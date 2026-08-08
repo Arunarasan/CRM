@@ -23,7 +23,18 @@ spring:
     baseline-version: 1
     baseline-description: "Schema as managed by Hibernate ddl-auto before Flyway was introduced"
 server:
-  port: 8080
+  port: ${PORT:10000}
+  address: 0.0.0.0
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "health,info"
+  endpoint:
+    health:
+      show-details: always
+
 
 jwt:
   secret: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}

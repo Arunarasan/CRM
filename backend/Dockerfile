@@ -21,9 +21,10 @@ USER spring:spring
 # Copy jar from build stage
 COPY --from=build /app/target/*.jar app.jar
 
-# Expose default Spring Boot port
-EXPOSE 8080
+# Default port for Render web service is 10000
+ENV PORT=10000
+EXPOSE 10000 8080
 
 # Configure JVM memory and entrypoint
 ENV JAVA_OPTS="-Xms256m -Xmx512m -XX:+UseG1GC"
-ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -Dserver.port=${PORT:-8080} -jar app.jar"]
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -Dserver.port=${PORT} -Dserver.address=0.0.0.0 -jar app.jar"]
