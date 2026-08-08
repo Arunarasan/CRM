@@ -1,0 +1,12 @@
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+
+app:
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:https://crm.arudra.com,https://app.arudra.com}

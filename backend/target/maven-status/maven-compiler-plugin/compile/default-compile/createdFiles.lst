@@ -1,0 +1,7 @@
+com\arudra\crm\repository\DailyReportRepository.class
+com\arudra\crm\entity\DailyReport.class
+com\arudra\crm\entity\ManpowerRequest.class
+com\arudra\crm\entity\PersonalReminder.class
+com\arudra\crm\entity\DailyReportMedia.class
+com\arudra\crm\repository\ManpowerRequestRepository.class
+com\arudra\crm\repository\PersonalReminderRepository.class
