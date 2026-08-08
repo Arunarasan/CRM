@@ -1,0 +1,55 @@
+# Dependencies
+node_modules/
+frontend/node_modules/
+.pnp
+.pnp.js
+
+# Build Outputs
+dist/
+frontend/dist/
+frontend/dist-ssr/
+backend/target/
+build/
+*.jar
+*.war
+*.ear
+*.class
+
+# Uploads and temporary files
+backend/uploads/
+uploads/
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Environment & Secrets
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.local
+
+# IDE & Editor files
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.DS_Store
+Thumbs.db
+.classpath
+.project
+.settings/
+.claude/
+
+# Crash / Test / Coverage
+coverage/
+*.lcov
+.nyc_output
