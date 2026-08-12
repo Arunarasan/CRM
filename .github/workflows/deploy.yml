@@ -45,7 +45,7 @@ jobs:
           npm run build
 
   # -------------------------------------------------------------
-  # Job 2: Safe Deployment to Hostinger VPS via SSH
+  # Job 2: Safe Deployment to Hostinger VPS via SSH (No sudo)
   # -------------------------------------------------------------
   deploy-to-vps:
     name: Deploy to Hostinger VPS
@@ -70,22 +70,25 @@ jobs:
 
             APP_DIR="${{ secrets.VPS_APP_DIR || '/opt/crm' }}"
 
-            # Ensure application directory and git repository exist
-            if [ ! -d "$APP_DIR/.git" ]; then
-              echo "Repository not initialized at $APP_DIR. Cloning repository..."
-              sudo mkdir -p "$APP_DIR"
-              sudo chown -R $USER:$USER "$APP_DIR"
-              git clone https://github.com/${{ github.repository }}.git "$APP_DIR"
+            # 1. Ensure application directory exists (no sudo)
+            if [ ! -d "$APP_DIR" ]; then
+              echo "Creating application directory at $APP_DIR..."
+              mkdir -p "$APP_DIR"
             fi
 
-            cd "$APP_DIR"
+            # 2. Check if git repository is initialized
+            if [ ! -d "$APP_DIR/.git" ]; then
+              echo "Cloning repository into $APP_DIR..."
+              git clone https://github.com/${{ github.repository }}.git "$APP_DIR"
+              cd "$APP_DIR"
+            else
+              cd "$APP_DIR"
+              echo "Fetching latest changes from main branch..."
+              git fetch origin main
+              git reset --hard origin/main
+            fi
 
-            # Pull latest changes from main branch without overwriting .env
-            echo "Fetching latest changes from main branch..."
-            git fetch origin main
-            git reset --hard origin/main
-
-            # Strict Safety Check: Verify production .env exists on VPS
+            # 3. Strict Safety Check: Verify production .env exists on VPS
             if [ ! -f .env ]; then
               echo "======================================================="
               echo "ERROR: Production .env file was not found in $APP_DIR!"
@@ -95,18 +98,19 @@ jobs:
               exit 1
             fi
 
-            # Build and deploy containers (ZERO volume destruction)
+            # 4. Build and deploy containers (ZERO volume destruction)
             echo "Building Docker images..."
             docker compose build
 
             echo "Starting production containers..."
             docker compose up -d --remove-orphans
 
-            # Verify container status and inspect logs
+            # 5. Verify container status
             echo "======================================================="
             echo "Container Status:"
             docker compose ps
 
+            # 6. Display recent logs after starting
             echo "======================================================="
             echo "Recent Backend Logs:"
             docker compose logs --tail=100 backend
