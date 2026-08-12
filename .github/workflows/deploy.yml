@@ -14,10 +14,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Code
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # Backend Build & Test
+      # Backend Build & Test (Java 17 Spring Boot)
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
@@ -25,12 +25,12 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
 
-      - name: Build & Test Backend (Spring Boot)
+      - name: Build & Test Backend
         run: |
           cd backend
           mvn clean test-compile -B
 
-      # Frontend Build & Validate
+      # Frontend Build & Validate (Node 20 React + Vite)
       - name: Set up Node.js 20
         uses: actions/setup-node@v4
         with:
@@ -38,7 +38,7 @@ jobs:
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Build Frontend (React + Vite)
+      - name: Build Frontend
         run: |
           cd frontend
           npm ci
@@ -64,16 +64,15 @@ jobs:
           script_stop: true
           script: |
             set -e
-            echo "=========================================="
-            echo "Starting CRM Production Deployment"
-            echo "=========================================="
+            echo "======================================================="
+            echo "Starting Production Deployment on Hostinger VPS"
+            echo "======================================================="
 
-            # Target directory on VPS
             APP_DIR="${{ secrets.VPS_APP_DIR || '/opt/crm' }}"
 
-            # Ensure application directory exists
-            if [ ! -d "$APP_DIR" ]; then
-              echo "Creating application directory at $APP_DIR..."
+            # Ensure application directory and git repository exist
+            if [ ! -d "$APP_DIR/.git" ]; then
+              echo "Repository not initialized at $APP_DIR. Cloning repository..."
               sudo mkdir -p "$APP_DIR"
               sudo chown -R $USER:$USER "$APP_DIR"
               git clone https://github.com/${{ github.repository }}.git "$APP_DIR"
@@ -81,27 +80,45 @@ jobs:
 
             cd "$APP_DIR"
 
-            # Fetch and update latest code from main
-            echo "Pulling latest changes from main branch..."
+            # Pull latest changes from main branch without overwriting .env
+            echo "Fetching latest changes from main branch..."
             git fetch origin main
             git reset --hard origin/main
 
-            # Check if production .env exists
+            # Strict Safety Check: Verify production .env exists on VPS
             if [ ! -f .env ]; then
-              echo "NOTICE: .env file was not found in $APP_DIR."
-              echo "Creating from .env.example template. Please update with real credentials!"
-              cp .env.example .env
+              echo "======================================================="
+              echo "ERROR: Production .env file was not found in $APP_DIR!"
+              echo "Deployment halted to prevent running with unconfigured secrets."
+              echo "Please create $APP_DIR/.env with real production credentials."
+              echo "======================================================="
+              exit 1
             fi
 
-            # Build and deploy with Docker Compose (Preserving volumes!)
-            echo "Building and starting Docker containers..."
+            # Build and deploy containers (ZERO volume destruction)
+            echo "Building Docker images..."
             docker compose build
+
+            echo "Starting production containers..."
             docker compose up -d --remove-orphans
 
-            # Check container status
-            echo "Verifying running containers..."
+            # Verify container status and inspect logs
+            echo "======================================================="
+            echo "Container Status:"
             docker compose ps
 
-            echo "=========================================="
+            echo "======================================================="
+            echo "Recent Backend Logs:"
+            docker compose logs --tail=100 backend
+
+            echo "======================================================="
+            echo "Recent Frontend Logs:"
+            docker compose logs --tail=100 frontend
+
+            echo "======================================================="
+            echo "Recent MySQL Logs:"
+            docker compose logs --tail=50 mysql
+
+            echo "======================================================="
             echo "Deployment Completed Successfully!"
-            echo "=========================================="
+            echo "======================================================="
