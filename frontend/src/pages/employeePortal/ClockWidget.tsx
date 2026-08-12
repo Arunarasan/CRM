@@ -38,14 +38,14 @@ export default function ClockWidget({ onChange }: { onChange?: () => void }) {
 
   const clockedIn = status?.clockedIn ?? false;
   const onBreak = status?.onBreak ?? false;
-  const done = !!status?.checkOutTime;
+  const sessions = status?.sessionsToday ?? 0;
 
   return (
     <div className="rounded-xl border bg-gradient-to-br from-primary/5 to-card p-4 shadow-sm">
       <div className="flex items-center justify-between">
         <div>
           <p className="text-xs text-muted-foreground">
-            {done ? "Today's shift" : onBreak ? 'On break' : clockedIn ? 'Clocked in' : 'Not clocked in'}
+            {onBreak ? 'On break' : clockedIn ? 'Clocked in' : sessions > 0 ? 'On a break between sessions' : 'Not clocked in'}
           </p>
           <p className="text-2xl font-bold leading-tight">{inr(status?.todayEarnings)}</p>
           <p className="text-[11px] text-muted-foreground">
@@ -60,10 +60,10 @@ export default function ClockWidget({ onChange }: { onChange?: () => void }) {
       {error && <p className="mt-2 rounded-md bg-destructive/15 p-2 text-xs text-destructive">{error}</p>}
 
       <div className="mt-3 grid grid-cols-2 gap-2">
-        {!clockedIn && !done && (
+        {!clockedIn && (
           <button onClick={() => act('in', () => employeePortalApi.clockIn())} disabled={!!busy}
             className="col-span-2 flex items-center justify-center gap-2 rounded-lg bg-emerald-600 py-2.5 text-sm font-semibold text-white active:scale-[0.99] disabled:opacity-60">
-            {busy === 'in' ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogIn className="h-4 w-4" />} Clock In
+            {busy === 'in' ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogIn className="h-4 w-4" />} {sessions > 0 ? 'Clock In Again' : 'Clock In'}
           </button>
         )}
         {clockedIn && !onBreak && (
@@ -84,12 +84,12 @@ export default function ClockWidget({ onChange }: { onChange?: () => void }) {
             {busy === 'out' ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />} Clock Out
           </button>
         )}
-        {done && (
-          <div className="col-span-2 rounded-lg bg-muted/50 py-2.5 text-center text-sm font-medium text-muted-foreground">
-            Shift complete · {status?.checkInTime}–{status?.checkOutTime}
-          </div>
-        )}
       </div>
+      {!clockedIn && sessions > 0 && (
+        <p className="mt-2 text-center text-[11px] text-muted-foreground">
+          {sessions} session{sessions === 1 ? '' : 's'} today · last out {status?.checkOutTime ?? '—'} · you can clock in again anytime
+        </p>
+      )}
 
       <div className="mt-3 grid grid-cols-2 gap-2 border-t pt-3 text-center">
         <div><p className="text-sm font-bold">{inr(status?.weekEarnings)}</p><p className="text-[10px] uppercase text-muted-foreground">This week</p></div>
