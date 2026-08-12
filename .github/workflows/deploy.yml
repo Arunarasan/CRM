@@ -68,98 +68,79 @@ jobs:
             echo "Starting Production Deployment on Hostinger VPS"
             echo "======================================================="
 
-            # STEP 1: Checking APP_DIR
-            echo "--> STEP 1: Checking APP_DIR"
             APP_DIR="${{ secrets.VPS_APP_DIR || '/opt/crm' }}"
-            echo "Target Directory: $APP_DIR"
-            echo "Current Working Directory:"
-            pwd
-            echo "Current User:"
-            whoami
+            echo "Target Application Directory: $APP_DIR"
+
+            # 1. Ensure application directory exists and navigate into it
             if [ ! -d "$APP_DIR" ]; then
-              echo "Directory $APP_DIR does not exist. Creating..."
+              echo "Creating directory $APP_DIR..."
               mkdir -p "$APP_DIR"
             fi
-            echo "Directory details:"
-            ls -ld "$APP_DIR"
-            cd "$APP_DIR"
-            echo "Successfully navigated to $APP_DIR"
 
-            # STEP 2: Checking Git repository
-            echo "--> STEP 2: Checking Git repository"
-            git config --global --add safe.directory "$APP_DIR" || true
-            if [ ! -d ".git" ]; then
-              echo "Git repository not initialized in $APP_DIR. Initializing..."
-              git init -b main
-            else
-              echo "Git repository already exists in $APP_DIR."
-              echo "Git Status:"
+            # 2. Git Synchronization
+            if [ -d "$APP_DIR/.git" ]; then
+              echo "Git repository exists in $APP_DIR."
+              cd "$APP_DIR"
+
+              echo "--> Checking git status..."
               git status --short || true
-              echo "Current Branch:"
-              git branch --show-current || true
-            fi
 
-            # STEP 3: Checking Git remote
-            echo "--> STEP 3: Checking Git remote"
-            REPO_URL="https://github.com/${{ github.repository }}.git"
-            echo "Configuring remote origin: $REPO_URL"
-            if git remote get-url origin > /dev/null 2>&1; then
-              git remote set-url origin "$REPO_URL"
+              echo "--> Checking git remotes..."
+              git remote -v
+
+              echo "--> Fetching origin/main..."
+              git fetch origin main
+
+              echo "--> Checking out main branch..."
+              git checkout main || git checkout -B main origin/main
+
+              echo "--> Resetting to origin/main..."
+              git reset --hard origin/main
+
+              echo "--> Current commit on VPS:"
+              git log -1 --oneline
             else
-              git remote add origin "$REPO_URL"
+              echo "Git repository does not exist in $APP_DIR. Cloning repository..."
+              git clone --branch main https://github.com/${{ github.repository }}.git "$APP_DIR"
+              cd "$APP_DIR"
             fi
-            echo "Configured Remotes:"
-            git remote -v
 
-            # STEP 4: Fetching main
-            echo "--> STEP 4: Fetching main"
-            git fetch origin main
-            echo "Successfully fetched origin/main"
+            # 3. Verify critical project files exist
+            echo "--> Verifying docker-compose.yml exists..."
+            test -f docker-compose.yml || { echo "ERROR: docker-compose.yml is missing in $APP_DIR!"; exit 1; }
+            echo "docker-compose.yml verified."
 
-            # STEP 5: Resetting to origin/main
-            echo "--> STEP 5: Resetting to origin/main"
-            git reset --hard origin/main
-            echo "Successfully reset working tree to origin/main"
-            echo "Current Commit on VPS:"
-            git log -1 --oneline
-
-            # STEP 6: Checking production .env
-            echo "--> STEP 6: Checking production .env"
+            # 4. Strict Safety Check: Verify production .env exists on VPS
+            echo "--> Verifying production .env exists..."
             if [ -f .env ]; then
               echo "Production .env EXISTS: Confirmed ($APP_DIR/.env is present)"
             else
               echo "======================================================="
               echo "ERROR: Production .env file is MISSING in $APP_DIR!"
+              echo "Deployment halted to prevent running with unconfigured secrets."
               echo "Please create $APP_DIR/.env on the VPS with real production credentials."
               echo "======================================================="
               exit 1
             fi
 
-            # STEP 7: Checking Docker
-            echo "--> STEP 7: Checking Docker"
-            echo "Docker Version:"
-            docker --version
-            echo "Docker Compose Version:"
-            docker compose version
-            echo "Validating Docker Compose Configuration..."
+            # 5. Validate Docker Compose Configuration
+            echo "--> Validating Docker Compose Configuration..."
             docker compose config --quiet
-            echo "Docker Compose Configuration is valid"
+            echo "Docker Compose Configuration is valid."
 
-            # STEP 8: Building Docker images
-            echo "--> STEP 8: Building Docker images"
+            # 6. Build and deploy containers (ZERO volume destruction)
+            echo "--> Building Docker images..."
             docker compose build
-            echo "Docker images built successfully"
 
-            # STEP 9: Starting containers
-            echo "--> STEP 9: Starting containers"
+            echo "--> Starting production containers..."
             docker compose up -d --remove-orphans
-            echo "Containers started successfully"
 
-            # STEP 10: Verifying containers
-            echo "--> STEP 10: Verifying containers"
+            # 7. Verify container status
+            echo "======================================================="
             echo "Container Status:"
             docker compose ps
 
+            # 8. Display recent logs after starting
             echo "======================================================="
             echo "Recent Backend Logs:"
             docker compose logs --tail=100 backend
