@@ -10,6 +10,7 @@ import {
   WP_STATUS_TONE, BILL_STATUS_TONE, QC_RESULT_TONE, RATE_TYPE_LABEL, RATE_TYPES,
 } from "@/types/contractor";
 import { Badge } from "@/components/ui/badge";
+import CameraCaptureButton from "@/components/CameraCaptureButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -803,8 +804,11 @@ function RecordProgressButton({ wpId, contractorId, unit, onDone }: {
             </div>
             <Field label="Issues on site"><Input onChange={(e) => set("issues", e.target.value)} /></Field>
             <Field label="Photo">
-              <Input type="file" accept="image/*,video/*"
-                     onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
+              <div className="flex items-center gap-2">
+                <Input type="file" accept="image/*,video/*"
+                       onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
+                <CameraCaptureButton onCapture={upload} label="Camera" />
+              </div>
               {photoUrl && <div className="text-xs text-emerald-600 mt-1">Uploaded ✓</div>}
             </Field>
             {error && <Banner tone="error">{error}</Banner>}

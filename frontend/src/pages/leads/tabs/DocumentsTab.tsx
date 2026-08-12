@@ -9,6 +9,7 @@ import { DOCUMENT_CATEGORIES, formatDate } from "../constants";
 import { SelectField, TextAreaField, TextField } from "../fields";
 import { ListSkeleton, useLeadList } from "./shared";
 import FileUploadField from "@/components/FileUploadField";
+import ImageCaptureField from "@/components/ImageCaptureField";
 import { resolveFileUrl } from "@/lib/uploadFile";
 
 const EMPTY = { fileName: "", fileUrl: "", category: "Property Images", documentType: "", description: "" };
@@ -88,16 +89,30 @@ export default function DocumentsTab({ leadId }: { leadId: string }) {
         <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle>Add Document</DialogTitle></DialogHeader>
           <form onSubmit={submit} className="space-y-4">
-            <FileUploadField
-              label="File"
-              required
+            <ImageCaptureField
+              label="Capture / add an image"
               module="LEAD"
-              value={form.fileUrl}
+              value={form.documentType === "Image" ? form.fileUrl : ""}
               onChange={({ url, fileName }) => setForm((f: any) => ({
                 ...f,
                 fileUrl: url,
                 fileName: f.fileName || fileName || "",
-                documentType: f.documentType || (fileName ? fileName.split(".").pop()?.toUpperCase() : ""),
+                category: f.category || "Site Photos",
+                documentType: "Image",
+              }))}
+            />
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span className="h-px flex-1 bg-border" /> or upload a file <span className="h-px flex-1 bg-border" />
+            </div>
+            <FileUploadField
+              label="File"
+              module="LEAD"
+              value={form.documentType !== "Image" ? form.fileUrl : ""}
+              onChange={({ url, fileName }) => setForm((f: any) => ({
+                ...f,
+                fileUrl: url,
+                fileName: f.fileName || fileName || "",
+                documentType: f.documentType && f.documentType !== "Image" ? f.documentType : (fileName ? fileName.split(".").pop()?.toUpperCase() : ""),
               }))}
             />
             <TextField label="File Name" required value={form.fileName} onChange={set("fileName")} />

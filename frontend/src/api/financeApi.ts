@@ -38,6 +38,10 @@ export const financeApi = {
   sendInvoice: (id: number) => api.post<Invoice>(`${BASE}/invoices/${id}/send`).then((r) => r.data),
   cancelInvoice: (id: number, reason?: string) =>
     api.post<Invoice>(`${BASE}/invoices/${id}/cancel${qs({ reason })}`).then((r) => r.data),
+  markInvoicePaid: (id: number, splits: { method: string; amount: number; referenceNumber?: string }[]) =>
+    api.post<Invoice>(`${BASE}/invoices/${id}/mark-paid`, splits).then((r) => r.data),
+  markInvoiceUnpaid: (id: number) =>
+    api.post<Invoice>(`${BASE}/invoices/${id}/mark-unpaid`).then((r) => r.data),
   generateFromQuotation: (quotationId: number, advancePercent?: number, draft = true) =>
     api.post<Invoice>(`${BASE}/invoices/generate-from-quotation/${quotationId}${qs({ advancePercent, draft })}`).then((r) => r.data),
   generateStageInvoice: (scheduleId: number) =>

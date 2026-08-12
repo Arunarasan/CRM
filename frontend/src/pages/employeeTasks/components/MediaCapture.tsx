@@ -2,13 +2,19 @@ import { useRef, useState } from 'react';
 import { Camera, Video, Mic, Square, X } from 'lucide-react';
 import { employeeTaskApi } from '@/api/employeeTaskApi';
 import { ProgressMediaItem } from '@/types/employeeTask';
+import ImageEditor from '@/components/ImageEditor';
+import { compressImageFile } from '@/lib/imageProcessing';
+import { useAuth } from '@/hooks/useAuth';
 
-/** Photo/video capture via native file input, plus voice notes via MediaRecorder. Uploads immediately to /api/uploads. */
+/** Photo/video capture via native file input, plus voice notes via MediaRecorder. Uploads immediately to /api/uploads.
+ *  Admins get the crop/rotate editor before upload; everyone else's photos are silently compressed only. */
 export default function MediaCapture({ media, onChange }: { media: ProgressMediaItem[]; onChange: (media: ProgressMediaItem[]) => void }) {
+  const { isAdmin } = useAuth();
   const photoInput = useRef<HTMLInputElement>(null);
   const videoInput = useRef<HTMLInputElement>(null);
   const [recording, setRecording] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [pendingPhoto, setPendingPhoto] = useState<File | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
 
@@ -22,10 +28,18 @@ export default function MediaCapture({ media, onChange }: { media: ProgressMedia
     }
   };
 
-  const onFileSelected = (e: React.ChangeEvent<HTMLInputElement>, mediaType: 'PHOTO' | 'VIDEO') => {
+  const onFileSelected = async (e: React.ChangeEvent<HTMLInputElement>, mediaType: 'PHOTO' | 'VIDEO') => {
     const file = e.target.files?.[0];
-    if (file) upload(file, mediaType);
     e.target.value = '';
+    if (!file) return;
+    if (mediaType !== 'PHOTO') { upload(file, mediaType); return; }
+    if (isAdmin) { setPendingPhoto(file); return; }   // admins edit before upload
+    upload(await compressImageFile(file), 'PHOTO');    // others: compress only
+  };
+
+  const onPhotoEdited = (edited: File) => {
+    setPendingPhoto(null);
+    upload(edited, 'PHOTO');
   };
 
   const startRecording = async () => {
@@ -72,6 +86,15 @@ export default function MediaCapture({ media, onChange }: { media: ProgressMedia
       </div>
       <input ref={photoInput} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => onFileSelected(e, 'PHOTO')} />
       <input ref={videoInput} type="file" accept="video/*" capture className="hidden" onChange={(e) => onFileSelected(e, 'VIDEO')} />
+      {pendingPhoto && (
+        <ImageEditor
+          file={pendingPhoto}
+          fileName="task-photo"
+          open={!!pendingPhoto}
+          onCancel={() => setPendingPhoto(null)}
+          onSave={onPhotoEdited}
+        />
+      )}
       {uploading && <p className="text-xs text-muted-foreground">Uploading…</p>}
       {media.length > 0 && (
         <div className="flex flex-wrap gap-2">

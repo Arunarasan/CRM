@@ -1,0 +1,16 @@
+**/.git
+**/.gitignore
+**/.env
+**/.env.*
+!**/.env.example
+**/target
+**/node_modules
+**/dist
+**/build
+**/*.log
+**/.idea
+**/.vscode
+**/*.swp
+**/.DS_Store
+**/Thumbs.db
+backend/uploads/

@@ -1,5 +1,6 @@
 package com.arudra.crm.service;
 
+import com.arudra.crm.dto.InvoicePaymentSplit;
 import com.arudra.crm.entity.*;
 import com.arudra.crm.repository.*;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -394,6 +395,78 @@ public class FinanceService {
         Invoice saved = invoiceRepository.save(invoice);
         syncScheduleFromInvoice(saved);
         return saved;
+    }
+
+    /**
+     * Marks an invoice paid by recording one or more confirmed payments that settle its balance.
+     * The tender can be split/combined across methods (CASH + UPI + …). A DRAFT is auto-issued
+     * first. Empty splits = a single full-balance CASH payment. Status flips to PAID (or PARTIAL
+     * if the tenders don't fully cover the balance) via {@link #recalculateInvoice}.
+     */
+    @Transactional
+    public Invoice markInvoicePaid(Long invoiceId, List<InvoicePaymentSplit> splits, User user) {
+        Invoice invoice = getInvoice(invoiceId);
+        if ("CANCELLED".equals(invoice.getStatus())) {
+            throw new RuntimeException("Cannot record payment on a cancelled invoice");
+        }
+        if ("DRAFT".equals(invoice.getStatus())) {
+            invoice = issueInvoice(invoiceId);
+        }
+        BigDecimal balance = invoice.getBalanceDue() != null ? invoice.getBalanceDue() : invoice.getTotalAmount();
+        if (balance == null || balance.signum() <= 0) {
+            return invoice; // nothing outstanding
+        }
+        List<InvoicePaymentSplit> tenders = (splits == null || splits.isEmpty())
+                ? List.of(new InvoicePaymentSplit("CASH", balance, null))
+                : splits;
+
+        for (InvoicePaymentSplit tender : tenders) {
+            BigDecimal amount = tender.amount() != null ? tender.amount() : BigDecimal.ZERO;
+            if (amount.signum() <= 0) continue;
+            CustomerPayment payment = new CustomerPayment();
+            payment.setCustomer(invoice.getCustomer());
+            payment.setProject(invoice.getProject());
+            payment.setInvoice(invoice);
+            payment.setAmount(amount);
+            payment.setPaymentMethod(tender.method() != null ? tender.method() : "CASH");
+            payment.setPaymentType("PARTIAL");
+            payment.setReferenceNumber(tender.referenceNumber());
+            payment.setStatus("CONFIRMED");
+            payment.setPaymentDate(LocalDate.now());
+            payment.setCollectedBy(user);
+            payment.setPaymentNumber(nextPaymentNumber());
+            CustomerPayment saved = paymentRepository.save(payment);
+            applyConfirmedPayment(saved);
+        }
+        return recalculateInvoice(invoiceId);
+    }
+
+    /**
+     * Reverses an invoice back to unpaid: voids every confirmed payment against it (soft-delete +
+     * a REVERSAL ledger entry that offsets the original receipt) and recalculates, so the invoice
+     * returns to SENT/OVERDUE. Idempotent — a payment already reversed is skipped.
+     */
+    @Transactional
+    public Invoice markInvoiceUnpaid(Long invoiceId) {
+        Invoice invoice = getInvoice(invoiceId);
+        if ("CANCELLED".equals(invoice.getStatus())) {
+            throw new RuntimeException("Cannot change payments on a cancelled invoice");
+        }
+        for (CustomerPayment p : paymentRepository.findByInvoiceId(invoiceId)) {
+            if (!"CONFIRMED".equals(p.getStatus()) || Boolean.TRUE.equals(p.getIsDeleted())) continue;
+            if (!ledgerRepository.existsByReferenceTypeAndReferenceIdAndEntryType("PAYMENT_REVERSAL", p.getId(), "REVERSAL")) {
+                postLedger(p.getCustomer(), p.getProject(), LocalDate.now(), "REVERSAL",
+                        "PAYMENT_REVERSAL", p.getId(), p.getPaymentNumber(),
+                        "Reversal of payment " + p.getPaymentNumber() + " (invoice " + invoice.getInvoiceNumber() + " marked unpaid)",
+                        p.getAmount(), BigDecimal.ZERO);
+            }
+            p.setStatus("REJECTED");
+            p.setIsDeleted(true);
+            p.setRemarks((p.getRemarks() == null || p.getRemarks().isBlank() ? "" : p.getRemarks() + " | ")
+                    + "Voided: invoice marked unpaid");
+            paymentRepository.save(p);
+        }
+        return recalculateInvoice(invoiceId);
     }
 
     private void syncScheduleFromInvoice(Invoice invoice) {

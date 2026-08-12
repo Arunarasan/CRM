@@ -9,13 +9,15 @@ import { changeRequestApi } from "@/api/changeRequestApi";
 import { inventoryApi } from "@/api/inventoryApi";
 import { ProjectPhase, ProjectRoom, ProjectRoomItem, ProjectMaterialRequirement, ProjectProgress, ProjectProgressDashboard, ProjectItemProgressLog, WORK_ITEM_STATUSES } from "@/types/project";
 import { ProjectChangeRequest, ChangeRequestType, CHANGE_REQUEST_TYPE_LABELS, CHANGE_REQUEST_STATUS_STYLES } from "@/types/changeRequest";
+import ProjectPaymentsTab from "@/pages/projectFinance/ProjectPaymentsTab";
+import CameraCaptureButton from "@/components/CameraCaptureButton";
 import { format, differenceInDays } from "date-fns";
 import {
   ArrowLeft, Calendar, User, DollarSign, Activity, FileText,
   AlertTriangle, ShieldAlert, CheckCircle2, FileImage, PenTool,
   TrendingUp, Plus, CheckSquare, Layers, Package, Sparkles,
   ChevronDown, ChevronRight, ShoppingCart, ClipboardCheck, FileEdit,
-  Phone, Mail, Clock, Sun, File, Play, History, RotateCcw, Lock, Camera
+  Phone, Mail, Clock, Sun, File, Play, History, RotateCcw, Lock
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -651,6 +653,7 @@ export default function ProjectCommandCenter() {
             <TabsTrigger value="overview" className="rounded-xl text-slate-500 data-[state=active]:shadow-sm data-[state=active]:text-slate-800">Overview & Gantt</TabsTrigger>
             <TabsTrigger value="phases" className="rounded-xl text-slate-500 data-[state=active]:shadow-sm data-[state=active]:text-slate-800">Phases & Rooms</TabsTrigger>
             <TabsTrigger value="materials" className="rounded-xl text-slate-500 data-[state=active]:shadow-sm data-[state=active]:text-slate-800">Materials</TabsTrigger>
+            <TabsTrigger value="payments" className="rounded-xl text-slate-500 data-[state=active]:shadow-sm data-[state=active]:text-slate-800">Payments & Invoices</TabsTrigger>
             <TabsTrigger value="execution" className="rounded-xl text-slate-500 data-[state=active]:shadow-sm data-[state=active]:text-slate-800">Daily Logs</TabsTrigger>
             <TabsTrigger value="fieldProgress" className="rounded-xl text-slate-500 data-[state=active]:shadow-sm data-[state=active]:text-slate-800">Field Progress</TabsTrigger>
             <TabsTrigger value="contractors" className="rounded-xl text-slate-500 data-[state=active]:shadow-sm data-[state=active]:text-slate-800">Contractors</TabsTrigger>
@@ -724,6 +727,61 @@ export default function ProjectCommandCenter() {
                 </div>
 
               </div>
+
+              {/* Project details carried over from the lead at conversion */}
+              {(project.propertyAddress || project.projectType || project.projectCategory ||
+                project.projectDescription || project.customerNotes || project.estimatedCost ||
+                project.projectManager || project.salesExecutive || project.designer || project.siteEngineer) && (
+                <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+                  <h3 className="text-lg font-bold text-slate-800 flex items-center mb-4"><ClipboardCheck className="w-5 h-5 mr-2 text-blue-600"/> Project Details</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+                    {project.propertyAddress && (
+                      <div className="md:col-span-2">
+                        <div className="text-xs font-semibold text-slate-400 mb-1 uppercase tracking-wider">Property Address</div>
+                        <div className="text-sm font-medium text-slate-700 whitespace-pre-line">{project.propertyAddress}</div>
+                      </div>
+                    )}
+                    {(project.projectType || project.projectCategory) && (
+                      <div>
+                        <div className="text-xs font-semibold text-slate-400 mb-1 uppercase tracking-wider">Property Type</div>
+                        <div className="text-sm font-medium text-slate-700">{[project.projectType, project.projectCategory].filter(Boolean).join(' · ')}</div>
+                      </div>
+                    )}
+                    {project.estimatedCost && (
+                      <div>
+                        <div className="text-xs font-semibold text-slate-400 mb-1 uppercase tracking-wider">Estimated Value</div>
+                        <div className="text-sm font-medium text-slate-700">₹{Number(project.estimatedCost).toLocaleString('en-IN')}</div>
+                      </div>
+                    )}
+                    {project.projectDescription && (
+                      <div className="md:col-span-2">
+                        <div className="text-xs font-semibold text-slate-400 mb-1 uppercase tracking-wider">Description</div>
+                        <div className="text-sm font-medium text-slate-700 whitespace-pre-line">{project.projectDescription}</div>
+                      </div>
+                    )}
+                    {project.customerNotes && (
+                      <div className="md:col-span-2">
+                        <div className="text-xs font-semibold text-slate-400 mb-1 uppercase tracking-wider">Customer Requirements</div>
+                        <div className="text-sm font-medium text-slate-700 whitespace-pre-line">{project.customerNotes}</div>
+                      </div>
+                    )}
+                    {(project.projectManager || project.salesExecutive || project.designer || project.siteEngineer) && (
+                      <div className="md:col-span-2">
+                        <div className="text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Team</div>
+                        <div className="flex flex-wrap gap-2">
+                          {([['Project Manager', project.projectManager], ['Sales', project.salesExecutive], ['Designer', project.designer], ['Site Engineer', project.siteEngineer]] as [string, any][])
+                            .filter(([, u]) => u)
+                            .map(([role, u]) => (
+                              <span key={role} className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
+                                <User className="w-3 h-3"/> {role}: {u.name}
+                              </span>
+                            ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Progress rollup */}
               {progress && (
@@ -960,6 +1018,11 @@ export default function ProjectCommandCenter() {
                   </div>
                 )}
               </div>
+            </TabsContent>
+
+            {/* PAYMENTS & INVOICES TAB */}
+            <TabsContent value="payments" className="space-y-6 mt-0 h-full outline-none">
+              <ProjectPaymentsTab project={project} onChanged={fetchProjectData} />
             </TabsContent>
 
             {/* MATERIALS TAB */}
@@ -1560,6 +1623,8 @@ export default function ProjectCommandCenter() {
                          />
                        </label>
                      </Button>
+                     <CameraCaptureButton onCapture={uploadProjectDocument} disabled={docUploading} label="Camera"
+                       className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-input bg-background px-4 text-sm font-medium hover:bg-accent disabled:opacity-60" />
                    </div>
                  </div>
 
@@ -1826,11 +1891,15 @@ export default function ProjectCommandCenter() {
                     </div>
                   ))}
                   {!editingItem.locked && (
-                    <label className="w-16 h-16 border-2 border-dashed rounded-lg flex items-center justify-center cursor-pointer hover:border-blue-400 text-slate-400">
-                      <Camera className="w-5 h-5" />
-                      <input type="file" accept="image/*" className="hidden"
-                        onChange={e => { const f = e.target.files?.[0]; if (f) handleItemPhotoUpload(f); e.target.value = ''; }} />
-                    </label>
+                    <>
+                      <label className="w-16 h-16 border-2 border-dashed rounded-lg flex items-center justify-center cursor-pointer hover:border-blue-400 text-slate-400" title="Choose from device">
+                        <FileImage className="w-5 h-5" />
+                        <input type="file" accept="image/*" className="hidden"
+                          onChange={e => { const f = e.target.files?.[0]; if (f) handleItemPhotoUpload(f); e.target.value = ''; }} />
+                      </label>
+                      <CameraCaptureButton onCapture={handleItemPhotoUpload} label=""
+                        className="w-16 h-16 border-2 border-dashed rounded-lg flex items-center justify-center hover:border-blue-400 text-slate-400" />
+                    </>
                   )}
                 </div>
                 {itemPhotoUploading && <p className="text-xs text-slate-400">Uploading…</p>}

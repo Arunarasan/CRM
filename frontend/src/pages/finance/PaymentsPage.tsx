@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { currency, PAYMENT_STATUS_TONE, REFUND_STATUS_TONE } from "./helpers";
 import { Plus, Search, Check, X } from "lucide-react";
+import CameraCaptureButton from "@/components/CameraCaptureButton";
 
 type Tab = "all" | "pending" | "refunds";
 
@@ -55,6 +56,17 @@ export default function PaymentsPage() {
   };
 
   const setTab = (t: Tab) => setParams(t === "all" ? {} : { tab: t });
+
+  const uploadProof = async (file: File) => {
+    setUploading(true);
+    try {
+      const data = new FormData();
+      data.append("file", file);
+      const res = await api.post(`/uploads`, data, { headers: { "Content-Type": "multipart/form-data" } });
+      setPProofUrl(res.data?.fileUrl ?? res.data?.data?.fileUrl ?? "");
+    } catch (err) { console.error(err); }
+    finally { setUploading(false); }
+  };
 
   return (
     <div className="space-y-4">
@@ -245,19 +257,12 @@ export default function PaymentsPage() {
             </label>
             <label className="text-sm block">
               <span className="font-semibold text-slate-700">Payment Proof (photo / receipt)</span>
-              <input type="file" accept="image/*,.pdf" className="mt-1 w-full text-sm" disabled={uploading}
-                     onChange={async (e) => {
-                       const file = e.target.files?.[0];
-                       if (!file) return;
-                       setUploading(true);
-                       try {
-                         const data = new FormData();
-                         data.append("file", file);
-                         const res = await api.post(`/uploads`, data, { headers: { "Content-Type": "multipart/form-data" } });
-                         setPProofUrl(res.data?.fileUrl ?? res.data?.data?.fileUrl ?? "");
-                       } catch (err) { console.error(err); }
-                       finally { setUploading(false); }
-                     }} />
+              <div className="mt-1 flex items-center gap-2">
+                <input type="file" accept="image/*,.pdf" className="w-full text-sm" disabled={uploading}
+                       onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadProof(f); e.target.value = ""; }} />
+                <CameraCaptureButton onCapture={uploadProof} disabled={uploading} label="Camera"
+                  className="inline-flex shrink-0 items-center gap-1 rounded-md border border-input bg-background px-2 py-1 text-xs font-medium hover:bg-accent disabled:opacity-60" />
+              </div>
               {pProofUrl && <span className="text-xs text-emerald-600 font-semibold">Proof attached ✓</span>}
             </label>
             <div className="flex gap-2 justify-end">

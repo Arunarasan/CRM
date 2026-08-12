@@ -42,3 +42,15 @@ services:
         generateValue: true
       - key: CORS_ALLOWED_ORIGINS
         value: https://crm-frontend.onrender.com,http://localhost:5173
+      - key: STORAGE_TYPE
+        value: s3
+      - key: R2_BUCKET_NAME
+        value: jbdecor
+      - key: R2_ENDPOINT
+        value: https://6ded68d1395464810b575e43d47d5346.r2.cloudflarestorage.com
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_PUBLIC_DOMAIN
+        sync: false

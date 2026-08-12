@@ -14,17 +14,26 @@ RUN mvn clean package -DskipTests -B
 FROM eclipse-temurin:17-jre-jammy
 WORKDIR /app
 
-# Add non-root user for security
-RUN groupadd -r spring && useradd -r -g spring spring
+# Install curl for health checks & create non-root user
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends curl && \
+    rm -rf /var/lib/apt/lists/* && \
+    groupadd -r spring && useradd -r -g spring spring
+
 USER spring:spring
 
 # Copy jar from build stage
-COPY --from=build /app/target/*.jar app.jar
+COPY --from=build --chown=spring:spring /app/target/*.jar app.jar
 
-# Default port for Render web service is 10000
-ENV PORT=10000
-EXPOSE 10000 8080
+# Expose backend port (defaults to 8080, supports Render 10000)
+ENV PORT=8080
+EXPOSE 8080 10000
 
-# Configure JVM memory and entrypoint
-ENV JAVA_OPTS="-Xms256m -Xmx512m -XX:+UseG1GC"
-ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -Dserver.port=${PORT} -Dserver.address=0.0.0.0 -jar app.jar"]
+# Production-tuned JVM flags with heap headroom and OOM safety
+ENV JAVA_OPTS="-Xms512m -Xmx1536m -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError"
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+  CMD curl -f http://localhost:${PORT:-8080}/actuator/health || exit 1
+
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -Dserver.port=${PORT:-8080} -Dserver.address=0.0.0.0 -jar app.jar"]
+

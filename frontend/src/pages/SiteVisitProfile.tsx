@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import SignatureCanvas from "react-signature-canvas";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { siteVisitApi, type SiteRoomMeasurement } from "@/lib/siteVisitApi";
+import CameraCaptureButton from "@/components/CameraCaptureButton";
 import { SelectField, TextField, selectClass } from "@/pages/leads/fields";
 
 export default function SiteVisitProfile() {
@@ -108,7 +109,10 @@ export default function SiteVisitProfile() {
       alert("Please provide a signature first.");
       return;
     }
-    const base64 = sigCanvas.current.getTrimmedCanvas().toDataURL('image/png');
+    // getTrimmedCanvas() pulls in the `trim-canvas` package, whose default export
+    // breaks under Vite's ESM interop ("import_build.default is not a function").
+    // getCanvas() gives the full signature canvas and avoids that dependency.
+    const base64 = sigCanvas.current.getCanvas().toDataURL('image/png');
     siteVisitApi.sign(id!, base64, visit.customerName)
       .then((data) => { setVisit(data); setIsSignDialogOpen(false); fetchHistory(); })
       .catch(() => alert("Failed to save signature"));
@@ -155,9 +159,7 @@ export default function SiteVisitProfile() {
       .then(() => fetchChecklist());
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, category: string) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const uploadMediaFile = (file: File, category: string) => {
     const reader = new FileReader();
     reader.onload = () => {
       const mediaType = file.type.startsWith("video") ? "Video" : file.type.startsWith("audio") ? "Voice" : file.type === "application/pdf" ? "PDF" : "Image";
@@ -166,7 +168,12 @@ export default function SiteVisitProfile() {
         .catch(() => alert("Failed to upload file"));
     };
     reader.readAsDataURL(file);
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, category: string) => {
+    const file = e.target.files?.[0];
     e.target.value = "";
+    if (file) uploadMediaFile(file, category);
   };
 
   if (loading) return <div className="p-8 animate-pulse text-muted-foreground">Loading visit details...</div>;
@@ -541,10 +548,14 @@ export default function SiteVisitProfile() {
                     <div key={category}>
                       <div className="flex items-center justify-between mb-2">
                         <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">{category}</h4>
-                        <label className="text-xs text-primary cursor-pointer hover:underline">
-                          + Upload
-                          <input type="file" className="hidden" onChange={(e) => handleFileUpload(e, category)} />
-                        </label>
+                        <div className="flex items-center gap-3">
+                          <label className="text-xs text-primary cursor-pointer hover:underline">
+                            + Upload
+                            <input type="file" className="hidden" onChange={(e) => handleFileUpload(e, category)} />
+                          </label>
+                          <CameraCaptureButton onCapture={(f) => uploadMediaFile(f, category)} label="Camera"
+                            className="inline-flex items-center gap-1 text-xs text-primary hover:underline" />
+                        </div>
                       </div>
                       {items.length === 0 ? (
                         <p className="text-xs text-muted-foreground">No files yet.</p>

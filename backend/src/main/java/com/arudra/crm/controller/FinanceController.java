@@ -103,6 +103,19 @@ public class FinanceController {
         return ResponseEntity.ok(financeService.markSent(id));
     }
 
+    @PostMapping("/invoices/{id}/mark-paid")
+    @PreAuthorize(COLLECT)
+    public ResponseEntity<Invoice> markInvoicePaid(@PathVariable Long id,
+                                                   @RequestBody(required = false) List<com.arudra.crm.dto.InvoicePaymentSplit> splits) {
+        return ResponseEntity.ok(financeService.markInvoicePaid(id, splits, currentUserService.getCurrentUser()));
+    }
+
+    @PostMapping("/invoices/{id}/mark-unpaid")
+    @PreAuthorize(WRITE)
+    public ResponseEntity<Invoice> markInvoiceUnpaid(@PathVariable Long id) {
+        return ResponseEntity.ok(financeService.markInvoiceUnpaid(id));
+    }
+
     @PostMapping("/invoices/{id}/cancel")
     @PreAuthorize(APPROVE)
     public ResponseEntity<Invoice> cancelInvoice(@PathVariable Long id,

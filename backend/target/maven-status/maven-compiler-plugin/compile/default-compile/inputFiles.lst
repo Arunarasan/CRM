@@ -70,6 +70,7 @@ A:\CRM\backend\src\main\java\com\arudra\crm\repository\TaskChecklistItemReposito
 A:\CRM\backend\src\main\java\com\arudra\crm\util\MeasurementWorkflow.java
 A:\CRM\backend\src\main\java\com\arudra\crm\repository\BoqRepository.java
 A:\CRM\backend\src\main\java\com\arudra\crm\repository\DamageEntryRepository.java
+A:\CRM\backend\src\main\java\com\arudra\crm\controller\HealthController.java
 A:\CRM\backend\src\main\java\com\arudra\crm\repository\MeasurementAssignmentRepository.java
 A:\CRM\backend\src\main\java\com\arudra\crm\repository\VerificationTokenRepository.java
 A:\CRM\backend\src\main\java\com\arudra\crm\entity\ContactPerson.java
@@ -79,6 +80,7 @@ A:\CRM\backend\src\main\java\com\arudra\crm\repository\ActivityLogRepository.jav
 A:\CRM\backend\src\main\java\com\arudra\crm\entity\EmployeeBonus.java
 A:\CRM\backend\src\main\java\com\arudra\crm\service\WorkforceAlertService.java
 A:\CRM\backend\src\main\java\com\arudra\crm\repository\MeasurementActivityLogRepository.java
+A:\CRM\backend\src\main\java\com\arudra\crm\storage\LocalStorageService.java
 A:\CRM\backend\src\main\java\com\arudra\crm\entity\ContractorLedgerEntry.java
 A:\CRM\backend\src\main\java\com\arudra\crm\entity\TaskCheckIn.java
 A:\CRM\backend\src\main\java\com\arudra\crm\entity\PerformanceReview.java
@@ -126,6 +128,7 @@ A:\CRM\backend\src\main\java\com\arudra\crm\repository\InventoryItemRepository.j
 A:\CRM\backend\src\main\java\com\arudra\crm\dto\measurement\MeasurementTimelineEventDTO.java
 A:\CRM\backend\src\main\java\com\arudra\crm\repository\BoqChangeLogRepository.java
 A:\CRM\backend\src\main\java\com\arudra\crm\config\JpaConfig.java
+A:\CRM\backend\src\main\java\com\arudra\crm\storage\StorageService.java
 A:\CRM\backend\src\main\java\com\arudra\crm\repository\ProjectChangeRequestRepository.java
 A:\CRM\backend\src\main\java\com\arudra\crm\service\ProjectFinanceService.java
 A:\CRM\backend\src\main\java\com\arudra\crm\repository\GoodsReceiptNoteItemRepository.java
@@ -167,6 +170,7 @@ A:\CRM\backend\src\main\java\com\arudra\crm\repository\ProjectStageRepository.ja
 A:\CRM\backend\src\main\java\com\arudra\crm\entity\MaterialRequest.java
 A:\CRM\backend\src\main\java\com\arudra\crm\entity\SiteVisitChecklist.java
 A:\CRM\backend\src\main\java\com\arudra\crm\repository\InvoiceItemRepository.java
+A:\CRM\backend\src\main\java\com\arudra\crm\dto\InvoicePaymentSplit.java
 A:\CRM\backend\src\main\java\com\arudra\crm\service\ProjectService.java
 A:\CRM\backend\src\main\java\com\arudra\crm\controller\FinanceController.java
 A:\CRM\backend\src\main\java\com\arudra\crm\entity\ProjectIssue.java
@@ -236,6 +240,7 @@ A:\CRM\backend\src\main\java\com\arudra\crm\entity\InventoryItem.java
 A:\CRM\backend\src\main\java\com\arudra\crm\entity\MeasurementCeiling.java
 A:\CRM\backend\src\main\java\com\arudra\crm\repository\CustomerLedgerEntryRepository.java
 A:\CRM\backend\src\main\java\com\arudra\crm\security\JwtUtil.java
+A:\CRM\backend\src\main\java\com\arudra\crm\storage\StorageKeys.java
 A:\CRM\backend\src\main\java\com\arudra\crm\config\DatabaseMigrationRunner.java
 A:\CRM\backend\src\main\java\com\arudra\crm\repository\QuotationTermRepository.java
 A:\CRM\backend\src\main\java\com\arudra\crm\config\CacheConfig.java
@@ -368,6 +373,7 @@ A:\CRM\backend\src\main\java\com\arudra\crm\controller\ProjectController.java
 A:\CRM\backend\src\main\java\com\arudra\crm\entity\MeasurementMedia.java
 A:\CRM\backend\src\main\java\com\arudra\crm\entity\CustomerActivity.java
 A:\CRM\backend\src\main\java\com\arudra\crm\service\InventoryCategoryService.java
+A:\CRM\backend\src\main\java\com\arudra\crm\storage\S3StorageService.java
 A:\CRM\backend\src\main\java\com\arudra\crm\entity\PurchaseRequestApproval.java
 A:\CRM\backend\src\main\java\com\arudra\crm\service\ContractorReportService.java
 A:\CRM\backend\src\main\java\com\arudra\crm\repository\TaskMaterialUsageRepository.java
@@ -417,6 +423,8 @@ A:\CRM\backend\src\main\java\com\arudra\crm\dto\lead\UserSummaryDTO.java
 A:\CRM\backend\src\main\java\com\arudra\crm\repository\GoodsReceiptNoteRepository.java
 A:\CRM\backend\src\main\java\com\arudra\crm\repository\PersonalReminderRepository.java
 A:\CRM\backend\src\main\java\com\arudra\crm\entity\ResourceType.java
+A:\CRM\backend\src\main\java\com\arudra\crm\storage\S3StorageProperties.java
+A:\CRM\backend\src\main\java\com\arudra\crm\storage\StoredFile.java
 A:\CRM\backend\src\main\java\com\arudra\crm\repository\LeadCommunicationRepository.java
 A:\CRM\backend\src\main\java\com\arudra\crm\repository\TaskProgressUpdateRepository.java
 A:\CRM\backend\src\main\java\com\arudra\crm\service\ProjectChangeRequestService.java

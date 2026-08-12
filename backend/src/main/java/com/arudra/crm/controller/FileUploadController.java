@@ -1,26 +1,21 @@
 package com.arudra.crm.controller;
 
 import com.arudra.crm.dto.ApiResponse;
-import org.springframework.beans.factory.annotation.Value;
+import com.arudra.crm.storage.StorageService;
+import com.arudra.crm.storage.StoredFile;
 import org.springframework.http.ResponseEntity;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
 import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
 
 /**
- * Generic multipart upload endpoint. Nothing in this codebase accepted real file uploads before —
- * every other "document"/"attachment" entity was populated by pasting an external URL. This stores
- * to local disk under app.upload.dir and returns a fileUrl served by StaticResourceConfig at /uploads/**.
+ * Generic multipart upload endpoint. Validates size/type here, then hands the bytes to the
+ * active {@link StorageService} (local disk in dev, S3/R2 in prod — selected by
+ * {@code app.storage.type}). The response shape is unchanged: {@code { fileUrl, fileName }}.
  */
 @RestController
 @RequestMapping("/api/uploads")
@@ -46,8 +41,11 @@ public class FileUploadController {
             "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "csv", "zip", "dwg", "dxf");
     private static final long MAX_SIZE_BYTES = 25L * 1024 * 1024;
 
-    @Value("${app.upload.dir:./uploads}")
-    private String uploadDir;
+    private final StorageService storageService;
+
+    public FileUploadController(StorageService storageService) {
+        this.storageService = storageService;
+    }
 
     @PostMapping
     public ResponseEntity<ApiResponse<Map<String, String>>> upload(
@@ -72,19 +70,10 @@ public class FileUploadController {
             return ResponseEntity.badRequest().body(ApiResponse.error("Unsupported file type: " + contentType));
         }
 
-        String safeModule = module.replaceAll("[^A-Za-z0-9_-]", "_");
-        String yearMonth = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy/MM"));
-        String storedName = UUID.randomUUID() + "-" + originalName.replaceAll("[^A-Za-z0-9._-]", "_");
-
-        Path dir = Path.of(uploadDir, safeModule, yearMonth).toAbsolutePath().normalize();
-        Files.createDirectories(dir);
-        Path target = dir.resolve(storedName);
-        file.transferTo(target.toFile());
-
-        String fileUrl = "/uploads/" + safeModule + "/" + yearMonth + "/" + storedName;
+        StoredFile stored = storageService.store(file.getBytes(), contentType, module, originalName);
         return ResponseEntity.ok(ApiResponse.success(Map.of(
-                "fileUrl", fileUrl,
-                "fileName", originalName
+                "fileUrl", stored.fileUrl(),
+                "fileName", stored.fileName()
         )));
     }
 }

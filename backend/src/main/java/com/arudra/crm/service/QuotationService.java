@@ -63,6 +63,12 @@ public class QuotationService {
     private BoqRepository boqRepository;
 
     @Autowired
+    private LeadDocumentRepository leadDocumentRepository;
+
+    @Autowired
+    private ProjectDocumentRepository projectDocumentRepository;
+
+    @Autowired
     @org.springframework.context.annotation.Lazy
     private FinanceService financeService;
 
@@ -577,7 +583,6 @@ public class QuotationService {
             project.setProjectName((floorLabel != null ? floorLabel + " - " : "") + "Project for " + owner);
             project.setStatus("PLANNING");
             project.setProgress(0);
-            project.setStartDate(java.time.LocalDate.now());
         }
         // A reused stub project (from the old direct-conversion path) may predate projectCode being set.
         if (project.getProjectCode() == null) {
@@ -590,6 +595,11 @@ public class QuotationService {
         project.setBoq(quotation.getBoq());
         project.setQuotation(quotation);
         project.setPriority(quotation.getPriority() != null ? quotation.getPriority() : "MEDIUM");
+
+        // Carry the lead's property / requirement / scheduling attributes and team assignments onto the
+        // project so it is self-sufficient after conversion. Contact + address land on the linked Customer.
+        applyLeadAttributesToProject(project, quotation.getLead());
+        if (project.getStartDate() == null) project.setStartDate(java.time.LocalDate.now());
 
         BigDecimal budget = items.stream()
                 .map(i -> i.getTotalAmount() != null ? i.getTotalAmount() : BigDecimal.ZERO)
@@ -683,6 +693,96 @@ public class QuotationService {
             lead.setConvertedDate(LocalDateTime.now());
         }
         leadRepository.save(lead);
+        copyLeadDocumentsToProject(lead, primaryProject, user);
+    }
+
+    /**
+     * Copies the lead's descriptive attributes and team assignments onto the project at conversion so
+     * the project screen carries everything captured during pre-sales without re-keying. Each field is
+     * only filled when the project doesn't already have a value — so a reused stub project (or manual
+     * edits made before conversion) and quotation-derived figures like budget are never clobbered.
+     * Contact identity (name/phone/email/GST) intentionally lives on the linked Customer, not here.
+     */
+    private void applyLeadAttributesToProject(Project project, Lead lead) {
+        if (lead == null || project == null) return;
+
+        // Property / site
+        if (isBlank(project.getPropertyAddress()))
+            project.setPropertyAddress(firstNonBlank(lead.getSiteAddress(), lead.getAddress()));
+        if (isBlank(project.getProjectType()))
+            project.setProjectType(lead.getPropertyType());
+        if (isBlank(project.getProjectCategory()))
+            project.setProjectCategory(lead.getRequirementCategory());
+
+        // Requirement / description
+        if (isBlank(project.getProjectDescription()))
+            project.setProjectDescription(firstNonBlank(lead.getProjectDescription(), lead.getCustomerRequirements()));
+        if (isBlank(project.getCustomerNotes()))
+            project.setCustomerNotes(firstNonBlank(lead.getCustomerRequirements(), lead.getSpecialRequests()));
+        if (isBlank(project.getInternalNotes()))
+            project.setInternalNotes(firstNonBlank(lead.getRemarks(), lead.getConversionNotes(), lead.getSiteNotes()));
+
+        // Scheduling
+        if (project.getStartDate() == null && lead.getExpectedStartDate() != null)
+            project.setStartDate(lead.getExpectedStartDate());
+        if (project.getEndDate() == null)
+            project.setEndDate(lead.getPreferredCompletionDate() != null
+                    ? lead.getPreferredCompletionDate() : lead.getExpectedEndDate());
+
+        // Financials (project.budget is derived from approved items separately — don't touch it)
+        if (project.getEstimatedCost() == null)
+            project.setEstimatedCost(lead.getExpectedProjectValue() != null
+                    ? lead.getExpectedProjectValue() : lead.getEstimatedBudget());
+
+        // Team (defaults from the lead; project owners can reassign later)
+        if (project.getProjectManager() == null) project.setProjectManager(lead.getProjectManager());
+        if (project.getSalesExecutive() == null) project.setSalesExecutive(lead.getAssignedSalesExecutive());
+        if (project.getDesigner() == null) project.setDesigner(lead.getAssignedDesigner());
+        if (project.getSiteEngineer() == null) project.setSiteEngineer(lead.getAssignedEngineer());
+    }
+
+    private static boolean isBlank(String s) {
+        return s == null || s.isBlank();
+    }
+
+    private static String firstNonBlank(String... values) {
+        for (String v : values) {
+            if (v != null && !v.isBlank()) return v;
+        }
+        return null;
+    }
+
+    /**
+     * Carries the lead's uploaded documents (property images, floor plans, agreements, site photos,
+     * etc.) over to the newly created project so nothing collected during the pre-sales pipeline is
+     * lost at conversion. Deduplicated by fileUrl so re-converting (or relinking a reused stub
+     * project) never inserts the same document twice.
+     */
+    private void copyLeadDocumentsToProject(Lead lead, Project project, User user) {
+        if (lead == null || project == null) return;
+        List<LeadDocument> leadDocs = leadDocumentRepository.findByLeadId(lead.getId());
+        if (leadDocs.isEmpty()) return;
+
+        Set<String> existingUrls = projectDocumentRepository.findByProjectId(project.getId()).stream()
+                .map(ProjectDocument::getFileUrl)
+                .filter(Objects::nonNull)
+                .collect(java.util.stream.Collectors.toSet());
+
+        for (LeadDocument src : leadDocs) {
+            if (src.getFileUrl() != null && existingUrls.contains(src.getFileUrl())) continue;
+            ProjectDocument doc = new ProjectDocument();
+            doc.setProject(project);
+            doc.setFileName(src.getFileName());
+            doc.setFileUrl(src.getFileUrl());
+            // Lead docs are tagged by category (Property Images, Floor Plans, Agreements, …); fall back
+            // to the coarse documentType. The project's own documentType field is category-like too.
+            doc.setDocumentType(src.getCategory() != null ? src.getCategory() : src.getDocumentType());
+            doc.setUploadedBy(src.getUploadedBy() != null ? src.getUploadedBy() : user);
+            doc.setUploadDate(LocalDateTime.now());
+            String origin = "Imported from lead " + (lead.getLeadNumber() != null ? lead.getLeadNumber() : "#" + lead.getId());
+            doc.setRemarks(src.getDescription() != null ? src.getDescription() + " — " + origin : origin);
+            projectDocumentRepository.save(doc);
+        }
     }
 
     @Transactional

@@ -7,6 +7,7 @@ import {
   type Lead, type UserSummary,
 } from "./constants";
 import { CheckboxField, SectionTitle, SelectField, TextAreaField, TextField } from "./fields";
+import MultiImageCaptureField, { type CapturedImage } from "@/components/MultiImageCaptureField";
 
 const EMPTY_FORM: Partial<Lead> = {
   name: "", mobileNumber: "", priority: "Medium", leadTemperature: "Warm", status: "New",
@@ -22,12 +23,14 @@ export default function LeadFormDialog({
   onSaved: (saved: Lead) => void;
 }) {
   const [form, setForm] = useState<Partial<Lead>>(EMPTY_FORM);
+  const [images, setImages] = useState<CapturedImage[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
     if (open) {
       setForm(lead ? { ...lead } : { ...EMPTY_FORM });
+      setImages([]);
       setError("");
     }
   }, [open, lead]);
@@ -60,9 +63,22 @@ export default function LeadFormDialog({
 
     const request = lead ? leadApi.update(lead.id, payload) : leadApi.create(payload);
     request
-      .then((res) => {
+      .then(async (res) => {
+        const savedLead = res.data;
+        // Persist any images captured on the form as LeadDocuments so they travel to the
+        // project on conversion (copyLeadDocumentsToProject reads lead documents).
+        if (images.length && savedLead?.id) {
+          await Promise.all(images.map((img) =>
+            leadApi.addDocument(savedLead.id, {
+              fileName: img.fileName,
+              fileUrl: img.url,
+              category: "Site Photos",
+              documentType: "Image",
+            }).catch((e) => console.error("Failed to attach lead image", e))
+          ));
+        }
         onOpenChange(false);
-        onSaved(res.data);
+        onSaved(savedLead);
       })
       .catch((err) => {
         console.error("Failed to save lead", err);
@@ -173,6 +189,14 @@ export default function LeadFormDialog({
             {userPicker("Designer", "assignedDesigner")}
             {userPicker("Engineer", "assignedEngineer")}
           </div>
+
+          <SectionTitle>Property / Site Images</SectionTitle>
+          <MultiImageCaptureField
+            label="Capture or add photos (property, site, reference)"
+            module="LEAD"
+            value={images}
+            onChange={setImages}
+          />
 
           {error && <p className="text-sm text-destructive">{error}</p>}
           <div className="flex justify-end gap-2 pt-4 border-t">
