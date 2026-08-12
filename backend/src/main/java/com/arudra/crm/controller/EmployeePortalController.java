@@ -211,6 +211,28 @@ public class EmployeePortalController {
         return ResponseEntity.ok(ApiResponse.success(portalService.getProjects(me())));
     }
 
+    /** Other active projects (not the employee's own) that have tasks they can pick up. */
+    @GetMapping("/projects/other")
+    @PreAuthorize(PORTAL)
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> otherProjects() {
+        return ResponseEntity.ok(ApiResponse.success(portalService.getOtherProjects(me())));
+    }
+
+    /** The unassigned, pickable tasks in a project. */
+    @GetMapping("/projects/{projectId}/open-tasks")
+    @PreAuthorize(PORTAL)
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> projectOpenTasks(@PathVariable Long projectId) {
+        return ResponseEntity.ok(ApiResponse.success(portalService.getProjectOpenTasks(me(), projectId)));
+    }
+
+    /** Pick up (self-assign) an unassigned task. */
+    @PostMapping("/tasks/{taskId}/pick-up")
+    @PreAuthorize(PORTAL)
+    public ResponseEntity<ApiResponse<String>> pickUpTask(@PathVariable Long taskId) {
+        portalService.pickUpTask(me(), taskId);
+        return ResponseEntity.ok(ApiResponse.success("Task picked up."));
+    }
+
     // --- Material Requests (own only) ---------------------------------------
 
     @GetMapping("/material-requests")

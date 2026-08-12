@@ -29,6 +29,9 @@ export default function TaskDetail() {
   if (!task) return <div className="p-6 text-center text-sm text-muted-foreground">Loading…</div>;
 
   const mine = task.myAssignmentStatus;
+  // Once the work is submitted/approved the task is read-only for the employee: no more progress,
+  // photos, notes, issues, material or checklist edits. A manager "reject → rework" reopens it.
+  const locked = mine === 'COMPLETED' || ['WAITING_APPROVAL', 'COMPLETED', 'CANCELLED'].includes(task.status);
 
   const doAction = async (action: 'accept' | 'start' | 'pause' | 'complete' | 'approve') => {
     setBusy(true);
@@ -78,11 +81,16 @@ export default function TaskDetail() {
 
       {task.status === 'WAITING_APPROVAL' && (
         <div className="rounded-xl border border-purple-200 bg-purple-50 p-3 text-xs text-purple-800">
-          Submitted — waiting for manager approval.
+          Submitted — waiting for manager approval. This task is locked and can’t be updated until a manager reviews it.
+        </div>
+      )}
+      {locked && task.status !== 'WAITING_APPROVAL' && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800">
+          This task is {task.status === 'CANCELLED' ? 'cancelled' : 'completed'} and locked — no further updates can be added.
         </div>
       )}
 
-      <CheckInBar taskId={taskId} checkins={task.checkins} onChanged={load} />
+      <CheckInBar taskId={taskId} checkins={task.checkins} onChanged={load} locked={locked} />
 
       <div className="rounded-xl border bg-card p-3 shadow-sm">
         <h3 className="mb-2 text-sm font-semibold">Assigned Team</h3>
@@ -96,7 +104,7 @@ export default function TaskDetail() {
         </ul>
       </div>
 
-      <ChecklistPanel taskId={taskId} checklist={task.checklist} onChanged={load} />
+      <ChecklistPanel taskId={taskId} checklist={task.checklist} onChanged={load} locked={locked} />
 
       <div className="rounded-xl border bg-card p-3 shadow-sm">
         <h3 className="mb-2 text-sm font-semibold">Progress &amp; Photos</h3>
@@ -149,43 +157,55 @@ export default function TaskDetail() {
             </li>
           ))}
         </ul>
-        <div className="flex gap-2">
-          <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add a note…"
-            className="flex-1 rounded-md border px-2 py-1.5 text-sm" />
-          <button onClick={addNote} className="rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground">Post</button>
-        </div>
+        {locked ? (
+          <p className="text-xs text-muted-foreground">Notes are closed — this task is locked.</p>
+        ) : (
+          <div className="flex gap-2">
+            <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add a note…"
+              className="flex-1 rounded-md border px-2 py-1.5 text-sm" />
+            <button onClick={addNote} className="rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground">Post</button>
+          </div>
+        )}
       </div>
 
       <div className="fixed bottom-16 left-1/2 z-20 w-full max-w-md -translate-x-1/2 border-t bg-card px-3 py-2 shadow-[0_-2px_8px_rgba(0,0,0,0.06)]">
-        {primaryAction && (
-          <button
-            onClick={() => doAction(primaryAction.action)}
-            disabled={busy}
-            className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg bg-primary py-2.5 text-sm font-semibold text-primary-foreground"
-          >
-            <primaryAction.icon className="h-4 w-4" /> {primaryAction.label}
-          </button>
+        {locked ? (
+          <p className="flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium text-muted-foreground">
+            <CheckCircle2 className="h-4 w-4 text-emerald-600" /> Task locked — no further updates
+          </p>
+        ) : (
+          <>
+            {primaryAction && (
+              <button
+                onClick={() => doAction(primaryAction.action)}
+                disabled={busy}
+                className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg bg-primary py-2.5 text-sm font-semibold text-primary-foreground"
+              >
+                <primaryAction.icon className="h-4 w-4" /> {primaryAction.label}
+              </button>
+            )}
+            {mine === 'IN_PROGRESS' && (
+              <button
+                onClick={() => doAction('complete')}
+                disabled={busy}
+                className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 py-2.5 text-sm font-semibold text-white"
+              >
+                <CheckCircle2 className="h-4 w-4" /> Complete Task
+              </button>
+            )}
+            <div className="grid grid-cols-3 gap-2">
+              <button onClick={() => setSheet('progress')} className="flex flex-col items-center gap-0.5 rounded-lg border py-2 text-[11px]">
+                <Camera className="h-4 w-4" /> Progress
+              </button>
+              <button onClick={() => setSheet('issue')} className="flex flex-col items-center gap-0.5 rounded-lg border py-2 text-[11px]">
+                <AlertTriangle className="h-4 w-4" /> Report Issue
+              </button>
+              <button onClick={() => setSheet('material')} className="flex flex-col items-center gap-0.5 rounded-lg border py-2 text-[11px]">
+                <Package className="h-4 w-4" /> Material
+              </button>
+            </div>
+          </>
         )}
-        {mine === 'IN_PROGRESS' && (
-          <button
-            onClick={() => doAction('complete')}
-            disabled={busy}
-            className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 py-2.5 text-sm font-semibold text-white"
-          >
-            <CheckCircle2 className="h-4 w-4" /> Complete Task
-          </button>
-        )}
-        <div className="grid grid-cols-3 gap-2">
-          <button onClick={() => setSheet('progress')} className="flex flex-col items-center gap-0.5 rounded-lg border py-2 text-[11px]">
-            <Camera className="h-4 w-4" /> Progress
-          </button>
-          <button onClick={() => setSheet('issue')} className="flex flex-col items-center gap-0.5 rounded-lg border py-2 text-[11px]">
-            <AlertTriangle className="h-4 w-4" /> Report Issue
-          </button>
-          <button onClick={() => setSheet('material')} className="flex flex-col items-center gap-0.5 rounded-lg border py-2 text-[11px]">
-            <Package className="h-4 w-4" /> Material
-          </button>
-        </div>
       </div>
 
       <ProgressSheet taskId={taskId} open={sheet === 'progress'} onOpenChange={(o) => setSheet(o ? 'progress' : null)} onSaved={load} />

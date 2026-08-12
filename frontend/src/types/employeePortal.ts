@@ -34,6 +34,7 @@ export interface TimeStatus {
   checkInTime: string | null;
   checkOutTime: string | null;
   breakMinutes: number;
+  sessionsToday: number;
   hourlyRate: number | null;
   todayHours: number;
   todayOvertime: number;
@@ -200,6 +201,28 @@ export interface MyProject {
   projectManager: string | null;
   myTaskCount: number;
   myCompletedCount: number;
+}
+
+export interface OtherProject {
+  id: number;
+  projectName: string;
+  location: string | null;
+  status: string;
+  progress: number | null;
+  projectManager: string | null;
+  openTaskCount: number;
+}
+
+/** A task an employee can pick up (self-assign). Shape mirrors the task card used elsewhere. */
+export interface PickableTask {
+  id: number;
+  taskName: string;
+  status: string;
+  priority: string | null;
+  dueDate: string | null;
+  room: string | null;
+  floor: string | null;
+  itemName: string | null;
 }
 
 // --- Operational self-service (Phase 2) ---------------------------------

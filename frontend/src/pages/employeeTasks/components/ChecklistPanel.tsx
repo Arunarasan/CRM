@@ -3,7 +3,7 @@ import { Check, Plus } from 'lucide-react';
 import { employeeTaskApi } from '@/api/employeeTaskApi';
 import { Checklist } from '@/types/employeeTask';
 
-export default function ChecklistPanel({ taskId, checklist, onChanged }: { taskId: number; checklist: Checklist[]; onChanged: () => void }) {
+export default function ChecklistPanel({ taskId, checklist, onChanged, locked }: { taskId: number; checklist: Checklist[]; onChanged: () => void; locked?: boolean }) {
   const [newItem, setNewItem] = useState('');
   const [adding, setAdding] = useState(false);
 
@@ -33,7 +33,8 @@ export default function ChecklistPanel({ taskId, checklist, onChanged }: { taskI
           <li key={item.id} className="flex items-center gap-2">
             <button
               onClick={() => toggle(item.id)}
-              className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border ${item.isCompleted ? 'border-emerald-600 bg-emerald-600' : 'border-slate-300'}`}
+              disabled={locked}
+              className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border disabled:opacity-70 ${item.isCompleted ? 'border-emerald-600 bg-emerald-600' : 'border-slate-300'}`}
             >
               {item.isCompleted && <Check className="h-3.5 w-3.5 text-white" />}
             </button>
@@ -41,17 +42,19 @@ export default function ChecklistPanel({ taskId, checklist, onChanged }: { taskI
           </li>
         ))}
       </ul>
-      <div className="mt-2 flex gap-2">
-        <input
-          value={newItem}
-          onChange={(e) => setNewItem(e.target.value)}
-          placeholder="Add checklist item…"
-          className="flex-1 rounded-md border px-2 py-1.5 text-xs"
-        />
-        <button onClick={addItem} disabled={adding || !newItem.trim()} className="rounded-md bg-primary px-2 text-primary-foreground">
-          <Plus className="h-4 w-4" />
-        </button>
-      </div>
+      {!locked && (
+        <div className="mt-2 flex gap-2">
+          <input
+            value={newItem}
+            onChange={(e) => setNewItem(e.target.value)}
+            placeholder="Add checklist item…"
+            className="flex-1 rounded-md border px-2 py-1.5 text-xs"
+          />
+          <button onClick={addItem} disabled={adding || !newItem.trim()} className="rounded-md bg-primary px-2 text-primary-foreground">
+            <Plus className="h-4 w-4" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -48,6 +48,8 @@ public class EmployeeTaskService {
     @Autowired
     private ProjectRoomItemRepository roomItemRepository;
     @Autowired
+    private ProjectRepository projectRepository;
+    @Autowired
     private ProductRepository productRepository;
     @Autowired
     private UserRepository userRepository;
@@ -62,6 +64,27 @@ public class EmployeeTaskService {
 
     private static final List<String> ACTIVE_ASSIGNMENT_STATUSES =
             List.of("ASSIGNED", "ACCEPTED", "IN_PROGRESS", "PAUSED", "WAITING_MATERIAL", "REWORK", "COMPLETED");
+
+    /**
+     * Once work is done a task is locked from further field updates, so an employee re-opening a
+     * completed task can no longer keep posting progress/photos/issues/material (which polluted the
+     * record). Locked when EITHER this employee's own assignment is COMPLETED (submitted, awaiting
+     * manager approval) OR the whole task is manager-approved/closed. A manager "reject → REWORK"
+     * moves the assignment out of COMPLETED and the task to REWORK, which unlocks it again.
+     */
+    private void assertTaskEditableBy(Long taskId, User employee) {
+        assignmentRepository.findByTaskIdAndEmployeeId(taskId, employee.getId()).ifPresent(a -> {
+            if ("COMPLETED".equals(a.getStatus())) {
+                throw new IllegalStateException("You've already completed this task — it's awaiting manager approval "
+                        + "and can't be updated until a manager requests rework.");
+            }
+        });
+        Task t = getTask(taskId);
+        if ("COMPLETED".equals(t.getStatus()) || "CANCELLED".equals(t.getStatus())) {
+            throw new IllegalStateException("This task is " + t.getStatus().toLowerCase().replace('_', ' ')
+                    + " and can no longer be updated.");
+        }
+    }
 
     // ---------------------------------------------------------------- Home / list / detail
 
@@ -138,6 +161,92 @@ public class EmployeeTaskService {
         }
         cards.sort(Comparator.comparing(c -> String.valueOf(c.get("projectName")), String.CASE_INSENSITIVE_ORDER));
         return cards;
+    }
+
+    /** A task nobody is currently working (no assignment that isn't cancelled/rejected). */
+    private boolean isUnassigned(Task task) {
+        return assignmentRepository.findByTaskId(task.getId()).stream()
+                .noneMatch(a -> !"CANCELLED".equals(a.getStatus()) && !"REJECTED".equals(a.getStatus()));
+    }
+
+    /**
+     * Active projects the employee is NOT assigned to, each carrying how many UNASSIGNED tasks they
+     * can pick up. Powers the portal's "Other Projects" list — employees can browse beyond their own
+     * projects and take on open work. Only projects with at least one pickable task are returned.
+     */
+    public List<Map<String, Object>> getOtherProjects(User employee) {
+        java.util.Set<Long> mineProjectIds = activeAssignments(employee.getId()).stream()
+                .map(TaskAssignment::getTask)
+                .filter(t -> t != null && t.getProject() != null)
+                .map(t -> t.getProject().getId())
+                .collect(Collectors.toSet());
+
+        List<Map<String, Object>> cards = new ArrayList<>();
+        for (Project p : projectRepository.findAll()) {
+            if (mineProjectIds.contains(p.getId())) continue;
+            if ("COMPLETED".equals(p.getStatus()) || "CANCELLED".equals(p.getStatus())) continue;
+            long open = taskRepository.findByProjectId(p.getId()).stream()
+                    .filter(t -> !"COMPLETED".equals(t.getStatus()) && !"CANCELLED".equals(t.getStatus()))
+                    .filter(this::isUnassigned)
+                    .count();
+            if (open == 0) continue; // nothing to pick up — don't clutter the list
+            Map<String, Object> card = new HashMap<>();
+            card.put("id", p.getId());
+            card.put("projectName", p.getProjectName());
+            card.put("location", p.getPropertyAddress());
+            card.put("status", p.getStatus());
+            card.put("progress", p.getProgress());
+            card.put("projectManager", p.getProjectManager() != null ? p.getProjectManager().getName() : null);
+            card.put("openTaskCount", open);
+            cards.add(card);
+        }
+        cards.sort(Comparator.comparing(c -> String.valueOf(c.get("projectName")), String.CASE_INSENSITIVE_ORDER));
+        return cards;
+    }
+
+    /** The pickable (unassigned, not closed) tasks in a project — what an employee may take on. */
+    public List<Map<String, Object>> getProjectOpenTasks(Long projectId, User employee) {
+        return taskRepository.findByProjectId(projectId).stream()
+                .filter(t -> !"COMPLETED".equals(t.getStatus()) && !"CANCELLED".equals(t.getStatus()))
+                .filter(this::isUnassigned)
+                .sorted(Comparator.comparing(Task::getDueDate, Comparator.nullsLast(Comparator.naturalOrder())))
+                .map(t -> toCard(t, employee.getId()))
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * An employee picks up an UNASSIGNED task and starts owning it. Guarded so they can only take
+     * tasks nobody else holds (per the chosen policy) — self-assigning never displaces another worker.
+     * Set ACCEPTED since the employee actively chose it. Managers are notified for accountability.
+     */
+    @LogActivity(module = "EMPLOYEE_TASK", action = "SELF_ASSIGN")
+    public Task selfAssign(Long taskId, User employee) {
+        Task task = getTask(taskId);
+        if ("COMPLETED".equals(task.getStatus()) || "CANCELLED".equals(task.getStatus())) {
+            throw new IllegalStateException("This task is closed and can't be picked up.");
+        }
+        if (!isUnassigned(task)) {
+            throw new IllegalStateException("This task is already taken. Only unassigned tasks can be picked up.");
+        }
+        TaskAssignment a = new TaskAssignment();
+        a.setTask(task);
+        a.setResourceType(ResourceType.EMPLOYEE);
+        a.setResourceId(employee.getId());
+        a.setEmployee(employee);
+        a.setAssignedBy(employee);
+        a.setRole("Self-assigned");
+        a.setStatus("ACCEPTED");
+        a.setAcceptedAt(LocalDateTime.now());
+        assignmentRepository.save(a);
+
+        task.setAssignedEmployee(employee); // mirror primary pointer for display/back-compat
+        Task saved = recomputeAndSave(task);
+        for (Long mgr : managersForTask(task)) {
+            notificationService.dispatch("Task picked up",
+                    employee.getName() + " picked up \"" + task.getTaskName() + "\".", "TASK", mgr,
+                    task.getProject() != null ? "/projects/" + task.getProject().getId() : null);
+        }
+        return saved;
     }
 
     public Map<String, Object> getTaskDetail(Long taskId, User employee) {
@@ -290,6 +399,7 @@ public class EmployeeTaskService {
 
     @LogActivity(module = "EMPLOYEE_TASK", action = "COMPLETE")
     public Task complete(Long taskId, User employee, String remarks) {
+        assertTaskEditableBy(taskId, employee);
         TaskAssignment a = getAssignment(taskId, employee.getId());
         a.setStatus("COMPLETED");
         a.setCompletedAt(LocalDateTime.now());
@@ -347,6 +457,7 @@ public class EmployeeTaskService {
     @LogActivity(module = "EMPLOYEE_TASK", action = "PROGRESS")
     public Map<String, Object> addProgress(Long taskId, User employee, Integer progressPercent, String remarks,
                                            Integer timeSpentMinutes, List<Map<String, Object>> mediaItems) {
+        assertTaskEditableBy(taskId, employee);
         Task task = getTask(taskId);
         TaskProgressUpdate update = new TaskProgressUpdate();
         update.setTask(task);
@@ -383,6 +494,9 @@ public class EmployeeTaskService {
     public Map<String, Object> toggleChecklistItem(Long checklistItemId, User employee) {
         TaskChecklistItem item = checklistItemRepository.findById(checklistItemId)
                 .orElseThrow(() -> new RuntimeException("Checklist item not found"));
+        if (item.getChecklist() != null && item.getChecklist().getTask() != null) {
+            assertTaskEditableBy(item.getChecklist().getTask().getId(), employee);
+        }
         item.setIsCompleted(!Boolean.TRUE.equals(item.getIsCompleted()));
         TaskChecklistItem saved = checklistItemRepository.save(item);
         return Map.of("id", saved.getId(), "content", saved.getContent(),
@@ -424,6 +538,7 @@ public class EmployeeTaskService {
 
     @LogActivity(module = "EMPLOYEE_TASK", action = "REPORT_ISSUE")
     public Map<String, Object> reportIssue(Long taskId, User employee, String issueType, String description) {
+        assertTaskEditableBy(taskId, employee);
         Task task = getTask(taskId);
         TaskIssue issue = new TaskIssue();
         issue.setTask(task);
@@ -456,6 +571,7 @@ public class EmployeeTaskService {
 
     @LogActivity(module = "EMPLOYEE_TASK", action = "MATERIAL_USAGE")
     public Map<String, Object> logMaterialUsage(Long taskId, User employee, Long productId, BigDecimal quantity, String remarks) {
+        assertTaskEditableBy(taskId, employee);
         Task task = getTask(taskId);
         Product product = productRepository.findById(productId).orElseThrow(() -> new RuntimeException("Product not found"));
 
@@ -475,6 +591,7 @@ public class EmployeeTaskService {
     // ---------------------------------------------------------------- Check-in / check-out
 
     public Map<String, Object> checkIn(Long taskId, User employee, Double latitude, Double longitude, String locationLabel) {
+        assertTaskEditableBy(taskId, employee);
         Task task = getTask(taskId);
         TaskCheckIn checkIn = new TaskCheckIn();
         checkIn.setTask(task);

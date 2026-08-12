@@ -1,7 +1,7 @@
 import api from '../lib/api';
 import {
   EmployeeProfile, EmployeeDashboard, AttendanceEntry, LeaveRequestEntry,
-  LeaveBalance, Payslip, SalarySummary, EmployeeDocumentEntry, MyProject,
+  LeaveBalance, Payslip, SalarySummary, EmployeeDocumentEntry, MyProject, OtherProject, PickableTask,
   TimeStatus, Timesheet, MaterialOption, MaterialRequestEntry, MaterialRequestCreateBody,
   LeadSummary, LeadCreateBody, ManpowerRequestEntry, ManpowerRequestCreateBody,
   DailyReportEntry, DailyReportCreateBody, PersonalReminderEntry, ReminderCreateBody,
@@ -53,6 +53,10 @@ export const employeePortalApi = {
 
   documents: () => api.get<EmployeeDocumentEntry[]>(`${BASE}/documents`).then((r) => r.data),
   projects: () => api.get<MyProject[]>(`${BASE}/projects`).then((r) => r.data),
+  otherProjects: () => api.get<OtherProject[]>(`${BASE}/projects/other`).then((r) => r.data),
+  projectOpenTasks: (projectId: number) =>
+    api.get<PickableTask[]>(`${BASE}/projects/${projectId}/open-tasks`).then((r) => r.data),
+  pickUpTask: (taskId: number) => api.post(`${BASE}/tasks/${taskId}/pick-up`).then((r) => r.data),
 
   // Material requests (own only) + material-master lookup for the picker
   materialRequests: () => api.get<MaterialRequestEntry[]>(`${BASE}/material-requests`).then((r) => r.data),

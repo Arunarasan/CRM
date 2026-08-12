@@ -365,6 +365,25 @@ public class EmployeePortalService {
         return employeeTaskService.getMyProjects(currentUser);
     }
 
+    /** Other active projects (not the employee's own) that have tasks they can pick up. */
+    public List<Map<String, Object>> getOtherProjects(User currentUser) {
+        requireEmployee(currentUser);
+        return employeeTaskService.getOtherProjects(currentUser);
+    }
+
+    /** The unassigned, pickable tasks in a project. */
+    public List<Map<String, Object>> getProjectOpenTasks(User currentUser, Long projectId) {
+        requireEmployee(currentUser);
+        return employeeTaskService.getProjectOpenTasks(projectId, currentUser);
+    }
+
+    /** Pick up (self-assign) an unassigned task in any project. */
+    @Transactional
+    public void pickUpTask(User currentUser, Long taskId) {
+        requireEmployee(currentUser);
+        employeeTaskService.selfAssign(taskId, currentUser);
+    }
+
     // =====================================================================
     // Material Requests (operational — reuses MaterialRequestService, self-scoped)
     // =====================================================================

@@ -14,7 +14,7 @@ function getPosition(): Promise<GeolocationPosition | null> {
   });
 }
 
-export default function CheckInBar({ taskId, checkins, onChanged }: { taskId: number; checkins: CheckInSummary[]; onChanged: () => void }) {
+export default function CheckInBar({ taskId, checkins, onChanged, locked }: { taskId: number; checkins: CheckInSummary[]; onChanged: () => void; locked?: boolean }) {
   const [busy, setBusy] = useState(false);
   const openCheckIn = checkins.find((c) => c.checkInTime && !c.checkOutTime);
 
@@ -46,14 +46,16 @@ export default function CheckInBar({ taskId, checkins, onChanged }: { taskId: nu
         <MapPin className="h-4 w-4" />
         {openCheckIn ? `Checked in at ${new Date(openCheckIn.checkInTime!).toLocaleTimeString()}` : 'Not checked in'}
       </div>
-      <button
-        onClick={openCheckIn ? checkOut : checkIn}
-        disabled={busy}
-        className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white ${openCheckIn ? 'bg-slate-700' : 'bg-emerald-600'}`}
-      >
-        {openCheckIn ? <LogOut className="h-3.5 w-3.5" /> : <LogIn className="h-3.5 w-3.5" />}
-        {openCheckIn ? 'Check Out' : 'Check In'}
-      </button>
+      {(!locked || openCheckIn) && (
+        <button
+          onClick={openCheckIn ? checkOut : checkIn}
+          disabled={busy}
+          className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white ${openCheckIn ? 'bg-slate-700' : 'bg-emerald-600'}`}
+        >
+          {openCheckIn ? <LogOut className="h-3.5 w-3.5" /> : <LogIn className="h-3.5 w-3.5" />}
+          {openCheckIn ? 'Check Out' : 'Check In'}
+        </button>
+      )}
     </div>
   );
 }
