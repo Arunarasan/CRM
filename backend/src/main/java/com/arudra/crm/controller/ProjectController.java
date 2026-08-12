@@ -29,6 +29,9 @@ public class ProjectController {
     private ProjectService projectService;
 
     @Autowired
+    private com.arudra.crm.service.QuotationService quotationService;
+
+    @Autowired
     private CurrentUserService currentUserService;
 
     @GetMapping
@@ -103,6 +106,19 @@ public class ProjectController {
     @PostMapping("/{id}/documents")
     public ResponseEntity<ProjectDocument> addDocument(@PathVariable Long id, @RequestBody ProjectDocument document) {
         return ResponseEntity.ok(projectService.addDocument(id, document, null));
+    }
+
+    /** Pull this project's lead documents + linked measurement drawings/media into its Documents tab. */
+    @PostMapping("/{id}/import-lead-assets")
+    public ResponseEntity<Map<String, Integer>> importLeadAssets(@PathVariable Long id) {
+        int imported = quotationService.importPreSalesAssets(id, currentUserService.getCurrentUser());
+        return ResponseEntity.ok(Map.of("imported", imported));
+    }
+
+    /** Replace a document's file (e.g. after an admin edits the image in the in-app viewer). */
+    @PutMapping("/documents/{docId}/file")
+    public ResponseEntity<ProjectDocument> replaceDocumentFile(@PathVariable Long docId, @RequestBody Map<String, String> body) {
+        return ResponseEntity.ok(projectService.replaceDocumentFile(docId, body.get("fileUrl"), body.get("fileName")));
     }
 
     @PostMapping("/{id}/payments")

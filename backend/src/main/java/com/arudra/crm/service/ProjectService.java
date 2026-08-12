@@ -285,6 +285,17 @@ public class ProjectService {
         return documentRepository.save(document);
     }
 
+    /** Point an existing document row at a new (e.g. edited) file, keeping its type/remarks/history. */
+    public ProjectDocument replaceDocumentFile(Long docId, String fileUrl, String fileName) {
+        ProjectDocument doc = documentRepository.findById(docId)
+                .orElseThrow(() -> new RuntimeException("Document not found"));
+        if (fileUrl != null && !fileUrl.isBlank()) doc.setFileUrl(fileUrl);
+        if (fileName != null && !fileName.isBlank()) {
+            doc.setFileName(fileName.length() > 200 ? fileName.substring(0, 200) : fileName);
+        }
+        return documentRepository.save(doc);
+    }
+
     public ProjectPayment addPayment(Long projectId, ProjectPayment payment, User user) {
         Project project = getProjectById(projectId);
         payment.setProject(project);

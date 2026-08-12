@@ -69,6 +69,12 @@ public class QuotationService {
     private ProjectDocumentRepository projectDocumentRepository;
 
     @Autowired
+    private MeasurementDrawingRepository measurementDrawingRepository;
+
+    @Autowired
+    private MeasurementMediaRepository measurementMediaRepository;
+
+    @Autowired
     @org.springframework.context.annotation.Lazy
     private FinanceService financeService;
 
@@ -693,7 +699,7 @@ public class QuotationService {
             lead.setConvertedDate(LocalDateTime.now());
         }
         leadRepository.save(lead);
-        copyLeadDocumentsToProject(lead, primaryProject, user);
+        copyPreSalesAssetsToProject(lead, quotation.getMeasurement(), primaryProject, user);
     }
 
     /**
@@ -753,36 +759,88 @@ public class QuotationService {
     }
 
     /**
-     * Carries the lead's uploaded documents (property images, floor plans, agreements, site photos,
-     * etc.) over to the newly created project so nothing collected during the pre-sales pipeline is
-     * lost at conversion. Deduplicated by fileUrl so re-converting (or relinking a reused stub
-     * project) never inserts the same document twice.
+     * Consolidates every visual/document asset captured during the pre-sales pipeline onto the newly
+     * created project, so the project's Documents tab is a complete, self-contained record after
+     * conversion. Three sources are pulled in, all as one-time snapshots at conversion:
+     *   1. Lead documents  — property images, floor plans, agreements, site photos.
+     *   2. Measurement drawings — floor plans, CAD, sketches, blueprints, layouts.
+     *   3. Measurement media   — before/room/measurement photos, videos, voice notes.
+     * Deduplicated by fileUrl (across all three sources and against what the project already has), so
+     * re-converting or relinking a reused stub project never inserts the same file twice.
      */
-    private void copyLeadDocumentsToProject(Lead lead, Project project, User user) {
-        if (lead == null || project == null) return;
-        List<LeadDocument> leadDocs = leadDocumentRepository.findByLeadId(lead.getId());
-        if (leadDocs.isEmpty()) return;
+    private void copyPreSalesAssetsToProject(Lead lead, Measurement measurement, Project project, User user) {
+        if (project == null) return;
 
         Set<String> existingUrls = projectDocumentRepository.findByProjectId(project.getId()).stream()
                 .map(ProjectDocument::getFileUrl)
                 .filter(Objects::nonNull)
-                .collect(java.util.stream.Collectors.toSet());
+                .collect(java.util.stream.Collectors.toCollection(HashSet::new));
 
-        for (LeadDocument src : leadDocs) {
-            if (src.getFileUrl() != null && existingUrls.contains(src.getFileUrl())) continue;
-            ProjectDocument doc = new ProjectDocument();
-            doc.setProject(project);
-            doc.setFileName(src.getFileName());
-            doc.setFileUrl(src.getFileUrl());
-            // Lead docs are tagged by category (Property Images, Floor Plans, Agreements, …); fall back
-            // to the coarse documentType. The project's own documentType field is category-like too.
-            doc.setDocumentType(src.getCategory() != null ? src.getCategory() : src.getDocumentType());
-            doc.setUploadedBy(src.getUploadedBy() != null ? src.getUploadedBy() : user);
-            doc.setUploadDate(LocalDateTime.now());
+        // 1) Lead documents — tagged by category (Property Images, Agreements, …); fall back to documentType.
+        if (lead != null && lead.getId() != null) {
             String origin = "Imported from lead " + (lead.getLeadNumber() != null ? lead.getLeadNumber() : "#" + lead.getId());
-            doc.setRemarks(src.getDescription() != null ? src.getDescription() + " — " + origin : origin);
-            projectDocumentRepository.save(doc);
+            for (LeadDocument src : leadDocumentRepository.findByLeadId(lead.getId())) {
+                copyPreSalesDoc(project, existingUrls, src.getFileName(), src.getFileUrl(),
+                        src.getCategory() != null ? src.getCategory() : src.getDocumentType(),
+                        src.getUploadedBy() != null ? src.getUploadedBy() : user, src.getDescription(), origin);
+            }
         }
+
+        // 2 & 3) The measurement is shared by reference with the project; snapshot its drawings + media
+        // into the Documents tab too, so they no longer live only behind the linked measurement.
+        if (measurement != null && measurement.getId() != null) {
+            String origin = "Imported from measurement #" + measurement.getId();
+            for (MeasurementDrawing d : measurementDrawingRepository.findByMeasurementId(measurement.getId())) {
+                copyPreSalesDoc(project, existingUrls, d.getFileName(), d.getFilePath(),
+                        d.getDrawingType() != null ? d.getDrawingType() : "Drawing",
+                        d.getUploadedBy() != null ? d.getUploadedBy() : user, d.getDescription(), origin);
+            }
+            for (MeasurementMedia m : measurementMediaRepository.findByMeasurementId(measurement.getId())) {
+                copyPreSalesDoc(project, existingUrls, m.getFileName(), m.getFilePath(),
+                        m.getCategory() != null ? m.getCategory() : (m.getMediaType() != null ? m.getMediaType() : "Photos"),
+                        m.getUploadedBy() != null ? m.getUploadedBy() : user, m.getDescription(), origin);
+            }
+        }
+    }
+
+    /**
+     * Inserts one ProjectDocument from a pre-sales source, guarding the project_documents column limits
+     * (file_name NOT NULL / 200 chars, file_url 500) so a stray long value can never abort the whole
+     * conversion transaction. Updates {@code existingUrls} in place so duplicates within this run —
+     * across lead/drawing/media sources — are also skipped.
+     */
+    /**
+     * On-demand counterpart to the automatic copy at conversion: backfills an EXISTING project's
+     * Documents tab from its lead's documents and its linked measurement's drawings + media. Needed
+     * for projects created before that copy existed, or to re-pull assets a user added to the lead /
+     * measurement after conversion. Idempotent — deduped by fileUrl, so re-running only adds what's
+     * new. Returns how many documents were actually imported.
+     */
+    @Transactional
+    public int importPreSalesAssets(Long projectId, User user) {
+        Project project = projectRepository.findById(projectId)
+                .orElseThrow(() -> new RuntimeException("Project not found"));
+        int before = projectDocumentRepository.findByProjectId(projectId).size();
+        copyPreSalesAssetsToProject(project.getLead(), project.getMeasurement(), project, user);
+        return projectDocumentRepository.findByProjectId(projectId).size() - before;
+    }
+
+    private void copyPreSalesDoc(Project project, Set<String> existingUrls, String fileName, String fileUrl,
+                                 String documentType, User uploadedBy, String description, String origin) {
+        if (fileUrl == null || fileUrl.isBlank()) return;        // nothing to link to
+        if (fileUrl.length() > 500) return;                      // exceeds column cap; skip rather than fail conversion
+        if (!existingUrls.add(fileUrl)) return;                  // already present (project or earlier in this run)
+
+        ProjectDocument doc = new ProjectDocument();
+        doc.setProject(project);
+        doc.setFileName(fileName == null || fileName.isBlank() ? "Untitled"
+                : fileName.length() > 200 ? fileName.substring(0, 200) : fileName);
+        doc.setFileUrl(fileUrl);
+        doc.setDocumentType(documentType);
+        doc.setUploadedBy(uploadedBy);
+        doc.setUploadDate(LocalDateTime.now());
+        doc.setRemarks(description != null && !description.isBlank() ? description + " — " + origin : origin);
+        projectDocumentRepository.save(doc);
     }
 
     @Transactional
