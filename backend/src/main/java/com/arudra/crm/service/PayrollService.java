@@ -46,6 +46,7 @@ public class PayrollService {
     @Autowired private ProjectRepository projectRepository;
     @Autowired private EmployeeDeductionRepository deductionRepository;
     @Autowired private EmployeeTimeService timeService;
+    @Autowired private com.arudra.crm.repository.TaskAssignmentRepository taskAssignmentRepository;
 
     // ============================================================ salary structure
     public SalaryStructure getStructure(Long employeeId) {
@@ -391,7 +392,37 @@ public class PayrollService {
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("record", rec);
         out.put("recoveries", recoveryRepository.findBySalaryRecordId(salaryRecordId));
+        out.put("workStats", employeeWorkStats(rec.getEmployee() != null ? rec.getEmployee().getId() : null));
         return out;
+    }
+
+    /**
+     * How much this employee has actually delivered: number of tasks they completed, and the number of
+     * distinct projects they finished at least one task on (project status irrelevant — the chosen
+     * definition). Employees are linked to their login (which owns TaskAssignments) by email.
+     */
+    public Map<String, Object> employeeWorkStats(Long employeeId) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        long tasksDone = 0, projectsDone = 0;
+        Employee employee = employeeId == null ? null : employeeRepository.findById(employeeId).orElse(null);
+        User user = employee != null && employee.getEmail() != null
+                ? userRepository.findByEmail(employee.getEmail()).orElse(null) : null;
+        if (user != null) {
+            java.util.Set<Long> doneTasks = new java.util.HashSet<>();
+            java.util.Set<Long> doneProjects = new java.util.HashSet<>();
+            for (com.arudra.crm.entity.TaskAssignment a : taskAssignmentRepository.findByEmployeeId(user.getId())) {
+                if (!"COMPLETED".equals(a.getStatus())) continue;
+                com.arudra.crm.entity.Task t = a.getTask();
+                if (t == null) continue;
+                doneTasks.add(t.getId());
+                if (t.getProject() != null) doneProjects.add(t.getProject().getId());
+            }
+            tasksDone = doneTasks.size();
+            projectsDone = doneProjects.size();
+        }
+        m.put("tasksDone", tasksDone);
+        m.put("projectsDone", projectsDone);
+        return m;
     }
 
     public List<SalaryRecord> getRegister(int month, int year) {

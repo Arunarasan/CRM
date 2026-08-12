@@ -145,6 +145,12 @@ public class HrController {
         return ResponseEntity.ok(hrService.getSalaryRecordsForEmployee(id));
     }
 
+    /** Delivery counts for the employee's payroll view: tasks completed + distinct projects worked. */
+    @GetMapping("/employees/{id}/work-stats")
+    public ResponseEntity<Map<String, Object>> getEmployeeWorkStats(@PathVariable Long id) {
+        return ResponseEntity.ok(payrollService.employeeWorkStats(id));
+    }
+
     @PostMapping("/payroll")
     public ResponseEntity<SalaryRecord> generateSalaryRecord(@RequestBody SalaryRecord record) {
         return ResponseEntity.ok(hrService.generateSalaryRecord(record));

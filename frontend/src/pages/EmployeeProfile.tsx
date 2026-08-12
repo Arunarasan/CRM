@@ -21,6 +21,7 @@ export default function EmployeeProfile() {
   const [attendance, setAttendance] = useState<any[]>([]);
   const [leaves, setLeaves] = useState<any[]>([]);
   const [payroll, setPayroll] = useState<any[]>([]);
+  const [workStats, setWorkStats] = useState<{ tasksDone: number; projectsDone: number } | null>(null);
   const [documents, setDocuments] = useState<any[]>([]);
   const [performance, setPerformance] = useState<any[]>([]);
   const [score, setScore] = useState<any>(null);
@@ -46,6 +47,7 @@ export default function EmployeeProfile() {
     api.get(`/hr/employees/${id}/attendance`).then(res => setAttendance(res.data));
     api.get(`/hr/employees/${id}/leaves`).then(res => setLeaves(res.data));
     api.get(`/hr/employees/${id}/payroll`).then(res => setPayroll(res.data));
+    api.get(`/hr/employees/${id}/work-stats`).then(res => setWorkStats(res.data)).catch(() => setWorkStats(null));
     loadDocuments();
     loadPerformance();
   }, [id]);
@@ -217,6 +219,18 @@ export default function EmployeeProfile() {
                 
                 {/* 3. Payroll */}
                 <TabsContent value="payroll">
+                    <div className="grid grid-cols-2 gap-4 mb-4">
+                        <div className="bg-white border rounded-2xl shadow-sm p-5">
+                            <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Tasks Completed</p>
+                            <p className="mt-1 text-3xl font-black text-slate-900">{workStats?.tasksDone ?? 0}</p>
+                            <p className="text-xs text-slate-500">total tasks this employee finished</p>
+                        </div>
+                        <div className="bg-white border rounded-2xl shadow-sm p-5">
+                            <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Projects Worked</p>
+                            <p className="mt-1 text-3xl font-black text-slate-900">{workStats?.projectsDone ?? 0}</p>
+                            <p className="text-xs text-slate-500">distinct projects they completed tasks on</p>
+                        </div>
+                    </div>
                     <div className="bg-white border rounded-2xl shadow-sm overflow-hidden flex flex-col">
                         <div className="flex-1 overflow-y-auto">
                             <Table>
