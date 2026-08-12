@@ -297,9 +297,11 @@ com\arudra\crm\repository\DepartmentRepository.class
 com\arudra\crm\entity\PurchaseReturn.class
 com\arudra\crm\entity\MeasurementMaterialEstimate.class
 com\arudra\crm\repository\ProjectExpenseRepository.class
+com\arudra\crm\storage\StorageKeys.class
 com\arudra\crm\service\FinanceReminderService.class
 com\arudra\crm\repository\DamageEntryRepository.class
 com\arudra\crm\service\WorkforceService.class
+com\arudra\crm\storage\S3StorageProperties.class
 com\arudra\crm\config\DatabaseMigrationRunner.class
 com\arudra\crm\controller\NotificationController.class
 com\arudra\crm\repository\AttendanceRepository.class
@@ -338,6 +340,7 @@ com\arudra\crm\entity\BoqItemLabour.class
 com\arudra\crm\repository\QuotationActivityRepository.class
 com\arudra\crm\entity\ProjectDailyLogEmployee.class
 com\arudra\crm\repository\ProjectRiskRepository.class
+com\arudra\crm\storage\StoredFile.class
 com\arudra\crm\controller\StockTransferController.class
 com\arudra\crm\dto\lead\LeadConversionResultDTO.class
 com\arudra\crm\entity\TaskAttachment.class
@@ -365,6 +368,7 @@ com\arudra\crm\entity\Project.class
 com\arudra\crm\repository\CustomerAddressRepository.class
 com\arudra\crm\repository\BoqChangeLogRepository.class
 com\arudra\crm\dto\ContactPersonDTO.class
+com\arudra\crm\dto\InvoicePaymentSplit.class
 com\arudra\crm\entity\MeasurementItem.class
 com\arudra\crm\entity\ResourceType.class
 com\arudra\crm\controller\CustomerProfileController.class
@@ -386,6 +390,7 @@ com\arudra\crm\service\WorkforceAlertService.class
 com\arudra\crm\entity\Contractor.class
 com\arudra\crm\service\PurchaseService.class
 com\arudra\crm\repository\MeasurementChecklistRepository.class
+com\arudra\crm\controller\HealthController.class
 com\arudra\crm\entity\MeasurementRoom.class
 com\arudra\crm\repository\GoodsReceiptNoteItemRepository.class
 com\arudra\crm\controller\SmartAssignmentController.class
@@ -475,6 +480,7 @@ com\arudra\crm\dto\customer360\CustomerOverviewDTO.class
 com\arudra\crm\repository\LeadAssignmentRepository.class
 com\arudra\crm\repository\RoleRepository.class
 com\arudra\crm\repository\PurchaseBillRepository.class
+com\arudra\crm\storage\StorageService.class
 com\arudra\crm\controller\AuthController.class
 com\arudra\crm\entity\SiteVisitHistory.class
 com\arudra\crm\repository\LoginHistoryRepository.class
@@ -521,9 +527,11 @@ com\arudra\crm\repository\BoqItemLabourRepository.class
 com\arudra\crm\entity\CustomerFollowUp.class
 com\arudra\crm\entity\SiteVisitMedia.class
 com\arudra\crm\service\NotificationService.class
+com\arudra\crm\storage\LocalStorageService.class
 com\arudra\crm\entity\ContractorSafetyRecord.class
 com\arudra\crm\entity\WorkPackageChange.class
 com\arudra\crm\entity\PurchaseBill.class
+com\arudra\crm\storage\S3StorageService.class
 com\arudra\crm\dto\customer360\CustomerDocumentUnifiedDTO.class
 com\arudra\crm\dto\sitevisit\SiteVisitMediaDTO.class
 com\arudra\crm\entity\TaskMaterialUsage.class

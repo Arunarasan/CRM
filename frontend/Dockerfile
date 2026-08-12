@@ -9,9 +9,11 @@ RUN npm ci
 # Copy source code
 COPY . .
 
-# Build argument for API Base URL (defaults to /api for reverse-proxy / same-origin)
+# Build arguments for API Base URL (defaults to /api for reverse-proxy / same-origin)
 ARG VITE_API_URL=/api
+ARG VITE_API_BASE_URL=$VITE_API_URL
 ENV VITE_API_URL=$VITE_API_URL
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 
 # Build static assets
 RUN npm run build

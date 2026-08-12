@@ -1,7 +1,6 @@
 package com.arudra.crm.storage;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.stereotype.Component;
 
 /**
  * Binds {@code app.storage.s3.*}. Works for both AWS S3 and Cloudflare R2:
@@ -13,7 +12,6 @@ import org.springframework.stereotype.Component;
  * {@code publicBaseUrl} is the origin objects are served from (a public bucket URL, an R2
  * public dev URL, or a custom CDN domain); the object key is appended to it.
  */
-@Component
 @ConfigurationProperties(prefix = "app.storage.s3")
 public class S3StorageProperties {
 
