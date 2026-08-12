@@ -153,7 +153,7 @@ export default function ContractorDetailPage() {
             <SimpleTable
               head={["Type", "File", "Number", "Expiry", "Verified", ""]}
               rows={data.documents.map((d) => [
-                d.type, <a href={d.fileUrl} target="_blank" rel="noreferrer" className="text-primary hover:underline">{d.fileName}</a>,
+                d.type, <a href={d.fileUrl} target="_blank" rel="noreferrer" title={d.fileName} className="text-primary hover:underline inline-block max-w-[200px] truncate align-middle">{d.fileName}</a>,
                 d.documentNumber ?? "—",
                 d.expiryDate ? <span className={d.expired ? "text-rose-600 font-semibold" : ""}>{d.expiryDate}</span> : "—",
                 d.verified ? <Badge className="bg-emerald-100 text-emerald-700">Verified</Badge>

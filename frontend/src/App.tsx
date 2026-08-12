@@ -2,6 +2,7 @@ import { Suspense, lazy } from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import DashboardLayout from "./layouts/DashboardLayout";
 import { DesktopGuard, EmployeeGuard } from "./components/RouteGuard";
+import ImageViewerProvider from "./components/ImageViewerProvider";
 
 // Lazy loading all pages
 const Dashboard = lazy(() => import("./pages/Dashboard"));
@@ -125,6 +126,7 @@ const PageLoader = () => (
 function App() {
   return (
     <Router>
+      <ImageViewerProvider>
       <Suspense fallback={<PageLoader />}>
         <Routes>
           <Route path="/login" element={<Login />} />
@@ -254,6 +256,7 @@ function App() {
           </Route>
         </Routes>
       </Suspense>
+      </ImageViewerProvider>
     </Router>
   );
 }

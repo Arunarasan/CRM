@@ -651,8 +651,9 @@ function RoomDetailDialog({ measurementId, room, canWrite, autoAddItem, onClose,
               <div className="grid grid-cols-4 gap-2">
                 {roomPhotos.map((m) => (
                   <a key={m.id} href={m.filePath} target="_blank" rel="noreferrer"
+                    title={m.fileName}
                     className="aspect-square rounded-lg border bg-muted flex items-center justify-center text-[10px] text-muted-foreground overflow-hidden p-1 text-center hover:border-primary">
-                    {m.fileName}
+                    <span className="line-clamp-3 break-all">{m.fileName}</span>
                   </a>
                 ))}
               </div>
@@ -666,9 +667,9 @@ function RoomDetailDialog({ measurementId, room, canWrite, autoAddItem, onClose,
               </h4>
               <div className="flex flex-wrap gap-2">
                 {drawings.map((d) => (
-                  <a key={d.id} href={d.filePath} target="_blank" rel="noreferrer"
-                    className="text-xs px-2 py-1 border rounded-full hover:border-primary flex items-center gap-1">
-                    <Ruler className="h-3 w-3" /> {d.fileName}
+                  <a key={d.id} href={d.filePath} target="_blank" rel="noreferrer" title={d.fileName}
+                    className="text-xs px-2 py-1 border rounded-full hover:border-primary flex items-center gap-1 max-w-[200px]">
+                    <Ruler className="h-3 w-3 shrink-0" /> <span className="truncate">{d.fileName}</span>
                   </a>
                 ))}
               </div>

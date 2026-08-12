@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
-import { Camera, ImagePlus, X, Loader2, CheckCircle2 } from "lucide-react";
+import { Camera, ImagePlus, X, Loader2, CheckCircle2, Pencil } from "lucide-react";
 import ImageEditor from "@/components/ImageEditor";
-import { uploadFile } from "@/lib/uploadFile";
+import { uploadFile, resolveFileUrl } from "@/lib/uploadFile";
 import { compressImageFile, type OutputFormat } from "@/lib/imageProcessing";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -88,6 +88,23 @@ export default function ImageCaptureField({
     }
   };
 
+  // Re-edit an already-uploaded image: pull it back from storage into the crop/rotate editor.
+  // Admin-only (gated by canEdit at the call site). On save, handleSave re-uploads and replaces.
+  const reeditImage = async () => {
+    if (!value) return;
+    setError(null);
+    try {
+      const blob = await fetch(resolveFileUrl(value)).then((r) => {
+        if (!r.ok) throw new Error("fetch failed");
+        return r.blob();
+      });
+      const name = uploadedName || "image";
+      setPending({ file: new File([blob], name, { type: blob.type || "image/jpeg" }), name });
+    } catch {
+      setError("Couldn't open this image for editing. Try re-uploading it.");
+    }
+  };
+
   const clear = () => {
     setUploadedName(null);
     setError(null);
@@ -107,8 +124,13 @@ export default function ImageCaptureField({
           <img src={value} alt={uploadedName || "uploaded"} className="h-14 w-14 shrink-0 rounded object-cover" />
           <div className="flex min-w-0 flex-1 items-center gap-1.5 text-sm">
             <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
-            <span className="min-w-0 truncate">{uploadedName || "Image uploaded"}</span>
+            <span className="min-w-0 truncate" title={uploadedName || undefined}>{uploadedName || "Image uploaded"}</span>
           </div>
+          {canEdit && !disabled && (
+            <button type="button" onClick={reeditImage} className="text-muted-foreground hover:text-primary" aria-label="Edit image" title="Edit image">
+              <Pencil className="h-4 w-4" />
+            </button>
+          )}
           {!disabled && (
             <button type="button" onClick={clear} className="text-muted-foreground hover:text-destructive" aria-label="Remove image">
               <X className="h-4 w-4" />

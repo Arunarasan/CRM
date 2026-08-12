@@ -146,7 +146,7 @@ export default function WorkforceProfilePage() {
                 <li key={d.id} className="flex items-center gap-3 py-2 text-sm">
                   <FileText className="w-4 h-4 text-slate-400" />
                   <span className="font-medium w-28">{d.docType}</span>
-                  <a href={d.fileUrl} target="_blank" rel="noreferrer" className="text-primary hover:underline truncate">
+                  <a href={d.fileUrl} target="_blank" rel="noreferrer" title={d.fileName} className="text-primary hover:underline truncate min-w-0">
                     {d.fileName}
                   </a>
                 </li>

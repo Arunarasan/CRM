@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
-import { Upload, Link2, X, Loader2, CheckCircle2, Camera } from "lucide-react";
-import { uploadFile, type UploadedFile } from "@/lib/uploadFile";
+import { Upload, Link2, X, Loader2, CheckCircle2, Camera, Pencil } from "lucide-react";
+import { uploadFile, resolveFileUrl, type UploadedFile } from "@/lib/uploadFile";
 import { compressImageFile } from "@/lib/imageProcessing";
 import ImageEditor from "@/components/ImageEditor";
 import { useAuth } from "@/hooks/useAuth";
@@ -85,6 +85,27 @@ export default function FileUploadField({
     if (file) handleFile(file);
   };
 
+  const currentName = uploaded?.fileName || value || "";
+  const looksImage = /\.(png|jpe?g|gif|webp|bmp|heic|heif|avif)(\?|#|$)/i.test(currentName);
+
+  // Re-edit an already-uploaded image: pull it back into the crop/rotate editor. Admin-only, images
+  // only. On save, doUpload replaces the stored file with the edited one.
+  const reeditImage = async () => {
+    const url = value || uploaded?.fileUrl;
+    if (!url) return;
+    setError(null);
+    try {
+      const blob = await fetch(resolveFileUrl(url)).then((r) => {
+        if (!r.ok) throw new Error("fetch failed");
+        return r.blob();
+      });
+      const name = uploaded?.fileName || "image";
+      setPending({ file: new File([blob], name, { type: blob.type || "image/jpeg" }), name });
+    } catch {
+      setError("Couldn't open this image for editing. Try re-uploading it.");
+    }
+  };
+
   const clear = () => {
     setUploaded(null);
     setError(null);
@@ -100,7 +121,12 @@ export default function FileUploadField({
       {uploaded || (value && !showUrl) ? (
         <div className="flex items-center gap-2 rounded-md border border-input bg-muted/40 px-3 py-2 text-sm">
           <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
-          <span className="min-w-0 flex-1 truncate">{uploaded?.fileName || value}</span>
+          <span className="min-w-0 flex-1 truncate" title={uploaded?.fileName || value}>{uploaded?.fileName || value}</span>
+          {canEdit && imagesAllowed && looksImage && !disabled && (
+            <button type="button" onClick={reeditImage} className="text-muted-foreground hover:text-primary" aria-label="Edit image" title="Edit image">
+              <Pencil className="h-4 w-4" />
+            </button>
+          )}
           {!disabled && (
             <button type="button" onClick={clear} className="text-muted-foreground hover:text-destructive" aria-label="Remove file">
               <X className="h-4 w-4" />
