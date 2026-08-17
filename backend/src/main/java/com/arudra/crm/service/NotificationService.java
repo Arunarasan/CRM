@@ -134,8 +134,14 @@ public class NotificationService {
         return notificationRepository.countByRecipientIdAndIsReadFalse(recipientId);
     }
 
-    public Notification markAsRead(Long notificationId) {
+    /** Marks one notification read, but only if it belongs to the requesting user. */
+    @Transactional
+    public Notification markAsRead(Long notificationId, Long requesterId) {
         Notification notif = notificationRepository.findById(notificationId).orElseThrow();
+        if (notif.getRecipientId() == null || !notif.getRecipientId().equals(requesterId)) {
+            throw new org.springframework.security.access.AccessDeniedException(
+                    "Notification does not belong to the current user");
+        }
         notif.setRead(true);
         return notificationRepository.save(notif);
     }

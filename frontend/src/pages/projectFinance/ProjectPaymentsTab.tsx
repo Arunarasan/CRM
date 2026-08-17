@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { useAuth } from "@/hooks/useAuth";
 import { printInvoice } from "./printInvoice";
+import CompletionBillingTracker from "./CompletionBillingTracker";
 
 const inr = (n?: number | null) =>
   "₹" + Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
@@ -50,6 +51,7 @@ export default function ProjectPaymentsTab({ project, onChanged }: { project: an
   const [loading, setLoading] = useState(true);
   const [denied, setDenied] = useState(false);
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [tick, setTick] = useState(0); // bumps so the billing tracker re-fetches after invoice changes
 
   const load = () => {
     if (!projectId) return;
@@ -61,6 +63,9 @@ export default function ProjectPaymentsTab({ project, onChanged }: { project: an
   };
 
   useEffect(load, [projectId]);
+
+  // Reload invoices AND signal the billing tracker to refresh (payment % moved).
+  const reloadAll = () => { load(); setTick((t) => t + 1); };
 
   const summary = useMemo(() => {
     const billable = invoices.filter((i) => i.status !== "DRAFT" && i.status !== "CANCELLED");
@@ -85,7 +90,7 @@ export default function ProjectPaymentsTab({ project, onChanged }: { project: an
     if (!confirm(`Mark invoice ${inv.invoiceNumber} as unpaid? This voids its recorded payments.`)) return;
     setBusyId(inv.id);
     financeApi.markInvoiceUnpaid(inv.id)
-      .then(() => { load(); onChanged?.(); })
+      .then(() => { reloadAll(); onChanged?.(); })
       .catch((e) => alert(e?.response?.data?.message || "Failed to mark unpaid"))
       .finally(() => setBusyId(null));
   };
@@ -93,7 +98,7 @@ export default function ProjectPaymentsTab({ project, onChanged }: { project: an
   const issue = (id: number) => {
     setBusyId(id);
     financeApi.issueInvoice(id)
-      .then(() => { load(); onChanged?.(); })
+      .then(() => { reloadAll(); onChanged?.(); })
       .catch((e) => alert(e?.response?.data?.message || "Failed to issue invoice"))
       .finally(() => setBusyId(null));
   };
@@ -116,6 +121,9 @@ export default function ProjectPaymentsTab({ project, onChanged }: { project: an
         <SummaryCard label="Paid" value={inr(summary.paid)} icon={<IndianRupee className="h-5 w-5" />} tint="text-emerald-600" />
         <SummaryCard label="Balance Due" value={inr(summary.due)} icon={<Receipt className="h-5 w-5" />} tint={summary.due > 0 ? "text-red-600" : "text-emerald-600"} />
       </div>
+
+      {/* Combined completion + billing tracker (work % + payments, auto-billing milestones) */}
+      <CompletionBillingTracker project={project} refreshSignal={tick} onChanged={reloadAll} />
 
       {loading ? (
         <div className="flex justify-center py-10 text-slate-400"><Loader2 className="h-6 w-6 animate-spin" /></div>
@@ -195,14 +203,14 @@ export default function ProjectPaymentsTab({ project, onChanged }: { project: an
         <InvoiceMaker
           project={project}
           onClose={() => setMakerOpen(false)}
-          onSaved={() => { setMakerOpen(false); load(); onChanged?.(); }}
+          onSaved={() => { setMakerOpen(false); reloadAll(); onChanged?.(); }}
         />
       )}
       {payFor && (
         <MarkPaidDialog
           invoice={payFor}
           onClose={() => setPayFor(null)}
-          onSaved={() => { setPayFor(null); load(); onChanged?.(); }}
+          onSaved={() => { setPayFor(null); reloadAll(); onChanged?.(); }}
         />
       )}
     </div>

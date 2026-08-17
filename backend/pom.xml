@@ -69,6 +69,13 @@
             <artifactId>spring-boot-starter-aop</artifactId>
         </dependency>
 
+        <!-- Mail: password-reset OTP delivery (SMTP). Config is env-driven; falls back to
+             console logging when SMTP is unconfigured so dev never breaks — see EmailService. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
+        </dependency>
+
         <!-- In-memory caching for Customer 360 aggregate queries -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

@@ -49,7 +49,7 @@ public class NotificationController {
 
     @PostMapping("/{id}/read")
     public ResponseEntity<Notification> markAsRead(@PathVariable Long id) {
-        return ResponseEntity.ok(notificationService.markAsRead(id));
+        return ResponseEntity.ok(notificationService.markAsRead(id, currentUserId()));
     }
 
     @PostMapping("/mark-all-read")

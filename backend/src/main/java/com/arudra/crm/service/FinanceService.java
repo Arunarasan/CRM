@@ -42,21 +42,28 @@ public class FinanceService {
     @Autowired private QuotationRepository quotationRepository;
     @Autowired private UserRepository userRepository;
     @Autowired private NotificationService notificationService;
+    @Autowired private DocumentNumberService documentNumberService;
 
     // =====================================================================
-    // Numbering
+    // Numbering — allocated atomically (see DocumentNumberService); the old
+    // max(id)+1 scheme could mint duplicate numbers under concurrent creates.
     // =====================================================================
-
-    private String nextNumber(String prefix, Optional<Long> lastId) {
-        return prefix + String.format("%06d", lastId.orElse(0L) + 1);
-    }
 
     private String nextInvoiceNumber() {
-        return nextNumber("INV-", invoiceRepository.findTopByOrderByIdDesc().map(Invoice::getId));
+        return String.format("INV-%06d", documentNumberService.nextValue("INVOICE"));
     }
 
     private String nextPaymentNumber() {
-        return nextNumber("PAY-", paymentRepository.findTopByOrderByIdDesc().map(CustomerPayment::getId));
+        return String.format("PAY-%06d", documentNumberService.nextValue("PAYMENT"));
+    }
+
+    private String nextNoteNumber(String type) {
+        String prefix = "CREDIT".equals(type) ? "CN-" : "DN-";
+        return prefix + String.format("%06d", documentNumberService.nextValue("NOTE"));
+    }
+
+    private String nextRefundNumber() {
+        return String.format("REF-%06d", documentNumberService.nextValue("REFUND"));
     }
 
     // =====================================================================
@@ -592,8 +599,7 @@ public class FinanceService {
         if (note.getDate() == null) note.setDate(LocalDate.now());
         note.setStatus("ACTIVE");
         if (note.getNoteNumber() == null || note.getNoteNumber().isBlank()) {
-            String prefix = "CREDIT".equals(note.getType()) ? "CN-" : "DN-";
-            note.setNoteNumber(nextNumber(prefix, noteRepository.findTopByOrderByIdDesc().map(CreditDebitNote::getId)));
+            note.setNoteNumber(nextNoteNumber(note.getType()));
         }
         CreditDebitNote saved = noteRepository.save(note);
         boolean isCredit = "CREDIT".equals(saved.getType());
@@ -647,7 +653,7 @@ public class FinanceService {
         refund.setId(null);
         refund.setStatus("PENDING");
         refund.setRequestedBy(actingUser);
-        refund.setRefundNumber(nextNumber("REF-", refundRepository.findTopByOrderByIdDesc().map(Refund::getId)));
+        refund.setRefundNumber(nextRefundNumber());
         return refundRepository.save(refund);
     }
 
@@ -732,10 +738,11 @@ public class FinanceService {
         if (base == null || base.signum() <= 0) {
             throw new RuntimeException("Project has no quotation value or budget to build a schedule from");
         }
+        // {stage, value-share %, work-progress trigger % (null = not progress-driven)}
         String[][] stages = {
-                {"QUOTATION_ADVANCE", "20"}, {"DESIGN_APPROVAL", "10"}, {"MATERIAL_PURCHASE", "25"},
-                {"WORK_STARTED", "15"}, {"COMPLETION_50", "10"}, {"COMPLETION_75", "10"},
-                {"PROJECT_COMPLETION", "8"}, {"FINAL_SETTLEMENT", "2"}
+                {"QUOTATION_ADVANCE", "20", null}, {"DESIGN_APPROVAL", "10", null}, {"MATERIAL_PURCHASE", "25", null},
+                {"WORK_STARTED", "15", "5"}, {"COMPLETION_50", "10", "50"}, {"COMPLETION_75", "10", "75"},
+                {"PROJECT_COMPLETION", "8", "90"}, {"FINAL_SETTLEMENT", "2", "100"}
         };
         List<PaymentSchedule> created = new ArrayList<>();
         int order = 0;
@@ -744,11 +751,105 @@ public class FinanceService {
             ps.setProject(project);
             ps.setStage(s[0]);
             ps.setPercentage(new BigDecimal(s[1]));
+            ps.setTriggerPercentage(s[2] == null ? null : new BigDecimal(s[2]));
             ps.setAmount(base.multiply(new BigDecimal(s[1])).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP));
             ps.setSortOrder(order++);
             created.add(scheduleRepository.save(ps));
         }
         return created;
+    }
+
+    @Transactional
+    public void setAutoBilling(Long projectId, boolean enabled) {
+        Project project = projectRepository.findById(projectId)
+                .orElseThrow(() -> new RuntimeException("Project not found: " + projectId));
+        project.setAutoBillingEnabled(enabled);
+        projectRepository.save(project);
+    }
+
+    /**
+     * Combined completion tracker for a project: work progress %, payment collected %, and each
+     * payment milestone with its work-progress trigger, whether work has reached it, and its
+     * invoice/paid state. Powers the "Completion & Billing" panel.
+     */
+    @Transactional(readOnly = true)
+    public Map<String, Object> getBillingProgress(Long projectId) {
+        Project project = projectRepository.findById(projectId)
+                .orElseThrow(() -> new RuntimeException("Project not found: " + projectId));
+        int workPercent = project.getProgress() == null ? 0 : project.getProgress();
+        List<PaymentSchedule> schedules = getSchedulesForProject(projectId);
+
+        BigDecimal scheduledTotal = BigDecimal.ZERO;
+        BigDecimal invoicedTotal = BigDecimal.ZERO;   // scheduled amount of stages already billed
+        BigDecimal collectedTotal = BigDecimal.ZERO;  // in ex-GST schedule terms (partials pro-rated)
+        List<Map<String, Object>> stages = new ArrayList<>();
+
+        for (PaymentSchedule s : schedules) {
+            BigDecimal amount = s.getAmount() == null ? BigDecimal.ZERO : s.getAmount();
+            scheduledTotal = scheduledTotal.add(amount);
+            String status = s.getStatus();
+            boolean billed = !"PENDING".equalsIgnoreCase(status);
+            if (billed) invoicedTotal = invoicedTotal.add(amount);
+
+            BigDecimal collectedForStage = BigDecimal.ZERO;
+            if ("PAID".equalsIgnoreCase(status)) {
+                collectedForStage = amount;
+            } else if ("PARTIAL".equalsIgnoreCase(status) && s.getInvoice() != null
+                    && s.getInvoice().getTotalAmount() != null && s.getInvoice().getTotalAmount().signum() > 0) {
+                BigDecimal ratio = (s.getInvoice().getAmountPaid() == null ? BigDecimal.ZERO : s.getInvoice().getAmountPaid())
+                        .divide(s.getInvoice().getTotalAmount(), 6, RoundingMode.HALF_UP);
+                collectedForStage = amount.multiply(ratio).setScale(2, RoundingMode.HALF_UP);
+            }
+            collectedTotal = collectedTotal.add(collectedForStage);
+
+            boolean reached = s.getTriggerPercentage() != null
+                    && BigDecimal.valueOf(workPercent).compareTo(s.getTriggerPercentage()) >= 0;
+
+            Map<String, Object> row = new java.util.LinkedHashMap<>();
+            row.put("id", s.getId());
+            row.put("stage", s.getStage());
+            row.put("description", s.getDescription());
+            row.put("percentage", s.getPercentage());
+            row.put("triggerPercentage", s.getTriggerPercentage());
+            row.put("amount", amount);
+            row.put("status", status);
+            row.put("autoTriggered", s.isAutoTriggered());
+            row.put("reached", reached);
+            row.put("progressDriven", s.getTriggerPercentage() != null);
+            if (s.getInvoice() != null) {
+                Map<String, Object> inv = new java.util.LinkedHashMap<>();
+                inv.put("id", s.getInvoice().getId());
+                inv.put("invoiceNumber", s.getInvoice().getInvoiceNumber());
+                inv.put("status", s.getInvoice().getStatus());
+                inv.put("totalAmount", s.getInvoice().getTotalAmount());
+                inv.put("amountPaid", s.getInvoice().getAmountPaid());
+                inv.put("balanceDue", s.getInvoice().getBalanceDue());
+                row.put("invoice", inv);
+            }
+            stages.add(row);
+        }
+
+        int paymentPercent = scheduledTotal.signum() == 0 ? 0
+                : collectedTotal.multiply(BigDecimal.valueOf(100))
+                        .divide(scheduledTotal, 0, RoundingMode.HALF_UP).intValue();
+        if (paymentPercent > 100) paymentPercent = 100;
+
+        boolean allPaid = !schedules.isEmpty() && schedules.stream().allMatch(s -> "PAID".equalsIgnoreCase(s.getStatus()));
+
+        Map<String, Object> d = new java.util.LinkedHashMap<>();
+        d.put("projectId", project.getId());
+        d.put("projectName", project.getProjectName());
+        d.put("projectStatus", project.getStatus());
+        d.put("workPercent", workPercent);
+        d.put("paymentPercent", paymentPercent);
+        d.put("autoBillingEnabled", project.isAutoBillingEnabled());
+        d.put("scheduledTotal", scheduledTotal);
+        d.put("invoicedTotal", invoicedTotal);
+        d.put("collectedTotal", collectedTotal);
+        d.put("hasSchedule", !schedules.isEmpty());
+        d.put("fullySettled", workPercent >= 100 && allPaid);
+        d.put("stages", stages);
+        return d;
     }
 
     // =====================================================================

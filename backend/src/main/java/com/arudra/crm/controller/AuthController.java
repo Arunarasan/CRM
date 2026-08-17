@@ -83,7 +83,7 @@ public class AuthController {
                     .map(GrantedAuthority::getAuthority)
                     .collect(Collectors.toList());
 
-            return ResponseEntity.ok(new AuthResponse(token, refreshToken.getToken(), user.getEmail(), user.getName(), roles));
+            return ResponseEntity.ok(new AuthResponse(token, refreshToken.getToken(), user.getEmail(), user.getName(), roles, user.isMustChangePassword()));
 
         } catch (BadCredentialsException ex) {
             handleFailedAttempt(authRequest.getEmail(), ipAddress);
@@ -124,6 +124,15 @@ public class AuthController {
     @Autowired
     private com.arudra.crm.service.VerificationTokenService verificationTokenService;
 
+    @Autowired
+    private com.arudra.crm.service.EmailService emailService;
+
+    @org.springframework.beans.factory.annotation.Value("${app.otp.length:6}")
+    private int otpLength;
+
+    @org.springframework.beans.factory.annotation.Value("${app.otp.expiry-minutes:10}")
+    private int otpExpiryMinutes;
+
     @PostMapping("/refresh")
     public ResponseEntity<?> refreshToken(@RequestBody com.arudra.crm.dto.TokenRefreshRequest request) {
         String requestRefreshToken = request.getRefreshToken();
@@ -139,29 +148,58 @@ public class AuthController {
                 .orElse((ResponseEntity<Object>) ResponseEntity.status(HttpStatus.UNAUTHORIZED).body((Object) Map.of("success", false, "message", "Refresh token is invalid or expired!")));
     }
 
+    /**
+     * Step 1: e-mail a one-time code to the account if it exists. Always returns the same
+     * generic success so the response can't be used to enumerate which emails are registered.
+     */
     @PostMapping("/forgot-password")
     public ResponseEntity<?> forgotPassword(@RequestBody com.arudra.crm.dto.ForgotPasswordRequest request) {
-        userRepository.findByEmail(request.getEmail()).ifPresent(user -> {
-            com.arudra.crm.entity.VerificationToken token = verificationTokenService.createToken(user, "PASSWORD_RESET");
-            // Mock email sending
-            System.out.println("MOCK EMAIL SENDER: Password reset link: http://localhost:5173/reset-password?token=" + token.getToken());
+        String email = request.getEmail() == null ? "" : request.getEmail().trim();
+        userRepository.findByEmail(email).ifPresent(user -> {
+            com.arudra.crm.entity.VerificationToken token =
+                    verificationTokenService.createPasswordResetOtp(user, otpLength, otpExpiryMinutes);
+            emailService.sendPasswordResetOtp(user.getEmail(), user.getName(), token.getToken(), otpExpiryMinutes);
         });
-        // Always return success to prevent email enumeration
-        return ResponseEntity.ok(Map.of("success", true, "message", "If the email exists, a password reset link has been sent."));
+        return ResponseEntity.ok(Map.of("success", true,
+                "message", "If an account exists for that email, a verification code has been sent."));
     }
 
+    /** Step 2 (optional): confirm the OTP is valid before showing the new-password fields. */
+    @PostMapping("/verify-otp")
+    public ResponseEntity<?> verifyOtp(@RequestBody com.arudra.crm.dto.VerifyOtpRequest request) {
+        boolean valid = userRepository.findByEmail(request.getEmail() == null ? "" : request.getEmail().trim())
+                .flatMap(user -> verificationTokenService.verifyPasswordResetOtp(user, request.getOtp()))
+                .isPresent();
+        if (valid) {
+            return ResponseEntity.ok(Map.of("success", true, "message", "Code verified."));
+        }
+        return ResponseEntity.badRequest().body(Map.of("success", false, "message", "Invalid or expired code."));
+    }
+
+    /** Step 3: verify the OTP and set the new password. */
     @PostMapping("/reset-password")
     public ResponseEntity<?> resetPassword(@RequestBody com.arudra.crm.dto.PasswordResetRequest request) {
-        return verificationTokenService.findByToken(request.getToken())
-                .filter(token -> !verificationTokenService.isExpired(token))
-                .filter(token -> "PASSWORD_RESET".equals(token.getPurpose()))
-                .map(token -> {
-                    User user = token.getUser();
-                    user.setPassword(passwordEncoder.encode(request.getNewPassword()));
-                    userRepository.save(user);
-                    verificationTokenService.deleteToken(token);
-                    return ResponseEntity.ok(Map.of("success", true, "message", "Password reset successfully."));
-                })
-                .orElse(ResponseEntity.badRequest().body(Map.of("success", false, "message", "Invalid or expired token.")));
+        String newPassword = request.getNewPassword();
+        if (newPassword == null || newPassword.length() < 6) {
+            return ResponseEntity.badRequest().body(Map.of("success", false,
+                    "message", "Password must be at least 6 characters."));
+        }
+        return userRepository.findByEmail(request.getEmail() == null ? "" : request.getEmail().trim())
+                .flatMap(user -> verificationTokenService.verifyPasswordResetOtp(user, request.getOtp())
+                        .map(token -> {
+                            user.setPassword(passwordEncoder.encode(newPassword));
+                            // A successful reset also clears any lockout from prior failed logins
+                            // and satisfies any forced first-login password change.
+                            user.setFailedAttempts(0);
+                            user.setAccountNonLocked(true);
+                            user.setLockTime(null);
+                            user.setMustChangePassword(false);
+                            userRepository.save(user);
+                            verificationTokenService.deleteToken(token);
+                            return ResponseEntity.ok(Map.of("success", true,
+                                    "message", "Password reset successfully. You can now sign in."));
+                        }))
+                .orElse(ResponseEntity.badRequest().body(Map.of("success", false,
+                        "message", "Invalid or expired code.")));
     }
 }

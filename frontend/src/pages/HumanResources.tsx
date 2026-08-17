@@ -24,12 +24,6 @@ export default function HumanResources() {
   const [isDeptOpen, setIsDeptOpen] = useState(false);
   const [deptForm, setDeptForm] = useState<any>({ name: '', description: '' });
   
-  const [isEmpOpen, setIsEmpOpen] = useState(false);
-  const [empForm, setEmpForm] = useState<any>({ 
-      employeeCode: `EMP-${Date.now().toString().slice(-4)}`,
-      firstName: '', lastName: '', email: '', dateOfJoining: '', departmentId: ''
-  });
-
   useEffect(() => {
     fetchData();
   }, [activeTab]);
@@ -46,16 +40,6 @@ export default function HumanResources() {
       api.post(`/hr/departments`, deptForm)
           .then(() => { setIsDeptOpen(false); fetchData(); })
           .catch(_err => alert("Failed to save department"));
-  };
-  
-  const handleSaveEmployee = () => {
-      const payload = {
-          ...empForm,
-          department: empForm.departmentId ? { id: parseInt(empForm.departmentId) } : null
-      };
-      api.post(`/hr/employees`, payload)
-          .then(() => { setIsEmpOpen(false); fetchData(); })
-          .catch(_err => alert("Failed to save employee"));
   };
   
   const handleApproveLeave = (id: number) => {
@@ -77,44 +61,11 @@ export default function HumanResources() {
                 <Button variant="outline" onClick={() => {
                     api.post('/hr/sync-employees').then(() => { alert("Users synced!"); fetchData(); }).catch(() => alert("Failed to sync"));
                 }}>Sync Users</Button>
-                <Dialog open={isEmpOpen} onOpenChange={setIsEmpOpen}>
-                    <DialogTrigger asChild><Button><Plus className="w-4 h-4 mr-2"/> Add Employee</Button></DialogTrigger>
-                    <DialogContent>
-                    <DialogHeader><DialogTitle>Add New Employee</DialogTitle></DialogHeader>
-                    <div className="space-y-4 py-4">
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <Label>First Name</Label>
-                                <Input value={empForm.firstName} onChange={e => setEmpForm({...empForm, firstName: e.target.value})} />
-                            </div>
-                            <div className="space-y-2">
-                                <Label>Last Name</Label>
-                                <Input value={empForm.lastName} onChange={e => setEmpForm({...empForm, lastName: e.target.value})} />
-                            </div>
-                            <div className="space-y-2">
-                                <Label>Email <span className="text-red-500">*</span> <span className="text-xs text-slate-400 font-normal">(Required for login access)</span></Label>
-                                <Input type="email" value={empForm.email} onChange={e => setEmpForm({...empForm, email: e.target.value})} placeholder="employee@company.com" required />
-                            </div>
-                            <div className="space-y-2">
-                                <Label>Employee Code</Label>
-                                <Input value={empForm.employeeCode} onChange={e => setEmpForm({...empForm, employeeCode: e.target.value})} />
-                            </div>
-                            <div className="space-y-2">
-                                <Label>Date of Joining</Label>
-                                <Input type="date" value={empForm.dateOfJoining} onChange={e => setEmpForm({...empForm, dateOfJoining: e.target.value})} />
-                            </div>
-                            <div className="space-y-2">
-                                <Label>Department</Label>
-                                <select className="w-full h-10 rounded-md border border-input px-3 py-2 text-sm" value={empForm.departmentId} onChange={e => setEmpForm({...empForm, departmentId: e.target.value})}>
-                                    <option value="">-- Select --</option>
-                                    {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                                </select>
-                            </div>
-                        </div>
-                        <Button onClick={handleSaveEmployee} className="w-full mt-4">Save Employee</Button>
-                    </div>
-                </DialogContent>
-            </Dialog>
+                {/* Adding people lives in the unified Workforce module — the single source of truth.
+                    Whatever is added there is mirrored into this directory automatically. */}
+                <Link to="/workforce">
+                    <Button><Plus className="w-4 h-4 mr-2"/> Add in Workforce</Button>
+                </Link>
             </div>
         )}
         

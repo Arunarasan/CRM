@@ -111,9 +111,10 @@ const EmployeeDailyReports = lazy(() => import("./pages/employeePortal/DailyRepo
 const EmployeeTaskManagement = lazy(() => import("./pages/employeePortal/TaskManagement"));
 
 const Login = lazy(() => import("./pages/Login"));
+const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
+const Users = lazy(() => import("./pages/Users"));
 
 // Placeholder pages
-const Users = () => <div className="p-6">Users Module</div>;
 const Settings = () => <div className="p-6">Settings Module</div>;
 
 // Fallback loader
@@ -130,6 +131,7 @@ function App() {
       <Suspense fallback={<PageLoader />}>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
           
           {/* Protected Routes Wrapper — desktop ERP, blocked for portal-only field employees */}
           <Route path="/" element={<DesktopGuard><DashboardLayout /></DesktopGuard>}>

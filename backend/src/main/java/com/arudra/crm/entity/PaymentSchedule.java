@@ -34,6 +34,20 @@ public class PaymentSchedule extends BaseEntity {
     @Column(precision = 5, scale = 2)
     private BigDecimal percentage;
 
+    /**
+     * Work-progress % at/above which this stage is auto-invoiced (marked DUE) by the billing
+     * automation. NULL = not progress-driven (billed manually or on another event).
+     */
+    @Column(name = "trigger_percentage", precision = 5, scale = 2)
+    private BigDecimal triggerPercentage;
+
+    /** Set once the automation has raised this stage's invoice, so it never double-bills. */
+    @Column(name = "auto_triggered", nullable = false)
+    private boolean autoTriggered = false;
+
+    @Column(name = "auto_triggered_date")
+    private LocalDate autoTriggeredDate;
+
     @Column(precision = 15, scale = 2, nullable = false)
     private BigDecimal amount;
 

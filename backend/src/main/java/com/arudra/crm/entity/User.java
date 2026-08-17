@@ -38,6 +38,14 @@ public class User extends BaseEntity {
     @Column(name = "email_verified", nullable = false)
     private boolean emailVerified = false;
 
+    /**
+     * Set on accounts provisioned with a temporary/bootstrap password (e.g. the prod
+     * bootstrap admin). The login response surfaces this so the client can force a
+     * password change; it is cleared when the user resets their password.
+     */
+    @Column(name = "must_change_password", nullable = false)
+    private boolean mustChangePassword = false;
+
     @JsonIgnore
     @Column(name = "failed_attempts", nullable = false)
     private int failedAttempts = 0;

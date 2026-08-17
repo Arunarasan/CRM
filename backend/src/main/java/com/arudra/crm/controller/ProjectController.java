@@ -19,11 +19,11 @@ import java.util.Map;
 @CrossOrigin(origins = "*")
 public class ProjectController {
 
-    // New Enterprise PM endpoints use these; the legacy endpoints below stay unauthenticated
-    // beyond SecurityConfig's blanket authenticated() to avoid regressing existing flows.
+    // Every mutating/reading endpoint carries method security. Authorities map to roles in DataSeeder.
     private static final String READ = "hasAuthority('ROLE_ADMIN') or hasAuthority('PROJECT_READ')";
     private static final String WRITE = "hasAuthority('ROLE_ADMIN') or hasAuthority('PROJECT_WRITE')";
     private static final String APPROVE = "hasAuthority('ROLE_ADMIN') or hasAuthority('PROJECT_APPROVE')";
+    private static final String DELETE = "hasAuthority('ROLE_ADMIN') or hasAuthority('PROJECT_DELETE')";
 
     @Autowired
     private ProjectService projectService;
@@ -35,81 +35,104 @@ public class ProjectController {
     private CurrentUserService currentUserService;
 
     @GetMapping
+    @PreAuthorize(READ)
     public ResponseEntity<Page<Project>> getAllProjects(
             @RequestParam(required = false) String search,
+            @RequestParam(required = false) String category,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
-        return ResponseEntity.ok(projectService.getProjects(search, page, size));
+        return ResponseEntity.ok(projectService.getProjects(search, category, page, size));
+    }
+
+    /** Tab badge counts for the Projects portfolio: all / new / inProgress / completed / unassigned. */
+    @GetMapping("/segment-counts")
+    @PreAuthorize(READ)
+    public ResponseEntity<Map<String, Long>> getSegmentCounts() {
+        return ResponseEntity.ok(projectService.getSegmentCounts());
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize(READ)
     public ResponseEntity<Map<String, Object>> getProjectDetails(@PathVariable Long id) {
         return ResponseEntity.ok(projectService.getProjectDashboard(id));
     }
 
     @GetMapping("/{id}/command-center-stats")
+    @PreAuthorize(READ)
     public ResponseEntity<Map<String, Object>> getCommandCenterStats(@PathVariable Long id) {
         return ResponseEntity.ok(projectService.getCommandCenterStats(id));
     }
 
     @PostMapping
+    @PreAuthorize(WRITE)
     public ResponseEntity<Project> createProject(@RequestBody Project project) {
         return ResponseEntity.ok(projectService.createProject(project));
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize(WRITE)
     public ResponseEntity<Project> updateProject(@PathVariable Long id, @RequestBody Project project) {
         return ResponseEntity.ok(projectService.updateProject(id, project));
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize(DELETE)
     public ResponseEntity<Void> deleteProject(@PathVariable Long id) {
         projectService.deleteProject(id);
         return ResponseEntity.ok().build();
     }
     
     @PostMapping("/{id}/stages")
+    @PreAuthorize(WRITE)
     public ResponseEntity<ProjectStage> addStage(@PathVariable Long id, @RequestBody ProjectStage stage) {
         return ResponseEntity.ok(projectService.addStage(id, stage));
     }
     
     @PostMapping("/{id}/daily-logs")
+    @PreAuthorize(WRITE)
     public ResponseEntity<ProjectDailyLog> addDailyLog(@PathVariable Long id, @RequestBody ProjectDailyLog log) {
         return ResponseEntity.ok(projectService.addDailyLog(id, log, null));
     }
     
     @PostMapping("/{id}/quality-checks")
+    @PreAuthorize(WRITE)
     public ResponseEntity<ProjectQualityCheck> addQualityCheck(@PathVariable Long id, @RequestBody ProjectQualityCheck check) {
         return ResponseEntity.ok(projectService.addQualityCheck(id, check, null));
     }
     
     @PostMapping("/{id}/approvals")
+    @PreAuthorize(WRITE)
     public ResponseEntity<ProjectCustomerApproval> addCustomerApproval(@PathVariable Long id, @RequestBody ProjectCustomerApproval approval) {
         return ResponseEntity.ok(projectService.addCustomerApproval(id, approval));
     }
 
     @PostMapping("/{id}/activity-logs")
+    @PreAuthorize(WRITE)
     public ResponseEntity<ProjectActivityLog> addActivityLog(@PathVariable Long id, @RequestBody ProjectActivityLog log) {
         return ResponseEntity.ok(projectService.addActivityLog(id, log, null));
     }
     
     @PostMapping("/{id}/issues")
+    @PreAuthorize(WRITE)
     public ResponseEntity<ProjectIssue> addIssue(@PathVariable Long id, @RequestBody ProjectIssue issue) {
         return ResponseEntity.ok(projectService.addIssue(id, issue));
     }
     
     @PostMapping("/{id}/risks")
+    @PreAuthorize(WRITE)
     public ResponseEntity<ProjectRisk> addRisk(@PathVariable Long id, @RequestBody ProjectRisk risk) {
         return ResponseEntity.ok(projectService.addRisk(id, risk));
     }
     
     @PostMapping("/{id}/documents")
+    @PreAuthorize(WRITE)
     public ResponseEntity<ProjectDocument> addDocument(@PathVariable Long id, @RequestBody ProjectDocument document) {
         return ResponseEntity.ok(projectService.addDocument(id, document, null));
     }
 
     /** Pull this project's lead documents + linked measurement drawings/media into its Documents tab. */
     @PostMapping("/{id}/import-lead-assets")
+    @PreAuthorize(WRITE)
     public ResponseEntity<Map<String, Integer>> importLeadAssets(@PathVariable Long id) {
         int imported = quotationService.importPreSalesAssets(id, currentUserService.getCurrentUser());
         return ResponseEntity.ok(Map.of("imported", imported));
@@ -117,26 +140,31 @@ public class ProjectController {
 
     /** Replace a document's file (e.g. after an admin edits the image in the in-app viewer). */
     @PutMapping("/documents/{docId}/file")
+    @PreAuthorize(WRITE)
     public ResponseEntity<ProjectDocument> replaceDocumentFile(@PathVariable Long docId, @RequestBody Map<String, String> body) {
         return ResponseEntity.ok(projectService.replaceDocumentFile(docId, body.get("fileUrl"), body.get("fileName")));
     }
 
     @PostMapping("/{id}/payments")
+    @PreAuthorize(WRITE)
     public ResponseEntity<ProjectPayment> addPayment(@PathVariable Long id, @RequestBody ProjectPayment payment) {
         return ResponseEntity.ok(projectService.addPayment(id, payment, null));
     }
     
     @PostMapping("/{id}/start-execution")
+    @PreAuthorize(APPROVE)
     public ResponseEntity<Project> startExecution(@PathVariable Long id) {
         return ResponseEntity.ok(projectService.startExecution(id, currentUserService.getCurrentUser()));
     }
 
     @PostMapping("/{id}/complete")
+    @PreAuthorize(APPROVE)
     public ResponseEntity<Project> completeProject(@PathVariable Long id, @RequestBody Map<String, String> payload) {
         return ResponseEntity.ok(projectService.completeProject(id, payload.get("certificate")));
     }
 
     @GetMapping("/{id}/site-visits/summary")
+    @PreAuthorize(READ)
     public ResponseEntity<Map<String, Object>> getSiteVisitsSummary(@PathVariable Long id) {
         return ResponseEntity.ok(projectService.getSiteVisitsSummary(id));
     }

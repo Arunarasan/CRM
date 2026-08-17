@@ -2,7 +2,7 @@ import api from '../lib/api';
 import {
   Invoice, InvoiceItem, CustomerPayment, CreditDebitNote, Refund, PaymentSchedule,
   ProjectExpense, CustomerLedger, CustomerOutstanding, ProjectProfitability,
-  FinanceDashboard, PageResp,
+  FinanceDashboard, PageResp, BillingProgress,
 } from '../types/finance';
 
 // Thin typed wrapper around /api/finance — mirrors purchaseApi.ts's conventions.
@@ -83,6 +83,12 @@ export const financeApi = {
   deleteSchedule: (id: number) => api.delete(`${BASE}/schedules/${id}`).then(() => undefined),
   generateDefaultSchedule: (projectId: number) =>
     api.post<PaymentSchedule[]>(`${BASE}/projects/${projectId}/schedules/generate-default`).then((r) => r.data),
+
+  // Combined completion + billing tracker
+  getBillingProgress: (projectId: number) =>
+    api.get<BillingProgress>(`${BASE}/projects/${projectId}/billing-progress`).then((r) => r.data),
+  setAutoBilling: (projectId: number, enabled: boolean) =>
+    api.put<{ autoBillingEnabled: boolean }>(`${BASE}/projects/${projectId}/auto-billing?enabled=${enabled}`).then((r) => r.data),
 
   // Ledger & outstanding
   getCustomerLedger: (customerId: number, from?: string, to?: string) =>

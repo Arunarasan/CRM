@@ -35,6 +35,7 @@ com\arudra\crm\repository\MeasurementRepository.class
 com\arudra\crm\controller\ContractorPortalController$MaterialRequestBody.class
 com\arudra\crm\dto\measurement\MeasurementDashboardDTO.class
 com\arudra\crm\repository\BoqItemMaterialRepository.class
+com\arudra\crm\service\UserService.class
 com\arudra\crm\repository\ContractorProgressMediaRepository.class
 com\arudra\crm\dto\CreatePrItem.class
 com\arudra\crm\entity\QuotationActivity.class
@@ -48,6 +49,7 @@ com\arudra\crm\entity\ContractorProject.class
 com\arudra\crm\entity\PayrollRecovery.class
 com\arudra\crm\repository\PurchaseRequestRepository.class
 com\arudra\crm\entity\Product.class
+com\arudra\crm\dto\user\AdminResetPasswordRequest.class
 com\arudra\crm\entity\PurchaseRequest.class
 com\arudra\crm\entity\MeasurementAssignment.class
 com\arudra\crm\entity\ProjectDailyLogMedia.class
@@ -68,6 +70,7 @@ com\arudra\crm\dto\customer360\CustomerProjectSummaryDTO.class
 com\arudra\crm\dto\customer360\CustomerDashboardStatsDTO.class
 com\arudra\crm\dto\sitevisit\SiteVisitHistoryDTO.class
 com\arudra\crm\entity\ContractorBillItem.class
+com\arudra\crm\dto\user\UserAdminDTO.class
 com\arudra\crm\entity\CustomerLedgerEntry.class
 com\arudra\crm\repository\UserRepository.class
 com\arudra\crm\dto\TaskDTO.class
@@ -93,6 +96,7 @@ com\arudra\crm\dto\DashboardSummaryDTO$ProjectProgress.class
 com\arudra\crm\entity\LeadAssignment.class
 com\arudra\crm\repository\TagRepository.class
 com\arudra\crm\repository\EmployeeAdvanceRepository.class
+com\arudra\crm\dto\user\CreateUserRequest.class
 com\arudra\crm\entity\SiteMeasurement.class
 com\arudra\crm\repository\ProjectItemProgressLogRepository.class
 com\arudra\crm\controller\ContractorPortalController$ProgressRequest.class
@@ -106,7 +110,6 @@ com\arudra\crm\repository\InventoryItemRepository.class
 com\arudra\crm\entity\Quotation.class
 com\arudra\crm\entity\TaskChecklistItem.class
 com\arudra\crm\entity\ContractorDocument.class
-com\arudra\crm\controller\BillingController.class
 com\arudra\crm\entity\Customer.class
 com\arudra\crm\controller\ContractorController.class
 com\arudra\crm\repository\InvoiceRepository.class
@@ -156,6 +159,7 @@ com\arudra\crm\entity\LeadLabel.class
 com\arudra\crm\entity\MaterialRequest.class
 com\arudra\crm\entity\RefreshToken.class
 com\arudra\crm\repository\BoqPhaseRepository.class
+com\arudra\crm\entity\AttendanceSession.class
 com\arudra\crm\service\StockTransferService.class
 com\arudra\crm\repository\ProductSupplierRepository.class
 com\arudra\crm\controller\WorkPackageController.class
@@ -200,7 +204,6 @@ com\arudra\crm\entity\TaskProgressUpdate.class
 com\arudra\crm\controller\MaterialRequestController.class
 com\arudra\crm\dto\customer360\CustomerFinancialSummaryDTO.class
 com\arudra\crm\service\PurchaseReportService.class
-com\arudra\crm\controller\BillingController$CreateInvoiceRequest.class
 com\arudra\crm\entity\BoqChangeLog.class
 com\arudra\crm\repository\QuotationApprovalRepository.class
 com\arudra\crm\config\SecurityConfig.class
@@ -244,7 +247,6 @@ com\arudra\crm\entity\ProjectDailyLog.class
 com\arudra\crm\repository\InventoryCategoryRepository.class
 com\arudra\crm\entity\Boq.class
 com\arudra\crm\repository\ContractorDailyProgressRepository.class
-com\arudra\crm\service\BillingService.class
 com\arudra\crm\repository\MeasurementPlumbingRepository.class
 com\arudra\crm\repository\PurchasePaymentRepository.class
 com\arudra\crm\entity\ProductSupplier.class
@@ -298,6 +300,7 @@ com\arudra\crm\entity\PurchaseReturn.class
 com\arudra\crm\entity\MeasurementMaterialEstimate.class
 com\arudra\crm\repository\ProjectExpenseRepository.class
 com\arudra\crm\storage\StorageKeys.class
+com\arudra\crm\service\ProjectBillingAutomationService.class
 com\arudra\crm\service\FinanceReminderService.class
 com\arudra\crm\repository\DamageEntryRepository.class
 com\arudra\crm\service\WorkforceService.class
@@ -370,6 +373,7 @@ com\arudra\crm\repository\BoqChangeLogRepository.class
 com\arudra\crm\dto\ContactPersonDTO.class
 com\arudra\crm\dto\InvoicePaymentSplit.class
 com\arudra\crm\entity\MeasurementItem.class
+com\arudra\crm\dto\user\UpdateUserRequest.class
 com\arudra\crm\entity\ResourceType.class
 com\arudra\crm\controller\CustomerProfileController.class
 com\arudra\crm\repository\ProjectRoomItemRepository.class
@@ -378,6 +382,7 @@ com\arudra\crm\repository\ContractorBillApprovalRepository.class
 com\arudra\crm\repository\ContractorBillItemRepository.class
 com\arudra\crm\entity\MeasurementChecklist.class
 com\arudra\crm\entity\ContractorAttendance.class
+com\arudra\crm\repository\AttendanceSessionRepository.class
 com\arudra\crm\controller\FileUploadController.class
 com\arudra\crm\repository\ProjectCustomerApprovalRepository.class
 com\arudra\crm\repository\PurchaseOrderItemRepository.class
@@ -422,6 +427,7 @@ com\arudra\crm\dto\PasswordResetRequest.class
 com\arudra\crm\dto\boq\BoqDashboardDTO.class
 com\arudra\crm\entity\AssignmentSettings.class
 com\arudra\crm\entity\GoodsReceiptNote.class
+com\arudra\crm\event\ProjectProgressChangedEvent.class
 com\arudra\crm\entity\ProjectMaterialRequirement.class
 com\arudra\crm\repository\LeadRepository.class
 com\arudra\crm\dto\CustomerProfileDTO.class
@@ -457,8 +463,10 @@ com\arudra\crm\repository\AssignmentSettingsRepository.class
 com\arudra\crm\repository\ContactPersonRepository.class
 com\arudra\crm\entity\Task.class
 com\arudra\crm\repository\QuotationTaxRepository.class
+com\arudra\crm\service\EmailService.class
 com\arudra\crm\repository\EmployeeDocumentRepository.class
 com\arudra\crm\entity\ProjectDailyLogMaterial.class
+com\arudra\crm\service\AttendanceOvertimeScheduler.class
 com\arudra\crm\entity\MeasurementWall.class
 com\arudra\crm\entity\LoginHistory.class
 com\arudra\crm\service\TaskService.class
@@ -469,6 +477,7 @@ com\arudra\crm\repository\MeasurementMediaRepository.class
 com\arudra\crm\entity\ProjectQualityCheck.class
 com\arudra\crm\entity\WorkPackageAssignment.class
 com\arudra\crm\repository\SiteVisitAssignmentRepository.class
+com\arudra\crm\controller\RoleController.class
 com\arudra\crm\dto\TaskDTO$UserSummaryDTO.class
 com\arudra\crm\repository\SiteVisitHistoryRepository.class
 com\arudra\crm\repository\TaskChecklistRepository.class
@@ -559,6 +568,7 @@ com\arudra\crm\repository\ContractorDocumentRepository.class
 com\arudra\crm\dto\sitevisit\SiteVisitDTO.class
 com\arudra\crm\repository\CustomerDocumentRepository.class
 com\arudra\crm\repository\ProjectPhaseRepository.class
+com\arudra\crm\dto\VerifyOtpRequest.class
 com\arudra\crm\entity\DamageEntry.class
 com\arudra\crm\repository\LeadStatusHistoryRepository.class
 com\arudra\crm\entity\BoqActivityLog.class

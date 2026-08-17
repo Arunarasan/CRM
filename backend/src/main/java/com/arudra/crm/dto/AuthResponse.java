@@ -15,4 +15,6 @@ public class AuthResponse {
     private String email;
     private String name;
     private List<String> roles;
+    /** True when the account was provisioned with a temporary password and must set a new one. */
+    private boolean mustChangePassword;
 }

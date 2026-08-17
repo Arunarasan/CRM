@@ -27,6 +27,11 @@ public class HrController {
     // Project Managers may recommend bonuses/OT (HR approves); processors and admins too.
     private static final String PAYROLL_RECOMMEND =
             "hasAuthority('ROLE_ADMIN') or hasAuthority('PAYROLL_PROCESS') or hasAuthority('PAYROLL_WRITE') or hasAuthority('ROLE_PROJECT_MANAGER')";
+    // Core HR data (employee PII, attendance, leave, documents, performance) is HR/management-scoped.
+    private static final String HR_READ =
+            "hasAuthority('ROLE_ADMIN') or hasAuthority('WORKFORCE_READ')";
+    private static final String HR_WRITE =
+            "hasAuthority('ROLE_ADMIN') or hasAuthority('WORKFORCE_WRITE')";
 
     @Autowired
     private HrService hrService;
@@ -47,18 +52,21 @@ public class HrController {
     }
 
     @PostMapping("/departments")
+    @PreAuthorize(HR_WRITE)
     public ResponseEntity<Department> createDepartment(@RequestBody Department department) {
         return ResponseEntity.ok(hrService.createDepartment(department));
     }
 
     // --- Employees ---
     @PostMapping("/sync-employees")
+    @PreAuthorize(HR_WRITE)
     public ResponseEntity<String> syncEmployeesToUsers() {
         hrService.syncEmployeesToUsers();
         return ResponseEntity.ok("Synced employees to users successfully.");
     }
 
     @GetMapping("/employees")
+    @PreAuthorize(HR_READ)
     public ResponseEntity<Page<Employee>> getEmployees(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
@@ -66,6 +74,7 @@ public class HrController {
     }
     
     @GetMapping("/employees/{id}")
+    @PreAuthorize(HR_READ)
     public ResponseEntity<Employee> getEmployee(@PathVariable Long id) {
         return hrService.getEmployee(id)
                 .map(ResponseEntity::ok)
@@ -73,28 +82,33 @@ public class HrController {
     }
 
     @PostMapping("/employees")
+    @PreAuthorize(HR_WRITE)
     public ResponseEntity<Employee> createEmployee(@RequestBody Employee employee) {
         return ResponseEntity.ok(hrService.createEmployee(employee));
     }
 
     @PutMapping("/employees/{id}")
+    @PreAuthorize(HR_WRITE)
     public ResponseEntity<Employee> updateEmployee(@PathVariable Long id, @RequestBody Employee employee) {
         return ResponseEntity.ok(hrService.updateEmployee(id, employee));
     }
 
     // --- Attendance ---
     @GetMapping("/employees/{id}/attendance")
+    @PreAuthorize(HR_READ)
     public ResponseEntity<List<Attendance>> getAttendanceForEmployee(@PathVariable Long id) {
         return ResponseEntity.ok(hrService.getAttendanceForEmployee(id));
     }
 
     @PostMapping("/attendance")
+    @PreAuthorize(HR_WRITE)
     public ResponseEntity<Attendance> markAttendance(@RequestBody Attendance attendance) {
         return ResponseEntity.ok(hrService.markAttendance(attendance));
     }
 
     // --- Leaves ---
     @GetMapping("/leaves")
+    @PreAuthorize(HR_READ)
     public ResponseEntity<Page<LeaveRequest>> getLeaveRequests(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
@@ -102,38 +116,45 @@ public class HrController {
     }
     
     @GetMapping("/employees/{id}/leaves")
+    @PreAuthorize(HR_READ)
     public ResponseEntity<List<LeaveRequest>> getLeaveRequestsForEmployee(@PathVariable Long id) {
         return ResponseEntity.ok(hrService.getLeaveRequestsForEmployee(id));
     }
 
     @PostMapping("/leaves")
+    @PreAuthorize(HR_WRITE)
     public ResponseEntity<LeaveRequest> createLeaveRequest(@RequestBody LeaveRequest request) {
         return ResponseEntity.ok(hrService.createLeaveRequest(request));
     }
     
     @PostMapping("/leaves/{id}/approve")
+    @PreAuthorize(HR_WRITE)
     public ResponseEntity<LeaveRequest> approveLeaveRequest(@PathVariable Long id, @RequestParam String approvedBy) {
         return ResponseEntity.ok(hrService.approveLeaveRequest(id, approvedBy));
     }
     
     @PostMapping("/leaves/{id}/reject")
+    @PreAuthorize(HR_WRITE)
     public ResponseEntity<LeaveRequest> rejectLeaveRequest(@PathVariable Long id) {
         return ResponseEntity.ok(hrService.rejectLeaveRequest(id));
     }
 
     // --- Documents ---
     @GetMapping("/employees/{id}/documents")
+    @PreAuthorize(HR_READ)
     public ResponseEntity<List<EmployeeDocument>> getDocumentsForEmployee(@PathVariable Long id) {
         return ResponseEntity.ok(hrService.getDocumentsForEmployee(id));
     }
     
     @PostMapping("/documents")
+    @PreAuthorize(HR_WRITE)
     public ResponseEntity<EmployeeDocument> addDocument(@RequestBody EmployeeDocument document) {
         return ResponseEntity.ok(hrService.addDocument(document));
     }
 
     // --- Payroll ---
     @GetMapping("/payroll")
+    @PreAuthorize(PAYROLL_READ)
     public ResponseEntity<Page<SalaryRecord>> getSalaryRecords(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
@@ -141,45 +162,53 @@ public class HrController {
     }
     
     @GetMapping("/employees/{id}/payroll")
+    @PreAuthorize(PAYROLL_READ)
     public ResponseEntity<List<SalaryRecord>> getSalaryRecordsForEmployee(@PathVariable Long id) {
         return ResponseEntity.ok(hrService.getSalaryRecordsForEmployee(id));
     }
 
     /** Delivery counts for the employee's payroll view: tasks completed + distinct projects worked. */
     @GetMapping("/employees/{id}/work-stats")
+    @PreAuthorize(PAYROLL_READ)
     public ResponseEntity<Map<String, Object>> getEmployeeWorkStats(@PathVariable Long id) {
         return ResponseEntity.ok(payrollService.employeeWorkStats(id));
     }
 
     @PostMapping("/payroll")
+    @PreAuthorize(PAYROLL_PROCESS)
     public ResponseEntity<SalaryRecord> generateSalaryRecord(@RequestBody SalaryRecord record) {
         return ResponseEntity.ok(hrService.generateSalaryRecord(record));
     }
     
     @PostMapping("/payroll/{id}/pay")
+    @PreAuthorize(PAYROLL_PROCESS)
     public ResponseEntity<SalaryRecord> markSalaryPaid(@PathVariable Long id) {
         return ResponseEntity.ok(hrService.markSalaryPaid(id));
     }
 
     // --- Performance ---
     @GetMapping("/employees/{id}/performance")
+    @PreAuthorize(HR_READ)
     public ResponseEntity<List<PerformanceReview>> getPerformanceReviewsForEmployee(@PathVariable Long id) {
         return ResponseEntity.ok(hrService.getPerformanceReviewsForEmployee(id));
     }
     
     @PostMapping("/performance")
+    @PreAuthorize(HR_WRITE)
     public ResponseEntity<PerformanceReview> addPerformanceReview(@RequestBody PerformanceReview review) {
         return ResponseEntity.ok(hrService.addPerformanceReview(review));
     }
 
     /** Auto-calculated performance scorecard (attendance + tasks + reviews) for one employee. */
     @GetMapping("/employees/{id}/performance/score")
+    @PreAuthorize(HR_READ)
     public ResponseEntity<Map<String, Object>> getPerformanceScore(@PathVariable Long id) {
         return ResponseEntity.ok(hrService.computePerformance(id));
     }
 
     /** Performance scorecards for all employees, best first — powers the HR dashboard Performance tab. */
     @GetMapping("/performance/scores")
+    @PreAuthorize(HR_READ)
     public ResponseEntity<List<Map<String, Object>>> getPerformanceScores() {
         return ResponseEntity.ok(hrService.getPerformanceScores());
     }

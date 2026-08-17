@@ -7,6 +7,33 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Link } from "react-router-dom";
 
+type SegmentKey = 'all' | 'new' | 'inProgress' | 'completed' | 'unassigned';
+
+interface SegmentCounts {
+  all: number;
+  new: number;
+  inProgress: number;
+  completed: number;
+  unassigned: number;
+}
+
+// Tab key -> backend `category` param (empty for "all").
+const SEGMENT_CATEGORY: Record<SegmentKey, string> = {
+  all: '',
+  new: 'NEW',
+  inProgress: 'IN_PROGRESS',
+  completed: 'COMPLETED',
+  unassigned: 'UNASSIGNED',
+};
+
+const SEGMENTS: { key: SegmentKey; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'new', label: 'New' },
+  { key: 'inProgress', label: 'In Progress' },
+  { key: 'completed', label: 'Completed' },
+  { key: 'unassigned', label: 'Team Not Assigned' },
+];
+
 export default function Projects() {
   const [projects, setProjects] = useState<any[]>([]);
   const [search, setSearch] = useState("");
@@ -14,17 +41,37 @@ export default function Projects() {
   const [totalPages, setTotalPages] = useState(1);
   const [dashboard, setDashboard] = useState<ProjectModuleDashboard | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [segment, setSegment] = useState<SegmentKey>('all');
+  const [counts, setCounts] = useState<SegmentCounts | null>(null);
 
   useEffect(() => {
     fetchProjects();
-  }, [search, page]);
+  }, [search, page, segment]);
 
   useEffect(() => {
     projectApi.dashboard().then(setDashboard).catch(err => console.error("Failed to fetch project dashboard", err));
   }, []);
 
+  const fetchCounts = () => {
+    api.get(`/projects/segment-counts`)
+      .then(res => setCounts(res.data))
+      .catch(err => console.error("Failed to fetch segment counts", err));
+  };
+
+  useEffect(() => { fetchCounts(); }, []);
+
+  // Reset to the first page whenever the tab or search changes.
+  const selectSegment = (key: SegmentKey) => {
+    if (key === segment) return;
+    setSegment(key);
+    setPage(0);
+  };
+
   const fetchProjects = () => {
-    api.get(`/projects?search=${search}&page=${page}&size=10`)
+    const category = SEGMENT_CATEGORY[segment];
+    const params = new URLSearchParams({ search, page: String(page), size: "10" });
+    if (category) params.set("category", category);
+    api.get(`/projects?${params.toString()}`)
       .then(res => {
         setProjects(res.data.content);
         setTotalPages(res.data.totalPages);
@@ -79,7 +126,7 @@ export default function Projects() {
             placeholder="Search projects or customers"
             className="border-0 shadow-none focus-visible:ring-0 text-sm bg-transparent"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => { setSearch(e.target.value); setPage(0); }}
           />
         </div>
         <div className="flex items-center bg-white p-1 rounded-2xl border border-slate-100 shadow-[0_1px_2px_rgba(0,0,0,0.03)] shrink-0">
@@ -100,6 +147,35 @@ export default function Projects() {
             <List className="h-4 w-4" />
           </button>
         </div>
+      </div>
+
+      {/* Segmentation tabs */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1">
+        {SEGMENTS.map(({ key, label }) => {
+          const active = segment === key;
+          const count = counts ? counts[key] : undefined;
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => selectSegment(key)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-2xl text-sm font-medium whitespace-nowrap border transition-colors ${
+                active
+                  ? 'bg-slate-800 text-white border-slate-800'
+                  : 'bg-white text-slate-500 border-slate-100 hover:bg-slate-50'
+              }`}
+            >
+              {label}
+              {count !== undefined && (
+                <span className={`text-[11px] px-1.5 py-0.5 rounded-full font-semibold ${
+                  active ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'
+                }`}>
+                  {count}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       {projects.length === 0 ? (

@@ -6,6 +6,7 @@ import com.arudra.crm.entity.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import com.arudra.crm.dto.ApiResponse;
 
@@ -18,6 +19,14 @@ import java.util.stream.Collectors;
 @RequestMapping("/api/dashboard")
 @CrossOrigin(origins = "*")
 public class DashboardController {
+
+    // The summary aggregates company-wide revenue, pipeline and customer data — an office/
+    // management overview, not something every authenticated user (e.g. field employees on the
+    // mobile portal) should read.
+    private static final String OFFICE =
+            "hasAuthority('ROLE_ADMIN') or hasAuthority('ROLE_MANAGER') or hasAuthority('ROLE_SALES') "
+            + "or hasAuthority('ROLE_PROJECT_MANAGER') or hasAuthority('ROLE_ACCOUNTS') "
+            + "or hasAuthority('ROLE_FINANCE_MANAGER')";
 
     @Autowired
     private CustomerRepository customerRepository;
@@ -35,6 +44,7 @@ public class DashboardController {
     private QuotationRepository quotationRepository;
 
     @GetMapping("/summary")
+    @PreAuthorize(OFFICE)
     public ResponseEntity<ApiResponse<DashboardSummaryDTO>> getDashboardSummary() {
         DashboardSummaryDTO summary = new DashboardSummaryDTO();
         

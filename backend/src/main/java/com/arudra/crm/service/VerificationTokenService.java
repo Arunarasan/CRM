@@ -7,12 +7,18 @@ import com.arudra.crm.repository.VerificationTokenRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.UUID;
 
 @Service
 public class VerificationTokenService {
+
+    /** Purpose value for password-reset one-time codes. */
+    public static final String PURPOSE_PASSWORD_RESET_OTP = "PASSWORD_RESET_OTP";
+
+    private static final SecureRandom RANDOM = new SecureRandom();
 
     @Autowired
     private VerificationTokenRepository verificationTokenRepository;
@@ -28,6 +34,46 @@ public class VerificationTokenService {
         // Valid for 24 hours
         token.setExpiryDate(LocalDateTime.now().plusHours(24));
         return verificationTokenRepository.save(token);
+    }
+
+    /**
+     * Issues a fresh numeric OTP for password reset, invalidating any previous one for the
+     * same user so only the latest code works. Returns the raw code so the caller can email it.
+     */
+    public VerificationToken createPasswordResetOtp(User user, int length, int expiryMinutes) {
+        // Only one live reset code per user.
+        verificationTokenRepository.deleteByUserAndPurpose(user, PURPOSE_PASSWORD_RESET_OTP);
+
+        String code = generateNumericCode(length);
+        // Guard the global-unique token column against the rare clash with another user's live code.
+        while (verificationTokenRepository.findByToken(code).isPresent()) {
+            code = generateNumericCode(length);
+        }
+
+        VerificationToken token = new VerificationToken();
+        token.setUser(user);
+        token.setToken(code);
+        token.setPurpose(PURPOSE_PASSWORD_RESET_OTP);
+        token.setExpiryDate(LocalDateTime.now().plusMinutes(expiryMinutes));
+        return verificationTokenRepository.save(token);
+    }
+
+    /**
+     * Returns the matching, non-expired reset token for this user, or empty if the code is
+     * wrong/expired. Does not consume it — the caller deletes it after a successful reset.
+     */
+    public Optional<VerificationToken> verifyPasswordResetOtp(User user, String otp) {
+        return verificationTokenRepository.findByUserAndPurpose(user, PURPOSE_PASSWORD_RESET_OTP)
+                .filter(t -> t.getToken().equals(otp))
+                .filter(t -> !isExpired(t));
+    }
+
+    private String generateNumericCode(int length) {
+        StringBuilder sb = new StringBuilder(length);
+        for (int i = 0; i < length; i++) {
+            sb.append(RANDOM.nextInt(10));
+        }
+        return sb.toString();
     }
 
     public Optional<VerificationToken> findByToken(String token) {

@@ -86,9 +86,11 @@ export default function Login() {
                 <label className="text-sm font-medium leading-none" htmlFor="password">
                   Password
                 </label>
-                <a href="#" className="text-sm text-muted-foreground hover:text-primary">
+                {/* TEMPORARILY DISABLED for production — re-enable to restore self-service password reset.
+                <a href="/forgot-password" className="text-sm text-muted-foreground hover:text-primary">
                   Forgot password?
                 </a>
+                */}
               </div>
               <Input 
                 id="password" 

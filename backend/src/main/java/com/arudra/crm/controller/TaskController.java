@@ -21,6 +21,10 @@ public class TaskController {
     // New Enterprise PM endpoints use this; legacy endpoints below are left unauthenticated
     // beyond SecurityConfig's blanket authenticated() to avoid regressing existing flows.
     private static final String ASSIGN = "hasAuthority('ROLE_ADMIN') or hasAuthority('TASK_ASSIGN')";
+    // Deleting a task is destructive — restrict it even though the other legacy CRUD stays broad.
+    private static final String DELETE =
+            "hasAuthority('ROLE_ADMIN') or hasAuthority('TASK_APPROVE') "
+            + "or hasAuthority('ROLE_MANAGER') or hasAuthority('ROLE_PROJECT_MANAGER')";
 
     @Autowired
     private TaskService taskService;
@@ -110,6 +114,7 @@ public class TaskController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize(DELETE)
     public ResponseEntity<Void> deleteTask(@PathVariable Long id) {
         taskService.deleteTask(id);
         return ResponseEntity.ok().build();

@@ -63,9 +63,20 @@ public class DataSeeder {
             LeadRepository leadRepository,
             ProjectRepository projectRepository,
             TaskRepository taskRepository,
-            PasswordEncoder passwordEncoder) {
+            PasswordEncoder passwordEncoder,
+            org.springframework.core.env.Environment environment) {
 
         return args -> {
+            // A profile is treated as "production" if any active profile is named prod/production.
+            // Roles and permissions are seeded on every profile (they are reference data the app
+            // needs to function); default credentials and sample business data are NOT.
+            boolean isProd = false;
+            for (String profile : environment.getActiveProfiles()) {
+                if (profile.equalsIgnoreCase("prod") || profile.equalsIgnoreCase("production")) {
+                    isProd = true;
+                    break;
+                }
+            }
             // 1. Seed Roles
             List<String> roleNames = Arrays.asList("ROLE_ADMIN", "ROLE_SALES", "ROLE_PROJECT_MANAGER",
                     "ROLE_EMPLOYEE", "ROLE_MANAGER", "ROLE_DESIGNER", "ROLE_ENGINEER", "ROLE_SUPERVISOR",
@@ -395,24 +406,56 @@ public class DataSeeder {
             assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_PROJECT_MANAGER",
                     "PAYROLL_READ");
 
-            // 2. Seed Default Admin
-            if (userRepository.findByEmail("admin@arudra.com").isEmpty()) {
+            // 2. Seed the bootstrap admin.
+            //
+            // BLK-001: never seed a hardcoded/well-known credential in production. Behaviour:
+            //   * Non-prod (dev/test): seed admin@arudra.com / Admin@123 for local convenience.
+            //   * Prod: seed an admin ONLY when BOOTSTRAP_ADMIN_EMAIL + BOOTSTRAP_ADMIN_PASSWORD
+            //     are both supplied via env, and flag it must_change_password so the operator is
+            //     forced to change it on first login. With no env vars set, no admin is created
+            //     (provision one out-of-band) — there is never a default password in prod.
+            Role adminRole = roleRepository.findByName("ROLE_ADMIN").orElseThrow();
+            if (isProd) {
+                String bootstrapEmail = environment.getProperty("BOOTSTRAP_ADMIN_EMAIL");
+                String bootstrapPassword = environment.getProperty("BOOTSTRAP_ADMIN_PASSWORD");
+                if (bootstrapEmail != null && !bootstrapEmail.isBlank()
+                        && bootstrapPassword != null && !bootstrapPassword.isBlank()) {
+                    bootstrapEmail = bootstrapEmail.trim();
+                    if (userRepository.findByEmail(bootstrapEmail).isEmpty()) {
+                        User admin = new User();
+                        admin.setName("Administrator");
+                        admin.setEmail(bootstrapEmail);
+                        admin.setPassword(passwordEncoder.encode(bootstrapPassword));
+                        admin.setEmailVerified(true);
+                        admin.setMustChangePassword(true);
+                        Set<Role> roles = new HashSet<>();
+                        roles.add(adminRole);
+                        admin.setRoles(roles);
+                        userRepository.save(admin);
+                        System.out.println("Seeded bootstrap admin '" + bootstrapEmail
+                                + "' (must change password on first login).");
+                    }
+                } else {
+                    System.out.println("No bootstrap admin seeded: set BOOTSTRAP_ADMIN_EMAIL and "
+                            + "BOOTSTRAP_ADMIN_PASSWORD to provision one, or create an admin out-of-band.");
+                }
+            } else if (userRepository.findByEmail("admin@arudra.com").isEmpty()) {
                 User admin = new User();
                 admin.setName("Default Admin");
                 admin.setEmail("admin@arudra.com");
                 admin.setPassword(passwordEncoder.encode("Admin@123"));
                 admin.setEmailVerified(true);
-                
-                Role adminRole = roleRepository.findByName("ROLE_ADMIN").orElseThrow();
+
                 Set<Role> roles = new HashSet<>();
                 roles.add(adminRole);
                 admin.setRoles(roles);
-                
+
                 userRepository.save(admin);
             }
 
-            // 3. Seed Sample Data if no customers exist
-            if (customerRepository.count() == 0) {
+            // 3. Seed Sample Data if no customers exist (non-prod only — never seed demo
+            //    business records into a production database).
+            if (!isProd && customerRepository.count() == 0) {
                 // Customer
                 Customer customer = new Customer();
                 customer.setName("Acme Corp");

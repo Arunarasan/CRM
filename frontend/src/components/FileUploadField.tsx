@@ -140,20 +140,20 @@ export default function FileUploadField({
               type="button"
               onClick={() => inputRef.current?.click()}
               disabled={uploading || disabled}
-              className="flex flex-1 items-center justify-center gap-2 rounded-md border border-dashed border-input bg-background px-3 py-3 text-sm font-medium text-muted-foreground transition-colors hover:border-primary hover:text-primary disabled:opacity-60"
+              className="flex min-w-0 flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-md border border-dashed border-input bg-background px-3 py-3 text-sm font-medium text-muted-foreground transition-colors hover:border-primary hover:text-primary disabled:opacity-60"
             >
-              {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-              {uploading ? "Uploading…" : "Choose file from device"}
+              {uploading ? <Loader2 className="h-4 w-4 shrink-0 animate-spin" /> : <Upload className="h-4 w-4 shrink-0" />}
+              <span className="truncate">{uploading ? "Uploading…" : "Choose file"}</span>
             </button>
             {imagesAllowed && (
               <button
                 type="button"
                 onClick={() => cameraRef.current?.click()}
                 disabled={uploading || disabled}
-                className="flex items-center justify-center gap-2 rounded-md border border-dashed border-input bg-background px-3 py-3 text-sm font-medium text-muted-foreground transition-colors hover:border-primary hover:text-primary disabled:opacity-60"
+                className="flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md border border-dashed border-input bg-background px-3 py-3 text-sm font-medium text-muted-foreground transition-colors hover:border-primary hover:text-primary disabled:opacity-60"
                 title="Take a photo"
               >
-                <Camera className="h-4 w-4" /> Camera
+                <Camera className="h-4 w-4 shrink-0" /> Camera
               </button>
             )}
           </div>

@@ -37,6 +37,7 @@ A:\CRM\backend\src\main\java\com\arudra\crm\dto\lead\LeadConversionRequest.java
 A:\CRM\backend\src\main\java\com\arudra\crm\repository\CustomerPaymentRepository.java
 A:\CRM\backend\src\main\java\com\arudra\crm\repository\LeadNegotiationRepository.java
 A:\CRM\backend\src\main\java\com\arudra\crm\dto\ContactPersonDTO.java
+A:\CRM\backend\src\main\java\com\arudra\crm\service\EmailService.java
 A:\CRM\backend\src\main\java\com\arudra\crm\dto\assignment\RecommendRequest.java
 A:\CRM\backend\src\main\java\com\arudra\crm\repository\MeasurementHistoryRepository.java
 A:\CRM\backend\src\main\java\com\arudra\crm\controller\WorkforceController.java
@@ -108,8 +109,10 @@ A:\CRM\backend\src\main\java\com\arudra\crm\repository\ProjectIssueRepository.ja
 A:\CRM\backend\src\main\java\com\arudra\crm\repository\RefreshTokenRepository.java
 A:\CRM\backend\src\main\java\com\arudra\crm\entity\PurchaseRequestItem.java
 A:\CRM\backend\src\main\java\com\arudra\crm\repository\ContractorBillRepository.java
+A:\CRM\backend\src\main\java\com\arudra\crm\dto\user\UpdateUserRequest.java
 A:\CRM\backend\src\main\java\com\arudra\crm\entity\Department.java
 A:\CRM\backend\src\main\java\com\arudra\crm\dto\DashboardSummaryDTO.java
+A:\CRM\backend\src\main\java\com\arudra\crm\dto\VerifyOtpRequest.java
 A:\CRM\backend\src\main\java\com\arudra\crm\entity\LeadFollowup.java
 A:\CRM\backend\src\main\java\com\arudra\crm\repository\SalaryRecordRepository.java
 A:\CRM\backend\src\main\java\com\arudra\crm\repository\ContractorDocumentRepository.java
@@ -123,7 +126,6 @@ A:\CRM\backend\src\main\java\com\arudra\crm\entity\SiteMeasurement.java
 A:\CRM\backend\src\main\java\com\arudra\crm\dto\lead\LeadBoardColumnDTO.java
 A:\CRM\backend\src\main\java\com\arudra\crm\repository\ProjectDocumentRepository.java
 A:\CRM\backend\src\main\java\com\arudra\crm\entity\MeasurementPlumbing.java
-A:\CRM\backend\src\main\java\com\arudra\crm\service\BillingService.java
 A:\CRM\backend\src\main\java\com\arudra\crm\repository\InventoryItemRepository.java
 A:\CRM\backend\src\main\java\com\arudra\crm\dto\measurement\MeasurementTimelineEventDTO.java
 A:\CRM\backend\src\main\java\com\arudra\crm\repository\BoqChangeLogRepository.java
@@ -160,6 +162,7 @@ A:\CRM\backend\src\main\java\com\arudra\crm\entity\QuotationDiscount.java
 A:\CRM\backend\src\main\java\com\arudra\crm\repository\TagRepository.java
 A:\CRM\backend\src\main\java\com\arudra\crm\config\StaticResourceConfig.java
 A:\CRM\backend\src\main\java\com\arudra\crm\entity\QuotationAdditionalCharge.java
+A:\CRM\backend\src\main\java\com\arudra\crm\entity\AttendanceSession.java
 A:\CRM\backend\src\main\java\com\arudra\crm\entity\ProjectDailyLogMedia.java
 A:\CRM\backend\src\main\java\com\arudra\crm\entity\ProjectRoomItem.java
 A:\CRM\backend\src\main\java\com\arudra\crm\repository\PurchaseBillRepository.java
@@ -171,15 +174,18 @@ A:\CRM\backend\src\main\java\com\arudra\crm\entity\MaterialRequest.java
 A:\CRM\backend\src\main\java\com\arudra\crm\entity\SiteVisitChecklist.java
 A:\CRM\backend\src\main\java\com\arudra\crm\repository\InvoiceItemRepository.java
 A:\CRM\backend\src\main\java\com\arudra\crm\dto\InvoicePaymentSplit.java
+A:\CRM\backend\src\main\java\com\arudra\crm\event\ProjectProgressChangedEvent.java
 A:\CRM\backend\src\main\java\com\arudra\crm\service\ProjectService.java
 A:\CRM\backend\src\main\java\com\arudra\crm\controller\FinanceController.java
 A:\CRM\backend\src\main\java\com\arudra\crm\entity\ProjectIssue.java
 A:\CRM\backend\src\main\java\com\arudra\crm\entity\PurchaseRequest.java
 A:\CRM\backend\src\main\java\com\arudra\crm\entity\Quotation.java
+A:\CRM\backend\src\main\java\com\arudra\crm\controller\RoleController.java
 A:\CRM\backend\src\main\java\com\arudra\crm\repository\ContractorPaymentRepository.java
 A:\CRM\backend\src\main\java\com\arudra\crm\service\StockTransferService.java
 A:\CRM\backend\src\main\java\com\arudra\crm\entity\TaskAttachment.java
 A:\CRM\backend\src\main\java\com\arudra\crm\repository\ContractorProjectRepository.java
+A:\CRM\backend\src\main\java\com\arudra\crm\service\DocumentNumberService.java
 A:\CRM\backend\src\main\java\com\arudra\crm\dto\CustomerAddressDTO.java
 A:\CRM\backend\src\main\java\com\arudra\crm\entity\WorkPackageAssignment.java
 A:\CRM\backend\src\main\java\com\arudra\crm\entity\AssignmentSettings.java
@@ -311,6 +317,7 @@ A:\CRM\backend\src\main\java\com\arudra\crm\repository\CustomerAddressRepository
 A:\CRM\backend\src\main\java\com\arudra\crm\controller\PurchaseController.java
 A:\CRM\backend\src\main\java\com\arudra\crm\service\CustomerService.java
 A:\CRM\backend\src\main\java\com\arudra\crm\repository\LeadFollowupRepository.java
+A:\CRM\backend\src\main\java\com\arudra\crm\service\UserService.java
 A:\CRM\backend\src\main\java\com\arudra\crm\controller\BoqController.java
 A:\CRM\backend\src\main\java\com\arudra\crm\entity\PersonalReminder.java
 A:\CRM\backend\src\main\java\com\arudra\crm\repository\LeadDocumentRepository.java
@@ -342,6 +349,7 @@ A:\CRM\backend\src\main\java\com\arudra\crm\repository\EmployeeRepository.java
 A:\CRM\backend\src\main\java\com\arudra\crm\repository\LeadLabelRepository.java
 A:\CRM\backend\src\main\java\com\arudra\crm\entity\SalaryStructure.java
 A:\CRM\backend\src\main\java\com\arudra\crm\repository\DepartmentRepository.java
+A:\CRM\backend\src\main\java\com\arudra\crm\dto\user\AdminResetPasswordRequest.java
 A:\CRM\backend\src\main\java\com\arudra\crm\service\NotificationService.java
 A:\CRM\backend\src\main\java\com\arudra\crm\service\FinanceService.java
 A:\CRM\backend\src\main\java\com\arudra\crm\dto\CustomerProfileDTO.java
@@ -357,6 +365,7 @@ A:\CRM\backend\src\main\java\com\arudra\crm\repository\SiteVisitChecklistReposit
 A:\CRM\backend\src\main\java\com\arudra\crm\entity\Project.java
 A:\CRM\backend\src\main\java\com\arudra\crm\repository\PurchaseRequestApprovalRepository.java
 A:\CRM\backend\src\main\java\com\arudra\crm\entity\PaymentSchedule.java
+A:\CRM\backend\src\main\java\com\arudra\crm\repository\AttendanceSessionRepository.java
 A:\CRM\backend\src\main\java\com\arudra\crm\repository\InventoryTransactionRepository.java
 A:\CRM\backend\src\main\java\com\arudra\crm\entity\Refund.java
 A:\CRM\backend\src\main\java\com\arudra\crm\repository\QuotationTaxRepository.java
@@ -409,7 +418,6 @@ A:\CRM\backend\src\main\java\com\arudra\crm\repository\ContractorDailyProgressRe
 A:\CRM\backend\src\main\java\com\arudra\crm\entity\InventoryCategory.java
 A:\CRM\backend\src\main\java\com\arudra\crm\repository\SiteVisitRepository.java
 A:\CRM\backend\src\main\java\com\arudra\crm\service\LeadService.java
-A:\CRM\backend\src\main\java\com\arudra\crm\controller\BillingController.java
 A:\CRM\backend\src\main\java\com\arudra\crm\repository\SupplierRepository.java
 A:\CRM\backend\src\main\java\com\arudra\crm\repository\AssignmentSettingsRepository.java
 A:\CRM\backend\src\main\java\com\arudra\crm\repository\EmployeeDocumentRepository.java
@@ -469,9 +477,11 @@ A:\CRM\backend\src\main\java\com\arudra\crm\service\VerificationTokenService.jav
 A:\CRM\backend\src\main\java\com\arudra\crm\entity\MeasurementDoor.java
 A:\CRM\backend\src\main\java\com\arudra\crm\repository\MeasurementSpecification.java
 A:\CRM\backend\src\main\java\com\arudra\crm\repository\PurchaseOrderRepository.java
+A:\CRM\backend\src\main\java\com\arudra\crm\dto\user\UserAdminDTO.java
 A:\CRM\backend\src\main\java\com\arudra\crm\controller\CustomerController.java
 A:\CRM\backend\src\main\java\com\arudra\crm\entity\ProjectQualityCheck.java
 A:\CRM\backend\src\main\java\com\arudra\crm\entity\PurchaseOrderItem.java
+A:\CRM\backend\src\main\java\com\arudra\crm\dto\user\CreateUserRequest.java
 A:\CRM\backend\src\main\java\com\arudra\crm\entity\ProjectDocument.java
 A:\CRM\backend\src\main\java\com\arudra\crm\controller\NotificationController.java
 A:\CRM\backend\src\main\java\com\arudra\crm\entity\PayrollRecovery.java
@@ -480,6 +490,7 @@ A:\CRM\backend\src\main\java\com\arudra\crm\repository\StockTransferRepository.j
 A:\CRM\backend\src\main\java\com\arudra\crm\repository\WorkPackageItemRepository.java
 A:\CRM\backend\src\main\java\com\arudra\crm\config\AuditorAwareImpl.java
 A:\CRM\backend\src\main\java\com\arudra\crm\repository\WorkPackageAssignmentRepository.java
+A:\CRM\backend\src\main\java\com\arudra\crm\service\ProjectBillingAutomationService.java
 A:\CRM\backend\src\main\java\com\arudra\crm\service\PurchaseService.java
 A:\CRM\backend\src\main\java\com\arudra\crm\entity\ContractorSafetyRecord.java
 A:\CRM\backend\src\main\java\com\arudra\crm\controller\MaterialRequestController.java
@@ -522,5 +533,6 @@ A:\CRM\backend\src\main\java\com\arudra\crm\repository\LeaveRequestRepository.ja
 A:\CRM\backend\src\main\java\com\arudra\crm\repository\EmployeeDeductionRepository.java
 A:\CRM\backend\src\main\java\com\arudra\crm\controller\StockTransferController.java
 A:\CRM\backend\src\main\java\com\arudra\crm\entity\MeasurementWindow.java
+A:\CRM\backend\src\main\java\com\arudra\crm\service\AttendanceOvertimeScheduler.java
 A:\CRM\backend\src\main\java\com\arudra\crm\repository\ProjectDailyLogEmployeeRepository.java
 A:\CRM\backend\src\main\java\com\arudra\crm\repository\MaterialRequestItemRepository.java

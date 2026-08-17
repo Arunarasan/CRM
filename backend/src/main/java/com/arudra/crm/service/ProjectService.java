@@ -120,6 +120,9 @@ public class ProjectService {
     private NotificationService notificationService;
 
     @Autowired
+    private org.springframework.context.ApplicationEventPublisher eventPublisher;
+
+    @Autowired
     private InventoryService inventoryService;
 
     @Autowired
@@ -128,12 +131,46 @@ public class ProjectService {
     @Autowired
     private com.arudra.crm.repository.ProductRepository productRepository;
 
-    public Page<Project> getProjects(String search, int page, int size) {
+    // Status buckets for the Projects portfolio tabs. A project's raw status is mapped into one
+    // of these groups; anything not listed (e.g. CANCELLED) shows only under "All".
+    private static final java.util.List<String> STATUS_NEW = java.util.List.of("PLANNING", "PENDING", "APPROVED");
+    private static final java.util.List<String> STATUS_IN_PROGRESS = java.util.List.of("RUNNING", "PAUSED", "ON_HOLD");
+    private static final java.util.List<String> STATUS_COMPLETED = java.util.List.of("COMPLETED", "CLOSED");
+
+    /**
+     * Portfolio listing with optional segmentation. {@code category} is one of NEW, IN_PROGRESS,
+     * COMPLETED, UNASSIGNED (team not assigned); anything else (or null) lists all projects.
+     */
+    public Page<Project> getProjects(String search, String category, int page, int size) {
         PageRequest pageRequest = PageRequest.of(page, size, Sort.by("id").descending());
-        if (search != null && !search.isEmpty()) {
-            return projectRepository.searchProjects(search, pageRequest);
+        String s = search == null ? "" : search.trim();
+        String cat = category == null ? "" : category.trim().toUpperCase();
+
+        switch (cat) {
+            case "NEW":
+                return projectRepository.findByStatusCategory(STATUS_NEW, s, pageRequest);
+            case "IN_PROGRESS":
+                return projectRepository.findByStatusCategory(STATUS_IN_PROGRESS, s, pageRequest);
+            case "COMPLETED":
+                return projectRepository.findByStatusCategory(STATUS_COMPLETED, s, pageRequest);
+            case "UNASSIGNED":
+                return projectRepository.findUnassignedTeam(s, pageRequest);
+            default:
+                return s.isEmpty()
+                        ? projectRepository.findAll(pageRequest)
+                        : projectRepository.searchProjects(s, pageRequest);
         }
-        return projectRepository.findAll(pageRequest);
+    }
+
+    /** Counts behind each Projects-page tab, so the badges stay accurate regardless of the current filter. */
+    public Map<String, Long> getSegmentCounts() {
+        Map<String, Long> counts = new java.util.LinkedHashMap<>();
+        counts.put("all", projectRepository.count());
+        counts.put("new", projectRepository.countByStatusCategory(STATUS_NEW));
+        counts.put("inProgress", projectRepository.countByStatusCategory(STATUS_IN_PROGRESS));
+        counts.put("completed", projectRepository.countByStatusCategory(STATUS_COMPLETED));
+        counts.put("unassigned", projectRepository.countUnassignedTeam());
+        return counts;
     }
 
     public Project getProjectById(Long id) {
@@ -755,6 +792,7 @@ public class ProjectService {
             projectRepository.save(project);
             notifyProject(project, "Project Completed",
                     project.getProjectName() + " is fully completed");
+            eventPublisher.publishEvent(new com.arudra.crm.event.ProjectProgressChangedEvent(project.getId()));
             return;
         }
         // Auto-completed earlier but a reopen dropped it back below 100.
@@ -764,6 +802,8 @@ public class ProjectService {
             project.setTotalDurationDays(null);
         }
         projectRepository.save(project);
+        // Let the billing automation react to the new work % (auto-raise due milestone invoices).
+        eventPublisher.publishEvent(new com.arudra.crm.event.ProjectProgressChangedEvent(project.getId()));
     }
 
     private void notifyRoomCompleted(ProjectRoom room) {

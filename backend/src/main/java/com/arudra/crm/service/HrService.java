@@ -33,6 +33,7 @@ public class HrService {
     @Autowired private RoleRepository roleRepository;
     @Autowired private NotificationService notificationService;
     @Autowired private TaskAssignmentRepository taskAssignmentRepository;
+    @Autowired private WorkforceRepository workforceRepository;
 
     /** Notifies an employee via their own login account (resolved by shared email), if one exists. */
     private void notifyEmployee(Employee employee, String title, String message, String type, String url) {
@@ -98,6 +99,14 @@ public class HrService {
     }
     @Transactional
     public Employee createEmployee(Employee employee) {
+        // Every employee must hang off a Workforce header — the single source of truth for the
+        // unified Workforce module (directory, assignment pool, profile). The workforce-driven
+        // create sets this before calling in; a direct POST /hr/employees does not, so back-fill a
+        // minimal header here to guarantee no orphan employees reach the database.
+        if (employee.getWorkforce() == null) {
+            employee.setWorkforce(workforceRepository.save(headerFor(employee)));
+        }
+
         Employee saved = employeeRepository.save(employee);
 
         // Auto-create a corresponding User account for the employee so they can log in
@@ -109,6 +118,22 @@ public class HrService {
         }
 
         return saved;
+    }
+
+    /** Builds a minimal Workforce header from an employee's own fields (used to back-fill orphans). */
+    private Workforce headerFor(Employee employee) {
+        Workforce header = new Workforce();
+        header.setWorkforceType(ResourceType.EMPLOYEE);
+        String full = ((employee.getFirstName() == null ? "" : employee.getFirstName()) + " "
+                + (employee.getLastName() == null ? "" : employee.getLastName())).trim();
+        header.setFullName(full.isEmpty() ? "Unnamed Employee" : full);
+        header.setEmail(employee.getEmail());
+        header.setMobile(employee.getPhone());
+        header.setProfilePhotoUrl(employee.getProfilePhotoUrl());
+        header.setEmergencyContactName(employee.getEmergencyContactName());
+        header.setEmergencyPhone(employee.getEmergencyContactPhone());
+        header.setStatus("AVAILABLE");
+        return header;
     }
 
     @Transactional

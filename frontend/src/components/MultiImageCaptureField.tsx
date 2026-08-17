@@ -83,18 +83,18 @@ export default function MultiImageCaptureField({
           type="button"
           onClick={() => cameraRef.current?.click()}
           disabled={busy || disabled}
-          className="flex flex-1 items-center justify-center gap-2 rounded-md border border-dashed border-input bg-background px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:border-primary hover:text-primary disabled:opacity-60"
+          className="flex min-w-0 flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-md border border-dashed border-input bg-background px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:border-primary hover:text-primary disabled:opacity-60"
         >
-          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
-          {busy ? "Uploading…" : "Take photo"}
+          {busy ? <Loader2 className="h-4 w-4 shrink-0 animate-spin" /> : <Camera className="h-4 w-4 shrink-0" />}
+          <span className="truncate">{busy ? "Uploading…" : "Take photo"}</span>
         </button>
         <button
           type="button"
           onClick={() => galleryRef.current?.click()}
           disabled={busy || disabled}
-          className="flex flex-1 items-center justify-center gap-2 rounded-md border border-dashed border-input bg-background px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:border-primary hover:text-primary disabled:opacity-60"
+          className="flex min-w-0 flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-md border border-dashed border-input bg-background px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:border-primary hover:text-primary disabled:opacity-60"
         >
-          <ImagePlus className="h-4 w-4" /> Add image
+          <ImagePlus className="h-4 w-4 shrink-0" /> <span className="truncate">Add image</span>
         </button>
       </div>
 

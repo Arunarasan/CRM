@@ -130,11 +130,52 @@ export interface PaymentSchedule {
   stage: string;
   description?: string;
   percentage?: number;
+  /** Work-progress % at/above which this stage auto-bills; null = not progress-driven. */
+  triggerPercentage?: number | null;
+  autoTriggered?: boolean;
+  autoTriggeredDate?: string | null;
   amount: number;
   dueDate?: string;
   status: "PENDING" | "INVOICED" | "PARTIAL" | "PAID" | "OVERDUE";
   invoice?: Invoice | null;
   sortOrder: number;
+}
+
+/** Combined completion tracker (work % + payment %) with per-milestone state. */
+export interface BillingProgress {
+  projectId: number;
+  projectName: string;
+  projectStatus: string;
+  workPercent: number;
+  paymentPercent: number;
+  autoBillingEnabled: boolean;
+  scheduledTotal: number;
+  invoicedTotal: number;
+  collectedTotal: number;
+  hasSchedule: boolean;
+  fullySettled: boolean;
+  stages: BillingStage[];
+}
+
+export interface BillingStage {
+  id: number;
+  stage: string;
+  description?: string | null;
+  percentage?: number | null;
+  triggerPercentage?: number | null;
+  amount: number;
+  status: PaymentSchedule["status"];
+  autoTriggered: boolean;
+  reached: boolean;
+  progressDriven: boolean;
+  invoice?: {
+    id: number;
+    invoiceNumber: string;
+    status: string;
+    totalAmount: number;
+    amountPaid: number;
+    balanceDue: number;
+  } | null;
 }
 
 export interface ProjectExpense {

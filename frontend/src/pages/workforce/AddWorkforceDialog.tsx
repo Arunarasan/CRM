@@ -320,8 +320,8 @@ export default function AddWorkforceDialog({
               </p>
               <div className="space-y-3">
                 {docs.map((d, i) => (
-                  <div key={i} className="flex items-end gap-2">
-                    <div className="w-40">
+                  <div key={i} className="flex flex-col gap-2 rounded-lg border p-2 sm:flex-row sm:items-end sm:border-0 sm:p-0">
+                    <div className="w-full sm:w-40">
                       <Label className="text-xs text-slate-500">Type</Label>
                       <select className="h-10 w-full rounded-md border bg-white px-3 text-sm"
                               value={d.docType}
@@ -338,7 +338,7 @@ export default function AddWorkforceDialog({
                           setDocs((arr) => arr.map((x, j) => j === i ? { ...x, fileUrl: url, fileName: fileName || x.fileName || "document" } : x))}
                       />
                     </div>
-                    <Button variant="ghost" size="sm" onClick={() => setDocs((arr) => arr.filter((_, j) => j !== i))}>
+                    <Button variant="ghost" size="sm" className="self-end sm:self-auto" onClick={() => setDocs((arr) => arr.filter((_, j) => j !== i))}>
                       <Trash2 className="w-4 h-4 text-rose-500" />
                     </Button>
                   </div>
