@@ -146,8 +146,8 @@ jobs:
             docker compose logs --tail=100 backend
 
             echo "======================================================="
-            echo "Recent Frontend Logs:"
-            docker compose logs --tail=100 frontend
+            echo "Recent Web (website + CRM) Logs:"
+            docker compose logs --tail=100 web
 
             echo "======================================================="
             echo "Recent MySQL Logs:"
