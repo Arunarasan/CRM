@@ -113,7 +113,7 @@ export default function ForgotPassword() {
                 {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                 Send code
               </Button>
-              <a href="/login" className="text-sm text-muted-foreground hover:text-primary flex items-center gap-1">
+              <a href={import.meta.env.BASE_URL + "login"} className="text-sm text-muted-foreground hover:text-primary flex items-center gap-1">
                 <ArrowLeft className="h-3.5 w-3.5" /> Back to sign in
               </a>
             </CardFooter>
@@ -192,7 +192,7 @@ export default function ForgotPassword() {
               </p>
             </CardContent>
             <CardFooter>
-              <Button className="w-full" onClick={() => (window.location.href = "/login")}>
+              <Button className="w-full" onClick={() => (window.location.href = import.meta.env.BASE_URL + "login")}>
                 Go to sign in
               </Button>
             </CardFooter>

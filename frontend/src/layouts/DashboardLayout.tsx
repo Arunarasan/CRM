@@ -40,7 +40,8 @@ const BOTTOM_NAV: { to: string; label: string; authority: string | null; icon: t
 function logout() {
   localStorage.removeItem("token");
   localStorage.removeItem("refreshToken");
-  window.location.href = "/login";
+  // BASE_URL keeps the redirect inside the CRM (/crm/ in production) instead of the public site.
+  window.location.href = import.meta.env.BASE_URL + "login";
 }
 
 export default function DashboardLayout() {
@@ -117,7 +118,7 @@ export default function DashboardLayout() {
   // back control, the app name, and logout. The page content stays full-width and untouched.
   if (isFieldEmployee) {
     const goBack = () =>
-      window.history.length > 1 ? window.history.back() : (window.location.href = "/employee");
+      window.history.length > 1 ? window.history.back() : (window.location.href = import.meta.env.BASE_URL + "employee");
     return (
       <div className="flex flex-col h-screen w-full bg-background">
         <header className="h-14 border-b flex items-center justify-between gap-2 px-3 sm:px-4 bg-card shrink-0">

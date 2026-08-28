@@ -39,8 +39,10 @@ export default function Login() {
         const roleNames = roles.filter((r) => r.startsWith("ROLE_"));
         const isFieldEmployee = roleNames.includes("ROLE_EMPLOYEE") && !roleNames.includes("ROLE_ADMIN");
 
-        // Use window.location for full reload to reset all app state and layout effects
-        window.location.href = isFieldEmployee ? "/employee" : "/dashboard";
+        // Use window.location for full reload to reset all app state and layout effects.
+        // Prefix with BASE_URL (/crm/ in the Option A production build, / in dev) so the
+        // redirect stays inside the CRM app instead of hitting the public website at root.
+        window.location.href = import.meta.env.BASE_URL + (isFieldEmployee ? "employee" : "dashboard");
       } else {
         setError("Invalid login response from server");
       }

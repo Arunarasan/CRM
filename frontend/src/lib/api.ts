@@ -91,7 +91,9 @@ api.interceptors.response.use(
         processQueue(err, null);
         localStorage.removeItem('token');
         localStorage.removeItem('refreshToken');
-        window.location.href = '/login';
+        // Respect the app base (/crm/ in the Option A production build) so an expired session
+        // returns to the CRM login, not the public website's customer login at root.
+        window.location.href = import.meta.env.BASE_URL + 'login';
         return Promise.reject(err);
       } finally {
         isRefreshing = false;

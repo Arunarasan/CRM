@@ -30,7 +30,7 @@ export default function EmployeeMore() {
     localStorage.removeItem('token');
     localStorage.removeItem('refreshToken');
     localStorage.removeItem('userRoles');
-    window.location.href = '/login';
+    window.location.href = import.meta.env.BASE_URL + 'login';
   };
 
   return (
