@@ -9,11 +9,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArrowLeft, Star, Phone, Mail, Building2, MapPin } from "lucide-react";
+import { useGoBack } from "@/hooks/useGoBack";
 
 const currency = (n?: number) => `₹${(n ?? 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 
 export default function ContractorDetailPage() {
   const { id } = useParams();
+  const goBack = useGoBack("/contractors/directory");
   const [data, setData] = useState<ContractorDetail | null>(null);
 
   useEffect(() => {
@@ -27,9 +29,9 @@ export default function ContractorDetailPage() {
 
   return (
     <div className="space-y-5">
-      <Link to="/contractors/directory" className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800">
-        <ArrowLeft className="w-4 h-4" /> All contractors
-      </Link>
+      <button type="button" onClick={goBack} className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800">
+        <ArrowLeft className="w-4 h-4" /> Back
+      </button>
 
       <div className="bg-white border rounded-2xl shadow-sm p-6">
         <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
@@ -55,12 +57,13 @@ export default function ContractorDetailPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mt-6 pt-6 border-t">
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mt-6 pt-6 border-t">
           <Metric label="Work packages" value={`${p.completedPackages}/${p.totalPackages}`} hint={`${p.delayedPackages} delayed`} />
           <Metric label="On-time delivery" value={`${p.onTimeDeliveryPercent}%`} />
           <Metric label="Total billed" value={currency(p.totalBilled)} />
+          <Metric label="Total paid" value={currency(data.outstanding.totalPaid)} hint={`incl. advances ${currency(data.outstanding.advancesPaid)}`} />
           <Metric label="Outstanding" value={currency(data.outstanding.billedOutstanding)} hint={`retention ${currency(data.outstanding.retentionHeld)}`} />
-          <Metric label="Ledger balance" value={currency(data.outstanding.ledgerBalance)} hint="payable to contractor" />
+          <Metric label="Dues (payable)" value={currency(data.outstanding.ledgerBalance)} hint="net ledger balance" />
         </div>
       </div>
 
@@ -109,6 +112,12 @@ export default function ContractorDetailPage() {
         </TabsContent>
 
         <TabsContent value="payments">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+            <SummaryTile label="Total paid" value={currency(data.outstanding.totalPaid)} />
+            <SummaryTile label="Advances paid" value={currency(data.outstanding.advancesPaid)} />
+            <SummaryTile label="Bills outstanding" value={currency(data.outstanding.billedOutstanding)} tone="amber" />
+            <SummaryTile label="Dues (net payable)" value={currency(data.outstanding.ledgerBalance)} tone="amber" />
+          </div>
           <Card>
             <SimpleTable
               head={["Date", "Type", "Amount", "Mode", "Reference", "Bill"]}
@@ -235,6 +244,15 @@ function Stat({ label, value, star }: { label: string; value?: number; star?: bo
         {value != null ? Number(value).toFixed(1) : "—"}
       </div>
       <div className="text-[10px] font-semibold uppercase text-slate-400">{label}</div>
+    </div>
+  );
+}
+
+function SummaryTile({ label, value, tone }: { label: string; value: string; tone?: "amber" }) {
+  return (
+    <div className={`rounded-xl border p-4 ${tone === "amber" ? "bg-amber-50 border-amber-200" : "bg-white"}`}>
+      <div className="text-xs font-semibold uppercase text-slate-400">{label}</div>
+      <div className="text-lg font-black text-slate-900 mt-1">{value}</div>
     </div>
   );
 }

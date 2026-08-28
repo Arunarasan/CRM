@@ -21,8 +21,12 @@ public class Task extends BaseEntity {
     @Column(name = "task_name", nullable = false, length = 255)
     private String taskName;
 
+    /**
+     * Nullable since V33: lead-stage workflow tasks exist before any project. Execution/manual tasks
+     * still carry a project — see {@code source} / the workflow links below.
+     */
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "project_id", nullable = false)
+    @JoinColumn(name = "project_id")
     private Project project;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -97,4 +101,56 @@ public class Task extends BaseEntity {
 
     @Column(name = "completed_date")
     private LocalDate completedDate;
+
+    // ---------------------------------------------------------------- workflow engine (V33)
+
+    /** WORKFLOW (engine-generated) or MANUAL (ad-hoc / desktop / legacy). */
+    @Column(name = "source", nullable = false, length = 20)
+    private String source = "MANUAL";
+
+    /** OWNER_APPROVAL | ALL_PARTICIPANTS | ANY_PARTICIPANT — how a collaborative task closes. */
+    @Column(name = "completion_rule", length = 30)
+    private String completionRule;
+
+    /** SINGLE_EMPLOYEE | MULTIPLE_EMPLOYEES | TEAM */
+    @Column(name = "assignment_type", length = 20)
+    private String assignmentType;
+
+    /** Comma-separated role/capability tokens allowed to pick this task (copied from the template). */
+    @Column(name = "eligible_roles", length = 255)
+    private String eligibleRoles;
+
+    @Column(name = "eligible_skills", length = 255)
+    private String eligibleSkills;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "task_template_id")
+    private TaskTemplate taskTemplate;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "workflow_instance_id")
+    private WorkflowInstance workflowInstance;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "workflow_phase_instance_id")
+    private WorkflowPhaseInstance workflowPhaseInstance;
+
+    // Plain subject ids (no FK), following the generatedFromBoqItemId convention.
+    @Column(name = "lead_id")
+    private Long leadId;
+
+    @Column(name = "customer_id")
+    private Long customerId;
+
+    @Column(name = "site_visit_id")
+    private Long siteVisitId;
+
+    @Column(name = "measurement_id")
+    private Long measurementId;
+
+    @Column(name = "boq_id")
+    private Long boqId;
+
+    @Column(name = "quotation_id")
+    private Long quotationId;
 }

@@ -2,7 +2,7 @@ import { LeadStatusData } from "@/types/dashboard";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-const COLORS = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#6366f1'];
+const COLORS = ['#114f39', '#c8981e', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#6366f1'];
 
 export default function LeadPipelineChart({ data, isLoading }: { data: LeadStatusData[], isLoading: boolean }) {
   if (isLoading) {

@@ -76,7 +76,11 @@ export default function MeasurementDetails() {
   const canDelete = hasAuthority("MEASUREMENT_DELETE");
 
   const handleBack = () => {
-    if (location.state?.from) {
+    // Prefer the last visited screen (browser history); the routes below are only fallbacks for when
+    // the page was opened directly with no in-app history to return to.
+    if (window.history.length > 2) {
+      navigate(-1);
+    } else if (location.state?.from) {
       navigate(location.state.from);
     } else if (measurement?.lead?.id) {
       navigate(`/leads/${measurement.lead.id}`);
@@ -86,8 +90,6 @@ export default function MeasurementDetails() {
       navigate(`/projects/${measurement.project.id}`);
     } else if (measurement?.siteVisit?.id) {
       navigate(`/site-visits/${measurement.siteVisit.id}`);
-    } else if (window.history.length > 2) {
-      navigate(-1);
     } else {
       navigate("/measurements");
     }
@@ -151,9 +153,12 @@ export default function MeasurementDetails() {
 
   const status = measurement.status || "Draft";
   const currentStageIndex = WORKFLOW_STAGES.indexOf(status === "Revision Required" ? "Under Review" : status);
+  const progressPct = status === "Completed"
+    ? 100
+    : Math.max(0, Math.round((currentStageIndex / (WORKFLOW_STAGES.length - 1)) * 100));
 
   return (
-    <div className="p-6 lg:p-8 space-y-5 h-full bg-background flex flex-col overflow-y-auto animate-in fade-in">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-5 h-full bg-background flex flex-col overflow-y-auto animate-in fade-in">
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-4">
@@ -214,7 +219,7 @@ export default function MeasurementDetails() {
             </Button>
           )}
           {canWrite && status === "Completed" && boqs.length === 0 && (
-            <Button className="bg-blue-600 hover:bg-blue-700 text-white" disabled={actionBusy}
+            <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" disabled={actionBusy}
               onClick={() => {
                 setActionBusy(true);
                 setActionError("");
@@ -273,9 +278,22 @@ export default function MeasurementDetails() {
         </div>
       )}
 
-      {/* Progress tracker */}
+      {/* Progress tracker — compact bar on phones, full stepper from sm up */}
       {status !== "Cancelled" && (
-        <div className="bg-card border rounded-xl p-4 shadow-sm overflow-x-auto">
+        <div className="sm:hidden bg-card border rounded-xl p-4 shadow-sm">
+          <div className="flex items-center justify-between text-sm">
+            <span className="font-semibold text-primary">{status}</span>
+            <span className="text-muted-foreground">
+              {status === "Completed" ? "Complete" : `Step ${currentStageIndex + 1} of ${WORKFLOW_STAGES.length}`}
+            </span>
+          </div>
+          <div className="mt-2 h-2 rounded-full bg-muted overflow-hidden">
+            <div className="h-full bg-primary transition-all" style={{ width: `${progressPct}%` }} />
+          </div>
+        </div>
+      )}
+      {status !== "Cancelled" && (
+        <div className="hidden sm:block bg-card border rounded-xl p-4 shadow-sm overflow-x-auto">
           <div className="flex items-center min-w-[900px]">
             {WORKFLOW_STAGES.map((stage, index) => {
               const done = index < currentStageIndex || status === "Completed";

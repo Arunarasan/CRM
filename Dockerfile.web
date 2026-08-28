@@ -1,0 +1,41 @@
+# Option A — single container serving BOTH the public website (at /) and the CRM (at /crm)
+# behind one nginx. Build context must be the repo root: `docker build -f Dockerfile.web .`
+#
+# API base: defaults to same-origin /api (nginx proxies to the backend — see nginx.web.conf, which
+# works in docker-compose where the backend service is reachable as `backend`). On hosts without
+# that proxy (e.g. Render separate services), pass --build-arg VITE_API_URL=https://<backend-host>/api
+# so the SPAs call the backend directly (CORS already permits it).
+
+ARG VITE_API_URL=/api
+
+# ---- Stage 1: build the public website (base /) ----
+FROM node:20-alpine AS website
+WORKDIR /website
+COPY website/package.json website/package-lock.json ./
+RUN npm ci
+COPY website/ ./
+ARG VITE_API_URL
+ENV VITE_API_URL=$VITE_API_URL
+RUN npm run build
+
+# ---- Stage 2: build the CRM (production base = /crm/, set in frontend/vite.config.ts) ----
+FROM node:20-alpine AS crm
+WORKDIR /crm
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend/ ./
+ARG VITE_API_URL
+ENV VITE_API_URL=$VITE_API_URL
+ENV VITE_API_BASE_URL=$VITE_API_URL
+RUN npm run build
+
+# ---- Stage 3: nginx serving both bundles ----
+FROM nginx:alpine
+RUN rm -rf /usr/share/nginx/html/*
+COPY --from=website /website/dist /usr/share/nginx/html
+COPY --from=crm /crm/dist /usr/share/nginx/html/crm
+COPY nginx.web.conf /etc/nginx/conf.d/default.conf
+EXPOSE 80
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+  CMD wget -q --spider http://127.0.0.1/healthz || exit 1
+CMD ["nginx", "-g", "daemon off;"]

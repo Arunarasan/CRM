@@ -111,14 +111,14 @@ export default function Settings() {
       <div className="mx-3 flex flex-col gap-1 rounded-xl border bg-card p-2 shadow-sm">
         {/* Dark mode */}
         <div className="flex items-center gap-3 px-2 py-2.5">
-          {theme === 'dark' ? <Moon className="h-5 w-5 text-indigo-500" /> : <Sun className="h-5 w-5 text-amber-500" />}
+          {theme === 'dark' ? <Moon className="h-5 w-5 text-emerald-500" /> : <Sun className="h-5 w-5 text-amber-500" />}
           <span className="flex-1 text-sm font-medium">Dark Mode</span>
           <Toggle on={theme === 'dark'} onClick={toggleTheme} />
         </div>
         {/* Language */}
         <div className="border-t px-2 py-2.5">
           <div className="mb-2 flex items-center gap-3">
-            <Globe className="h-5 w-5 text-sky-600" />
+            <Globe className="h-5 w-5 text-emerald-600" />
             <span className="flex-1 text-sm font-medium">Language</span>
           </div>
           <div className="flex flex-wrap gap-2">

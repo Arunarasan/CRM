@@ -8,14 +8,17 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search } from "lucide-react";
+import { Plus, Search, RefreshCw } from "lucide-react";
 import AddWorkforceDialog from "./AddWorkforceDialog";
+import api from "@/lib/api";
+import { toast } from "@/components/ui/toast";
 
 export default function WorkforceDirectoryPage() {
   const [rows, setRows] = useState<WorkforceListRow[]>([]);
   const [meta, setMeta] = useState<WorkforceMeta | null>(null);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   const [search, setSearch] = useState("");
   const [type, setType] = useState("");
@@ -39,6 +42,16 @@ export default function WorkforceDirectoryPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Reconciles login Users with Employee records (the old /hr "Sync Users" utility). The
+  // unified directory is the source of truth now, so this stays a manual admin action here.
+  const syncUsers = () => {
+    setSyncing(true);
+    api.post("/hr/sync-employees")
+      .then(() => { toast.success("Users synced with employee records."); load(); })
+      .catch(() => toast.error("Failed to sync users."))
+      .finally(() => setSyncing(false));
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col md:flex-row md:items-center gap-3">
@@ -58,6 +71,9 @@ export default function WorkforceDirectoryPage() {
         <div className="w-full md:w-44">
           <Input placeholder="Company…" value={company} onChange={(e) => setCompany(e.target.value)} />
         </div>
+        <Button variant="outline" onClick={syncUsers} disabled={syncing} className="shrink-0">
+          <RefreshCw className={`w-4 h-4 mr-1 ${syncing ? "animate-spin" : ""}`} /> Sync Users
+        </Button>
         <Button onClick={() => setOpen(true)} className="shrink-0">
           <Plus className="w-4 h-4 mr-1" /> Add Workforce
         </Button>

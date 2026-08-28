@@ -50,6 +50,13 @@ management:
   endpoint:
     health:
       show-details: always
+  health:
+    # The mail indicator opens an SMTP connection on every /actuator/health poll. Without SMTP
+    # credentials (or during a transient mail outage) it reports DOWN, which flips the whole
+    # endpoint to HTTP 503 and fails the container healthcheck (`curl -f`), aborting the deploy.
+    # Mail is non-critical to serving the app, so exclude it from the health probe.
+    mail:
+      enabled: false
 
 
 jwt:

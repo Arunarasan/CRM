@@ -39,9 +39,15 @@ export function StatusPill({ status }: { status: string }) {
     HALF_DAY: 'bg-amber-100 text-amber-700',
     NOT_MARKED: 'bg-slate-100 text-slate-600',
     NONE: 'bg-slate-100 text-slate-600',
-    LEAVE: 'bg-sky-100 text-sky-700',
+    LEAVE: 'bg-emerald-100 text-emerald-700',
     ABSENT: 'bg-red-100 text-red-700',
     REJECTED: 'bg-red-100 text-red-700',
+    APPLIED: 'bg-slate-200 text-slate-700',
+    CONVERTED: 'bg-teal-100 text-teal-700',
+    ACTIVE: 'bg-emerald-100 text-emerald-700',
+    RECOVERING: 'bg-emerald-100 text-emerald-700',
+    RECOVERED: 'bg-emerald-100 text-emerald-700',
+    CLOSED: 'bg-slate-200 text-slate-700',
   };
   return (
     <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${tone[status] ?? 'bg-slate-100 text-slate-600'}`}>

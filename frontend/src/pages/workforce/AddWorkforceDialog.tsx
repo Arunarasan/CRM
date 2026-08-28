@@ -370,7 +370,7 @@ function num(v: string): number | undefined {
 }
 
 function Section({ title, tone, children }: { title: string; tone?: "indigo" | "amber"; children: React.ReactNode }) {
-  const bar = tone === "indigo" ? "text-indigo-600" : tone === "amber" ? "text-amber-600" : "text-slate-400";
+  const bar = tone === "indigo" ? "text-emerald-600" : tone === "amber" ? "text-amber-600" : "text-slate-400";
   return (
     <section>
       <h4 className={`text-xs font-bold uppercase mb-2 ${bar}`}>{title}</h4>

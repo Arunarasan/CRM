@@ -71,6 +71,25 @@ export interface EmployeeDeduction {
   targetYear?: number;
 }
 
+// An employee-raised money request (advance / one-off loan repayment / other) awaiting admin action.
+export interface PayrollRequest {
+  id: number;
+  employee?: any;
+  requestedBy?: any;
+  requestType: 'ADVANCE' | 'LOAN_REPAYMENT' | 'ADVANCE_REPAYMENT' | 'SET_RECOVERY' | 'OTHER';
+  direction: 'DEBIT' | 'CREDIT';
+  amount: number;
+  monthlyRecovery?: number | null;
+  targetMonth?: number | null;
+  targetYear?: number | null;
+  loanId?: number | null;
+  advanceId?: number | null;
+  reason?: string;
+  status: string; // PENDING | APPROVED | APPLIED | CONVERTED | REJECTED
+  adminRemarks?: string;
+  createdAt?: string;
+}
+
 // Full hourly wage settings (HR-managed).
 export interface WageSettings {
   salaryType?: string;
@@ -138,6 +157,42 @@ export interface FinanceDashboard {
     contractValue: number;
     paymentRequestsPendingApproval: number;
   };
+}
+
+// Unified pay run — one row per person (employee OR contractor) for a period.
+// Mirrors backend dto/payroll/PayrollLine.
+export interface PayrollLine {
+  resourceType: 'EMPLOYEE' | 'CONTRACTOR';
+  personId?: number;
+  name?: string;
+  code?: string;
+  payModel: 'MONTHLY' | 'HOURLY' | 'CONTRACT';
+  basisLabel?: string;
+  gross?: number | null;
+  deductions?: number | null;
+  payable?: number;
+  outstanding?: number | null; // contractor-only running balance (pending amount)
+  billedTotal?: number | null; // contractor-only: total value billed (advances + regular)
+  paidToDate?: number | null; // contractor-only: total paid so far, including advances
+  status?: string; // PENDING · APPROVED · PAID (emp) | DUE · PENDING · PAID (con)
+  recordId?: number | null; // salary record id for inline emp approve/pay
+  actionHint?: 'APPROVE' | 'PAY' | 'VIEW' | 'OPEN_BILL' | 'LEDGER';
+  month: number;
+  year: number;
+}
+
+export interface PayrollSummary {
+  month: number;
+  year: number;
+  totalPeople: number;
+  employees: number;
+  contractors: number;
+  toApprove: number;
+  toPay: number;
+  paid: number;
+  employeeNetPayout: number;
+  contractorOutstanding: number;
+  combinedPayout: number;
 }
 
 // Unified /api/workforce/{id}/finance response.

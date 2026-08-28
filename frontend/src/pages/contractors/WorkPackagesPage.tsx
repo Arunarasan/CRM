@@ -107,7 +107,7 @@ export default function WorkPackagesPage() {
       </div>
 
       {message && (
-        <div className="text-sm bg-blue-50 border border-blue-200 text-blue-800 rounded-md p-3">{message}</div>
+        <div className="text-sm bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-md p-3">{message}</div>
       )}
 
       <div className="grid grid-cols-3 gap-4">

@@ -33,6 +33,10 @@ export default function MeasurementForm() {
   const parseId = (val: string | null) => (val && val !== "null" && val !== "undefined" && !isNaN(Number(val))) ? { id: Number(val) } : undefined;
 
   const handleCancel = () => {
+    // Prefer the real previous screen (browser history) so Back returns wherever the user actually
+    // came from — the task detail, a list, a search result — instead of a hardcoded entity page.
+    if (window.history.length > 2) { navigate(-1); return; }
+    // Opened directly with no in-app history: fall back to the most relevant context page.
     if (location.state?.from) {
       navigate(location.state.from);
     } else if (leadId) {
@@ -43,8 +47,6 @@ export default function MeasurementForm() {
       navigate(`/site-visits/${siteVisitId}`);
     } else if (projectId) {
       navigate(`/projects/${projectId}`);
-    } else if (window.history.length > 2) {
-      navigate(-1);
     } else {
       navigate("/measurements");
     }
@@ -65,6 +67,28 @@ export default function MeasurementForm() {
   const [roomsToCarry, setRoomsToCarry] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  // Guard against duplicate creation: the workflow "Open Measurement page" button always lands here,
+  // so without this every re-visit would spawn another measurement for the same lead. We look up any
+  // existing measurement for this context and, by default, show it — a new one is created only when
+  // the user explicitly confirms. `existing === null` means "not checked yet" (form stays hidden).
+  const [existing, setExisting] = useState<Measurement[] | null>(null);
+  const [confirmNew, setConfirmNew] = useState(false);
+
+  useEffect(() => {
+    const lid = leadId || (lead?.id != null ? String(lead.id) : null);
+    const cid = customerId || (customer?.id != null ? String(customer.id) : null);
+    const filters = lid ? { leadId: Number(lid) } : cid ? { customerId: Number(cid) } : null;
+    if (!filters) {
+      // A site visit resolves its lead/customer asynchronously — stay in "checking" until it does,
+      // so the form never flashes before the dedupe lookup can run.
+      if (siteVisitId && !lead && !customer) { setExisting(null); return; }
+      setExisting([]); return; // nothing to dedupe against → allow the form
+    }
+    measurementApi.list({ size: 100, filters: filters as any })
+      .then((res) => setExisting(res.content || []))
+      .catch(() => setExisting([]));
+  }, [leadId, customerId, lead?.id, customer?.id]);
 
   useEffect(() => {
     measurementApi.assignableEmployees().then((res: any[]) => setEmployees(
@@ -164,17 +188,17 @@ export default function MeasurementForm() {
   // Without upstream context there is nobody to measure for — send the user back to the workflow.
   if (!hasContext) {
     return (
-      <div className="p-6 lg:p-8 max-w-2xl mx-auto space-y-6 animate-in fade-in">
+      <div className="p-4 sm:p-6 lg:p-8 max-w-2xl mx-auto space-y-4 sm:space-y-6 animate-in fade-in">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">New Measurement</h1>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">New Measurement</h1>
           <p className="text-sm text-muted-foreground mt-1">Measurements are raised from a site visit or a lead.</p>
         </div>
-        <div className="rounded-xl border bg-card p-6 space-y-4">
+        <div className="rounded-xl border bg-card p-4 sm:p-6 space-y-4">
           <p className="text-sm text-muted-foreground">
             A measurement always belongs to a customer or lead, and the property details come from the site
             visit — so start from there instead of re-entering it here.
           </p>
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
             <Button onClick={() => navigate("/site-visits")}>Go to Site Visits</Button>
             <Button variant="outline" onClick={() => navigate("/leads")}>Go to Leads</Button>
           </div>
@@ -183,15 +207,61 @@ export default function MeasurementForm() {
     );
   }
 
+  // Only show the create form once we've checked for duplicates and either found none or the user
+  // explicitly chose to add another. Until then the existing-measurement gate is shown instead.
+  const showForm = existing !== null && (existing.length === 0 || confirmNew);
+
   return (
-    <div className="p-6 lg:p-8 max-w-5xl mx-auto space-y-6 animate-in fade-in">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">New Measurement</h1>
+    <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto space-y-4 sm:space-y-6 animate-in fade-in">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">New Measurement</h1>
           <p className="text-sm text-muted-foreground mt-1">Capture site measurement details — rooms and drawings can be added after creation.</p>
         </div>
-        <Button variant="outline" onClick={handleCancel}>Cancel</Button>
+        <Button variant="outline" size="sm" className="shrink-0" onClick={handleCancel}>Cancel</Button>
       </div>
+
+      {existing === null && (
+        <p className="text-sm text-muted-foreground">Checking for an existing measurement…</p>
+      )}
+
+      {existing !== null && existing.length > 0 && !confirmNew && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 sm:p-5 space-y-3">
+          <div>
+            <h2 className="text-base font-semibold text-amber-900">
+              {existing.length === 1 ? "A measurement already exists" : `${existing.length} measurements already exist`}
+            </h2>
+            <p className="text-sm text-amber-800 mt-1">
+              This {leadId ? "lead" : "customer"} already has measurement work recorded. Open the existing one to
+              continue or edit it — don't create a duplicate. Only add a new measurement if this is a genuinely
+              separate visit (e.g. a re-measurement).
+            </p>
+          </div>
+          <div className="space-y-2">
+            {existing.map((m) => (
+              <div key={m.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-card p-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">{m.measurementNumber || `Measurement #${m.id}`}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {[m.measurementType, m.status, m.measurementDate].filter(Boolean).join(" · ")}
+                  </p>
+                </div>
+                <Button size="sm" onClick={() => navigate(`/measurements/${m.id}`, { state: { from: location.state?.from } })}>
+                  Open
+                </Button>
+              </div>
+            ))}
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2 pt-1">
+            <Button variant="outline" size="sm" onClick={() => setConfirmNew(true)}>
+              Create a new measurement anyway
+            </Button>
+            <Button variant="ghost" size="sm" onClick={handleCancel}>Cancel</Button>
+          </div>
+        </div>
+      )}
+
+      {showForm && (<>
 
       {sourceVisit && (
         <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 text-sm">
@@ -208,9 +278,9 @@ export default function MeasurementForm() {
 
       <ContactContextCard lead={lead} customer={customer} visit={sourceVisit} />
 
-      <form onSubmit={handleSubmit} className="space-y-6 bg-card p-6 rounded-xl border shadow-sm">
+      <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6 bg-card p-4 sm:p-6 rounded-xl border shadow-sm">
         <SectionTitle>Basic Details</SectionTitle>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
           <SelectField label="Measurement Type" value={form.measurementType} onChange={set("measurementType")} options={MEASUREMENT_TYPES} allowEmpty={false} />
           <SelectField label="Priority" value={form.priority} onChange={set("priority")} options={MEASUREMENT_PRIORITIES} allowEmpty={false} />
           <TextField label="Measurement Date" type="date" value={form.measurementDate} onChange={set("measurementDate")} />
@@ -247,7 +317,7 @@ export default function MeasurementForm() {
         )}
 
         <SectionTitle>Property Information</SectionTitle>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
           <TextField label="Property Type" value={form.propertyType} onChange={set("propertyType")} placeholder="e.g., Apartment, Villa, Office" />
           <TextField label="Construction Stage" value={form.constructionStage} onChange={set("constructionStage")} placeholder="e.g., Raw, Plastered, Painted" />
           <TextField label="Total Floors" type="number" value={form.totalFloors} onChange={set("totalFloors")} />
@@ -264,11 +334,12 @@ export default function MeasurementForm() {
         </div>
 
         {error && <p className="text-sm text-destructive">{error}</p>}
-        <div className="flex justify-end gap-2 pt-4 border-t">
-          <Button type="button" variant="outline" onClick={() => navigate(-1)}>Cancel</Button>
-          <Button type="submit" disabled={saving}>{saving ? "Saving..." : "Create Measurement"}</Button>
+        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-4 border-t">
+          <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={handleCancel}>Cancel</Button>
+          <Button type="submit" className="w-full sm:w-auto" disabled={saving}>{saving ? "Saving..." : "Create Measurement"}</Button>
         </div>
       </form>
+      </>)}
     </div>
   );
 }
@@ -316,8 +387,8 @@ function ContactRow({ label, value }: { label: string; value?: string }) {
   if (!value) return null;
   return (
     <div className="flex gap-2">
-      <dt className="text-muted-foreground min-w-24">{label}</dt>
-      <dd className="font-medium break-words">{value}</dd>
+      <dt className="text-muted-foreground min-w-24 shrink-0">{label}</dt>
+      <dd className="font-medium break-words min-w-0">{value}</dd>
     </div>
   );
 }

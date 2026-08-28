@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, Navigate, useParams } from "react-router-dom";
 import { workforceApi } from "@/api/workforceApi";
 import type { WorkforceDetail, WorkforceMeta } from "@/types/workforce";
 import { RESOURCE_TYPE_LABELS, RESOURCE_TYPE_STYLES, WORKFORCE_STATUS_TONE } from "@/types/workforce";
@@ -8,9 +8,11 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft, Pencil, FileText, ExternalLink } from "lucide-react";
 import AddWorkforceDialog from "./AddWorkforceDialog";
 import WorkforceFinanceTab from "./WorkforceFinanceTab";
+import { useGoBack } from "@/hooks/useGoBack";
 
 export default function WorkforceProfilePage() {
   const { id } = useParams();
+  const goBack = useGoBack("/workforce");
   const [detail, setDetail] = useState<WorkforceDetail | null>(null);
   const [meta, setMeta] = useState<WorkforceMeta | null>(null);
   const [loading, setLoading] = useState(true);
@@ -29,6 +31,12 @@ export default function WorkforceProfilePage() {
   if (loading) return <div className="p-8 text-center text-muted-foreground">Loading…</div>;
   if (!detail) return <div className="p-8 text-center text-muted-foreground">Workforce not found.</div>;
 
+  // Employees have one canonical, richer profile at /hr/employees/:id — send them there.
+  // Contractors keep this master-record view (their operational module is /contractors).
+  if (detail.workforce.workforceType === "EMPLOYEE" && detail.employee?.id) {
+    return <Navigate to={`/hr/employees/${detail.employee.id}`} replace />;
+  }
+
   const w = detail.workforce;
   const emp = detail.employee;
   const con = detail.contractor;
@@ -36,9 +44,9 @@ export default function WorkforceProfilePage() {
 
   return (
     <div className="p-4 md:p-8 max-w-5xl mx-auto space-y-6">
-      <Link to="/workforce" className="flex items-center gap-1 text-sm text-muted-foreground hover:text-primary">
-        <ArrowLeft className="w-4 h-4" /> Back to directory
-      </Link>
+      <button type="button" onClick={goBack} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-primary">
+        <ArrowLeft className="w-4 h-4" /> Back
+      </button>
 
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-4">

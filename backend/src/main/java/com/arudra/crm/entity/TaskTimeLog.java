@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Getter
@@ -40,4 +41,27 @@ public class TaskTimeLog extends BaseEntity {
 
     @Column(name = "overtime_minutes")
     private Integer overtimeMinutes = 0;
+
+    // ---------------------------------------------------------------- approval lifecycle (V36)
+
+    /** The calendar day this work belongs to (for timesheet grouping / payroll periods). */
+    @Column(name = "work_date")
+    private LocalDate workDate;
+
+    /** DRAFT (tracked) → SUBMITTED (employee) → APPROVED | REJECTED (supervisor/admin). */
+    @Column(name = "status", nullable = false, length = 20)
+    private String status = "DRAFT";
+
+    @Column(name = "submitted_at")
+    private LocalDateTime submittedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "approved_by_id")
+    private User approvedBy;
+
+    @Column(name = "approved_at")
+    private LocalDateTime approvedAt;
+
+    @Column(name = "remarks", length = 500)
+    private String remarks;
 }

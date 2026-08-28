@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import JsBarcode from "jsbarcode";
 import { inventoryApi } from "@/api/inventoryApi";
+import { toast } from "@/components/ui/toast";
+import SearchableSelect from "@/components/ui/searchable-select";
 import type { InventoryCategory, Product, Warehouse } from "@/types/inventory";
 import { INVENTORY_UNITS } from "@/types/inventory";
 import { Button } from "@/components/ui/button";
@@ -53,13 +55,13 @@ export default function MaterialMaster() {
     if (payload.category?.id) payload.category = { id: payload.category.id };
     if (payload.defaultWarehouse?.id) payload.defaultWarehouse = { id: payload.defaultWarehouse.id };
     const action = editingId ? inventoryApi.updateProduct(editingId, payload) : inventoryApi.createProduct(payload);
-    action.then(() => { setDialogOpen(false); load(); }).catch(() => alert("Failed to save material"));
+    action.then(() => { setDialogOpen(false); load(); toast.success("Material saved."); }).catch(() => toast.error("Failed to save material."));
   };
 
   const handleScanResult = (code: string) => {
     inventoryApi.findByBarcode(code)
       .then((p) => setSearch(p.materialCode || p.sku || code))
-      .catch(() => alert(`No material found for code ${code}`));
+      .catch(() => toast.error(`No material found for code ${code}`));
   };
 
   return (
@@ -134,11 +136,10 @@ export default function MaterialMaster() {
             </div>
             <div className="space-y-1">
               <Label>Category</Label>
-              <select className="w-full border rounded-md h-9 px-2 text-sm bg-white" value={form.category?.id ?? ""}
-                onChange={(e) => setForm({ ...form, category: e.target.value ? { id: Number(e.target.value) } : null })}>
-                <option value="">—</option>
-                {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+              <SearchableSelect value={form.category?.id ? String(form.category.id) : ""}
+                onChange={(v) => setForm({ ...form, category: v ? { id: Number(v) } : null })}
+                options={categories.map((c) => ({ value: String(c.id), label: c.name }))}
+                placeholder="Search category…" clearLabel="— none —" />
             </div>
             <div className="space-y-1">
               <Label>Unit</Label>
@@ -149,11 +150,10 @@ export default function MaterialMaster() {
             </div>
             <div className="space-y-1">
               <Label>Default Warehouse</Label>
-              <select className="w-full border rounded-md h-9 px-2 text-sm bg-white" value={form.defaultWarehouse?.id ?? ""}
-                onChange={(e) => setForm({ ...form, defaultWarehouse: e.target.value ? { id: Number(e.target.value) } : null })}>
-                <option value="">—</option>
-                {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-              </select>
+              <SearchableSelect value={form.defaultWarehouse?.id ? String(form.defaultWarehouse.id) : ""}
+                onChange={(v) => setForm({ ...form, defaultWarehouse: v ? { id: Number(v) } : null })}
+                options={warehouses.map((w) => ({ value: String(w.id), label: w.name }))}
+                placeholder="Search warehouse…" clearLabel="— none —" />
             </div>
             <div className="space-y-1">
               <Label>HSN Code</Label>

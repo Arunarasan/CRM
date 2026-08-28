@@ -160,7 +160,15 @@ public class ProjectController {
     @PostMapping("/{id}/complete")
     @PreAuthorize(APPROVE)
     public ResponseEntity<Project> completeProject(@PathVariable Long id, @RequestBody Map<String, String> payload) {
-        return ResponseEntity.ok(projectService.completeProject(id, payload.get("certificate")));
+        boolean force = payload != null && "true".equalsIgnoreCase(payload.get("force"));
+        return ResponseEntity.ok(projectService.completeProject(id, payload == null ? null : payload.get("certificate"), force));
+    }
+
+    /** Completion-gate readiness checklist (which §42 conditions are met / outstanding). */
+    @GetMapping("/{id}/completion-readiness")
+    @PreAuthorize(READ)
+    public ResponseEntity<Map<String, Object>> completionReadiness(@PathVariable Long id) {
+        return ResponseEntity.ok(projectService.getCompletionReadiness(id));
     }
 
     @GetMapping("/{id}/site-visits/summary")
@@ -412,6 +420,29 @@ public class ProjectController {
     public ResponseEntity<ApiResponse<Map<String, Object>>> generateFromBoq(@PathVariable Long id) {
         return ResponseEntity.ok(ApiResponse.success(
                 projectService.reconcileProjectWithBoq(id, currentUserService.getCurrentUser())));
+    }
+
+    /** People (employees + contractors) assigned across this project's tasks — the Labour roster. */
+    @GetMapping("/{id}/resources")
+    @PreAuthorize(READ)
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getProjectResources(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.success(projectService.getProjectResources(id)));
+    }
+
+    /** Approved quotations for this project's lead — the candidate scopes the Phases tab builds from. */
+    @GetMapping("/{id}/available-quotations")
+    @PreAuthorize(READ)
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getAvailableQuotations(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.success(projectService.getAvailableQuotations(id)));
+    }
+
+    /** Re-point the project at a chosen approved quotation (and its BOQ), then build phases/rooms/materials. */
+    @PostMapping("/{id}/generate-from-quotation")
+    @PreAuthorize(WRITE)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> generateFromQuotation(
+            @PathVariable Long id, @RequestParam Long quotationId) {
+        return ResponseEntity.ok(ApiResponse.success(
+                projectService.generateFromQuotation(id, quotationId, currentUserService.getCurrentUser())));
     }
 
     @GetMapping("/dashboard")

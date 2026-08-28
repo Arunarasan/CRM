@@ -1,10 +1,8 @@
-import UnderMaintenance from "@/components/UnderMaintenance";
+import { Navigate } from "react-router-dom";
 
+// Billing is not a standalone module — invoicing, collection and customer balances all live in
+// the unified "Billing & Finance" module at /finance. This route is kept alive so old deep-links
+// resolve, and simply forwards into Finance.
 export default function Billing() {
-  return (
-    <UnderMaintenance
-      moduleName="Billing"
-      description="Invoicing, billing management, advance payments and customer balance tracking are currently undergoing scheduled maintenance."
-    />
-  );
+  return <Navigate to="/finance" replace />;
 }

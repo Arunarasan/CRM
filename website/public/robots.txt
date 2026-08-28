@@ -1,0 +1,12 @@
+# JB Decor — public website
+User-agent: *
+Allow: /
+
+# Keep private/app areas out of the index
+Disallow: /portal
+Disallow: /login
+Disallow: /checkout
+Disallow: /cart
+Disallow: /crm
+
+Sitemap: https://jbdecor.com/sitemap.xml

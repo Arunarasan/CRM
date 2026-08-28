@@ -116,6 +116,22 @@ public class SmartAssignmentController {
         return ResponseEntity.ok(ApiResponse.success(service.dashboard()));
     }
 
+    // ------------------------------------------------------ Merged Tasks & Employees board
+
+    /** All tasks pre-bucketed (UNASSIGNED / ASSIGNED / IN_PROGRESS / NEEDS_APPROVAL / COMPLETED) for the Tasks tab. */
+    @GetMapping("/task-board")
+    @PreAuthorize(READ)
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> taskBoard() {
+        return ResponseEntity.ok(ApiResponse.success(service.taskBoard()));
+    }
+
+    /** Per-employee roster (tasks now / completed 24h / working now) for the Employees tab. */
+    @GetMapping("/roster")
+    @PreAuthorize(READ)
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> roster() {
+        return ResponseEntity.ok(ApiResponse.success(service.roster()));
+    }
+
     private Long toLong(Object o) {
         if (o == null) return null;
         if (o instanceof Number n) return n.longValue();

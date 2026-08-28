@@ -4,20 +4,27 @@ import { Search, FileText, ArrowRight, CheckCircle, Clock, Split, GitBranch, Ind
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import ResponsiveList, { type Column } from "@/components/ui/responsive-list";
 import { quotationApi } from "@/api/quotationApi";
 import { boqApi } from "@/api/boqApi";
 import {
   QUOTATION_STATUS_LABELS, QUOTATION_STATUS_STYLES, type Quotation,
 } from "@/types/quotation";
-import type { BoqDashboard } from "@/types/boq";
-import EmptyState from "../customer360/components/EmptyState";
+import { QUOTATION_MODE_LABELS, type BoqDashboard } from "@/types/boq";
 
 type StatCard = { label: string; value: string | number | undefined; icon: React.ElementType; className: string };
 
 function formatCurrency(value?: number) {
   if (value === undefined || value === null) return "—";
   return `₹${Number(value).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
+}
+
+function StatusPill({ status }: { status?: string }) {
+  return (
+    <span className={`px-2 py-1 text-xs rounded-full font-medium whitespace-nowrap ${QUOTATION_STATUS_STYLES[status || ""] || "bg-muted text-muted-foreground"}`}>
+      {QUOTATION_STATUS_LABELS[status || ""] || status || "Draft"}
+    </span>
+  );
 }
 
 export default function QuotationList() {
@@ -59,11 +66,30 @@ export default function QuotationList() {
   const stats: StatCard[] = useMemo(() => [
     { label: "Approved Quotations", value: dashboard?.approvedQuotations, icon: CheckCircle, className: "bg-green-100 text-green-600" },
     { label: "Pending Quotations", value: dashboard?.pendingQuotations, icon: Clock, className: "bg-amber-100 text-amber-600" },
-    { label: "Partial Quotations", value: dashboard?.partialQuotations, icon: Split, className: "bg-blue-100 text-blue-600" },
+    { label: "Partial Quotations", value: dashboard?.partialQuotations, icon: Split, className: "bg-emerald-100 text-emerald-600" },
     { label: "Revisions", value: dashboard?.revisionCount, icon: GitBranch, className: "bg-violet-100 text-violet-600" },
     { label: "Approved Value", value: formatCurrency(dashboard?.approvedValue), icon: IndianRupee, className: "bg-emerald-100 text-emerald-600" },
     { label: "Pending Value", value: formatCurrency(dashboard?.pendingValue), icon: IndianRupee, className: "bg-slate-100 text-slate-600" },
   ], [dashboard]);
+
+  const columns: Column<Quotation>[] = [
+    { key: "number", header: "Number", cell: (q) => <span className="font-medium text-primary">{q.quotationNumber}</span> },
+    { key: "customer", header: "Customer", cell: (q) => <span className="text-sm">{q.customer?.name || "—"}</span> },
+    { key: "boq", header: "BOQ", cell: (q) => <span className="text-sm">{q.boq?.boqNumber || "—"}</span> },
+    { key: "mode", header: "Mode", cell: (q) => <span className="text-sm">{QUOTATION_MODE_LABELS[q.quotationMode || "FULL_HOUSE"] || "Complete House"}</span> },
+    { key: "version", header: "Version", cell: (q) => <span className="text-sm">v{q.revisionNumber ?? 0}</span> },
+    { key: "status", header: "Status", cell: (q) => <StatusPill status={q.status} /> },
+    { key: "total", header: "Grand Total", headClassName: "text-right", cellClassName: "text-right text-sm font-medium whitespace-nowrap", cell: (q) => formatCurrency(q.grandTotal) },
+    {
+      key: "actions", header: "", headClassName: "text-right",
+      cellClassName: "text-right",
+      cell: (q) => (
+        <Link to={`/quotations/${q.id}`} onClick={(e) => e.stopPropagation()}>
+          <Button variant="ghost" size="sm"><ArrowRight className="h-4 w-4" /></Button>
+        </Link>
+      ),
+    },
+  ];
 
   return (
     <div className="p-6 lg:p-8 space-y-6 flex flex-col h-full animate-in fade-in">
@@ -109,74 +135,40 @@ export default function QuotationList() {
         </div>
       </div>
 
-      <div className="border rounded-xl bg-card overflow-hidden">
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Number</TableHead>
-                <TableHead>Customer</TableHead>
-                <TableHead>BOQ</TableHead>
-                <TableHead>Mode</TableHead>
-                <TableHead>Version</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Grand Total</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                Array.from({ length: 6 }).map((_, i) => (
-                  <TableRow key={i}>
-                    {Array.from({ length: 8 }).map((_, j) => (
-                      <TableCell key={j}><Skeleton className="h-5 w-full" /></TableCell>
-                    ))}
-                  </TableRow>
-                ))
-              ) : quotations.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={8} className="p-0">
-                    <EmptyState icon={FileText} title="No quotations found"
-                      description="Generate one from an approved BOQ." />
-                  </TableCell>
-                </TableRow>
-              ) : (
-                quotations.map((q) => (
-                  <TableRow key={q.id} className="cursor-pointer" onClick={() => navigate(`/quotations/${q.id}`)}>
-                    <TableCell className="font-medium text-primary">{q.quotationNumber}</TableCell>
-                    <TableCell className="text-sm">{q.customer?.name || "—"}</TableCell>
-                    <TableCell className="text-sm">{q.boq?.boqNumber || "—"}</TableCell>
-                    <TableCell className="text-sm">{q.quotationMode || "FULL_HOUSE"}</TableCell>
-                    <TableCell className="text-sm">v{q.revisionNumber ?? 0}</TableCell>
-                    <TableCell>
-                      <span className={`px-2 py-1 text-xs rounded-full font-medium whitespace-nowrap ${QUOTATION_STATUS_STYLES[q.status || ""] || "bg-muted text-muted-foreground"}`}>
-                        {QUOTATION_STATUS_LABELS[q.status || ""] || q.status || "Draft"}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-right text-sm font-medium whitespace-nowrap">{formatCurrency(q.grandTotal)}</TableCell>
-                    <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                      <Link to={`/quotations/${q.id}`}>
-                        <Button variant="ghost" size="sm"><ArrowRight className="h-4 w-4" /></Button>
-                      </Link>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between p-4 border-t">
-            <span className="text-sm text-muted-foreground">
-              {totalElements} quotations · Page {page + 1} of {totalPages}
-            </span>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage(page - 1)}>Previous</Button>
-              <Button variant="outline" size="sm" disabled={page >= totalPages - 1} onClick={() => setPage(page + 1)}>Next</Button>
+      <ResponsiveList
+        items={quotations}
+        loading={loading}
+        getRowKey={(q) => q.id!}
+        onRowClick={(q) => navigate(`/quotations/${q.id}`)}
+        emptyIcon={FileText}
+        emptyTitle="No quotations found"
+        emptyDescription="Generate one from an approved BOQ."
+        columns={columns}
+        renderCard={(q) => (
+          <div className="space-y-1">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-medium text-primary">{q.quotationNumber}</span>
+              <StatusPill status={q.status} />
+            </div>
+            <div className="text-sm">{q.customer?.name || "—"}</div>
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>{q.boq?.boqNumber || "—"} · v{q.revisionNumber ?? 0}</span>
+              <span className="text-sm font-semibold text-foreground">{formatCurrency(q.grandTotal)}</span>
             </div>
           </div>
         )}
-      </div>
+      />
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-muted-foreground">
+            {totalElements} quotations · Page {page + 1} of {totalPages}
+          </span>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage(page - 1)}>Previous</Button>
+            <Button variant="outline" size="sm" disabled={page >= totalPages - 1} onClick={() => setPage(page + 1)}>Next</Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -27,11 +27,11 @@ export default function FinanceDashboard() {
 
   const tiles = [
     { label: "Today's Collection", value: currency(data.todaysCollection), icon: Wallet, tone: "bg-emerald-50 text-emerald-600", to: "/finance/payments" },
-    { label: "Monthly Revenue (Invoiced)", value: currency(data.monthRevenue), icon: TrendingUp, tone: "bg-blue-50 text-blue-600", to: "/finance/invoices" },
+    { label: "Monthly Revenue (Invoiced)", value: currency(data.monthRevenue), icon: TrendingUp, tone: "bg-emerald-50 text-emerald-600", to: "/finance/invoices" },
     { label: "Monthly Collection", value: currency(data.monthCollection), icon: PiggyBank, tone: "bg-cyan-50 text-cyan-600", to: "/finance/payments" },
     { label: "Total Outstanding", value: currency(data.totalOutstanding), icon: AlertCircle, tone: "bg-amber-50 text-amber-600", to: "/finance/outstanding" },
     { label: "Overdue Amount", value: currency(data.overdueAmount), icon: AlertCircle, tone: "bg-red-50 text-red-600", to: "/finance/outstanding" },
-    { label: "Pending Invoices", value: data.pendingInvoices, icon: FileText, tone: "bg-indigo-50 text-indigo-600", to: "/finance/invoices" },
+    { label: "Pending Invoices", value: data.pendingInvoices, icon: FileText, tone: "bg-emerald-50 text-emerald-600", to: "/finance/invoices" },
     { label: "Monthly Expenses", value: currency(data.monthExpenses), icon: Receipt, tone: "bg-rose-50 text-rose-600", to: "/finance/expenses" },
     { label: "Monthly Profit", value: currency(data.monthProfit), icon: TrendingUp, tone: data.monthProfit >= 0 ? "bg-emerald-50 text-emerald-600" : "bg-red-50 text-red-600", to: "/finance/profitability" },
   ];

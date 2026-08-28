@@ -96,7 +96,7 @@ export default function ResourceSelect({ value, onChange, placeholder = 'Assign 
             <div className="flex gap-1">
               {TYPE_FILTERS.map(f => (
                 <button key={f.key} type="button" onClick={() => setTypeFilter(f.key)}
-                  className={`text-xs px-2 py-1 rounded-md font-medium ${typeFilter === f.key ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                  className={`text-xs px-2 py-1 rounded-md font-medium ${typeFilter === f.key ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
                   {f.label}
                 </button>
               ))}

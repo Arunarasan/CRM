@@ -253,9 +253,9 @@ export const PO_STATUSES: PurchaseOrderStatus[] = [
 export const PO_STATUS_TONE: Record<string, string> = {
   DRAFT: "bg-slate-100 text-slate-700",
   PENDING_APPROVAL: "bg-amber-100 text-amber-700",
-  APPROVED: "bg-blue-100 text-blue-700",
+  APPROVED: "bg-emerald-100 text-emerald-700",
   REJECTED: "bg-red-100 text-red-700",
-  SENT: "bg-indigo-100 text-indigo-700",
+  SENT: "bg-emerald-100 text-emerald-700",
   CONFIRMED: "bg-cyan-100 text-cyan-700",
   PARTIAL: "bg-orange-100 text-orange-700",
   COMPLETED: "bg-emerald-100 text-emerald-700",
@@ -264,14 +264,14 @@ export const PO_STATUS_TONE: Record<string, string> = {
 
 export const PR_STATUS_TONE: Record<string, string> = {
   PENDING: "bg-amber-100 text-amber-700",
-  APPROVED: "bg-blue-100 text-blue-700",
+  APPROVED: "bg-emerald-100 text-emerald-700",
   REJECTED: "bg-red-100 text-red-700",
   CONVERTED: "bg-emerald-100 text-emerald-700",
 };
 
 export const PRIORITY_TONE: Record<string, string> = {
   LOW: "bg-slate-100 text-slate-600",
-  MEDIUM: "bg-blue-100 text-blue-700",
+  MEDIUM: "bg-emerald-100 text-emerald-700",
   HIGH: "bg-orange-100 text-orange-700",
   URGENT: "bg-red-100 text-red-700",
 };

@@ -4,10 +4,11 @@ import api from "@/lib/api";
 import { financeApi } from "@/api/financeApi";
 import type { CustomerLedger, CustomerOutstanding } from "@/types/finance";
 import { Button } from "@/components/ui/button";
+import SearchableSelect from "@/components/ui/searchable-select";
 import { currency, currencyFull } from "./helpers";
 
 const TYPE_TONE: Record<string, string> = {
-  INVOICE: "text-blue-700",
+  INVOICE: "text-emerald-700",
   PAYMENT: "text-emerald-700",
   CREDIT_NOTE: "text-cyan-700",
   DEBIT_NOTE: "text-orange-700",
@@ -43,11 +44,15 @@ export default function LedgerPage() {
       <div className="flex flex-wrap items-end gap-3">
         <label className="text-sm">
           <span className="font-semibold text-slate-700 block mb-1">Customer</span>
-          <select className="border rounded-lg px-3 py-2 bg-white min-w-[220px]" value={customerId}
-                  onChange={(e) => setParams(e.target.value ? { customerId: e.target.value } : {})}>
-            <option value="">Select customer…</option>
-            {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+          <div className="min-w-[240px]">
+            <SearchableSelect
+              value={customerId}
+              onChange={(v) => setParams(v ? { customerId: v } : {})}
+              options={customers.map((c) => ({ value: String(c.id), label: c.name }))}
+              placeholder="Search customer…"
+              clearLabel="— clear —"
+            />
+          </div>
         </label>
         <label className="text-sm">
           <span className="font-semibold text-slate-700 block mb-1">From</span>
@@ -67,7 +72,7 @@ export default function LedgerPage() {
           {[
             ["Outstanding", currency(outstanding.totalOutstanding), "text-amber-700"],
             ["Overdue", currency(outstanding.overdueAmount), "text-red-600"],
-            ["Upcoming Due", currency(outstanding.upcomingDue), "text-blue-700"],
+            ["Upcoming Due", currency(outstanding.upcomingDue), "text-emerald-700"],
             ["Last Payment", outstanding.lastPaymentDate ?? "Never", "text-slate-800"],
             ["Credit Limit", outstanding.creditLimit != null ? currency(Number(outstanding.creditLimit)) : "—", "text-slate-800"],
           ].map(([label, value, tone]) => (

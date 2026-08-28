@@ -12,6 +12,7 @@ import {
 import { CheckboxField, Field, SelectField, TextAreaField, TextField, selectClass } from "../../leads/fields";
 import { ListSkeleton } from "../../leads/tabs/shared";
 import EmptyState from "../../customer360/components/EmptyState";
+import CatalogItemSelect from "../CatalogItemSelect";
 import { useMeasurementSubResource } from "../helpers";
 
 const SCOPE_FLAGS: { key: keyof MeasurementRoom; label: string }[] = [
@@ -365,7 +366,7 @@ function MeasuredItemsPanel({ measurementId, rooms, items, loading, canWrite, fo
         )}
 
         {form && (
-          <form ref={formRef} onSubmit={save} className="p-3 border-2 border-primary/40 rounded-lg bg-muted/30 grid grid-cols-2 md:grid-cols-4 gap-3">
+          <form ref={formRef} onSubmit={save} className="p-3 border-2 border-primary/40 rounded-lg bg-muted/30 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
             <p className="col-span-full text-sm font-medium">
               {form.id ? "Edit item" : `New item in ${roomName(form.roomId)}`}
             </p>
@@ -375,6 +376,12 @@ function MeasuredItemsPanel({ measurementId, rooms, items, loading, canWrite, fo
                 {rooms.map((r) => <option key={r.id} value={r.id}>{r.roomName}</option>)}
               </select>
             </Field>
+            <CatalogItemSelect onPick={(v) => {
+              if (v.itemType) set("itemType")(v.itemType);
+              if (v.itemName) set("itemName")(v.itemName);
+              if (v.unit) set("unit")(v.unit);
+              if (v.material) set("material")(v.material);
+            }} />
             <Field label="Item Type">
               <select className={selectClass} value={form.itemType} onChange={(e) => set("itemType")(e.target.value)}>
                 {ITEM_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
@@ -391,11 +398,11 @@ function MeasuredItemsPanel({ measurementId, rooms, items, loading, canWrite, fo
             <TextField label="Width" type="number" value={form.width} onChange={(v) => set("width")(v === "" ? undefined : Number(v))} />
             <TextField label="Height" type="number" value={form.height} onChange={(v) => set("height")(v === "" ? undefined : Number(v))} />
             <TextField label="Quantity" type="number" value={form.quantity} onChange={(v) => set("quantity")(v === "" ? undefined : Number(v))} />
-            <div className="col-span-2">
+            <div className="col-span-full sm:col-span-2">
               <TextField label="Material / Finish" value={form.material} onChange={set("material")}
                 placeholder="e.g. 8mm toughened glass, Teak ply" />
             </div>
-            <div className="col-span-2">
+            <div className="col-span-full sm:col-span-2">
               <TextField label="Notes (carried into the BOQ)" value={form.notes} onChange={set("notes")}
                 placeholder="Site observation, access constraint, finish detail…" />
             </div>
@@ -449,18 +456,18 @@ function RoomFormDialog({ open, onOpenChange, measurementId, room, onSaved }: {
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader><DialogTitle>{room ? `Edit ${room.roomName}` : "Add Room"}</DialogTitle></DialogHeader>
         <form onSubmit={submit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <TextField label="Room Name" required value={form.roomName} onChange={set("roomName")} />
             <SelectField label="Room Type" value={form.roomType} onChange={set("roomType")} options={ROOM_TYPES} />
             <SelectField label="Floor" value={form.floorNumber} onChange={set("floorNumber")} options={FLOOR_LEVELS} />
           </div>
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
             <TextField label="Length (ft)" type="number" value={form.length} onChange={set("length")} />
             <TextField label="Width (ft)" type="number" value={form.width} onChange={set("width")} />
             <TextField label="Height (ft)" type="number" value={form.height} onChange={set("height")} />
             <TextField label="Ceiling Height (ft)" type="number" value={form.ceilingHeight} onChange={set("ceilingHeight")} />
           </div>
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
             <TextField label="Door Count" type="number" value={form.doorCount} onChange={set("doorCount")} />
             <TextField label="Window Count" type="number" value={form.windowCount} onChange={set("windowCount")} />
             <TextField label="Column Count" type="number" value={form.columnCount} onChange={set("columnCount")} />
@@ -531,7 +538,7 @@ function RoomDetailDialog({ measurementId, room, canWrite, autoAddItem, onClose,
         <div className="space-y-5">
           <div>
             <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Summary</h4>
-            <div className="grid grid-cols-3 md:grid-cols-4 gap-4 text-sm">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 text-sm">
               <Info label="Dimensions" value={`${room.length ?? "—"}×${room.width ?? "—"}×${room.height ?? "—"} ft`} />
               <Info label="Floor Area" value={room.floorArea ? `${room.floorArea} sqft` : "—"} />
               <Info label="Wall Area" value={room.wallArea ? `${room.wallArea} sqft` : "—"} />
@@ -607,7 +614,14 @@ function RoomDetailDialog({ measurementId, room, canWrite, autoAddItem, onClose,
             )}
 
             {itemForm && (
-              <form onSubmit={saveItem} className="mt-3 p-3 border rounded-lg bg-muted/30 grid grid-cols-2 md:grid-cols-3 gap-3">
+              <form onSubmit={saveItem} className="mt-3 p-3 border rounded-lg bg-muted/30 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                <CatalogItemSelect onPick={(v) => setItemForm((f) => f && ({
+                  ...f,
+                  itemType: v.itemType ?? f.itemType,
+                  itemName: v.itemName ?? f.itemName,
+                  unit: v.unit ?? f.unit,
+                  material: v.material ?? f.material,
+                }))} />
                 <Field label="Item Type">
                   <select className={selectClass} value={itemForm.itemType} onChange={(e) => setItemForm((f) => ({ ...f, itemType: e.target.value }))}>
                     {ITEM_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
@@ -648,7 +662,7 @@ function RoomDetailDialog({ measurementId, room, canWrite, autoAddItem, onClose,
             {roomPhotos.length === 0 ? (
               <p className="text-sm text-muted-foreground">No photos tagged to this room yet — upload from the Media tab.</p>
             ) : (
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                 {roomPhotos.map((m) => (
                   <a key={m.id} href={m.filePath} target="_blank" rel="noreferrer"
                     title={m.fileName}
@@ -902,8 +916,64 @@ function ItemFirstView({
           {loading ? <ListSkeleton rows={2} /> : items.length === 0 ? (
             <EmptyState icon={Ruler} title="No items yet"
               description="Start by adding the elements you measured — walls, windows, cupboards, screens. Assign them to rooms afterwards." />
-          ) : (
-            <div className="border rounded-lg overflow-x-auto">
+          ) : (<>
+            {/* Mobile: one tap-friendly card per item (tables are unusable at 375px). */}
+            <div className="sm:hidden space-y-2.5">
+              {canWrite && (
+                <label className="flex items-center gap-2 text-xs text-muted-foreground px-1">
+                  <input type="checkbox" className="h-4 w-4" checked={allSelected} onChange={toggleSelectAll} aria-label="Select all items" />
+                  Select all
+                </label>
+              )}
+              {items.map((item) => {
+                const selected = item.id != null && selectedIds.has(item.id);
+                return (
+                  <div key={`${item.roomId}-${item.id}`}
+                    className={`rounded-xl border p-3 space-y-2.5 ${selected ? "border-primary bg-primary/5" : "bg-card"}`}>
+                    <div className="flex items-start gap-2.5">
+                      {canWrite && (
+                        <input type="checkbox" className="h-5 w-5 mt-0.5 shrink-0" checked={selected}
+                          onChange={() => toggleSelect(item.id)} aria-label="Select item" />
+                      )}
+                      <button type="button" className="flex-1 min-w-0 text-left"
+                        onClick={canWrite ? () => setForm(item) : undefined}>
+                        <div className="font-semibold text-sm leading-tight">
+                          {item.itemType}{item.itemName ? <span className="text-muted-foreground font-normal"> · {item.itemName}</span> : ""}
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
+                          <span>{[item.length, item.width, item.height].filter((v) => v != null).join(" × ") || "no dims"}</span>
+                          <span>Qty {item.quantity ?? 1}{item.unit ? ` ${item.unit}` : ""}</span>
+                          <span className="font-medium text-foreground">{item.area ? `${item.area} sqft` : "—"}</span>
+                        </div>
+                        {item.material && <div className="text-xs text-muted-foreground mt-0.5">{item.material}</div>}
+                        {item.notes && <div className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{item.notes}</div>}
+                      </button>
+                      {canWrite && (
+                        <button type="button" onClick={() => remove(item)} aria-label="Delete item"
+                          className="text-destructive hover:opacity-70 p-1.5 -m-0.5 shrink-0">
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                    {canWrite ? (
+                      <select
+                        className={`${selectClass} ${realRoomIds.has(item.roomId) ? "" : "text-amber-700 border-amber-300"}`}
+                        value={realRoomIds.has(item.roomId) ? String(item.roomId) : ""}
+                        onChange={(e) => changeRoom(item, e.target.value)}>
+                        <option value="">Room: Unassigned</option>
+                        {realRooms.map((r) => <option key={r.id} value={r.id}>Room: {r.roomName}</option>)}
+                        <option value={NEW_ROOM_OPTION}>＋ New room…</option>
+                      </select>
+                    ) : (
+                      <div className="text-xs text-muted-foreground">Room: {roomLabel(item.roomId)}</div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Desktop / tablet: the dense table. */}
+            <div className="hidden sm:block border rounded-lg overflow-x-auto">
               <table className="w-full text-sm min-w-[760px]">
                 <thead className="bg-muted/50 text-xs text-muted-foreground">
                   <tr>
@@ -968,10 +1038,10 @@ function ItemFirstView({
                 </tbody>
               </table>
             </div>
-          )}
+          </>)}
 
           {form && (
-            <form onSubmit={save} className="p-3 border-2 border-primary/40 rounded-lg bg-muted/30 grid grid-cols-2 md:grid-cols-4 gap-3">
+            <form onSubmit={save} className="p-3 border-2 border-primary/40 rounded-lg bg-muted/30 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
               <p className="col-span-full text-sm font-medium">{form.id ? "Edit item" : "New item"}</p>
               {!form.id && (
                 <Field label="Room">
@@ -982,6 +1052,12 @@ function ItemFirstView({
                   </select>
                 </Field>
               )}
+              <CatalogItemSelect onPick={(v) => {
+                if (v.itemType) set("itemType")(v.itemType);
+                if (v.itemName) set("itemName")(v.itemName);
+                if (v.unit) set("unit")(v.unit);
+                if (v.material) set("material")(v.material);
+              }} />
               <Field label="Item Type">
                 <select className={selectClass} value={form.itemType} onChange={(e) => set("itemType")(e.target.value)}>
                   {ITEM_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
@@ -998,10 +1074,10 @@ function ItemFirstView({
               <TextField label="Width" type="number" value={form.width} onChange={(v) => set("width")(v === "" ? undefined : Number(v))} />
               <TextField label="Height" type="number" value={form.height} onChange={(v) => set("height")(v === "" ? undefined : Number(v))} />
               <TextField label="Quantity" type="number" value={form.quantity} onChange={(v) => set("quantity")(v === "" ? undefined : Number(v))} />
-              <div className="col-span-2">
+              <div className="col-span-full sm:col-span-2">
                 <TextField label="Material / Finish" value={form.material} onChange={set("material")} placeholder="e.g. 8mm toughened glass, Teak ply" />
               </div>
-              <div className="col-span-2">
+              <div className="col-span-full sm:col-span-2">
                 <TextField label="Notes (carried into the BOQ)" value={form.notes} onChange={set("notes")} placeholder="Site observation, access constraint, finish detail…" />
               </div>
               <div className="col-span-full flex justify-end gap-2">

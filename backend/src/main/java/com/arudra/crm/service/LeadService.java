@@ -72,6 +72,7 @@ public class LeadService {
     @Autowired private QuotationRepository quotationRepository;
     @Autowired private BoqRepository boqRepository;
     @Autowired private NotificationService notificationService;
+    @Autowired private WorkflowTriggerService workflowTriggerService;
 
     // =====================================================================
     // Query / list
@@ -176,8 +177,12 @@ public class LeadService {
         dto.setQuotationPending(leadRepository
                 .countByIsDeletedFalseAndStatusIn(LeadWorkflow.QUOTATION_PENDING_STATUSES));
 
-        // legacy keys
+        // per-stage tiles
         dto.setNewLeads(leadRepository.countByIsDeletedFalseAndStatusIgnoreCase("New"));
+        dto.setContactedLeads(leadRepository.countByIsDeletedFalseAndStatusIgnoreCase("Contacted"));
+        dto.setInterestedLeads(leadRepository.countByIsDeletedFalseAndStatusIgnoreCase("Interested"));
+
+        // legacy keys
         dto.setQualifiedLeads(leadRepository.countByIsDeletedFalseAndStatusIn(
                 List.of("Interested", "Negotiation", "Quotation Approved", "Project Confirmed")));
         dto.setWonLeads(dto.getConvertedLeads());
@@ -223,6 +228,9 @@ public class LeadService {
             assignLead(savedLead.getId(), savedLead.getAssignedSalesExecutive().getId(),
                     "Sales Executive", currentUser);
         }
+
+        // Kick off the automatic lead workflow (generates the first "Review New Lead" task).
+        workflowTriggerService.onLeadCreated(savedLead);
         return savedLead;
     }
 
@@ -392,6 +400,37 @@ public class LeadService {
                 lead.getLeadNumber() + " (" + lead.getName() + ") was assigned to you as " + role + ".",
                 "LEAD", userToAssign.getId(), "/leads/" + lead.getId());
         return lead;
+    }
+
+    @Transactional
+    public Lead updateReferral(Long id, LeadReferralRequest req, User user) {
+        Lead lead = getLeadById(id);
+        String type = req.getReferralType();
+        lead.setReferralType(type != null && !type.isBlank() ? type : null);
+
+        // Resolve/clear the referrer link so it always matches the chosen type.
+        if ("Existing Customer".equals(type) && req.getReferredByCustomerId() != null) {
+            lead.setReferredByCustomer(customerRepository.findById(req.getReferredByCustomerId())
+                    .orElseThrow(() -> new ResourceNotFoundException(
+                            "Customer not found with id: " + req.getReferredByCustomerId())));
+        } else {
+            lead.setReferredByCustomer(null);
+        }
+        if ("Employee".equals(type) && req.getReferredByEmployeeId() != null) {
+            lead.setReferredByEmployee(userRepository.findById(req.getReferredByEmployeeId())
+                    .orElseThrow(() -> new ResourceNotFoundException(
+                            "User not found with id: " + req.getReferredByEmployeeId())));
+        } else {
+            lead.setReferredByEmployee(null);
+        }
+
+        lead.setReferrerName(req.getReferrerName());
+        lead.setReferrerContact(req.getReferrerContact());
+        lead.setReferralNotes(req.getReferralNotes());
+
+        Lead saved = leadRepository.save(lead);
+        logActivity(saved, "UPDATED", "Referral details updated.", user);
+        return saved;
     }
 
     public List<LeadAssignment> getAssignments(Long leadId) {
@@ -701,26 +740,14 @@ public class LeadService {
             throw new IllegalStateException("Lead is already converted.");
         }
 
-        // 1. Customer
-        Customer customer = new Customer();
-        customer.setName(lead.getCompanyName() != null && !lead.getCompanyName().isEmpty()
-                ? lead.getCompanyName() : lead.getName());
-        customer.setEmail(lead.getEmail());
-        customer.setPhone(lead.getMobileNumber());
-        customer.setAlternatePhone(lead.getAlternateMobile());
-        customer.setWhatsappNumber(lead.getWhatsappNumber());
-        customer.setCity(lead.getCity());
-        customer.setDistrict(lead.getDistrict());
-        customer.setState(lead.getState());
-        customer.setPincode(lead.getPincode());
-        customer.setBillingAddress(lead.getAddress());
-        customer.setSiteAddress(lead.getSiteAddress());
-        customer.setGoogleMapLocation(lead.getGoogleMapLocation());
-        customer.setGstNumber(lead.getGstNumber());
-        customer.setContactPersonName(lead.getContactPerson());
-        customer.setCompanyName(lead.getCompanyName());
-        customer.setCustomerSince(LocalDate.now());
-        customer.setAssignedEmployee(lead.getAssignedSalesExecutive());
+        // 1. Customer — reuse an existing record matched by email (then phone) rather than always
+        //    creating a duplicate. This is what connects a website-registered client (who already
+        //    has a Customer + portal login) to the project born from this lead: the project lands on
+        //    THEIR customer id, so it shows up in their portal automatically.
+        Customer customer = findExistingCustomerForLead(lead);
+        boolean isNewCustomer = (customer == null);
+        if (isNewCustomer) customer = new Customer();
+        fillCustomerFromLead(customer, lead, isNewCustomer);
         Customer savedCustomer = customerRepository.save(customer);
 
         // 2. Re-link history so nothing is orphaned
@@ -772,6 +799,59 @@ public class LeadService {
         result.setLinkedMeasurements(measurements.size());
         return result;
     }
+
+    /** Match an existing customer for this lead by email, then phone (so we reuse, not duplicate). */
+    private Customer findExistingCustomerForLead(Lead lead) {
+        String email = lead.getEmail();
+        if (email != null && !email.isBlank()) {
+            Customer c = customerRepository
+                    .findFirstByEmailIgnoreCaseAndIsDeletedFalseOrderByIdAsc(email.trim()).orElse(null);
+            if (c != null) return c;
+        }
+        String phone = lead.getMobileNumber();
+        if (phone != null && !phone.isBlank()) {
+            return customerRepository.findFirstByPhoneAndIsDeletedFalseOrderByIdAsc(phone.trim()).orElse(null);
+        }
+        return null;
+    }
+
+    /**
+     * Copies lead details onto the customer. For a NEW customer everything is set; for an EXISTING
+     * matched customer we only fill blanks, so we never clobber data the client (or staff) already
+     * curated — e.g. a portal-registered customer's name/address stay intact.
+     */
+    private void fillCustomerFromLead(Customer customer, Lead lead, boolean isNew) {
+        String preferredName = lead.getCompanyName() != null && !lead.getCompanyName().isEmpty()
+                ? lead.getCompanyName() : lead.getName();
+        if (isNew || isBlank(customer.getName())) customer.setName(preferredName);
+        setIfBlank(isNew, customer.getEmail(), lead.getEmail(), customer::setEmail);
+        setIfBlank(isNew, customer.getPhone(), lead.getMobileNumber(), customer::setPhone);
+        setIfBlank(isNew, customer.getAlternatePhone(), lead.getAlternateMobile(), customer::setAlternatePhone);
+        setIfBlank(isNew, customer.getWhatsappNumber(), lead.getWhatsappNumber(), customer::setWhatsappNumber);
+        setIfBlank(isNew, customer.getCity(), lead.getCity(), customer::setCity);
+        setIfBlank(isNew, customer.getDistrict(), lead.getDistrict(), customer::setDistrict);
+        setIfBlank(isNew, customer.getState(), lead.getState(), customer::setState);
+        setIfBlank(isNew, customer.getPincode(), lead.getPincode(), customer::setPincode);
+        setIfBlank(isNew, customer.getBillingAddress(), lead.getAddress(), customer::setBillingAddress);
+        setIfBlank(isNew, customer.getSiteAddress(), lead.getSiteAddress(), customer::setSiteAddress);
+        setIfBlank(isNew, customer.getGoogleMapLocation(), lead.getGoogleMapLocation(), customer::setGoogleMapLocation);
+        setIfBlank(isNew, customer.getGstNumber(), lead.getGstNumber(), customer::setGstNumber);
+        setIfBlank(isNew, customer.getContactPersonName(), lead.getContactPerson(), customer::setContactPersonName);
+        setIfBlank(isNew, customer.getCompanyName(), lead.getCompanyName(), customer::setCompanyName);
+        if (isNew) {
+            customer.setCustomerSince(LocalDate.now());
+            customer.setAssignedEmployee(lead.getAssignedSalesExecutive());
+        }
+    }
+
+    /** Set the value only when creating, or when the current value is blank (fill-blanks). */
+    private void setIfBlank(boolean isNew, String current, String value,
+                            java.util.function.Consumer<String> setter) {
+        if (value == null || value.isBlank()) return;
+        if (isNew || isBlank(current)) setter.accept(value);
+    }
+
+    private boolean isBlank(String s) { return s == null || s.isBlank(); }
 
     // =====================================================================
     // Reports

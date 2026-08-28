@@ -105,6 +105,44 @@ export const customer360Api = {
   // Reuses the existing POST /customers/{id}/documents endpoint (CustomerController).
   uploadDocument: (id: number | string, payload: { fileName: string; fileUrl: string; fileType?: string }) =>
     api.post(`${base(id)}/documents`, payload).then((r) => r.data),
+
+  // ---- Portal access (customer self-service login) ----
+  getPortalAccess: (id: number | string) =>
+    api.get<PortalAccess>(`${base(id)}/portal-access`).then((r) => r.data),
+  grantPortalAccess: (id: number | string, email?: string) =>
+    api.post<PortalGrantResult>(`${base(id)}/portal-access`, email ? { email } : {}).then((r) => r.data),
+  revokePortalAccess: (id: number | string, userId: number) =>
+    api.delete(`${base(id)}/portal-access/${userId}`).then((r) => r.data),
+  suspendPortalAccess: (id: number | string, userId: number, suspended: boolean) =>
+    api.patch(`${base(id)}/portal-access/${userId}/suspend`, { suspended }).then((r) => r.data),
+
+  // ---- Global portal on/off (site-wide) ----
+  getPortalPolicy: () => api.get<{ enabled: boolean }>(`/website/portal-policy`).then((r) => r.data),
+  setPortalPolicy: (enabled: boolean) =>
+    api.put<{ enabled: boolean }>(`/website/portal-policy`, { enabled }).then((r) => r.data),
 };
+
+export interface PortalLogin {
+  userId: number;
+  name: string;
+  email: string;
+  portalRole: string;
+  primary: boolean;
+  emailVerified: boolean;
+  suspended: boolean;
+}
+export interface PortalAccess {
+  customerId: number;
+  customerName?: string;
+  customerEmail?: string;
+  hasAccess: boolean;
+  portalGloballyEnabled: boolean;
+  logins: PortalLogin[];
+}
+export interface PortalGrantResult {
+  email: string;
+  linkedExistingAccount: boolean;
+  temporaryPassword: string | null;
+}
 
 export default customer360Api;

@@ -1,9 +1,13 @@
 import { useEffect, useState } from "react";
+import { ChevronDown } from "lucide-react";
+import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { toast } from "@/components/ui/toast";
+import ExistingCustomerSearch from "@/pages/customers/ExistingCustomerSearch";
 import { leadApi } from "./leadApi";
 import {
-  CONSTRUCTION_STATUSES, LEAD_SOURCES, LEAD_TYPES, PRIORITIES, TEMPERATURES,
+  CONSTRUCTION_STATUSES, LEAD_SOURCES, LEAD_TYPES, PRIORITIES, REFERRAL_TYPES, TEMPERATURES,
   type Lead, type UserSummary,
 } from "./constants";
 import { CheckboxField, SectionTitle, SelectField, TextAreaField, TextField } from "./fields";
@@ -26,16 +30,45 @@ export default function LeadFormDialog({
   const [images, setImages] = useState<CapturedImage[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  // Advanced sections (project, budget, assignment, images) stay collapsed for a new lead so
+  // the create form is short; an existing lead opens expanded so all its data is visible.
+  const [showMore, setShowMore] = useState(false);
 
   useEffect(() => {
     if (open) {
       setForm(lead ? { ...lead } : { ...EMPTY_FORM });
       setImages([]);
       setError("");
+      setShowMore(!!lead);
     }
   }, [open, lead]);
 
   const set = (key: keyof Lead) => (value: any) => setForm((f) => ({ ...f, [key]: value }));
+
+  // Reuse a customer the system already knows: pull their full record and prefill the lead.
+  const prefillFromCustomer = (customerId: number) => {
+    api.get(`/customers/${customerId}`).then((res) => {
+      const c = res.data || {};
+      setForm((f) => ({
+        ...f,
+        name: c.name || f.name,
+        companyName: c.companyName ?? f.companyName,
+        contactPerson: c.contactPersonName ?? f.contactPerson,
+        mobileNumber: c.phone ?? f.mobileNumber,
+        alternateMobile: c.alternatePhone ?? f.alternateMobile,
+        whatsappNumber: c.whatsappNumber ?? f.whatsappNumber,
+        email: c.email ?? f.email,
+        gstNumber: c.gstNumber ?? f.gstNumber,
+        address: c.billingAddress ?? f.address,
+        siteAddress: c.siteAddress ?? f.siteAddress,
+        city: c.city ?? f.city,
+        district: c.district ?? f.district,
+        state: c.state ?? f.state,
+        pincode: c.pincode ?? f.pincode,
+      }));
+      toast.success(`Prefilled from ${c.name || "customer"}`);
+    }).catch(() => toast.error("Could not load that customer's details."));
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -61,6 +94,22 @@ export default function LeadFormDialog({
     delete payload.convertedToCustomer;
     delete payload.convertedToProject;
 
+    // Referral references: send just the id, and only for referral leads — clear the whole block
+    // otherwise so switching source away from "Referral" doesn't carry stale referrer data.
+    if (payload.leadSource === "Referral") {
+      if (payload.referredByCustomer?.id) payload.referredByCustomer = { id: payload.referredByCustomer.id };
+      else delete payload.referredByCustomer;
+      if (payload.referredByEmployee?.id) payload.referredByEmployee = { id: payload.referredByEmployee.id };
+      else delete payload.referredByEmployee;
+    } else {
+      payload.referralType = null;
+      payload.referrerName = null;
+      payload.referrerContact = null;
+      payload.referralNotes = null;
+      delete payload.referredByCustomer;
+      delete payload.referredByEmployee;
+    }
+
     const request = lead ? leadApi.update(lead.id, payload) : leadApi.create(payload);
     request
       .then(async (res) => {
@@ -77,6 +126,7 @@ export default function LeadFormDialog({
             }).catch((e) => console.error("Failed to attach lead image", e))
           ));
         }
+        toast.success(lead ? "Lead updated" : `Lead ${savedLead?.leadNumber || ""} created`.trim());
         onOpenChange(false);
         onSaved(savedLead);
       })
@@ -115,6 +165,15 @@ export default function LeadFormDialog({
           <DialogTitle>{lead ? `Edit Lead ${lead.leadNumber}` : "Create New Lead"}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
+          {!lead && (
+            <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">
+                Existing customer? Link them to auto-fill their details (optional)
+              </label>
+              <ExistingCustomerSearch onPick={prefillFromCustomer} />
+            </div>
+          )}
+
           <SectionTitle>Lead Details</SectionTitle>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             <TextField label="Lead Title / Customer Name" required value={form.name} onChange={set("name")} />
@@ -124,13 +183,87 @@ export default function LeadFormDialog({
             <SelectField label="Lead Temperature" value={form.leadTemperature} onChange={set("leadTemperature")} options={TEMPERATURES} allowEmpty={false} />
           </div>
 
+          {/* When the lead came in via a referral, capture who referred it (an existing customer,
+              a staff member, or an external person). */}
+          {form.leadSource === "Referral" && (
+            <div className="rounded-lg border bg-muted/30 p-3 space-y-3">
+              <SectionTitle>Referral Details</SectionTitle>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <SelectField
+                  label="Referred By"
+                  value={form.referralType}
+                  onChange={(v) => setForm((f) => ({
+                    ...f, referralType: v,
+                    referredByCustomer: undefined, referredByEmployee: undefined,
+                    referrerName: "", referrerContact: "",
+                  }))}
+                  options={REFERRAL_TYPES}
+                />
+              </div>
+
+              {form.referralType === "Existing Customer" && (
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium">Referring Customer</label>
+                  {form.referredByCustomer?.id ? (
+                    <div className="flex items-center justify-between rounded-md border bg-background px-3 py-2 text-sm">
+                      <span className="font-medium">{form.referrerName || form.referredByCustomer.name}</span>
+                      <button
+                        type="button"
+                        className="text-xs text-primary hover:underline"
+                        onClick={() => setForm((f) => ({ ...f, referredByCustomer: undefined, referrerName: "", referrerContact: "" }))}
+                      >
+                        Change
+                      </button>
+                    </div>
+                  ) : (
+                    <ExistingCustomerSearch
+                      placeholder="Search the customer who referred..."
+                      onPick={(id, c) => setForm((f) => ({
+                        ...f,
+                        referredByCustomer: { id, name: c?.name },
+                        referrerName: c?.name || "",
+                        referrerContact: c?.phone || "",
+                      }))}
+                    />
+                  )}
+                </div>
+              )}
+
+              {form.referralType === "Employee" && (
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium">Referring Employee</label>
+                  <select
+                    className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    value={form.referredByEmployee?.id ?? ""}
+                    onChange={(e) => {
+                      const u = users.find((x) => x.id === Number(e.target.value));
+                      setForm((f) => ({ ...f, referredByEmployee: u, referrerName: u?.name || "" }));
+                    }}
+                  >
+                    <option value="">Select employee...</option>
+                    {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+                  </select>
+                </div>
+              )}
+
+              {form.referralType === "Other" && (
+                <div className="grid grid-cols-2 gap-4">
+                  <TextField label="Referrer Name" value={form.referrerName} onChange={set("referrerName")} />
+                  <TextField label="Referrer Contact" type="tel" inputMode="tel" value={form.referrerContact} onChange={set("referrerContact")} />
+                </div>
+              )}
+
+              <TextAreaField label="Referral Notes" rows={2} value={form.referralNotes} onChange={set("referralNotes")} />
+            </div>
+          )}
+
           <SectionTitle>Customer Information</SectionTitle>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             <TextField label="Company Name" value={form.companyName} onChange={set("companyName")} />
             <TextField label="Contact Person" value={form.contactPerson} onChange={set("contactPerson")} />
-            <TextField label="Primary Mobile" required value={form.mobileNumber} onChange={set("mobileNumber")} />
-            <TextField label="Alternative Mobile" value={form.alternateMobile} onChange={set("alternateMobile")} />
-            <TextField label="WhatsApp Number" value={form.whatsappNumber} onChange={set("whatsappNumber")} />
+            <TextField label="Primary Mobile" required type="tel" inputMode="tel" autoComplete="tel" value={form.mobileNumber} onChange={set("mobileNumber")} />
+            <TextField label="Alternative Mobile" type="tel" inputMode="tel" value={form.alternateMobile} onChange={set("alternateMobile")} />
+            <TextField label="WhatsApp Number" type="tel" inputMode="tel" value={form.whatsappNumber} onChange={set("whatsappNumber")} />
             <TextField label="Email" type="email" value={form.email} onChange={set("email")} />
             <TextField label="GST Number" value={form.gstNumber} onChange={set("gstNumber")} />
           </div>
@@ -141,12 +274,22 @@ export default function LeadFormDialog({
             <TextField label="City" value={form.city} onChange={set("city")} />
             <TextField label="District" value={form.district} onChange={set("district")} />
             <TextField label="State" value={form.state} onChange={set("state")} />
-            <TextField label="Pincode" value={form.pincode} onChange={set("pincode")} />
+            <TextField label="Pincode" inputMode="numeric" value={form.pincode} onChange={set("pincode")} />
             <div className="col-span-2">
               <TextAreaField label="Project / Site Address" rows={2} value={form.siteAddress} onChange={set("siteAddress")} />
             </div>
           </div>
 
+          {!showMore ? (
+            <button
+              type="button"
+              onClick={() => setShowMore(true)}
+              className="flex items-center gap-1.5 text-sm text-primary hover:underline"
+            >
+              <ChevronDown className="h-4 w-4" /> Add project, budget &amp; assignment details
+            </button>
+          ) : (
+          <>
           <SectionTitle>Property & Requirements</SectionTitle>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             <TextField label="Property Type" value={form.propertyType} onChange={set("propertyType")} placeholder="e.g. Flat, Independent House" />
@@ -197,6 +340,8 @@ export default function LeadFormDialog({
             value={images}
             onChange={setImages}
           />
+          </>
+          )}
 
           {error && <p className="text-sm text-destructive">{error}</p>}
           <div className="flex justify-end gap-2 pt-4 border-t">

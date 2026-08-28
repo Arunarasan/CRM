@@ -1,40 +1,55 @@
 import { useState, useEffect } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import api from "@/lib/api";
 import { uploadFile, resolveFileUrl } from "@/lib/uploadFile";
-import { useImageViewer } from "@/components/ImageViewerProvider";
-import { projectApi } from "@/api/projectApi";
+import { projectApi, AvailableQuotation } from "@/api/projectApi";
 import { employeeTaskApi } from "@/api/employeeTaskApi";
 import { boqApi } from "@/api/boqApi";
 import { changeRequestApi } from "@/api/changeRequestApi";
 import { inventoryApi } from "@/api/inventoryApi";
-import { ProjectPhase, ProjectRoom, ProjectRoomItem, ProjectMaterialRequirement, ProjectProgress, ProjectProgressDashboard, ProjectItemProgressLog, WORK_ITEM_STATUSES } from "@/types/project";
-import { ProjectChangeRequest, ChangeRequestType, CHANGE_REQUEST_TYPE_LABELS, CHANGE_REQUEST_STATUS_STYLES } from "@/types/changeRequest";
+import { ProjectPhase, ProjectRoom, ProjectRoomItem, ProjectMaterialRequirement, ProjectProgress, ProjectProgressDashboard, ProjectItemProgressLog, GenerateFromBoqResult, WORK_ITEM_STATUSES } from "@/types/project";
+import { ProjectChangeRequest } from "@/types/changeRequest";
 import ProjectPaymentsTab from "@/pages/projectFinance/ProjectPaymentsTab";
 import CameraCaptureButton from "@/components/CameraCaptureButton";
 import { format, differenceInDays } from "date-fns";
 import {
-  ArrowLeft, Calendar, User, DollarSign, Activity, FileText,
-  AlertTriangle, ShieldAlert, CheckCircle2, FileImage, PenTool,
+  ArrowLeft, User, Activity,
+  AlertTriangle, CheckCircle2, FileImage,
   TrendingUp, Plus, CheckSquare, Layers, Package, Sparkles,
-  ChevronDown, ChevronRight, ShoppingCart, ClipboardCheck, FileEdit,
-  Phone, Mail, Clock, Sun, File, Play, History, RotateCcw, Lock
+  ChevronDown, ChevronRight, ShoppingCart, ClipboardCheck,
+  Phone, Mail, Play, History, RotateCcw, Lock,
+  MoreHorizontal, MapPin, MessageCircle, Wallet, Users,
+  CalendarClock, Pencil, Check, X
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
+import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import ProjectContractorsTab from "@/pages/contractors/ProjectContractorsTab";
+import ApprovalsTab from "@/pages/projectCommandCenter/tabs/ApprovalsTab";
+import ChangeRequestsTab from "@/pages/projectCommandCenter/tabs/ChangeRequestsTab";
+import DailyLogsTab from "@/pages/projectCommandCenter/tabs/DailyLogsTab";
+import FieldProgressTab from "@/pages/projectCommandCenter/tabs/FieldProgressTab";
+import QualityTab from "@/pages/projectCommandCenter/tabs/QualityTab";
+import IssuesRisksTab from "@/pages/projectCommandCenter/tabs/IssuesRisksTab";
+import DocumentsTab from "@/pages/projectCommandCenter/tabs/DocumentsTab";
+import LabourTab from "@/pages/projectCommandCenter/tabs/LabourTab";
 import ResourceSelect, { ResourceSelection } from "@/components/workforce/ResourceSelect";
 import { ResourceType } from "@/types/workforce";
+import { useGoBack } from "@/hooks/useGoBack";
+import { toast } from "@/components/ui/toast";
+import SearchableSelect from "@/components/ui/searchable-select";
 
 const ITEM_STATUS_STYLES: Record<string, string> = {
   PENDING: 'bg-slate-100 text-slate-600',
-  ASSIGNED: 'bg-indigo-100 text-indigo-700',
+  ASSIGNED: 'bg-emerald-100 text-emerald-700',
   MATERIAL_READY: 'bg-cyan-100 text-cyan-700',
-  STARTED: 'bg-blue-100 text-blue-700',
-  IN_PROGRESS: 'bg-blue-100 text-blue-700',
+  STARTED: 'bg-emerald-100 text-emerald-700',
+  IN_PROGRESS: 'bg-emerald-100 text-emerald-700',
   INSPECTION: 'bg-amber-100 text-amber-700',
   COMPLETED: 'bg-emerald-100 text-emerald-700',
   ON_HOLD: 'bg-orange-100 text-orange-700',
@@ -42,11 +57,52 @@ const ITEM_STATUS_STYLES: Record<string, string> = {
   CANCELLED: 'bg-slate-200 text-slate-500',
 };
 const itemStatusStyle = (status?: string) => ITEM_STATUS_STYLES[(status || 'PENDING').toUpperCase()] || ITEM_STATUS_STYLES.PENDING;
-const progressBarColor = (pct: number) => pct >= 100 ? 'bg-emerald-500' : pct >= 50 ? 'bg-blue-500' : pct > 0 ? 'bg-amber-500' : 'bg-slate-300';
+
+// Compact inline editor input, sized to sit inside an overview cell without reflowing the layout.
+const cellInput = "w-full h-8 rounded-md border border-input bg-background px-2 text-sm";
+
+/** One overview row: label + value (view), or label + editor (edit). Read-only rows omit children. */
+function EditRow({ label, editing, view, children, danger }: {
+  label: string; editing: boolean; view: React.ReactNode; children?: React.ReactNode; danger?: boolean;
+}) {
+  const showEdit = editing && !!children;
+  return (
+    <div className="flex items-baseline justify-between gap-3 border-b border-dashed border-slate-100 pb-2">
+      <span className="text-xs font-medium text-slate-400 shrink-0">{label}</span>
+      {showEdit
+        ? <div className="min-w-0 flex-1 pl-3">{children}</div>
+        : <span className={`text-sm font-semibold text-right ${danger ? 'text-rose-600' : 'text-slate-700'}`}>{view}</span>}
+    </div>
+  );
+}
+const progressBarColor = (pct: number) => pct >= 100 ? 'bg-emerald-500' : pct >= 50 ? 'bg-emerald-500' : pct > 0 ? 'bg-amber-500' : 'bg-slate-300';
+
+// The 12 operational sections grouped into 5 task-shaped areas, so the tab bar reads as
+// "where in the project am I working" instead of a wall of equal chips. Each section keeps its
+// own content block untouched — this is purely how they're navigated.
+const TAB_GROUPS: { id: string; label: string; sections: [string, string][] }[] = [
+  { id: "overview", label: "Overview", sections: [["overview", "Overview"]] },
+  { id: "execution", label: "Execution", sections: [
+    ["phases", "Phases & Rooms"], ["execution", "Daily Logs"], ["fieldProgress", "Tasks"],
+    ["quality", "Quality Control"], ["issues", "Issues & Risks"],
+  ] },
+  { id: "commercial", label: "Commercial", sections: [
+    ["payments", "Payments & Invoices"], ["approvals", "Approvals"], ["changeRequests", "Change Requests"],
+  ] },
+  { id: "resources", label: "Resources", sections: [
+    ["materials", "Materials"], ["contractors", "Contractors"], ["labour", "Labour"],
+  ] },
+  { id: "documents", label: "Documents", sections: [["media", "Documents"]] },
+];
+const groupOf = (section: string) =>
+  TAB_GROUPS.find((g) => g.sections.some(([v]) => v === section)) || TAB_GROUPS[0];
 
 export default function ProjectCommandCenter() {
   const { id } = useParams();
+  const navigate = useNavigate();
+  const goBack = useGoBack("/projects");
   const projectId = Number(id);
+  const [activeTab, setActiveTab] = useState("overview");
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [progress, setProgress] = useState<ProjectProgress | null>(null);
@@ -59,8 +115,17 @@ export default function ProjectCommandCenter() {
   const [expandedRoom, setExpandedRoom] = useState<number | null>(null);
   const [itemsByRoom, setItemsByRoom] = useState<Record<number, ProjectRoomItem[]>>({});
   const [newPhase, setNewPhase] = useState({ name: '', sequence: 1, budget: 0 });
-  const [generatingFromBoq, setGeneratingFromBoq] = useState(false);
   const [masterBoq, setMasterBoq] = useState<any>(null);
+
+  // "Build from approved quotation" picker (replaces the old blind "Generate from BOQ" button)
+  const [quotationPicker, setQuotationPicker] = useState<{ open: boolean; list: AvailableQuotation[]; loading: boolean; selectedId: number | null; generating: boolean }>(
+    { open: false, list: [], loading: false, selectedId: null, generating: false });
+
+  // Inline editing of the Overview cards (Project Overview + Financial Health budget, and Project Details)
+  const [editingOverview, setEditingOverview] = useState(false);
+  const [editingDetails, setEditingDetails] = useState(false);
+  const [savingProject, setSavingProject] = useState(false);
+  const [pform, setPform] = useState<Record<string, any>>({});
 
   // Progress tracking: live dashboard + work-item editor
   const [progressDashboard, setProgressDashboard] = useState<ProjectProgressDashboard | null>(null);
@@ -71,13 +136,9 @@ export default function ProjectCommandCenter() {
   const [savingItem, setSavingItem] = useState(false);
   const [itemPhotoUploading, setItemPhotoUploading] = useState(false);
 
-  // Field Progress — read-only view into the mobile Employee Task module's live execution data
+  // Field tasks — source for the FAB "assign resource" picker and the Field Progress tab (which
+  // lazy-loads its own per-task assignments/execution detail).
   const [fieldTasks, setFieldTasks] = useState<any[]>([]);
-  const [expandedFieldTask, setExpandedFieldTask] = useState<number | null>(null);
-  const [fieldTaskAssignments, setFieldTaskAssignments] = useState<Record<number, any[]>>({});
-  // Full execution evidence (progress updates + photos, material usage, issues) per task — so an
-  // admin can see HOW the work was done, not just the status. Sourced from the employee-task detail.
-  const [fieldTaskDetails, setFieldTaskDetails] = useState<Record<number, any>>({});
 
   // Materials
   const [materials, setMaterials] = useState<ProjectMaterialRequirement[]>([]);
@@ -92,18 +153,17 @@ export default function ProjectCommandCenter() {
     { open: false, direction: 'IN', productId: '', type: 'PURCHASE', quantity: 1, warehouseId: '', reference: '' });
   const [newProduct, setNewProduct] = useState({ open: false, name: '', unit: '', costPrice: '', sellingPrice: '', brand: '' });
 
-  // Change Requests
-  const [changeRequests, setChangeRequests] = useState<ProjectChangeRequest[]>([]);
-  const [newChangeRequest, setNewChangeRequest] = useState<{ changeType: ChangeRequestType; reason: string; description: string }>({
-    changeType: 'CUSTOMER_REQUEST', reason: '', description: '',
-  });
-  const [changeRequestPhaseActions, setChangeRequestPhaseActions] = useState<Record<string, 'ACTIVATE' | 'DEACTIVATE'>>({});
+  // Per-material quantity editor (replaces the old type-and-blur inline cells)
+  const [matEdit, setMatEdit] = useState<{ open: boolean; id: number | null; productName: string; requiredQty: number; reservedQty: number; issuedQty: number; returnedQty: number; consumedQty: number }>(
+    { open: false, id: null, productName: '', requiredQty: 0, reservedQty: 0, issuedQty: 0, returnedQty: 0, consumedQty: 0 });
+  const [savingMat, setSavingMat] = useState(false);
 
-  // Form states for dialogs
+  // Change Requests (list only; the tab owns its own create/decision form state)
+  const [changeRequests, setChangeRequests] = useState<ProjectChangeRequest[]>([]);
+
+  // Form states for dialogs still owned by this shell (Add Stage + the FAB's Report Issue quick action)
   const [newStage, setNewStage] = useState({ name: '', dueDate: '' });
-  const [newDailyLog, setNewDailyLog] = useState({ logDate: format(new Date(), 'yyyy-MM-dd'), percentageCompleted: 0, workCompleted: '', workPending: '', issues: '', weather: '', manpower: 0 });
   const [newIssue, setNewIssue] = useState({ title: '', description: '', priority: 'MEDIUM' });
-  const [newQualityCheck, setNewQualityCheck] = useState({ checklistCategory: '', itemChecked: '', status: 'APPROVED', remarks: '', inspectionDate: format(new Date(), 'yyyy-MM-dd') });
 
   // Quick Actions states
   const [quickActionView, setQuickActionView] = useState<'menu'|'create_task'|'assign_employee'|'report_issue'|'purchase_request'>('menu');
@@ -112,64 +172,14 @@ export default function ProjectCommandCenter() {
   const [newAssignState, setNewAssignState] = useState<{ taskId: string; resource: ResourceSelection | null }>({ taskId: '', resource: null });
   const [newPurchaseState, setNewPurchaseState] = useState({ itemDesc: '', quantity: 1 });
 
-  // Project document upload (import from device)
-  const [docType, setDocType] = useState('Photos');
-  const [docUploading, setDocUploading] = useState(false);
-  const uploadProjectDocument = async (file: File) => {
-    setDocUploading(true);
-    try {
-      const { fileUrl, fileName } = await uploadFile(file, 'PROJECT');
-      await api.post(`/projects/${id}/documents`, { fileName, fileUrl, documentType: docType });
-      fetchProjectData();
-    } catch (err) {
-      console.error('Failed to upload document', err);
-      alert('Failed to upload document. Please try again.');
-    } finally {
-      setDocUploading(false);
-    }
-  };
-
-  // Backfill this project's Documents from the originating lead + linked measurement (drawings/media).
-  const [importingLeadDocs, setImportingLeadDocs] = useState(false);
-  const importLeadDocuments = async () => {
-    setImportingLeadDocs(true);
-    try {
-      const { data: res } = await api.post(`/projects/${id}/import-lead-assets`);
-      fetchProjectData();
-      const n = res?.imported ?? 0;
-      alert(n > 0 ? `Imported ${n} file${n === 1 ? '' : 's'} from the lead and measurement.`
-                  : 'Nothing new to import — the lead/measurement files are already here (or none were uploaded).');
-    } catch (err) {
-      console.error('Failed to import lead documents', err);
-      alert('Could not import files from the lead. Please try again.');
-    } finally {
-      setImportingLeadDocs(false);
-    }
-  };
-
-  // Open a document image in the in-app viewer with admin editing; on save, point the row at the
-  // edited file. Documents are ours to edit (unlike employees' work-evidence photos).
-  const { openImage } = useImageViewer();
-  const isImageDoc = (doc: any) => /\.(png|jpe?g|gif|webp|bmp|heic|heif|avif)(\?|#|$)/i.test(doc?.fileUrl || '');
-  const openDocument = (doc: any) => {
-    openImage({
-      src: resolveFileUrl(doc.fileUrl),
-      fileName: doc.fileName,
-      editable: true,
-      module: 'PROJECT',
-      onReplace: ({ url, fileName }) => {
-        api.put(`/projects/documents/${doc.id}/file`, { fileUrl: url, fileName })
-          .then(() => fetchProjectData())
-          .catch(err => { console.error('Failed to replace document image', err); alert('Failed to save the edited image.'); });
-      },
-    });
-  };
-
   useEffect(() => {
     fetchProjectData();
   }, [id]);
 
-  const fetchProjectData = () => {
+  // The core project blob (`data`) — overview, stages, daily logs, issues, risks, quality checks,
+  // approvals and documents all come from this single GET. Mutations that only touch those
+  // sub-records refresh with fetchCore() instead of re-pulling all ~13 endpoints.
+  const fetchCore = () => {
     api.get(`/projects/${id}`)
       .then(res => {
         setData(res.data);
@@ -182,6 +192,17 @@ export default function ProjectCommandCenter() {
         console.error("Failed to fetch project", err);
         setLoading(false);
       });
+  };
+
+  const fetchStats = () => {
+    api.get(`/projects/${id}/command-center-stats`).then(res => setStats(res.data)).catch(err => console.error("Failed to fetch stats", err));
+  };
+
+  // Full reload — used on first mount and after cross-cutting changes (e.g. change requests that
+  // cascade to phases, materials and the quotation).
+  const fetchProjectData = () => {
+    fetchCore();
+    fetchStats();
     projectApi.getProgress(projectId).then(setProgress).catch(err => console.error("Failed to fetch progress", err));
     projectApi.getProgressDashboard(projectId).then(setProgressDashboard).catch(err => console.error("Failed to fetch progress dashboard", err));
     projectApi.getPhases(projectId).then(setPhases).catch(err => console.error("Failed to fetch phases", err));
@@ -192,27 +213,6 @@ export default function ProjectCommandCenter() {
     projectApi.getMaterialPurchaseSummary(projectId).then(setPurchaseSummary).catch(() => {});
     changeRequestApi.getByProject(projectId).then(setChangeRequests).catch(err => console.error("Failed to fetch change requests", err));
     api.get(`/tasks/project/${projectId}`).then(res => setFieldTasks(res.data)).catch(err => console.error("Failed to fetch field tasks", err));
-    api.get(`/projects/${id}/command-center-stats`).then(res => setStats(res.data)).catch(err => console.error("Failed to fetch stats", err));
-  };
-
-  const toggleExpandFieldTask = (taskId: number) => {
-    if (expandedFieldTask === taskId) {
-      setExpandedFieldTask(null);
-      return;
-    }
-    setExpandedFieldTask(taskId);
-    if (!fieldTaskAssignments[taskId]) {
-      api.get(`/tasks/${taskId}/assignments`).then(res => setFieldTaskAssignments(prev => ({ ...prev, [taskId]: res.data })));
-    }
-    if (!fieldTaskDetails[taskId]) {
-      api.get(`/employee-tasks/${taskId}`)
-        .then(res => setFieldTaskDetails(prev => ({ ...prev, [taskId]: res.data?.data ?? res.data })))
-        .catch(err => {
-          console.error("Failed to fetch task execution detail", err);
-          // Show the empty state rather than a perpetual "Loading…" (e.g. a PM without task-read access).
-          setFieldTaskDetails(prev => ({ ...prev, [taskId]: { progress: [], materialUsage: [], issues: [] } }));
-        });
-    }
   };
 
   const handleQuickCreateTask = () => {
@@ -227,53 +227,17 @@ export default function ProjectCommandCenter() {
        resourceId: newAssignState.resource.resourceId,
      }])
        .then(() => { setQuickActionOpen(false); setQuickActionView('menu'); setNewAssignState({ taskId: '', resource: null }); fetchProjectData(); })
-       .catch(err => alert(err?.response?.data?.message || 'Failed to assign resource'));
+       .catch(err => toast.error(err?.response?.data?.message || 'Failed to assign resource'));
   };
   const handleQuickIssue = () => {
      api.post(`/projects/${projectId}/issues`, newIssue)
-       .then(() => { setQuickActionOpen(false); setQuickActionView('menu'); fetchProjectData(); })
+       .then(() => { setQuickActionOpen(false); setQuickActionView('menu'); fetchCore(); fetchStats(); })
        .catch(err => console.error(err));
   };
   const handleQuickPurchase = () => {
      api.post(`/projects/${projectId}/purchases`, newPurchaseState)
        .then(() => { setQuickActionOpen(false); setQuickActionView('menu'); fetchProjectData(); })
        .catch(err => console.error(err));
-  };
-
-  const handleCreateChangeRequest = () => {
-    if (!newChangeRequest.reason) { alert("Enter a reason for this change request"); return; }
-    changeRequestApi.create(projectId, newChangeRequest)
-      .then(async (cr) => {
-        const entries = Object.entries(changeRequestPhaseActions);
-        for (const [phaseId, action] of entries) {
-          await changeRequestApi.addPhaseAction(cr.id!, Number(phaseId), action);
-        }
-        setNewChangeRequest({ changeType: 'CUSTOMER_REQUEST', reason: '', description: '' });
-        setChangeRequestPhaseActions({});
-        changeRequestApi.getByProject(projectId).then(setChangeRequests);
-      })
-      .catch(() => alert("Failed to submit change request"));
-  };
-
-  const handleApproveChangeRequest = (crId: number) => {
-    if (!confirm("Approve and apply this change request now? This will create a new BOQ revision and cascade to tasks/materials/quotation.")) return;
-    changeRequestApi.approve(crId)
-      .then(() => {
-        changeRequestApi.getByProject(projectId).then(setChangeRequests);
-        fetchProjectData();
-      })
-      .catch((err) => alert(err?.response?.data?.message || err?.message || "Failed to approve change request"));
-  };
-
-  const handleRejectChangeRequest = (crId: number) => {
-    const reason = window.prompt("Reason for rejection (optional):") || undefined;
-    changeRequestApi.reject(crId, reason).then(() => changeRequestApi.getByProject(projectId).then(setChangeRequests))
-      .catch(() => alert("Failed to reject change request"));
-  };
-
-  const handleCompleteChangeRequest = (crId: number) => {
-    changeRequestApi.complete(crId).then(() => changeRequestApi.getByProject(projectId).then(setChangeRequests))
-      .catch(() => alert("Failed to mark change request completed"));
   };
 
   const toggleExpandPhase = (phaseId: number) => {
@@ -304,7 +268,7 @@ export default function ProjectCommandCenter() {
         setPhases(prev => [...prev, phase]);
         setNewPhase({ name: '', sequence: 1, budget: 0 });
       })
-      .catch(() => alert("Failed to add phase"));
+      .catch(() => toast.error("Failed to add phase"));
   };
 
   // ---- Work-item progress editing + rollup refresh --------------------------
@@ -336,7 +300,7 @@ export default function ProjectCommandCenter() {
       const { fileUrl } = await uploadFile(file, 'PROJECT');
       setItemPhotos(prev => [...prev, fileUrl]);
     } catch {
-      alert('Failed to upload photo. Please try again.');
+      toast.error('Failed to upload photo. Please try again.');
     } finally {
       setItemPhotoUploading(false);
     }
@@ -357,7 +321,7 @@ export default function ProjectCommandCenter() {
         if (roomId && phaseId) refreshAfterItemChange(roomId, phaseId);
         setEditingItem(null);
       })
-      .catch(err => alert(err?.response?.data?.message || "Failed to update work item"))
+      .catch(err => toast.error(err?.response?.data?.message || "Failed to update work item"))
       .finally(() => setSavingItem(false));
   };
 
@@ -372,7 +336,7 @@ export default function ProjectCommandCenter() {
         const phaseId = findPhaseIdForRoom(roomId);
         if (roomId && phaseId) refreshAfterItemChange(roomId, phaseId);
       })
-      .catch(err => alert(err?.response?.data?.message || "Failed to update assignment"));
+      .catch(err => toast.error(err?.response?.data?.message || "Failed to update assignment"));
   };
 
   const handleReopenItem = () => {
@@ -385,7 +349,7 @@ export default function ProjectCommandCenter() {
         if (roomId && phaseId) refreshAfterItemChange(roomId, phaseId);
         setEditingItem(null);
       })
-      .catch(err => alert(err?.response?.data?.message || "Failed to reopen work item"))
+      .catch(err => toast.error(err?.response?.data?.message || "Failed to reopen work item"))
       .finally(() => setSavingItem(false));
   };
 
@@ -402,25 +366,45 @@ export default function ProjectCommandCenter() {
     return 0;
   };
 
-  const handleGenerateFromBoq = () => {
-    setGeneratingFromBoq(true);
-    projectApi.generateFromBoq(projectId)
+  const applyGenerateResult = (result: GenerateFromBoqResult) => {
+    const totalChanges = result.phasesCreated + result.roomsCreated + result.tasksCreated + result.materialsCreated;
+    if (totalChanges === 0) {
+      toast.info("Already in sync — nothing new to build. The selected quotation's BOQ has no new active items.");
+    } else {
+      toast.success(`Generated ${result.phasesCreated} phase(s), ${result.roomsCreated} room(s), ${result.tasksCreated} task(s), ${result.materialsCreated} material requirement(s).`);
+    }
+    projectApi.getPhases(projectId).then(setPhases);
+    projectApi.getMaterials(projectId).then(setMaterials);
+  };
+
+  const openQuotationPicker = () => {
+    setQuotationPicker(s => ({ ...s, open: true, loading: true, selectedId: null }));
+    projectApi.getAvailableQuotations(projectId)
+      .then(list => setQuotationPicker(s => ({
+        ...s, list, loading: false,
+        selectedId: list.find(q => q.isCurrent)?.id ?? list[0]?.id ?? null,
+      })))
+      .catch(() => { toast.error("Failed to load approved quotations"); setQuotationPicker(s => ({ ...s, loading: false })); });
+  };
+
+  const handleGenerateFromQuotation = () => {
+    const qid = quotationPicker.selectedId;
+    if (!qid) { toast.error("Select an approved quotation"); return; }
+    setQuotationPicker(s => ({ ...s, generating: true }));
+    projectApi.generateFromQuotation(projectId, qid)
       .then(result => {
-        const totalChanges = result.phasesCreated + result.roomsCreated + result.tasksCreated + result.materialsCreated;
-        if (totalChanges === 0) {
-          alert("Already in sync with the linked BOQ — nothing new to generate. The BOQ has no active items, or its phases/rooms/tasks were generated already.");
-        } else {
-          alert(`Generated ${result.phasesCreated} phase(s), ${result.roomsCreated} room(s), ${result.tasksCreated} task(s), ${result.materialsCreated} material requirement(s).`);
-        }
-        projectApi.getPhases(projectId).then(setPhases);
-        projectApi.getMaterials(projectId).then(setMaterials);
+        applyGenerateResult(result);
+        fetchCore(); // project.boq/quotation was re-linked — refresh the BOQ summary card
+        setQuotationPicker(s => ({ ...s, open: false, generating: false }));
       })
-      .catch((err) => alert(err?.response?.data?.message || err?.message || "Failed to generate from BOQ (does this project have a linked BOQ?)"))
-      .finally(() => setGeneratingFromBoq(false));
+      .catch(err => {
+        toast.error(err?.response?.data?.message || err?.message || "Failed to build from the selected quotation");
+        setQuotationPicker(s => ({ ...s, generating: false }));
+      });
   };
 
   const handleAddMaterial = () => {
-    if (!newMaterial.productId) { alert("Select a product"); return; }
+    if (!newMaterial.productId) { toast.error("Select a product"); return; }
     projectApi.addMaterial(projectId, {
       product: { id: Number(newMaterial.productId) },
       requiredQty: Number(newMaterial.requiredQty),
@@ -430,15 +414,33 @@ export default function ProjectCommandCenter() {
         setMaterials(prev => [...prev, m]);
         setNewMaterial({ productId: '', requiredQty: 0, unit: '' });
       })
-      .catch(() => alert("Failed to add material requirement"));
+      .catch(() => toast.error("Failed to add material requirement"));
   };
 
-  const handleUpdateMaterialQty = (reqId: number, field: 'reservedQty' | 'issuedQty' | 'returnedQty' | 'consumedQty', value: number) => {
-    const material = materials.find(m => m.id === reqId);
+  const openMatEdit = (m: ProjectMaterialRequirement) => {
+    setMatEdit({
+      open: true, id: m.id ?? null, productName: m.product?.name || 'Material', requiredQty: Number(m.requiredQty) || 0,
+      reservedQty: Number(m.reservedQty) || 0, issuedQty: Number(m.issuedQty) || 0,
+      returnedQty: Number(m.returnedQty) || 0, consumedQty: Number(m.consumedQty) || 0,
+    });
+  };
+
+  const handleSaveMatEdit = () => {
+    if (matEdit.id == null) return;
+    const { reservedQty, issuedQty, returnedQty, consumedQty } = matEdit;
+    if ([reservedQty, issuedQty, returnedQty, consumedQty].some(v => v < 0)) { toast.error("Quantities cannot be negative"); return; }
+    if (returnedQty + consumedQty > issuedQty) { toast.error("Returned + consumed cannot exceed issued"); return; }
+    const material = materials.find(m => m.id === matEdit.id);
     if (!material) return;
-    projectApi.updateMaterial(reqId, { ...material, [field]: value })
-      .then(updated => setMaterials(prev => prev.map(m => m.id === reqId ? updated : m)))
-      .catch(() => alert("Failed to update material"));
+    setSavingMat(true);
+    projectApi.updateMaterial(matEdit.id, { ...material, reservedQty, issuedQty, returnedQty, consumedQty })
+      .then(updated => {
+        setMaterials(prev => prev.map(m => m.id === matEdit.id ? updated : m));
+        setMatEdit(s => ({ ...s, open: false }));
+        toast.success("Material updated");
+      })
+      .catch(() => toast.error("Failed to update material"))
+      .finally(() => setSavingMat(false));
   };
 
   const refreshMaterialData = () => {
@@ -460,9 +462,9 @@ export default function ProjectCommandCenter() {
   };
 
   const handleRecordStock = () => {
-    if (!stockMove.productId) { alert("Select a material"); return; }
-    if (!stockMove.warehouseId) { alert("Select a warehouse"); return; }
-    if (!stockMove.quantity || stockMove.quantity <= 0) { alert("Quantity must be greater than zero"); return; }
+    if (!stockMove.productId) { toast.error("Select a material"); return; }
+    if (!stockMove.warehouseId) { toast.error("Select a warehouse"); return; }
+    if (!stockMove.quantity || stockMove.quantity <= 0) { toast.error("Quantity must be greater than zero"); return; }
     const isInbound = stockMove.direction === 'IN';
     const payload: Record<string, unknown> = {
       type: stockMove.type,
@@ -477,11 +479,11 @@ export default function ProjectCommandCenter() {
         setStockMove(s => ({ ...s, open: false }));
         refreshMaterialData();
       })
-      .catch((err) => alert(err?.response?.data?.message || "Failed to record stock movement"));
+      .catch((err) => toast.error(err?.response?.data?.message || "Failed to record stock movement"));
   };
 
   const handleCreateProduct = () => {
-    if (!newProduct.name.trim()) { alert("Product name is required"); return; }
+    if (!newProduct.name.trim()) { toast.error("Product name is required"); return; }
     inventoryApi.createProduct({
       name: newProduct.name.trim(),
       unit: newProduct.unit || undefined,
@@ -492,9 +494,9 @@ export default function ProjectCommandCenter() {
       .then((p) => {
         setProducts(prev => [p, ...prev]);
         setNewProduct({ open: false, name: '', unit: '', costPrice: '', sellingPrice: '', brand: '' });
-        alert(`Product "${p.name}" created (${p.materialCode || 'new'}).`);
+        toast.success(`Product "${p.name}" created (${p.materialCode || 'new'}).`);
       })
-      .catch((err) => alert(err?.response?.data?.message || "Failed to create product"));
+      .catch((err) => toast.error(err?.response?.data?.message || "Failed to create product"));
   };
 
   const handleRequestMaterial = (m: ProjectMaterialRequirement) => {
@@ -504,72 +506,40 @@ export default function ProjectCommandCenter() {
       items: [{ productId: m.product.id, quantity: Number(m.remainingQty) || 1 }],
       remarks: `Project material requirement #${m.id}`,
     })
-      .then(() => alert("Material request raised — visible under Inventory > Material Requests."))
-      .catch((err) => alert(err?.response?.data?.message || "Failed to raise material request"));
+      .then(() => toast.success("Material request raised — visible under Inventory > Material Requests."))
+      .catch((err) => toast.error(err?.response?.data?.message || "Failed to raise material request"));
   };
 
   const handleRequestPurchase = (reqId: number) => {
     projectApi.requestPurchase(reqId)
       .then(() => {
-        alert("Purchase order created.");
+        toast.success("Purchase order created.");
         projectApi.getMaterials(projectId).then(setMaterials);
       })
-      .catch((err) => alert(err?.response?.data?.message || err?.message || "Failed to request purchase"));
-  };
-
-  const handleDecideApproval = (approvalId: number, approve: boolean) => {
-    const action = approve ? projectApi.approveApproval(approvalId) : projectApi.rejectApproval(approvalId);
-    action.then(() => fetchProjectData()).catch(() => alert("Failed to update approval"));
+      .catch((err) => toast.error(err?.response?.data?.message || err?.message || "Failed to request purchase"));
   };
 
   const handleAddStage = () => {
     api.post(`/projects/${id}/stages`, newStage)
       .then(() => {
-        fetchProjectData();
+        fetchCore();
         setNewStage({ name: '', dueDate: '' });
       })
-      .catch(_err => alert("Failed to add stage"));
+      .catch(_err => toast.error("Failed to add stage"));
   };
 
-  const handleAddDailyLog = () => {
-    api.post(`/projects/${id}/daily-logs`, newDailyLog)
-      .then(() => {
-        fetchProjectData();
-        setNewDailyLog({ logDate: format(new Date(), 'yyyy-MM-dd'), percentageCompleted: 0, workCompleted: '', workPending: '', issues: '', weather: '', manpower: 0 });
-      })
-      .catch(_err => alert("Failed to add log"));
-  };
-
-  const handleAddIssue = () => {
-    api.post(`/projects/${id}/issues`, newIssue)
-      .then(() => {
-        fetchProjectData();
-        setNewIssue({ title: '', description: '', priority: 'MEDIUM' });
-      })
-      .catch(_err => alert("Failed to add issue"));
-  };
-
-  const handleAddQualityCheck = () => {
-    api.post(`/projects/${id}/quality-checks`, newQualityCheck)
-      .then(() => {
-        fetchProjectData();
-        setNewQualityCheck({ checklistCategory: '', itemChecked: '', status: 'APPROVED', remarks: '', inspectionDate: format(new Date(), 'yyyy-MM-dd') });
-      })
-      .catch(_err => alert("Failed to add check"));
-  };
-  
   const handleCompleteProject = () => {
     if (confirm("Mark this project as COMPLETED?")) {
       api.post(`/projects/${id}/complete`, { certificate: "placeholder-cert-data" })
         .then(() => fetchProjectData())
-        .catch(_err => alert("Failed to complete project"));
+        .catch(_err => toast.error("Failed to complete project"));
     }
   };
 
   const handleStartExecution = () => {
     api.post(`/projects/${id}/start-execution`)
       .then(() => fetchProjectData())
-      .catch((err: any) => alert(err?.response?.data?.message || "Failed to start execution"));
+      .catch((err: any) => toast.error(err?.response?.data?.message || "Failed to start execution"));
   };
 
   if (loading) return <div className="p-8 text-slate-500">Loading Command Center...</div>;
@@ -577,6 +547,70 @@ export default function ProjectCommandCenter() {
 
   const { project, stages, dailyLogs, qualityChecks, issues, risks, documents } = data;
   const profitOrLoss = (project.budget || 0) - (project.spentAmount || 0);
+  const utilizationPct = project.budget ? Math.round(((project.spentAmount || 0) / project.budget) * 100) : 0;
+
+  const inr = (n?: number | null) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
+  const shortDate = (iso?: string) => iso ? format(new Date(iso), 'dd MMM yyyy') : '—';
+  const daysRemaining = project.endDate ? differenceInDays(new Date(project.endDate), new Date()) : null;
+
+  // --- Inline overview editing -------------------------------------------------
+  // updateProject is a full replace, so we merge the edited fields onto the whole project object.
+  const startEdit = (which: 'overview' | 'details') => {
+    setPform({
+      projectType: project.projectType ?? '',
+      projectCategory: project.projectCategory ?? '',
+      priority: project.priority ?? 'MEDIUM',
+      startDate: project.startDate ? String(project.startDate).slice(0, 10) : '',
+      endDate: project.endDate ? String(project.endDate).slice(0, 10) : '',
+      estimatedCost: project.estimatedCost ?? '',
+      budget: project.budget ?? '',
+      propertyAddress: project.propertyAddress ?? '',
+      projectDescription: project.projectDescription ?? '',
+      customerNotes: project.customerNotes ?? '',
+    });
+    if (which === 'overview') setEditingOverview(true); else setEditingDetails(true);
+  };
+
+  const num = (v: any) => (v === '' || v === null || v === undefined ? null : Number(v));
+
+  const saveProjectFields = (patch: Record<string, any>, done: () => void) => {
+    setSavingProject(true);
+    api.put(`/projects/${id}`, { ...project, ...patch })
+      .then(() => { fetchCore(); toast.success("Project updated"); done(); })
+      .catch(err => toast.error(err?.response?.data?.message || "Failed to update project"))
+      .finally(() => setSavingProject(false));
+  };
+
+  const saveOverview = () => saveProjectFields({
+    projectType: pform.projectType || null,
+    projectCategory: pform.projectCategory || null,
+    priority: pform.priority || null,
+    startDate: pform.startDate || null,
+    endDate: pform.endDate || null,
+    estimatedCost: num(pform.estimatedCost),
+    budget: num(pform.budget),
+  }, () => setEditingOverview(false));
+
+  const saveDetails = () => saveProjectFields({
+    propertyAddress: pform.propertyAddress || null,
+    projectDescription: pform.projectDescription || null,
+    customerNotes: pform.customerNotes || null,
+  }, () => setEditingDetails(false));
+
+  const daysRemainingText = daysRemaining === null ? '—' : daysRemaining < 0 ? `${Math.abs(daysRemaining)} Days Over` : `${daysRemaining} Days`;
+
+  // Recent Activity — synthesized from the project's live sub-records, newest first.
+  const activityFeed = (() => {
+    const items: { date?: string; activity: string; by?: string; details: string }[] = [];
+    (dailyLogs || []).forEach((l: any) => items.push({ date: l.logDate, activity: 'Daily Log', by: l.createdBy?.name || l.recordedBy?.name, details: l.workCompleted || `${l.percentageCompleted ?? 0}% completed` }));
+    (issues || []).forEach((i: any) => items.push({ date: i.createdAt || i.reportedDate, activity: 'Issue Reported', by: i.reportedBy?.name || i.createdBy?.name, details: i.title || i.description || 'Issue logged' }));
+    (stages || []).forEach((s: any) => items.push({ date: s.completedDate || s.dueDate, activity: s.status === 'COMPLETED' ? 'Stage Completed' : 'Stage Updated', by: undefined, details: s.name }));
+    (documents || []).forEach((d: any) => items.push({ date: d.createdAt || d.uploadedAt, activity: 'Document Added', by: d.uploadedBy?.name, details: d.fileName || d.documentName || 'Document' }));
+    return items
+      .filter((x) => x.details)
+      .sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime())
+      .slice(0, 6);
+  })();
 
   // Gantt Chart Logic
   const getGanttTimeline = () => {
@@ -584,6 +618,13 @@ export default function ProjectCommandCenter() {
     const projectStart = new Date(project.startDate);
     const projectEnd = new Date(project.endDate);
     const totalDays = differenceInDays(projectEnd, projectStart) || 1;
+
+    // Real sequential timeline: stages ordered by due date, each bar spans from the previous
+    // milestone (or the project start) to its own due date — derived from actual data, not a
+    // fixed placeholder width.
+    const sortedStages = [...stages]
+      .filter((s: any) => s.dueDate)
+      .sort((a: any, b: any) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
 
     return (
       <div className="mt-8 space-y-4">
@@ -595,13 +636,12 @@ export default function ProjectCommandCenter() {
           </div>
         </div>
         
-        {stages.map((stage: any) => {
-          if (!stage.dueDate) return null;
-          // For visualization, assume stage takes some time leading up to due date
+        {sortedStages.map((stage: any, idx: number) => {
           const mEnd = new Date(stage.dueDate);
-          const mStart = new Date(mEnd);
-          mStart.setDate(mStart.getDate() - 7); // placeholder 1 week duration for visual
-          
+          // Segment starts where the previous milestone ended (or at the project start for the first).
+          const prevDue = idx > 0 ? new Date(sortedStages[idx - 1].dueDate) : projectStart;
+          const mStart = prevDue < projectStart ? projectStart : prevDue;
+
           let leftPercent = (differenceInDays(mStart, projectStart) / totalDays) * 100;
           let widthPercent = (differenceInDays(mEnd, mStart) / totalDays) * 100;
           
@@ -615,7 +655,7 @@ export default function ProjectCommandCenter() {
               <div className="flex-1 relative h-8 bg-slate-100 rounded-md overflow-hidden flex items-center">
                 <div 
                   className={`absolute h-6 rounded-md shadow-sm transition-all flex items-center px-2 text-xs font-bold text-white whitespace-nowrap overflow-hidden
-                    ${stage.status === 'COMPLETED' ? 'bg-green-500' : stage.status === 'IN_PROGRESS' ? 'bg-blue-500' : 'bg-slate-400'}`}
+                    ${stage.status === 'COMPLETED' ? 'bg-green-500' : stage.status === 'IN_PROGRESS' ? 'bg-emerald-500' : 'bg-slate-400'}`}
                   style={{ left: `${leftPercent}%`, width: `${widthPercent}%` }}
                 >
                   <span className="opacity-0 group-hover:opacity-100 transition-opacity">
@@ -634,208 +674,381 @@ export default function ProjectCommandCenter() {
     <div className="flex flex-col h-full bg-slate-50/50 relative">
 
       {/* Enhanced Top Header */}
-      <div className="bg-white border-b border-slate-100 px-8 py-6 flex flex-col md:flex-row items-start justify-between shrink-0 z-10 gap-4">
-        <div className="flex items-start gap-4">
-          <Link to="/projects">
-            <Button variant="ghost" size="icon" className="mt-1 text-slate-400 hover:text-slate-600"><ArrowLeft className="h-4 w-4" /></Button>
-          </Link>
-          <div>
-            <div className="flex items-center gap-3 mb-1">
-              <h1 className="text-2xl font-semibold tracking-tight text-slate-800">{project.projectCode} - {project.projectName}</h1>
-              <span className={`px-2.5 py-1 text-[11px] rounded-full font-medium ${
-                project.status === 'RUNNING' ? 'bg-sky-50 text-sky-600' :
-                project.status === 'COMPLETED' ? 'bg-emerald-50 text-emerald-600' :
+      <div className="bg-white border-b border-slate-100 px-4 sm:px-6 lg:px-8 py-4 sm:py-5 flex flex-wrap items-start justify-between shrink-0 z-10 gap-3">
+        <div className="flex items-start gap-2 sm:gap-3 min-w-0">
+          <Button variant="ghost" size="icon" onClick={goBack} title="Back" className="mt-0.5 text-slate-400 hover:text-slate-600 shrink-0"><ArrowLeft className="h-4 w-4" /></Button>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-lg sm:text-xl lg:text-2xl font-semibold tracking-tight text-slate-800 truncate">{project.projectCode} - {project.projectName}</h1>
+              <span className={`px-2.5 py-0.5 text-[11px] rounded-full font-semibold uppercase tracking-wide ${
+                project.status === 'RUNNING' ? 'bg-emerald-100 text-emerald-700' :
+                project.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-700' :
                 'bg-slate-100 text-slate-500'
               }`}>
-                {project.status.replace('_', ' ')}
+                {project.status.replace(/_/g, ' ')}
               </span>
-              {stats?.health && (
-                <span className={`px-2.5 py-1 text-[11px] rounded-full font-medium ${
-                  stats.health === 'EXCELLENT' ? 'bg-emerald-50 text-emerald-600' :
-                  stats.health === 'GOOD' ? 'bg-sky-50 text-sky-600' :
-                  stats.health === 'WARNING' ? 'bg-amber-50 text-amber-600' :
-                  'bg-rose-50 text-rose-600'
+              {(stats?.health === 'WARNING' || stats?.health === 'CRITICAL') && (
+                <span className={`px-2.5 py-0.5 text-[11px] rounded-full font-semibold uppercase tracking-wide ${
+                  stats.health === 'CRITICAL' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'
                 }`}>
-                  Health: {stats.health}
+                  {stats.health === 'CRITICAL' ? 'Critical' : 'Warning'}
                 </span>
               )}
             </div>
-            <div className="text-slate-400 flex items-center gap-4 text-sm mt-2">
+            <div className="text-slate-400 flex items-center gap-3 sm:gap-4 text-xs sm:text-sm mt-2 flex-wrap">
               <span className="flex items-center gap-1"><User className="w-4 h-4"/> {project.customer?.name}</span>
-              <span className="flex items-center gap-1"><Phone className="w-4 h-4 text-sky-400 cursor-pointer"/> {project.customer?.phone || 'N/A'}</span>
-              <span className="flex items-center gap-1"><Mail className="w-4 h-4 text-sky-400 cursor-pointer"/> {project.customer?.email || 'N/A'}</span>
+              {project.customer?.phone && (
+                <a href={`tel:${project.customer.phone}`} className="flex items-center gap-1 hover:text-emerald-600"><Phone className="w-4 h-4 text-emerald-400"/> {project.customer.phone}</a>
+              )}
+              <span className="flex items-center gap-1"><Mail className="w-4 h-4 text-emerald-400"/> {project.customer?.email || 'N/A'}</span>
             </div>
           </div>
         </div>
 
-        <div className="flex gap-3">
-          {['PLANNING', 'PENDING', 'APPROVED'].includes(project.status) && (
-            <Button onClick={handleStartExecution} className="bg-sky-500 hover:bg-sky-600 rounded-xl">
-              <Play className="w-4 h-4 mr-2"/> Start Execution
-            </Button>
-          )}
+        <div className="flex items-center gap-2 shrink-0">
           {project.status !== 'COMPLETED' && (
             <Button onClick={handleCompleteProject} className="bg-emerald-500 hover:bg-emerald-600 rounded-xl">
               <CheckCircle2 className="w-4 h-4 mr-2"/> Mark Completed
             </Button>
           )}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="icon" className="rounded-xl border-slate-200 text-slate-500"><MoreHorizontal className="h-4 w-4" /></Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {['PLANNING', 'PENDING', 'APPROVED'].includes(project.status) && (
+                <>
+                  <DropdownMenuItem onSelect={handleStartExecution}><Play className="w-4 h-4 mr-2"/> Start Execution</DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                </>
+              )}
+              <DropdownMenuItem asChild><Link to={`/tasks?projectId=${projectId}`}>View Tasks</Link></DropdownMenuItem>
+              {project.customer?.id && (
+                <DropdownMenuItem asChild><Link to={`/customers/${project.customer.id}`}>View Customer</Link></DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
       {/* Quick Stats (below header) */}
       {stats && (
-        <div className="bg-white border-b border-slate-100 px-8 py-3 flex gap-3 overflow-x-auto whitespace-nowrap hide-scrollbar shrink-0 z-10">
-          <div className="px-4 py-2 bg-sky-50 text-sky-600 rounded-xl flex flex-col min-w-[120px]"><span className="text-[11px] text-sky-400 mb-0.5">Today's Tasks</span><span className="text-lg font-semibold">{stats.tasks?.inProgress || 0}</span></div>
-          <div className="px-4 py-2 bg-rose-50 text-rose-600 rounded-xl flex flex-col min-w-[120px]"><span className="text-[11px] text-rose-400 mb-0.5">Delayed Tasks</span><span className="text-lg font-semibold">{stats.tasks?.delayed || 0}</span></div>
-          <div className="px-4 py-2 bg-orange-50 text-orange-600 rounded-xl flex flex-col min-w-[120px]"><span className="text-[11px] text-orange-400 mb-0.5">Open Issues</span><span className="text-lg font-semibold">{stats.issues?.open || 0}</span></div>
-          <div className="px-4 py-2 bg-amber-50 text-amber-600 rounded-xl flex flex-col min-w-[120px]"><span className="text-[11px] text-amber-400 mb-0.5">Pending Approvals</span><span className="text-lg font-semibold">{stats.approvals?.pending || 0}</span></div>
-          <div className="px-4 py-2 bg-emerald-50 text-emerald-600 rounded-xl flex flex-col min-w-[120px]"><span className="text-[11px] text-emerald-400 mb-0.5">Employees Working</span><span className="text-lg font-semibold">{(stats.liveEmployees || []).length}</span></div>
-          <div className="px-4 py-2 bg-violet-50 text-violet-600 rounded-xl flex flex-col min-w-[120px]"><span className="text-[11px] text-violet-400 mb-0.5">Active Site Visits</span><span className="text-lg font-semibold">{(stats.visitsToday || []).length}</span></div>
+        <div className="bg-white border-b border-slate-100 px-4 sm:px-6 lg:px-8 py-4 shrink-0 z-10">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            {[
+              { label: "Today's Tasks", value: stats.tasks?.inProgress || 0, bg: 'bg-emerald-50', ring: 'border-emerald-100', text: 'text-emerald-700', sub: 'text-emerald-400' },
+              { label: 'Delayed Tasks', value: stats.tasks?.delayed || 0, bg: 'bg-rose-50', ring: 'border-rose-100', text: 'text-rose-700', sub: 'text-rose-400' },
+              { label: 'Open Issues', value: stats.issues?.open || 0, bg: 'bg-orange-50', ring: 'border-orange-100', text: 'text-orange-700', sub: 'text-orange-400' },
+              { label: 'Pending Approvals', value: stats.approvals?.pending || 0, bg: 'bg-amber-50', ring: 'border-amber-100', text: 'text-amber-700', sub: 'text-amber-400' },
+              { label: 'Employees Working', value: stats.todayManpower || 0, bg: 'bg-emerald-50', ring: 'border-emerald-100', text: 'text-emerald-700', sub: 'text-emerald-400' },
+              { label: 'Site Visits', value: stats.siteVisitsToday || 0, bg: 'bg-violet-50', ring: 'border-violet-100', text: 'text-violet-700', sub: 'text-violet-400' },
+            ].map((s) => (
+              <div key={s.label} className={`${s.bg} ${s.ring} border rounded-xl px-3 py-2.5 flex flex-col`}>
+                <span className={`text-[11px] font-medium ${s.sub} mb-0.5 truncate`}>{s.label}</span>
+                <span className={`text-xl font-bold ${s.text}`}>{s.value}</span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
-      <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
-        <div className="flex-1 overflow-hidden flex flex-col p-8">
-        <Tabs defaultValue="overview" className="w-full flex flex-col h-full">
-          
-          <TabsList className="bg-white p-1 border border-slate-100 shadow-[0_1px_2px_rgba(0,0,0,0.03)] rounded-2xl inline-flex w-fit mb-6 flex-wrap h-auto">
-            <TabsTrigger value="overview" className="rounded-xl text-slate-500 data-[state=active]:shadow-sm data-[state=active]:text-slate-800">Overview & Gantt</TabsTrigger>
-            <TabsTrigger value="phases" className="rounded-xl text-slate-500 data-[state=active]:shadow-sm data-[state=active]:text-slate-800">Phases & Rooms</TabsTrigger>
-            <TabsTrigger value="materials" className="rounded-xl text-slate-500 data-[state=active]:shadow-sm data-[state=active]:text-slate-800">Materials</TabsTrigger>
-            <TabsTrigger value="payments" className="rounded-xl text-slate-500 data-[state=active]:shadow-sm data-[state=active]:text-slate-800">Payments & Invoices</TabsTrigger>
-            <TabsTrigger value="execution" className="rounded-xl text-slate-500 data-[state=active]:shadow-sm data-[state=active]:text-slate-800">Daily Logs</TabsTrigger>
-            <TabsTrigger value="fieldProgress" className="rounded-xl text-slate-500 data-[state=active]:shadow-sm data-[state=active]:text-slate-800">Field Progress</TabsTrigger>
-            <TabsTrigger value="contractors" className="rounded-xl text-slate-500 data-[state=active]:shadow-sm data-[state=active]:text-slate-800">Contractors</TabsTrigger>
-            <TabsTrigger value="quality" className="rounded-xl text-slate-500 data-[state=active]:shadow-sm data-[state=active]:text-slate-800">Quality Control</TabsTrigger>
-            <TabsTrigger value="approvals" className="rounded-xl text-slate-500 data-[state=active]:shadow-sm data-[state=active]:text-slate-800">Approvals</TabsTrigger>
-            <TabsTrigger value="changeRequests" className="rounded-xl text-slate-500 data-[state=active]:shadow-sm data-[state=active]:text-slate-800">Change Requests</TabsTrigger>
-            <TabsTrigger value="issues" className="rounded-xl text-slate-500 data-[state=active]:shadow-sm data-[state=active]:text-slate-800 flex items-center gap-2">
-              Issues & Risks
-              {(issues.length > 0 || risks.length > 0) && (
-                <span className="bg-red-100 text-red-600 px-1.5 rounded-full text-[10px] font-bold">{issues.length + risks.length}</span>
-              )}
-            </TabsTrigger>
-            <TabsTrigger value="media" className="rounded-xl text-slate-500 data-[state=active]:shadow-sm data-[state=active]:text-slate-800">Documents</TabsTrigger>
-          </TabsList>
+      <div className="flex-1 overflow-hidden flex flex-col">
+        <div className="flex-1 overflow-hidden flex flex-col p-4 sm:p-6 lg:p-8">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full flex flex-col h-full">
+
+          {(() => {
+            const active = groupOf(activeTab);
+            const issueCount = issues.length + risks.length;
+            return (
+              <div className="mb-6 space-y-2">
+                {/* Primary strip — the 5 areas of work */}
+                <div className="bg-white p-1 border border-slate-100 shadow-[0_1px_2px_rgba(0,0,0,0.03)] rounded-2xl flex flex-wrap w-full lg:w-fit gap-1 justify-start">
+                  {TAB_GROUPS.map((g) => {
+                    const isActive = g.id === active.id;
+                    return (
+                      <button
+                        key={g.id}
+                        type="button"
+                        onClick={() => setActiveTab(g.sections[0][0])}
+                        className={`rounded-xl px-3.5 py-1.5 text-sm font-medium transition flex items-center gap-2 shrink-0 ${isActive ? "bg-slate-100 text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+                      >
+                        {g.label}
+                        {g.id === "execution" && issueCount > 0 && (
+                          <span className="bg-red-100 text-red-600 px-1.5 rounded-full text-[10px] font-bold">{issueCount}</span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Secondary strip — sections inside the active area */}
+                {active.sections.length > 1 && (
+                  <div className="flex flex-wrap gap-1 px-1">
+                    {active.sections.map(([value, label]) => {
+                      const isActive = value === activeTab;
+                      return (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => setActiveTab(value)}
+                          className={`rounded-lg px-3 py-1 text-xs font-medium transition flex items-center gap-1.5 shrink-0 ${isActive ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200" : "text-slate-500 hover:bg-slate-50"}`}
+                        >
+                          {label}
+                          {value === "issues" && issueCount > 0 && (
+                            <span className="bg-red-100 text-red-600 px-1.5 rounded-full text-[10px] font-bold">{issueCount}</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           <div className="flex-1 overflow-y-auto pb-20">
             
             {/* OVERVIEW TAB */}
             <TabsContent value="overview" className="space-y-6 mt-0 h-full outline-none">
-              <div className="grid grid-cols-4 gap-6">
-                
-                {/* Financial KPI */}
-                <div className="col-span-2 bg-white rounded-2xl border border-slate-100 p-6 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
-                  <h3 className="text-xs font-semibold text-slate-400 mb-4 flex items-center"><DollarSign className="w-4 h-4 mr-2"/> Financial Health</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <div className="text-3xl font-bold text-slate-800">${project.budget?.toLocaleString() || 0}</div>
-                      <div className="text-sm font-medium text-slate-500">Allocated Budget</div>
-                    </div>
-                    <div>
-                      <div className="text-3xl font-bold text-slate-800">${project.spentAmount?.toLocaleString() || 0}</div>
-                      <div className="text-sm font-medium text-slate-500">Spent Amount</div>
-                    </div>
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6">
+
+                {/* Project Overview — key facts (inline editable) */}
+                <div className="lg:col-span-6 bg-white rounded-2xl border border-slate-100 p-5 sm:p-6 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+                  <div className="mb-4 flex items-center justify-between">
+                    <h3 className="text-sm font-bold text-slate-700 flex items-center"><ClipboardCheck className="w-4 h-4 mr-2 text-emerald-600"/> Project Overview</h3>
+                    {!editingOverview ? (
+                      <button type="button" onClick={() => startEdit('overview')} className="text-slate-400 hover:text-emerald-600" title="Edit"><Pencil className="w-4 h-4" /></button>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <button type="button" onClick={saveOverview} disabled={savingProject} className="text-emerald-600 hover:text-emerald-700 disabled:opacity-50" title="Save"><Check className="w-4 h-4" /></button>
+                        <button type="button" onClick={() => setEditingOverview(false)} className="text-slate-400 hover:text-rose-500" title="Cancel"><X className="w-4 h-4" /></button>
+                      </div>
+                    )}
                   </div>
-                  <div className="mt-6">
-                    <div className="flex justify-between text-xs font-semibold mb-2">
-                      <span className="text-slate-500">Budget Utilization</span>
-                      <span className={profitOrLoss < 0 ? 'text-red-500' : 'text-slate-700'}>
-                        {project.budget ? Math.round(((project.spentAmount || 0) / project.budget) * 100) : 0}%
-                      </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3.5">
+                    <EditRow label="Project Type" editing={editingOverview} view={project.projectType || '—'}>
+                      <input className={cellInput} value={pform.projectType} onChange={e => setPform({ ...pform, projectType: e.target.value })} placeholder="Residential, Commercial…" />
+                    </EditRow>
+                    <EditRow label="Property Type" editing={editingOverview} view={project.projectCategory || '—'}>
+                      <input className={cellInput} value={pform.projectCategory} onChange={e => setPform({ ...pform, projectCategory: e.target.value })} placeholder="Apartment, Villa…" />
+                    </EditRow>
+                    <EditRow label="Priority" editing={editingOverview} view={project.priority || '—'}>
+                      <select className={cellInput} value={pform.priority} onChange={e => setPform({ ...pform, priority: e.target.value })}>
+                        {['LOW', 'MEDIUM', 'HIGH', 'URGENT'].map(p => <option key={p} value={p}>{p}</option>)}
+                      </select>
+                    </EditRow>
+                    <EditRow label="Project Manager" editing={editingOverview} view={project.projectManager?.name || '—'} />
+                    <EditRow label="Start Date" editing={editingOverview} view={shortDate(project.startDate)}>
+                      <input type="date" className={cellInput} value={pform.startDate} onChange={e => setPform({ ...pform, startDate: e.target.value })} />
+                    </EditRow>
+                    <EditRow label="Target Completion" editing={editingOverview} view={shortDate(project.endDate)}>
+                      <input type="date" className={cellInput} value={pform.endDate} onChange={e => setPform({ ...pform, endDate: e.target.value })} />
+                    </EditRow>
+                    <EditRow label="Days Remaining" editing={editingOverview} danger={daysRemaining !== null && daysRemaining < 0} view={daysRemainingText} />
+                    <EditRow label="Project Value" editing={editingOverview} view={project.estimatedCost ? inr(project.estimatedCost) : (project.budget ? inr(project.budget) : '—')}>
+                      <input type="number" min={0} className={cellInput} value={pform.estimatedCost} onChange={e => setPform({ ...pform, estimatedCost: e.target.value })} placeholder="Estimated value" />
+                    </EditRow>
+                  </div>
+                </div>
+
+                {/* Financial Health */}
+                <div className="lg:col-span-3 bg-white rounded-2xl border border-slate-100 p-5 sm:p-6 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+                  <h3 className="text-sm font-bold text-slate-700 mb-4 flex items-center"><Wallet className="w-4 h-4 mr-2 text-emerald-600"/> Financial Health</h3>
+                  <div className="mb-2">
+                    {editingOverview ? (
+                      <input type="number" min={0} className={cellInput + " text-lg font-bold"} value={pform.budget} onChange={e => setPform({ ...pform, budget: e.target.value })} placeholder="Budget" />
+                    ) : (
+                      <div className="text-2xl font-bold text-slate-800">{inr(project.budget)}</div>
+                    )}
+                    <div className="text-xs font-medium text-slate-400">Allocated Budget {editingOverview && <span className="text-emerald-500">· editing</span>}</div>
+                  </div>
+                  <div className="mb-4">
+                    <div className="text-2xl font-bold text-slate-800">{inr(project.spentAmount)}</div>
+                    <div className="text-xs font-medium text-slate-400">Spent Amount</div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-xs font-semibold mb-1.5">
+                      <span className="text-slate-500">Utilization</span>
+                      <span className={profitOrLoss < 0 ? 'text-rose-500' : 'text-slate-700'}>{utilizationPct}%</span>
                     </div>
-                    <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
-                      <div 
-                        className={`h-3 rounded-full transition-all ${profitOrLoss < 0 ? 'bg-red-500' : 'bg-emerald-500'}`} 
-                        style={{ width: `${Math.min(100, project.budget ? ((project.spentAmount || 0) / project.budget) * 100 : 0)}%` }}
-                      ></div>
+                    <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
+                      <div className={`h-2.5 rounded-full transition-all ${profitOrLoss < 0 ? 'bg-rose-500' : 'bg-emerald-500'}`}
+                        style={{ width: `${Math.min(100, utilizationPct)}%` }} />
                     </div>
                   </div>
                 </div>
 
-                {/* Progress KPI */}
-                <div className="col-span-1 bg-white rounded-2xl border border-slate-100 p-6 shadow-[0_1px_2px_rgba(0,0,0,0.03)] flex flex-col items-center justify-center relative">
-                   <Activity className="absolute top-6 left-6 text-slate-300 w-6 h-6" />
-                   <div className="text-5xl font-black text-blue-600 mb-2">{project.progress}%</div>
-                   <div className="text-xs font-semibold text-slate-400">Overall Progress</div>
-                </div>
-
-                {/* Timeline KPI */}
-                <div className="col-span-1 bg-white rounded-2xl border border-slate-100 p-6 shadow-[0_1px_2px_rgba(0,0,0,0.03)] flex flex-col justify-center">
-                   <h3 className="text-xs font-semibold text-slate-400 mb-4 flex items-center"><Calendar className="w-4 h-4 mr-2"/> Timeline</h3>
-                   <div className="space-y-4">
-                     <div>
-                       <div className="text-xs font-semibold text-slate-400 mb-1">START DATE</div>
-                       <div className="font-bold text-slate-700">{project.startDate ? format(new Date(project.startDate), 'MMMM d, yyyy') : 'Not set'}</div>
-                     </div>
-                     <div>
-                       <div className="text-xs font-semibold text-slate-400 mb-1">TARGET COMPLETION</div>
-                       <div className="font-bold text-slate-700">{project.endDate ? format(new Date(project.endDate), 'MMMM d, yyyy') : 'Not set'}</div>
-                     </div>
-                   </div>
+                {/* Overall Progress — donut */}
+                <div className="lg:col-span-3 bg-white rounded-2xl border border-slate-100 p-5 sm:p-6 shadow-[0_1px_2px_rgba(0,0,0,0.03)] flex flex-col items-center justify-center">
+                  <h3 className="text-sm font-bold text-slate-700 mb-3 self-start flex items-center"><Activity className="w-4 h-4 mr-2 text-emerald-600"/> Overall Progress</h3>
+                  <div className="relative h-32 w-32">
+                    <svg viewBox="0 0 100 100" className="h-full w-full -rotate-90">
+                      <circle cx="50" cy="50" r="42" fill="none" stroke="currentColor" strokeWidth="9" className="text-slate-100" />
+                      <circle cx="50" cy="50" r="42" fill="none" strokeWidth="9" strokeLinecap="round"
+                        className={(project.progress || 0) >= 100 ? 'text-emerald-500' : 'text-emerald-600'}
+                        stroke="currentColor"
+                        strokeDasharray={2 * Math.PI * 42}
+                        strokeDashoffset={2 * Math.PI * 42 * (1 - Math.min(100, project.progress || 0) / 100)} />
+                    </svg>
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <span className="text-2xl font-black text-slate-800">{project.progress || 0}%</span>
+                    </div>
+                  </div>
                 </div>
 
               </div>
 
-              {/* Project details carried over from the lead at conversion */}
-              {(project.propertyAddress || project.projectType || project.projectCategory ||
-                project.projectDescription || project.customerNotes || project.estimatedCost ||
-                project.projectManager || project.salesExecutive || project.designer || project.siteEngineer) && (
-                <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
-                  <h3 className="text-lg font-bold text-slate-800 flex items-center mb-4"><ClipboardCheck className="w-5 h-5 mr-2 text-blue-600"/> Project Details</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
-                    {project.propertyAddress && (
-                      <div className="md:col-span-2">
-                        <div className="text-xs font-semibold text-slate-400 mb-1 uppercase tracking-wider">Property Address</div>
-                        <div className="text-sm font-medium text-slate-700 whitespace-pre-line">{project.propertyAddress}</div>
+              {/* Upcoming Deadlines · Customer Snapshot · Quick Actions */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+
+                {/* Upcoming Deadlines */}
+                <div className="bg-white rounded-2xl border border-slate-100 p-5 sm:p-6 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+                  <h3 className="text-sm font-bold text-slate-700 mb-4 flex items-center"><CalendarClock className="w-4 h-4 mr-2 text-slate-400"/> Upcoming Deadlines</h3>
+                  <div className="space-y-3">
+                    {(stats?.tasks?.delayed ?? 0) > 0 && (
+                      <div className="bg-rose-50 p-3 rounded-lg border border-rose-100">
+                        <div className="text-[11px] font-bold text-rose-600 uppercase tracking-wide mb-1">Overdue Tasks</div>
+                        <div className="text-sm font-medium text-rose-800">{stats.tasks.delayed} task{stats.tasks.delayed === 1 ? '' : 's'} require immediate attention</div>
                       </div>
                     )}
-                    {(project.projectType || project.projectCategory) && (
-                      <div>
-                        <div className="text-xs font-semibold text-slate-400 mb-1 uppercase tracking-wider">Property Type</div>
-                        <div className="text-sm font-medium text-slate-700">{[project.projectType, project.projectCategory].filter(Boolean).join(' · ')}</div>
-                      </div>
-                    )}
-                    {project.estimatedCost && (
-                      <div>
-                        <div className="text-xs font-semibold text-slate-400 mb-1 uppercase tracking-wider">Estimated Value</div>
-                        <div className="text-sm font-medium text-slate-700">₹{Number(project.estimatedCost).toLocaleString('en-IN')}</div>
-                      </div>
-                    )}
-                    {project.projectDescription && (
-                      <div className="md:col-span-2">
-                        <div className="text-xs font-semibold text-slate-400 mb-1 uppercase tracking-wider">Description</div>
-                        <div className="text-sm font-medium text-slate-700 whitespace-pre-line">{project.projectDescription}</div>
-                      </div>
-                    )}
-                    {project.customerNotes && (
-                      <div className="md:col-span-2">
-                        <div className="text-xs font-semibold text-slate-400 mb-1 uppercase tracking-wider">Customer Requirements</div>
-                        <div className="text-sm font-medium text-slate-700 whitespace-pre-line">{project.customerNotes}</div>
-                      </div>
-                    )}
-                    {(project.projectManager || project.salesExecutive || project.designer || project.siteEngineer) && (
-                      <div className="md:col-span-2">
-                        <div className="text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Team</div>
-                        <div className="flex flex-wrap gap-2">
-                          {([['Project Manager', project.projectManager], ['Sales', project.salesExecutive], ['Designer', project.designer], ['Site Engineer', project.siteEngineer]] as [string, any][])
-                            .filter(([, u]) => u)
-                            .map(([role, u]) => (
-                              <span key={role} className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
-                                <User className="w-3 h-3"/> {role}: {u.name}
-                              </span>
-                            ))}
-                        </div>
-                      </div>
-                    )}
+                    <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
+                      <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">Target Completion</div>
+                      <div className="text-sm font-medium text-slate-800">{shortDate(project.endDate)}</div>
+                    </div>
                   </div>
                 </div>
-              )}
+
+                {/* Customer Snapshot */}
+                <div className="bg-white rounded-2xl border border-slate-100 p-5 sm:p-6 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+                  <h3 className="text-sm font-bold text-slate-700 mb-4 flex items-center"><User className="w-4 h-4 mr-2 text-slate-400"/> Customer Snapshot</h3>
+                  <div className="font-bold text-slate-700 text-sm">{project.customer?.name || '—'}</div>
+                  <div className="text-xs text-slate-500 flex items-center gap-1 mt-1 mb-4"><MapPin className="w-3.5 h-3.5 shrink-0"/> {project.customer?.address || 'No address on file'}</div>
+                  <div className="flex gap-2">
+                    <Button asChild size="sm" variant="outline" className="flex-1 bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100" disabled={!project.customer?.phone}>
+                      <a href={project.customer?.phone ? `tel:${project.customer.phone}` : undefined}><Phone className="w-3.5 h-3.5 mr-1"/> Call</a>
+                    </Button>
+                    <Button asChild size="sm" variant="outline" className="flex-1 bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100">
+                      <a href={project.customer?.phone ? `https://wa.me/${String(project.customer.phone).replace(/\D/g, '')}` : undefined} target="_blank" rel="noreferrer"><MessageCircle className="w-3.5 h-3.5 mr-1"/> WhatsApp</a>
+                    </Button>
+                  </div>
+                  {project.customer?.id && (
+                    <Link to={`/customers/${project.customer.id}`} className="block text-center text-xs font-semibold text-emerald-600 hover:text-emerald-700 mt-3">View Customer</Link>
+                  )}
+                </div>
+
+                {/* Quick Actions */}
+                <div className="bg-white rounded-2xl border border-slate-100 p-5 sm:p-6 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+                  <h3 className="text-sm font-bold text-slate-700 mb-4 flex items-center"><Sparkles className="w-4 h-4 mr-2 text-slate-400"/> Quick Actions</h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {([
+                      { label: 'Add Task', icon: CheckSquare, view: 'create_task', color: 'text-emerald-500' },
+                      { label: 'Assign Resource', icon: Users, view: 'assign_employee', color: 'text-emerald-500' },
+                      { label: 'Report Issue', icon: AlertTriangle, view: 'report_issue', color: 'text-rose-500' },
+                      { label: 'Purchase Request', icon: ShoppingCart, view: 'purchase_request', color: 'text-violet-500' },
+                    ] as const).map((a) => (
+                      <button key={a.label} type="button"
+                        onClick={() => { setQuickActionView(a.view); setQuickActionOpen(true); }}
+                        className="flex items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 hover:bg-slate-100 px-3 py-2.5 text-xs font-semibold text-slate-700 text-left transition-colors">
+                        <a.icon className={`w-4 h-4 shrink-0 ${a.color}`} /> <span className="truncate">{a.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Recent Activity */}
+              <div className="bg-white rounded-2xl border border-slate-100 p-5 sm:p-6 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+                <h3 className="text-sm font-bold text-slate-700 mb-4 flex items-center"><History className="w-4 h-4 mr-2 text-slate-400"/> Recent Activity</h3>
+                {activityFeed.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400 border-b border-slate-100">
+                          <th className="py-2 pr-4 font-semibold">Date</th>
+                          <th className="py-2 pr-4 font-semibold">Activity</th>
+                          <th className="py-2 pr-4 font-semibold">By</th>
+                          <th className="py-2 font-semibold">Details</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50">
+                        {activityFeed.map((a, i) => (
+                          <tr key={i} className="text-slate-600">
+                            <td className="py-2.5 pr-4 whitespace-nowrap text-slate-500">{a.date ? format(new Date(a.date), 'dd MMM yyyy') : '—'}</td>
+                            <td className="py-2.5 pr-4 whitespace-nowrap font-medium text-slate-700">{a.activity}</td>
+                            <td className="py-2.5 pr-4 whitespace-nowrap">{a.by || '—'}</td>
+                            <td className="py-2.5 max-w-xs truncate" title={a.details}>{a.details}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="py-8 text-center text-sm text-slate-400">No recent activity yet.</div>
+                )}
+              </div>
+
+              {/* Project Details — inline editable (address / description / customer requirements) */}
+              <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+                <div className="mb-4 flex items-center justify-between">
+                  <h3 className="text-lg font-bold text-slate-800 flex items-center"><ClipboardCheck className="w-5 h-5 mr-2 text-emerald-600"/> Project Details</h3>
+                  {!editingDetails ? (
+                    <button type="button" onClick={() => startEdit('details')} className="text-slate-400 hover:text-emerald-600" title="Edit"><Pencil className="w-4 h-4" /></button>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <button type="button" onClick={saveDetails} disabled={savingProject} className="text-emerald-600 hover:text-emerald-700 disabled:opacity-50" title="Save"><Check className="w-4 h-4" /></button>
+                      <button type="button" onClick={() => setEditingDetails(false)} className="text-slate-400 hover:text-rose-500" title="Cancel"><X className="w-4 h-4" /></button>
+                    </div>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+                  <div className="md:col-span-2">
+                    <div className="text-xs font-semibold text-slate-400 mb-1 uppercase tracking-wider">Property Address</div>
+                    {editingDetails
+                      ? <textarea className="w-full min-h-[64px] rounded-md border border-input bg-background px-3 py-2 text-sm" value={pform.propertyAddress} onChange={e => setPform({ ...pform, propertyAddress: e.target.value })} placeholder="Site / property address" />
+                      : <div className="text-sm font-medium text-slate-700 whitespace-pre-line">{project.propertyAddress || '—'}</div>}
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold text-slate-400 mb-1 uppercase tracking-wider">Property Type</div>
+                    <div className="text-sm font-medium text-slate-700">{[project.projectType, project.projectCategory].filter(Boolean).join(' · ') || '—'}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold text-slate-400 mb-1 uppercase tracking-wider">Estimated Value</div>
+                    <div className="text-sm font-medium text-slate-700">{project.estimatedCost ? inr(project.estimatedCost) : '—'}</div>
+                  </div>
+                  <div className="md:col-span-2">
+                    <div className="text-xs font-semibold text-slate-400 mb-1 uppercase tracking-wider">Description</div>
+                    {editingDetails
+                      ? <textarea className="w-full min-h-[80px] rounded-md border border-input bg-background px-3 py-2 text-sm" value={pform.projectDescription} onChange={e => setPform({ ...pform, projectDescription: e.target.value })} placeholder="Scope / description of the project" />
+                      : <div className="text-sm font-medium text-slate-700 whitespace-pre-line">{project.projectDescription || '—'}</div>}
+                  </div>
+                  <div className="md:col-span-2">
+                    <div className="text-xs font-semibold text-slate-400 mb-1 uppercase tracking-wider">Customer Requirements</div>
+                    {editingDetails
+                      ? <textarea className="w-full min-h-[80px] rounded-md border border-input bg-background px-3 py-2 text-sm" value={pform.customerNotes} onChange={e => setPform({ ...pform, customerNotes: e.target.value })} placeholder="What the customer asked for" />
+                      : <div className="text-sm font-medium text-slate-700 whitespace-pre-line">{project.customerNotes || '—'}</div>}
+                  </div>
+                  {(project.projectManager || project.salesExecutive || project.designer || project.siteEngineer) && (
+                    <div className="md:col-span-2">
+                      <div className="text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Team</div>
+                      <div className="flex flex-wrap gap-2">
+                        {([['Project Manager', project.projectManager], ['Sales', project.salesExecutive], ['Designer', project.designer], ['Site Engineer', project.siteEngineer]] as [string, any][])
+                          .filter(([, u]) => u)
+                          .map(([role, u]) => (
+                            <span key={role} className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
+                              <User className="w-3 h-3"/> {role}: {u.name}
+                            </span>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
 
               {/* Progress rollup */}
               {progress && (
                 <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
-                  <h3 className="text-lg font-bold text-slate-800 flex items-center mb-4"><Activity className="w-5 h-5 mr-2 text-blue-600"/> Progress Rollup</h3>
+                  <h3 className="text-lg font-bold text-slate-800 flex items-center mb-4"><Activity className="w-5 h-5 mr-2 text-emerald-600"/> Progress Rollup</h3>
                   <div className="grid grid-cols-3 md:grid-cols-6 gap-4">
                     {[
                       { label: 'Overall', value: progress.overallPercent },
@@ -850,7 +1063,7 @@ export default function ProjectCommandCenter() {
                           <span>{p.label}</span><span>{p.value}%</span>
                         </div>
                         <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
-                          <div className="h-2.5 rounded-full bg-blue-600 transition-all" style={{ width: `${Math.min(100, p.value)}%` }}></div>
+                          <div className="h-2.5 rounded-full bg-emerald-600 transition-all" style={{ width: `${Math.min(100, p.value)}%` }}></div>
                         </div>
                       </div>
                     ))}
@@ -861,7 +1074,7 @@ export default function ProjectCommandCenter() {
               {/* Gantt / Stages */}
               <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
                 <div className="flex items-center justify-between border-b pb-4">
-                  <h3 className="text-lg font-bold text-slate-800 flex items-center"><TrendingUp className="w-5 h-5 mr-2 text-blue-600"/> Project Stages & Gantt</h3>
+                  <h3 className="text-lg font-bold text-slate-800 flex items-center"><TrendingUp className="w-5 h-5 mr-2 text-emerald-600"/> Project Stages & Gantt</h3>
                   <Dialog>
                     <DialogTrigger asChild>
                       <Button size="sm" variant="outline"><Plus className="w-4 h-4 mr-2"/> Add Stage</Button>
@@ -897,7 +1110,7 @@ export default function ProjectCommandCenter() {
                 <div className="space-y-4">
                   <div className="bg-white border border-slate-100 rounded-2xl shadow-[0_1px_2px_rgba(0,0,0,0.03)] p-5">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-semibold text-slate-600 flex items-center"><TrendingUp className="w-4 h-4 mr-2 text-blue-600"/> Overall Project Progress</span>
+                      <span className="text-sm font-semibold text-slate-600 flex items-center"><TrendingUp className="w-4 h-4 mr-2 text-emerald-600"/> Overall Project Progress</span>
                       <span className="text-2xl font-bold text-slate-800">{progressDashboard.overallProgress}%</span>
                     </div>
                     <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
@@ -907,7 +1120,7 @@ export default function ProjectCommandCenter() {
                   <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
                     {([
                       ['Completed Tasks', progressDashboard.completedTasks, 'text-emerald-600'],
-                      ['In Progress', progressDashboard.inProgressTasks, 'text-blue-600'],
+                      ['In Progress', progressDashboard.inProgressTasks, 'text-emerald-600'],
                       ['Pending Tasks', progressDashboard.pendingTasks, 'text-slate-600'],
                       ['Delayed Tasks', progressDashboard.delayedTasks, 'text-red-600'],
                       ['Inspection Pending', progressDashboard.inspectionPending, 'text-amber-600'],
@@ -952,12 +1165,12 @@ export default function ProjectCommandCenter() {
                   <div>
                     <div className="text-slate-500 text-xs mb-1">Approved (Master) BOQ</div>
                     {masterBoq ? (
-                      <Link to={`/boq/${masterBoq.id}`} className="font-semibold text-blue-600 hover:underline">{masterBoq.boqNumber}</Link>
+                      <Link to={`/boq/${masterBoq.id}`} className="font-semibold text-emerald-600 hover:underline">{masterBoq.boqNumber}</Link>
                     ) : <span className="text-slate-400">—</span>}
                   </div>
                   <div>
                     <div className="text-slate-500 text-xs mb-1">Current BOQ Revision</div>
-                    <Link to={`/boq/${data.boq.id}`} className="font-semibold text-blue-600 hover:underline">
+                    <Link to={`/boq/${data.boq.id}`} className="font-semibold text-emerald-600 hover:underline">
                       {data.boq.boqNumber} · Rev {data.boq.revisionNumber ?? 1}
                     </Link>
                     <span className="ml-2 text-xs px-2 py-0.5 bg-slate-100 rounded-full uppercase">{data.boq.status}</span>
@@ -972,11 +1185,25 @@ export default function ProjectCommandCenter() {
               )}
 
               <div className="flex items-center justify-between">
-                <h2 className="text-2xl font-bold text-slate-800 flex items-center"><Layers className="w-5 h-5 mr-2 text-blue-600"/> Phases & Rooms</h2>
+                <h2 className="text-2xl font-bold text-slate-800 flex items-center"><Layers className="w-5 h-5 mr-2 text-emerald-600"/> Phases & Rooms</h2>
                 <div className="flex gap-3">
-                  <Button variant="outline" onClick={handleGenerateFromBoq} disabled={generatingFromBoq}>
-                    <Sparkles className="w-4 h-4 mr-2"/> {generatingFromBoq ? 'Generating...' : 'Generate from BOQ'}
-                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline"><Sparkles className="w-4 h-4 mr-2"/> Change plan <ChevronDown className="w-4 h-4 ml-2"/></Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-64">
+                      <DropdownMenuItem onSelect={openQuotationPicker}>
+                        <ClipboardCheck className="w-4 h-4 mr-2 text-emerald-600"/> Build from approved quotation
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem disabled={!project.lead?.id} onSelect={() => project.lead?.id && navigate(`/boq/new?leadId=${project.lead.id}`)}>
+                        <Plus className="w-4 h-4 mr-2 text-emerald-600"/> Create new BOQ
+                      </DropdownMenuItem>
+                      <DropdownMenuItem disabled={!project.lead?.id} onSelect={() => project.lead?.id && navigate(`/quotations/new?leadId=${project.lead.id}`)}>
+                        <Plus className="w-4 h-4 mr-2 text-violet-600"/> Create new Quotation
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                   <Dialog>
                     <DialogTrigger asChild>
                       <Button><Plus className="w-4 h-4 mr-2"/> Add Phase</Button>
@@ -994,6 +1221,54 @@ export default function ProjectCommandCenter() {
                 </div>
               </div>
 
+              {/* Build-from-approved-quotation picker — replaces the old blind "Generate from BOQ". */}
+              <Dialog open={quotationPicker.open} onOpenChange={(o) => setQuotationPicker(s => ({ ...s, open: o }))}>
+                <DialogContent className="sm:max-w-lg">
+                  <DialogHeader><DialogTitle>Build from approved quotation</DialogTitle></DialogHeader>
+                  <div className="pt-2">
+                    <p className="text-sm text-slate-500 mb-4">
+                      Pick an approved quotation for this lead. The project's scope is set to that quotation's BOQ,
+                      then phases, rooms, tasks and material requirements are (re)built from it.
+                    </p>
+                    {quotationPicker.loading ? (
+                      <div className="py-10 text-center text-sm text-slate-400">Loading approved quotations…</div>
+                    ) : quotationPicker.list.length === 0 ? (
+                      <div className="py-10 text-center text-sm text-slate-400">
+                        No approved quotations found for this project's lead.
+                      </div>
+                    ) : (
+                      <div className="space-y-2 max-h-[50vh] overflow-y-auto">
+                        {quotationPicker.list.map((q) => {
+                          const selected = quotationPicker.selectedId === q.id;
+                          return (
+                            <button key={q.id} type="button"
+                              onClick={() => setQuotationPicker(s => ({ ...s, selectedId: q.id }))}
+                              className={`w-full text-left rounded-xl border p-3 transition ${selected ? 'border-emerald-500 ring-1 ring-emerald-200 bg-emerald-50/50' : 'border-slate-200 hover:bg-slate-50'}`}>
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className="font-semibold text-slate-800 truncate">{q.quotationNumber}</span>
+                                  {q.revisionNumber > 0 && <span className="text-[11px] text-slate-400">Rev {q.revisionNumber}</span>}
+                                  {q.isCurrent && <span className="text-[10px] font-bold px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded uppercase shrink-0">Current</span>}
+                                </div>
+                                <span className="font-semibold text-slate-700 shrink-0">{inr(q.grandTotal)}</span>
+                              </div>
+                              <div className="text-xs text-slate-500 mt-1">
+                                BOQ {q.boq.boqNumber} · Rev {q.boq.revisionNumber}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                    <Button className="w-full mt-4"
+                      disabled={quotationPicker.generating || !quotationPicker.selectedId}
+                      onClick={handleGenerateFromQuotation}>
+                      {quotationPicker.generating ? 'Building…' : 'Use this quotation'}
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+
               <div className="space-y-3">
                 {phases.map(phase => (
                   <div key={phase.id} className="bg-white border border-slate-100 rounded-2xl shadow-[0_1px_2px_rgba(0,0,0,0.03)] overflow-hidden">
@@ -1004,7 +1279,7 @@ export default function ProjectCommandCenter() {
                         <span className="text-xs font-bold px-2 py-0.5 bg-slate-100 text-slate-600 rounded uppercase">{phase.status}</span>
                       </div>
                       <div className="flex items-center gap-6 text-sm text-slate-500">
-                        <span>Budget: ${(phase.budget || 0).toLocaleString()}</span>
+                        <span>Budget: {inr(phase.budget)}</span>
                         <span>{phase.completionPercentage || 0}% complete</span>
                       </div>
                     </button>
@@ -1077,7 +1352,7 @@ export default function ProjectCommandCenter() {
             {/* MATERIALS TAB */}
             <TabsContent value="materials" className="space-y-6 mt-0 h-full outline-none">
               <div className="flex items-center justify-between flex-wrap gap-3">
-                <h2 className="text-2xl font-bold text-slate-800 flex items-center"><Package className="w-5 h-5 mr-2 text-blue-600"/> Materials & Stock</h2>
+                <h2 className="text-2xl font-bold text-slate-800 flex items-center"><Package className="w-5 h-5 mr-2 text-emerald-600"/> Materials & Stock</h2>
                 <div className="flex items-center gap-2 flex-wrap">
                   <Button variant="outline" onClick={() => setNewProduct(s => ({ ...s, open: true }))}><Sparkles className="w-4 h-4 mr-2"/> New Product</Button>
                   <Button variant="outline" className="text-emerald-700 border-emerald-200 hover:bg-emerald-50" onClick={() => openStockMove('IN')}><TrendingUp className="w-4 h-4 mr-2"/> Stock In</Button>
@@ -1091,10 +1366,12 @@ export default function ProjectCommandCenter() {
                       <div className="space-y-4 pt-4">
                         <div className="space-y-2">
                           <Label>Product</Label>
-                          <select className="w-full flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm" value={newMaterial.productId} onChange={e => setNewMaterial({ ...newMaterial, productId: e.target.value })}>
-                            <option value="">Select product...</option>
-                            {products.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                          </select>
+                          <SearchableSelect
+                            value={newMaterial.productId}
+                            onChange={(v) => setNewMaterial({ ...newMaterial, productId: v })}
+                            options={products.map((p: any) => ({ value: String(p.id), label: p.name, hint: p.materialCode }))}
+                            placeholder="Select product…"
+                          />
                         </div>
                         <div className="space-y-2"><Label>Required Quantity</Label><Input type="number" value={newMaterial.requiredQty} onChange={e => setNewMaterial({ ...newMaterial, requiredQty: Number(e.target.value) })} /></div>
                         <div className="space-y-2"><Label>Unit</Label><Input value={newMaterial.unit} onChange={e => setNewMaterial({ ...newMaterial, unit: e.target.value })} placeholder="e.g. pcs, kg, sqft" /></div>
@@ -1106,7 +1383,8 @@ export default function ProjectCommandCenter() {
               </div>
 
               <div className="bg-white border border-slate-100 rounded-2xl shadow-[0_1px_2px_rgba(0,0,0,0.03)] overflow-hidden">
-                <table className="w-full text-sm">
+                <div className="overflow-x-auto">
+                <table className="w-full text-sm min-w-[720px]">
                   <thead className="bg-slate-50 text-xs font-bold text-slate-500 uppercase">
                     <tr>
                       <th className="text-left p-3">Product</th>
@@ -1124,24 +1402,15 @@ export default function ProjectCommandCenter() {
                       <tr key={m.id} className="border-t">
                         <td className="p-3 font-medium">{m.product?.name}</td>
                         <td className="p-3 text-right">{m.requiredQty}</td>
-                        <td className="p-3 text-right">
-                          <input type="number" className="w-20 text-right border rounded px-1" defaultValue={m.reservedQty}
-                            onBlur={e => handleUpdateMaterialQty(m.id!, 'reservedQty', Number(e.target.value))} />
-                        </td>
-                        <td className="p-3 text-right">
-                          <input type="number" className="w-20 text-right border rounded px-1" defaultValue={m.issuedQty}
-                            onBlur={e => handleUpdateMaterialQty(m.id!, 'issuedQty', Number(e.target.value))} />
-                        </td>
-                        <td className="p-3 text-right">
-                          <input type="number" className="w-20 text-right border rounded px-1" defaultValue={m.returnedQty}
-                            onBlur={e => handleUpdateMaterialQty(m.id!, 'returnedQty', Number(e.target.value))} />
-                        </td>
-                        <td className="p-3 text-right">
-                          <input type="number" className="w-20 text-right border rounded px-1" defaultValue={m.consumedQty}
-                            onBlur={e => handleUpdateMaterialQty(m.id!, 'consumedQty', Number(e.target.value))} />
-                        </td>
+                        <td className="p-3 text-right tabular-nums">{m.reservedQty ?? 0}</td>
+                        <td className="p-3 text-right tabular-nums">{m.issuedQty ?? 0}</td>
+                        <td className="p-3 text-right tabular-nums">{m.returnedQty ?? 0}</td>
+                        <td className="p-3 text-right tabular-nums">{m.consumedQty ?? 0}</td>
                         <td className={`p-3 text-right font-bold ${(m.remainingQty || 0) > 0 ? 'text-red-500' : 'text-emerald-600'}`}>{m.remainingQty}</td>
                         <td className="p-3 text-center space-x-1.5 whitespace-nowrap">
+                          <Button size="sm" variant="outline" onClick={() => openMatEdit(m)} title="Edit reserved / issued / returned / consumed">
+                            <Pencil className="w-3.5 h-3.5 mr-1"/> Edit
+                          </Button>
                           <Button size="sm" variant="outline" className="text-emerald-700 border-emerald-200 hover:bg-emerald-50" onClick={() => openStockMove('IN', m.product?.id)} title="Record stock received">
                             <TrendingUp className="w-3.5 h-3.5 mr-1"/> In
                           </Button>
@@ -1166,13 +1435,14 @@ export default function ProjectCommandCenter() {
                     )}
                   </tbody>
                 </table>
+                </div>
               </div>
 
               {/* PURCHASE SUMMARY + MOVEMENT HISTORY */}
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
                 <div className="bg-white border border-slate-100 rounded-2xl shadow-[0_1px_2px_rgba(0,0,0,0.03)] overflow-hidden">
                   <div className="p-4 border-b bg-slate-50 flex items-center justify-between">
-                    <h3 className="font-bold text-slate-800 flex items-center"><ShoppingCart className="w-4 h-4 mr-2 text-blue-600"/> Purchase Summary</h3>
+                    <h3 className="font-bold text-slate-800 flex items-center"><ShoppingCart className="w-4 h-4 mr-2 text-emerald-600"/> Purchase Summary</h3>
                     <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">By product</span>
                   </div>
                   <table className="w-full text-sm">
@@ -1204,7 +1474,7 @@ export default function ProjectCommandCenter() {
 
                 <div className="bg-white border border-slate-100 rounded-2xl shadow-[0_1px_2px_rgba(0,0,0,0.03)] overflow-hidden">
                   <div className="p-4 border-b bg-slate-50 flex items-center justify-between">
-                    <h3 className="font-bold text-slate-800 flex items-center"><History className="w-4 h-4 mr-2 text-blue-600"/> Stock Movement</h3>
+                    <h3 className="font-bold text-slate-800 flex items-center"><History className="w-4 h-4 mr-2 text-emerald-600"/> Stock Movement</h3>
                     <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Recent</span>
                   </div>
                   <div className="max-h-[360px] overflow-y-auto">
@@ -1245,10 +1515,12 @@ export default function ProjectCommandCenter() {
                   <div className="space-y-4 pt-4">
                     <div className="space-y-2">
                       <Label>Product</Label>
-                      <select className="w-full flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm" value={stockMove.productId} onChange={e => setStockMove(s => ({ ...s, productId: e.target.value }))}>
-                        <option value="">Select product...</option>
-                        {products.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                      </select>
+                      <SearchableSelect
+                        value={stockMove.productId}
+                        onChange={(v) => setStockMove(s => ({ ...s, productId: v }))}
+                        options={products.map((p: any) => ({ value: String(p.id), label: p.name, hint: p.materialCode }))}
+                        placeholder="Select product…"
+                      />
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-2">
@@ -1294,315 +1566,49 @@ export default function ProjectCommandCenter() {
                   </div>
                 </DialogContent>
               </Dialog>
+
+              {/* MATERIAL QUANTITY EDITOR */}
+              <Dialog open={matEdit.open} onOpenChange={(o) => setMatEdit(s => ({ ...s, open: o }))}>
+                <DialogContent>
+                  <DialogHeader><DialogTitle>Edit — {matEdit.productName}</DialogTitle></DialogHeader>
+                  <div className="space-y-4 pt-2">
+                    <p className="text-xs text-slate-500">Required <span className="font-semibold text-slate-700">{matEdit.requiredQty}</span>. Set the quantities booked against this requirement.</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5"><Label>Reserved</Label><Input type="number" min={0} value={matEdit.reservedQty} onChange={e => setMatEdit(s => ({ ...s, reservedQty: Number(e.target.value) }))} /></div>
+                      <div className="space-y-1.5"><Label>Issued</Label><Input type="number" min={0} value={matEdit.issuedQty} onChange={e => setMatEdit(s => ({ ...s, issuedQty: Number(e.target.value) }))} /></div>
+                      <div className="space-y-1.5"><Label>Returned</Label><Input type="number" min={0} value={matEdit.returnedQty} onChange={e => setMatEdit(s => ({ ...s, returnedQty: Number(e.target.value) }))} /></div>
+                      <div className="space-y-1.5"><Label>Consumed</Label><Input type="number" min={0} value={matEdit.consumedQty} onChange={e => setMatEdit(s => ({ ...s, consumedQty: Number(e.target.value) }))} /></div>
+                    </div>
+                    <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
+                      Net on site (issued − returned − consumed): <span className="font-semibold text-slate-700">{matEdit.issuedQty - matEdit.returnedQty - matEdit.consumedQty}</span>
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <Button variant="outline" onClick={() => setMatEdit(s => ({ ...s, open: false }))} disabled={savingMat}>Cancel</Button>
+                      <Button onClick={handleSaveMatEdit} disabled={savingMat}>{savingMat ? 'Saving…' : 'Save'}</Button>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
             </TabsContent>
 
             {/* APPROVALS TAB */}
             <TabsContent value="approvals" className="space-y-4 mt-0 h-full outline-none">
-              <h2 className="text-2xl font-bold text-slate-800 flex items-center"><ClipboardCheck className="w-5 h-5 mr-2 text-blue-600"/> Customer Approvals</h2>
-              <div className="grid grid-cols-2 gap-4">
-                {(data.approvals || []).map((a: any) => (
-                  <div key={a.id} className={`bg-white p-5 rounded-2xl border border-slate-100 border-l-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)] ${a.status === 'APPROVED' ? 'border-l-green-500' : a.status === 'REJECTED' ? 'border-l-red-500' : 'border-l-orange-500'}`}>
-                    <div className="flex justify-between items-start mb-2">
-                      <h4 className="font-bold text-slate-800">{a.approvalType}</h4>
-                      <span className={`text-xs font-bold px-2 py-0.5 rounded uppercase ${a.status === 'APPROVED' ? 'bg-green-100 text-green-700' : a.status === 'REJECTED' ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'}`}>
-                        {a.status}
-                      </span>
-                    </div>
-                    <p className="text-sm text-slate-600 mb-3">{a.remarks || '-'}</p>
-                    {a.status === 'PENDING' && (
-                      <div className="flex gap-2">
-                        <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={() => handleDecideApproval(a.id, true)}>Approve</Button>
-                        <Button size="sm" variant="outline" onClick={() => handleDecideApproval(a.id, false)}>Reject</Button>
-                      </div>
-                    )}
-                  </div>
-                ))}
-                {(!data.approvals || data.approvals.length === 0) && <div className="col-span-2 text-slate-500 text-center py-12">No customer approvals recorded yet.</div>}
-              </div>
+              <ApprovalsTab projectId={projectId} approvals={data.approvals} onChanged={fetchCore} onStatsChanged={fetchStats} />
             </TabsContent>
 
             {/* CHANGE REQUESTS TAB */}
             <TabsContent value="changeRequests" className="space-y-6 mt-0 h-full outline-none">
-              <div className="flex items-center justify-between">
-                <h2 className="text-2xl font-bold text-slate-800 flex items-center"><FileEdit className="w-5 h-5 mr-2 text-blue-600"/> Project Change Requests</h2>
-                <Dialog>
-                  <DialogTrigger asChild>
-                    <Button><Plus className="w-4 h-4 mr-2"/> New Change Request</Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader><DialogTitle>New Change Request</DialogTitle></DialogHeader>
-                    <div className="space-y-4 pt-4 max-h-[70vh] overflow-y-auto">
-                      <div className="space-y-2">
-                        <Label>Change Type</Label>
-                        <select className="w-full flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
-                          value={newChangeRequest.changeType}
-                          onChange={e => setNewChangeRequest({ ...newChangeRequest, changeType: e.target.value as ChangeRequestType })}>
-                          {Object.entries(CHANGE_REQUEST_TYPE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                        </select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Reason</Label>
-                        <Input value={newChangeRequest.reason} onChange={e => setNewChangeRequest({ ...newChangeRequest, reason: e.target.value })} placeholder="e.g. Customer wants to reduce scope to Ground Floor only" />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Description</Label>
-                        <textarea className="w-full min-h-[80px] p-2 rounded-md border text-sm" value={newChangeRequest.description}
-                          onChange={e => setNewChangeRequest({ ...newChangeRequest, description: e.target.value })} />
-                      </div>
-                      {phases.length > 0 && (
-                        <div className="space-y-2">
-                          <Label>Phase Actions (activate/deactivate on approval)</Label>
-                          <div className="space-y-1.5 border rounded-md p-2">
-                            {phases.map(phase => (
-                              <div key={phase.id} className="flex items-center justify-between text-sm">
-                                <span>{phase.name}</span>
-                                <select className="border rounded px-2 py-1 text-xs"
-                                  value={changeRequestPhaseActions[phase.id!] || ''}
-                                  onChange={e => setChangeRequestPhaseActions({ ...changeRequestPhaseActions, [phase.id!]: e.target.value as 'ACTIVATE' | 'DEACTIVATE' })}>
-                                  <option value="">No change</option>
-                                  <option value="ACTIVATE">Activate</option>
-                                  <option value="DEACTIVATE">Deactivate</option>
-                                </select>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      <Button className="w-full" onClick={handleCreateChangeRequest}>Submit Change Request</Button>
-                    </div>
-                  </DialogContent>
-                </Dialog>
-              </div>
-
-              <div className="space-y-3">
-                {changeRequests.map(cr => (
-                  <div key={cr.id} className="bg-white p-5 rounded-2xl border border-slate-100 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
-                    <div className="flex justify-between items-start mb-2">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h4 className="font-bold text-slate-800">{cr.requestNumber}</h4>
-                          <span className={`text-xs font-bold px-2 py-0.5 rounded uppercase ${CHANGE_REQUEST_STATUS_STYLES[cr.status || 'PENDING']}`}>{cr.status}</span>
-                        </div>
-                        <div className="text-sm text-slate-500">{CHANGE_REQUEST_TYPE_LABELS[cr.changeType]} · requested by {cr.requestedBy?.name || '—'}</div>
-                      </div>
-                    </div>
-                    <p className="text-sm text-slate-700 mb-1">{cr.reason}</p>
-                    {cr.description && <p className="text-sm text-slate-500 mb-3">{cr.description}</p>}
-                    <div className="flex gap-2">
-                      {cr.status === 'PENDING' && (
-                        <>
-                          <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={() => handleApproveChangeRequest(cr.id!)}>Approve & Apply</Button>
-                          <Button size="sm" variant="outline" onClick={() => handleRejectChangeRequest(cr.id!)}>Reject</Button>
-                        </>
-                      )}
-                      {cr.status === 'APPROVED' && (
-                        <Button size="sm" variant="outline" onClick={() => handleCompleteChangeRequest(cr.id!)}>Mark Completed</Button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-                {changeRequests.length === 0 && (
-                  <div className="py-16 text-center border-2 border-dashed rounded-2xl bg-slate-50/50">
-                    <FileEdit className="h-10 w-10 text-slate-300 mx-auto mb-3" />
-                    <p className="text-slate-500 font-medium">No change requests yet.</p>
-                  </div>
-                )}
-              </div>
+              <ChangeRequestsTab projectId={projectId} phases={phases} changeRequests={changeRequests} onChangeRequestsChanged={() => changeRequestApi.getByProject(projectId).then(setChangeRequests)} onFullRefresh={fetchProjectData} />
             </TabsContent>
 
             {/* EXECUTION LOGS TAB */}
             <TabsContent value="execution" className="space-y-6 mt-0 h-full outline-none">
-              <div className="flex items-center justify-between">
-                <h2 className="text-2xl font-bold text-slate-800">Daily Execution Logs</h2>
-                <Dialog>
-                  <DialogTrigger asChild>
-                    <Button><PenTool className="w-4 h-4 mr-2"/> New Daily Log</Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader><DialogTitle>New Daily Log</DialogTitle></DialogHeader>
-                    <div className="space-y-4 pt-4 max-h-[70vh] overflow-y-auto">
-                      <div className="space-y-2"><Label>Date</Label><Input type="date" value={newDailyLog.logDate} onChange={e => setNewDailyLog({...newDailyLog, logDate: e.target.value})} /></div>
-                      <div className="space-y-2"><Label>Work Completed</Label><textarea className="w-full min-h-[80px] p-2 rounded-md border text-sm" value={newDailyLog.workCompleted} onChange={e => setNewDailyLog({...newDailyLog, workCompleted: e.target.value})} /></div>
-                      <div className="space-y-2"><Label>Work Pending</Label><textarea className="w-full min-h-[80px] p-2 rounded-md border text-sm" value={newDailyLog.workPending} onChange={e => setNewDailyLog({...newDailyLog, workPending: e.target.value})} /></div>
-                      <div className="space-y-2"><Label>Issues / Blockers</Label><textarea className="w-full min-h-[60px] p-2 rounded-md border text-sm" value={newDailyLog.issues} onChange={e => setNewDailyLog({...newDailyLog, issues: e.target.value})} /></div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2"><Label>Manpower</Label><Input type="number" value={newDailyLog.manpower} onChange={e => setNewDailyLog({...newDailyLog, manpower: Number(e.target.value)})} /></div>
-                        <div className="space-y-2"><Label>Weather</Label><Input value={newDailyLog.weather} onChange={e => setNewDailyLog({...newDailyLog, weather: e.target.value})} /></div>
-                      </div>
-                      <Button className="w-full" onClick={handleAddDailyLog}>Submit Log</Button>
-                    </div>
-                  </DialogContent>
-                </Dialog>
-              </div>
-
-              <div className="space-y-4">
-                {dailyLogs.map((log: any) => (
-                  <div key={log.id} className="bg-white p-5 rounded-2xl border border-slate-100 shadow-[0_1px_2px_rgba(0,0,0,0.03)] flex flex-col gap-3">
-                    <div className="flex items-center justify-between border-b pb-3">
-                      <div className="flex items-center gap-2 font-semibold text-slate-700">
-                        <User className="w-4 h-4 text-slate-400" /> {log.reportedBy?.username || 'User'}
-                      </div>
-                      <div className="text-sm font-bold bg-slate-100 px-3 py-1 rounded-full text-slate-700">
-                        {format(new Date(log.logDate), 'MMMM d, yyyy')}
-                      </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <span className="text-xs font-bold text-slate-400 uppercase block mb-1">Work Completed</span>
-                        <p className="text-sm text-slate-700">{log.workCompleted || '-'}</p>
-                      </div>
-                      <div>
-                        <span className="text-xs font-bold text-slate-400 uppercase block mb-1">Work Pending</span>
-                        <p className="text-sm text-slate-700">{log.workPending || '-'}</p>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-4 pt-2 border-t border-slate-50 mt-2">
-                       <div><span className="text-xs font-bold text-slate-400 uppercase">Manpower:</span> <span className="text-sm font-semibold ml-2">{log.manpower}</span></div>
-                       <div><span className="text-xs font-bold text-slate-400 uppercase">Weather:</span> <span className="text-sm font-semibold ml-2">{log.weather || '-'}</span></div>
-                       <div><span className="text-xs font-bold text-slate-400 uppercase">Issues:</span> <span className="text-sm font-semibold ml-2 text-red-500">{log.issues || 'None'}</span></div>
-                    </div>
-                  </div>
-                ))}
-                {dailyLogs.length === 0 && <div className="text-slate-500 text-center py-12">No daily logs recorded yet.</div>}
-              </div>
+              <DailyLogsTab projectId={projectId} dailyLogs={dailyLogs} onChanged={fetchCore} />
             </TabsContent>
 
             {/* FIELD PROGRESS TAB — read-only view into the mobile Employee Task module (manager: live progress + employee timeline) */}
             <TabsContent value="fieldProgress" className="space-y-6 mt-0 h-full outline-none">
-              <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_1px_2px_rgba(0,0,0,0.03)] overflow-hidden">
-                <div className="p-4 border-b bg-slate-50 flex items-center justify-between">
-                  <h3 className="font-bold text-slate-800">Field Task Execution</h3>
-                  <span className="text-xs text-slate-500">
-                    {fieldTasks.filter((t: any) => t.status === 'COMPLETED').length} / {fieldTasks.length} completed
-                  </span>
-                </div>
-                <div className="divide-y">
-                  {fieldTasks.map((task: any) => (
-                    <div key={task.id}>
-                      <div
-                        className="p-4 flex items-center justify-between cursor-pointer hover:bg-slate-50"
-                        onClick={() => toggleExpandFieldTask(task.id)}
-                      >
-                        <div className="min-w-0">
-                          <p className="font-semibold text-slate-800 truncate">{task.taskName}</p>
-                          <p className="text-xs text-slate-500">{task.room?.roomName || task.phase?.name || 'Unassigned location'}</p>
-                        </div>
-                        <span className="px-2.5 py-1 bg-slate-100 text-slate-700 text-xs rounded-full font-bold shrink-0 ml-3">
-                          {task.status?.replace('_', ' ')}
-                        </span>
-                      </div>
-                      {expandedFieldTask === task.id && (
-                        <div className="px-4 pb-4 bg-slate-50/50">
-                          {(fieldTaskAssignments[task.id] || []).length === 0 ? (
-                            <p className="text-xs text-slate-500 py-2">No employees assigned yet.</p>
-                          ) : (
-                            <table className="w-full text-xs">
-                              <thead>
-                                <tr className="text-slate-500 text-left">
-                                  <th className="py-1 font-medium">Employee</th>
-                                  <th className="py-1 font-medium">Role</th>
-                                  <th className="py-1 font-medium">Status</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {fieldTaskAssignments[task.id].map((a: any) => (
-                                  <tr key={a.employeeId} className="border-t border-slate-200">
-                                    <td className="py-1.5">{a.employeeName}</td>
-                                    <td className="py-1.5">{a.role || '-'}</td>
-                                    <td className="py-1.5">{a.status?.replace('_', ' ')}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          )}
-
-                          {(() => {
-                            const d = fieldTaskDetails[task.id];
-                            if (!d) return <p className="text-xs text-slate-400 py-2">Loading work details…</p>;
-                            const progress = d.progress || [];
-                            const materials = d.materialUsage || [];
-                            const issues = d.issues || [];
-                            if (progress.length === 0 && materials.length === 0 && issues.length === 0)
-                              return <p className="text-xs text-slate-400 py-2">No progress updates, photos, or materials logged yet.</p>;
-                            return (
-                              <div className="mt-3 space-y-3">
-                                {progress.length > 0 && (
-                                  <div>
-                                    <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Progress &amp; Photos</p>
-                                    <ul className="space-y-2">
-                                      {progress.map((p: any) => (
-                                        <li key={p.id} className="rounded-lg border border-slate-200 bg-white p-2.5">
-                                          <div className="flex items-center justify-between text-[11px]">
-                                            <span className="font-semibold text-slate-700">{p.employeeName || 'Employee'}</span>
-                                            <span className="text-slate-400">{p.createdAt ? format(new Date(p.createdAt), 'MMM d, h:mm a') : ''}</span>
-                                          </div>
-                                          <div className="flex flex-wrap gap-2 text-[11px] mt-0.5">
-                                            {p.progressPercent != null && <span className="text-emerald-600 font-medium">{p.progressPercent}% complete</span>}
-                                            {p.timeSpentMinutes != null && <span className="text-slate-500">{p.timeSpentMinutes} min</span>}
-                                          </div>
-                                          {p.remarks && <p className="text-xs text-slate-700 mt-1">{p.remarks}</p>}
-                                          {p.media?.length > 0 && (
-                                            <div className="mt-1.5 flex gap-2 overflow-x-auto">
-                                              {p.media.map((m: any, i: number) => (
-                                                (m.mediaType === 'PHOTO' || m.mediaType === 'Image') ? (
-                                                  <a key={i} href={resolveFileUrl(m.fileUrl)} target="_blank" rel="noreferrer" className="shrink-0">
-                                                    <img src={resolveFileUrl(m.fileUrl)} alt="work" className="h-16 w-16 rounded-md border object-cover" />
-                                                  </a>
-                                                ) : (
-                                                  <a key={i} href={resolveFileUrl(m.fileUrl)} target="_blank" rel="noreferrer"
-                                                     className="flex h-16 w-16 shrink-0 items-center justify-center rounded-md border bg-slate-100 text-[10px] text-slate-500">
-                                                    {m.mediaType}
-                                                  </a>
-                                                )
-                                              ))}
-                                            </div>
-                                          )}
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  </div>
-                                )}
-
-                                {materials.length > 0 && (
-                                  <div>
-                                    <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Materials Used</p>
-                                    <ul className="space-y-1">
-                                      {materials.map((m: any) => (
-                                        <li key={m.id} className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs">
-                                          <span className="min-w-0 truncate text-slate-700">{m.productName}</span>
-                                          <span className="shrink-0 text-slate-500">{String(m.quantityUsed)} {m.unit} · {m.usedByName}</span>
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  </div>
-                                )}
-
-                                {issues.length > 0 && (
-                                  <div>
-                                    <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Issues Reported</p>
-                                    <ul className="space-y-1">
-                                      {issues.map((i: any) => (
-                                        <li key={i.id} className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs">
-                                          <span className="font-medium text-slate-700">{(i.issueType || '').replace('_', ' ')}</span>
-                                          {i.description ? ` — ${i.description}` : ''}
-                                          <span className="text-slate-400"> ({i.status})</span>
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })()}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                  {fieldTasks.length === 0 && <div className="text-slate-500 text-center py-12">No field tasks generated for this project yet.</div>}
-                </div>
-              </div>
+              <FieldProgressTab projectId={projectId} fieldTasks={fieldTasks} onChanged={() => api.get(`/tasks/project/${projectId}`).then(res => setFieldTasks(res.data)).catch(() => {})} />
             </TabsContent>
 
             {/* CONTRACTORS TAB — subcontracted scope on this project, as work packages */}
@@ -1610,247 +1616,40 @@ export default function ProjectCommandCenter() {
               <ProjectContractorsTab projectId={projectId} />
             </TabsContent>
 
+            {/* LABOUR TAB — people (employees + contractors) assigned across this project's tasks */}
+            <TabsContent value="labour" className="space-y-6 mt-0 h-full outline-none">
+              <LabourTab projectId={projectId} onManageTasks={() => setActiveTab("fieldProgress")} />
+            </TabsContent>
+
             {/* QUALITY CONTROL TAB */}
             <TabsContent value="quality" className="space-y-6 mt-0 h-full outline-none">
-              <div className="flex items-center justify-between">
-                <h2 className="text-2xl font-bold text-slate-800">Quality Inspections</h2>
-                <Dialog>
-                  <DialogTrigger asChild>
-                    <Button><CheckSquare className="w-4 h-4 mr-2"/> New Inspection</Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader><DialogTitle>New Quality Check</DialogTitle></DialogHeader>
-                    <div className="space-y-4 pt-4">
-                      <div className="space-y-2"><Label>Category</Label><Input value={newQualityCheck.checklistCategory} onChange={e => setNewQualityCheck({...newQualityCheck, checklistCategory: e.target.value})} placeholder="e.g. Electrical, Plumbing" /></div>
-                      <div className="space-y-2"><Label>Item Checked</Label><Input value={newQualityCheck.itemChecked} onChange={e => setNewQualityCheck({...newQualityCheck, itemChecked: e.target.value})} /></div>
-                      <div className="space-y-2"><Label>Status</Label>
-                        <select className="w-full flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm" value={newQualityCheck.status} onChange={e => setNewQualityCheck({...newQualityCheck, status: e.target.value})}>
-                          <option value="APPROVED">Approved</option><option value="REJECTED">Rejected</option><option value="REWORK_REQUIRED">Rework Required</option>
-                        </select>
-                      </div>
-                      <div className="space-y-2"><Label>Remarks</Label><textarea className="w-full min-h-[80px] p-2 rounded-md border text-sm" value={newQualityCheck.remarks} onChange={e => setNewQualityCheck({...newQualityCheck, remarks: e.target.value})} /></div>
-                      <Button className="w-full" onClick={handleAddQualityCheck}>Submit Inspection</Button>
-                    </div>
-                  </DialogContent>
-                </Dialog>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                {qualityChecks.map((qc: any) => (
-                  <div key={qc.id} className={`bg-white p-5 rounded-2xl border border-slate-100 border-l-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)] ${qc.status === 'APPROVED' ? 'border-l-green-500' : qc.status === 'REJECTED' ? 'border-l-red-500' : 'border-l-orange-500'}`}>
-                    <div className="flex justify-between items-start mb-2">
-                       <h4 className="font-bold text-slate-800">{qc.itemChecked}</h4>
-                       <span className={`text-xs font-bold px-2 py-0.5 rounded uppercase ${qc.status === 'APPROVED' ? 'bg-green-100 text-green-700' : qc.status === 'REJECTED' ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'}`}>
-                         {qc.status.replace('_', ' ')}
-                       </span>
-                    </div>
-                    <div className="text-sm font-medium text-slate-500 mb-2">{qc.checklistCategory}</div>
-                    <p className="text-sm text-slate-700">{qc.remarks || '-'}</p>
-                    <div className="mt-4 pt-3 border-t text-xs font-medium text-slate-400 flex justify-between">
-                       <span>Inspector: {qc.inspector?.username || 'Unknown'}</span>
-                       <span>{qc.inspectionDate ? format(new Date(qc.inspectionDate), 'MMM d, yyyy') : ''}</span>
-                    </div>
-                  </div>
-                ))}
-                {qualityChecks.length === 0 && <div className="col-span-2 text-slate-500 text-center py-12">No quality checks recorded yet.</div>}
-              </div>
+              <QualityTab projectId={projectId} qualityChecks={qualityChecks} onChanged={fetchCore} />
             </TabsContent>
 
             {/* ISSUES & RISKS TAB */}
             <TabsContent value="issues" className="space-y-8 mt-0 h-full outline-none">
-              <div className="grid grid-cols-2 gap-8">
-                
-                {/* ISSUES */}
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h2 className="text-xl font-bold text-slate-800 flex items-center"><AlertTriangle className="w-5 h-5 mr-2 text-red-500"/> Active Issues</h2>
-                    <Dialog>
-                      <DialogTrigger asChild><Button size="sm" variant="outline">Report Issue</Button></DialogTrigger>
-                      <DialogContent>
-                        <DialogHeader><DialogTitle>Report Issue</DialogTitle></DialogHeader>
-                        <div className="space-y-4 pt-4">
-                          <div className="space-y-2"><Label>Title</Label><Input value={newIssue.title} onChange={e => setNewIssue({...newIssue, title: e.target.value})} /></div>
-                          <div className="space-y-2"><Label>Priority</Label>
-                            <select className="w-full flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm" value={newIssue.priority} onChange={e => setNewIssue({...newIssue, priority: e.target.value})}>
-                              <option value="LOW">Low</option><option value="MEDIUM">Medium</option><option value="HIGH">High</option><option value="CRITICAL">Critical</option>
-                            </select>
-                          </div>
-                          <div className="space-y-2"><Label>Description</Label>
-                            <textarea className="w-full min-h-[100px] p-3 rounded-md border border-input bg-background text-sm" value={newIssue.description} onChange={e => setNewIssue({...newIssue, description: e.target.value})} />
-                          </div>
-                          <Button className="w-full" onClick={handleAddIssue}>Submit Issue</Button>
-                        </div>
-                      </DialogContent>
-                    </Dialog>
-                  </div>
-
-                  <div className="space-y-3">
-                    {issues.map((issue: any) => (
-                      <div key={issue.id} className="bg-white p-4 rounded-xl border border-slate-100 border-l-4 border-l-red-500 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
-                        <div className="flex justify-between items-start mb-2">
-                          <h4 className="font-bold text-slate-800">{issue.title}</h4>
-                          <span className="text-xs font-bold px-2 py-0.5 bg-red-100 text-red-700 rounded uppercase">{issue.priority}</span>
-                        </div>
-                        <p className="text-sm text-slate-600">{issue.description}</p>
-                      </div>
-                    ))}
-                    {issues.length === 0 && <div className="text-slate-500 py-4">No active issues.</div>}
-                  </div>
-                </div>
-
-                {/* RISKS */}
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h2 className="text-xl font-bold text-slate-800 flex items-center"><ShieldAlert className="w-5 h-5 mr-2 text-orange-500"/> Risk Matrix</h2>
-                    <Button size="sm" variant="outline" disabled>Add Risk</Button>
-                  </div>
-                  <div className="space-y-3">
-                    {risks.map((risk: any) => (
-                       <div key={risk.id} className="bg-white p-4 rounded-xl border border-slate-100 border-l-4 border-l-orange-500 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
-                         <div className="flex justify-between items-start mb-2">
-                           <h4 className="font-bold text-slate-800">{risk.title}</h4>
-                           <span className="text-xs font-bold px-2 py-0.5 bg-orange-100 text-orange-700 rounded uppercase">{risk.riskLevel}</span>
-                         </div>
-                         <p className="text-sm text-slate-600 mt-1">{risk.mitigationPlan}</p>
-                       </div>
-                    ))}
-                    {risks.length === 0 && <div className="text-slate-500 py-4">No logged risks.</div>}
-                  </div>
-                </div>
-
-              </div>
+              <IssuesRisksTab projectId={projectId} issues={issues} risks={risks} onChanged={fetchCore} onStatsChanged={fetchStats} />
             </TabsContent>
 
             {/* MEDIA TAB */}
             <TabsContent value="media" className="mt-0 h-full outline-none">
-              <div className="bg-white border border-slate-100 rounded-2xl p-8 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
-                 <div className="text-center max-w-md mx-auto mb-6">
-                   <FileImage className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-                   <h3 className="text-lg font-bold text-slate-800 mb-2">Document Storage</h3>
-                   <p className="text-slate-500 mb-6">
-                     Upload architectural plans, site photos, approvals, and contracts straight from your device.
-                   </p>
-                   <div className="flex items-center justify-center gap-2">
-                     <select
-                       className="h-10 rounded-md border border-input bg-background px-3 text-sm"
-                       value={docType}
-                       onChange={(e) => setDocType(e.target.value)}
-                     >
-                       {["Photos", "Videos", "Floor Plan", "CAD", "Agreement", "Invoice", "PO", "BOQ", "Approval"].map((t) => (
-                         <option key={t} value={t}>{t}</option>
-                       ))}
-                     </select>
-                     <Button asChild disabled={docUploading}>
-                       <label className="cursor-pointer">
-                         {docUploading ? "Uploading…" : "Upload File"}
-                         <input
-                           type="file"
-                           className="hidden"
-                           accept="image/*,video/*,audio/*,application/pdf,.doc,.docx,.xls,.xlsx,.dwg,.dxf"
-                           onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadProjectDocument(f); e.target.value = ''; }}
-                         />
-                       </label>
-                     </Button>
-                     <CameraCaptureButton onCapture={uploadProjectDocument} disabled={docUploading} label="Camera"
-                       className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-input bg-background px-4 text-sm font-medium hover:bg-accent disabled:opacity-60" />
-                   </div>
-                   <div className="mt-3">
-                     <Button variant="outline" onClick={importLeadDocuments} disabled={importingLeadDocs}>
-                       {importingLeadDocs ? 'Importing…' : 'Import from Lead & Measurement'}
-                     </Button>
-                     <p className="text-xs text-slate-400 mt-1">Pulls in documents from the originating lead and drawings/photos from its measurement.</p>
-                   </div>
-                 </div>
-
-                 {documents.length > 0 && (
-                   <div className="mt-4 text-left grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                     {documents.map((doc: any) => (
-                       <a key={doc.id} href={resolveFileUrl(doc.fileUrl)} target="_blank" rel="noreferrer"
-                          onClick={isImageDoc(doc) ? (e) => { e.preventDefault(); e.stopPropagation(); openDocument(doc); } : undefined}
-                          className="p-4 border rounded-xl flex items-center gap-3 hover:border-blue-400 hover:bg-slate-50 transition-colors">
-                         <FileText className="w-8 h-8 text-blue-500 shrink-0" />
-                         <div className="min-w-0">
-                           <div className="font-semibold text-sm truncate">{doc.fileName}</div>
-                           <div className="text-xs text-slate-500 uppercase">{doc.documentType}</div>
-                         </div>
-                       </a>
-                     ))}
-                   </div>
-                 )}
-              </div>
+              <DocumentsTab projectId={projectId} documents={documents} onChanged={fetchCore} />
             </TabsContent>
 
 
           </div>
         </Tabs>
         </div>
-
-        {/* Right Sidebar */}
-        <div className="w-full md:w-80 bg-white border-l border-slate-100 overflow-y-auto hidden md:block shrink-0">
-           <div className="p-6 space-y-8">
-              <div>
-                <h3 className="font-bold text-slate-800 mb-4 flex items-center"><User className="w-4 h-4 mr-2 text-slate-400"/> Customer Snapshot</h3>
-                <div className="bg-slate-50 border rounded-xl p-4">
-                  <div className="font-bold text-slate-700 text-sm mb-1">{project.customer?.name}</div>
-                  <div className="text-xs text-slate-500 mb-3">{project.customer?.address || 'No address on file'}</div>
-                  <div className="flex gap-2 mt-2">
-                    <Button size="sm" variant="outline" className="flex-1 bg-green-50 text-green-700 border-green-200 hover:bg-green-100 hover:text-green-800"><Phone className="w-3.5 h-3.5 mr-1"/> Call</Button>
-                    <Button size="sm" variant="outline" className="flex-1 bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 hover:text-emerald-800">WhatsApp</Button>
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <h3 className="font-bold text-slate-800 mb-4 flex items-center"><Clock className="w-4 h-4 mr-2 text-slate-400"/> Upcoming Deadlines</h3>
-                <div className="space-y-3">
-                  {(stats?.tasks?.delayed > 0) && (
-                    <div className="bg-red-50 p-3 rounded-lg border border-red-100">
-                      <div className="text-xs font-bold text-red-600 uppercase mb-1">Overdue Tasks</div>
-                      <div className="text-sm font-medium text-red-800">{stats.tasks.delayed} tasks require immediate attention</div>
-                    </div>
-                  )}
-                  <div className="bg-slate-50 p-3 rounded-lg border">
-                    <div className="text-xs font-bold text-slate-500 uppercase mb-1">Target Completion</div>
-                    <div className="text-sm font-medium text-slate-800">{project.endDate ? format(new Date(project.endDate), 'MMM d, yyyy') : 'Not set'}</div>
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <h3 className="font-bold text-slate-800 mb-4 flex items-center"><Sun className="w-4 h-4 mr-2 text-slate-400"/> Site Weather</h3>
-                <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 flex items-center justify-between">
-                  <div>
-                    <div className="font-bold text-blue-900">72°F / 22°C</div>
-                    <div className="text-xs text-blue-700">Clear Skies</div>
-                  </div>
-                  <Sun className="w-8 h-8 text-yellow-500" />
-                </div>
-              </div>
-
-              <div>
-                <h3 className="font-bold text-slate-800 mb-4 flex items-center"><File className="w-4 h-4 mr-2 text-slate-400"/> Recent Documents</h3>
-                <div className="space-y-2">
-                  {(data?.documents || []).slice(0, 3).map((doc: any) => (
-                     <a key={doc.id} href={resolveFileUrl(doc.fileUrl)} target="_blank" rel="noreferrer" className="flex items-center p-2 rounded hover:bg-slate-50 text-sm">
-                       <FileText className="w-4 h-4 mr-2 text-blue-500" />
-                       <span className="truncate text-slate-700 font-medium">{doc.documentName}</span>
-                     </a>
-                  ))}
-                  {(!data?.documents || data.documents.length === 0) && <div className="text-xs text-slate-500 italic">No documents uploaded.</div>}
-                </div>
-              </div>
-           </div>
-        </div>
       </div>
-      
+
       {/* Floating Action Button */}
-      <div className="fixed bottom-6 right-6 md:right-[340px] z-50">
+      <div className="fixed bottom-6 right-6 z-50">
          <Dialog open={quickActionOpen} onOpenChange={(open) => {
              setQuickActionOpen(open);
              if (!open) setTimeout(() => setQuickActionView('menu'), 200);
           }}>
             <DialogTrigger asChild>
-               <Button className="rounded-full w-14 h-14 shadow-lg bg-blue-600 hover:bg-blue-700 border-4 border-white"><Plus className="w-6 h-6 text-white"/></Button>
+               <Button className="rounded-full w-14 h-14 shadow-lg bg-emerald-600 hover:bg-emerald-700 border-4 border-white"><Plus className="w-6 h-6 text-white"/></Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-md">
                <DialogHeader>
@@ -1864,7 +1663,7 @@ export default function ProjectCommandCenter() {
                
                {quickActionView === 'menu' && (
                  <div className="grid grid-cols-2 gap-4 pt-4">
-                    <Button variant="outline" className="h-20 flex flex-col items-center justify-center gap-2" onClick={() => setQuickActionView('create_task')}><CheckSquare className="w-5 h-5 text-blue-500"/> Create Task</Button>
+                    <Button variant="outline" className="h-20 flex flex-col items-center justify-center gap-2" onClick={() => setQuickActionView('create_task')}><CheckSquare className="w-5 h-5 text-emerald-500"/> Create Task</Button>
                     <Button variant="outline" className="h-20 flex flex-col items-center justify-center gap-2" onClick={() => setQuickActionView('assign_employee')}><User className="w-5 h-5 text-emerald-500"/> Assign Resource</Button>
                     <Button variant="outline" className="h-20 flex flex-col items-center justify-center gap-2" onClick={() => setQuickActionView('report_issue')}><AlertTriangle className="w-5 h-5 text-red-500"/> Report Issue</Button>
                     <Button variant="outline" className="h-20 flex flex-col items-center justify-center gap-2" onClick={() => setQuickActionView('purchase_request')}><ShoppingCart className="w-5 h-5 text-purple-500"/> Purchase Request</Button>
@@ -1886,10 +1685,12 @@ export default function ProjectCommandCenter() {
                {quickActionView === 'assign_employee' && (
                  <div className="space-y-4 pt-4">
                    <div className="space-y-2"><Label>Select Task</Label>
-                     <select className="w-full p-2 border rounded-md text-sm" value={newAssignState.taskId} onChange={e => setNewAssignState({...newAssignState, taskId: e.target.value})}>
-                       <option value="">-- Choose a task --</option>
-                       {fieldTasks.map(t => <option key={t.id} value={t.id}>{t.taskName}</option>)}
-                     </select>
+                     <SearchableSelect
+                       value={newAssignState.taskId}
+                       onChange={(v) => setNewAssignState({ ...newAssignState, taskId: v })}
+                       options={fieldTasks.map((t: any) => ({ value: String(t.id), label: t.taskName, hint: t.room?.roomName || t.phase?.name }))}
+                       placeholder="Choose a task…"
+                     />
                    </div>
                    <div className="space-y-2"><Label>Assign Resource</Label>
                      <ResourceSelect value={newAssignState.resource}
@@ -1985,7 +1786,7 @@ export default function ProjectCommandCenter() {
                 </div>
                 <input type="range" min={0} max={100} step={5} value={itemForm.progress} disabled={editingItem.locked}
                   onChange={e => setItemForm(f => ({ ...f, progress: Number(e.target.value) }))}
-                  className="w-full accent-blue-600 disabled:opacity-50" />
+                  className="w-full accent-emerald-600 disabled:opacity-50" />
                 <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
                   <div className={`h-full ${progressBarColor(itemForm.progress)} rounded-full`} style={{ width: `${itemForm.progress}%` }} />
                 </div>
@@ -2027,13 +1828,13 @@ export default function ProjectCommandCenter() {
                   ))}
                   {!editingItem.locked && (
                     <>
-                      <label className="w-16 h-16 border-2 border-dashed rounded-lg flex items-center justify-center cursor-pointer hover:border-blue-400 text-slate-400" title="Choose from device">
+                      <label className="w-16 h-16 border-2 border-dashed rounded-lg flex items-center justify-center cursor-pointer hover:border-emerald-400 text-slate-400" title="Choose from device">
                         <FileImage className="w-5 h-5" />
                         <input type="file" accept="image/*" className="hidden"
                           onChange={e => { const f = e.target.files?.[0]; if (f) handleItemPhotoUpload(f); e.target.value = ''; }} />
                       </label>
                       <CameraCaptureButton onCapture={handleItemPhotoUpload} label=""
-                        className="w-16 h-16 border-2 border-dashed rounded-lg flex items-center justify-center hover:border-blue-400 text-slate-400" />
+                        className="w-16 h-16 border-2 border-dashed rounded-lg flex items-center justify-center hover:border-emerald-400 text-slate-400" />
                     </>
                   )}
                 </div>
@@ -2053,7 +1854,7 @@ export default function ProjectCommandCenter() {
                 <div className="space-y-3">
                   {itemTimeline.slice().reverse().map(log => (
                     <div key={log.id} className="flex gap-3 text-xs">
-                      <div className="w-2 h-2 rounded-full bg-blue-500 mt-1 shrink-0" />
+                      <div className="w-2 h-2 rounded-full bg-emerald-500 mt-1 shrink-0" />
                       <div className="flex-1">
                         <div className="flex items-center justify-between">
                           <span className="font-semibold text-slate-700">{(log.eventType || '').replace(/_/g, ' ')}</span>

@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { inventoryApi } from "@/api/inventoryApi";
+import { toast } from "@/components/ui/toast";
+import { apiError } from "@/lib/apiError";
 import type { Product, StockTransfer, Warehouse } from "@/types/inventory";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,10 +10,11 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Plus, Trash2 } from "lucide-react";
 import ProductSearchSelect from "./components/ProductSearchSelect";
+import SearchableSelect from "@/components/ui/searchable-select";
 
 const STATUS_TONE: Record<string, string> = {
   REQUESTED: "bg-slate-100 text-slate-700",
-  APPROVED: "bg-blue-100 text-blue-700",
+  APPROVED: "bg-emerald-100 text-emerald-700",
   IN_TRANSIT: "bg-amber-100 text-amber-700",
   RECEIVED: "bg-emerald-100 text-emerald-700",
   CANCELLED: "bg-red-100 text-red-700",
@@ -44,7 +47,7 @@ export default function StockTransfers() {
   };
 
   const create = () => {
-    if (!sourceId || !destId || lines.length === 0) { alert("Source, destination and at least one material line are required"); return; }
+    if (!sourceId || !destId || lines.length === 0) { toast.error("Source, destination and at least one material line are required."); return; }
     inventoryApi.createTransfer({
       sourceWarehouseId: Number(sourceId),
       destinationWarehouseId: Number(destId),
@@ -52,12 +55,12 @@ export default function StockTransfers() {
       notes,
     }).then(() => {
       setDialogOpen(false); setSourceId(""); setDestId(""); setNotes(""); setLines([]);
-      load();
-    }).catch((e) => alert(e?.response?.data?.message || "Failed to create transfer"));
+      load(); toast.success("Transfer created.");
+    }).catch((e) => toast.error(apiError(e, "Failed to create transfer.")));
   };
 
   const act = (action: (id: number) => Promise<unknown>, id: number) => {
-    action(id).then(load).catch((e) => alert(e?.response?.data?.message || "Action failed"));
+    action(id).then(load).catch((e) => toast.error(apiError(e, "Action failed.")));
   };
 
   return (
@@ -107,17 +110,15 @@ export default function StockTransfers() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label>Source Warehouse</Label>
-                <select className="w-full border rounded-md h-9 px-2 text-sm bg-white" value={sourceId} onChange={(e) => setSourceId(e.target.value)}>
-                  <option value="">Select...</option>
-                  {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-                </select>
+                <SearchableSelect value={sourceId} onChange={setSourceId}
+                  options={warehouses.map((w) => ({ value: String(w.id), label: w.name }))}
+                  placeholder="Search warehouse…" clearLabel="— none —" />
               </div>
               <div className="space-y-1">
                 <Label>Destination Warehouse</Label>
-                <select className="w-full border rounded-md h-9 px-2 text-sm bg-white" value={destId} onChange={(e) => setDestId(e.target.value)}>
-                  <option value="">Select...</option>
-                  {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-                </select>
+                <SearchableSelect value={destId} onChange={setDestId}
+                  options={warehouses.map((w) => ({ value: String(w.id), label: w.name }))}
+                  placeholder="Search warehouse…" clearLabel="— none —" />
               </div>
             </div>
 

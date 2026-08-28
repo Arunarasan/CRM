@@ -64,6 +64,7 @@ public class SmartAssignmentService {
     public AssignmentSettings updateSettings(AssignmentSettings incoming) {
         AssignmentSettings s = getSettings();
         if (incoming.getMaxTasksPerDay() != null) s.setMaxTasksPerDay(incoming.getMaxTasksPerDay());
+        if (incoming.getMaxActiveTasks() != null) s.setMaxActiveTasks(incoming.getMaxActiveTasks());
         if (incoming.getMaxWorkingHours() != null) s.setMaxWorkingHours(incoming.getMaxWorkingHours());
         if (incoming.getMaxOvertimeHours() != null) s.setMaxOvertimeHours(incoming.getMaxOvertimeHours());
         if (incoming.getAutoBalanceEnabled() != null) s.setAutoBalanceEnabled(incoming.getAutoBalanceEnabled());
@@ -596,6 +597,121 @@ public class SmartAssignmentService {
         d.put("aiRecommendedAssignments", aiRecommended);
         d.put("totalEmployees", employees.size());
         return d;
+    }
+
+    // ============================================================ Merged Tasks & Employees board
+
+    /**
+     * All tasks pre-bucketed for the merged Tasks tab, each with its resolved live assignees.
+     * Buckets: UNASSIGNED · ASSIGNED · IN_PROGRESS · NEEDS_APPROVAL · COMPLETED.
+     */
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> taskBoard() {
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (Task t : taskRepository.findAll()) {
+            List<TaskAssignment> active = assignmentRepository.findByTaskId(t.getId()).stream()
+                    .filter(a -> !"CANCELLED".equalsIgnoreCase(a.getStatus()) && !"REJECTED".equalsIgnoreCase(a.getStatus()))
+                    .collect(Collectors.toList());
+
+            List<Map<String, Object>> assignees = new ArrayList<>();
+            for (TaskAssignment a : active) {
+                Map<String, Object> who = new LinkedHashMap<>();
+                who.put("resourceType", a.getResourceType());
+                who.put("resourceId", a.getResourceId());
+                who.put("name", assigneeName(a));
+                who.put("code", assigneeCode(a));
+                who.put("status", a.getStatus());
+                assignees.add(who);
+            }
+
+            String status = t.getStatus() == null ? "" : t.getStatus().toUpperCase();
+            String bucket;
+            if ("COMPLETED".equals(status)) bucket = "COMPLETED";
+            else if ("WAITING_APPROVAL".equals(status)) bucket = "NEEDS_APPROVAL";
+            else if (Set.of("IN_PROGRESS", "PAUSED", "WAITING_MATERIAL", "REWORK").contains(status)) bucket = "IN_PROGRESS";
+            else if (!assignees.isEmpty()) bucket = "ASSIGNED";
+            else bucket = "UNASSIGNED";
+
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("id", t.getId());
+            row.put("taskName", t.getTaskName());
+            row.put("projectId", t.getProject() != null ? t.getProject().getId() : null);
+            row.put("project", t.getProject() != null ? t.getProject().getProjectName() : null);
+            row.put("status", t.getStatus());
+            row.put("priority", t.getPriority());
+            row.put("dueDate", t.getDueDate());
+            row.put("bucket", bucket);
+            row.put("assignees", assignees);
+            rows.add(row);
+        }
+        return rows;
+    }
+
+    /**
+     * Per-employee roster for the merged Employees tab: how many tasks each employee holds now,
+     * how many they closed in the last 24h, and whether they are clocked in right now.
+     */
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> roster() {
+        AssignmentSettings cfg = getSettings();
+        LocalDate today = LocalDate.now();
+        java.time.LocalDateTime since = java.time.LocalDateTime.now().minusHours(24);
+        int maxTasks = cfg.getMaxTasksPerDay() == null ? 0 : cfg.getMaxTasksPerDay();
+
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (Employee emp : employeeRepository.findAll()) {
+            if (Boolean.TRUE.equals(emp.getIsDeleted())) continue;
+            User user = resolveUser(emp);
+
+            List<TaskAssignment> mine = user == null ? List.of()
+                    : assignmentRepository.findByResourceTypeAndResourceId(ResourceType.EMPLOYEE, user.getId());
+            long assignedNow = mine.stream().filter(a -> ACTIVE_STATUSES.contains(a.getStatus())).count();
+            long completed24 = mine.stream()
+                    .filter(a -> a.getCompletedAt() != null && a.getCompletedAt().isAfter(since))
+                    .count();
+
+            Attendance att = attendanceRepository.findFirstByEmployeeIdAndDateOrderByIdDesc(emp.getId(), today).orElse(null);
+            boolean workingNow = att != null && att.getCheckInTime() != null && att.getCheckOutTime() == null;
+            boolean onLeave = onLeaveOn(emp.getId(), today) || "ON_LEAVE".equalsIgnoreCase(emp.getStatus());
+
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("employeeId", emp.getId());
+            row.put("userId", user != null ? user.getId() : null);
+            row.put("resourceId", user != null ? user.getId() : null);
+            row.put("employeeCode", emp.getEmployeeCode());
+            row.put("name", emp.getFirstName() + " " + emp.getLastName());
+            row.put("designation", emp.getDesignation());
+            row.put("department", emp.getDepartment() != null ? emp.getDepartment().getName() : null);
+            row.put("tasksAssignedNow", assignedNow);
+            row.put("completedLast24h", completed24);
+            row.put("workingNow", workingNow);
+            row.put("onLeave", onLeave);
+            row.put("status", emp.getStatus());
+            row.put("maxTasksPerDay", maxTasks);
+            row.put("atCapacity", maxTasks > 0 && assignedNow >= maxTasks);
+            row.put("assignable", user != null);
+            rows.add(row);
+        }
+        rows.sort((a, b) -> Double.compare(num(b.get("tasksAssignedNow")), num(a.get("tasksAssignedNow"))));
+        return rows;
+    }
+
+    /** Display name for a task assignment — employee login name, or a typed fallback for contractors. */
+    private String assigneeName(TaskAssignment a) {
+        if (a.getEmployee() != null && a.getEmployee().getName() != null) return a.getEmployee().getName();
+        if (ResourceType.EMPLOYEE.equals(ResourceType.normalize(a.getResourceType())) && a.getResourceId() != null) {
+            return userRepository.findById(a.getResourceId()).map(User::getName).orElse("Employee #" + a.getResourceId());
+        }
+        return a.getResourceType() + " #" + a.getResourceId();
+    }
+
+    /** Employee code for a task assignment's holder, when it resolves to an employee master row. */
+    private String assigneeCode(TaskAssignment a) {
+        User u = a.getEmployee() != null ? a.getEmployee()
+                : (a.getResourceId() != null ? userRepository.findById(a.getResourceId()).orElse(null) : null);
+        if (u == null || u.getEmail() == null) return null;
+        return employeeRepository.findByEmailIgnoreCaseAndIsDeletedFalse(u.getEmail())
+                .map(Employee::getEmployeeCode).orElse(null);
     }
 
     // ============================================================ Cards & helpers

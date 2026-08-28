@@ -18,6 +18,9 @@ public class ProjectService {
 
     @Autowired
     private ProjectRepository projectRepository;
+
+    @Autowired
+    private ProjectCompletionService projectCompletionService;
     
     @Autowired
     private ProjectStageRepository stageRepository;
@@ -108,6 +111,12 @@ public class ProjectService {
     private BoqItemMaterialRepository boqItemMaterialRepository;
 
     @Autowired
+    private QuotationRepository quotationRepository;
+
+    @Autowired
+    private TaskAssignmentRepository taskAssignmentRepository;
+
+    @Autowired
     private PurchaseOrderRepository purchaseOrderRepository;
 
     @Autowired
@@ -134,7 +143,8 @@ public class ProjectService {
     // Status buckets for the Projects portfolio tabs. A project's raw status is mapped into one
     // of these groups; anything not listed (e.g. CANCELLED) shows only under "All".
     private static final java.util.List<String> STATUS_NEW = java.util.List.of("PLANNING", "PENDING", "APPROVED");
-    private static final java.util.List<String> STATUS_IN_PROGRESS = java.util.List.of("RUNNING", "PAUSED", "ON_HOLD");
+    private static final java.util.List<String> STATUS_IN_PROGRESS = java.util.List.of("RUNNING");
+    private static final java.util.List<String> STATUS_ON_HOLD = java.util.List.of("PAUSED", "ON_HOLD");
     private static final java.util.List<String> STATUS_COMPLETED = java.util.List.of("COMPLETED", "CLOSED");
 
     /**
@@ -146,19 +156,47 @@ public class ProjectService {
         String s = search == null ? "" : search.trim();
         String cat = category == null ? "" : category.trim().toUpperCase();
 
+        Page<Project> result;
         switch (cat) {
             case "NEW":
-                return projectRepository.findByStatusCategory(STATUS_NEW, s, pageRequest);
+                result = projectRepository.findByStatusCategory(STATUS_NEW, s, pageRequest);
+                break;
             case "IN_PROGRESS":
-                return projectRepository.findByStatusCategory(STATUS_IN_PROGRESS, s, pageRequest);
+                result = projectRepository.findByStatusCategory(STATUS_IN_PROGRESS, s, pageRequest);
+                break;
+            case "ON_HOLD":
+                result = projectRepository.findByStatusCategory(STATUS_ON_HOLD, s, pageRequest);
+                break;
             case "COMPLETED":
-                return projectRepository.findByStatusCategory(STATUS_COMPLETED, s, pageRequest);
+                result = projectRepository.findByStatusCategory(STATUS_COMPLETED, s, pageRequest);
+                break;
             case "UNASSIGNED":
-                return projectRepository.findUnassignedTeam(s, pageRequest);
+                result = projectRepository.findUnassignedTeam(s, pageRequest);
+                break;
             default:
-                return s.isEmpty()
+                result = s.isEmpty()
                         ? projectRepository.findAll(pageRequest)
                         : projectRepository.searchProjects(s, pageRequest);
+        }
+        attachTaskTallies(result.getContent());
+        return result;
+    }
+
+    /** Fills taskTotal/taskDone on each project in one grouped query, so the portfolio Tasks column has real numbers. */
+    private void attachTaskTallies(List<Project> projects) {
+        if (projects.isEmpty()) return;
+        List<Long> ids = projects.stream().map(Project::getId).toList();
+        Map<Long, long[]> tallies = new java.util.HashMap<>();
+        for (Object[] row : taskRepository.tallyTasksByProjectIds(ids)) {
+            Long pid = ((Number) row[0]).longValue();
+            long total = row[1] == null ? 0 : ((Number) row[1]).longValue();
+            long done = row[2] == null ? 0 : ((Number) row[2]).longValue();
+            tallies.put(pid, new long[]{ total, done });
+        }
+        for (Project p : projects) {
+            long[] t = tallies.getOrDefault(p.getId(), new long[]{ 0, 0 });
+            p.setTaskTotal(t[0]);
+            p.setTaskDone(t[1]);
         }
     }
 
@@ -168,6 +206,7 @@ public class ProjectService {
         counts.put("all", projectRepository.count());
         counts.put("new", projectRepository.countByStatusCategory(STATUS_NEW));
         counts.put("inProgress", projectRepository.countByStatusCategory(STATUS_IN_PROGRESS));
+        counts.put("onHold", projectRepository.countByStatusCategory(STATUS_ON_HOLD));
         counts.put("completed", projectRepository.countByStatusCategory(STATUS_COMPLETED));
         counts.put("unassigned", projectRepository.countUnassignedTeam());
         return counts;
@@ -249,6 +288,8 @@ public class ProjectService {
         project.setProjectType(projectDetails.getProjectType());
         project.setPriority(projectDetails.getPriority());
         project.setProjectCategory(projectDetails.getProjectCategory());
+        project.setPropertyAddress(projectDetails.getPropertyAddress());
+        project.setEstimatedCost(projectDetails.getEstimatedCost());
         project.setStartDate(projectDetails.getStartDate());
         project.setEndDate(projectDetails.getEndDate());
         project.setActualCompletionDate(projectDetails.getActualCompletionDate());
@@ -287,7 +328,31 @@ public class ProjectService {
         Project project = getProjectById(projectId);
         check.setProject(project);
         check.setInspector(user);
-        return qualityCheckRepository.save(check);
+        ProjectQualityCheck saved = qualityCheckRepository.save(check);
+
+        // A failed inspection spawns corrective rework (spec §39). The completion gate already blocks
+        // project completion while any REJECTED/REWORK_REQUIRED check is unresolved, and the new task
+        // is a plain open task anyone eligible can pick up and, after fixing, re-inspect.
+        if ("REJECTED".equals(saved.getStatus()) || "REWORK_REQUIRED".equals(saved.getStatus())) {
+            String what = saved.getItemChecked() != null ? saved.getItemChecked()
+                    : saved.getChecklistCategory() != null ? saved.getChecklistCategory() : "work";
+            Task rework = new Task();
+            rework.setProject(project);
+            rework.setTaskName("Rework: " + what);
+            rework.setDescription("Quality inspection failed (" + saved.getStatus() + ")"
+                    + (saved.getRemarks() != null ? ": " + saved.getRemarks() : "") + ". Correct and re-inspect.");
+            rework.setPriority("HIGH");
+            rework.setStatus("PENDING");
+            rework.setSource("MANUAL");
+            Task savedRework = taskRepository.save(rework);
+            taskChecklistService.ensureDefaultChecklist(savedRework);
+            if (project.getProjectManager() != null) {
+                notificationService.dispatch("Rework raised",
+                        "Quality check failed on " + project.getProjectName() + " — rework task created.",
+                        "TASK", project.getProjectManager().getId(), "/projects/" + project.getId());
+            }
+        }
+        return saved;
     }
 
     public ProjectCustomerApproval addCustomerApproval(Long projectId, ProjectCustomerApproval approval) {
@@ -340,13 +405,35 @@ public class ProjectService {
         return paymentRepository.save(payment);
     }
     
+    /** Back-compat entry point — enforces the completion gate (no override). */
     public Project completeProject(Long projectId, String certificateBase64) {
+        return completeProject(projectId, certificateBase64, false);
+    }
+
+    /**
+     * Complete a project, gated on {@link ProjectCompletionService}. Completion is refused while any
+     * required condition is unmet unless {@code force} is set (an admin override for exceptions).
+     */
+    public Project completeProject(Long projectId, String certificateBase64, boolean force) {
         Project project = getProjectById(projectId);
+        if (!force) {
+            String blocking = projectCompletionService.blockingSummary(projectId);
+            if (!blocking.isEmpty()) {
+                throw new IllegalStateException("Project isn't ready to complete — " + blocking
+                        + ". Resolve these or override to force completion.");
+            }
+        }
         project.setStatus("COMPLETED");
         project.setProgress(100);
         project.setActualCompletionDate(java.time.LocalDate.now());
         project.setCompletionCertificateBase64(certificateBase64);
         return projectRepository.save(project);
+    }
+
+    /** Readiness report for the completion gate (drives the UI checklist). */
+    public Map<String, Object> getCompletionReadiness(Long projectId) {
+        getProjectById(projectId);
+        return projectCompletionService.evaluate(projectId);
     }
 
     /** Site visit summary for the Project detail page: totals, latest/upcoming visit and assigned employees. */
@@ -1369,6 +1456,107 @@ public class ProjectService {
 
     public Map<String, Object> generateFromBoq(Long projectId) {
         return reconcileProjectWithBoq(projectId, null);
+    }
+
+    /**
+     * People (employees + contractors) working on this project, aggregated from task assignments —
+     * one row per resource with their task counts, roles and how many are still open. Powers the
+     * Resources → Labour panel in the Command Center.
+     */
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getProjectResources(Long projectId) {
+        List<TaskAssignment> all = taskAssignmentRepository.findByTaskProjectId(projectId);
+        Map<String, List<TaskAssignment>> byResource = new java.util.LinkedHashMap<>();
+        for (TaskAssignment a : all) {
+            if (a.getResourceId() == null) continue;
+            String type = a.getResourceType() != null ? a.getResourceType() : "EMPLOYEE";
+            byResource.computeIfAbsent(type + "#" + a.getResourceId(), k -> new java.util.ArrayList<>()).add(a);
+        }
+        List<Map<String, Object>> rows = new java.util.ArrayList<>();
+        for (List<TaskAssignment> group : byResource.values()) {
+            TaskAssignment first = group.get(0);
+            String type = first.getResourceType() != null ? first.getResourceType() : "EMPLOYEE";
+            Long resourceId = first.getResourceId();
+            long active = group.stream().filter(a -> !java.util.Set.of("COMPLETED", "CANCELLED", "REJECTED").contains(a.getStatus())).count();
+            java.util.Set<String> roles = new java.util.LinkedHashSet<>();
+            group.forEach(a -> { if (a.getRole() != null && !a.getRole().isBlank()) roles.add(a.getRole()); });
+            String name;
+            try { name = workforceResourceService.displayName(type, resourceId); }
+            catch (Exception e) { name = (first.getEmployee() != null ? first.getEmployee().getName() : "Unknown"); }
+
+            Map<String, Object> row = new java.util.LinkedHashMap<>();
+            row.put("resourceType", type);
+            row.put("resourceId", resourceId);
+            row.put("name", name);
+            row.put("taskCount", group.size());
+            row.put("activeTaskCount", active);
+            row.put("completedTaskCount", group.size() - active);
+            row.put("roles", new java.util.ArrayList<>(roles));
+            rows.add(row);
+        }
+        rows.sort((a, b) -> {
+            int t = String.valueOf(a.get("resourceType")).compareTo(String.valueOf(b.get("resourceType")));
+            if (t != 0) return t;
+            return Integer.compare((int) b.get("taskCount"), (int) a.get("taskCount"));
+        });
+        return rows;
+    }
+
+    /**
+     * Approved quotations belonging to this project's lead — the candidate scopes the Phases tab
+     * lets a PM build from. Each carries its own BOQ; the one currently linked to the project is
+     * flagged so the picker can show "Current".
+     */
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getAvailableQuotations(Long projectId) {
+        Project project = getProjectById(projectId);
+        Long leadId = project.getLead() != null ? project.getLead().getId() : null;
+        Long currentBoqId = project.getBoq() != null ? project.getBoq().getId() : null;
+        if (leadId == null) return java.util.List.of();
+        return quotationRepository.findByLeadIdOrderByCreatedAtDesc(leadId).stream()
+                .filter(q -> "APPROVED".equalsIgnoreCase(q.getStatus()) && q.getBoq() != null)
+                .map(q -> {
+                    Map<String, Object> m = new java.util.LinkedHashMap<>();
+                    m.put("id", q.getId());
+                    m.put("quotationNumber", q.getQuotationNumber());
+                    m.put("revisionNumber", q.getRevisionNumber());
+                    m.put("grandTotal", q.getGrandTotal());
+                    Map<String, Object> b = new java.util.LinkedHashMap<>();
+                    b.put("id", q.getBoq().getId());
+                    b.put("boqNumber", q.getBoq().getBoqNumber());
+                    b.put("revisionNumber", q.getBoq().getRevisionNumber());
+                    m.put("boq", b);
+                    m.put("isCurrent", q.getBoq().getId().equals(currentBoqId));
+                    return m;
+                })
+                .toList();
+    }
+
+    /**
+     * Re-point the project at a chosen approved quotation (and its BOQ), then reconcile
+     * phases/rooms/materials from it. Lets a PM adopt a revised-and-approved scope after the
+     * project was already created. Reuses the idempotent {@link #reconcileProjectWithBoq}.
+     */
+    @Transactional
+    public Map<String, Object> generateFromQuotation(Long projectId, Long quotationId, User user) {
+        Project project = getProjectById(projectId);
+        Quotation quotation = quotationRepository.findById(quotationId)
+                .orElseThrow(() -> new IllegalArgumentException("Quotation not found"));
+        if (!"APPROVED".equalsIgnoreCase(quotation.getStatus())) {
+            throw new IllegalStateException("Only an approved quotation can be used to build the project.");
+        }
+        if (quotation.getBoq() == null) {
+            throw new IllegalStateException("This quotation has no BOQ to build from.");
+        }
+        Long projectLeadId = project.getLead() != null ? project.getLead().getId() : null;
+        Long quotationLeadId = quotation.getLead() != null ? quotation.getLead().getId() : null;
+        if (projectLeadId != null && quotationLeadId != null && !projectLeadId.equals(quotationLeadId)) {
+            throw new IllegalStateException("That quotation belongs to a different lead than this project.");
+        }
+        project.setQuotation(quotation);
+        project.setBoq(quotation.getBoq());
+        projectRepository.save(project);
+        return reconcileProjectWithBoq(projectId, user);
     }
 
     /**

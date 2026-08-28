@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import type { CustomerOverview } from "@/types/customer360";
 import { useAuth } from "@/hooks/useAuth";
+import { useGoBack } from "@/hooks/useGoBack";
 
 function statusVariant(status?: string): "success" | "warning" | "destructive" | "secondary" {
   if (!status) return "secondary";
@@ -28,6 +29,7 @@ interface Props {
 export default function CustomerHeader({ overview, isLoading, onEdit, onUploadDocument, onAddFollowUp }: Props) {
   const { hasAuthority } = useAuth();
   const canWrite = hasAuthority("CUSTOMER_WRITE");
+  const goBack = useGoBack("/customers");
 
   const quickActions = [
     { label: "Edit Customer", icon: Pencil, onClick: onEdit, show: canWrite },
@@ -52,9 +54,9 @@ export default function CustomerHeader({ overview, isLoading, onEdit, onUploadDo
   return (
     <div className="bg-card border-b sticky top-0 z-10">
       <div className="px-4 sm:px-6 py-4">
-        <Link to="/customers" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-3">
-          <ArrowLeft className="w-4 h-4" /> Back to Customers
-        </Link>
+        <button type="button" onClick={goBack} className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-3">
+          <ArrowLeft className="w-4 h-4" /> Back
+        </button>
 
         <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
           <div className="flex items-start gap-4 min-w-0">

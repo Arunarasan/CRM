@@ -195,6 +195,41 @@ public class EmployeePortalController {
         return ResponseEntity.ok(ApiResponse.success(portalService.getMyBonuses(me())));
     }
 
+    /** Month-by-month earnings preview (amount + incentive per month), computed read-only. */
+    @GetMapping("/monthly-earnings")
+    @PreAuthorize(PORTAL)
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> monthlyEarnings() {
+        return ResponseEntity.ok(ApiResponse.success(portalService.getMonthlyEarnings(me())));
+    }
+
+    // --- Payroll requests (employee raises → admin approves) ----------------
+
+    @GetMapping("/payroll-requests")
+    @PreAuthorize(PORTAL)
+    public ResponseEntity<ApiResponse<List<PayrollRequest>>> payrollRequests() {
+        return ResponseEntity.ok(ApiResponse.success(portalService.getMyPayrollRequests(me())));
+    }
+
+    @PostMapping("/payroll-requests")
+    @PreAuthorize(PORTAL)
+    public ResponseEntity<ApiResponse<PayrollRequest>> createPayrollRequest(@RequestBody Map<String, Object> body) {
+        return ResponseEntity.ok(ApiResponse.success(portalService.createPayrollRequest(me(), body)));
+    }
+
+    /** The employee's loans (for display + raising a one-off repayment request). */
+    @GetMapping("/loans")
+    @PreAuthorize(PORTAL)
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> loans() {
+        return ResponseEntity.ok(ApiResponse.success(portalService.getMyLoans(me())));
+    }
+
+    /** The employee's salary advances (for display). */
+    @GetMapping("/advances")
+    @PreAuthorize(PORTAL)
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> advances() {
+        return ResponseEntity.ok(ApiResponse.success(portalService.getMyAdvances(me())));
+    }
+
     // --- Documents ----------------------------------------------------------
 
     @GetMapping("/documents")
@@ -231,6 +266,28 @@ public class EmployeePortalController {
     public ResponseEntity<ApiResponse<String>> pickUpTask(@PathVariable Long taskId) {
         portalService.pickUpTask(me(), taskId);
         return ResponseEntity.ok(ApiResponse.success("Task picked up."));
+    }
+
+    /** Join an already-owned collaborative task as a participant. */
+    @PostMapping("/tasks/{taskId}/join")
+    @PreAuthorize(PORTAL)
+    public ResponseEntity<ApiResponse<String>> joinTask(@PathVariable Long taskId) {
+        portalService.joinTask(me(), taskId);
+        return ResponseEntity.ok(ApiResponse.success("Joined task."));
+    }
+
+    /** The shared Task Pool — eligible AVAILABLE tasks this employee can pick up. */
+    @GetMapping("/tasks/pool")
+    @PreAuthorize(PORTAL)
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> taskPool() {
+        return ResponseEntity.ok(ApiResponse.success(portalService.getAvailablePool(me())));
+    }
+
+    /** Active-task capacity for the current employee. */
+    @GetMapping("/tasks/capacity")
+    @PreAuthorize(PORTAL)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> taskCapacity() {
+        return ResponseEntity.ok(ApiResponse.success(portalService.getTaskCapacity(me())));
     }
 
     // --- Material Requests (own only) ---------------------------------------

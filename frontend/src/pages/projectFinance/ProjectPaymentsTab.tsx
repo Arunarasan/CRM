@@ -12,6 +12,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
 import { useAuth } from "@/hooks/useAuth";
+import { toast } from "@/components/ui/toast";
 import { printInvoice } from "./printInvoice";
 import CompletionBillingTracker from "./CompletionBillingTracker";
 
@@ -91,15 +92,15 @@ export default function ProjectPaymentsTab({ project, onChanged }: { project: an
     setBusyId(inv.id);
     financeApi.markInvoiceUnpaid(inv.id)
       .then(() => { reloadAll(); onChanged?.(); })
-      .catch((e) => alert(e?.response?.data?.message || "Failed to mark unpaid"))
+      .catch((e) => toast.error(e?.response?.data?.message || "Failed to mark unpaid"))
       .finally(() => setBusyId(null));
   };
 
   const issue = (id: number) => {
     setBusyId(id);
     financeApi.issueInvoice(id)
-      .then(() => { reloadAll(); onChanged?.(); })
-      .catch((e) => alert(e?.response?.data?.message || "Failed to issue invoice"))
+      .then(() => { reloadAll(); onChanged?.(); toast.success("Invoice issued"); })
+      .catch((e) => toast.error(e?.response?.data?.message || "Failed to issue invoice"))
       .finally(() => setBusyId(null));
   };
 
@@ -108,7 +109,7 @@ export default function ProjectPaymentsTab({ project, onChanged }: { project: an
       const [full, items] = await Promise.all([financeApi.getInvoice(inv.id), financeApi.getInvoiceItems(inv.id)]);
       printInvoice(full, items, project);
     } catch {
-      alert("Could not open the invoice for printing.");
+      toast.error("Could not open the invoice for printing.");
     }
   };
 
@@ -117,7 +118,7 @@ export default function ProjectPaymentsTab({ project, onChanged }: { project: an
       {/* Summary cards */}
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <SummaryCard label="Total Budget" value={inr(summary.budget)} icon={<Wallet className="h-5 w-5" />} tint="text-slate-700" />
-        <SummaryCard label="Invoiced" value={inr(summary.invoiced)} icon={<FileText className="h-5 w-5" />} tint="text-blue-600" />
+        <SummaryCard label="Invoiced" value={inr(summary.invoiced)} icon={<FileText className="h-5 w-5" />} tint="text-emerald-600" />
         <SummaryCard label="Paid" value={inr(summary.paid)} icon={<IndianRupee className="h-5 w-5" />} tint="text-emerald-600" />
         <SummaryCard label="Balance Due" value={inr(summary.due)} icon={<Receipt className="h-5 w-5" />} tint={summary.due > 0 ? "text-red-600" : "text-emerald-600"} />
       </div>
@@ -132,7 +133,7 @@ export default function ProjectPaymentsTab({ project, onChanged }: { project: an
       ) : (
         <section className="rounded-2xl border border-slate-100 bg-white p-6 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
           <div className="mb-4 flex items-center justify-between">
-            <h3 className="flex items-center gap-2 text-lg font-bold text-slate-800"><FileText className="h-5 w-5 text-blue-600" /> Invoices</h3>
+            <h3 className="flex items-center gap-2 text-lg font-bold text-slate-800"><FileText className="h-5 w-5 text-emerald-600" /> Invoices</h3>
             {canWrite && customerId && (
               <Button size="sm" onClick={() => setMakerOpen(true)}><Plus className="h-4 w-4" /> New Invoice</Button>
             )}
@@ -303,7 +304,7 @@ function MarkPaidDialog({ invoice, onClose, onSaved }: { invoice: Invoice; onClo
               </button>
             </div>
           ))}
-          <button type="button" onClick={addTender} className="flex items-center gap-1 text-sm font-medium text-blue-600 hover:underline">
+          <button type="button" onClick={addTender} className="flex items-center gap-1 text-sm font-medium text-emerald-600 hover:underline">
             <Plus className="h-4 w-4" /> Add another method (combine)
           </button>
 
@@ -325,37 +326,68 @@ function MarkPaidDialog({ invoice, onClose, onSaved }: { invoice: Invoice; onClo
   );
 }
 
-/** Inline invoice maker — a few line items + a single GST rate. Backend recomputes GST/totals. */
+// Default line description per invoice type — used in the simple single-amount mode.
+const DEFAULT_DESC: Record<InvoiceType, string> = {
+  ADVANCE: "Advance payment",
+  PROGRESS: "Progress payment",
+  FINAL: "Final payment",
+  PROFORMA: "Proforma amount",
+  QUOTATION: "Quotation amount",
+};
+
+/**
+ * Invoice maker. Simple by default: pick a type, enter one amount, done — GST/totals auto. An
+ * "Itemize" toggle reveals the multi-line editor when a detailed breakdown is needed.
+ */
 function InvoiceMaker({ project, onClose, onSaved }: { project: any; onClose: () => void; onSaved: () => void }) {
   const [invoiceType, setInvoiceType] = useState<InvoiceType>("ADVANCE");
   const [date, setDate] = useState(today());
   const [dueDate, setDueDate] = useState("");
   const [gstRate, setGstRate] = useState(18);
   const [notes, setNotes] = useState("");
-  const [lines, setLines] = useState<LineItem[]>([{ description: "Advance payment", quantity: 1, unitPrice: 0 }]);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [itemized, setItemized] = useState(false);
 
+  // Simple mode (default)
+  const [amount, setAmount] = useState<number>(0);
+  const [description, setDescription] = useState("");
+
+  // Itemized mode
+  const [lines, setLines] = useState<LineItem[]>([{ description: "", quantity: 1, unitPrice: 0 }]);
   const setLine = (idx: number, patch: Partial<LineItem>) =>
     setLines((ls) => ls.map((l, i) => (i === idx ? { ...l, ...patch } : l)));
   const addLine = () => setLines((ls) => [...ls, { description: "", quantity: 1, unitPrice: 0 }]);
   const removeLine = (idx: number) => setLines((ls) => ls.filter((_, i) => i !== idx));
 
-  const subTotal = lines.reduce((s, l) => s + (Number(l.quantity) || 0) * (Number(l.unitPrice) || 0), 0);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const subTotal = itemized
+    ? lines.reduce((s, l) => s + (Number(l.quantity) || 0) * (Number(l.unitPrice) || 0), 0)
+    : (Number(amount) || 0);
   const gstAmount = subTotal * (Number(gstRate) || 0) / 100;
   const total = subTotal + gstAmount;
 
   const save = async (issue: boolean) => {
-    const items = lines
-      .filter((l) => l.description.trim() && Number(l.unitPrice) > 0)
-      .map((l) => ({
-        description: l.description.trim(),
-        quantity: Number(l.quantity) || 1,
-        unitPrice: Number(l.unitPrice) || 0,
-        gstRate: Number(gstRate) || 0,
-        totalPrice: (Number(l.quantity) || 1) * (Number(l.unitPrice) || 0),
-      }));
-    if (items.length === 0) { setError("Add at least one line item with an amount."); return; }
+    const items = itemized
+      ? lines
+          .filter((l) => l.description.trim() && Number(l.unitPrice) > 0)
+          .map((l) => ({
+            description: l.description.trim(),
+            quantity: Number(l.quantity) || 1,
+            unitPrice: Number(l.unitPrice) || 0,
+            gstRate: Number(gstRate) || 0,
+            totalPrice: (Number(l.quantity) || 1) * (Number(l.unitPrice) || 0),
+          }))
+      : (Number(amount) > 0
+          ? [{
+              description: description.trim() || DEFAULT_DESC[invoiceType],
+              quantity: 1,
+              unitPrice: Number(amount),
+              gstRate: Number(gstRate) || 0,
+              totalPrice: Number(amount),
+            }]
+          : []);
+    if (items.length === 0) { setError(itemized ? "Add at least one line item with an amount." : "Enter an amount."); return; }
     setSaving(true);
     setError(null);
     try {
@@ -371,6 +403,7 @@ function InvoiceMaker({ project, onClose, onSaved }: { project: any; onClose: ()
       };
       const saved = await financeApi.createInvoice(invoice, items);
       if (issue && saved?.id) await financeApi.issueInvoice(saved.id);
+      toast.success(issue ? "Invoice created & issued" : "Draft invoice saved");
       onSaved();
     } catch (e: any) {
       setError(e?.response?.data?.message || "Failed to create invoice.");
@@ -381,20 +414,66 @@ function InvoiceMaker({ project, onClose, onSaved }: { project: any; onClose: ()
 
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2"><FileText className="h-5 w-5" /> New Invoice</DialogTitle>
-          <DialogDescription>Raise an advance or fee invoice for this project. GST and totals are calculated automatically.</DialogDescription>
+          <DialogDescription>Enter the amount — GST and totals are calculated automatically.</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-            <label className="space-y-1 text-sm">
-              <span className="font-medium">Type</span>
-              <select value={invoiceType} onChange={(e) => setInvoiceType(e.target.value as InvoiceType)} className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm">
-                {INVOICE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-              </select>
-            </label>
+          {/* Type as segmented buttons */}
+          <div className="space-y-1.5">
+            <span className="text-sm font-medium">Type</span>
+            <div className="grid grid-cols-4 gap-1.5">
+              {INVOICE_TYPES.map((t) => (
+                <button key={t} type="button" onClick={() => setInvoiceType(t)}
+                  className={`rounded-lg border px-2 py-1.5 text-xs font-semibold capitalize transition-colors ${
+                    invoiceType === t ? "border-emerald-500 bg-emerald-50 text-emerald-700" : "border-slate-200 text-slate-500 hover:bg-slate-50"}`}>
+                  {t.toLowerCase()}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {!itemized ? (
+            <>
+              <label className="block space-y-1 text-sm">
+                <span className="font-medium">Amount (before GST)</span>
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">₹</span>
+                  <Input type="number" min={0} value={amount || ""} onChange={(e) => setAmount(Number(e.target.value))}
+                    className="pl-7 text-lg font-semibold" placeholder="0" autoFocus />
+                </div>
+              </label>
+              <label className="block space-y-1 text-sm">
+                <span className="font-medium">Description</span>
+                <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder={DEFAULT_DESC[invoiceType]} />
+              </label>
+            </>
+          ) : (
+            <div className="space-y-2">
+              <div className="grid grid-cols-12 gap-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                <span className="col-span-6">Description</span><span className="col-span-2 text-right">Qty</span>
+                <span className="col-span-3 text-right">Rate</span><span className="col-span-1" />
+              </div>
+              {lines.map((l, idx) => (
+                <div key={idx} className="grid grid-cols-12 items-center gap-2">
+                  <Input className="col-span-6" placeholder="e.g. Design fee" value={l.description} onChange={(e) => setLine(idx, { description: e.target.value })} />
+                  <Input className="col-span-2 text-right" type="number" min={1} value={l.quantity} onChange={(e) => setLine(idx, { quantity: Number(e.target.value) })} />
+                  <Input className="col-span-3 text-right" type="number" min={0} value={l.unitPrice} onChange={(e) => setLine(idx, { unitPrice: Number(e.target.value) })} />
+                  <button type="button" className="col-span-1 flex justify-center text-slate-400 hover:text-red-500 disabled:opacity-30" onClick={() => removeLine(idx)} disabled={lines.length === 1}>
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
+              <button type="button" onClick={addLine} className="flex items-center gap-1 text-sm font-medium text-emerald-600 hover:underline">
+                <Plus className="h-4 w-4" /> Add line
+              </button>
+            </div>
+          )}
+
+          {/* Date · Due · GST in one compact row */}
+          <div className="grid grid-cols-3 gap-3">
             <label className="space-y-1 text-sm">
               <span className="font-medium">Date</span>
               <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
@@ -409,30 +488,11 @@ function InvoiceMaker({ project, onClose, onSaved }: { project: any; onClose: ()
             </label>
           </div>
 
-          <div className="space-y-2">
-            <div className="grid grid-cols-12 gap-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
-              <span className="col-span-6">Description</span><span className="col-span-2 text-right">Qty</span>
-              <span className="col-span-3 text-right">Rate</span><span className="col-span-1" />
-            </div>
-            {lines.map((l, idx) => (
-              <div key={idx} className="grid grid-cols-12 items-center gap-2">
-                <Input className="col-span-6" placeholder="e.g. Advance payment / Design fee" value={l.description} onChange={(e) => setLine(idx, { description: e.target.value })} />
-                <Input className="col-span-2 text-right" type="number" min={1} value={l.quantity} onChange={(e) => setLine(idx, { quantity: Number(e.target.value) })} />
-                <Input className="col-span-3 text-right" type="number" min={0} value={l.unitPrice} onChange={(e) => setLine(idx, { unitPrice: Number(e.target.value) })} />
-                <button type="button" className="col-span-1 flex justify-center text-slate-400 hover:text-red-500 disabled:opacity-30" onClick={() => removeLine(idx)} disabled={lines.length === 1}>
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </div>
-            ))}
-            <button type="button" onClick={addLine} className="flex items-center gap-1 text-sm font-medium text-blue-600 hover:underline">
-              <Plus className="h-4 w-4" /> Add line
-            </button>
-          </div>
+          <button type="button" onClick={() => setItemized((v) => !v)} className="text-xs font-medium text-emerald-600 hover:underline">
+            {itemized ? "← Back to simple amount" : "Itemize (multiple lines)"}
+          </button>
 
-          <label className="block space-y-1 text-sm">
-            <span className="font-medium">Notes</span>
-            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Optional note shown on the invoice" />
-          </label>
+          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Optional note shown on the invoice" />
 
           <div className="flex justify-end gap-6 rounded-md bg-slate-50 px-4 py-3 text-sm">
             <span className="text-slate-500">Sub-total <strong className="ml-1 text-slate-700">{inr(subTotal)}</strong></span>

@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 const currency = (n?: number) => `₹${(n ?? 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 
 const ENTRY_TONE: Record<string, string> = {
-  BILL: "bg-blue-100 text-blue-700",
+  BILL: "bg-emerald-100 text-emerald-700",
   PAYMENT: "bg-emerald-100 text-emerald-700",
   ADVANCE: "bg-amber-100 text-amber-700",
   RETENTION_HELD: "bg-violet-100 text-violet-700",

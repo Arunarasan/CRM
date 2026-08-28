@@ -32,10 +32,16 @@ public class EmployeeTaskController {
 
     private final EmployeeTaskService employeeTaskService;
     private final CurrentUserService currentUserService;
+    private final com.arudra.crm.service.TaskTimeService taskTimeService;
+    private final com.arudra.crm.service.LeadTaskFormService leadTaskFormService;
 
-    public EmployeeTaskController(EmployeeTaskService employeeTaskService, CurrentUserService currentUserService) {
+    public EmployeeTaskController(EmployeeTaskService employeeTaskService, CurrentUserService currentUserService,
+                                  com.arudra.crm.service.TaskTimeService taskTimeService,
+                                  com.arudra.crm.service.LeadTaskFormService leadTaskFormService) {
         this.employeeTaskService = employeeTaskService;
         this.currentUserService = currentUserService;
+        this.taskTimeService = taskTimeService;
+        this.leadTaskFormService = leadTaskFormService;
     }
 
     private User me() {
@@ -64,6 +70,36 @@ public class EmployeeTaskController {
     @PreAuthorize(READ)
     public ResponseEntity<ApiResponse<Map<String, Object>>> getTaskDetail(@PathVariable Long id) {
         return ResponseEntity.ok(ApiResponse.success(employeeTaskService.getTaskDetail(id, me())));
+    }
+
+    // ---- Task Pool (self-pick / join / capacity) ----
+
+    /** Eligible, AVAILABLE tasks the employee can pick up — the shared pool. */
+    @GetMapping("/pool")
+    @PreAuthorize(READ)
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> pool() {
+        return ResponseEntity.ok(ApiResponse.success(employeeTaskService.getAvailablePool(me())));
+    }
+
+    /** The employee's active-task capacity (active / max / canPick). */
+    @GetMapping("/capacity")
+    @PreAuthorize(READ)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> capacity() {
+        return ResponseEntity.ok(ApiResponse.success(employeeTaskService.getCapacity(me())));
+    }
+
+    /** Pick & Start — atomically claim an unassigned, eligible task. */
+    @PostMapping("/{id}/pick")
+    @PreAuthorize(EXECUTE)
+    public ResponseEntity<ApiResponse<Task>> pick(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.success(employeeTaskService.selfAssign(id, me())));
+    }
+
+    /** Join an already-owned collaborative task as a participant. */
+    @PostMapping("/{id}/join")
+    @PreAuthorize(EXECUTE)
+    public ResponseEntity<ApiResponse<Task>> join(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.success(employeeTaskService.joinTask(id, me())));
     }
 
     /**
@@ -139,6 +175,18 @@ public class EmployeeTaskController {
     public ResponseEntity<ApiResponse<Task>> complete(@PathVariable Long id, @RequestBody(required = false) Map<String, String> body) {
         String remarks = body == null ? null : body.get("remarks");
         return ResponseEntity.ok(ApiResponse.success(employeeTaskService.complete(id, me(), remarks)));
+    }
+
+    /**
+     * Submit a lead-workflow task's structured data form (Contact/Requirement/Qualify/Site-Visit…).
+     * Captures the submission, applies it to the lead, then completes the task.
+     * Payload: {outcome, notes, nextFollowUpDate, media:[...], data:{...}}.
+     */
+    @PostMapping("/{id}/lead-form")
+    @PreAuthorize(EXECUTE)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> submitLeadForm(
+            @PathVariable Long id, @RequestBody(required = false) Map<String, Object> body) {
+        return ResponseEntity.ok(ApiResponse.success(leadTaskFormService.submit(id, me(), body)));
     }
 
     @PostMapping("/{id}/approve")
@@ -221,5 +269,79 @@ public class EmployeeTaskController {
     @PreAuthorize(APPROVE)
     public ResponseEntity<ApiResponse<Map<String, Object>>> getReportsSummary() {
         return ResponseEntity.ok(ApiResponse.success(employeeTaskService.getReportsSummary()));
+    }
+
+    // ---- Task time tracking → payroll approval (Increment 5) ----
+
+    @PostMapping("/{id}/time/start")
+    @PreAuthorize(EXECUTE)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> timeStart(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.success(taskTimeService.startWork(id, me())));
+    }
+
+    @PostMapping("/{id}/time/pause")
+    @PreAuthorize(EXECUTE)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> timePause(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.success(taskTimeService.pauseWork(id, me())));
+    }
+
+    @PostMapping("/{id}/time/resume")
+    @PreAuthorize(EXECUTE)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> timeResume(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.success(taskTimeService.resumeWork(id, me())));
+    }
+
+    @PostMapping("/{id}/time/stop")
+    @PreAuthorize(EXECUTE)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> timeStop(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.success(taskTimeService.stopWork(id, me())));
+    }
+
+    /** The current employee's own timesheet for a date range. */
+    @GetMapping("/time/timesheet")
+    @PreAuthorize(READ)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> timesheet(
+            @RequestParam @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate from,
+            @RequestParam @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate to) {
+        return ResponseEntity.ok(ApiResponse.success(taskTimeService.getTimesheet(me(), from, to)));
+    }
+
+    /** Submit all finished draft time in a range for approval. */
+    @PostMapping("/time/submit")
+    @PreAuthorize(EXECUTE)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> submitTime(
+            @RequestParam @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate from,
+            @RequestParam @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate to) {
+        int submitted = taskTimeService.submitRange(me(), from, to);
+        return ResponseEntity.ok(ApiResponse.success(Map.of("submitted", submitted)));
+    }
+
+    /** Supervisor/admin: time awaiting approval. */
+    @GetMapping("/time/pending")
+    @PreAuthorize(APPROVE)
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> pendingTime() {
+        return ResponseEntity.ok(ApiResponse.success(taskTimeService.pendingApprovals()));
+    }
+
+    @PostMapping("/time/{logId}/approve")
+    @PreAuthorize(APPROVE)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> approveTime(@PathVariable Long logId) {
+        return ResponseEntity.ok(ApiResponse.success(taskTimeService.approve(logId, me())));
+    }
+
+    @PostMapping("/time/{logId}/reject")
+    @PreAuthorize(APPROVE)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> rejectTime(@PathVariable Long logId,
+            @RequestBody(required = false) Map<String, String> body) {
+        return ResponseEntity.ok(ApiResponse.success(taskTimeService.reject(logId, me(), body == null ? null : body.get("remarks"))));
+    }
+
+    /** HR/payroll read: approved task hours for an employee over a period (APPROVED records only). */
+    @GetMapping("/time/approved-hours")
+    @PreAuthorize(APPROVE)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> approvedHours(@RequestParam Long employeeId,
+            @RequestParam @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate from,
+            @RequestParam @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate to) {
+        return ResponseEntity.ok(ApiResponse.success(taskTimeService.approvedHours(employeeId, from, to)));
     }
 }

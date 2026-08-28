@@ -38,6 +38,7 @@ public class BoqService {
     private static final BigDecimal HUNDRED = new BigDecimal(100);
 
     @Autowired private BoqRepository boqRepository;
+    @Autowired private WorkflowTriggerService workflowTriggerService;
     @Autowired private BoqItemRepository boqItemRepository;
     @Autowired private BoqItemMaterialRepository boqItemMaterialRepository;
     @Autowired private BoqItemLabourRepository boqItemLabourRepository;
@@ -1552,6 +1553,7 @@ public class BoqService {
         reserveBoqMaterials(saved);
         logActivity(saved, "Approved", "BOQ approved", currentUser);
         notify("BOQ Approved", saved.getBoqNumber() + " has been approved.", saved, currentUser);
+        workflowTriggerService.onBoqApproved(saved); // advance the lead workflow → Quotation tasks
         return saved;
     }
 

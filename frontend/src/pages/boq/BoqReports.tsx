@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useGoBack } from "@/hooks/useGoBack";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { boqApi } from "@/api/boqApi";
 import type { BoqItem } from "@/types/boq";
@@ -49,6 +50,7 @@ function ItemTable({ items }: { items: BoqItem[] }) {
 export default function BoqReports() {
   const { id } = useParams<{ id: string }>();
   const boqId = Number(id);
+  const goBack = useGoBack(`/boq/${boqId}`);
   const [roomWise, setRoomWise] = useState<any[]>([]);
   const [floorWise, setFloorWise] = useState<any[]>([]);
   const [materialConsumption, setMaterialConsumption] = useState<any[]>([]);
@@ -72,7 +74,7 @@ export default function BoqReports() {
   return (
     <div className="p-6 lg:p-8 space-y-5 animate-in fade-in">
       <div className="flex items-center gap-4">
-        <Link to={`/boq/${boqId}`}><Button variant="outline" size="icon"><ArrowLeft className="h-4 w-4" /></Button></Link>
+        <Button variant="outline" size="icon" onClick={goBack} title="Back"><ArrowLeft className="h-4 w-4" /></Button>
         <div>
           <h1 className="text-2xl font-bold tracking-tight">BOQ Reports</h1>
           <p className="text-sm text-muted-foreground">Room-wise, floor-wise, material, labour, profit, and work-status breakdowns.</p>

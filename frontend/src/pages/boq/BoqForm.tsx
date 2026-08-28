@@ -93,7 +93,7 @@ export default function BoqForm() {
   if (loading) return <div className="p-8 text-muted-foreground">Loading BOQ...</div>;
 
   return (
-    <div className="p-6 lg:p-8 max-w-6xl mx-auto space-y-6 animate-in fade-in">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto space-y-6 animate-in fade-in">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">{isEdit ? "Edit BOQ" : "New BOQ"}</h1>
@@ -104,7 +104,7 @@ export default function BoqForm() {
         <Button variant="outline" onClick={() => navigate(-1)}>Cancel</Button>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6 bg-card p-6 rounded-xl border shadow-sm">
+      <form onSubmit={handleSubmit} className="space-y-6 bg-card p-4 sm:p-6 rounded-xl border shadow-sm">
         <SectionTitle>Relationships</SectionTitle>
         {client?.name && (
           <div className="rounded-lg border bg-muted/40 p-3 text-sm">
@@ -125,7 +125,7 @@ export default function BoqForm() {
             </p>
           </div>
         )}
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
           <Field label="Customer (optional)">
             <select className={selectClass} value={form.customer?.id ?? ""} onChange={(e) => setRef("customer")(e.target.value)}>
               <option value="">{form.lead?.name ? `Lead: ${form.lead.name}` : "No customer yet"}</option>
@@ -200,7 +200,7 @@ export default function BoqForm() {
         )}
 
         <SectionTitle>Charges</SectionTitle>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
           <Field label="Discount Type">
             <select className={selectClass} value={form.discountType ?? "PERCENT"} onChange={(e) => set("discountType")(e.target.value)}>
               <option value="PERCENT">Percent (%)</option>

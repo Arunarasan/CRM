@@ -16,6 +16,8 @@ export type IssueType =
 
 export type MediaType = 'PHOTO' | 'VIDEO' | 'VOICE';
 
+export type DueState = 'ON_TRACK' | 'DUE_SOON' | 'OVERDUE';
+
 export interface TaskCard {
   id: number;
   taskName: string;
@@ -26,9 +28,43 @@ export interface TaskCard {
   priority: string;
   status: TaskStatus;
   dueDate: string | null;
+  dueState?: DueState;
   progressPercent: number | null;
   assignedEmployees: string[];
   myAssignmentStatus?: AssignmentStatus;
+  canPick?: boolean; // set on pool cards — false when the viewer is at capacity
+}
+
+/** Active-task capacity for the current employee. */
+export interface Capacity {
+  active: number;
+  max: number;
+  canPick: boolean;
+}
+
+export interface TimeLogSummary {
+  id: number;
+  taskId: number | null;
+  taskName: string | null;
+  employeeName: string | null;
+  workDate: string | null;
+  startedAt: string | null;
+  pausedAt: string | null;
+  completedAt: string | null;
+  running: boolean;
+  workingTimeMinutes: number;
+  status: 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'REJECTED';
+  remarks: string | null;
+  approvedBy: string | null;
+}
+
+export interface Timesheet {
+  from: string;
+  to: string;
+  logs: TimeLogSummary[];
+  draftMinutes: number;
+  submittedMinutes: number;
+  approvedMinutes: number;
 }
 
 export interface AssignmentSummary {
@@ -117,8 +153,28 @@ export interface CheckInSummary {
   locationLabel: string | null;
 }
 
+export type LeadFormType =
+  | 'FOLLOW_UP' | 'REQUIREMENT' | 'QUALIFY' | 'SCHEDULE_VISIT' | 'SITE_VISIT' | 'REVIEW';
+
+export interface LeadFormMedia { url: string; type: string; caption?: string }
+
+export interface LeadFormPayload {
+  outcome?: string;
+  notes?: string;
+  nextFollowUpDate?: string;
+  media?: LeadFormMedia[];
+  data?: Record<string, string>;
+}
+
 export interface TaskDetail extends TaskCard {
   description: string | null;
+  assignmentType: 'SINGLE_EMPLOYEE' | 'MULTIPLE_EMPLOYEES' | 'TEAM' | null;
+  completionRule: string | null;
+  formType?: LeadFormType | null;
+  leadId?: number | null;
+  moduleDriven?: boolean;
+  moduleLink?: string | null;
+  moduleLabel?: string | null;
   customer: string | null;
   location: string | null;
   estimatedHours: number | null;
@@ -141,6 +197,9 @@ export interface HomeSummary {
   upcoming: number;
   completedToday: number;
   todaysTasks: TaskCard[];
+  activeTaskCount?: number;
+  maxActiveTasks?: number;
+  availableCount?: number;
 }
 
 export interface ReportsSummary {

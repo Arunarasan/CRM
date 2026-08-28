@@ -66,7 +66,7 @@ export default function NotificationCenter() {
 
   const getIcon = (type: string) => {
       switch (type) {
-          case 'TASK': return <CheckCircle2 className="w-5 h-5 text-blue-500" />;
+          case 'TASK': return <CheckCircle2 className="w-5 h-5 text-emerald-500" />;
           case 'PAYMENT': return <CreditCard className="w-5 h-5 text-green-500" />;
           case 'LEAD': return <AlertCircle className="w-5 h-5 text-purple-500" />;
           case 'PROJECT': return <Briefcase className="w-5 h-5 text-orange-500" />;
@@ -112,7 +112,7 @@ export default function NotificationCenter() {
                     ) : (
                         <div className="divide-y">
                             {notifications.map((n: any) => (
-                                <div key={n.id} className={`p-4 flex gap-4 transition-colors ${n.read ? 'bg-white' : 'bg-blue-50/30'}`}>
+                                <div key={n.id} className={`p-4 flex gap-4 transition-colors ${n.read ? 'bg-white' : 'bg-emerald-50/30'}`}>
                                     <div className="shrink-0 mt-1">
                                         {getIcon(n.type)}
                                     </div>
@@ -124,7 +124,7 @@ export default function NotificationCenter() {
                                         <p className={`text-sm mt-1 ${n.read ? 'text-slate-500' : 'text-slate-700 font-medium'}`}>{n.message}</p>
                                         
                                         {n.actionUrl && (
-                                            <a href={n.actionUrl} className="text-xs font-semibold text-blue-600 hover:underline mt-2 inline-block">
+                                            <a href={n.actionUrl} className="text-xs font-semibold text-emerald-600 hover:underline mt-2 inline-block">
                                                 View Details &rarr;
                                             </a>
                                         )}
@@ -133,10 +133,10 @@ export default function NotificationCenter() {
                                         {!n.read && (
                                             <button
                                                 onClick={() => markAsRead(n.id)}
-                                                className="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-blue-600 transition-colors"
+                                                className="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-emerald-600 transition-colors"
                                                 title="Mark as read"
                                             >
-                                                <div className="w-2.5 h-2.5 bg-blue-600 rounded-full" />
+                                                <div className="w-2.5 h-2.5 bg-emerald-600 rounded-full" />
                                             </button>
                                         )}
                                         <button
@@ -162,7 +162,7 @@ export default function NotificationCenter() {
                         <div className="space-y-6">
                             <div className="flex items-center justify-between">
                                 <div className="flex gap-4">
-                                    <div className="p-3 bg-blue-50 text-blue-600 rounded-xl"><Bell className="w-6 h-6" /></div>
+                                    <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl"><Bell className="w-6 h-6" /></div>
                                     <div>
                                         <h4 className="font-semibold text-slate-900">In-App Notifications</h4>
                                         <p className="text-sm text-slate-500">Alerts in the top right bell menu.</p>
@@ -198,7 +198,7 @@ export default function NotificationCenter() {
                             
                             <div className="flex items-center justify-between opacity-50">
                                 <div className="flex gap-4">
-                                    <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl"><Smartphone className="w-6 h-6" /></div>
+                                    <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl"><Smartphone className="w-6 h-6" /></div>
                                     <div>
                                         <div className="flex items-center gap-2">
                                             <h4 className="font-semibold text-slate-900">SMS / Text</h4>

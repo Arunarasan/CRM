@@ -1,1 +1,10 @@
+com\arudra\crm\controller\ControllerAuthorizationTest.class
+com\arudra\crm\service\TaskDependencyServiceTest.class
 com\arudra\crm\SchemaGenTest.class
+com\arudra\crm\service\ProjectCompletionServiceTest.class
+com\arudra\crm\service\TaskTimeServiceTest.class
+com\arudra\crm\service\WorkflowTriggerServiceTest.class
+com\arudra\crm\controller\ControllerAuthorizationTest$MethodSecurityTestConfig.class
+com\arudra\crm\service\TaskEligibilityServiceTest.class
+com\arudra\crm\service\TaskGenerationServiceTest.class
+com\arudra\crm\service\NotificationServiceIdorTest.class

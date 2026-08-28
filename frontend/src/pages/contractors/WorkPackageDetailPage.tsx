@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArrowLeft, Plus, AlertTriangle, CheckCircle2, Boxes, Receipt } from "lucide-react";
+import { useGoBack } from "@/hooks/useGoBack";
 
 const currency = (n?: number) => `₹${(n ?? 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 const num = (v: unknown) => (v === "" || v == null ? undefined : Number(v));
@@ -26,6 +27,7 @@ interface ProductOption { id: number; name: string; unit?: string; costPrice?: n
 export default function WorkPackageDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const goBack = useGoBack("/contractors/work-packages");
   const wpId = Number(id);
 
   const [detail, setDetail] = useState<WorkPackageDetail | null>(null);
@@ -66,9 +68,9 @@ export default function WorkPackageDetailPage() {
 
   return (
     <div className="space-y-5">
-      <Link to="/contractors/work-packages" className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800">
-        <ArrowLeft className="w-4 h-4" /> All work packages
-      </Link>
+      <button type="button" onClick={goBack} className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800">
+        <ArrowLeft className="w-4 h-4" /> Back
+      </button>
 
       {/* ---------------------------------------------------------- header */}
       <div className="bg-white border rounded-2xl shadow-sm p-6">

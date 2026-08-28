@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { inventoryApi } from "@/api/inventoryApi";
+import { toast } from "@/components/ui/toast";
+import { apiError } from "@/lib/apiError";
 import type { PurchaseRequest } from "@/types/inventory";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -22,15 +24,15 @@ export default function PurchaseRequests() {
   const runScan = () => {
     setScanning(true);
     inventoryApi.triggerPurchaseRequestScan()
-      .then((r) => { alert(`Created ${r.created} new purchase request(s).`); load(); })
+      .then((r) => { toast.success(`Created ${r.created} new purchase request(s).`); load(); })
       .finally(() => setScanning(false));
   };
 
   const convert = (id: number) => {
-    inventoryApi.convertPurchaseRequest(id).then(() => load()).catch((e) => alert(e?.response?.data?.message || "Failed to convert"));
+    inventoryApi.convertPurchaseRequest(id).then(() => { load(); toast.success("Converted to purchase order."); }).catch((e) => toast.error(apiError(e, "Failed to convert.")));
   };
   const reject = (id: number) => {
-    inventoryApi.rejectPurchaseRequest(id).then(() => load()).catch(() => alert("Failed to reject"));
+    inventoryApi.rejectPurchaseRequest(id).then(() => { load(); toast.success("Request rejected."); }).catch(() => toast.error("Failed to reject."));
   };
 
   return (

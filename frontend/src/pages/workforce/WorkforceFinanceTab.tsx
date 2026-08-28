@@ -3,7 +3,8 @@ import { Link } from "react-router-dom";
 import { workforceApi } from "@/api/workforceApi";
 import { payrollApi } from "@/api/payrollApi";
 import { contractorApi } from "@/api/contractorApi";
-import type { WorkforceFinance, SalaryStructure } from "@/types/payroll";
+import type { WorkforceFinance, SalaryStructure, PayrollRequest } from "@/types/payroll";
+import { toast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -47,7 +48,23 @@ function EmployeeFinance({ fin, reload }: { fin: WorkforceFinance; reload: () =>
   const [advOpen, setAdvOpen] = useState(false);
   const [loanOpen, setLoanOpen] = useState(false);
   const [runOpen, setRunOpen] = useState(false);
+  const [reqs, setReqs] = useState<PayrollRequest[]>([]);
   const s = fin.structure;
+
+  const loadReqs = useCallback(() => {
+    payrollApi.payrollRequestsForEmployee(empId).then(setReqs).catch(() => setReqs([]));
+  }, [empId]);
+  useEffect(() => { loadReqs(); }, [loadReqs]);
+  // Reload both the finance snapshot (advances/loans/payslips) and the request list after an action.
+  const reloadAll = () => { reload(); loadReqs(); };
+
+  // Route each request to the card it belongs with; SET_RECOVERY follows its target (loan vs advance).
+  const advanceReqs = reqs.filter((r) =>
+    r.requestType === "ADVANCE" || r.requestType === "ADVANCE_REPAYMENT"
+    || (r.requestType === "SET_RECOVERY" && r.advanceId != null));
+  const loanReqs = reqs.filter((r) =>
+    r.requestType === "LOAN_REPAYMENT" || (r.requestType === "SET_RECOVERY" && r.loanId != null));
+  const otherReqs = reqs.filter((r) => r.requestType === "OTHER");
 
   return (
     <div className="space-y-5">
@@ -96,6 +113,7 @@ function EmployeeFinance({ fin, reload }: { fin: WorkforceFinance; reload: () =>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <Card title="Advances" action={<Button size="sm" variant="outline" onClick={() => setAdvOpen(true)}><Plus className="w-4 h-4 mr-1" />Add</Button>}>
+          <RequestBlock title="Requested by employee" reqs={advanceReqs} reload={reloadAll} />
           <MiniList rows={(fin.advances ?? []).map((a) => ({
             id: a.id!, main: inr(a.amount), sub: a.reason || "—",
             right: `Bal ${inr(a.balance)}`, status: a.status,
@@ -103,6 +121,7 @@ function EmployeeFinance({ fin, reload }: { fin: WorkforceFinance; reload: () =>
           }))} empty="No advances." />
         </Card>
         <Card title="Loans" action={<Button size="sm" variant="outline" onClick={() => setLoanOpen(true)}><Plus className="w-4 h-4 mr-1" />Add</Button>}>
+          <RequestBlock title="Repayment requests" reqs={loanReqs} reload={reloadAll} />
           <MiniList rows={(fin.loans ?? []).map((l) => ({
             id: l.id!, main: inr(l.principal), sub: `EMI ${inr(l.emiAmount)}`,
             right: `Bal ${inr(l.balance)}`, status: l.status,
@@ -110,6 +129,12 @@ function EmployeeFinance({ fin, reload }: { fin: WorkforceFinance; reload: () =>
           }))} empty="No loans." />
         </Card>
       </div>
+
+      {otherReqs.length > 0 && (
+        <Card title="Other requests">
+          <RequestBlock reqs={otherReqs} reload={reloadAll} />
+        </Card>
+      )}
 
       {structOpen && <StructureDialog employeeId={empId} initial={s} onClose={() => setStructOpen(false)} onSaved={() => { setStructOpen(false); reload(); }} />}
       {advOpen && <AdvanceDialog employeeId={empId} onClose={() => setAdvOpen(false)} onSaved={() => { setAdvOpen(false); reload(); }} />}
@@ -342,6 +367,60 @@ function KV({ label, value }: { label: string; value: string }) {
 function Num({ label, v, on }: { label: string; v: number; on: (v: number) => void }) {
   return <div><Label className="text-xs text-slate-500">{label}</Label><Input type="number" value={v} onChange={(e) => on(Number(e.target.value))} /></div>;
 }
+const REQ_MONTHS = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const REQ_TYPE_LABEL: Record<string, string> = {
+  ADVANCE: "Advance", LOAN_REPAYMENT: "Loan repayment", ADVANCE_REPAYMENT: "Advance repayment",
+  SET_RECOVERY: "Recovery plan", OTHER: "Other",
+};
+const REQ_STATUS_TONE: Record<string, string> = {
+  PENDING: "bg-amber-100 text-amber-700", APPROVED: "bg-emerald-100 text-emerald-700",
+  APPLIED: "bg-slate-200 text-slate-700", CONVERTED: "bg-teal-100 text-teal-700",
+  REJECTED: "bg-rose-100 text-rose-700",
+};
+
+// Employee-raised requests surfaced inside the Advances / Loans cards, approvable in place.
+function RequestBlock({ title, reqs, reload }: { title?: string; reqs: PayrollRequest[]; reload: () => void }) {
+  if (reqs.length === 0) return null;
+  const approve = (id: number) =>
+    payrollApi.approvePayrollRequest(id).then(() => { toast.success("Request approved."); reload(); })
+      .catch((e: any) => toast.error(e?.response?.data?.message || "Failed to approve"));
+  const reject = (id: number) => {
+    const remarks = window.prompt("Reason for rejection (optional):") ?? undefined;
+    payrollApi.rejectPayrollRequest(id, remarks).then(() => { toast.success("Request rejected."); reload(); })
+      .catch((e: any) => toast.error(e?.response?.data?.message || "Failed to reject"));
+  };
+  return (
+    <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50/50 p-2">
+      {title && <div className="mb-1 px-1 text-[11px] font-bold uppercase tracking-wide text-amber-700">{title}</div>}
+      <ul className="divide-y divide-amber-100">
+        {reqs.map((r) => (
+          <li key={r.id} className="flex items-center justify-between gap-2 py-2 text-sm">
+            <div className="min-w-0">
+              <div className="font-semibold">
+                {inr(r.amount)}
+                <span className="ml-1 text-[11px] font-normal text-slate-400">{REQ_TYPE_LABEL[r.requestType] || r.requestType}{r.requestType === "SET_RECOVERY" ? "/mo" : ""}</span>
+                {r.requestType === "OTHER" && r.direction === "CREDIT" && <span className="ml-1 text-xs font-normal text-emerald-600">reimbursement</span>}
+              </div>
+              <div className="truncate text-xs text-muted-foreground">
+                {r.targetMonth ? `${REQ_MONTHS[r.targetMonth]} ${r.targetYear} · ` : ""}{r.reason || "—"}
+              </div>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <Badge className={REQ_STATUS_TONE[r.status] || "bg-slate-100 text-slate-700"}>{r.status}</Badge>
+              {r.status === "PENDING" && (
+                <>
+                  <button className="text-xs font-medium text-primary" onClick={() => approve(r.id)}>Approve</button>
+                  <button className="text-xs font-medium text-rose-600" onClick={() => reject(r.id)}>Reject</button>
+                </>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function MiniList({ rows, empty }: { rows: { id: number; main: string; sub: string; right: string; status?: string; action?: { label: string; fn: () => void } }[]; empty: string }) {
   if (rows.length === 0) return <p className="text-sm text-muted-foreground">{empty}</p>;
   return (

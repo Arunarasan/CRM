@@ -29,6 +29,7 @@ public class SiteVisitService {
     @Autowired private SiteVisitMediaRepository mediaRepository;
     @Autowired private SiteVisitHistoryRepository historyRepository;
     @Autowired private LeadRepository leadRepository;
+    @Autowired private WorkflowTriggerService workflowTriggerService;
     @Autowired private NotificationService notificationService;
 
     // =====================================================================
@@ -298,6 +299,7 @@ public class SiteVisitService {
         logHistory(saved, "Visit Completed", performedBy, "Visit completed. Outcome: " + outcome);
         notifyOwners(saved, performedBy, "Visit Completed",
                 saved.getVisitNumber() + " was marked completed" + (outcome != null ? " (" + outcome + ")" : ""));
+        workflowTriggerService.onSiteVisitCompleted(saved); // advance the lead workflow
         return saved;
     }
 

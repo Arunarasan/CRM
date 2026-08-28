@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { inventoryApi } from "@/api/inventoryApi";
+import { toast } from "@/components/ui/toast";
 import type { Warehouse, WarehouseStockSummary } from "@/types/inventory";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,7 +33,7 @@ export default function Warehouses() {
 
   const save = () => {
     const action = editingId ? inventoryApi.updateWarehouse(editingId, form) : inventoryApi.createWarehouse(form);
-    action.then(() => { setDialogOpen(false); load(); }).catch(() => alert("Failed to save warehouse"));
+    action.then(() => { setDialogOpen(false); load(); toast.success("Warehouse saved."); }).catch(() => toast.error("Failed to save warehouse."));
   };
 
   return (
@@ -65,9 +66,9 @@ export default function Warehouses() {
                   <div className="text-red-600 font-bold uppercase text-[10px]">Damaged</div>
                   <div className="font-black text-red-700 text-lg">{s?.damagedStock ?? "—"}</div>
                 </div>
-                <div className="bg-blue-50 rounded-lg p-2">
-                  <div className="text-blue-600 font-bold uppercase text-[10px]">In Transit</div>
-                  <div className="font-black text-blue-700 text-lg">{s?.inTransitStock ?? "—"}</div>
+                <div className="bg-emerald-50 rounded-lg p-2">
+                  <div className="text-emerald-600 font-bold uppercase text-[10px]">In Transit</div>
+                  <div className="font-black text-emerald-700 text-lg">{s?.inTransitStock ?? "—"}</div>
                 </div>
               </div>
             </div>

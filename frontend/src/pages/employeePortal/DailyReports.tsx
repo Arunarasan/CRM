@@ -87,7 +87,7 @@ export default function DailyReports() {
             <div key={r.id} className="rounded-xl border bg-card p-3 shadow-sm">
               <div className="flex items-start justify-between gap-2">
                 <p className="flex items-center gap-1.5 text-sm font-semibold">
-                  <CalendarDays className="h-4 w-4 text-sky-600" /> {r.reportDate}
+                  <CalendarDays className="h-4 w-4 text-emerald-600" /> {r.reportDate}
                   {r.hoursWorked != null && <span className="text-xs font-normal text-muted-foreground">· {r.hoursWorked}h</span>}
                 </p>
                 <StatusPill status={r.status} />

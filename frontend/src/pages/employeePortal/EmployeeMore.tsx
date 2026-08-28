@@ -12,7 +12,7 @@ const ITEMS = [
   { to: '/employee/attendance', label: 'Attendance', icon: CalendarDays, color: 'text-emerald-600' },
   { to: '/employee/timesheet', label: 'Timesheet & Earnings', icon: Clock, color: 'text-teal-600' },
   { to: '/employee/task-management', label: 'Task Management', icon: ListTodo, color: 'text-fuchsia-600' },
-  { to: '/employee/leave', label: 'Leave', icon: Plane, color: 'text-sky-600' },
+  { to: '/employee/leave', label: 'Leave', icon: Plane, color: 'text-emerald-600' },
   { to: '/employee/salary', label: 'Salary & Payslips', icon: Wallet, color: 'text-amber-600' },
   { to: '/employee/projects', label: 'My Projects', icon: FolderKanban, color: 'text-violet-600' },
   { to: '/employee/documents', label: 'Documents', icon: FileText, color: 'text-rose-600' },

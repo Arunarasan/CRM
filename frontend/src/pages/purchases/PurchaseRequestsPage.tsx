@@ -2,10 +2,13 @@ import { useEffect, useState } from "react";
 import api from "@/lib/api";
 import { purchaseApi } from "@/api/purchaseApi";
 import { inventoryApi } from "@/api/inventoryApi";
+import { toast } from "@/components/ui/toast";
+import { apiError } from "@/lib/apiError";
 import type { PurchaseRequest } from "@/types/purchase";
 import { PR_STATUS_TONE, PRIORITY_TONE } from "@/types/purchase";
 import type { Product, Warehouse } from "@/types/inventory";
 import ProductSearchSelect from "@/pages/inventory/components/ProductSearchSelect";
+import SearchableSelect from "@/components/ui/searchable-select";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -47,14 +50,15 @@ export default function PurchaseRequestsPage() {
   const runScan = () => {
     setScanning(true);
     purchaseApi.triggerLowStockScan()
-      .then((r) => { alert(`Created ${r.created} low-stock purchase request(s).`); load(); })
+      .then((r) => { toast.success(`Created ${r.created} low-stock purchase request(s).`); load(); })
+      .catch((e) => toast.error(apiError(e, "Low-stock scan failed.")))
       .finally(() => setScanning(false));
   };
 
   const submit = () => {
     const items = lines.filter((l) => l.product && l.quantity > 0)
       .map((l) => ({ productId: l.product!.id, quantity: l.quantity, estimatedUnitPrice: l.estimatedUnitPrice, notes: l.notes }));
-    if (items.length === 0) return alert("Add at least one material line");
+    if (items.length === 0) return toast.error("Add at least one material line.");
     setSaving(true);
     purchaseApi.createPurchaseRequest({
       projectId: form.projectId ? Number(form.projectId) : undefined,
@@ -70,24 +74,24 @@ export default function PurchaseRequestsPage() {
         setIsCreateOpen(false);
         setForm({ priority: "MEDIUM", source: "PROJECT_MANAGER", approvalLevels: 1 });
         setLines([{ product: null, quantity: 1 }]);
-        load();
+        load(); toast.success("Purchase request created.");
       })
-      .catch((e) => alert(e?.response?.data?.message || "Failed to create purchase request"))
+      .catch((e) => toast.error(apiError(e, "Failed to create purchase request.")))
       .finally(() => setSaving(false));
   };
 
   const approve = (id: number) => {
     const comments = window.prompt("Approval comments (optional):") ?? "";
-    purchaseApi.approvePurchaseRequest(id, comments).then(load).catch((e) => alert(e?.response?.data?.message || "Failed to approve"));
+    purchaseApi.approvePurchaseRequest(id, comments).then(() => { load(); toast.success("Request approved."); }).catch((e) => toast.error(apiError(e, "Failed to approve.")));
   };
   const reject = (id: number) => {
     const reason = window.prompt("Rejection reason:") ?? "";
-    purchaseApi.rejectPurchaseRequest(id, reason).then(load).catch((e) => alert(e?.response?.data?.message || "Failed to reject"));
+    purchaseApi.rejectPurchaseRequest(id, reason).then(() => { load(); toast.success("Request rejected."); }).catch((e) => toast.error(apiError(e, "Failed to reject.")));
   };
   const convert = (id: number) => {
     purchaseApi.convertPurchaseRequest(id)
-      .then((orders) => { alert(`Created ${orders.length} purchase order(s): ${orders.map((o) => o.poNumber).join(", ")}`); load(); })
-      .catch((e) => alert(e?.response?.data?.message || "Failed to convert"));
+      .then((orders) => { toast.success(`Created ${orders.length} purchase order(s): ${orders.map((o) => o.poNumber).join(", ")}`); load(); })
+      .catch((e) => toast.error(apiError(e, "Failed to convert.")));
   };
 
   return (
@@ -208,19 +212,15 @@ export default function PurchaseRequestsPage() {
               </div>
               <div className="space-y-2">
                 <Label>Project (optional)</Label>
-                <select className="w-full h-10 rounded-md border border-input px-3 py-2 text-sm" value={form.projectId || ""}
-                  onChange={(e) => setForm({ ...form, projectId: e.target.value })}>
-                  <option value="">— None —</option>
-                  {projects.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
-                </select>
+                <SearchableSelect value={form.projectId || ""} onChange={(v) => setForm({ ...form, projectId: v })}
+                  options={projects.map((p) => ({ value: String(p.id), label: p.label }))}
+                  placeholder="Search project…" clearLabel="— None —" />
               </div>
               <div className="space-y-2">
                 <Label>Deliver To Warehouse</Label>
-                <select className="w-full h-10 rounded-md border border-input px-3 py-2 text-sm" value={form.warehouseId || ""}
-                  onChange={(e) => setForm({ ...form, warehouseId: e.target.value })}>
-                  <option value="">— Select —</option>
-                  {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-                </select>
+                <SearchableSelect value={form.warehouseId || ""} onChange={(v) => setForm({ ...form, warehouseId: v })}
+                  options={warehouses.map((w) => ({ value: String(w.id), label: w.name }))}
+                  placeholder="Search warehouse…" clearLabel="— none —" />
               </div>
               <div className="space-y-2">
                 <Label>Required By</Label>

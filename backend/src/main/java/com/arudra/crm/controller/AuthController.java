@@ -15,6 +15,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.authentication.LockedException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -66,7 +67,7 @@ public class AuthController {
             String token = jwtUtil.generateToken(userDetails);
 
             User user = userRepository.findByEmail(authRequest.getEmail()).orElseThrow();
-            
+
             // Reset failed attempts on success
             if (user.getFailedAttempts() > 0) {
                 user.setFailedAttempts(0);
@@ -85,6 +86,11 @@ public class AuthController {
 
             return ResponseEntity.ok(new AuthResponse(token, refreshToken.getToken(), user.getEmail(), user.getName(), roles, user.isMustChangePassword()));
 
+        } catch (DisabledException ex) {
+            // enabled == emailVerified (CustomUserDetailsService): the account isn't active.
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
+                    "success", false,
+                    "message", "This account isn't active yet. Please contact our team."));
         } catch (BadCredentialsException ex) {
             handleFailedAttempt(authRequest.getEmail(), ipAddress);
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("success", false, "message", "Invalid email or password"));

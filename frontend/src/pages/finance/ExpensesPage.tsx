@@ -4,12 +4,13 @@ import { financeApi } from "@/api/financeApi";
 import type { ProjectExpense, PageResp } from "@/types/finance";
 import { EXPENSE_CATEGORIES } from "@/types/finance";
 import { Button } from "@/components/ui/button";
+import SearchableSelect from "@/components/ui/searchable-select";
 import { currency, stageLabel } from "./helpers";
 import { Plus, Trash2 } from "lucide-react";
 
 const SOURCE_TONE: Record<string, string> = {
   MANUAL: "bg-slate-100 text-slate-600",
-  PURCHASE_BILL: "bg-blue-100 text-blue-700",
+  PURCHASE_BILL: "bg-emerald-100 text-emerald-700",
   INVENTORY_CONSUMPTION: "bg-cyan-100 text-cyan-700",
   CONTRACTOR_PAYMENT: "bg-orange-100 text-orange-700",
   SALARY: "bg-purple-100 text-purple-700",
@@ -43,11 +44,11 @@ export default function ExpensesPage() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <select className="border rounded-lg px-3 py-2 text-sm bg-white min-w-[220px]" value={projectId}
-                onChange={(e) => { setProjectId(e.target.value); setPage(0); }}>
-          <option value="">All Projects</option>
-          {projects.map((p) => <option key={p.id} value={p.id}>{p.projectName ?? p.name}</option>)}
-        </select>
+        <div className="min-w-[240px]">
+          <SearchableSelect value={projectId} onChange={(v) => { setProjectId(v); setPage(0); }}
+            options={projects.map((p) => ({ value: String(p.id), label: p.projectName ?? p.name ?? `Project #${p.id}` }))}
+            placeholder="All projects" clearLabel="All Projects" />
+        </div>
         {projectId && (
           <Button variant="outline" disabled={busy}
                   onClick={async () => {
@@ -126,10 +127,11 @@ export default function ExpensesPage() {
             <h3 className="font-bold text-slate-900">Add Project Expense</h3>
             <label className="text-sm block">
               <span className="font-semibold text-slate-700">Project</span>
-              <select className="mt-1 w-full border rounded-lg px-3 py-2" value={eProject} onChange={(e) => setEProject(e.target.value)}>
-                <option value="">Select project…</option>
-                {projects.map((p) => <option key={p.id} value={p.id}>{p.projectName ?? p.name}</option>)}
-              </select>
+              <div className="mt-1">
+                <SearchableSelect value={eProject} onChange={setEProject}
+                  options={projects.map((p) => ({ value: String(p.id), label: p.projectName ?? p.name ?? `Project #${p.id}` }))}
+                  placeholder="Search project…" />
+              </div>
             </label>
             <div className="grid grid-cols-2 gap-3">
               <label className="text-sm block">

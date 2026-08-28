@@ -41,8 +41,20 @@ export const leadApi = {
     api.post(`/leads/${id}/assignments`, { userId, role }),
   getAssignments: (id: string | number) => api.get(`/leads/${id}/assignments`),
 
+  updateReferral: (id: number, payload: {
+    referralType: string | null;
+    referredByCustomerId: number | null;
+    referredByEmployeeId: number | null;
+    referrerName: string | null;
+    referrerContact: string | null;
+    referralNotes: string | null;
+  }) => api.put<Lead>(`/leads/${id}/referral`, payload),
+
   getFollowups: (id: string | number) => api.get(`/leads/${id}/follow-ups`),
   addFollowup: (id: string | number, payload: any) => api.post(`/leads/${id}/follow-ups`, payload),
+
+  // Structured data captured by employees completing this lead's workflow tasks (Task Data log).
+  getTaskSubmissions: (id: string | number) => api.get(`/leads/${id}/task-submissions`),
 
   getCommunications: (id: string | number) => api.get(`/leads/${id}/communications`),
   addCommunication: (id: string | number, payload: any) => api.post(`/leads/${id}/communications`, payload),

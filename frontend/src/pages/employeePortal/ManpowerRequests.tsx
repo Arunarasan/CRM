@@ -65,7 +65,7 @@ export default function ManpowerRequests() {
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="flex items-center gap-1.5 text-sm font-semibold">
-                    <Users className="h-4 w-4 text-indigo-600" /> {r.requiredWorkers} worker{r.requiredWorkers > 1 ? 's' : ''}
+                    <Users className="h-4 w-4 text-emerald-600" /> {r.requiredWorkers} worker{r.requiredWorkers > 1 ? 's' : ''}
                     {r.skillRequired ? ` · ${r.skillRequired}` : ''}
                   </p>
                   <p className="text-[11px] text-muted-foreground">{r.requestNumber}{r.project?.projectName ? ` · ${r.project.projectName}` : ''}</p>

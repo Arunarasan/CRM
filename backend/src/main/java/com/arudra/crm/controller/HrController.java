@@ -174,6 +174,15 @@ public class HrController {
         return ResponseEntity.ok(payrollService.employeeWorkStats(id));
     }
 
+    /** Per-day sheet: attendance worked/OT hours, day earnings, and real task-tracked hours for a month. */
+    @GetMapping("/employees/{id}/daily-log")
+    @PreAuthorize(PAYROLL_READ)
+    public ResponseEntity<Map<String, Object>> employeeDailyLog(@PathVariable Long id,
+                                                                @RequestParam int month,
+                                                                @RequestParam int year) {
+        return ResponseEntity.ok(payrollService.employeeDailyLog(id, month, year));
+    }
+
     @PostMapping("/payroll")
     @PreAuthorize(PAYROLL_PROCESS)
     public ResponseEntity<SalaryRecord> generateSalaryRecord(@RequestBody SalaryRecord record) {
@@ -318,6 +327,21 @@ public class HrController {
         return ResponseEntity.ok(payrollService.getRegister(month, year));
     }
 
+    /** Unified pay run: one row per person — every employee AND every contractor — for the period. */
+    @GetMapping("/payroll/unified-register")
+    @PreAuthorize(PAYROLL_READ)
+    public ResponseEntity<List<com.arudra.crm.dto.payroll.PayrollLine>> unifiedRegister(
+            @RequestParam int month, @RequestParam int year) {
+        return ResponseEntity.ok(payrollService.unifiedRegister(month, year));
+    }
+
+    /** Combined counts + payout totals across employees and contractors for the period. */
+    @GetMapping("/payroll/summary")
+    @PreAuthorize(PAYROLL_READ)
+    public ResponseEntity<Map<String, Object>> payrollSummary(@RequestParam int month, @RequestParam int year) {
+        return ResponseEntity.ok(payrollService.payrollSummary(month, year));
+    }
+
     @GetMapping("/payslip/{salaryRecordId}")
     @PreAuthorize(PAYROLL_READ)
     public ResponseEntity<Map<String, Object>> payslip(@PathVariable Long salaryRecordId) {
@@ -328,6 +352,13 @@ public class HrController {
     @PreAuthorize(PAYROLL_READ)
     public ResponseEntity<Map<String, Object>> financeDashboard() {
         return ResponseEntity.ok(payrollService.financeDashboard());
+    }
+
+    /** Workforce cash-flow for a month: paid-out by category (salary/advance/loan/bonus/contractor) vs owed. */
+    @GetMapping("/cashflow")
+    @PreAuthorize(PAYROLL_READ)
+    public ResponseEntity<Map<String, Object>> cashflow(@RequestParam int month, @RequestParam int year) {
+        return ResponseEntity.ok(payrollService.cashflow(month, year));
     }
 
     @GetMapping("/payroll-reports/{type}")
@@ -400,6 +431,13 @@ public class HrController {
         return ResponseEntity.ok(payrollService.saveWageSettings(id, body));
     }
 
+    /** Quick toggle of an employee's pay basis (HOURLY ↔ MONTHLY) — inline action on the payroll page. */
+    @PutMapping("/employees/{id}/pay-basis")
+    @PreAuthorize(PAYROLL_PROCESS)
+    public ResponseEntity<Employee> setPayBasis(@PathVariable Long id, @RequestParam String salaryType) {
+        return ResponseEntity.ok(payrollService.setPayBasis(id, salaryType));
+    }
+
     /** Project Manager recommends a bonus for an employee (RECOMMENDED → HR approves). */
     @PostMapping("/employees/{id}/bonuses/recommend")
     @PreAuthorize(PAYROLL_RECOMMEND)
@@ -431,5 +469,31 @@ public class HrController {
     @PreAuthorize(PAYROLL_PROCESS)
     public ResponseEntity<EmployeeDeduction> approveDeduction(@PathVariable Long id) {
         return ResponseEntity.ok(payrollService.approveDeduction(id, currentUserService.getCurrentUser()));
+    }
+
+    // --- Employee-raised payroll requests (advance / loan repayment / other) — admin approval queue ---
+    @GetMapping("/payroll-requests")
+    @PreAuthorize(PAYROLL_READ)
+    public ResponseEntity<List<PayrollRequest>> payrollRequests(@RequestParam(required = false) String status) {
+        return ResponseEntity.ok(payrollService.allPayrollRequests(status));
+    }
+
+    @GetMapping("/employees/{id}/payroll-requests")
+    @PreAuthorize(PAYROLL_READ)
+    public ResponseEntity<List<PayrollRequest>> payrollRequestsForEmployee(@PathVariable Long id) {
+        return ResponseEntity.ok(payrollService.payrollRequestsForEmployee(id));
+    }
+
+    @PostMapping("/payroll-requests/{id}/approve")
+    @PreAuthorize(PAYROLL_PROCESS)
+    public ResponseEntity<PayrollRequest> approvePayrollRequest(@PathVariable Long id) {
+        return ResponseEntity.ok(payrollService.approvePayrollRequest(id, currentUserService.getCurrentUser()));
+    }
+
+    @PostMapping("/payroll-requests/{id}/reject")
+    @PreAuthorize(PAYROLL_PROCESS)
+    public ResponseEntity<PayrollRequest> rejectPayrollRequest(@PathVariable Long id, @RequestBody(required = false) Map<String, String> body) {
+        String remarks = body == null ? null : body.get("remarks");
+        return ResponseEntity.ok(payrollService.rejectPayrollRequest(id, currentUserService.getCurrentUser(), remarks));
     }
 }

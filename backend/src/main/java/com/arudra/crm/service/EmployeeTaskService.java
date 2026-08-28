@@ -6,6 +6,7 @@ import com.arudra.crm.entity.*;
 import com.arudra.crm.repository.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -61,9 +62,19 @@ public class EmployeeTaskService {
     private InventoryService inventoryService;
     @Autowired
     private NotificationService notificationService;
+    @Autowired
+    private WorkflowTriggerService workflowTriggerService;
+    @Autowired
+    private TaskEligibilityService taskEligibilityService;
+    @Autowired
+    private AssignmentSettingsRepository assignmentSettingsRepository;
 
     private static final List<String> ACTIVE_ASSIGNMENT_STATUSES =
             List.of("ASSIGNED", "ACCEPTED", "IN_PROGRESS", "PAUSED", "WAITING_MATERIAL", "REWORK", "COMPLETED");
+
+    /** Statuses that count toward an employee's active-task capacity (excludes done/closed). */
+    private static final List<String> CAPACITY_STATUSES =
+            List.of("ASSIGNED", "ACCEPTED", "IN_PROGRESS", "PAUSED", "WAITING_MATERIAL", "REWORK");
 
     /**
      * Once work is done a task is locked from further field updates, so an employee re-opening a
@@ -104,6 +115,9 @@ public class EmployeeTaskService {
         long pending = tasks.stream().filter(t -> !"COMPLETED".equals(t.getStatus())).count();
 
         Map<String, Object> home = new HashMap<>();
+        home.put("activeTaskCount", activeTaskCount(employee.getId()));
+        home.put("maxActiveTasks", maxActiveTasks());
+        home.put("availableCount", getAvailablePool(employee).size());
         home.put("dueToday", dueToday);
         home.put("overdue", overdue);
         home.put("upcoming", upcoming);
@@ -208,7 +222,9 @@ public class EmployeeTaskService {
     public List<Map<String, Object>> getProjectOpenTasks(Long projectId, User employee) {
         return taskRepository.findByProjectId(projectId).stream()
                 .filter(t -> !"COMPLETED".equals(t.getStatus()) && !"CANCELLED".equals(t.getStatus()))
+                .filter(t -> !"LOCKED".equals(t.getStatus()))
                 .filter(this::isUnassigned)
+                .filter(t -> taskEligibilityService.isEligible(employee, t))
                 .sorted(Comparator.comparing(Task::getDueDate, Comparator.nullsLast(Comparator.naturalOrder())))
                 .map(t -> toCard(t, employee.getId()))
                 .collect(Collectors.toList());
@@ -219,22 +235,33 @@ public class EmployeeTaskService {
      * tasks nobody else holds (per the chosen policy) — self-assigning never displaces another worker.
      * Set ACCEPTED since the employee actively chose it. Managers are notified for accountability.
      */
+    @Transactional
     @LogActivity(module = "EMPLOYEE_TASK", action = "SELF_ASSIGN")
     public Task selfAssign(Long taskId, User employee) {
-        Task task = getTask(taskId);
+        // Pessimistic row lock serializes concurrent picks so only one employee can win a task.
+        Task task = taskRepository.findByIdForUpdate(taskId)
+                .orElseThrow(() -> new RuntimeException("Task not found"));
         if ("COMPLETED".equals(task.getStatus()) || "CANCELLED".equals(task.getStatus())) {
             throw new IllegalStateException("This task is closed and can't be picked up.");
         }
-        if (!isUnassigned(task)) {
-            throw new IllegalStateException("This task is already taken. Only unassigned tasks can be picked up.");
+        if ("LOCKED".equals(task.getStatus())) {
+            throw new IllegalStateException("This task is locked until the work it depends on is completed.");
         }
+        if (!taskEligibilityService.isEligible(employee, task)) {
+            throw new IllegalStateException(taskEligibilityService.ineligibleReason(employee, task));
+        }
+        if (!isUnassigned(task)) {
+            throw new IllegalStateException("This task was already picked by another employee.");
+        }
+        assertHasCapacity(employee);
+
         TaskAssignment a = new TaskAssignment();
         a.setTask(task);
         a.setResourceType(ResourceType.EMPLOYEE);
         a.setResourceId(employee.getId());
         a.setEmployee(employee);
         a.setAssignedBy(employee);
-        a.setRole("Self-assigned");
+        a.setRole("Owner"); // first picker owns the task (matters for OWNER_APPROVAL completion)
         a.setStatus("ACCEPTED");
         a.setAcceptedAt(LocalDateTime.now());
         assignmentRepository.save(a);
@@ -249,11 +276,131 @@ public class EmployeeTaskService {
         return saved;
     }
 
+    /**
+     * A second (and further) employee joins an already-owned collaborative task. Single-employee
+     * tasks can't be joined. Consumes one capacity slot and is eligibility-gated like a pick.
+     */
+    @Transactional
+    @LogActivity(module = "EMPLOYEE_TASK", action = "JOIN")
+    public Task joinTask(Long taskId, User employee) {
+        Task task = taskRepository.findByIdForUpdate(taskId)
+                .orElseThrow(() -> new RuntimeException("Task not found"));
+        if ("COMPLETED".equals(task.getStatus()) || "CANCELLED".equals(task.getStatus())) {
+            throw new IllegalStateException("This task is closed and can't be joined.");
+        }
+        String type = task.getAssignmentType();
+        boolean collaborative = "MULTIPLE_EMPLOYEES".equals(type) || "TEAM".equals(type);
+        if (!collaborative) {
+            throw new IllegalStateException("This is a single-person task and can't be joined.");
+        }
+        if (isUnassigned(task)) {
+            throw new IllegalStateException("No one has started this task yet — use Pick & Start instead.");
+        }
+        if (!taskEligibilityService.isEligible(employee, task)) {
+            throw new IllegalStateException(taskEligibilityService.ineligibleReason(employee, task));
+        }
+
+        // Re-activate a prior cancelled/rejected assignment rather than stacking duplicate rows.
+        TaskAssignment existing = assignmentRepository.findByTaskIdAndEmployeeId(taskId, employee.getId()).orElse(null);
+        if (existing != null && !"CANCELLED".equals(existing.getStatus()) && !"REJECTED".equals(existing.getStatus())) {
+            throw new IllegalStateException("You're already on this task.");
+        }
+        assertHasCapacity(employee);
+
+        TaskAssignment a = existing != null ? existing : new TaskAssignment();
+        a.setTask(task);
+        a.setResourceType(ResourceType.EMPLOYEE);
+        a.setResourceId(employee.getId());
+        a.setEmployee(employee);
+        a.setAssignedBy(employee);
+        a.setRole("Participant");
+        a.setStatus("ACCEPTED");
+        a.setAcceptedAt(LocalDateTime.now());
+        assignmentRepository.save(a);
+
+        Task saved = recomputeAndSave(task);
+        for (Long mgr : managersForTask(task)) {
+            notificationService.dispatch("Task joined",
+                    employee.getName() + " joined \"" + task.getTaskName() + "\".", "TASK", mgr,
+                    task.getProject() != null ? "/projects/" + task.getProject().getId() : null);
+        }
+        return saved;
+    }
+
+    // ---------------------------------------------------------------- Capacity
+
+    /** Distinct tasks the employee is actively holding (owned or participating, not yet done). */
+    public int activeTaskCount(Long employeeId) {
+        return (int) assignmentRepository.findByEmployeeId(employeeId).stream()
+                .filter(a -> CAPACITY_STATUSES.contains(a.getStatus()))
+                .filter(a -> a.getTask() != null)
+                .map(a -> a.getTask().getId())
+                .distinct().count();
+    }
+
+    /** Configurable capacity cap (assignment_settings singleton), default 3. */
+    public int maxActiveTasks() {
+        return assignmentSettingsRepository.findById(AssignmentSettings.SINGLETON_ID)
+                .or(() -> assignmentSettingsRepository.findAll().stream().findFirst())
+                .map(AssignmentSettings::getMaxActiveTasks)
+                .orElse(3);
+    }
+
+    public Map<String, Object> getCapacity(User employee) {
+        int active = activeTaskCount(employee.getId());
+        int max = maxActiveTasks();
+        Map<String, Object> m = new HashMap<>();
+        m.put("active", active);
+        m.put("max", max);
+        m.put("canPick", active < max);
+        return m;
+    }
+
+    private void assertHasCapacity(User employee) {
+        int active = activeTaskCount(employee.getId());
+        int max = maxActiveTasks();
+        if (active >= max) {
+            throw new IllegalStateException("You're at capacity (" + active + " / " + max
+                    + "). Complete or release a task before picking another.");
+        }
+    }
+
+    /**
+     * The eligible, AVAILABLE workflow tasks an employee may pick up — the shared Task Pool. Each
+     * card carries {@code canPick} reflecting the employee's remaining capacity.
+     */
+    public List<Map<String, Object>> getAvailablePool(User employee) {
+        boolean hasCapacity = activeTaskCount(employee.getId()) < maxActiveTasks();
+        return taskRepository.findByStatus("AVAILABLE").stream()
+                .filter(this::isUnassigned)
+                .filter(t -> taskEligibilityService.isEligible(employee, t))
+                .sorted(Comparator.comparing(Task::getDueDate, Comparator.nullsLast(Comparator.naturalOrder())))
+                .map(t -> {
+                    Map<String, Object> card = toCard(t, employee.getId());
+                    card.put("canPick", hasCapacity);
+                    return card;
+                })
+                .collect(Collectors.toList());
+    }
+
     public Map<String, Object> getTaskDetail(Long taskId, User employee) {
         Task task = getTask(taskId);
         Map<String, Object> detail = toCard(task, employee != null ? employee.getId() : null);
 
         detail.put("description", task.getDescription());
+        detail.put("assignmentType", task.getAssignmentType());
+        detail.put("completionRule", task.getCompletionRule());
+        // Lead-workflow tasks may carry a structured completion form (Contact/Requirement/Qualify/…),
+        // or be module-driven (Measurement/BOQ) — done in a dedicated module, not by the generic button.
+        String templateCode = task.getTaskTemplate() != null ? task.getTaskTemplate().getCode() : null;
+        detail.put("formType", com.arudra.crm.util.LeadTaskForms.formTypeFor(templateCode));
+        detail.put("leadId", task.getLeadId());
+        boolean moduleDriven = com.arudra.crm.util.LeadTaskForms.isModuleDriven(templateCode);
+        detail.put("moduleDriven", moduleDriven);
+        detail.put("moduleLink", moduleDriven
+                ? com.arudra.crm.util.LeadTaskForms.moduleLink(templateCode, task.getLeadId()) : null);
+        detail.put("moduleLabel", moduleDriven
+                ? com.arudra.crm.util.LeadTaskForms.moduleLabel(templateCode) : null);
         detail.put("customer", task.getProject() != null && task.getProject().getCustomer() != null
                 ? task.getProject().getCustomer().getName() : null);
         detail.put("location", task.getProject() != null ? task.getProject().getPropertyAddress() : null);
@@ -400,6 +547,15 @@ public class EmployeeTaskService {
     @LogActivity(module = "EMPLOYEE_TASK", action = "COMPLETE")
     public Task complete(Long taskId, User employee, String remarks) {
         assertTaskEditableBy(taskId, employee);
+        // Module-driven tasks (Measurement/BOQ) can't be finished by hand — they close automatically
+        // when the real work is finalized in their module. Manual completion would falsely advance the
+        // workflow (e.g. generate the BOQ task with no measurement recorded).
+        Task guard = getTask(taskId);
+        if (guard.getTaskTemplate() != null
+                && com.arudra.crm.util.LeadTaskForms.isModuleDriven(guard.getTaskTemplate().getCode())) {
+            throw new IllegalStateException("This task is completed automatically when its work is finalized "
+                    + "in its dedicated module — it can't be marked done here.");
+        }
         TaskAssignment a = getAssignment(taskId, employee.getId());
         a.setStatus("COMPLETED");
         a.setCompletedAt(LocalDateTime.now());
@@ -407,7 +563,18 @@ public class EmployeeTaskService {
         assignmentRepository.save(a);
         Task task = a.getTask();
 
-        // Notify the people who track delivery: the project manager and the admins.
+        // Honor the task's completion rule (defaults to OWNER_APPROVAL for anything unset):
+        //   ANY_PARTICIPANT   → the task is done the moment one participant finishes.
+        //   ALL_PARTICIPANTS  → done once every active participant has finished (no manager step).
+        //   OWNER_APPROVAL    → participants submit; owner/manager approves via approveCompletion.
+        String rule = task.getCompletionRule() == null ? "OWNER_APPROVAL" : task.getCompletionRule();
+        boolean finalizeNow = "ANY_PARTICIPANT".equals(rule)
+                || ("ALL_PARTICIPANTS".equals(rule) && allActiveAssignmentsCompleted(task));
+        if (finalizeNow) {
+            return finalizeTaskCompletion(task, employee);
+        }
+
+        // Not final yet — notify delivery trackers that this participant submitted their part.
         String title = "Task Completed";
         String message = employee.getName() + " completed \"" + task.getTaskName() + "\"";
         for (Long mgr : managersForTask(task)) {
@@ -415,7 +582,38 @@ public class EmployeeTaskService {
         }
         notificationService.dispatchToAdmins(title, message, "TASK", "/tasks", employee.getId());
 
-        return recomputeAndSave(task);
+        return recomputeAndSave(task); // → WAITING_APPROVAL once all participants are done
+    }
+
+    /** Finalize a task as COMPLETED, close its assignments, notify, and drive the workflow forward. */
+    private Task finalizeTaskCompletion(Task task, User byEmployee) {
+        task.setStatus("COMPLETED");
+        task.setCompletedDate(LocalDate.now());
+        for (TaskAssignment a : assignmentRepository.findByTaskId(task.getId())) {
+            if (!"CANCELLED".equals(a.getStatus()) && !"REJECTED".equals(a.getStatus())
+                    && !"COMPLETED".equals(a.getStatus())) {
+                a.setStatus("COMPLETED");
+                if (a.getCompletedAt() == null) a.setCompletedAt(LocalDateTime.now());
+                assignmentRepository.save(a);
+            }
+        }
+        Task saved = taskRepository.save(task);
+
+        String message = "\"" + task.getTaskName() + "\" is complete";
+        for (Long mgr : managersForTask(task)) {
+            notificationService.dispatch("Task Completed", message, "TASK", mgr, "/tasks");
+        }
+        notificationService.dispatchToAdmins("Task Completed", message, "TASK", "/tasks", byEmployee.getId());
+
+        workflowTriggerService.onTaskCompleted(saved);
+        return saved;
+    }
+
+    private boolean allActiveAssignmentsCompleted(Task task) {
+        List<TaskAssignment> active = assignmentRepository.findByTaskId(task.getId()).stream()
+                .filter(a -> !"CANCELLED".equals(a.getStatus()) && !"REJECTED".equals(a.getStatus()))
+                .collect(Collectors.toList());
+        return !active.isEmpty() && active.stream().allMatch(a -> "COMPLETED".equals(a.getStatus()));
     }
 
     @LogActivity(module = "EMPLOYEE_TASK", action = "APPROVE")
@@ -432,6 +630,9 @@ public class EmployeeTaskService {
                         "TASK", a.getEmployee().getId(), "/employee/tasks/" + taskId);
             }
         }
+
+        // Drive the workflow forward: unlock dependents / advance the phase (no-op for manual tasks).
+        workflowTriggerService.onTaskCompleted(task);
         return task;
     }
 
@@ -668,6 +869,19 @@ public class EmployeeTaskService {
         return t.getDueDate() != null && t.getDueDate().isBefore(today) && !"COMPLETED".equals(t.getStatus()) && !"CANCELLED".equals(t.getStatus());
     }
 
+    /**
+     * Derived scheduling state — never mutates {@code status} (spec §16/26): ON_TRACK, DUE_SOON
+     * (within 2 days) or OVERDUE. Closed tasks are always ON_TRACK.
+     */
+    private String dueState(Task t, LocalDate today) {
+        if (t.getDueDate() == null || "COMPLETED".equals(t.getStatus()) || "CANCELLED".equals(t.getStatus())) {
+            return "ON_TRACK";
+        }
+        if (t.getDueDate().isBefore(today)) return "OVERDUE";
+        if (!t.getDueDate().isAfter(today.plusDays(2))) return "DUE_SOON";
+        return "ON_TRACK";
+    }
+
     private Task recomputeAndSave(Task task) {
         recomputeTaskStatus(task);
         return taskRepository.save(task);
@@ -728,6 +942,7 @@ public class EmployeeTaskService {
         card.put("priority", t.getPriority());
         card.put("status", t.getStatus());
         card.put("dueDate", t.getDueDate());
+        card.put("dueState", dueState(t, LocalDate.now())); // ON_TRACK | DUE_SOON | OVERDUE (derived, non-destructive)
         card.put("progressPercent", latestProgressPercent(t.getId()));
 
         List<TaskAssignment> assignments = assignmentRepository.findByTaskId(t.getId());

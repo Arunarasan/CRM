@@ -91,7 +91,7 @@ export default function ProfitabilityPage() {
               <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
                 <div className="flex justify-between"><dt className="text-muted-foreground">Quotation Value</dt><dd className="font-semibold">{currency(selected.quotationValue)}</dd></div>
                 <div className="flex justify-between"><dt className="text-muted-foreground">Budget</dt><dd className="font-semibold">{currency(selected.budget)}</dd></div>
-                <div className="flex justify-between"><dt className="text-muted-foreground">Revenue (Invoiced)</dt><dd className="font-semibold text-blue-700">{currency(selected.revenue)}</dd></div>
+                <div className="flex justify-between"><dt className="text-muted-foreground">Revenue (Invoiced)</dt><dd className="font-semibold text-emerald-700">{currency(selected.revenue)}</dd></div>
                 <div className="flex justify-between"><dt className="text-muted-foreground">Collected</dt><dd className="font-semibold text-emerald-700">{currency(selected.collected)}</dd></div>
                 <div className="flex justify-between"><dt className="text-muted-foreground">Outstanding</dt><dd className="font-semibold text-amber-700">{currency(selected.outstanding)}</dd></div>
                 <div className="flex justify-between"><dt className="text-muted-foreground">Estimated Cost</dt><dd className="font-semibold">{currency(selected.estimatedCost)}</dd></div>

@@ -28,13 +28,13 @@ const selectCls =
 
 function scoreColor(score: number) {
   if (score >= 85) return 'text-emerald-600';
-  if (score >= 70) return 'text-blue-600';
+  if (score >= 70) return 'text-emerald-600';
   if (score >= 55) return 'text-amber-600';
   return 'text-rose-600';
 }
 function scoreRing(score: number) {
   if (score >= 85) return 'border-emerald-500';
-  if (score >= 70) return 'border-blue-500';
+  if (score >= 70) return 'border-emerald-500';
   if (score >= 55) return 'border-amber-500';
   return 'border-rose-500';
 }
@@ -427,7 +427,7 @@ function DashboardTab() {
 
   const widgets: { label: string; value: string | number; tone: string }[] = [
     { label: 'Available Today', value: d.availableToday, tone: 'text-emerald-600' },
-    { label: 'Working Now', value: d.workingNow, tone: 'text-blue-600' },
+    { label: 'Working Now', value: d.workingNow, tone: 'text-emerald-600' },
     { label: 'Free Employees', value: d.freeEmployees, tone: 'text-emerald-600' },
     { label: 'On Leave', value: d.onLeave, tone: 'text-amber-600' },
     { label: 'In Overtime', value: d.inOvertime, tone: 'text-rose-600' },

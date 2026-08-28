@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { format } from "date-fns";
 import { purchaseApi } from "@/api/purchaseApi";
+import { toast } from "@/components/ui/toast";
+import { apiError } from "@/lib/apiError";
+import SearchableSelect from "@/components/ui/searchable-select";
 import type { PurchaseBill, PurchaseOrder } from "@/types/purchase";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -36,9 +39,9 @@ export default function InvoicesPage() {
   }, [isCreateOpen]);
 
   const createBill = () => {
-    if (!form.purchaseOrderId) return alert("Select the purchase order this invoice is against");
-    if (!form.billNumber) return alert("Enter the supplier's invoice number");
-    if (!form.totalAmount) return alert("Enter the invoice amount");
+    if (!form.purchaseOrderId) return toast.error("Select the purchase order this invoice is against.");
+    if (!form.billNumber) return toast.error("Enter the supplier's invoice number.");
+    if (!form.totalAmount) return toast.error("Enter the invoice amount.");
     purchaseApi.createBill({
       billNumber: form.billNumber,
       purchaseOrder: { id: Number(form.purchaseOrderId) },
@@ -47,13 +50,13 @@ export default function InvoicesPage() {
       totalAmount: Number(form.totalAmount),
       notes: form.notes,
     })
-      .then(() => { setIsCreateOpen(false); setForm({}); load(); })
-      .catch((e) => alert(e?.response?.data?.message || "Failed to log invoice"));
+      .then(() => { setIsCreateOpen(false); setForm({}); load(); toast.success("Supplier bill logged."); })
+      .catch((e) => toast.error(apiError(e, "Failed to log invoice.")));
   };
 
   const addPayment = () => {
     if (!payBill) return;
-    if (!payForm.amount) return alert("Enter the payment amount");
+    if (!payForm.amount) return toast.error("Enter the payment amount.");
     purchaseApi.addPayment({
       purchaseBill: { id: payBill.id },
       amount: Number(payForm.amount),
@@ -62,8 +65,8 @@ export default function InvoicesPage() {
       referenceNumber: payForm.referenceNumber,
       notes: payForm.notes,
     })
-      .then(() => { setPayBill(null); setPayForm({ paymentMethod: "BANK_TRANSFER", paymentType: "PARTIAL" }); load(); })
-      .catch((e) => alert(e?.response?.data?.message || "Failed to record payment"));
+      .then(() => { setPayBill(null); setPayForm({ paymentMethod: "BANK_TRANSFER", paymentType: "PARTIAL" }); load(); toast.success("Payment recorded."); })
+      .catch((e) => toast.error(apiError(e, "Failed to record payment.")));
   };
 
   const today = new Date().toISOString().slice(0, 10);
@@ -135,11 +138,9 @@ export default function InvoicesPage() {
           <div className="space-y-3 py-2">
             <div className="space-y-1.5">
               <Label className="text-xs">Purchase Order *</Label>
-              <select className="w-full h-10 rounded-md border border-input px-3 text-sm" value={form.purchaseOrderId || ""}
-                onChange={(e) => setForm({ ...form, purchaseOrderId: e.target.value })}>
-                <option value="">— Select PO —</option>
-                {orders.map((po) => <option key={po.id} value={po.id}>{po.poNumber} · {po.supplier?.name} · {currency(po.totalAmount)}</option>)}
-              </select>
+              <SearchableSelect value={form.purchaseOrderId || ""} onChange={(v) => setForm({ ...form, purchaseOrderId: v })}
+                options={orders.map((po) => ({ value: String(po.id), label: po.poNumber, hint: `${po.supplier?.name ?? ""} · ${currency(po.totalAmount)}` }))}
+                placeholder="Search purchase order…" />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">

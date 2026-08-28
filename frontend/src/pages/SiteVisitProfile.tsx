@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import SignatureCanvas from "react-signature-canvas";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { siteVisitApi, type SiteRoomMeasurement } from "@/lib/siteVisitApi";
+import { measurementApi } from "@/api/measurementApi";
 import CameraCaptureButton from "@/components/CameraCaptureButton";
 import { SelectField, TextField, selectClass } from "@/pages/leads/fields";
 
@@ -22,7 +23,11 @@ export default function SiteVisitProfile() {
   const [isSignDialogOpen, setIsSignDialogOpen] = useState(false);
 
   const handleBack = () => {
-    if (location.state?.from) {
+    // Prefer the last visited screen (browser history); the routes below are only fallbacks for when
+    // the page was opened directly with no in-app history to return to.
+    if (window.history.length > 2) {
+      navigate(-1);
+    } else if (location.state?.from) {
       navigate(location.state.from);
     } else if (visit?.lead?.id) {
       navigate(`/leads/${visit.lead.id}`);
@@ -30,8 +35,6 @@ export default function SiteVisitProfile() {
       navigate(`/customers/${visit.customer.id}`);
     } else if (visit?.project?.id) {
       navigate(`/projects/${visit.project.id}`);
-    } else if (window.history.length > 2) {
-      navigate(-1);
     } else {
       navigate("/site-visits");
     }
@@ -51,6 +54,18 @@ export default function SiteVisitProfile() {
 
   const [assignOpen, setAssignOpen] = useState(false);
   const [assignForm, setAssignForm] = useState({ userId: "", role: "Site Engineer", remarks: "" });
+
+  // Site Visit & Measurement is one combined step — once the visit is done, nudge the user to capture
+  // the measurement in the same trip. Look up any measurement already recorded for this lead so the
+  // banner shows the right state (continue vs. already captured). null = not checked yet.
+  const [leadMeasurements, setLeadMeasurements] = useState<any[] | null>(null);
+  useEffect(() => {
+    const leadId = visit?.lead?.id;
+    if (!leadId) { setLeadMeasurements([]); return; }
+    measurementApi.list({ size: 50, filters: { leadId } as any })
+      .then((r) => setLeadMeasurements(r.content || []))
+      .catch(() => setLeadMeasurements([]));
+  }, [visit?.lead?.id]);
 
   useEffect(() => {
     fetchVisit();
@@ -245,6 +260,40 @@ export default function SiteVisitProfile() {
           <Button variant="outline" onClick={handleSaveVisit}><Save className="mr-2 h-4 w-4" /> Save Changes</Button>
         </div>
       </div>
+
+      {/* Combined "Site Visit & Measurement" step: once the visit is complete, guide the user straight
+          into the measurement — same trip, one task. Shows "already captured" if one exists. */}
+      {visit.status === 'Completed' && leadMeasurements !== null && (
+        leadMeasurements.length === 0 ? (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4">
+            <div className="flex items-start gap-3">
+              <Ruler className="h-5 w-5 shrink-0 text-amber-700 mt-0.5" />
+              <div>
+                <p className="text-sm font-semibold text-amber-900">Next: capture the measurement</p>
+                <p className="text-sm text-amber-800">
+                  Site Visit &amp; Measurement is one step — take the measurements now while you're on site.
+                  The property details you just recorded carry over automatically.
+                </p>
+              </div>
+            </div>
+            <Button className="shrink-0 bg-amber-600 hover:bg-amber-700 text-white" onClick={() => navigate(`/measurements/new?siteVisitId=${id}`)}>
+              <Ruler className="mr-2 h-4 w-4" /> Continue to Measurement
+            </Button>
+          </div>
+        ) : (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-emerald-300 bg-emerald-50 p-4">
+            <div className="flex items-start gap-3">
+              <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-700 mt-0.5" />
+              <p className="text-sm font-medium text-emerald-900">
+                Measurement already captured for this lead — the Site Visit &amp; Measurement step is complete.
+              </p>
+            </div>
+            <Button variant="outline" className="shrink-0 border-emerald-300 text-emerald-800" onClick={() => navigate(`/measurements/${leadMeasurements[0].id}`)}>
+              <Ruler className="mr-2 h-4 w-4" /> Open Measurement
+            </Button>
+          </div>
+        )
+      )}
 
       <Tabs defaultValue="overview" className="w-full mt-6">
         <TabsList className="w-full justify-start border-b rounded-none pb-px bg-transparent h-auto p-0 space-x-6 flex-wrap">

@@ -120,7 +120,7 @@ export default function ReportsHub() {
             <div className="bg-white p-6 rounded-2xl border shadow-sm flex flex-col">
                 <div className="flex items-center justify-between mb-4">
                     <h3 className="font-bold text-slate-500 text-sm">Total Revenue</h3>
-                    <div className="p-2 bg-blue-50 text-blue-600 rounded-lg"><Activity className="w-5 h-5" /></div>
+                    <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg"><Activity className="w-5 h-5" /></div>
                 </div>
                 <p className="text-3xl font-black text-slate-900">${metrics.totalRevenue?.toFixed(2) || '0.00'}</p>
             </div>
@@ -171,7 +171,7 @@ export default function ReportsHub() {
                             <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} dy={10} />
                             <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} tickFormatter={(value) => `$${value}`} />
                             <RechartsTooltip cursor={{fill: '#f1f5f9'}} contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
-                            <Bar dataKey="Revenue" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={50} />
+                            <Bar dataKey="Revenue" fill="#114f39" radius={[4, 4, 0, 0]} maxBarSize={50} />
                         </BarChart>
                     </ResponsiveContainer>
                 </div>
@@ -201,7 +201,7 @@ export default function ReportsHub() {
         {taskSummary && (
           <div className="bg-white border rounded-2xl shadow-sm overflow-hidden mb-8">
               <div className="p-6 border-b bg-slate-50 flex items-center gap-2">
-                  <ClipboardCheck className="w-5 h-5 text-indigo-600" />
+                  <ClipboardCheck className="w-5 h-5 text-emerald-600" />
                   <h3 className="font-bold text-slate-800 text-lg">Field Task Execution</h3>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-5 gap-6 p-6">
@@ -245,7 +245,7 @@ export default function ReportsHub() {
         {inventorySummary && (
           <div className="bg-white border rounded-2xl shadow-sm overflow-hidden mb-8">
               <div className="p-6 border-b bg-slate-50 flex items-center gap-2">
-                  <Package className="w-5 h-5 text-blue-600" />
+                  <Package className="w-5 h-5 text-emerald-600" />
                   <h3 className="font-bold text-slate-800 text-lg">Inventory & Materials</h3>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-6 gap-6 p-6">

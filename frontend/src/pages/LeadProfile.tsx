@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft, Phone, Mail, Building, CheckCircle2, MoreVertical, Edit, XCircle,
   MessageCircle, MapPin, Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -15,41 +14,47 @@ import {
 import { leadApi } from "./leads/leadApi";
 import {
   LEAD_STAGES, LEAD_STATUSES, PRIORITY_STYLES, TEMPERATURE_STYLES,
-  formatDate, formatDateTime, formatINR, statusStyle,
+  formatDate, formatINR, statusStyle,
   type Lead, type UserSummary,
 } from "./leads/constants";
 import { SelectField, TextAreaField, selectClass } from "./leads/fields";
+import { useGoBack } from "@/hooks/useGoBack";
 import LeadFormDialog from "./leads/LeadFormDialog";
 import ConvertLeadDialog from "./leads/ConvertLeadDialog";
-import FollowUpsTab from "./leads/tabs/FollowUpsTab";
-import CommunicationsTab from "./leads/tabs/CommunicationsTab";
-import SiteVisitsTab from "./leads/tabs/SiteVisitsTab";
-import MeasurementsTab from "./leads/tabs/MeasurementsTab";
-import BoqTab from "./leads/tabs/BoqTab";
-import QuotationsTab from "./leads/tabs/QuotationsTab";
-import ProjectsTab from "./leads/tabs/ProjectsTab";
-import TasksTab from "./leads/tabs/TasksTab";
+import NextStepBanner from "./leads/NextStepBanner";
+import { useLeadJourney, type JourneyStepId } from "./leads/journey";
+import OverviewTab from "./leads/tabs/OverviewTab";
+import SalesJourneyTab from "./leads/tabs/SalesJourneyTab";
+import ActivityTab from "./leads/tabs/ActivityTab";
 import DocumentsTab from "./leads/tabs/DocumentsTab";
-import NotesTab from "./leads/tabs/NotesTab";
 import TimelineTab from "./leads/tabs/TimelineTab";
-
-function InfoItem({ label, value }: { label: string; value?: React.ReactNode }) {
-  return (
-    <div>
-      <span className="text-muted-foreground block mb-1 text-xs">{label}</span>
-      <span className="font-medium text-sm">{value ?? "—"}</span>
-    </div>
-  );
-}
 
 const TAB_TRIGGER_CLASS =
   "rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-0 pb-2 whitespace-nowrap";
 
+// The consolidated tab set. Old deep-links (?tab=measurements, ?tab=followups, …) still resolve
+// to the new home so bookmarks and cross-page links keep working after the tab collapse.
+const TABS = ["overview", "journey", "activity", "documents", "timeline"] as const;
+const LEGACY_TAB_MAP: Record<string, string> = {
+  customer: "overview", requirements: "overview",
+  sitevisits: "journey", measurements: "journey", boqs: "journey", quotations: "journey",
+  projects: "journey", tasks: "journey", taskdata: "journey",
+  followups: "activity", communication: "activity", notes: "activity",
+};
+function normalizeTab(t: string) {
+  return (TABS as readonly string[]).includes(t) ? t : LEGACY_TAB_MAP[t] || "overview";
+}
+
 export default function LeadProfile() {
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
+  const goBack = useGoBack("/leads");
   const [lead, setLead] = useState<Lead | null>(null);
   const [users, setUsers] = useState<UserSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState(normalizeTab(searchParams.get("tab") || "overview"));
+  // Set by the Next-Step banner to jump into the Journey tab and open the right stage.
+  const [focusStep, setFocusStep] = useState<{ id: JourneyStepId; nonce: number } | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [convertOpen, setConvertOpen] = useState(false);
   const [statusOpen, setStatusOpen] = useState(false);
@@ -63,6 +68,14 @@ export default function LeadProfile() {
       .catch((err) => console.error("Failed to fetch lead", err))
       .finally(() => setLoading(false));
   }, [id]);
+
+  const journey = useLeadJourney(id || "", lead);
+
+  // The banner's action jumps to the Journey tab and opens the current stage.
+  const goToNextStep = () => {
+    if (journey.currentStep) setFocusStep({ id: journey.currentStep.id, nonce: Date.now() });
+    setActiveTab("journey");
+  };
 
   useEffect(() => {
     fetchLead();
@@ -88,9 +101,7 @@ export default function LeadProfile() {
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-4">
-          <Link to="/leads">
-            <Button variant="outline" size="icon"><ArrowLeft className="h-4 w-4" /></Button>
-          </Link>
+          <Button variant="outline" size="icon" onClick={goBack} title="Back"><ArrowLeft className="h-4 w-4" /></Button>
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-2xl lg:text-3xl font-bold tracking-tight">{lead.name}</h1>
@@ -198,7 +209,7 @@ export default function LeadProfile() {
       {/* Quick actions */}
       <div className="flex flex-wrap gap-2 bg-card p-2 rounded-xl border shadow-sm">
         <Button variant="ghost" size="sm" asChild>
-          <a href={`tel:${lead.mobileNumber}`}><Phone className="h-4 w-4 mr-2 text-blue-500" /> Call</a>
+          <a href={`tel:${lead.mobileNumber}`}><Phone className="h-4 w-4 mr-2 text-emerald-500" /> Call</a>
         </Button>
         <Button variant="ghost" size="sm" asChild>
           <a href={`https://wa.me/${(lead.whatsappNumber || lead.mobileNumber)?.replace(/[^0-9]/g, "")}`} target="_blank" rel="noreferrer">
@@ -222,15 +233,16 @@ export default function LeadProfile() {
         </div>
       </div>
 
-      {/* Tabs */}
-      <Tabs defaultValue="overview" className="w-full">
+      {/* The single "what's next" prompt — always visible, jumps straight to the right stage. */}
+      <NextStepBanner journey={journey} onGo={goToNextStep} />
+
+      {/* Tabs — the 15-tab pipeline is collapsed into 5 task-shaped groups. */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <div className="overflow-x-auto pb-2">
-          <TabsList className="w-full justify-start border-b rounded-none pb-px bg-transparent h-auto p-0 space-x-5 min-w-max flex">
+          <TabsList className="w-full justify-start border-b rounded-none pb-px bg-transparent h-auto p-0 space-x-6 min-w-max flex">
             {[
-              ["overview", "Overview"], ["customer", "Customer"], ["requirements", "Requirements"],
-              ["followups", "Follow-ups"], ["communication", "Communication"], ["sitevisits", "Site Visits"],
-              ["measurements", "Measurements"], ["boqs", "BOQs"], ["quotations", "Quotations"], ["projects", "Projects"], ["tasks", "Tasks"],
-              ["documents", "Documents"], ["notes", "Notes"], ["timeline", "Timeline"],
+              ["overview", "Overview"], ["journey", "Sales Journey"], ["activity", "Activity"],
+              ["documents", "Documents"], ["timeline", "Timeline"],
             ].map(([value, label]) => (
               <TabsTrigger key={value} value={value} className={TAB_TRIGGER_CLASS}>{label}</TabsTrigger>
             ))}
@@ -239,142 +251,26 @@ export default function LeadProfile() {
 
         <div className="mt-6">
           <TabsContent value="overview" className="space-y-4">
-            <Card>
-              <CardHeader><CardTitle>Lead Summary</CardTitle></CardHeader>
-              <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                <InfoItem label="Lead Source" value={lead.leadSource} />
-                <InfoItem label="Lead Type" value={lead.leadType} />
-                <InfoItem label="Stage" value={lead.stage} />
-                <InfoItem label="Temperature" value={lead.leadTemperature} />
-                <InfoItem label="Estimated Budget" value={<span className="text-lg">{formatINR(lead.estimatedBudget)}</span>} />
-                <InfoItem label="Expected Project Value" value={formatINR(lead.expectedProjectValue)} />
-                <InfoItem label="Expected Start" value={formatDate(lead.expectedStartDate)} />
-                <InfoItem label="Expected Completion" value={formatDate(lead.expectedEndDate)} />
-                <InfoItem label="Follow-ups Logged" value={lead.followUpCount ?? 0} />
-                <InfoItem label="Next Follow-up" value={formatDate(lead.nextFollowUpDate)} />
-                <InfoItem label="Created" value={formatDateTime(lead.createdAt)} />
-                <InfoItem label="Created By" value={lead.createdBy} />
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader><CardTitle>Team</CardTitle></CardHeader>
-              <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                <InfoItem label="Sales Executive" value={lead.assignedSalesExecutive?.name || "Unassigned"} />
-                <InfoItem label="Designer" value={lead.assignedDesigner?.name || "Unassigned"} />
-                <InfoItem label="Engineer" value={lead.assignedEngineer?.name || "Unassigned"} />
-                <InfoItem label="Project Manager" value={lead.projectManager?.name || "Unassigned"} />
-              </CardContent>
-            </Card>
-            {lead.status === "Lost" && (
-              <Card className="border-destructive/40">
-                <CardHeader><CardTitle className="text-destructive">Lost Lead Details</CardTitle></CardHeader>
-                <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <InfoItem label="Reason" value={lead.lostReason} />
-                  <InfoItem label="Competitor" value={lead.competitor} />
-                  <InfoItem label="Customer Feedback" value={lead.customerFeedback} />
-                </CardContent>
-              </Card>
-            )}
+            <OverviewTab lead={lead} users={users} canEdit={isOpen} onChanged={fetchLead} />
           </TabsContent>
 
-          <TabsContent value="customer" className="space-y-4">
-            <Card>
-              <CardHeader><CardTitle>Contact Details</CardTitle></CardHeader>
-              <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                <InfoItem label="Customer Name" value={lead.name} />
-                <InfoItem label="Company" value={lead.companyName} />
-                <InfoItem label="Contact Person" value={lead.contactPerson} />
-                <InfoItem label="Primary Mobile" value={lead.mobileNumber} />
-                <InfoItem label="Alternative Mobile" value={lead.alternateMobile} />
-                <InfoItem label="WhatsApp" value={lead.whatsappNumber} />
-                <InfoItem label="Email" value={lead.email} />
-                <InfoItem label="GST Number" value={lead.gstNumber} />
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader><CardTitle>Address</CardTitle></CardHeader>
-              <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                <div className="col-span-2"><InfoItem label="Address" value={lead.address} /></div>
-                <InfoItem label="City" value={lead.city} />
-                <InfoItem label="District" value={lead.district} />
-                <InfoItem label="State" value={lead.state} />
-                <InfoItem label="Pincode" value={lead.pincode} />
-                <div className="col-span-2"><InfoItem label="Project / Site Address" value={lead.siteAddress} /></div>
-              </CardContent>
-            </Card>
+          <TabsContent value="journey">
+            <SalesJourneyTab
+              leadId={id}
+              lead={lead}
+              users={users}
+              journey={journey}
+              focusStep={focusStep}
+              onChanged={() => { fetchLead(); journey.reload(); }}
+              onEditRequirement={() => setEditOpen(true)}
+              onConvert={() => setConvertOpen(true)}
+            />
           </TabsContent>
-
-          <TabsContent value="requirements" className="space-y-4">
-            <Card>
-              <CardHeader><CardTitle>Property Details</CardTitle></CardHeader>
-              <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                <InfoItem label="Property Type" value={lead.propertyType} />
-                <InfoItem label="Construction Status" value={lead.currentConstructionStage} />
-                <InfoItem label="Floors" value={lead.floorCount} />
-                <InfoItem label="Area (sq.ft)" value={lead.areaSqft} />
-                <InfoItem label="Design Style" value={lead.preferredDesignStyle} />
-                <InfoItem label="Preferred Materials" value={lead.preferredMaterial} />
-                <InfoItem label="Color Theme" value={lead.preferredColorTheme} />
-                <InfoItem label="Duration" value={lead.estimatedDuration} />
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader><CardTitle>Scope of Work</CardTitle></CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex flex-wrap gap-2">
-                  {[
-                    ["Modular Kitchen", lead.reqKitchen], ["Wardrobe", lead.reqWardrobe], ["TV Unit", lead.reqTvUnit],
-                    ["False Ceiling", lead.reqFalseCeiling], ["Painting", lead.reqPainting], ["Flooring", lead.reqFlooring],
-                    ["Electrical", lead.reqElectrical], ["Plumbing", lead.reqPlumbing], ["Wood Finish", lead.reqWoodFinish],
-                  ].filter(([, v]) => v).map(([label]) => (
-                    <span key={label as string} className="px-3 py-1 bg-primary/10 text-primary text-sm rounded-full font-medium">
-                      ✓ {label}
-                    </span>
-                  ))}
-                  {![lead.reqKitchen, lead.reqWardrobe, lead.reqTvUnit, lead.reqFalseCeiling, lead.reqPainting,
-                    lead.reqFlooring, lead.reqElectrical, lead.reqPlumbing, lead.reqWoodFinish].some(Boolean) && (
-                    <span className="text-sm text-muted-foreground">No scope items selected.</span>
-                  )}
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <InfoItem label="Rooms Required" value={lead.roomsRequired} />
-                  <InfoItem label="Special Requests" value={lead.specialRequests} />
-                </div>
-                <InfoItem label="Requirement Description" value={lead.projectDescription} />
-                <InfoItem label="Customer Requirements / Notes" value={lead.customerRequirements} />
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="followups">
-            <FollowUpsTab leadId={id} onChanged={fetchLead} />
-          </TabsContent>
-          <TabsContent value="communication">
-            <CommunicationsTab leadId={id} onChanged={fetchLead} />
-          </TabsContent>
-          <TabsContent value="sitevisits">
-            <SiteVisitsTab leadId={id} onChanged={fetchLead} />
-          </TabsContent>
-          <TabsContent value="measurements">
-            <MeasurementsTab leadId={id} />
-          </TabsContent>
-          <TabsContent value="boqs">
-            <BoqTab leadId={id} />
-          </TabsContent>
-          <TabsContent value="quotations">
-            <QuotationsTab leadId={id} />
-          </TabsContent>
-          <TabsContent value="projects">
-            <ProjectsTab leadId={id} />
-          </TabsContent>
-          <TabsContent value="tasks">
-            <TasksTab leadId={id} users={users} />
+          <TabsContent value="activity">
+            <ActivityTab leadId={id} onChanged={fetchLead} />
           </TabsContent>
           <TabsContent value="documents">
             <DocumentsTab leadId={id} />
-          </TabsContent>
-          <TabsContent value="notes">
-            <NotesTab leadId={id} />
           </TabsContent>
           <TabsContent value="timeline">
             <TimelineTab leadId={id} />

@@ -19,9 +19,9 @@ export default function PurchaseDashboard() {
 
   const tiles = [
     { label: "Pending Requests", value: data.pendingPurchaseRequests, icon: ClipboardList, to: "/purchases/requests", tone: "bg-amber-50 text-amber-600" },
-    { label: "Approved Requests", value: data.approvedPurchaseRequests, icon: ClipboardList, to: "/purchases/requests", tone: "bg-blue-50 text-blue-600" },
+    { label: "Approved Requests", value: data.approvedPurchaseRequests, icon: ClipboardList, to: "/purchases/requests", tone: "bg-emerald-50 text-emerald-600" },
     { label: "Draft / Awaiting POs", value: data.pendingPurchaseOrders, icon: FileText, to: "/purchases/orders", tone: "bg-slate-100 text-slate-600" },
-    { label: "Open POs", value: data.openPurchaseOrders, icon: FileText, to: "/purchases/orders", tone: "bg-indigo-50 text-indigo-600" },
+    { label: "Open POs", value: data.openPurchaseOrders, icon: FileText, to: "/purchases/orders", tone: "bg-emerald-50 text-emerald-600" },
     { label: "Pending GRNs", value: data.pendingGrns, icon: PackageCheck, to: "/purchases/grns", tone: "bg-cyan-50 text-cyan-600" },
     { label: "Unpaid Invoices", value: data.pendingBills, icon: Receipt, to: "/purchases/invoices", tone: "bg-rose-50 text-rose-600" },
     { label: "Outstanding", value: currency(data.outstandingPayments), icon: Receipt, to: "/purchases/payments", tone: "bg-red-50 text-red-600" },

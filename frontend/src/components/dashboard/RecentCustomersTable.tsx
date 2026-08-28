@@ -22,7 +22,7 @@ export default function RecentCustomersTable({ customers, isLoading }: { custome
     <Card className="col-span-1 lg:col-span-2 shadow-sm rounded-xl border-border/40 animate-in fade-in slide-in-from-bottom-4" style={{ animationDelay: '700ms' }}>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Users className="h-5 w-5 text-blue-500" />
+          <Users className="h-5 w-5 text-emerald-500" />
           Recent Customers
         </CardTitle>
       </CardHeader>

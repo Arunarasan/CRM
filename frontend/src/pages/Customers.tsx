@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
 import api from "@/lib/api";
-import { Search, Plus, Filter, Download, Upload, Eye } from "lucide-react";
+import { Search, Plus, Filter, Download, Upload, Eye, ChevronRight, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Link } from "react-router-dom";
+import ResponsiveList, { type Column } from "@/components/ui/responsive-list";
+import FilterSheet from "@/components/ui/filter-sheet";
+import CustomerFormDialog from "./customers/CustomerFormDialog";
+import { useNavigate } from "react-router-dom";
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
@@ -20,47 +21,59 @@ interface CustomerProfileDTO {
   tags: {id: number, name: string}[];
 }
 
+const EMPTY_FILTERS = { name: "", city: "", email: "", phone: "", tag: "" };
+
+function Tags({ tags }: { tags: CustomerProfileDTO["tags"] }) {
+  if (!tags?.length) return null;
+  return (
+    <div className="flex gap-1 flex-wrap">
+      {tags.map(tag => (
+        <span key={tag.id} className="px-2 py-0.5 bg-primary/10 text-primary text-xs rounded-full">{tag.name}</span>
+      ))}
+    </div>
+  );
+}
+
 export default function Customers() {
+  const navigate = useNavigate();
   const [customers, setCustomers] = useState<CustomerProfileDTO[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [showFilters, setShowFilters] = useState(false);
   const [isAddCustomerOpen, setIsAddCustomerOpen] = useState(false);
-  
-  const initialCustomerState = {
-    name: "", email: "", phone: "", billingAddress: "", siteAddress: "", city: "", district: "", state: "", country: "", pincode: "", googleMapLocation: "", latitude: "", longitude: "", gstNumber: "",
-    customerType: "Individual", companyName: "", contactPersonName: "", alternatePhone: "", whatsappNumber: "", website: "", panNumber: "", status: "Active"
-  };
-  const [newCustomer, setNewCustomer] = useState(initialCustomerState);
-  
-  // Advanced filters
-  const [filters, setFilters] = useState({
-    name: "",
-    city: "",
-    email: "",
-    phone: "",
-    tag: ""
-  });
+  const [filters, setFilters] = useState({ ...EMPTY_FILTERS });
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 350);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  useEffect(() => { setPage(0); }, [debouncedSearch, filters]);
 
   useEffect(() => {
     fetchCustomers();
-  }, [search, page, filters]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearch, page, filters]);
 
   const fetchCustomers = () => {
+    setLoading(true);
     const params = new URLSearchParams({
-      search,
+      search: debouncedSearch,
       page: page.toString(),
       size: "10",
       ...Object.fromEntries(Object.entries(filters).filter(([_, v]) => v !== ""))
     });
-    
+
     api.get(`/customers?${params.toString()}`)
       .then(res => {
         setCustomers(res.data.content);
         setTotalPages(res.data.totalPages);
       })
-      .catch(err => console.error("Failed to fetch customers", err));
+      .catch(err => console.error("Failed to fetch customers", err))
+      .finally(() => setLoading(false));
   };
 
   const handleExportExcel = () => {
@@ -91,280 +104,122 @@ export default function Customers() {
     doc.save('customers_export.pdf');
   };
 
-  const handleCreateCustomer = (e: React.FormEvent) => {
-    e.preventDefault();
-    const payload = { ...newCustomer };
-    if (!payload.email) payload.email = null as any;
-    if (!payload.latitude) payload.latitude = null as any;
-    if (!payload.longitude) payload.longitude = null as any;
+  const setFilter = (key: keyof typeof filters) => (value: string) =>
+    setFilters((f) => ({ ...f, [key]: value }));
+  const activeFilterCount = Object.values(filters).filter((v) => v !== "").length;
 
-    api.post("/customers", payload)
-      .then(() => {
-        setIsAddCustomerOpen(false);
-        setNewCustomer(initialCustomerState);
-        fetchCustomers();
-      })
-      .catch(err => console.error("Failed to create customer", err));
-  };
+  const location = (c: CustomerProfileDTO) =>
+    `${c.city || ""}${c.city && c.state ? ", " : ""}${c.state || ""}` || "—";
+
+  const columns: Column<CustomerProfileDTO>[] = [
+    { key: "name", header: "Name", cellClassName: "font-medium", cell: (c) => <span className="text-primary">{c.name}</span> },
+    {
+      key: "contact", header: "Contact", cell: (c) => (
+        <div><div className="text-sm">{c.email}</div><div className="text-xs text-muted-foreground">{c.phone}</div></div>
+      ),
+    },
+    { key: "location", header: "Location", cell: (c) => location(c) },
+    { key: "tags", header: "Tags", cell: (c) => <Tags tags={c.tags} /> },
+    {
+      key: "actions", header: "", headClassName: "text-right", cellClassName: "text-right",
+      cell: (c) => (
+        <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); navigate(`/customers/${c.id}`); }}>
+          <Eye className="h-4 w-4 mr-1" /> Profile
+        </Button>
+      ),
+    },
+  ];
 
   return (
-    <div className="p-8 space-y-6 flex flex-col h-full animate-in fade-in">
-      <div className="flex items-center justify-between">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6 flex flex-col h-full animate-in fade-in">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-3xl font-bold tracking-tight">Customers</h1>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={handleExportExcel}><Download className="mr-2 h-4 w-4" /> Excel</Button>
           <Button variant="outline" onClick={handleExportPDF}><Download className="mr-2 h-4 w-4" /> PDF</Button>
           <Button variant="outline"><Upload className="mr-2 h-4 w-4" /> Import</Button>
-          <Dialog open={isAddCustomerOpen} onOpenChange={setIsAddCustomerOpen}>
-            <DialogTrigger asChild>
-              <Button><Plus className="mr-2 h-4 w-4" /> Add Customer</Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>Add New Customer</DialogTitle>
-              </DialogHeader>
-              <form onSubmit={handleCreateCustomer} className="space-y-4 pt-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Customer Type</label>
-                    <select 
-                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background"
-                      value={newCustomer.customerType} 
-                      onChange={e => setNewCustomer({...newCustomer, customerType: e.target.value})}
-                    >
-                      <option value="Individual">Individual</option>
-                      <option value="Business">Business</option>
-                      <option value="Builder">Builder</option>
-                      <option value="Architect">Architect</option>
-                      <option value="Contractor">Contractor</option>
-                    </select>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Status</label>
-                    <select 
-                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background"
-                      value={newCustomer.status} 
-                      onChange={e => setNewCustomer({...newCustomer, status: e.target.value})}
-                    >
-                      <option value="Active">Active</option>
-                      <option value="Inactive">Inactive</option>
-                      <option value="Blacklisted">Blacklisted</option>
-                    </select>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Customer Name *</label>
-                    <Input required value={newCustomer.name} onChange={e => setNewCustomer({...newCustomer, name: e.target.value})} />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Company Name</label>
-                    <Input value={newCustomer.companyName} onChange={e => setNewCustomer({...newCustomer, companyName: e.target.value})} />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Contact Person</label>
-                    <Input value={newCustomer.contactPersonName} onChange={e => setNewCustomer({...newCustomer, contactPersonName: e.target.value})} />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Email</label>
-                    <Input type="email" value={newCustomer.email} onChange={e => setNewCustomer({...newCustomer, email: e.target.value})} />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Mobile Number *</label>
-                    <Input required value={newCustomer.phone} onChange={e => setNewCustomer({...newCustomer, phone: e.target.value})} />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Alternate Mobile</label>
-                    <Input value={newCustomer.alternatePhone} onChange={e => setNewCustomer({...newCustomer, alternatePhone: e.target.value})} />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">WhatsApp Number</label>
-                    <Input value={newCustomer.whatsappNumber} onChange={e => setNewCustomer({...newCustomer, whatsappNumber: e.target.value})} />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Website</label>
-                    <Input value={newCustomer.website} onChange={e => setNewCustomer({...newCustomer, website: e.target.value})} />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">GST Number</label>
-                    <Input value={newCustomer.gstNumber} onChange={e => setNewCustomer({...newCustomer, gstNumber: e.target.value})} />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">PAN Number</label>
-                    <Input value={newCustomer.panNumber} onChange={e => setNewCustomer({...newCustomer, panNumber: e.target.value})} />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Billing Address</label>
-                    <Input value={newCustomer.billingAddress} onChange={e => setNewCustomer({...newCustomer, billingAddress: e.target.value})} />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Site Address</label>
-                    <Input value={newCustomer.siteAddress} onChange={e => setNewCustomer({...newCustomer, siteAddress: e.target.value})} />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">City</label>
-                    <Input value={newCustomer.city} onChange={e => setNewCustomer({...newCustomer, city: e.target.value})} />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">District</label>
-                    <Input value={newCustomer.district} onChange={e => setNewCustomer({...newCustomer, district: e.target.value})} />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">State</label>
-                    <Input value={newCustomer.state} onChange={e => setNewCustomer({...newCustomer, state: e.target.value})} />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Country</label>
-                    <Input value={newCustomer.country} onChange={e => setNewCustomer({...newCustomer, country: e.target.value})} />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Pincode</label>
-                    <Input value={newCustomer.pincode} onChange={e => setNewCustomer({...newCustomer, pincode: e.target.value})} />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Google Map Location</label>
-                    <Input value={newCustomer.googleMapLocation} onChange={e => setNewCustomer({...newCustomer, googleMapLocation: e.target.value})} />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Latitude</label>
-                    <Input type="number" step="any" value={newCustomer.latitude} onChange={e => setNewCustomer({...newCustomer, latitude: e.target.value})} />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Longitude</label>
-                    <Input type="number" step="any" value={newCustomer.longitude} onChange={e => setNewCustomer({...newCustomer, longitude: e.target.value})} />
-                  </div>
-                </div>
-                <div className="flex justify-end pt-4">
-                  <Button type="submit">Save Customer</Button>
-                </div>
-              </form>
-            </DialogContent>
-          </Dialog>
+          <Button onClick={() => setIsAddCustomerOpen(true)}><Plus className="mr-2 h-4 w-4" /> Add Customer</Button>
         </div>
       </div>
 
-      <div className="flex gap-4">
-        {/* Main Content */}
-        <div className="flex-1 space-y-4">
-          <div className="flex items-center gap-2">
-            <div className="flex-1 flex items-center space-x-2 bg-card p-2 rounded-lg border">
-              <Search className="h-5 w-5 text-muted-foreground ml-2" />
-              <Input 
-                placeholder="Search across all fields..." 
-                className="border-0 shadow-none focus-visible:ring-0 text-base"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </div>
-            <Button variant={showFilters ? "secondary" : "outline"} onClick={() => setShowFilters(!showFilters)}>
-              <Filter className="mr-2 h-4 w-4" /> Filters
-            </Button>
-          </div>
+      <CustomerFormDialog
+        open={isAddCustomerOpen}
+        onOpenChange={setIsAddCustomerOpen}
+        onSaved={fetchCustomers}
+      />
 
-          <div className="border rounded-xl bg-card overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Contact</TableHead>
-                  <TableHead>Location</TableHead>
-                  <TableHead>Tags</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {customers.map((customer) => (
-                  <TableRow key={customer.id} className="hover:bg-muted/50">
-                    <TableCell className="font-medium">
-                      <Link to={`/customers/${customer.id}`} className="hover:underline text-primary">
-                        {customer.name}
-                      </Link>
-                    </TableCell>
-                    <TableCell>
-                      <div className="text-sm">{customer.email}</div>
-                      <div className="text-xs text-muted-foreground">{customer.phone}</div>
-                    </TableCell>
-                    <TableCell>
-                      {customer.city}{customer.city && customer.state ? ', ' : ''}{customer.state}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-1 flex-wrap">
-                        {customer.tags?.map(tag => (
-                          <span key={tag.id} className="px-2 py-1 bg-primary/10 text-primary text-xs rounded-full">
-                            {tag.name}
-                          </span>
-                        ))}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Link to={`/customers/${customer.id}`}>
-                        <Button variant="ghost" size="sm">
-                          <Eye className="h-4 w-4 mr-1" /> Profile
-                        </Button>
-                      </Link>
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {customers.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                      No customers found matching your criteria.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between mt-4">
-              <Button variant="outline" disabled={page === 0} onClick={() => setPage(page - 1)}>Previous</Button>
-              <span className="text-sm text-muted-foreground">Page {page + 1} of {totalPages}</span>
-              <Button variant="outline" disabled={page >= totalPages - 1} onClick={() => setPage(page + 1)}>Next</Button>
-            </div>
-          )}
+      {/* Search + filter toggle */}
+      <div className="flex items-center gap-2">
+        <div className="flex-1 flex items-center space-x-2 bg-card p-1.5 rounded-lg border">
+          <Search className="h-5 w-5 text-muted-foreground ml-2" />
+          <Input
+            placeholder="Search across all fields..."
+            className="border-0 shadow-none focus-visible:ring-0 text-base"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
         </div>
+        <Button variant={activeFilterCount > 0 ? "secondary" : "outline"} onClick={() => setShowFilters(true)}>
+          <Filter className="mr-2 h-4 w-4" /> Filters
+          {activeFilterCount > 0 && (
+            <span className="ml-2 bg-primary text-primary-foreground text-xs rounded-full h-5 w-5 flex items-center justify-center">
+              {activeFilterCount}
+            </span>
+          )}
+        </Button>
+      </div>
 
-        {/* Sidebar Filters */}
-        {showFilters && (
-          <div className="w-80 space-y-4 border rounded-xl p-4 bg-card animate-in slide-in-from-right-8">
-            <h3 className="font-semibold text-lg border-b pb-2">Advanced Filters</h3>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Name</label>
-                <Input value={filters.name} onChange={e => setFilters({...filters, name: e.target.value})} placeholder="Filter by name..." />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Email</label>
-                <Input value={filters.email} onChange={e => setFilters({...filters, email: e.target.value})} placeholder="Filter by email..." />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Phone</label>
-                <Input value={filters.phone} onChange={e => setFilters({...filters, phone: e.target.value})} placeholder="Filter by phone..." />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">City</label>
-                <Input value={filters.city} onChange={e => setFilters({...filters, city: e.target.value})} placeholder="Filter by city..." />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Tag</label>
-                <Input value={filters.tag} onChange={e => setFilters({...filters, tag: e.target.value})} placeholder="Filter by tag..." />
-              </div>
-              <Button className="w-full" variant="outline" onClick={() => setFilters({name: "", city: "", email: "", phone: "", tag: ""})}>
-                Clear Filters
-              </Button>
+      <ResponsiveList
+        items={customers}
+        loading={loading}
+        getRowKey={(c) => c.id}
+        onRowClick={(c) => navigate(`/customers/${c.id}`)}
+        emptyIcon={Users}
+        emptyTitle="No customers found"
+        emptyDescription="No customers match your search or filters. Add your first customer to get started."
+        emptyAction={<Button onClick={() => setIsAddCustomerOpen(true)}><Plus className="mr-2 h-4 w-4" /> Add Customer</Button>}
+        columns={columns}
+        renderCard={(c) => (
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 space-y-1">
+              <div className="font-medium text-primary truncate">{c.name}</div>
+              {c.phone && <div className="text-sm text-muted-foreground">{c.phone}</div>}
+              {c.email && <div className="text-sm text-muted-foreground truncate">{c.email}</div>}
+              <div className="text-xs text-muted-foreground">{location(c)}</div>
+              <Tags tags={c.tags} />
             </div>
+            <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
           </div>
         )}
-      </div>
+      />
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage(page - 1)}>Previous</Button>
+          <span className="text-sm text-muted-foreground">Page {page + 1} of {totalPages}</span>
+          <Button variant="outline" size="sm" disabled={page >= totalPages - 1} onClick={() => setPage(page + 1)}>Next</Button>
+        </div>
+      )}
+
+      <FilterSheet
+        open={showFilters}
+        onClose={() => setShowFilters(false)}
+        activeCount={activeFilterCount}
+        onClear={() => setFilters({ ...EMPTY_FILTERS })}
+      >
+        {([
+          { label: "Name", key: "name" as const },
+          { label: "Email", key: "email" as const },
+          { label: "Phone", key: "phone" as const },
+          { label: "City", key: "city" as const },
+          { label: "Tag", key: "tag" as const },
+        ]).map(({ label, key }) => (
+          <div key={key} className="space-y-1.5">
+            <label className="text-sm font-medium">{label}</label>
+            <Input value={filters[key]} onChange={(e) => setFilter(key)(e.target.value)} placeholder={`Filter by ${label.toLowerCase()}...`} />
+          </div>
+        ))}
+      </FilterSheet>
     </div>
   );
 }

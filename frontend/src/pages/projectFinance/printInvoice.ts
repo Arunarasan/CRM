@@ -34,8 +34,8 @@ export function printInvoice(invoice: Invoice, items: InvoiceItem[], project?: a
   <style>
     * { box-sizing: border-box; }
     body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; color: #1e293b; margin: 32px; font-size: 13px; }
-    .head { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #2563eb; padding-bottom: 16px; }
-    .brand { font-size: 22px; font-weight: 800; color: #2563eb; }
+    .head { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #114f39; padding-bottom: 16px; }
+    .brand { font-size: 22px; font-weight: 800; color: #114f39; }
     .title { text-align: right; }
     .title h1 { margin: 0; font-size: 20px; letter-spacing: 1px; }
     .pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; }

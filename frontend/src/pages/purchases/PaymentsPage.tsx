@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { format } from "date-fns";
 import { purchaseApi } from "@/api/purchaseApi";
+import { toast } from "@/components/ui/toast";
+import { apiError } from "@/lib/apiError";
+import SearchableSelect from "@/components/ui/searchable-select";
 import type { PurchaseOrder, PurchasePayment } from "@/types/purchase";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,7 +16,7 @@ import { Plus, Wallet } from "lucide-react";
 const currency = (n?: number) => `₹${(n ?? 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
 
 const TYPE_TONE: Record<string, string> = {
-  ADVANCE: "bg-indigo-100 text-indigo-700",
+  ADVANCE: "bg-emerald-100 text-emerald-700",
   PARTIAL: "bg-amber-100 text-amber-700",
   FULL: "bg-emerald-100 text-emerald-700",
 };
@@ -37,8 +40,8 @@ export default function PaymentsPage() {
   }, [isAdvanceOpen]);
 
   const saveAdvance = () => {
-    if (!form.purchaseOrderId) return alert("Select the purchase order");
-    if (!form.amount) return alert("Enter the advance amount");
+    if (!form.purchaseOrderId) return toast.error("Select the purchase order.");
+    if (!form.amount) return toast.error("Enter the advance amount.");
     purchaseApi.addPayment({
       purchaseOrder: { id: Number(form.purchaseOrderId) },
       amount: Number(form.amount),
@@ -47,8 +50,8 @@ export default function PaymentsPage() {
       referenceNumber: form.referenceNumber,
       notes: form.notes,
     })
-      .then(() => { setIsAdvanceOpen(false); setForm({ paymentMethod: "BANK_TRANSFER" }); load(); })
-      .catch((e) => alert(e?.response?.data?.message || "Failed to record advance"));
+      .then(() => { setIsAdvanceOpen(false); setForm({ paymentMethod: "BANK_TRANSFER" }); load(); toast.success("Advance payment recorded."); })
+      .catch((e) => toast.error(apiError(e, "Failed to record advance.")));
   };
 
   const totalOutstanding = outstanding.reduce((acc, o) => acc + (o.balance || 0), 0);
@@ -133,11 +136,9 @@ export default function PaymentsPage() {
           <div className="space-y-3 py-2">
             <div className="space-y-1.5">
               <Label className="text-xs">Purchase Order *</Label>
-              <select className="w-full h-10 rounded-md border border-input px-3 text-sm" value={form.purchaseOrderId || ""}
-                onChange={(e) => setForm({ ...form, purchaseOrderId: e.target.value })}>
-                <option value="">— Select PO —</option>
-                {orders.map((po) => <option key={po.id} value={po.id}>{po.poNumber} · {po.supplier?.name} · {currency(po.totalAmount)}</option>)}
-              </select>
+              <SearchableSelect value={form.purchaseOrderId || ""} onChange={(v) => setForm({ ...form, purchaseOrderId: v })}
+                options={orders.map((po) => ({ value: String(po.id), label: po.poNumber, hint: `${po.supplier?.name ?? ""} · ${currency(po.totalAmount)}` }))}
+                placeholder="Search purchase order…" />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">

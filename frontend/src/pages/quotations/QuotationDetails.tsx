@@ -153,7 +153,7 @@ export default function QuotationDetails() {
   const status = quotation.status || "DRAFT";
 
   return (
-    <div className="p-6 lg:p-8 space-y-5 h-full bg-background flex flex-col overflow-y-auto animate-in fade-in">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-5 h-full bg-background flex flex-col overflow-y-auto animate-in fade-in">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-4">
           <Button variant="outline" size="icon" onClick={handleBack} title="Back">

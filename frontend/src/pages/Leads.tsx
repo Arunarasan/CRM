@@ -2,22 +2,24 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-pangea/dnd";
 import {
-  Search, Plus, Filter, LayoutGrid, List, Clock, ArrowRight, Users, Flame, Snowflake,
-  ThermometerSun, CheckCircle, XCircle, PhoneCall, MapPin, Ruler, FileText, CalendarDays,
-  TrendingUp, Target,
+  Search, Plus, Filter, LayoutGrid, List, Clock, Users, Sparkles,
+  ThermometerSun, CheckCircle, XCircle, PhoneCall, MapPin, CalendarDays,
+  Target, Mail, Phone, CalendarPlus, MoreVertical, ChevronLeft, ChevronRight,
+  RotateCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import ResponsiveList, { type Column } from "@/components/ui/responsive-list";
+import FilterSheet from "@/components/ui/filter-sheet";
 import { leadApi } from "./leads/leadApi";
 import LeadFormDialog from "./leads/LeadFormDialog";
 import { selectClass } from "./leads/fields";
 import {
   BOARD_DROP_STATUS, EMPTY_FILTERS, LEAD_SOURCES, LEAD_STAGES, LEAD_STATUSES, LEAD_TYPES,
-  PRIORITIES, PRIORITY_STYLES, TEMPERATURES, TEMPERATURE_STYLES, formatDate, formatINR,
-  statusStyle, type BoardColumn, type DashboardMetrics, type Lead, type LeadFilters,
-  type UserSummary,
+  PRIORITIES, TEMPERATURES, TEMPERATURE_STYLES, avatarColor, followUpTone, formatDate,
+  formatINR, initials, relativeTime, stageStyle, statusStyle, type BoardColumn,
+  type DashboardMetrics, type Lead, type LeadFilters, type UserSummary,
 } from "./leads/constants";
 
 type StatCard = {
@@ -27,9 +29,11 @@ type StatCard = {
   className: string;
 };
 
+const ROWS_PER_PAGE_OPTIONS = [10, 25, 50, 100];
+
 export default function Leads() {
   const navigate = useNavigate();
-  const [viewMode, setViewMode] = useState<"kanban" | "table">("kanban");
+  const [viewMode, setViewMode] = useState<"kanban" | "table">("table");
   const [dashboard, setDashboard] = useState<DashboardMetrics | null>(null);
   const [board, setBoard] = useState<BoardColumn[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -38,11 +42,13 @@ export default function Leads() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
   const [totalPages, setTotalPages] = useState(1);
   const [totalElements, setTotalElements] = useState(0);
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState<LeadFilters>({ ...EMPTY_FILTERS });
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 350);
@@ -63,7 +69,7 @@ export default function Leads() {
 
   const fetchList = useCallback(() => {
     setLoading(true);
-    leadApi.list({ search: debouncedSearch, page, size: 15, filters })
+    leadApi.list({ search: debouncedSearch, page, size: rowsPerPage, filters })
       .then((res) => {
         setLeads(res.data.content);
         setTotalPages(res.data.totalPages);
@@ -71,7 +77,7 @@ export default function Leads() {
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [debouncedSearch, page, filters]);
+  }, [debouncedSearch, page, rowsPerPage, filters]);
 
   useEffect(() => {
     fetchDashboard();
@@ -83,7 +89,8 @@ export default function Leads() {
     else fetchList();
   }, [viewMode, fetchBoard, fetchList]);
 
-  useEffect(() => { setPage(0); }, [debouncedSearch, filters]);
+  useEffect(() => { setPage(0); }, [debouncedSearch, filters, rowsPerPage]);
+  useEffect(() => { setSelected(new Set()); }, [leads]);
 
   const refresh = () => {
     fetchDashboard();
@@ -121,19 +128,14 @@ export default function Leads() {
   };
 
   const stats: StatCard[] = useMemo(() => [
-    { label: "Total Leads", value: dashboard?.totalLeads, icon: Users, className: "bg-blue-100 text-blue-600" },
-    { label: "Today", value: dashboard?.todayLeads, icon: CalendarDays, className: "bg-indigo-100 text-indigo-600" },
-    { label: "This Week", value: dashboard?.weekLeads, icon: TrendingUp, className: "bg-violet-100 text-violet-600" },
-    { label: "This Month", value: dashboard?.monthLeads, icon: Target, className: "bg-purple-100 text-purple-600" },
-    { label: "Hot", value: dashboard?.hotLeads, icon: Flame, className: "bg-red-100 text-red-600" },
-    { label: "Warm", value: dashboard?.warmLeads, icon: ThermometerSun, className: "bg-amber-100 text-amber-600" },
-    { label: "Cold", value: dashboard?.coldLeads, icon: Snowflake, className: "bg-sky-100 text-sky-600" },
+    { label: "Total Leads", value: dashboard?.totalLeads, icon: Users, className: "bg-emerald-100 text-emerald-600" },
+    { label: "New", value: dashboard?.newLeads, icon: Sparkles, className: "bg-emerald-100 text-emerald-600" },
+    { label: "Contacted", value: dashboard?.contactedLeads, icon: PhoneCall, className: "bg-violet-100 text-violet-600" },
+    { label: "Interested", value: dashboard?.interestedLeads, icon: ThermometerSun, className: "bg-purple-100 text-purple-600" },
+    { label: "Site Visit", value: dashboard?.todaySiteVisits, icon: MapPin, className: "bg-cyan-100 text-cyan-600" },
     { label: "Converted", value: dashboard?.convertedLeads, icon: CheckCircle, className: "bg-green-100 text-green-600" },
     { label: "Lost", value: dashboard?.lostLeads, icon: XCircle, className: "bg-rose-100 text-rose-600" },
-    { label: "Pending Follow-ups", value: dashboard?.pendingFollowups, icon: PhoneCall, className: "bg-orange-100 text-orange-600" },
-    { label: "Today's Site Visits", value: dashboard?.todaySiteVisits, icon: MapPin, className: "bg-cyan-100 text-cyan-600" },
-    { label: "Today's Measurements", value: dashboard?.todayMeasurements, icon: Ruler, className: "bg-teal-100 text-teal-600" },
-    { label: "Quotation Pending", value: dashboard?.quotationPending, icon: FileText, className: "bg-yellow-100 text-yellow-700" },
+    { label: "Follow-ups", value: dashboard?.pendingFollowups, icon: CalendarDays, className: "bg-orange-100 text-orange-600" },
   ], [dashboard]);
 
   const setFilter = (key: keyof LeadFilters) => (value: string) =>
@@ -141,14 +143,128 @@ export default function Leads() {
 
   const activeFilterCount = Object.values(filters).filter((v) => v !== "").length;
 
+  const tempPill = (t?: string) =>
+    t ? <span className={`px-2 py-0.5 text-xs rounded-full font-semibold ${TEMPERATURE_STYLES[t] || "bg-muted text-muted-foreground"}`}>{t}</span> : <span className="text-xs text-muted-foreground">—</span>;
+
+  const stagePill = (l: Lead) => {
+    const label = l.stage || l.status;
+    return <span className={`px-2 py-0.5 text-xs rounded-full font-medium whitespace-nowrap ${stageStyle(l.stage) === "bg-muted text-muted-foreground" ? statusStyle(l.status) : stageStyle(l.stage)}`}>{label}</span>;
+  };
+
+  const toggleRow = (id: number) => setSelected((prev) => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+  const allSelected = leads.length > 0 && leads.every((l) => selected.has(l.id));
+  const toggleAll = () => setSelected(allSelected ? new Set() : new Set(leads.map((l) => l.id)));
+
+  const columns: Column<Lead>[] = [
+    {
+      key: "select",
+      header: (
+        <input type="checkbox" className="h-4 w-4 rounded border-input accent-primary cursor-pointer"
+          checked={allSelected} onChange={toggleAll} onClick={(e) => e.stopPropagation()} aria-label="Select all" />
+      ),
+      headClassName: "w-8",
+      cellClassName: "w-8",
+      cell: (l) => (
+        <input type="checkbox" className="h-4 w-4 rounded border-input accent-primary cursor-pointer"
+          checked={selected.has(l.id)} onChange={() => toggleRow(l.id)} onClick={(e) => e.stopPropagation()}
+          aria-label={`Select ${l.name}`} />
+      ),
+    },
+    {
+      key: "lead", header: "Lead Details", cell: (l) => (
+        <div className="min-w-[9rem]">
+          <div className="text-[11px] font-mono text-muted-foreground">{l.leadNumber}</div>
+          <div className="font-semibold text-foreground truncate">{l.name}</div>
+          {(l.city || l.state) && (
+            <div className="text-xs text-muted-foreground truncate">{[l.city, l.state].filter(Boolean).join(", ")}</div>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: "contact", header: "Contact", cell: (l) => (
+        <div className="space-y-0.5 min-w-[9rem]">
+          <a href={`tel:${l.mobileNumber}`} onClick={(e) => e.stopPropagation()}
+            className="flex items-center gap-1.5 text-sm hover:text-primary">
+            <Phone className="h-3 w-3 text-muted-foreground shrink-0" /> {l.mobileNumber}
+          </a>
+          {l.email && (
+            <a href={`mailto:${l.email}`} onClick={(e) => e.stopPropagation()}
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary truncate">
+              <Mail className="h-3 w-3 shrink-0" /> <span className="truncate">{l.email}</span>
+            </a>
+          )}
+        </div>
+      ),
+    },
+    { key: "stage", header: "Stage", cell: (l) => stagePill(l) },
+    { key: "source", header: "Source", cellClassName: "text-sm text-muted-foreground whitespace-nowrap", cell: (l) => l.leadSource || "—" },
+    {
+      key: "owner", header: "Owner", cell: (l) => {
+        const name = l.assignedSalesExecutive?.name;
+        return (
+          <div className="flex items-center gap-2 min-w-[7rem]">
+            <span className={`h-7 w-7 rounded-full flex items-center justify-center text-[11px] font-semibold shrink-0 ${avatarColor(name)}`}>
+              {initials(name)}
+            </span>
+            <span className="text-sm truncate">{name || <span className="text-muted-foreground">Unassigned</span>}</span>
+          </div>
+        );
+      },
+    },
+    {
+      key: "activity", header: "Last Activity", cellClassName: "whitespace-nowrap", cell: (l) => (
+        <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <span className="h-1.5 w-1.5 rounded-full bg-green-500 shrink-0" />
+          {relativeTime(l.lastContactAt || l.lastFollowUp || l.updatedAt || l.createdAt)}
+        </span>
+      ),
+    },
+    {
+      key: "next", header: "Next Follow-up", cellClassName: "whitespace-nowrap text-sm", cell: (l) => {
+        const t = followUpTone(l.nextFollowUpDate);
+        return <span className={t.className}>{t.label}</span>;
+      },
+    },
+    { key: "status", header: "Status", cell: (l) => tempPill(l.leadTemperature) },
+    {
+      key: "actions", header: "", headClassName: "text-right", cellClassName: "text-right", cell: (l) => (
+        <div className="flex items-center justify-end gap-0.5" onClick={(e) => e.stopPropagation()}>
+          <a href={`tel:${l.mobileNumber}`}>
+            <Button variant="ghost" size="icon" className="h-8 w-8" title="Call">
+              <PhoneCall className="h-4 w-4" />
+            </Button>
+          </a>
+          <Link to={`/leads/${l.id}`}>
+            <Button variant="ghost" size="icon" className="h-8 w-8" title="Schedule follow-up">
+              <CalendarPlus className="h-4 w-4" />
+            </Button>
+          </Link>
+          <Link to={`/leads/${l.id}`}>
+            <Button variant="ghost" size="icon" className="h-8 w-8" title="More">
+              <MoreVertical className="h-4 w-4" />
+            </Button>
+          </Link>
+        </div>
+      ),
+    },
+  ];
+
+  const showingFrom = totalElements === 0 ? 0 : page * rowsPerPage + 1;
+  const showingTo = Math.min((page + 1) * rowsPerPage, totalElements);
+
   return (
-    <div className="p-6 lg:p-8 space-y-6 flex flex-col h-full animate-in fade-in">
+    <div className={`p-6 lg:p-8 space-y-5 flex flex-col animate-in fade-in ${viewMode === "kanban" ? "h-full" : ""}`}>
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Lead Management</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Track every enquiry from first contact to project conversion
+            Manage and track leads across all stages
             {dashboard && <> · conversion rate <span className="font-semibold text-foreground">{dashboard.conversionRate}</span></>}
           </p>
         </div>
@@ -161,6 +277,14 @@ export default function Leads() {
               <List className="h-4 w-4 mr-2" /> List
             </Button>
           </div>
+          <Button variant={activeFilterCount > 0 ? "secondary" : "outline"} onClick={() => setShowFilters(true)}>
+            <Filter className="mr-2 h-4 w-4" /> Filter
+            {activeFilterCount > 0 && (
+              <span className="ml-2 bg-primary text-primary-foreground text-xs rounded-full h-5 min-w-5 px-1 flex items-center justify-center">
+                {activeFilterCount}
+              </span>
+            )}
+          </Button>
           <Button onClick={() => setIsAddOpen(true)}>
             <Plus className="mr-2 h-4 w-4" /> Add Lead
           </Button>
@@ -168,10 +292,10 @@ export default function Leads() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-7 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-3">
         {stats.map((stat) => (
-          <div key={stat.label} className="p-3 bg-card rounded-xl border shadow-sm flex items-center gap-3">
-            <div className={`h-9 w-9 rounded-full flex items-center justify-center shrink-0 ${stat.className}`}>
+          <div key={stat.label} className="p-3 bg-card rounded-xl border shadow-sm flex items-center gap-2.5">
+            <div className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${stat.className}`}>
               <stat.icon size={16} />
             </div>
             <div className="min-w-0">
@@ -179,46 +303,59 @@ export default function Leads() {
               {dashboard ? (
                 <p className="text-xl font-bold leading-tight">{stat.value ?? 0}</p>
               ) : (
-                <Skeleton className="h-6 w-10 mt-0.5" />
+                <Skeleton className="h-6 w-8 mt-0.5" />
               )}
             </div>
           </div>
         ))}
       </div>
 
-      {/* Search + filter toggle */}
-      <div className="flex items-center gap-2">
-        <div className="flex-1 flex items-center space-x-2 bg-card p-1.5 rounded-lg border">
-          <Search className="h-5 w-5 text-muted-foreground ml-2" />
+      {/* Toolbar: search + inline filters */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex-1 min-w-[240px] flex items-center gap-2 bg-card px-3 rounded-lg border h-10">
+          <Search className="h-4 w-4 text-muted-foreground shrink-0" />
           <Input
-            placeholder="Search by lead number, customer, phone, WhatsApp, email, company, city, project address..."
-            className="border-0 shadow-none focus-visible:ring-0 text-base"
+            placeholder="Search by lead number, customer, phone, email, company, city..."
+            className="border-0 shadow-none focus-visible:ring-0 h-9 px-0 text-sm"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <Button variant={showFilters ? "secondary" : "outline"} onClick={() => setShowFilters(!showFilters)}>
-          <Filter className="mr-2 h-4 w-4" /> Filters
-          {activeFilterCount > 0 && (
-            <span className="ml-2 bg-primary text-primary-foreground text-xs rounded-full h-5 w-5 flex items-center justify-center">
-              {activeFilterCount}
-            </span>
-          )}
-        </Button>
+        {viewMode === "table" && (
+          <>
+            <select className={`${selectClass} w-auto min-w-[7.5rem]`} value={filters.stage} onChange={(e) => setFilter("stage")(e.target.value)}>
+              <option value="">All Stages</option>
+              {LEAD_STAGES.map((o) => <option key={o} value={o}>{o}</option>)}
+            </select>
+            <select className={`${selectClass} w-auto min-w-[7.5rem]`} value={filters.source} onChange={(e) => setFilter("source")(e.target.value)}>
+              <option value="">All Sources</option>
+              {LEAD_SOURCES.map((o) => <option key={o} value={o}>{o}</option>)}
+            </select>
+            <select className={`${selectClass} w-auto min-w-[7.5rem]`} value={filters.assignedEmployeeId} onChange={(e) => setFilter("assignedEmployeeId")(e.target.value)}>
+              <option value="">All Owners</option>
+              {users.map((u) => <option key={u.id} value={String(u.id)}>{u.name}</option>)}
+            </select>
+          </>
+        )}
+        {activeFilterCount > 0 && (
+          <Button variant="ghost" size="sm" onClick={() => { setFilters({ ...EMPTY_FILTERS }); setSearch(""); }}>
+            <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Reset
+          </Button>
+        )}
       </div>
 
       <div className="flex gap-4 flex-1 min-h-0">
-        <div className="flex-1 min-w-0 space-y-4">
+        <div className="flex-1 min-w-0 flex flex-col min-h-0 gap-4">
           {viewMode === "kanban" ? (
             loading && board.length === 0 ? (
-              <div className="flex gap-4 overflow-x-auto pb-4">
+              <div className="flex gap-4 overflow-x-auto pb-4 flex-1 min-h-[420px]">
                 {Array.from({ length: 5 }).map((_, i) => (
-                  <Skeleton key={i} className="w-80 h-[420px] flex-shrink-0 rounded-xl" />
+                  <Skeleton key={i} className="w-80 h-full min-h-[420px] flex-shrink-0 rounded-xl" />
                 ))}
               </div>
             ) : (
               <DragDropContext onDragEnd={onDragEnd}>
-                <div className="flex gap-4 overflow-x-auto pb-4 h-[calc(100vh-390px)] min-h-[420px]">
+                <div className="flex gap-4 overflow-x-auto pb-4 flex-1 min-h-[420px]">
                   {board.map((column) => (
                     <div key={column.key} className="w-80 flex-shrink-0 bg-muted/50 rounded-xl p-3 flex flex-col h-full border">
                       <div className="mb-3 px-1">
@@ -291,160 +428,151 @@ export default function Leads() {
               </DragDropContext>
             )
           ) : (
-            <div className="border rounded-xl bg-card overflow-hidden">
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Lead</TableHead>
-                      <TableHead>Customer</TableHead>
-                      <TableHead>Mobile</TableHead>
-                      <TableHead>Source</TableHead>
-                      <TableHead>Requirement</TableHead>
-                      <TableHead>Assigned</TableHead>
-                      <TableHead className="text-right">Budget</TableHead>
-                      <TableHead>Priority</TableHead>
-                      <TableHead>Stage</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Next Follow-up</TableHead>
-                      <TableHead>Last Contact</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {loading ? (
-                      Array.from({ length: 6 }).map((_, i) => (
-                        <TableRow key={i}>
-                          {Array.from({ length: 13 }).map((_, j) => (
-                            <TableCell key={j}><Skeleton className="h-5 w-full" /></TableCell>
-                          ))}
-                        </TableRow>
-                      ))
-                    ) : leads.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={13} className="text-center py-12 text-muted-foreground">
-                          <Target className="w-8 h-8 mx-auto mb-2 opacity-40" />
-                          No leads match your search or filters.
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      leads.map((lead) => (
-                        <TableRow key={lead.id} className="cursor-pointer" onClick={() => navigate(`/leads/${lead.id}`)}>
-                          <TableCell className="font-medium">
-                            <div className="text-xs text-muted-foreground">{lead.leadNumber}</div>
-                            <span className="text-primary">{lead.name}</span>
-                          </TableCell>
-                          <TableCell>
-                            <div className="text-sm">{lead.companyName || lead.contactPerson || "—"}</div>
-                            <div className="text-xs text-muted-foreground">{lead.city || ""}</div>
-                          </TableCell>
-                          <TableCell className="text-sm whitespace-nowrap">{lead.mobileNumber}</TableCell>
-                          <TableCell className="text-sm">{lead.leadSource || "—"}</TableCell>
-                          <TableCell className="text-sm">{lead.leadType || "—"}</TableCell>
-                          <TableCell className="text-sm">{lead.assignedSalesExecutive?.name || "Unassigned"}</TableCell>
-                          <TableCell className="text-right text-sm font-medium whitespace-nowrap">{formatINR(lead.estimatedBudget)}</TableCell>
-                          <TableCell>
-                            {lead.priority && (
-                              <span className={`text-[10px] uppercase px-2 py-0.5 rounded-full font-bold ${PRIORITY_STYLES[lead.priority] || ""}`}>
-                                {lead.priority}
-                              </span>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-sm whitespace-nowrap">{lead.stage || "—"}</TableCell>
-                          <TableCell>
-                            <span className={`px-2 py-1 text-xs rounded-full font-medium whitespace-nowrap ${statusStyle(lead.status)}`}>
-                              {lead.status}
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-sm whitespace-nowrap">{formatDate(lead.nextFollowUpDate)}</TableCell>
-                          <TableCell className="text-sm whitespace-nowrap">{formatDate(lead.lastContactAt || lead.lastFollowUp)}</TableCell>
-                          <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                            <Link to={`/leads/${lead.id}`}>
-                              <Button variant="ghost" size="sm"><ArrowRight className="h-4 w-4" /></Button>
-                            </Link>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-              {totalPages > 1 && (
-                <div className="flex items-center justify-between p-4 border-t">
-                  <span className="text-sm text-muted-foreground">
-                    {totalElements} leads · Page {page + 1} of {totalPages}
-                  </span>
-                  <div className="flex gap-2">
-                    <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage(page - 1)}>Previous</Button>
-                    <Button variant="outline" size="sm" disabled={page >= totalPages - 1} onClick={() => setPage(page + 1)}>Next</Button>
-                  </div>
+            <>
+              {selected.size > 0 && (
+                <div className="flex items-center justify-between px-4 py-2 bg-primary/10 border border-primary/20 rounded-lg text-sm">
+                  <span className="font-medium">{selected.size} selected</span>
+                  <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>Clear</Button>
                 </div>
               )}
-            </div>
+              <ResponsiveList
+                items={leads}
+                loading={loading}
+                getRowKey={(l) => l.id}
+                onRowClick={(l) => navigate(`/leads/${l.id}`)}
+                emptyIcon={Target}
+                emptyTitle="No leads found"
+                emptyDescription="No leads match your search or filters."
+                columns={columns}
+                renderCard={(l) => (
+                  <div className="space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="text-[11px] font-mono text-muted-foreground">{l.leadNumber}</div>
+                        <div className="font-semibold text-foreground truncate">{l.name}</div>
+                        {(l.city || l.state) && (
+                          <div className="text-xs text-muted-foreground truncate">{[l.city, l.state].filter(Boolean).join(", ")}</div>
+                        )}
+                      </div>
+                      {tempPill(l.leadTemperature)}
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {stagePill(l)}
+                      {l.leadSource && <span className="text-xs text-muted-foreground">{l.leadSource}</span>}
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="flex items-center gap-1.5 text-muted-foreground">
+                        <span className={`h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-semibold ${avatarColor(l.assignedSalesExecutive?.name)}`}>
+                          {initials(l.assignedSalesExecutive?.name)}
+                        </span>
+                        {l.assignedSalesExecutive?.name || "Unassigned"}
+                      </span>
+                      <span className={followUpTone(l.nextFollowUpDate).className}>
+                        {followUpTone(l.nextFollowUpDate).label}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 pt-1 border-t text-sm" onClick={(e) => e.stopPropagation()}>
+                      <a href={`tel:${l.mobileNumber}`} className="flex items-center gap-1.5 text-muted-foreground hover:text-primary">
+                        <Phone className="h-3.5 w-3.5" /> {l.mobileNumber}
+                      </a>
+                    </div>
+                  </div>
+                )}
+              />
+              {/* Pagination footer */}
+              <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
+                <span>
+                  Showing <span className="font-medium text-foreground">{showingFrom}</span> to{" "}
+                  <span className="font-medium text-foreground">{showingTo}</span> of{" "}
+                  <span className="font-medium text-foreground">{totalElements}</span> leads
+                </span>
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <span>Rows per page</span>
+                    <select
+                      className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                      value={rowsPerPage}
+                      onChange={(e) => setRowsPerPage(Number(e.target.value))}
+                    >
+                      {ROWS_PER_PAGE_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Button variant="outline" size="icon" className="h-9 w-9" disabled={page === 0} onClick={() => setPage(page - 1)}>
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <span className="px-2 min-w-[3rem] text-center text-foreground font-medium">
+                      {page + 1} / {Math.max(totalPages, 1)}
+                    </span>
+                    <Button variant="outline" size="icon" className="h-9 w-9" disabled={page >= totalPages - 1} onClick={() => setPage(page + 1)}>
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </>
           )}
         </div>
-
-        {/* Filters panel */}
-        {showFilters && (
-          <div className="w-72 shrink-0 space-y-3 border rounded-xl p-4 bg-card animate-in slide-in-from-right-8 overflow-y-auto max-h-[calc(100vh-380px)]">
-            <h3 className="font-semibold border-b pb-2">Advanced Filters</h3>
-            {[
-              { label: "Lead Source", key: "source" as const, options: LEAD_SOURCES },
-              { label: "Lead Type", key: "leadType" as const, options: LEAD_TYPES },
-              { label: "Status", key: "status" as const, options: LEAD_STATUSES },
-              { label: "Stage", key: "stage" as const, options: LEAD_STAGES },
-              { label: "Priority", key: "priority" as const, options: PRIORITIES },
-              { label: "Temperature", key: "temperature" as const, options: TEMPERATURES },
-            ].map(({ label, key, options }) => (
-              <div key={key} className="space-y-1">
-                <label className="text-sm font-medium">{label}</label>
-                <select className={selectClass} value={filters[key]} onChange={(e) => setFilter(key)(e.target.value)}>
-                  <option value="">All</option>
-                  {options.map((o) => <option key={o} value={o}>{o}</option>)}
-                </select>
-              </div>
-            ))}
-            <div className="space-y-1">
-              <label className="text-sm font-medium">Assigned Employee</label>
-              <select className={selectClass} value={filters.assignedEmployeeId} onChange={(e) => setFilter("assignedEmployeeId")(e.target.value)}>
-                <option value="">All</option>
-                {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-              </select>
-            </div>
-            <div className="space-y-1">
-              <label className="text-sm font-medium">Conversion</label>
-              <select className={selectClass} value={filters.isConverted} onChange={(e) => setFilter("isConverted")(e.target.value)}>
-                <option value="">Any</option>
-                <option value="false">Open Leads</option>
-                <option value="true">Converted</option>
-              </select>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1">
-                <label className="text-sm font-medium">Budget Min</label>
-                <Input type="number" value={filters.budgetMin} onChange={(e) => setFilter("budgetMin")(e.target.value)} />
-              </div>
-              <div className="space-y-1">
-                <label className="text-sm font-medium">Budget Max</label>
-                <Input type="number" value={filters.budgetMax} onChange={(e) => setFilter("budgetMax")(e.target.value)} />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1">
-                <label className="text-sm font-medium">From</label>
-                <Input type="date" value={filters.dateFrom} onChange={(e) => setFilter("dateFrom")(e.target.value)} />
-              </div>
-              <div className="space-y-1">
-                <label className="text-sm font-medium">To</label>
-                <Input type="date" value={filters.dateTo} onChange={(e) => setFilter("dateTo")(e.target.value)} />
-              </div>
-            </div>
-            <Button className="w-full" variant="outline" onClick={() => setFilters({ ...EMPTY_FILTERS })}>
-              Clear Filters
-            </Button>
-          </div>
-        )}
       </div>
+
+      <FilterSheet
+        open={showFilters}
+        onClose={() => setShowFilters(false)}
+        activeCount={activeFilterCount}
+        onClear={() => setFilters({ ...EMPTY_FILTERS })}
+      >
+        {[
+          { label: "Lead Source", key: "source" as const, options: LEAD_SOURCES },
+          { label: "Lead Type", key: "leadType" as const, options: LEAD_TYPES },
+          { label: "Status", key: "status" as const, options: LEAD_STATUSES },
+          { label: "Stage", key: "stage" as const, options: LEAD_STAGES },
+          { label: "Priority", key: "priority" as const, options: PRIORITIES },
+          { label: "Temperature", key: "temperature" as const, options: TEMPERATURES },
+        ].map(({ label, key, options }) => (
+          <div key={key} className="space-y-1.5">
+            <label className="text-sm font-medium">{label}</label>
+            <select className={selectClass} value={filters[key]} onChange={(e) => setFilter(key)(e.target.value)}>
+              <option value="">All</option>
+              {options.map((o) => <option key={o} value={o}>{o}</option>)}
+            </select>
+          </div>
+        ))}
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium">Assigned Employee</label>
+          <select className={selectClass} value={filters.assignedEmployeeId} onChange={(e) => setFilter("assignedEmployeeId")(e.target.value)}>
+            <option value="">All</option>
+            {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+          </select>
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium">Conversion</label>
+          <select className={selectClass} value={filters.isConverted} onChange={(e) => setFilter("isConverted")(e.target.value)}>
+            <option value="">Any</option>
+            <option value="false">Open Leads</option>
+            <option value="true">Converted</option>
+          </select>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Budget Min</label>
+            <Input type="number" inputMode="numeric" value={filters.budgetMin} onChange={(e) => setFilter("budgetMin")(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Budget Max</label>
+            <Input type="number" inputMode="numeric" value={filters.budgetMax} onChange={(e) => setFilter("budgetMax")(e.target.value)} />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">From</label>
+            <Input type="date" value={filters.dateFrom} onChange={(e) => setFilter("dateFrom")(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">To</label>
+            <Input type="date" value={filters.dateTo} onChange={(e) => setFilter("dateTo")(e.target.value)} />
+          </div>
+        </div>
+      </FilterSheet>
 
       <LeadFormDialog
         open={isAddOpen}

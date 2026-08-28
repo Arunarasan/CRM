@@ -31,4 +31,9 @@ public interface SalaryRecordRepository extends JpaRepository<SalaryRecord, Long
     @Query("SELECT COALESCE(SUM(s.netSalary), 0) FROM SalaryRecord s " +
            "WHERE s.isDeleted = false AND s.year = :year AND s.status = 'PAID'")
     BigDecimal sumPaidNetByYear(@Param("year") Integer year);
+
+    /** Unpaid payslip net across ALL months for a status — the live "salary payable" balance. */
+    @Query("SELECT COALESCE(SUM(s.netSalary), 0) FROM SalaryRecord s " +
+           "WHERE s.isDeleted = false AND s.status = :status")
+    BigDecimal sumNetByStatus(@Param("status") String status);
 }

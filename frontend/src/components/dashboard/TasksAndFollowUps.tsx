@@ -63,7 +63,7 @@ export default function TasksAndFollowUps({
       <Card className="shadow-sm rounded-xl border-border/40 animate-in fade-in slide-in-from-bottom-4" style={{ animationDelay: '500ms' }}>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <PhoneCall className="h-5 w-5 text-indigo-500" />
+            <PhoneCall className="h-5 w-5 text-emerald-500" />
             Today's Follow-ups
           </CardTitle>
         </CardHeader>
@@ -78,7 +78,7 @@ export default function TasksAndFollowUps({
               {followUps.map(lead => (
                 <div key={lead.id} className="flex items-center justify-between p-3 rounded-lg border border-border/50 bg-background hover:bg-muted/50 transition-colors">
                   <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-full bg-indigo-500/10 flex items-center justify-center text-indigo-500 font-bold">
+                    <div className="h-10 w-10 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-500 font-bold">
                       {lead.customerName.charAt(0)}
                     </div>
                     <div>

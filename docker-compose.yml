@@ -74,13 +74,14 @@ services:
   # -------------------------------------------------------------
   # React + Vite Frontend (Nginx SPA)
   # -------------------------------------------------------------
-  frontend:
+  # Option A: one container serves the public website at / and the CRM at /crm.
+  web:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: Dockerfile.web
       args:
         VITE_API_URL: ${VITE_API_URL:-/api}
-    container_name: crm-frontend
+    container_name: jbdecor-web
     restart: unless-stopped
     ports:
       - "${FRONTEND_PORT:-80}:80"

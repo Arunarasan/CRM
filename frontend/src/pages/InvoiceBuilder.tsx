@@ -1,10 +1,7 @@
-import UnderMaintenance from "@/components/UnderMaintenance";
+import { Navigate } from "react-router-dom";
 
+// Legacy /billing/invoices/new deep-link. Invoice creation now lives in the unified Billing &
+// Finance module, so forward to the Finance invoice form.
 export default function InvoiceBuilder() {
-  return (
-    <UnderMaintenance
-      moduleName="Billing (Invoice Builder)"
-      description="Invoice creation and calculation services are currently undergoing scheduled maintenance."
-    />
-  );
+  return <Navigate to="/finance/invoices/new" replace />;
 }

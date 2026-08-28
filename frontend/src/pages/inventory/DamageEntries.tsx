@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { inventoryApi } from "@/api/inventoryApi";
+import { toast } from "@/components/ui/toast";
+import { apiError } from "@/lib/apiError";
 import type { DamageEntry, Product, Warehouse } from "@/types/inventory";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Plus, AlertTriangle } from "lucide-react";
 import ProductSearchSelect from "./components/ProductSearchSelect";
+import SearchableSelect from "@/components/ui/searchable-select";
 
 export default function DamageEntries() {
   const [entries, setEntries] = useState<DamageEntry[]>([]);
@@ -28,12 +31,12 @@ export default function DamageEntries() {
   }, []);
 
   const submit = () => {
-    if (!product || !warehouseId) { alert("Material and warehouse are required"); return; }
+    if (!product || !warehouseId) { toast.error("Material and warehouse are required."); return; }
     inventoryApi.reportDamage({ productId: product.id, warehouseId: Number(warehouseId), quantity, reason, photoUrl: photoUrl || undefined })
       .then(() => {
         setDialogOpen(false); setProduct(null); setWarehouseId(""); setQuantity(1); setReason(""); setPhotoUrl("");
-        load();
-      }).catch((e) => alert(e?.response?.data?.message || "Failed to report damage"));
+        load(); toast.success("Damage reported.");
+      }).catch((e) => toast.error(apiError(e, "Failed to report damage.")));
   };
 
   return (
@@ -73,10 +76,9 @@ export default function DamageEntries() {
             </div>
             <div className="space-y-1">
               <Label>Warehouse</Label>
-              <select className="w-full border rounded-md h-9 px-2 text-sm bg-white" value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}>
-                <option value="">Select...</option>
-                {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-              </select>
+              <SearchableSelect value={warehouseId} onChange={setWarehouseId}
+                options={warehouses.map((w) => ({ value: String(w.id), label: w.name }))}
+                placeholder="Search warehouse…" clearLabel="— none —" />
             </div>
             <div className="space-y-1">
               <Label>Quantity</Label>

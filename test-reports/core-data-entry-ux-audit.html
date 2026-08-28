@@ -1,0 +1,544 @@
+<title>Core Data-Entry UX Audit</title>
+<style>
+  :root {
+    --ground: #F7F8FA;
+    --surface: #FFFFFF;
+    --surface-2: #F1F3F7;
+    --ink: #0F1319;
+    --ink-2: #444C59;
+    --ink-3: #6B7280;
+    --line: #E2E6ED;
+    --line-2: #D3D9E3;
+    --accent: #2A4BD0;
+    --accent-soft: #E9EDFB;
+    --crit: #C4362E;
+    --crit-soft: #FBEAE8;
+    --warn: #9A6700;
+    --warn-soft: #FBF1DC;
+    --good: #1F8A5B;
+    --good-soft: #E4F3EB;
+    --shadow: 0 1px 2px rgba(15,19,25,.04), 0 4px 16px rgba(15,19,25,.05);
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0C0F14;
+      --surface: #141922;
+      --surface-2: #1C222D;
+      --ink: #EEF1F6;
+      --ink-2: #B4BCC9;
+      --ink-3: #838C9B;
+      --line: #263040;
+      --line-2: #313D50;
+      --accent: #7C93F0;
+      --accent-soft: #1B2438;
+      --crit: #F0847B;
+      --crit-soft: #33201E;
+      --warn: #E0B25A;
+      --warn-soft: #302713;
+      --good: #6FCB9C;
+      --good-soft: #14291F;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 16px rgba(0,0,0,.4);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #0C0F14;
+    --surface: #141922;
+    --surface-2: #1C222D;
+    --ink: #EEF1F6;
+    --ink-2: #B4BCC9;
+    --ink-3: #838C9B;
+    --line: #263040;
+    --line-2: #313D50;
+    --accent: #7C93F0;
+    --accent-soft: #1B2438;
+    --crit: #F0847B;
+    --crit-soft: #33201E;
+    --warn: #E0B25A;
+    --warn-soft: #302713;
+    --good: #6FCB9C;
+    --good-soft: #14291F;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 16px rgba(0,0,0,.4);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 940px; margin: 0 auto; padding: 0 24px 96px; }
+
+  h1, h2, h3 { line-height: 1.15; text-wrap: balance; letter-spacing: -.02em; margin: 0; }
+  h2 { font-size: 1.5rem; margin: 0 0 4px; }
+  h3 { font-size: 1.08rem; letter-spacing: -.01em; }
+  p { margin: 0; }
+  .eyebrow {
+    font-size: .72rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--accent);
+  }
+  .muted { color: var(--ink-2); }
+  .dim { color: var(--ink-3); }
+  code, .mono { font-family: var(--mono); font-size: .82em; }
+  .cite {
+    font-family: var(--mono); font-size: .78rem; color: var(--ink-2);
+    background: var(--surface-2); border: 1px solid var(--line);
+    padding: 1px 6px; border-radius: 5px; white-space: nowrap;
+  }
+
+  /* Masthead */
+  header.top {
+    border-bottom: 1px solid var(--line);
+    background: var(--surface);
+    margin-bottom: 40px;
+  }
+  .top-inner { max-width: 940px; margin: 0 auto; padding: 40px 24px 34px; }
+  .kicker { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; flex-wrap: wrap; }
+  .kicker .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+  h1 { font-size: clamp(1.9rem, 4.5vw, 2.9rem); font-weight: 800; }
+  .sub { margin-top: 14px; font-size: 1.05rem; color: var(--ink-2); max-width: 60ch; }
+  .meta-row {
+    margin-top: 24px; display: flex; flex-wrap: wrap; gap: 8px 20px;
+    font-size: .8rem; color: var(--ink-3); align-items: center;
+  }
+  .meta-row b { color: var(--ink-2); font-weight: 600; }
+
+  /* Verdict banner */
+  .verdict {
+    display: grid; grid-template-columns: auto 1fr; gap: 20px; align-items: center;
+    background: var(--surface); border: 1px solid var(--line);
+    border-left: 4px solid var(--warn);
+    border-radius: 12px; padding: 22px 24px; box-shadow: var(--shadow);
+    margin-bottom: 40px;
+  }
+  .verdict .grade {
+    font-size: 2.6rem; font-weight: 800; letter-spacing: -.04em; color: var(--warn);
+    font-variant-numeric: tabular-nums; line-height: 1;
+  }
+  .verdict .grade small { display: block; font-size: .62rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); margin-top: 6px; }
+
+  section { margin-bottom: 52px; }
+  .sec-head { margin-bottom: 22px; }
+  .sec-head .eyebrow { display: block; margin-bottom: 8px; }
+
+  /* Scorecard */
+  .scorecard { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+  @media (min-width: 720px) { .scorecard { grid-template-columns: repeat(4, 1fr); } }
+  .score {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+    padding: 18px 18px 16px; box-shadow: var(--shadow);
+  }
+  .score .name { font-weight: 700; font-size: .95rem; letter-spacing: -.01em; }
+  .score .path { font-family: var(--mono); font-size: .68rem; color: var(--ink-3); margin-top: 2px; }
+  .score .val { font-size: 2.1rem; font-weight: 800; letter-spacing: -.03em; margin: 10px 0 2px; font-variant-numeric: tabular-nums; }
+  .score .bar { height: 5px; border-radius: 3px; background: var(--surface-2); overflow: hidden; margin-top: 8px; }
+  .score .bar > i { display: block; height: 100%; border-radius: 3px; }
+  .score .tag { font-size: .72rem; font-weight: 600; margin-top: 9px; }
+  .t-crit { color: var(--crit); } .t-warn { color: var(--warn); } .t-good { color: var(--good); }
+  .fill-crit { background: var(--crit); } .fill-warn { background: var(--warn); } .fill-good { background: var(--good); }
+
+  /* Findings */
+  .finding {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+    box-shadow: var(--shadow); margin-bottom: 14px; overflow: hidden;
+  }
+  .finding > .head {
+    display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: start;
+    padding: 16px 20px;
+  }
+  .sev {
+    font-size: .64rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase;
+    padding: 4px 8px; border-radius: 6px; white-space: nowrap; margin-top: 2px;
+    font-variant-numeric: tabular-nums;
+  }
+  .sev.crit { background: var(--crit-soft); color: var(--crit); }
+  .sev.warn { background: var(--warn-soft); color: var(--warn); }
+  .finding .title { font-weight: 700; font-size: 1rem; letter-spacing: -.01em; }
+  .finding .body { margin-top: 5px; color: var(--ink-2); font-size: .92rem; }
+  .finding .rule {
+    margin-top: 12px; font-size: .8rem; color: var(--ink-2);
+    border-top: 1px dashed var(--line-2); padding-top: 11px;
+    display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap;
+  }
+  .finding .rule b { color: var(--ink); font-weight: 600; }
+  .cites { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .scope { font-size: .72rem; color: var(--ink-3); margin-top: 8px; }
+  .scope b { color: var(--ink-2); font-weight: 600; }
+
+  /* Roadmap */
+  .phase {
+    display: grid; grid-template-columns: auto 1fr; gap: 20px;
+    padding: 20px 0; border-top: 1px solid var(--line);
+  }
+  .phase:last-child { border-bottom: 1px solid var(--line); }
+  .phase .num {
+    font-size: 1.5rem; font-weight: 800; color: var(--accent); font-variant-numeric: tabular-nums;
+    letter-spacing: -.03em; min-width: 2ch;
+  }
+  .phase h3 { margin-bottom: 3px; }
+  .phase .goal { font-size: .82rem; color: var(--ink-3); margin-bottom: 12px; }
+  .phase ul { margin: 0; padding-left: 18px; color: var(--ink-2); font-size: .92rem; }
+  .phase li { margin-bottom: 5px; }
+  .phase li::marker { color: var(--line-2); }
+  .effort {
+    display: inline-block; font-size: .68rem; font-weight: 700; letter-spacing: .04em;
+    text-transform: uppercase; color: var(--ink-3); border: 1px solid var(--line-2);
+    border-radius: 20px; padding: 2px 10px; margin-left: 10px; vertical-align: middle;
+  }
+
+  .callout {
+    background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+    border-radius: 12px; padding: 18px 20px; font-size: .92rem; color: var(--ink);
+  }
+  .callout .eyebrow { margin-bottom: 6px; display: block; }
+  .strength { border-left: 4px solid var(--good); }
+
+  .foot { margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--line); font-size: .78rem; color: var(--ink-3); }
+
+  ul.plain { margin: 0; padding-left: 20px; color: var(--ink-2); }
+  ul.plain li { margin-bottom: 6px; }
+  b.k { color: var(--ink); font-weight: 600; }
+</style>
+
+<header class="top">
+  <div class="top-inner">
+    <div class="kicker"><span class="dot"></span><span class="eyebrow">Arudra CRM · UX Audit</span></div>
+    <h1>Core Data-Entry UX Audit</h1>
+    <p class="sub">How the Customer, Lead, and Quotation screens measure against the premium human-centered design standard — grounded in the actual code, ranked by impact, with a phased fix plan. No code changed yet.</p>
+    <div class="meta-row">
+      <span><b>Scope:</b> Customers · Leads · Quotations</span>
+      <span><b>Reviewed:</b> 2026-08-20</span>
+      <span><b>Files read:</b> 6 screens + 4 primitives</span>
+      <span><b>Findings:</b> 14 (5 critical, 9 secondary)</span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <div class="verdict">
+    <div class="grade">C+<small>Overall</small></div>
+    <div>
+      <h2 style="font-size:1.15rem;margin-bottom:6px;">Solid foundation, uneven execution — and one screen holds the others back</h2>
+      <p class="muted" style="font-size:.94rem;">The <b>Leads</b> module is genuinely good: sectioned forms, skeletons, inline errors, a reusable field kit. But <b>Customers</b> is a different app built to different rules — a flat 24-field wall with no feedback and no edit path — and the shell underneath all three has <b>no mobile or tablet layout at all</b>. The standard is mostly reachable by levelling the weak screens up to the Lead pattern, not by inventing anything new.</p>
+    </div>
+  </div>
+
+  <!-- SCORECARD -->
+  <section>
+    <div class="sec-head">
+      <span class="eyebrow">Scorecard</span>
+      <h2>Where each surface stands</h2>
+    </div>
+    <div class="scorecard">
+      <div class="score">
+        <div class="name">Customers</div>
+        <div class="path">pages/Customers.tsx</div>
+        <div class="val t-crit">D</div>
+        <div class="bar"><i class="fill-crit" style="width:34%"></i></div>
+        <div class="tag t-crit">Rebuild the form</div>
+      </div>
+      <div class="score">
+        <div class="name">Leads</div>
+        <div class="path">pages/Leads.tsx</div>
+        <div class="val t-good">B+</div>
+        <div class="bar"><i class="fill-good" style="width:82%"></i></div>
+        <div class="tag t-good">The reference to copy</div>
+      </div>
+      <div class="score">
+        <div class="name">Quotations</div>
+        <div class="path">quotations/QuotationList.tsx</div>
+        <div class="val t-warn">B–</div>
+        <div class="bar"><i class="fill-warn" style="width:70%"></i></div>
+        <div class="tag t-warn">Clean, but jargon leaks</div>
+      </div>
+      <div class="score">
+        <div class="name">App shell</div>
+        <div class="path">layouts/DashboardLayout.tsx</div>
+        <div class="val t-crit">D+</div>
+        <div class="bar"><i class="fill-crit" style="width:40%"></i></div>
+        <div class="tag t-crit">No mobile / tablet</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CRITICAL -->
+  <section>
+    <div class="sec-head">
+      <span class="eyebrow" style="color:var(--crit)">Critical findings</span>
+      <h2>Fix these first — they break the standard outright</h2>
+    </div>
+
+    <div class="finding">
+      <div class="head">
+        <span class="sev crit">C1</span>
+        <div>
+          <div class="title">The shell has no mobile or tablet layout — the desktop UI just squeezes</div>
+          <div class="body">The sidebar is a hard-coded <code>w-64</code> <code>&lt;aside&gt;</code> that is always rendered, with no collapse, hamburger, drawer, or bottom navigation. On a phone it eats ~40% of the screen and the content column collapses to an unusable strip. There is no <code>md:hidden</code> / responsive branch anywhere in the layout.</div>
+          <div class="rule"><b>Violates</b> §23 Responsive navigation · §11 Mobile as a distinct model · §5 “don’t solve responsiveness by shrinking.” This is the single highest-leverage fix: every screen inherits it.</div>
+          <div class="cites"><span class="cite">DashboardLayout.tsx:55–88</span></div>
+          <div class="scope"><b>Impact:</b> every page on every phone and small tablet.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="finding">
+      <div class="head">
+        <span class="sev crit">C2</span>
+        <div>
+          <div class="title">Customer form is a flat 24-field wall — no sections, no progressive disclosure</div>
+          <div class="body">Every field renders at once in one <code>grid-cols-2</code> block inside a dialog: Individual and Business fields, GST/PAN, billing + site address, and raw <b>Latitude / Longitude</b> number inputs — shown to everyone regardless of customer type. Compare the Lead form, which is cleanly sectioned via shared primitives.</div>
+          <div class="rule"><b>Violates</b> §13 Long-form problem · §14 Progressive disclosure · §4 Human-first language (lat/long are database fields, not human ones).</div>
+          <div class="cites"><span class="cite">Customers.tsx:126–244</span></div>
+          <div class="scope"><b>Impact:</b> highest-frequency create action in the CRM; primary onboarding surface.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="finding">
+      <div class="head">
+        <span class="sev crit">C3</span>
+        <div>
+          <div class="title">Customer create fails silently — no success, no error, no loading state</div>
+          <div class="body">On submit, failure is swallowed by <code>console.error</code> and the dialog just… stays open. On success there is no toast and the Save button never shows a pending state, so a user on a slow connection can double-submit. There is no toast system anywhere in these screens. Leads does this better (inline error + “Saving…”), but even it has no success confirmation.</div>
+          <div class="rule"><b>Violates</b> §32 Human error handling · §34 Loading states · §35 Success feedback. “Never leave users wondering if the application is working.”</div>
+          <div class="cites"><span class="cite">Customers.tsx:101–108</span> <span class="cite">LeadFormDialog.tsx:83–87</span></div>
+          <div class="scope"><b>Impact:</b> data-loss anxiety + duplicate records on every create.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="finding">
+      <div class="head">
+        <span class="sev crit">C4</span>
+        <div>
+          <div class="title">Two different form-building conventions in the same app</div>
+          <div class="body">Leads build forms from a shared kit — <code>Field</code>, <code>TextField</code>, <code>SelectField</code>, <code>SectionTitle</code> (<span class="cite">leads/fields.tsx</span>). Customers hand-rolls every <code>&lt;label&gt;</code> and raw <code>&lt;select&gt;</code> inline. Even input heights disagree: the base <code>Input</code> is <code>h-9</code>, the hand-coded selects are <code>h-10</code>. A user who learns one screen does not transfer that knowledge to the next, and neither do developers.</div>
+          <div class="rule"><b>Violates</b> §47 Design system · §48 Consistency rule. The fix (C2) and this fix are the same work: rebuild Customers on the Lead field kit.</div>
+          <div class="cites"><span class="cite">leads/fields.tsx:1–116</span> <span class="cite">Customers.tsx:128–243</span> <span class="cite">ui/input.tsx:11</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="finding">
+      <div class="head">
+        <span class="sev crit">C5</span>
+        <div>
+          <div class="title">Tables don’t transform for small screens — and Customers has no scroll guard at all</div>
+          <div class="body">The Lead list is a <b>13-column</b> table forced into horizontal scroll on mobile (§21 says use that “only when a real comparison is necessary” — a lead card isn’t). Quotations does the same with 8 columns. The Customers table has <b>no</b> <code>overflow-x</code> wrapper, so on a narrow viewport it either overflows the page or crushes columns. None of the three degrade to the card/list pattern the standard calls for.</div>
+          <div class="rule"><b>Violates</b> §21 Table design · §24 Responsive component transformation (“Table → Cards/List on mobile”).</div>
+          <div class="cites"><span class="cite">Leads.tsx:294–371</span> <span class="cite">Customers.tsx:272–325</span> <span class="cite">QuotationList.tsx:112–167</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECONDARY -->
+  <section>
+    <div class="sec-head">
+      <span class="eyebrow" style="color:var(--warn)">Secondary findings</span>
+      <h2>Real gaps, lower blast radius</h2>
+    </div>
+
+    <div class="finding">
+      <div class="head">
+        <span class="sev warn">S1</span>
+        <div>
+          <div class="title">Filter panels steal content width instead of adapting per device</div>
+          <div class="body">Both Customers and Leads render filters as a fixed right column (<code>w-80</code> / <code>w-72</code>) that shrinks the table when open. The standard wants: sidebar on desktop → drawer on tablet → bottom sheet on mobile. Today it’s one behaviour everywhere.</div>
+          <div class="rule"><b>Violates</b> §24 Component transformation · §20 Mobile bottom sheets.</div>
+          <div class="cites"><span class="cite">Customers.tsx:337–366</span> <span class="cite">Leads.tsx:388–446</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="finding">
+      <div class="head">
+        <span class="sev warn">S2</span>
+        <div>
+          <div class="title">No edit path for a customer — the dialog is create-only</div>
+          <div class="body">The “Add Customer” dialog can’t edit. Changing one phone number has no inline-edit affordance anywhere in the list, unlike the standard’s pattern of small, context-preserving edits. Leads, by contrast, reuse one <code>LeadFormDialog</code> for both create and edit.</div>
+          <div class="rule"><b>Violates</b> §18 Inline editing · §38 Preserve context.</div>
+          <div class="cites"><span class="cite">Customers.tsx:118–250</span> <span class="cite">LeadFormDialog.tsx:16–36</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="finding">
+      <div class="head">
+        <span class="sev warn">S3</span>
+        <div>
+          <div class="title">The system asks for data it already has</div>
+          <div class="body">A lead already carries name, phone, company, GST, and full address — but converting or creating a customer doesn’t pre-fill from it, and the Lead form doesn’t autocomplete against existing customers. Users re-type known data. The address is entered twice within a single lead (billing + site) with no “same as” shortcut.</div>
+          <div class="rule"><b>Violates</b> §15 Smart form design · §40 Smart data entry (“don’t ask for information the system already knows”).</div>
+          <div class="cites"><span class="cite">Customers.tsx:31–35</span> <span class="cite">LeadFormDialog.tsx:127–148</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="finding">
+      <div class="head">
+        <span class="sev warn">S4</span>
+        <div>
+          <div class="title">Wrong mobile keyboards — phone and pincode are plain text inputs</div>
+          <div class="body">Phone, alternate phone, WhatsApp, and pincode use default text inputs, so mobile users get the alphabetic keyboard for numeric data. No <code>type="tel"</code> / <code>inputMode="numeric"</code>. Email is correct in most places.</div>
+          <div class="rule"><b>Violates</b> §39 Responsive keyboard experience.</div>
+          <div class="cites"><span class="cite">Customers.tsx:175,179,229</span> <span class="cite">LeadFormDialog.tsx:131–133,144</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="finding">
+      <div class="head">
+        <span class="sev warn">S5</span>
+        <div>
+          <div class="title">Even the good Lead form is one long scroll with no disclosure</div>
+          <div class="body">It’s sectioned (good) but still shows every section at once — Scope of Work checkboxes, budget, timeline, three assignee pickers, image capture — regardless of lead type. Optional/advanced groups (assignment, images, detailed requirements) are prime candidates for collapse-until-needed or a light 2–3 step flow.</div>
+          <div class="rule"><b>Violates</b> §14 Progressive disclosure · §17 Multi-step forms (used only where it genuinely helps).</div>
+          <div class="cites"><span class="cite">LeadFormDialog.tsx:117–199</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="finding">
+      <div class="head">
+        <span class="sev warn">S6</span>
+        <div>
+          <div class="title">Empty and loading states are inconsistent across the three</div>
+          <div class="body">Quotations has the best pattern (a proper <code>EmptyState</code> with guidance). Leads shows an icon + text but no call-to-action. Customers shows bare “No customers found” text — and has <b>no skeleton at all</b>, so the table is just blank until data lands, while Leads and Quotations both skeleton correctly.</div>
+          <div class="rule"><b>Violates</b> §33 Empty states (explain what’s missing + what to do) · §34 Loading states.</div>
+          <div class="cites"><span class="cite">Customers.tsx:316–322</span> <span class="cite">Leads.tsx:323–329</span> <span class="cite">QuotationList.tsx:136–142</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="finding">
+      <div class="head">
+        <span class="sev warn">S7</span>
+        <div>
+          <div class="title">Two search boxes, one of them fake</div>
+          <div class="body">The global header has a “Search…” input that is wired to nothing, while each page has its own real search below it. A decorative search box that does nothing is a direct trust and clarity cost — users try it and get silence.</div>
+          <div class="rule"><b>Violates</b> §2 The 5-second rule · §6 Predictable navigation. Either make it a real global search or remove it.</div>
+          <div class="cites"><span class="cite">DashboardLayout.tsx:94–97</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="finding">
+      <div class="head">
+        <span class="sev warn">S8</span>
+        <div>
+          <div class="title">System jargon leaks into user-facing labels</div>
+          <div class="body">Quotations surfaces raw enum values (<code>Mode: FULL_HOUSE</code>), and terms like <b>BOQ</b> / <b>GRN</b> appear unglossed. The <code>quotationMode</code> cell prints the code, not a human phrase. Most action labels elsewhere are excellent (“Save Customer”, “Create Lead”) — this is a narrow leak, not a pattern.</div>
+          <div class="rule"><b>Violates</b> §4 Human-first language. Map enums → readable labels the way status already is (<code>QUOTATION_STATUS_LABELS</code> exists — extend the pattern to mode).</div>
+          <div class="cites"><span class="cite">QuotationList.tsx:149</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="finding">
+      <div class="head">
+        <span class="sev warn">S9</span>
+        <div>
+          <div class="title">Fragile magic-number heights won’t survive the responsive work</div>
+          <div class="body">The Kanban board and filter panel use hand-tuned viewport math (<code>h-[calc(100vh-390px)]</code>, <code>max-h-[calc(100vh-380px)]</code>). These assume a fixed header/toolbar stack and will break the moment the shell becomes responsive (C1). Worth replacing with flexbox constraints as part of that pass.</div>
+          <div class="rule"><b>Violates</b> §52 Practicality — “A beautiful UI that feels slow / breaks is not premium.”</div>
+          <div class="cites"><span class="cite">Leads.tsx:221,389</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- STRENGTHS -->
+  <section>
+    <div class="sec-head">
+      <span class="eyebrow" style="color:var(--good)">What’s already right</span>
+      <h2>Don’t lose these in the rework</h2>
+    </div>
+    <div class="callout strength">
+      <ul class="plain">
+        <li><b class="k">Action labels are human.</b> “Save Customer”, “Create Lead”, “Add Lead”, “Generate from a BOQ” — verbs that say what happens. Keep this voice.</li>
+        <li><b class="k">The Lead field kit is the design-system seed.</b> <code>leads/fields.tsx</code> is exactly the shared component layer §47 asks for — it just needs to be adopted app-wide and grown (drawer, bottom sheet, toast).</li>
+        <li><b class="k">Lead form UX fundamentals are in place.</b> Sectioned layout, inline error surfacing, disabled+“Saving…” button, image capture, and one dialog reused for create <i>and</i> edit.</li>
+        <li><b class="k">Skeletons + debounced search + optimistic Kanban drag</b> on Leads and Quotations show the team already knows the right patterns — they’re just not applied evenly.</li>
+        <li><b class="k">Quotations’ EmptyState</b> is the empty-state pattern to standardize on.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ROADMAP -->
+  <section>
+    <div class="sec-head">
+      <span class="eyebrow">Roadmap</span>
+      <h2>A sequenced plan — each phase is usable on its own</h2>
+      <p class="muted" style="margin-top:8px;font-size:.94rem;max-width:62ch;">Ordered by leverage. Phase 1 is a hard prerequisite for the responsive work in every later phase, which is why it comes first even though it isn’t a data-entry screen.</p>
+    </div>
+
+    <div class="phase">
+      <div class="num">1</div>
+      <div>
+        <h3>Responsive shell + a shared feedback layer<span class="effort">Foundation</span></h3>
+        <p class="goal">Unblocks all mobile/tablet work · closes C1, C3, S7</p>
+        <ul>
+          <li>Give <code>DashboardLayout</code> three modes: sidebar (desktop) → collapsible rail (tablet) → drawer + bottom nav (mobile).</li>
+          <li>Add one app-wide toast system; wire success + human-readable error into every create/update (starting with the silent Customer create).</li>
+          <li>Decide the global header search: make it real or remove it. Remove the duplicate logout.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="num">2</div>
+      <div>
+        <h3>Rebuild the Customer form on the Lead field kit<span class="effort">High impact</span></h3>
+        <p class="goal">Closes C2, C4, S2 · the biggest single-screen win</p>
+        <ul>
+          <li>Replace the 24-field wall with sectioned <code>Field</code>/<code>TextField</code>/<code>SelectField</code> groups: Basic → Contact → Address → Business.</li>
+          <li>Progressive disclosure: reveal Company/GST/PAN only when type ≠ Individual; hide lat/long behind a “Pin on map” affordance.</li>
+          <li>Make the dialog do create <i>and</i> edit, mirroring <code>LeadFormDialog</code>. Add pending state + toast.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="num">3</div>
+      <div>
+        <h3>Lists → responsive cards, filters → drawer/sheet<span class="effort">Broad</span></h3>
+        <p class="goal">Closes C5, S1, S6 across all three screens</p>
+        <ul>
+          <li>Build one <code>ResponsiveList</code>: full table on desktop, card/list on mobile — apply to Customers, Leads, Quotations.</li>
+          <li>Filters become a right sidebar (desktop) / drawer (tablet) / bottom sheet (mobile) via one shared component.</li>
+          <li>Standardize empty + skeleton states on the Quotations EmptyState pattern; add the missing Customer skeleton.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="num">4</div>
+      <div>
+        <h3>Smart entry &amp; polish<span class="effort">Refinement</span></h3>
+        <p class="goal">Closes S3, S4, S5, S8, S9</p>
+        <ul>
+          <li>Pre-fill customer from lead on convert; autocomplete existing customers in the lead form; “same as billing” address shortcut.</li>
+          <li>Correct input types/<code>inputMode</code> for phone &amp; pincode; add light progressive disclosure to the Lead form.</li>
+          <li>Map remaining enums (quotation mode) to human labels; replace magic-number heights with flex constraints.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <div class="callout">
+    <span class="eyebrow">The one-line takeaway</span>
+    The standard is closer than the grade suggests. You already built the right patterns once — in Leads. The work is mostly <b>propagation and a responsive shell</b>, not invention: make the shell adapt, level Customers up to the Lead pattern, and factor the shared pieces (list, filter, toast, field kit) so consistency comes for free.
+  </div>
+
+  <div class="foot">
+    Audit against the Premium Human-Centered design standard (§1–§55). Findings cite the reviewed source at the line level; no code was modified. Grades are relative to the standard, not to typical CRM software.
+  </div>
+
+</div>

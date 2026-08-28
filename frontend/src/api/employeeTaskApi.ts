@@ -1,6 +1,7 @@
 import api from '../lib/api';
 import {
   TaskCard, TaskDetail, HomeSummary, ReportsSummary, ProgressMediaItem,
+  Capacity, Timesheet, TimeLogSummary, LeadFormPayload,
 } from '../types/employeeTask';
 
 // Thin typed wrapper around /api/employee-tasks (mobile field-execution) endpoints,
@@ -19,6 +20,28 @@ export const employeeTaskApi = {
   },
   detail: (id: number) => api.get<TaskDetail>(`${BASE}/${id}`).then((r) => r.data),
 
+  // ---- Task Pool (Increment 2/6): capacity, self-pick, join ----
+  pool: () => api.get<TaskCard[]>(`${BASE}/pool`).then((r) => r.data),
+  capacity: () => api.get<Capacity>(`${BASE}/capacity`).then((r) => r.data),
+  pick: (id: number) => api.post(`${BASE}/${id}/pick`).then((r) => r.data),
+  join: (id: number) => api.post(`${BASE}/${id}/join`).then((r) => r.data),
+
+  // ---- Task time tracking → payroll approval (Increment 5/6) ----
+  timeStart: (id: number) => api.post<TimeLogSummary>(`${BASE}/${id}/time/start`).then((r) => r.data),
+  timePause: (id: number) => api.post<TimeLogSummary>(`${BASE}/${id}/time/pause`).then((r) => r.data),
+  timeResume: (id: number) => api.post<TimeLogSummary>(`${BASE}/${id}/time/resume`).then((r) => r.data),
+  timeStop: (id: number) => api.post<TimeLogSummary>(`${BASE}/${id}/time/stop`).then((r) => r.data),
+  timesheet: (from: string, to: string) =>
+    api.get<Timesheet>(`${BASE}/time/timesheet?from=${from}&to=${to}`).then((r) => r.data),
+  submitTime: (from: string, to: string) =>
+    api.post<{ submitted: number }>(`${BASE}/time/submit?from=${from}&to=${to}`).then((r) => r.data),
+  pendingTime: () => api.get<TimeLogSummary[]>(`${BASE}/time/pending`).then((r) => r.data),
+  approveTime: (logId: number) => api.post(`${BASE}/time/${logId}/approve`).then((r) => r.data),
+  rejectTime: (logId: number, remarks?: string) =>
+    api.post(`${BASE}/time/${logId}/reject`, { remarks }).then((r) => r.data),
+  approvedHours: (employeeId: number, from: string, to: string) =>
+    api.get(`${BASE}/time/approved-hours?employeeId=${employeeId}&from=${from}&to=${to}`).then((r) => r.data),
+
   assign: (id: number, employeeIds: number[], role?: string) =>
     api.post(`${BASE}/${id}/assignments`, { employeeIds, role }).then((r) => r.data),
   // Unified: assign any workforce resource(s) — employees and/or contractors.
@@ -35,6 +58,9 @@ export const employeeTaskApi = {
   pause: (id: number, remarks?: string) => api.post(`${BASE}/${id}/pause`, { remarks }).then((r) => r.data),
   resume: (id: number) => api.post(`${BASE}/${id}/resume`).then((r) => r.data),
   complete: (id: number, remarks?: string) => api.post(`${BASE}/${id}/complete`, { remarks }).then((r) => r.data),
+  // Lead-workflow structured form: captures data, writes it onto the lead, then completes the task.
+  submitLeadForm: (id: number, payload: LeadFormPayload) =>
+    api.post(`${BASE}/${id}/lead-form`, payload).then((r) => r.data),
   approve: (id: number) => api.post(`${BASE}/${id}/approve`).then((r) => r.data),
   reject: (id: number, remarks: string) => api.post(`${BASE}/${id}/reject`, { remarks }).then((r) => r.data),
 

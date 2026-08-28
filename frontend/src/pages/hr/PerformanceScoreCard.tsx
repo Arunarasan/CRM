@@ -4,7 +4,7 @@ import { CalendarClock, ListChecks, Star } from "lucide-react";
 export function gradeStyle(grade: string) {
   switch (grade) {
     case "A": return { label: "Excellent", text: "text-emerald-700", bg: "bg-emerald-100", ring: "text-emerald-500" };
-    case "B": return { label: "Good",      text: "text-blue-700",    bg: "bg-blue-100",    ring: "text-blue-500" };
+    case "B": return { label: "Good",      text: "text-emerald-700",    bg: "bg-emerald-100",    ring: "text-emerald-500" };
     case "C": return { label: "Average",   text: "text-amber-700",   bg: "bg-amber-100",   ring: "text-amber-500" };
     case "D": return { label: "Needs Work", text: "text-red-700",     bg: "bg-red-100",     ring: "text-red-500" };
     default:  return { label: "No Data",   text: "text-slate-500",   bg: "bg-slate-100",   ring: "text-slate-300" };

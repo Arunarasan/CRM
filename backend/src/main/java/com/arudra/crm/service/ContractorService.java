@@ -361,6 +361,7 @@ public class ContractorService {
         outstanding.put("billedOutstanding", nz(billRepository.sumOutstandingByContractor(contractorId)));
         outstanding.put("retentionHeld", nz(billRepository.sumRetentionByContractor(contractorId)));
         outstanding.put("totalPaid", nz(paymentRepository.sumPaidByContractor(contractorId)));
+        outstanding.put("advancesPaid", nz(paymentRepository.sumAdvancesByContractor(contractorId)));
         outstanding.put("ledgerBalance", ledgerService.getBalance(contractorId));
         return outstanding;
     }

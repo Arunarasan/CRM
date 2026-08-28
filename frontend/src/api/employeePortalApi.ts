@@ -5,7 +5,7 @@ import {
   TimeStatus, Timesheet, MaterialOption, MaterialRequestEntry, MaterialRequestCreateBody,
   LeadSummary, LeadCreateBody, ManpowerRequestEntry, ManpowerRequestCreateBody,
   DailyReportEntry, DailyReportCreateBody, PersonalReminderEntry, ReminderCreateBody,
-  MyBonuses,
+  MyBonuses, MonthlyEarning, PayrollRequestEntry, PayrollRequestCreateBody, MyLoan, MyAdvance,
 } from '../types/employeePortal';
 
 // Thin typed wrapper around /api/employee-portal — the employee self-service surface.
@@ -48,6 +48,14 @@ export const employeePortalApi = {
 
   salary: () => api.get<SalarySummary>(`${BASE}/salary`).then((r) => r.data),
   bonuses: () => api.get<MyBonuses>(`${BASE}/bonuses`).then((r) => r.data),
+  monthlyEarnings: () => api.get<MonthlyEarning[]>(`${BASE}/monthly-earnings`).then((r) => r.data),
+
+  // Payroll money requests (advance / loan repayment / other) — employee raises, admin approves
+  payrollRequests: () => api.get<PayrollRequestEntry[]>(`${BASE}/payroll-requests`).then((r) => r.data),
+  createPayrollRequest: (body: PayrollRequestCreateBody) =>
+    api.post<PayrollRequestEntry>(`${BASE}/payroll-requests`, body).then((r) => r.data),
+  myLoans: () => api.get<MyLoan[]>(`${BASE}/loans`).then((r) => r.data),
+  myAdvances: () => api.get<MyAdvance[]>(`${BASE}/advances`).then((r) => r.data),
   payslips: () => api.get<Payslip[]>(`${BASE}/payslips`).then((r) => r.data),
   payslip: (id: number) => api.get<Payslip>(`${BASE}/payslips/${id}`).then((r) => r.data),
 

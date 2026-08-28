@@ -8,7 +8,7 @@
         "-o",
         "spring-boot:run"
       ],
-      "port": 8080,
+      "port": 10000,
       "cwd": "backend"
     },
     {
@@ -20,6 +20,17 @@
       ],
       "port": 5173,
       "cwd": "frontend",
+      "autoPort": true
+    },
+    {
+      "name": "website",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
+      "port": 5273,
+      "cwd": "website",
       "autoPort": true
     }
   ]

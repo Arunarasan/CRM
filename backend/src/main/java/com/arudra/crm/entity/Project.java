@@ -167,4 +167,11 @@ public class Project extends BaseEntity {
             inverseJoinColumns = @JoinColumn(name = "user_id")
     )
     private Set<User> assignedEmployees = new HashSet<>();
+
+    /** Populated only on the portfolio list response (see ProjectService.getProjects) for the Tasks column. */
+    @Transient
+    private Long taskTotal;
+
+    @Transient
+    private Long taskDone;
 }

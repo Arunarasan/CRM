@@ -21,6 +21,9 @@ public class QuotationService {
     private QuotationRepository quotationRepository;
 
     @Autowired
+    private WorkflowTriggerService workflowTriggerService;
+
+    @Autowired
     private QuotationActivityRepository quotationActivityRepository;
 
     @Autowired
@@ -535,6 +538,13 @@ public class QuotationService {
         quotationRepository.save(quotation);
 
         syncLeadWithConvertedProject(quotation, projects.get(0), user);
+
+        // Chain the workflow engine: complete the lead workflow, start each project's PROJECT
+        // workflow, and generate execution tasks from the approved BOQ (single-project only).
+        boolean single = projects.size() == 1;
+        for (Project p : projects) {
+            workflowTriggerService.onProjectCreated(p, single);
+        }
 
         logActivity(quotation, "CONVERTED", "Converted to " + projects.size() + " project(s): " +
                 projects.stream().map(Project::getProjectCode).reduce((a, b) -> a + ", " + b).orElse(""), user);

@@ -84,8 +84,10 @@ export default function BoqDetails() {
   const boqId = Number(id);
   const navigate = useNavigate();
   const location = useLocation();
-  // Return to wherever we came from (e.g. a lead's BOQ tab passes state.from), else the BOQ list.
+  // Return to the last visited screen (browser history); fall back to state.from or the BOQ list
+  // only when the page was opened directly with no in-app history.
   const handleBack = () => {
+    if (window.history.length > 2) { navigate(-1); return; }
     const from = (location.state as { from?: string } | null)?.from;
     navigate(from || "/boq");
   };
@@ -361,7 +363,7 @@ export default function BoqDetails() {
             </>
           )}
           {canWrite && status === "APPROVED" && (
-            <Button className="bg-blue-600 hover:bg-blue-700 text-white" disabled={actionBusy} onClick={() => setQuoteDialogOpen(true)}>
+            <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" disabled={actionBusy} onClick={() => setQuoteDialogOpen(true)}>
               <FileOutput className="mr-2 h-4 w-4" /> Generate Quotation
             </Button>
           )}

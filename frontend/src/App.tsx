@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-d
 import DashboardLayout from "./layouts/DashboardLayout";
 import { DesktopGuard, EmployeeGuard } from "./components/RouteGuard";
 import ImageViewerProvider from "./components/ImageViewerProvider";
+import { Toaster } from "./components/ui/toast";
 
 // Lazy loading all pages
 const Dashboard = lazy(() => import("./pages/Dashboard"));
@@ -12,20 +13,36 @@ const Leads = lazy(() => import("./pages/Leads"));
 const LeadProfile = lazy(() => import("./pages/LeadProfile"));
 const SiteVisits = lazy(() => import("./pages/SiteVisits"));
 const SiteVisitProfile = lazy(() => import("./pages/SiteVisitProfile"));
+const SiteVisitCreate = lazy(() => import("./pages/siteVisits/SiteVisitCreate"));
 const MeasurementList = lazy(() => import("./pages/measurements/MeasurementList"));
 const MeasurementForm = lazy(() => import("./pages/measurements/MeasurementForm"));
 const MeasurementDetails = lazy(() => import("./pages/measurements/MeasurementDetails"));
+const MeasurementItemCatalogPage = lazy(() => import("./pages/measurements/MeasurementItemCatalog"));
+const WebsiteLayout = lazy(() => import("./pages/website/WebsiteLayout"));
+const HeroSlidesAdmin = lazy(() => import("./pages/website/HeroSlidesAdmin"));
+const CategoriesAdmin = lazy(() => import("./pages/website/CategoriesAdmin"));
+const ProductsAdmin = lazy(() => import("./pages/website/ProductsAdmin"));
+const ServicesAdmin = lazy(() => import("./pages/website/ServicesAdmin"));
+const PortfolioAdmin = lazy(() => import("./pages/website/PortfolioAdmin"));
+const MaterialsAdmin = lazy(() => import("./pages/website/MaterialsAdmin"));
+const TestimonialsAdmin = lazy(() => import("./pages/website/TestimonialsAdmin"));
+const OrdersAdmin = lazy(() => import("./pages/website/OrdersAdmin"));
+const ServiceRequestsAdmin = lazy(() => import("./pages/website/ServiceRequestsAdmin"));
+const SettingsAdmin = lazy(() => import("./pages/website/SettingsAdmin"));
+const ContentAdmin = lazy(() => import("./pages/website/ContentAdmin"));
+const ReviewsAdmin = lazy(() => import("./pages/website/ReviewsAdmin"));
 const BoqList = lazy(() => import("./pages/boq/BoqList"));
+const BoqEntry = lazy(() => import("./pages/boq/BoqEntry"));
 const BoqForm = lazy(() => import("./pages/boq/BoqForm"));
 const BoqDetails = lazy(() => import("./pages/boq/BoqDetails"));
 const BoqReports = lazy(() => import("./pages/boq/BoqReports"));
 const QuotationList = lazy(() => import("./pages/quotations/QuotationList"));
+const QuotationEntry = lazy(() => import("./pages/quotations/QuotationEntry"));
 const QuotationDetails = lazy(() => import("./pages/quotations/QuotationDetails"));
 const QuotationPrint = lazy(() => import("./pages/quotations/QuotationPrint"));
 const Projects = lazy(() => import("./pages/Projects"));
 const ProjectCommandCenter = lazy(() => import("./pages/ProjectCommandCenter"));
 const Tasks = lazy(() => import("./pages/Tasks"));
-const SmartAssignment = lazy(() => import("./pages/assignments/SmartAssignment"));
 const ContractorLayout = lazy(() => import("./pages/contractors/ContractorLayout"));
 const ContractorDashboard = lazy(() => import("./pages/contractors/ContractorDashboard"));
 const ContractorsPage = lazy(() => import("./pages/contractors/ContractorsPage"));
@@ -76,12 +93,17 @@ const FinanceLedgerPage = lazy(() => import("./pages/finance/LedgerPage"));
 const FinanceProfitabilityPage = lazy(() => import("./pages/finance/ProfitabilityPage"));
 const FinanceExpensesPage = lazy(() => import("./pages/finance/ExpensesPage"));
 const FinanceReportsPage = lazy(() => import("./pages/finance/FinanceReportsPage"));
-const HumanResources = lazy(() => import("./pages/HumanResources"));
 const EmployeeProfile = lazy(() => import("./pages/EmployeeProfile"));
 const WorkforceLayout = lazy(() => import("./pages/workforce/WorkforceLayout"));
 const WorkforceDirectoryPage = lazy(() => import("./pages/workforce/WorkforceDirectoryPage"));
 const WorkforceProfilePage = lazy(() => import("./pages/workforce/WorkforceProfilePage"));
 const WorkforceReportsPage = lazy(() => import("./pages/workforce/WorkforceReportsPage"));
+const HrFinanceDashboard = lazy(() => import("./pages/hr/HrFinanceDashboard"));
+const CashflowPage = lazy(() => import("./pages/hr/CashflowPage"));
+const HrPerformancePage = lazy(() => import("./pages/hr/HrPerformancePage"));
+const HrLeavePage = lazy(() => import("./pages/hr/HrLeavePage"));
+const HrDepartmentsPage = lazy(() => import("./pages/hr/HrDepartmentsPage"));
+const HrAttendancePage = lazy(() => import("./pages/hr/HrAttendancePage"));
 const PayslipPrint = lazy(() => import("./pages/hr/PayslipPrint"));
 const ReportsHub = lazy(() => import("./pages/ReportsHub"));
 const NotificationCenter = lazy(() => import("./pages/NotificationCenter"));
@@ -126,8 +148,11 @@ const PageLoader = () => (
 
 function App() {
   return (
-    <Router>
+    // basename follows Vite's base (/crm/ in production, / in dev) so the CRM works when
+    // served under /crm alongside the public website (Option A).
+    <Router basename={import.meta.env.BASE_URL}>
       <ImageViewerProvider>
+      <Toaster />
       <Suspense fallback={<PageLoader />}>
         <Routes>
           <Route path="/login" element={<Login />} />
@@ -143,24 +168,44 @@ function App() {
             <Route path="leads" element={<Leads />} />
             <Route path="leads/:id" element={<LeadProfile />} />
             <Route path="site-visits" element={<SiteVisits />} />
+            <Route path="site-visits/new" element={<SiteVisitCreate />} />
             <Route path="site-visits/:id" element={<SiteVisitProfile />} />
             <Route path="measurements" element={<MeasurementList />} />
             <Route path="measurements/new" element={<MeasurementForm />} />
+            <Route path="measurements/catalog" element={<MeasurementItemCatalogPage />} />
             <Route path="measurements/:id" element={<MeasurementDetails />} />
             <Route path="boq" element={<BoqList />} />
             {/* Standalone BOQ creation removed — BOQs are generated from a Measurement
                 (Measurement → Generate BOQ); the form remains for editing only. */}
-            <Route path="boq/new" element={<Navigate to="/measurements" replace />} />
+            <Route path="boq/new" element={<BoqEntry />} />
             <Route path="boq/:id/edit" element={<BoqForm />} />
             <Route path="boq/:id" element={<BoqDetails />} />
             <Route path="boq/:id/reports" element={<BoqReports />} />
             <Route path="quotations" element={<QuotationList />} />
+            <Route path="quotations/new" element={<QuotationEntry />} />
             <Route path="quotations/:id" element={<QuotationDetails />} />
             <Route path="quotations/:id/print" element={<QuotationPrint />} />
             <Route path="projects" element={<Projects />} />
             <Route path="projects/:id" element={<ProjectCommandCenter />} />
             <Route path="tasks" element={<Tasks />} />
-            <Route path="assignments" element={<SmartAssignment />} />
+            {/* Website / CMS — manage the public marketing site's catalog and content. */}
+            <Route path="website" element={<WebsiteLayout />}>
+              <Route index element={<HeroSlidesAdmin />} />
+              <Route path="categories" element={<CategoriesAdmin />} />
+              <Route path="products" element={<ProductsAdmin />} />
+              <Route path="services" element={<ServicesAdmin />} />
+              <Route path="portfolio" element={<PortfolioAdmin />} />
+              <Route path="materials" element={<MaterialsAdmin />} />
+              <Route path="testimonials" element={<TestimonialsAdmin />} />
+              <Route path="orders" element={<OrdersAdmin />} />
+              <Route path="service-requests" element={<ServiceRequestsAdmin />} />
+              <Route path="content" element={<ContentAdmin />} />
+              <Route path="reviews" element={<ReviewsAdmin />} />
+              <Route path="settings" element={<SettingsAdmin />} />
+            </Route>
+            {/* Workflow Console + Smart Assignment are merged into the Tasks screen. */}
+            <Route path="workflow" element={<Navigate to="/tasks" replace />} />
+            <Route path="assignments" element={<Navigate to="/tasks" replace />} />
             {/* Contractor Management — contractors work through project work packages,
                 never as a standalone engagement, so the whole module lives under one shell. */}
             <Route path="contractors" element={<ContractorLayout />}>
@@ -217,15 +262,23 @@ function App() {
             </Route>
             <Route path="finance/invoices/new" element={<FinanceInvoiceFormPage />} />
             <Route path="finance/invoices/:id" element={<FinanceInvoiceDetailPage />} />
-            {/* Unified Workforce Management — one directory + creation flow for employees and
-                contractors. Payroll (/hr) and contractor operations (/contractors) remain the
-                deep-linked operational modules. */}
+            {/* Unified "HR & Payroll" module — one directory + creation flow for employees and
+                contractors, with payroll / attendance / leave / departments / performance folded
+                in as tabs. The old standalone /hr screen redirects here. Contractor operations
+                (/contractors) remain the deep-linked operational module. */}
             <Route path="workforce" element={<WorkforceLayout />}>
               <Route index element={<WorkforceDirectoryPage />} />
+              <Route path="payroll" element={<HrFinanceDashboard />} />
+              <Route path="cashflow" element={<CashflowPage />} />
+              <Route path="attendance" element={<HrAttendancePage />} />
+              <Route path="leave" element={<HrLeavePage />} />
+              <Route path="departments" element={<HrDepartmentsPage />} />
+              <Route path="performance" element={<HrPerformancePage />} />
               <Route path="reports" element={<WorkforceReportsPage />} />
             </Route>
             <Route path="workforce/:id" element={<WorkforceProfilePage />} />
-            <Route path="hr" element={<HumanResources />} />
+            {/* Old Human Resources home merged into /workforce; keep the deep links alive. */}
+            <Route path="hr" element={<Navigate to="/workforce" replace />} />
             <Route path="hr/employees/:id" element={<EmployeeProfile />} />
             <Route path="hr/payslip/:id" element={<PayslipPrint />} />
             <Route path="reports" element={<ReportsHub />} />

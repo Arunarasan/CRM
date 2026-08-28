@@ -54,7 +54,51 @@ export const smartAssignmentApi = {
     api.get<AssignmentHistoryRow[]>(`${BASE}/history`, { params: taskId ? { taskId } : {} }).then((r) => r.data),
 
   dashboard: () => api.get<AssignmentDashboard>(`${BASE}/dashboard`).then((r) => r.data),
+
+  // --- Merged Tasks & Employees board ---
+  taskBoard: () => api.get<TaskBoardRow[]>(`${BASE}/task-board`).then((r) => r.data),
+  roster: () => api.get<RosterRow[]>(`${BASE}/roster`).then((r) => r.data),
 };
+
+export type TaskBucket = 'UNASSIGNED' | 'ASSIGNED' | 'IN_PROGRESS' | 'NEEDS_APPROVAL' | 'COMPLETED';
+
+export interface TaskAssigneeView {
+  resourceType: string;
+  resourceId: number;
+  name: string;
+  code: string | null;
+  status: string;
+}
+
+export interface TaskBoardRow {
+  id: number;
+  taskName: string;
+  projectId: number | null;
+  project: string | null;
+  status: string;
+  priority: string | null;
+  dueDate: string | null;
+  bucket: TaskBucket;
+  assignees: TaskAssigneeView[];
+}
+
+export interface RosterRow {
+  employeeId: number;
+  userId: number | null;
+  resourceId: number | null;
+  employeeCode: string | null;
+  name: string;
+  designation: string | null;
+  department: string | null;
+  tasksAssignedNow: number;
+  completedLast24h: number;
+  workingNow: boolean;
+  onLeave: boolean;
+  status: string | null;
+  maxTasksPerDay: number;
+  atCapacity: boolean;
+  assignable: boolean;
+}
 
 // --- Small helpers for the form dropdowns (raw entity endpoints, not ApiResponse-wrapped) ---
 

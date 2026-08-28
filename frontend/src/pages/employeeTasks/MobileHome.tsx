@@ -80,13 +80,30 @@ export default function MobileHome() {
       {/* Time-clock + hourly earnings */}
       <ClockWidget onChange={load} />
 
+      {/* My Work: capacity + available pool shortcut */}
+      {home && home.maxActiveTasks != null && (
+        <button
+          onClick={() => navigate('/employee/tasks?tab=AVAILABLE')}
+          className="flex items-center justify-between rounded-xl border bg-card px-3 py-2.5 text-left shadow-sm active:bg-accent/40"
+        >
+          <div>
+            <p className="text-xs text-muted-foreground">Task capacity</p>
+            <p className="text-lg font-bold leading-none">{home.activeTaskCount ?? 0} / {home.maxActiveTasks}</p>
+          </div>
+          <div className="text-right">
+            <p className="text-xs text-muted-foreground">Available for you</p>
+            <p className="text-lg font-bold leading-none text-primary">{home.availableCount ?? 0} →</p>
+          </div>
+        </button>
+      )}
+
       {/* Quick actions */}
       <div className="grid grid-cols-4 gap-2">
         {[
           { label: 'Add Lead', icon: UserPlus, color: 'text-emerald-600', to: '/employee/leads' },
           { label: 'Material', icon: Boxes, color: 'text-orange-600', to: '/employee/requests/material' },
-          { label: 'Manpower', icon: Users, color: 'text-indigo-600', to: '/employee/requests/manpower' },
-          { label: 'Report', icon: ClipboardList, color: 'text-sky-600', to: '/employee/daily-reports' },
+          { label: 'Manpower', icon: Users, color: 'text-emerald-600', to: '/employee/requests/manpower' },
+          { label: 'Report', icon: ClipboardList, color: 'text-emerald-600', to: '/employee/daily-reports' },
         ].map(({ label, icon: Icon, color, to }) => (
           <button key={label} onClick={() => navigate(to)} className="flex flex-col items-center gap-1 rounded-xl border bg-card p-2 text-center shadow-sm active:bg-accent/40">
             <Icon className={`h-5 w-5 ${color}`} />
@@ -110,7 +127,7 @@ export default function MobileHome() {
           onClick={() => navigate('/employee/leave')}
           className="flex flex-col items-start gap-1 rounded-xl border bg-card p-3 text-left shadow-sm active:bg-accent/40"
         >
-          <Plane className="h-5 w-5 text-sky-600" />
+          <Plane className="h-5 w-5 text-emerald-600" />
           <span className="text-xs text-muted-foreground">Leave Balance</span>
           <span className="text-xl font-bold leading-none">{dash ? dash.leaveBalance : '–'}<span className="ml-1 text-xs font-normal text-muted-foreground">days</span></span>
           {dash && dash.pendingLeaves > 0 && (

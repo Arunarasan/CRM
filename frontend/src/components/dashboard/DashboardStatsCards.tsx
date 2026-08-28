@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 export default function DashboardStatsCards({ data, isLoading }: { data: DashboardSummary | null, isLoading: boolean }) {
   const cards = [
     { title: "Total Revenue", value: data ? `₹${data.totalRevenue.toLocaleString()}` : "0", icon: DollarSign, color: "text-emerald-500", bg: "bg-emerald-500/10" },
-    { title: "Total Customers", value: data?.totalCustomers || 0, icon: Users, color: "text-blue-500", bg: "bg-blue-500/10" },
+    { title: "Total Customers", value: data?.totalCustomers || 0, icon: Users, color: "text-emerald-500", bg: "bg-emerald-500/10" },
     { title: "Total Leads", value: data?.totalLeads || 0, icon: Target, color: "text-purple-500", bg: "bg-purple-500/10" },
     { title: "Active Projects", value: data?.activeProjects || 0, icon: Briefcase, color: "text-amber-500", bg: "bg-amber-500/10" },
     { title: "Pending Tasks", value: data?.pendingTasks || 0, icon: CheckSquare, color: "text-rose-500", bg: "bg-rose-500/10" },

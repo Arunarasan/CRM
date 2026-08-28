@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import SearchableSelect from "@/components/ui/searchable-select";
 import { Plus, ArrowRight, Search } from "lucide-react";
 
 const currency = (n?: number) => `₹${(n ?? 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
@@ -49,11 +50,11 @@ export default function PurchaseOrdersPage() {
             <option value="">All statuses</option>
             {PO_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
-          <select className="h-10 rounded-md border border-input px-3 text-sm" value={supplierId}
-            onChange={(e) => { setSupplierId(e.target.value); setPage(0); }}>
-            <option value="">All suppliers</option>
-            {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
+          <div className="w-52">
+            <SearchableSelect value={supplierId} onChange={(v) => { setSupplierId(v); setPage(0); }}
+              options={suppliers.map((s) => ({ value: String(s.id), label: s.name }))}
+              placeholder="All suppliers" clearLabel="All suppliers" />
+          </div>
         </div>
         <Link to="/purchases/orders/new">
           <Button><Plus className="w-4 h-4 mr-2" /> Create Purchase Order</Button>

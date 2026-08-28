@@ -81,7 +81,9 @@ public class DataSeeder {
             List<String> roleNames = Arrays.asList("ROLE_ADMIN", "ROLE_SALES", "ROLE_PROJECT_MANAGER",
                     "ROLE_EMPLOYEE", "ROLE_MANAGER", "ROLE_DESIGNER", "ROLE_ENGINEER", "ROLE_SUPERVISOR",
                     "ROLE_ESTIMATOR", "ROLE_ACCOUNTS", "ROLE_INVENTORY_MANAGER", "ROLE_STORE_KEEPER",
-                    "ROLE_FINANCE_MANAGER", "ROLE_CONTRACTOR");
+                    "ROLE_FINANCE_MANAGER", "ROLE_CONTRACTOR",
+                    // Website customer portal login role.
+                    "ROLE_CUSTOMER");
             for (String roleName : roleNames) {
                 if (roleRepository.findByName(roleName).isEmpty()) {
                     Role role = new Role();
@@ -124,7 +126,8 @@ public class DataSeeder {
                     "CONTRACTOR_PAYMENT", "CONTRACTOR_PORTAL",
                     "WORKFORCE_READ", "WORKFORCE_WRITE",
                     "ASSIGNMENT_READ", "ASSIGNMENT_WRITE",
-                    "PAYROLL_READ", "PAYROLL_WRITE", "PAYROLL_PROCESS");
+                    "PAYROLL_READ", "PAYROLL_WRITE", "PAYROLL_PROCESS",
+                    "WEBSITE_READ", "WEBSITE_WRITE");
             for (String permissionName : permissionNames) {
                 if (permissionRepository.findByName(permissionName).isEmpty()) {
                     Permission permission = new Permission();
@@ -254,8 +257,13 @@ public class DataSeeder {
                     "TASK_APPROVE", "EMPLOYEE_TASK_READ", "EMPLOYEE_TASK_EXECUTE", "EMPLOYEE_TASK_ISSUE", "EMPLOYEE_TASK_MATERIAL");
             assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_MANAGER",
                     "TASK_APPROVE");
+            // Sales/Pre-sales pick the lead-workflow pool tasks (Review Lead, Contact, Quotation…),
+            // so they need the field-execution module too — otherwise they're notified about a
+            // pickable task but get 403 on the pool. PM likewise picks BOQ/Project-scope tasks.
+            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_SALES",
+                    "EMPLOYEE_TASK_READ", "EMPLOYEE_TASK_EXECUTE", "EMPLOYEE_TASK_ISSUE", "EMPLOYEE_TASK_MATERIAL");
             assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_PROJECT_MANAGER",
-                    "TASK_APPROVE");
+                    "TASK_APPROVE", "EMPLOYEE_TASK_READ", "EMPLOYEE_TASK_EXECUTE", "EMPLOYEE_TASK_ISSUE", "EMPLOYEE_TASK_MATERIAL");
             assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_SUPERVISOR",
                     "TASK_APPROVE", "EMPLOYEE_TASK_READ", "EMPLOYEE_TASK_EXECUTE", "EMPLOYEE_TASK_ISSUE", "EMPLOYEE_TASK_MATERIAL");
             assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_ENGINEER",
@@ -263,6 +271,16 @@ public class DataSeeder {
             assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_EMPLOYEE",
                     "EMPLOYEE_TASK_READ", "EMPLOYEE_TASK_EXECUTE", "EMPLOYEE_TASK_ISSUE", "EMPLOYEE_TASK_MATERIAL",
                     "EMPLOYEE_PORTAL");
+            // Single-role phase: the "general employee" drives a lead end-to-end for now (specialist
+            // roles come later). Grant the module WRITE/APPROVE permissions the module-driven lead tasks
+            // (Measure Site → Measurement, Site Visit, Prepare BOQ → BOQ) actually need, plus LEAD_WRITE
+            // so they can schedule visits from the lead page. Narrow these per role when roles are split.
+            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_EMPLOYEE",
+                    "LEAD_WRITE",
+                    "MEASUREMENT_WRITE", "MEASUREMENT_ASSIGN", "MEASUREMENT_APPROVE",
+                    "SITE_VISIT_WRITE", "SITE_VISIT_ASSIGN",
+                    "BOQ_READ", "BOQ_WRITE", "BOQ_APPROVE",
+                    "QUOTATION_READ", "QUOTATION_WRITE", "QUOTATION_APPROVE");
 
             // Dynamic BOQ Management + Project Change Request permissions
             assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_ADMIN",
@@ -406,6 +424,10 @@ public class DataSeeder {
             assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_PROJECT_MANAGER",
                     "PAYROLL_READ");
 
+            // Website / CMS management — admin-only for now.
+            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_ADMIN",
+                    "WEBSITE_READ", "WEBSITE_WRITE");
+
             // 2. Seed the bootstrap admin.
             //
             // BLK-001: never seed a hardcoded/well-known credential in production. Behaviour:
@@ -513,5 +535,239 @@ public class DataSeeder {
                 roleRepository.assignPermission(role.getId(), permission.getId());
             }
         }
+    }
+
+    /**
+     * Seeds the public website catalog (categories, products, services, portfolio, materials,
+     * hero slides, testimonials) idempotently — each block runs only when its table is empty, so
+     * it populates a fresh database and is a no-op thereafter. Content, not sample business data,
+     * so it seeds on every profile (the public site must never be empty).
+     */
+    @Bean
+    @Order(3)
+    @Transactional
+    public CommandLineRunner seedWebsiteCatalog(
+            ShopCategoryRepository categoryRepo, ShopProductRepository productRepo,
+            com.arudra.crm.repository.ServiceRepository serviceRepo, PortfolioProjectRepository portfolioRepo,
+            MaterialRepository materialRepo, HeroSlideRepository heroRepo, TestimonialRepository testimonialRepo) {
+        return args -> {
+            // Categories
+            if (categoryRepo.count() == 0) {
+                String[][] cats = {
+                        {"Furniture", "furniture", "Armchair"}, {"Lighting", "lighting", "Lamp"},
+                        {"Décor", "decor", "Flower2"}, {"Curtains", "curtains", "Blinds"},
+                        {"Wallpaper", "wallpaper", "Wallpaper"}, {"Kitchen Accessories", "kitchen-accessories", "CookingPot"},
+                        {"Wardrobes", "wardrobes", "DoorClosed"}, {"Bathroom", "bathroom", "Bath"},
+                        {"Dining", "dining", "Utensils"}, {"Office", "office", "Briefcase"},
+                };
+                int i = 1;
+                for (String[] c : cats) {
+                    ShopCategory pc = new ShopCategory();
+                    pc.setName(c[0]); pc.setSlug(c[1]); pc.setIcon(c[2]); pc.setDisplayOrder(i++); pc.setActive(true);
+                    categoryRepo.save(pc);
+                }
+            }
+            java.util.Map<String, ShopCategory> catBySlug = new java.util.HashMap<>();
+            categoryRepo.findAll().forEach(c -> catBySlug.put(c.getSlug(), c));
+
+            // Products
+            if (productRepo.count() == 0) {
+                seedProduct(productRepo, catBySlug, "Crystal Gold Chandelier", "crystal-gold-chandelier", "JBD-LT-001", "lighting",
+                        "Hand-finished crystal chandelier with a warm gold frame.", img("1513506003901-1e6a229e2d15", 800), "24999", null, 5.0, 42, true, 12);
+                seedProduct(productRepo, catBySlug, "Luxury Velvet Chair", "luxury-velvet-chair", "JBD-FN-014", "furniture",
+                        "Deep-seated accent chair upholstered in forest velvet.", img("1595515106969-1ce29566ff1c", 800), "18999", null, 5.0, 31, true, 8);
+                seedProduct(productRepo, catBySlug, "Marble Coffee Table", "marble-coffee-table", "JBD-FN-022", "furniture",
+                        "Italian marble top on a sculpted gold-tone base.", img("1533090161767-e6ffed986c88", 800), "22999", null, 4.0, 27, true, 5);
+                seedProduct(productRepo, catBySlug, "Designer Table Lamp", "designer-table-lamp", "JBD-LT-009", "lighting",
+                        "Sculptural ceramic base with a linen drum shade.", img("1550581190-9c1c48d21d6c", 800), "6999", null, 5.0, 58, true, 20);
+                seedProduct(productRepo, catBySlug, "Ivory Bouclé Sofa", "ivory-boucle-sofa", "JBD-FN-031", "furniture",
+                        "Three-seater bouclé sofa with a low architectural profile.", img("1493663284031-b7e3aefcae8e", 800), "74999", "68999", 5.0, 19, true, 3);
+                seedProduct(productRepo, catBySlug, "Walnut Display Sideboard", "walnut-display-sideboard", "JBD-FN-040", "furniture",
+                        "Fluted walnut sideboard with brushed-brass detailing.", img("1524758631624-e2822e304c36", 800), "48999", null, 4.0, 23, false, 4);
+                seedProduct(productRepo, catBySlug, "Sculpted Ceramic Vase", "sculpted-ceramic-vase", "JBD-DC-019", "decor",
+                        "Matte ceramic vase with an organic hand-thrown form.", img("1550581190-9c1c48d21d6c", 800), "3499", null, 4.0, 45, false, 30);
+                seedProduct(productRepo, catBySlug, "Executive Leather Desk Chair", "executive-leather-desk-chair", "JBD-OF-002", "office",
+                        "Full-grain leather task chair with a brushed-steel frame.", img("1595515106969-1ce29566ff1c", 800), "32999", "28999", 5.0, 16, false, 6);
+            }
+
+            // Services
+            if (serviceRepo.count() == 0) {
+                seedService(serviceRepo, "Interior Design", "interior-design", "Full-scope residential and commercial design.", "PencilRuler");
+                seedService(serviceRepo, "Modular Kitchen", "modular-kitchen", "Ergonomic, made-to-measure kitchens.", "CookingPot");
+                seedService(serviceRepo, "Wardrobe Design", "wardrobe-design", "Bespoke wardrobes engineered around how you live.", "DoorClosed");
+                seedService(serviceRepo, "Lighting Design", "lighting-design", "Layered lighting that shapes mood and depth.", "Lamp");
+                seedService(serviceRepo, "False Ceiling", "false-ceiling", "Sculpted ceilings and cove detailing.", "Layers");
+                seedService(serviceRepo, "Turnkey Interiors", "turnkey-interiors", "End-to-end design, sourcing, and execution.", "KeyRound");
+            }
+
+            // Portfolio
+            if (portfolioRepo.count() == 0) {
+                seedPortfolio(portfolioRepo, "The Emerald Residence", "emerald-residence", "Residential", "Bengaluru", 2025, img("1600210492486-724fe5c67fb0", 1000));
+                seedPortfolio(portfolioRepo, "Hillcrest Villa", "hillcrest-villa", "Villa", "Coonoor", 2024, img("1616594039964-ae9021a400a0", 1000));
+                seedPortfolio(portfolioRepo, "Skyline Apartment", "skyline-apartment", "Apartment", "Mumbai", 2025, img("1616137466211-f939a420be84", 1000));
+                seedPortfolio(portfolioRepo, "Meridian Workspace", "meridian-workspace", "Office", "Hyderabad", 2024, img("1519710164239-da123dc03ef4", 1000));
+            }
+
+            // Materials
+            if (materialRepo.count() == 0) {
+                seedMaterial(materialRepo, "Natural Teak Wood", "natural-teak-wood", "Wood", "Golden Brown", "Hand-oiled matte");
+                seedMaterial(materialRepo, "Carrara Marble", "carrara-marble", "Marble", "White & Grey", "Polished");
+                seedMaterial(materialRepo, "Forest Green Granite", "forest-green-granite", "Granite", "Forest Green", "Leathered");
+                seedMaterial(materialRepo, "Smoked Oak Veneer", "smoked-oak-veneer", "Veneer", "Ash Grey", "Natural PU");
+                seedMaterial(materialRepo, "Fluted Glass", "fluted-glass", "Glass", "Clear", "Reeded");
+                seedMaterial(materialRepo, "Belgian Linen Fabric", "belgian-linen-fabric", "Fabric", "Warm Ivory", "Woven");
+            }
+
+            // Hero slides
+            if (heroRepo.count() == 0) {
+                seedHero(heroRepo, img("1618221195710-dd6b41faaea6", 1920), "Crafting Spaces. Defining Luxury.",
+                        "Designing Spaces That Inspire", "Luxury",
+                        "Bespoke interiors that blend elegance, functionality, and craftsmanship.",
+                        "Book Consultation", "/consultation", "Explore Portfolio", "/portfolio", 1);
+                seedHero(heroRepo, img("1616486338812-3dadae4b4ace", 1920), "Turnkey Interior Solutions",
+                        "From Blueprint to", "Masterpiece",
+                        "End-to-end design, material sourcing, and flawless execution.",
+                        "Start Your Project", "/consultation", "View Our Work", "/portfolio", 2);
+            }
+
+            // Testimonials
+            if (testimonialRepo.count() == 0) {
+                seedTestimonial(testimonialRepo, "Ananya Rao", "Homeowner", "Bengaluru",
+                        "JB Decor turned our apartment into something we never want to leave.");
+                seedTestimonial(testimonialRepo, "Rahul Menon", "Managing Director", "Hyderabad",
+                        "They delivered our office fit-out on time and on budget. Truly professional.");
+                seedTestimonial(testimonialRepo, "Priya & Karthik", "Villa Owners", "Coonoor",
+                        "From the first sketch to handover, it was a calm, luxurious experience.");
+            }
+        };
+    }
+
+    /**
+     * Seeds CMS-managed site settings + page content from the website's current hardcoded defaults,
+     * so the CRM has something to view/edit and the public site reads identical values from the DB.
+     * Idempotent (only seeds when empty), so it never clobbers admin edits.
+     */
+    @Bean
+    @Order(4)
+    @Transactional
+    public CommandLineRunner seedWebsiteSettingsContent(SiteSettingRepository settingRepo,
+                                                        ContentBlockRepository contentRepo) {
+        return args -> {
+            if (settingRepo.countByIsDeletedFalse() == 0) {
+                int i = 1;
+                // group, key, label, value, inputType
+                i = seedSetting(settingRepo, "Brand", "brand.name", "Brand name", "JB Decor", "text", i);
+                i = seedSetting(settingRepo, "Brand", "brand.tagline", "Tagline", "Premium Interior Design & Décor", "text", i);
+                i = seedSetting(settingRepo, "Brand", "brand.positioning", "Positioning line", "Crafting Spaces. Defining Luxury.", "text", i);
+                i = seedSetting(settingRepo, "Contact", "contact.phone", "Phone", "+91 90000 00000", "tel", i);
+                i = seedSetting(settingRepo, "Contact", "contact.email", "Email", "hello@jbdecor.com", "email", i);
+                i = seedSetting(settingRepo, "Contact", "contact.whatsapp", "WhatsApp number", "919000000000", "tel", i);
+                i = seedSetting(settingRepo, "Contact", "contact.address", "Address", "JB Decor Studio, Bengaluru, India", "textarea", i);
+                i = seedSetting(settingRepo, "Contact", "contact.businessHours", "Business hours", "Mon – Sat · 10:00 AM – 7:00 PM", "text", i);
+                i = seedSetting(settingRepo, "Social", "social.instagram", "Instagram URL", "https://instagram.com", "url", i);
+                i = seedSetting(settingRepo, "Social", "social.facebook", "Facebook URL", "https://facebook.com", "url", i);
+                i = seedSetting(settingRepo, "Social", "social.pinterest", "Pinterest URL", "https://pinterest.com", "url", i);
+                i = seedSetting(settingRepo, "Social", "social.linkedin", "LinkedIn URL", "https://linkedin.com", "url", i);
+                seedSetting(settingRepo, "Portal", "portal.enabled", "Customer portal enabled", "true", "text", i);
+            }
+
+            if (contentRepo.countByIsDeletedFalse() == 0) {
+                int i = 1;
+                // page, section, title, subtitle, body
+                i = seedContent(contentRepo, "home", "why_choose_us", "Why Choose JB Decor",
+                        "Design-led, delivered end to end",
+                        "From concept to handover, we craft interiors that balance timeless elegance with everyday livability.", i);
+                i = seedContent(contentRepo, "home", "consultation_cta", "Let's design your space",
+                        "Book a free consultation",
+                        "Tell us about your project and our design team will be in touch within one business day.", i);
+                i = seedContent(contentRepo, "about", "intro", "About JB Decor",
+                        "Crafting Spaces. Defining Luxury.",
+                        "JB Decor is a premium interior design studio delivering residential and commercial spaces across India, blending craftsmanship with a considered, client-first process.", i);
+                seedContent(contentRepo, "contact", "intro", "Get in touch",
+                        "We'd love to hear about your project",
+                        "Reach us by phone, email or WhatsApp — or send an enquiry and we'll respond within one business day.", i);
+            }
+        };
+    }
+
+    private int seedSetting(SiteSettingRepository repo, String group, String key, String label,
+                            String value, String inputType, int order) {
+        com.arudra.crm.entity.SiteSetting s = new com.arudra.crm.entity.SiteSetting();
+        s.setGroupName(group);
+        s.setSettingKey(key);
+        s.setLabel(label);
+        s.setSettingValue(value);
+        s.setInputType(inputType);
+        s.setDisplayOrder(order);
+        repo.save(s);
+        return order + 1;
+    }
+
+    private int seedContent(ContentBlockRepository repo, String page, String section, String title,
+                            String subtitle, String body, int order) {
+        com.arudra.crm.entity.ContentBlock c = new com.arudra.crm.entity.ContentBlock();
+        c.setPage(page);
+        c.setSectionKey(section);
+        c.setTitle(title);
+        c.setSubtitle(subtitle);
+        c.setBody(body);
+        c.setDisplayOrder(order);
+        c.setActive(true);
+        repo.save(c);
+        return order + 1;
+    }
+
+    private static String img(String id, int w) {
+        return "https://images.unsplash.com/photo-" + id + "?auto=format&fit=crop&w=" + w + "&q=80";
+    }
+
+    private void seedProduct(ShopProductRepository repo, java.util.Map<String, ShopCategory> cats, String name,
+                             String slug, String sku, String categorySlug, String shortDesc, String image,
+                             String price, String discount, double rating, int reviews, boolean featured, int stock) {
+        ShopProduct p = new ShopProduct();
+        p.setName(name); p.setSlug(slug); p.setSku(sku); p.setCategory(cats.get(categorySlug));
+        p.setShortDescription(shortDesc); p.setImageUrl(image);
+        p.setPrice(new BigDecimal(price));
+        if (discount != null) p.setDiscountPrice(new BigDecimal(discount));
+        p.setRating(rating); p.setReviewCount(reviews); p.setFeatured(featured); p.setActive(true); p.setStock(stock);
+        repo.save(p);
+    }
+
+    private void seedService(com.arudra.crm.repository.ServiceRepository repo, String title, String slug,
+                             String shortDesc, String icon) {
+        com.arudra.crm.entity.Service s = new com.arudra.crm.entity.Service();
+        s.setTitle(title); s.setSlug(slug); s.setShortDescription(shortDesc); s.setIcon(icon); s.setActive(true);
+        repo.save(s);
+    }
+
+    private void seedPortfolio(PortfolioProjectRepository repo, String title, String slug, String category,
+                               String location, int year, String cover) {
+        PortfolioProject p = new PortfolioProject();
+        p.setTitle(title); p.setSlug(slug); p.setCategory(category); p.setLocation(location);
+        p.setYear(year); p.setCoverImage(cover); p.setActive(true);
+        repo.save(p);
+    }
+
+    private void seedMaterial(MaterialRepository repo, String name, String slug, String category,
+                              String color, String finish) {
+        Material m = new Material();
+        m.setName(name); m.setSlug(slug); m.setCategory(category); m.setColor(color); m.setFinish(finish);
+        m.setActive(true);
+        repo.save(m);
+    }
+
+    private void seedHero(HeroSlideRepository repo, String image, String eyebrow, String title, String accent,
+                          String desc, String pbt, String pbl, String sbt, String sbl, int order) {
+        HeroSlide h = new HeroSlide();
+        h.setImageUrl(image); h.setEyebrow(eyebrow); h.setTitle(title); h.setTitleAccent(accent);
+        h.setDescription(desc); h.setPrimaryButtonText(pbt); h.setPrimaryButtonLink(pbl);
+        h.setSecondaryButtonText(sbt); h.setSecondaryButtonLink(sbl); h.setDisplayOrder(order); h.setActive(true);
+        repo.save(h);
+    }
+
+    private void seedTestimonial(TestimonialRepository repo, String name, String role, String location, String quote) {
+        Testimonial t = new Testimonial();
+        t.setName(name); t.setRole(role); t.setLocation(location); t.setRating(5); t.setQuote(quote); t.setActive(true);
+        repo.save(t);
     }
 }

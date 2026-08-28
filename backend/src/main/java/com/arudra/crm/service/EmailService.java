@@ -50,6 +50,18 @@ public class EmailService {
         send(toEmail, subject, body);
     }
 
+    /** Sends the sign-up email-verification OTP, or logs it when SMTP is not configured. */
+    public void sendEmailVerificationOtp(String toEmail, String recipientName, String otp, int expiryMinutes) {
+        String subject = appName + " — Verify your email";
+        String body = "Hi " + (recipientName == null || recipientName.isBlank() ? "there" : recipientName) + ",\n\n"
+                + "Welcome to " + appName + "! Your email verification code is: " + otp + "\n\n"
+                + "Enter it on the sign-up screen to activate your account. This code is valid for "
+                + expiryMinutes + " minutes.\n\n"
+                + "If you did not create an account, you can safely ignore this email.\n\n"
+                + "— " + appName;
+        send(toEmail, subject, body);
+    }
+
     /** Low-level send with console fallback. Never throws to the caller. */
     public void send(String toEmail, String subject, String body) {
         JavaMailSender sender = mailSenderProvider.getIfAvailable();

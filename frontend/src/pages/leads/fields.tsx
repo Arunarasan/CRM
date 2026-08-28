@@ -20,7 +20,7 @@ export function Field({
 }
 
 export function TextField({
-  label, value, onChange, required, type = "text", placeholder,
+  label, value, onChange, required, type = "text", placeholder, inputMode, autoComplete,
 }: {
   label: string;
   value: any;
@@ -28,6 +28,8 @@ export function TextField({
   required?: boolean;
   type?: string;
   placeholder?: string;
+  inputMode?: "text" | "numeric" | "decimal" | "tel" | "email" | "url" | "search";
+  autoComplete?: string;
 }) {
   return (
     <Field label={label} required={required}>
@@ -35,6 +37,8 @@ export function TextField({
         type={type}
         required={required}
         placeholder={placeholder}
+        inputMode={inputMode}
+        autoComplete={autoComplete}
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value)}
       />

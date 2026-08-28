@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ArrowLeft } from "lucide-react";
+import { useGoBack } from "@/hooks/useGoBack";
 
 const currency = (n?: number) => `₹${(n ?? 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 const pct = (base: number, p?: number) => (p ? (base * p) / 100 : 0);
@@ -19,6 +20,7 @@ export default function BillFormPage() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const workPackageId = Number(params.get("workPackageId"));
+  const goBack = useGoBack(`/contractors/work-packages/${workPackageId}`);
   const contractorId = Number(params.get("contractorId"));
 
   const [billType, setBillType] = useState(params.get("billType") ?? "RUNNING");
@@ -116,10 +118,10 @@ export default function BillFormPage() {
 
   return (
     <div className="space-y-5">
-      <Link to={`/contractors/work-packages/${workPackageId}`}
+      <button type="button" onClick={goBack}
             className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800">
-        <ArrowLeft className="w-4 h-4" /> Back to work package
-      </Link>
+        <ArrowLeft className="w-4 h-4" /> Back
+      </button>
 
       <div className="bg-white border rounded-2xl shadow-sm p-6">
         <h2 className="text-xl font-black text-slate-900">

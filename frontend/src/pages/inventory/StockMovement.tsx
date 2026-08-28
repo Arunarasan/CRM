@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { inventoryApi } from "@/api/inventoryApi";
+import { toast } from "@/components/ui/toast";
+import SearchableSelect from "@/components/ui/searchable-select";
 import type { InventoryTransaction, Product, Warehouse } from "@/types/inventory";
 import { STOCK_ENTRY_TYPES } from "@/types/inventory";
 import { Button } from "@/components/ui/button";
@@ -44,7 +46,7 @@ export default function StockMovement() {
   }, []);
 
   const submit = () => {
-    if (!product) { alert("Select a material first"); return; }
+    if (!product) { toast.error("Select a material first."); return; }
     const payload: Record<string, unknown> = {
       type,
       quantity,
@@ -54,8 +56,8 @@ export default function StockMovement() {
       destinationWarehouse: destinationWarehouseId ? { id: Number(destinationWarehouseId) } : null,
     };
     inventoryApi.processTransaction(payload)
-      .then(() => { setProduct(null); setQuantity(1); setReference(""); load(); })
-      .catch(() => alert("Failed to record stock entry"));
+      .then(() => { setProduct(null); setQuantity(1); setReference(""); load(); toast.success("Stock entry recorded."); })
+      .catch(() => toast.error("Failed to record stock entry."));
   };
 
   return (
@@ -98,19 +100,17 @@ export default function StockMovement() {
           {NEEDS_SOURCE.includes(type) && (
             <div className="space-y-1">
               <Label>Source Warehouse</Label>
-              <select className="w-full border rounded-md h-9 px-2 text-sm bg-white" value={sourceWarehouseId} onChange={(e) => setSourceWarehouseId(e.target.value)}>
-                <option value="">Select...</option>
-                {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-              </select>
+              <SearchableSelect value={sourceWarehouseId} onChange={setSourceWarehouseId}
+                options={warehouses.map((w) => ({ value: String(w.id), label: w.name }))}
+                placeholder="Search warehouse…" clearLabel="— none —" />
             </div>
           )}
           {NEEDS_DEST.includes(type) && (
             <div className="space-y-1">
               <Label>Destination Warehouse</Label>
-              <select className="w-full border rounded-md h-9 px-2 text-sm bg-white" value={destinationWarehouseId} onChange={(e) => setDestinationWarehouseId(e.target.value)}>
-                <option value="">Select...</option>
-                {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-              </select>
+              <SearchableSelect value={destinationWarehouseId} onChange={setDestinationWarehouseId}
+                options={warehouses.map((w) => ({ value: String(w.id), label: w.name }))}
+                placeholder="Search warehouse…" clearLabel="— none —" />
             </div>
           )}
         </div>
@@ -153,7 +153,7 @@ export default function StockMovement() {
       </div>
 
       <BarcodeScanner open={scannerOpen} onClose={() => setScannerOpen(false)} onDetect={(code) => {
-        inventoryApi.findByBarcode(code).then(setProduct).catch(() => alert(`No material found for code ${code}`));
+        inventoryApi.findByBarcode(code).then(setProduct).catch(() => toast.error(`No material found for code ${code}`));
       }} />
     </div>
   );

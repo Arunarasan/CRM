@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { purchaseApi } from "@/api/purchaseApi";
+import { toast } from "@/components/ui/toast";
 import type { Supplier, SupplierProfile } from "@/types/purchase";
 import { PO_STATUS_TONE } from "@/types/purchase";
 import { Button } from "@/components/ui/button";
@@ -28,10 +29,10 @@ export default function SuppliersPage() {
   }, [search]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const save = () => {
-    if (!form.name) return alert("Supplier name is required");
+    if (!form.name) return toast.error("Supplier name is required.");
     const req = form.id ? purchaseApi.updateSupplier(form.id, form) : purchaseApi.createSupplier(form);
-    req.then(() => { setIsFormOpen(false); setForm(EMPTY); load(); })
-      .catch(() => alert("Failed to save supplier"));
+    req.then(() => { setIsFormOpen(false); setForm(EMPTY); load(); toast.success("Supplier saved."); })
+      .catch(() => toast.error("Failed to save supplier."));
   };
 
   const openProfile = (s: Supplier) => {
@@ -60,7 +61,7 @@ export default function SuppliersPage() {
         {suppliers.map((s) => (
           <div key={s.id} className="bg-white border rounded-2xl p-5 shadow-sm flex flex-col">
             <div className="flex items-start justify-between mb-3">
-              <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center"><Truck className="w-6 h-6" /></div>
+              <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center"><Truck className="w-6 h-6" /></div>
               <div className="flex items-center gap-1">
                 {s.status === "INACTIVE" && <Badge className="bg-slate-200 text-slate-500">INACTIVE</Badge>}
                 <Button variant="ghost" size="icon" onClick={() => { setForm(s); setIsFormOpen(true); }}><Pencil className="w-4 h-4" /></Button>

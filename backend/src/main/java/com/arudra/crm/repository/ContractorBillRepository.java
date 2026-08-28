@@ -65,6 +65,13 @@ public interface ContractorBillRepository extends JpaRepository<ContractorBill, 
            "WHERE b.status NOT IN ('REJECTED', 'CANCELLED', 'DRAFT') AND b.isDeleted = false")
     BigDecimal sumAllOutstanding();
 
+    /** Outstanding balance on bills dated within a period — the month-scoped contractor payable. */
+    @Query("SELECT COALESCE(SUM(b.balanceAmount), 0) FROM ContractorBill b " +
+           "WHERE b.billDate BETWEEN :from AND :to AND b.status NOT IN ('REJECTED', 'CANCELLED', 'DRAFT') " +
+           "AND b.isDeleted = false")
+    BigDecimal sumOutstandingBetween(@org.springframework.data.repository.query.Param("from") java.time.LocalDate from,
+                                     @org.springframework.data.repository.query.Param("to") java.time.LocalDate to);
+
     @Query("SELECT COALESCE(SUM(b.retentionAmount), 0) FROM ContractorBill b " +
            "WHERE b.contractor.id = :contractorId AND b.status NOT IN ('REJECTED', 'CANCELLED', 'DRAFT') " +
            "AND b.isDeleted = false")

@@ -12,11 +12,41 @@ import {
 
 const BASE = '/projects';
 
+/** One person (employee or contractor) working on a project, aggregated from task assignments. */
+export interface ProjectResource {
+  resourceType: string;
+  resourceId: number;
+  name: string;
+  taskCount: number;
+  activeTaskCount: number;
+  completedTaskCount: number;
+  roles: string[];
+}
+
+/** One approved quotation a project can be built from (Phases tab picker). */
+export interface AvailableQuotation {
+  id: number;
+  quotationNumber: string;
+  revisionNumber: number;
+  grandTotal: number;
+  boq: { id: number; boqNumber: string; revisionNumber: number };
+  isCurrent: boolean;
+}
+
 export const projectApi = {
   dashboard: () => api.get<ProjectModuleDashboard>(`${BASE}/dashboard`).then((r) => r.data),
   getProgress: (projectId: number) => api.get<ProjectProgress>(`${BASE}/${projectId}/progress`).then((r) => r.data),
   generateFromBoq: (projectId: number) =>
     api.post<GenerateFromBoqResult>(`${BASE}/${projectId}/generate-from-boq`).then((r) => r.data),
+  /** People (employees + contractors) assigned across this project's tasks — the Labour roster. */
+  getProjectResources: (projectId: number) =>
+    api.get<ProjectResource[]>(`${BASE}/${projectId}/resources`).then((r) => r.data),
+  /** Approved quotations for this project's lead — candidates for the "build from" picker. */
+  getAvailableQuotations: (projectId: number) =>
+    api.get<AvailableQuotation[]>(`${BASE}/${projectId}/available-quotations`).then((r) => r.data),
+  /** Re-link the project to the chosen approved quotation's BOQ, then build phases/rooms/materials. */
+  generateFromQuotation: (projectId: number, quotationId: number) =>
+    api.post<GenerateFromBoqResult>(`${BASE}/${projectId}/generate-from-quotation?quotationId=${quotationId}`).then((r) => r.data),
 
   // Phases
   getPhases: (projectId: number) => api.get<ProjectPhase[]>(`${BASE}/${projectId}/phases`).then((r) => r.data),
@@ -82,6 +112,8 @@ export const projectApi = {
     api.post<ProjectDailyLogMedia>(`${BASE}/daily-logs/${logId}/media`, entry).then((r) => r.data),
 
   // Customer approval workflow
+  createApproval: (projectId: number, approval: { approvalType: string; remarks?: string; status?: string }) =>
+    api.post(`${BASE}/${projectId}/approvals`, { status: "PENDING", ...approval }).then((r) => r.data),
   approveApproval: (approvalId: number, remarks?: string) =>
     api.post(`${BASE}/approvals/${approvalId}/approve`, remarks ? { remarks } : {}).then((r) => r.data),
   rejectApproval: (approvalId: number, remarks?: string) =>

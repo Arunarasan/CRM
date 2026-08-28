@@ -124,7 +124,7 @@ export default function SiteVisits() {
                   <div className={`text-xs p-1.5 rounded border truncate cursor-pointer transition-colors ${
                     visit.status === 'Completed' ? 'bg-green-100 border-green-200 text-green-800 hover:bg-green-200' :
                     visit.status === 'Cancelled' ? 'bg-red-100 border-red-200 text-red-800 hover:bg-red-200' :
-                    visit.status === 'In Progress' ? 'bg-blue-100 border-blue-200 text-blue-800 hover:bg-blue-200' :
+                    visit.status === 'In Progress' ? 'bg-emerald-100 border-emerald-200 text-emerald-800 hover:bg-emerald-200' :
                     visit.priority === 'High' || visit.priority === 'Urgent' ? 'bg-orange-100 border-orange-200 text-orange-800 hover:bg-orange-200' :
                     'bg-white hover:bg-muted'
                   }`}>
@@ -236,7 +236,7 @@ export default function SiteVisits() {
             <p className="text-sm font-medium text-muted-foreground">Today's Visits</p>
             <h3 className="text-2xl font-bold">{dashboard.todaysVisits}</h3>
           </div>
-          <div className="h-10 w-10 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center"><Activity size={20}/></div>
+          <div className="h-10 w-10 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center"><Activity size={20}/></div>
         </div>
         <div className="p-4 bg-card rounded-xl border shadow-sm flex items-center justify-between">
           <div>

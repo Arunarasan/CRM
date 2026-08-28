@@ -37,6 +37,7 @@ public class MeasurementService {
     private static final double DEFAULT_WINDOW_AREA = 15.0; // 3ft x 5ft
 
     @Autowired private MeasurementRepository measurementRepository;
+    @Autowired private WorkflowTriggerService workflowTriggerService;
     @Autowired private MeasurementRoomRepository roomRepository;
     @Autowired private MeasurementItemRepository itemRepository;
     @Autowired private MeasurementAssignmentRepository assignmentRepository;
@@ -916,6 +917,7 @@ public class MeasurementService {
         measurement.setCompletedAt(LocalDateTime.now());
         Measurement saved = measurementRepository.save(measurement);
         logActivity(saved, "Completed", "Measurement completed and ready for BOQ", currentUser);
+        workflowTriggerService.onMeasurementCompleted(saved); // advance the lead workflow → BOQ task
         return saved;
     }
 

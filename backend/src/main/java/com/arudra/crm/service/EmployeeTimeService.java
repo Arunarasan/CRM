@@ -189,6 +189,26 @@ public class EmployeeTimeService {
         m.put("todayEarnings", live[2]);
         m.put("weekEarnings", earningsBetween(employee, startOfWeek(LocalDate.now()), LocalDate.now(), asOf));
         m.put("monthEarnings", earningsBetween(employee, LocalDate.now().withDayOfMonth(1), LocalDate.now(), asOf));
+
+        // Motivational daily target: a full standard day at the regular rate — the money the
+        // running earnings bar fills toward on the home screen.
+        BigDecimal std = nz(employee.getStandardDailyHours(), new BigDecimal("8"));
+        m.put("standardDailyHours", std);
+        m.put("dailyTargetEarnings", employee.getHourlyRate() == null ? null
+                : std.multiply(regularRate(employee, false)).setScale(2, RoundingMode.HALF_UP));
+
+        // Today's individual clock-in→clock-out sessions, so the home screen can list them.
+        List<Map<String, Object>> sessionList = new ArrayList<>();
+        for (AttendanceSession s : sessions) {
+            Map<String, Object> sm = new LinkedHashMap<>();
+            sm.put("checkInTime", s.getCheckInTime());
+            sm.put("checkOutTime", s.getCheckOutTime());
+            sm.put("breakMinutes", s.getBreakMinutes() == null ? 0 : s.getBreakMinutes());
+            sm.put("onBreak", s.getCheckOutTime() == null && s.getBreakStart() != null);
+            sm.put("running", s.getCheckOutTime() == null);
+            sessionList.add(sm);
+        }
+        m.put("sessions", sessionList);
         return m;
     }
 

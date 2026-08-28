@@ -83,7 +83,7 @@ export default function FinanceReportsPage() {
       {loading && <div className="p-8 text-sm text-muted-foreground">Building report…</div>}
 
       {!loading && data && report === "revenue" && chart([
-        { key: "invoiced", name: "Invoiced", color: "#3b82f6" },
+        { key: "invoiced", name: "Invoiced", color: "#114f39" },
         { key: "collected", name: "Collected", color: "#10b981" },
       ])}
 
@@ -114,7 +114,7 @@ export default function FinanceReportsPage() {
       )}
 
       {!loading && data && report === "pvs" && chart([
-        { key: "sales", name: "Sales (Invoices)", color: "#3b82f6" },
+        { key: "sales", name: "Sales (Invoices)", color: "#114f39" },
         { key: "purchases", name: "Purchases (Bills)", color: "#f59e0b" },
       ])}
 
@@ -147,7 +147,7 @@ export default function FinanceReportsPage() {
         <div className="max-w-lg bg-white border rounded-2xl shadow-sm p-6">
           <h3 className="font-bold text-slate-800 mb-4">Profit &amp; Loss · {String(data.from)} → {String(data.to)}</h3>
           <dl className="space-y-2.5 text-sm">
-            <div className="flex justify-between"><dt>Revenue (Invoiced)</dt><dd className="font-bold text-blue-700">{currencyFull(Number(data.revenue))}</dd></div>
+            <div className="flex justify-between"><dt>Revenue (Invoiced)</dt><dd className="font-bold text-emerald-700">{currencyFull(Number(data.revenue))}</dd></div>
             <div className="flex justify-between"><dt>Project Expenses</dt><dd className="font-semibold text-rose-600">- {currencyFull(Number(data.projectExpenses))}</dd></div>
             <div className="flex justify-between"><dt>Payroll</dt><dd className="font-semibold text-rose-600">- {currencyFull(Number(data.payroll))}</dd></div>
             <div className="flex justify-between border-t pt-3 text-base">

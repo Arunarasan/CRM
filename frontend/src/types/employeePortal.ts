@@ -28,6 +28,14 @@ export interface EmployeeProfile {
   workforce?: Record<string, unknown> | null;
 }
 
+export interface TimeSession {
+  checkInTime: string | null;
+  checkOutTime: string | null;
+  breakMinutes: number;
+  onBreak: boolean;
+  running: boolean;
+}
+
 export interface TimeStatus {
   clockedIn: boolean;
   onBreak: boolean;
@@ -41,6 +49,9 @@ export interface TimeStatus {
   todayEarnings: number;
   weekEarnings: number;
   monthEarnings: number;
+  standardDailyHours: number;
+  dailyTargetEarnings: number | null;
+  sessions: TimeSession[];
 }
 
 export interface EmployeeDashboard {
@@ -386,4 +397,80 @@ export interface MyBonuses {
   bonuses: BonusEntry[];
   bonusPaidTotal: number;
   bonusPendingTotal: number;
+}
+
+/**
+ * One month's read-only earnings preview (see EmployeePortalService.getMonthlyEarnings). `amount` is
+ * the pay earned for work (hourly attendance earnings, or the salaried gross); `incentive` and
+ * `bonus` are that month's bonuses. `official` is set when a payslip has already been generated for
+ * the month; otherwise `preview` is true. `current` flags the running (partial) month.
+ */
+export interface MonthlyEarning {
+  month: number;
+  year: number;
+  payType: 'HOURLY' | 'MONTHLY';
+  amount: number;
+  incentive: number;
+  bonus: number;
+  total: number;
+  workedHours?: number;
+  overtimeHours?: number;
+  attendanceDays?: number;
+  official: { id: number; status: string; netSalary: number } | null;
+  preview: boolean;
+  current: boolean;
+}
+
+/** One of the employee's loans (for display; the repayment picker filters to outstanding ones). */
+export interface MyLoan {
+  id: number;
+  principal: number;
+  emiAmount: number;
+  recoveredAmount?: number;
+  balance: number;
+  status?: string; // ACTIVE | CLOSED
+  disbursedDate?: string;
+}
+
+/** One of the employee's salary advances (for display). */
+export interface MyAdvance {
+  id: number;
+  amount: number;
+  monthlyRecovery?: number;
+  recoveredAmount?: number;
+  balance: number;
+  status?: string; // PENDING | APPROVED | RECOVERING | RECOVERED
+  reason?: string;
+  advanceDate?: string;
+}
+
+export type PayrollRequestType = 'ADVANCE' | 'LOAN_REPAYMENT' | 'ADVANCE_REPAYMENT' | 'SET_RECOVERY' | 'OTHER';
+
+/** One of the employee's money requests. */
+export interface PayrollRequestEntry {
+  id: number;
+  requestType: PayrollRequestType;
+  direction: 'DEBIT' | 'CREDIT';
+  amount: number;
+  monthlyRecovery?: number | null;
+  targetMonth?: number | null;
+  targetYear?: number | null;
+  loanId?: number | null;
+  advanceId?: number | null;
+  reason?: string;
+  status: string; // PENDING | APPROVED | APPLIED | CONVERTED | REJECTED
+  adminRemarks?: string;
+  createdAt?: string;
+}
+
+export interface PayrollRequestCreateBody {
+  requestType: PayrollRequestType;
+  amount: number;
+  reason?: string;
+  direction?: 'DEBIT' | 'CREDIT';
+  monthlyRecovery?: number;
+  targetMonth?: number;
+  targetYear?: number;
+  loanId?: number;
+  advanceId?: number;
 }

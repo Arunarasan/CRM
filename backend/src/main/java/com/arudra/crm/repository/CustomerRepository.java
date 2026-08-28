@@ -20,4 +20,8 @@ public interface CustomerRepository extends JpaRepository<Customer, Long>, JpaSp
     Page<Customer> searchCustomers(@Param("search") String search, Pageable pageable);
 
     Page<Customer> findAllByOrderByCreatedAtDesc(Pageable pageable);
+
+    /** Match an existing customer for website guest checkout (email first, then phone). */
+    java.util.Optional<Customer> findFirstByEmailIgnoreCaseAndIsDeletedFalseOrderByIdAsc(String email);
+    java.util.Optional<Customer> findFirstByPhoneAndIsDeletedFalseOrderByIdAsc(String phone);
 }

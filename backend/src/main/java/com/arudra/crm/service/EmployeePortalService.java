@@ -51,6 +51,10 @@ public class EmployeePortalService {
     @Autowired private TaskRepository taskRepository;
     @Autowired private NotificationService notificationService;
     @Autowired private EmployeeBonusRepository bonusRepository;
+    @Autowired private EmployeeLoanRepository loanRepository;
+    @Autowired private EmployeeAdvanceRepository advanceRepository;
+    @Autowired private PayrollRequestRepository payrollRequestRepository;
+    @Autowired private PayrollService payrollService;
 
     /** Annual leave allowance used to derive a simple balance until a policy engine exists. */
     private static final int DEFAULT_ANNUAL_LEAVE = 24;
@@ -348,6 +352,250 @@ public class EmployeePortalService {
         return out;
     }
 
+    /**
+     * A month-by-month earnings preview for the signed-in employee, from their date of joining to the
+     * current month (most recent first). This is a <b>read-only computation</b> — it never creates a
+     * {@link SalaryRecord}, so the admin/finance payroll-run + approval workflow stays the single
+     * source of official payslips. For each month it reports:
+     * <ul>
+     *   <li><b>amount</b> — the pay earned for work: for HOURLY staff this is regular+overtime
+     *       earnings summed from attendance (via the same {@link EmployeeTimeService} engine payroll
+     *       uses); for salaried staff it is the active salary structure's gross (or base salary).</li>
+     *   <li><b>incentive</b> — INCENTIVE-type bonuses awarded that month; <b>bonus</b> — other
+     *       bonuses that month.</li>
+     *   <li><b>official</b> — the id/status/net of an already-generated payslip for that month, if
+     *       one exists (so the UI can link to the official document); otherwise the row is a preview.</li>
+     * </ul>
+     */
+    public List<Map<String, Object>> getMonthlyEarnings(User currentUser) {
+        Employee emp = requireEmployee(currentUser);
+        java.time.YearMonth cur = java.time.YearMonth.now();
+        java.time.YearMonth from = emp.getDateOfJoining() != null
+                ? java.time.YearMonth.from(emp.getDateOfJoining()) : cur;
+        // Guard against an unset/absurd joining date so the list never explodes.
+        if (from.isAfter(cur)) from = cur;
+        if (from.isBefore(cur.minusMonths(120))) from = cur.minusMonths(120);
+
+        boolean hourly = "HOURLY".equalsIgnoreCase(emp.getSalaryType())
+                || (!"MONTHLY".equalsIgnoreCase(emp.getSalaryType())
+                    && emp.getHourlyRate() != null && emp.getHourlyRate().signum() > 0);
+
+        SalaryStructure structure = salaryStructureRepository
+                .findFirstByEmployeeIdAndActiveTrueOrderByIdDesc(emp.getId()).orElse(null);
+        java.math.BigDecimal monthlyGross = structure != null
+                ? nz(structure.getBasic()).add(nz(structure.getHra()))
+                    .add(nz(structure.getAllowances())).add(nz(structure.getSpecialAllowance()))
+                : nz(emp.getBaseSalary());
+
+        // Official payslips already generated, indexed by year*100+month (keep the latest per month).
+        Map<Integer, SalaryRecord> official = new java.util.HashMap<>();
+        for (SalaryRecord r : salaryRecordRepository.findByEmployeeIdOrderByYearDescMonthDesc(emp.getId())) {
+            if (r.getYear() != null && r.getMonth() != null) {
+                official.putIfAbsent(r.getYear() * 100 + r.getMonth(), r);
+            }
+        }
+
+        // Bonuses bucketed by award month → [incentive, otherBonus].
+        Map<Integer, java.math.BigDecimal[]> bonusByMonth = new java.util.HashMap<>();
+        for (EmployeeBonus b : bonusRepository.findByEmployeeIdAndIsDeletedFalseOrderByIdDesc(emp.getId())) {
+            if (b.getAwardDate() == null) continue;
+            int key = b.getAwardDate().getYear() * 100 + b.getAwardDate().getMonthValue();
+            java.math.BigDecimal[] agg = bonusByMonth.computeIfAbsent(key,
+                    k -> new java.math.BigDecimal[]{java.math.BigDecimal.ZERO, java.math.BigDecimal.ZERO});
+            java.math.BigDecimal amt = nz(b.getAmount());
+            if ("INCENTIVE".equalsIgnoreCase(b.getBonusType())) agg[0] = agg[0].add(amt);
+            else agg[1] = agg[1].add(amt);
+        }
+
+        List<Map<String, Object>> out = new java.util.ArrayList<>();
+        for (java.time.YearMonth ym = cur; !ym.isBefore(from); ym = ym.minusMonths(1)) {
+            int key = ym.getYear() * 100 + ym.getMonthValue();
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("month", ym.getMonthValue());
+            row.put("year", ym.getYear());
+            row.put("payType", hourly ? "HOURLY" : "MONTHLY");
+
+            java.math.BigDecimal amount;
+            if (hourly) {
+                Map<String, Object> hs = employeeTimeService.hourlySummary(emp, ym.atDay(1), ym.atEndOfMonth());
+                amount = nz((java.math.BigDecimal) hs.get("regularEarnings"))
+                        .add(nz((java.math.BigDecimal) hs.get("overtimeEarnings")));
+                row.put("workedHours", hs.get("workedHours"));
+                row.put("overtimeHours", hs.get("overtimeHours"));
+                row.put("attendanceDays", hs.get("attendanceDays"));
+            } else {
+                amount = monthlyGross;
+            }
+
+            java.math.BigDecimal[] bonusAgg = bonusByMonth.getOrDefault(key,
+                    new java.math.BigDecimal[]{java.math.BigDecimal.ZERO, java.math.BigDecimal.ZERO});
+            java.math.BigDecimal incentive = bonusAgg[0], bonus = bonusAgg[1];
+
+            row.put("amount", scale(amount));
+            row.put("incentive", scale(incentive));
+            row.put("bonus", scale(bonus));
+            row.put("total", scale(amount.add(incentive).add(bonus)));
+
+            SalaryRecord off = official.get(key);
+            if (off != null) {
+                Map<String, Object> o = new LinkedHashMap<>();
+                o.put("id", off.getId());
+                o.put("status", off.getStatus());
+                o.put("netSalary", nz(off.getNetSalary()));
+                row.put("official", o);
+                row.put("preview", false);
+            } else {
+                row.put("official", null);
+                row.put("preview", true);
+            }
+            row.put("current", ym.equals(cur)); // the running (partial) month
+            out.add(row);
+        }
+        return out;
+    }
+
+    private static java.math.BigDecimal nz(java.math.BigDecimal v) {
+        return v == null ? java.math.BigDecimal.ZERO : v;
+    }
+
+    private static java.math.BigDecimal scale(java.math.BigDecimal v) {
+        return v.setScale(2, java.math.RoundingMode.HALF_UP);
+    }
+
+    // =====================================================================
+    // Payroll requests (employee raises → admin approves)
+    // =====================================================================
+
+    /** The signed-in employee's own money requests (advance / loan repayment / other), latest first. */
+    public List<PayrollRequest> getMyPayrollRequests(User currentUser) {
+        Employee emp = requireEmployee(currentUser);
+        return payrollRequestRepository.findByEmployeeIdAndIsDeletedFalseOrderByIdDesc(emp.getId());
+    }
+
+    /**
+     * The employee's loans as compact maps (all of them, latest first, for the portal to display).
+     * The repayment picker filters these to the still-outstanding ones on the client.
+     */
+    public List<Map<String, Object>> getMyLoans(User currentUser) {
+        Employee emp = requireEmployee(currentUser);
+        List<Map<String, Object>> out = new java.util.ArrayList<>();
+        for (EmployeeLoan l : loanRepository.findByEmployeeIdOrderByIdDesc(emp.getId())) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", l.getId());
+            m.put("principal", l.getPrincipal());
+            m.put("emiAmount", l.getEmiAmount());
+            m.put("recoveredAmount", l.getRecoveredAmount());
+            m.put("balance", l.getBalance());
+            m.put("status", l.getStatus());
+            m.put("disbursedDate", l.getDisbursedDate());
+            out.add(m);
+        }
+        return out;
+    }
+
+    /** The employee's salary advances as compact maps (all of them, latest first). */
+    public List<Map<String, Object>> getMyAdvances(User currentUser) {
+        Employee emp = requireEmployee(currentUser);
+        List<Map<String, Object>> out = new java.util.ArrayList<>();
+        for (EmployeeAdvance a : advanceRepository.findByEmployeeIdOrderByIdDesc(emp.getId())) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", a.getId());
+            m.put("amount", a.getAmount());
+            m.put("monthlyRecovery", a.getMonthlyRecovery());
+            m.put("recoveredAmount", a.getRecoveredAmount());
+            m.put("balance", a.getBalance());
+            m.put("status", a.getStatus());
+            m.put("reason", a.getReason());
+            m.put("advanceDate", a.getAdvanceDate());
+            out.add(m);
+        }
+        return out;
+    }
+
+    /**
+     * Raise a payroll money request for the signed-in employee. employee + requestedBy are server-set from
+     * the security context (never trusted from the body). A LOAN_REPAYMENT is validated to reference one of
+     * this employee's own active loans. Persisted as PENDING; admin approves from the HR queue.
+     */
+    @LogActivity(module = "EMPLOYEE_PORTAL", action = "PAYROLL_REQUEST_CREATE")
+    @Transactional
+    public PayrollRequest createPayrollRequest(User currentUser, Map<String, Object> body) {
+        Employee emp = requireEmployee(currentUser);
+        String type = trimToNull((String) body.get("requestType"));
+        if (type == null) throw new IllegalArgumentException("Request type is required.");
+        type = type.toUpperCase();
+        java.util.Set<String> allowed = java.util.Set.of(
+                "ADVANCE", "LOAN_REPAYMENT", "ADVANCE_REPAYMENT", "SET_RECOVERY", "OTHER");
+        if (!allowed.contains(type)) {
+            throw new IllegalArgumentException("Unsupported request type.");
+        }
+        java.math.BigDecimal amount = asDecimal(body.get("amount"));
+        if (amount == null || amount.signum() <= 0) {
+            throw new IllegalArgumentException("Amount must be greater than zero.");
+        }
+
+        PayrollRequest r = new PayrollRequest();
+        r.setEmployee(emp);
+        r.setRequestedBy(currentUser);
+        r.setRequestType(type);
+        r.setAmount(amount);
+        r.setReason(trimToNull((String) body.get("reason")));
+        r.setDirection("CREDIT".equalsIgnoreCase((String) body.get("direction")) && type.equals("OTHER")
+                ? "CREDIT" : "DEBIT");
+
+        LocalDate now = LocalDate.now();
+        // Resolve + ownership-check any referenced loan / advance up front.
+        Long loanId = asLong(body.get("loanId"));
+        if (loanId != null) {
+            EmployeeLoan loan = loanRepository.findById(loanId)
+                    .orElseThrow(() -> new IllegalArgumentException("Loan not found."));
+            if (loan.getEmployee() == null || !loan.getEmployee().getId().equals(emp.getId())) {
+                throw new IllegalStateException("That loan does not belong to you.");
+            }
+            r.setLoanId(loanId);
+        }
+        Long advanceId = asLong(body.get("advanceId"));
+        if (advanceId != null) {
+            EmployeeAdvance adv = advanceRepository.findById(advanceId)
+                    .orElseThrow(() -> new IllegalArgumentException("Advance not found."));
+            if (adv.getEmployee() == null || !adv.getEmployee().getId().equals(emp.getId())) {
+                throw new IllegalStateException("That advance does not belong to you.");
+            }
+            r.setAdvanceId(advanceId);
+        }
+
+        switch (type) {
+            case "ADVANCE":
+                r.setMonthlyRecovery(asDecimal(body.get("monthlyRecovery")));
+                break;
+            case "SET_RECOVERY":
+                // amount = the proposed monthly recovery / EMI; applied to the loan or advance on approval.
+                if (loanId == null && advanceId == null) {
+                    throw new IllegalArgumentException("Select the loan or advance to set the recovery plan for.");
+                }
+                break;
+            case "LOAN_REPAYMENT":
+                if (loanId == null) throw new IllegalArgumentException("Select the loan to repay.");
+                setTargetMonth(r, body, now);
+                break;
+            case "ADVANCE_REPAYMENT":
+                if (advanceId == null) throw new IllegalArgumentException("Select the advance to repay.");
+                setTargetMonth(r, body, now);
+                break;
+            default: // OTHER
+                setTargetMonth(r, body, now);
+        }
+        return payrollService.createPayrollRequest(r);
+    }
+
+    /** Sets the request's target month/year from the body, defaulting to the current month. */
+    private void setTargetMonth(PayrollRequest r, Map<String, Object> body, LocalDate now) {
+        Integer tm = asInt(body.get("targetMonth"));
+        Integer ty = asInt(body.get("targetYear"));
+        r.setTargetMonth(tm != null ? tm : now.getMonthValue());
+        r.setTargetYear(ty != null ? ty : now.getYear());
+    }
+
     // =====================================================================
     // Documents
     // =====================================================================
@@ -382,6 +630,25 @@ public class EmployeePortalService {
     public void pickUpTask(User currentUser, Long taskId) {
         requireEmployee(currentUser);
         employeeTaskService.selfAssign(taskId, currentUser);
+    }
+
+    /** Join an already-owned collaborative task as a participant. */
+    @Transactional
+    public void joinTask(User currentUser, Long taskId) {
+        requireEmployee(currentUser);
+        employeeTaskService.joinTask(taskId, currentUser);
+    }
+
+    /** The shared Task Pool: eligible AVAILABLE tasks this employee can pick up. */
+    public List<Map<String, Object>> getAvailablePool(User currentUser) {
+        requireEmployee(currentUser);
+        return employeeTaskService.getAvailablePool(currentUser);
+    }
+
+    /** This employee's active-task capacity (active / max / canPick). */
+    public Map<String, Object> getTaskCapacity(User currentUser) {
+        requireEmployee(currentUser);
+        return employeeTaskService.getCapacity(currentUser);
     }
 
     // =====================================================================

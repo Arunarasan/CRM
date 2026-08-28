@@ -1,7 +1,7 @@
 import api from '../lib/api';
 import {
   SalaryStructure, SalaryRecord, EmployeeAdvance, EmployeeLoan, FinanceDashboard,
-  EmployeeDeduction, WageSettings,
+  EmployeeDeduction, WageSettings, PayrollLine, PayrollSummary, PayrollRequest,
 } from '../types/payroll';
 
 // Employee payroll — /api/hr endpoints. These return raw bodies (HrController is not wrapped in
@@ -48,6 +48,12 @@ export const payrollApi = {
 
   register: (month: number, year: number) =>
     api.get<SalaryRecord[]>(`/hr/payroll/register?month=${month}&year=${year}`).then((r) => r.data),
+
+  // Unified pay run — every employee AND contractor for the period, one row per person.
+  unifiedRegister: (month: number, year: number) =>
+    api.get<PayrollLine[]>(`/hr/payroll/unified-register?month=${month}&year=${year}`).then((r) => r.data),
+  payrollSummary: (month: number, year: number) =>
+    api.get<PayrollSummary>(`/hr/payroll/summary?month=${month}&year=${year}`).then((r) => r.data),
   payslip: (salaryRecordId: number) =>
     api.get<{ record: SalaryRecord; recoveries: any[] }>(`/hr/payslip/${salaryRecordId}`).then((r) => r.data),
   markPaid: (salaryRecordId: number) =>
@@ -73,9 +79,23 @@ export const payrollApi = {
   approveDeduction: (id: number) =>
     api.post<EmployeeDeduction>(`/hr/deductions/${id}/approve`).then((r) => r.data),
 
+  // Employee-raised payroll requests (advance / loan repayment / other) — admin approval queue
+  payrollRequests: (status?: string) =>
+    api.get<PayrollRequest[]>(`/hr/payroll-requests${status ? `?status=${status}` : ''}`).then((r) => r.data),
+  payrollRequestsForEmployee: (employeeId: number) =>
+    api.get<PayrollRequest[]>(`/hr/employees/${employeeId}/payroll-requests`).then((r) => r.data),
+  approvePayrollRequest: (id: number) =>
+    api.post<PayrollRequest>(`/hr/payroll-requests/${id}/approve`).then((r) => r.data),
+  rejectPayrollRequest: (id: number, remarks?: string) =>
+    api.post<PayrollRequest>(`/hr/payroll-requests/${id}/reject`, { remarks }).then((r) => r.data),
+
   // Full hourly wage settings
   saveWageSettings: (employeeId: number, body: WageSettings) =>
     api.put<any>(`/hr/employees/${employeeId}/wage-settings`, body).then((r) => r.data),
+
+  // Quick basis toggle (HOURLY ↔ MONTHLY) — inline action on the payroll page
+  setPayBasis: (employeeId: number, salaryType: "HOURLY" | "MONTHLY") =>
+    api.put<any>(`/hr/employees/${employeeId}/pay-basis?salaryType=${salaryType}`).then((r) => r.data),
 
   // Hourly pay register — which employee earned how much this month
   hourlyPayRegister: (month: number, year: number) =>
@@ -88,6 +108,8 @@ export const payrollApi = {
   },
 
   financeDashboard: () => api.get<FinanceDashboard>(`/hr/finance-dashboard`).then((r) => r.data),
+  cashflow: (month: number, year: number) =>
+    api.get<any>(`/hr/cashflow?month=${month}&year=${year}`).then((r) => r.data),
   report: (type: string, month?: number, year?: number) => {
     const q = new URLSearchParams();
     if (month) q.set('month', String(month));

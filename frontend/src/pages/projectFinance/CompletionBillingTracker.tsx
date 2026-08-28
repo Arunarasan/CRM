@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import {
-  Loader2, Zap, CheckCircle2, Clock, CircleDollarSign, Lock, ChevronRight, PartyPopper,
+  Loader2, Zap, CheckCircle2, Clock, CircleDollarSign, Lock, ChevronRight, PartyPopper, FilePlus2,
 } from "lucide-react";
+import { toast } from "@/components/ui/toast";
 import { financeApi } from "@/api/financeApi";
 import type { BillingProgress, BillingStage } from "@/types/finance";
 import { Switch } from "@/components/ui/switch";
@@ -19,7 +20,7 @@ function stageBadge(status: string): { text: string; cls: string } {
   switch (status) {
     case "PAID": return { text: "Paid", cls: "bg-emerald-100 text-emerald-700" };
     case "PARTIAL": return { text: "Partial", cls: "bg-amber-100 text-amber-700" };
-    case "INVOICED": return { text: "Due", cls: "bg-blue-100 text-blue-700" };
+    case "INVOICED": return { text: "Due", cls: "bg-emerald-100 text-emerald-700" };
     case "OVERDUE": return { text: "Overdue", cls: "bg-red-100 text-red-600" };
     default: return { text: "Pending", cls: "bg-slate-100 text-slate-500" };
   }
@@ -38,6 +39,7 @@ export default function CompletionBillingTracker({ project, onChanged, refreshSi
   const [data, setData] = useState<BillingProgress | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [raisingId, setRaisingId] = useState<number | null>(null);
 
   const load = () => {
     if (!projectId) return;
@@ -64,8 +66,18 @@ export default function CompletionBillingTracker({ project, onChanged, refreshSi
     setBusy(true);
     financeApi.generateDefaultSchedule(projectId)
       .then(() => { load(); onChanged?.(); })
-      .catch((e) => alert(e?.response?.data?.message || "Could not create the payment plan."))
+      .catch((e) => toast.error(e?.response?.data?.message || "Could not create the payment plan."))
       .finally(() => setBusy(false));
+  };
+
+  // Manually raise the invoice for a milestone now (the same invoice auto-billing would create when
+  // work crosses the trigger) — for stages that are due but not yet invoiced, or when auto-bill is off.
+  const raiseInvoice = (scheduleId: number) => {
+    setRaisingId(scheduleId);
+    financeApi.generateStageInvoice(scheduleId)
+      .then(() => { load(); onChanged?.(); toast.success("Invoice raised for this milestone."); })
+      .catch((e) => toast.error(e?.response?.data?.message || "Could not raise the invoice."))
+      .finally(() => setRaisingId(null));
   };
 
   if (loading) {
@@ -82,7 +94,7 @@ export default function CompletionBillingTracker({ project, onChanged, refreshSi
     return (
       <section className="rounded-2xl border border-slate-100 bg-white p-6 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
         <div className="flex items-center gap-2 text-lg font-bold text-slate-800">
-          <CircleDollarSign className="h-5 w-5 text-blue-600" /> Completion &amp; Billing
+          <CircleDollarSign className="h-5 w-5 text-emerald-600" /> Completion &amp; Billing
         </div>
         <p className="mt-2 text-sm text-slate-500">
           No payment milestone plan yet. Add one so invoices raise automatically as work progresses
@@ -101,7 +113,7 @@ export default function CompletionBillingTracker({ project, onChanged, refreshSi
     <section className="rounded-2xl border border-slate-100 bg-white p-6 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-lg font-bold text-slate-800">
-          <CircleDollarSign className="h-5 w-5 text-blue-600" /> Completion &amp; Billing
+          <CircleDollarSign className="h-5 w-5 text-emerald-600" /> Completion &amp; Billing
         </div>
         <label className="flex items-center gap-2 text-sm text-slate-600">
           <Zap className={`h-4 w-4 ${data.autoBillingEnabled ? "text-amber-500" : "text-slate-300"}`} />
@@ -129,24 +141,29 @@ export default function CompletionBillingTracker({ project, onChanged, refreshSi
       <div className="mt-6">
         <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">Payment milestones</h4>
         <ol className="relative space-y-1 border-l border-slate-200 pl-5">
-          {data.stages.map((s) => <MilestoneRow key={s.id} s={s} workPercent={data.workPercent} />)}
+          {data.stages.map((s) => (
+            <MilestoneRow key={s.id} s={s} workPercent={data.workPercent}
+              canWrite={canWrite} raising={raisingId === s.id} onRaise={() => raiseInvoice(s.id)} />
+          ))}
         </ol>
       </div>
     </section>
   );
 }
 
-function MilestoneRow({ s, workPercent }: { s: BillingStage; workPercent: number }) {
+function MilestoneRow({ s, workPercent, canWrite, raising, onRaise }: { s: BillingStage; workPercent: number; canWrite: boolean; raising: boolean; onRaise: () => void }) {
   const badge = stageBadge(s.status);
   const isPaid = s.status === "PAID";
   // A progress-driven stage that work hasn't reached yet is "locked".
   const locked = s.progressDriven && !s.reached && s.status === "PENDING";
+  // Not yet invoiced and there's an amount to bill — a human can raise it now.
+  const canRaise = canWrite && !s.invoice && s.status === "PENDING" && Number(s.amount) > 0;
 
   const dotCls = isPaid
     ? "bg-emerald-500 border-emerald-500"
     : s.status === "PENDING"
-      ? (locked ? "bg-white border-slate-300" : "bg-blue-500 border-blue-500")
-      : "bg-blue-500 border-blue-500";
+      ? (locked ? "bg-white border-slate-300" : "bg-emerald-500 border-emerald-500")
+      : "bg-emerald-500 border-emerald-500";
 
   return (
     <li className="relative py-2">
@@ -159,7 +176,7 @@ function MilestoneRow({ s, workPercent }: { s: BillingStage; workPercent: number
             <span className="text-sm font-semibold text-slate-800">{prettyStage(s.stage)}</span>
             {s.progressDriven ? (
               <span className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
-                s.reached ? "bg-blue-50 text-blue-600" : "bg-slate-100 text-slate-400"}`}>
+                s.reached ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-400"}`}>
                 {locked ? <Lock className="h-2.5 w-2.5" /> : <ChevronRight className="h-2.5 w-2.5" />}
                 at {Number(s.triggerPercentage)}%
               </span>
@@ -183,6 +200,13 @@ function MilestoneRow({ s, workPercent }: { s: BillingStage; workPercent: number
             {s.status === "PENDING" && !locked && <Clock className="h-3 w-3" />}
             {badge.text}
           </span>
+          {canRaise && (
+            <button type="button" onClick={onRaise} disabled={raising}
+              title={locked ? "Raise this invoice now (before work reaches the trigger)" : "Raise this invoice now"}
+              className="inline-flex items-center gap-1 rounded-md border border-emerald-200 px-2 py-1 text-[11px] font-medium text-emerald-600 transition-colors hover:bg-emerald-50 disabled:opacity-50">
+              {raising ? <Loader2 className="h-3 w-3 animate-spin" /> : <FilePlus2 className="h-3 w-3" />} Raise
+            </button>
+          )}
         </div>
       </div>
     </li>
@@ -190,8 +214,8 @@ function MilestoneRow({ s, workPercent }: { s: BillingStage; workPercent: number
 }
 
 function Bar({ label, percent, caption, tone }: { label: string; percent: number; caption: string; tone: "blue" | "emerald" }) {
-  const barCls = tone === "blue" ? "bg-blue-500" : "bg-emerald-500";
-  const pctCls = tone === "blue" ? "text-blue-600" : "text-emerald-600";
+  const barCls = tone === "blue" ? "bg-emerald-500" : "bg-emerald-500";
+  const pctCls = tone === "blue" ? "text-emerald-600" : "text-emerald-600";
   return (
     <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-4">
       <div className="flex items-center justify-between">

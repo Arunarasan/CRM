@@ -115,7 +115,7 @@ export default function PurchaseReportsPage() {
                 <TableRow key={r.poId}>
                   <TableCell className="font-bold text-slate-800">{r.poNumber}</TableCell>
                   <TableCell>{r.supplierName}</TableCell>
-                  <TableCell><Badge className="bg-indigo-100 text-indigo-700">{r.status}</Badge></TableCell>
+                  <TableCell><Badge className="bg-emerald-100 text-emerald-700">{r.status}</Badge></TableCell>
                   <TableCell className="text-slate-500">{r.expectedDeliveryDate || "—"}</TableCell>
                   <TableCell className={`text-right font-bold ${r.daysOverdue > 0 ? "text-red-600" : "text-slate-400"}`}>{r.daysOverdue}</TableCell>
                   <TableCell className="text-right font-bold">{currency(r.totalAmount)}</TableCell>

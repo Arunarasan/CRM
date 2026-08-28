@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { format } from "date-fns";
 import { purchaseApi } from "@/api/purchaseApi";
+import { toast } from "@/components/ui/toast";
+import { apiError } from "@/lib/apiError";
 import type { GoodsReceiptNote, GoodsReceiptNoteItem, GrnPhoto } from "@/types/purchase";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -37,14 +39,14 @@ export default function GoodsReceiptsPage() {
   const saveQc = () => {
     if (!detail) return;
     purchaseApi.recordQualityCheck(detail.id, qcForm.qcStatus, qcForm.reason, qcForm.remarks)
-      .then((updated) => { setDetail(updated); load(); })
-      .catch((e) => alert(e?.response?.data?.message || "Failed to record QC"));
+      .then((updated) => { setDetail(updated); load(); toast.success("Quality check recorded."); })
+      .catch((e) => toast.error(apiError(e, "Failed to record QC.")));
   };
 
   const approve = (grn: GoodsReceiptNote) => {
     purchaseApi.approveGrn(grn.id)
-      .then(() => { alert("GRN approved — accepted stock added to inventory."); setDetail(null); load(); })
-      .catch((e) => alert(e?.response?.data?.message || "Failed to approve GRN"));
+      .then(() => { toast.success("GRN approved — accepted stock added to inventory."); setDetail(null); load(); })
+      .catch((e) => toast.error(apiError(e, "Failed to approve GRN.")));
   };
 
   return (

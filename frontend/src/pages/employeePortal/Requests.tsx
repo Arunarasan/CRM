@@ -17,9 +17,9 @@ const ITEMS: {
   soon?: boolean;
 }[] = [
   { to: '/employee/requests/material', label: 'Material Requests', hint: 'Request materials for a task', icon: Boxes, color: 'text-orange-600' },
-  { to: '/employee/requests/manpower', label: 'Manpower Requests', hint: 'Request additional workers', icon: Users, color: 'text-indigo-600' },
+  { to: '/employee/requests/manpower', label: 'Manpower Requests', hint: 'Request additional workers', icon: Users, color: 'text-emerald-600' },
   { to: '/employee/leads', label: 'My Leads', hint: 'Add a new customer lead', icon: UserPlus, color: 'text-emerald-600' },
-  { to: '/employee/daily-reports', label: 'Daily Reports', hint: 'Submit today’s work report', icon: ClipboardList, color: 'text-sky-600' },
+  { to: '/employee/daily-reports', label: 'Daily Reports', hint: 'Submit today’s work report', icon: ClipboardList, color: 'text-emerald-600' },
   { to: '/employee/leave', label: 'Leave', hint: 'Apply for leave & view balance', icon: Plane, color: 'text-violet-600' },
 ];
 

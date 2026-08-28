@@ -63,7 +63,7 @@ export default function BoqList() {
   useEffect(() => { setPage(0); }, [debouncedSearch, filters]);
 
   const stats: StatCard[] = useMemo(() => [
-    { label: "Total BOQs", value: dashboard?.totalBoqs, icon: FileSpreadsheet, className: "bg-blue-100 text-blue-600" },
+    { label: "Total BOQs", value: dashboard?.totalBoqs, icon: FileSpreadsheet, className: "bg-emerald-100 text-emerald-600" },
     { label: "Draft", value: dashboard?.draft, icon: FileClock, className: "bg-slate-100 text-slate-600" },
     { label: "Pending Review", value: dashboard?.pendingReview, icon: ClipboardCheck, className: "bg-violet-100 text-violet-600" },
     { label: "Approved", value: dashboard?.approved, icon: CheckCircle, className: "bg-green-100 text-green-600" },

@@ -6,6 +6,7 @@ import type { CustomerPayment, Refund, PageResp } from "@/types/finance";
 import { PAYMENT_METHODS } from "@/types/finance";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import SearchableSelect from "@/components/ui/searchable-select";
 import { currency, PAYMENT_STATUS_TONE, REFUND_STATUS_TONE } from "./helpers";
 import { Plus, Search, Check, X } from "lucide-react";
 import CameraCaptureButton from "@/components/CameraCaptureButton";
@@ -230,10 +231,11 @@ export default function PaymentsPage() {
             </p>
             <label className="text-sm block">
               <span className="font-semibold text-slate-700">Customer</span>
-              <select className="mt-1 w-full border rounded-lg px-3 py-2" value={pCustomer} onChange={(e) => setPCustomer(e.target.value)}>
-                <option value="">Select customer…</option>
-                {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+              <div className="mt-1">
+                <SearchableSelect value={pCustomer} onChange={setPCustomer}
+                  options={customers.map((c) => ({ value: String(c.id), label: c.name }))}
+                  placeholder="Search customer…" clearLabel="— none —" />
+              </div>
             </label>
             <div className="grid grid-cols-2 gap-3">
               <label className="text-sm block">
@@ -291,10 +293,11 @@ export default function PaymentsPage() {
             <h3 className="font-bold text-slate-900">Request Refund</h3>
             <label className="text-sm block">
               <span className="font-semibold text-slate-700">Customer</span>
-              <select className="mt-1 w-full border rounded-lg px-3 py-2" value={rCustomer} onChange={(e) => setRCustomer(e.target.value)}>
-                <option value="">Select customer…</option>
-                {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+              <div className="mt-1">
+                <SearchableSelect value={rCustomer} onChange={setRCustomer}
+                  options={customers.map((c) => ({ value: String(c.id), label: c.name }))}
+                  placeholder="Search customer…" clearLabel="— none —" />
+              </div>
             </label>
             <label className="text-sm block">
               <span className="font-semibold text-slate-700">Amount</span>

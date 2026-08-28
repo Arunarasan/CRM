@@ -24,8 +24,12 @@ public class LeadDashboardDTO {
     private long todayMeasurements;
     private long quotationPending;
 
-    // legacy keys still consumed by older clients
+    // per-stage tiles (open leads only) surfaced on the lead list
     private long newLeads;
+    private long contactedLeads;
+    private long interestedLeads;
+
+    // legacy keys still consumed by older clients
     private long qualifiedLeads;     // leads in Interested/Negotiation and beyond
     private long wonLeads;           // = convertedLeads
     private String conversionRate;   // e.g. "25.0%"

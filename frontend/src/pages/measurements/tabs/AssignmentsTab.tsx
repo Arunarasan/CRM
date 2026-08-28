@@ -11,8 +11,8 @@ import EmptyState from "../../customer360/components/EmptyState";
 import { formatDateTime, initials, useMeasurementSubResource } from "../helpers";
 
 const ASSIGNMENT_STATUS_STYLES: Record<string, string> = {
-  Assigned: "bg-blue-100 text-blue-700",
-  Accepted: "bg-indigo-100 text-indigo-700",
+  Assigned: "bg-emerald-100 text-emerald-700",
+  Accepted: "bg-emerald-100 text-emerald-700",
   Completed: "bg-emerald-100 text-emerald-700",
   Declined: "bg-red-100 text-red-700",
 };

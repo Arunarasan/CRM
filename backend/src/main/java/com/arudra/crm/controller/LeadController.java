@@ -32,6 +32,16 @@ public class LeadController {
     @Autowired
     private CurrentUserService currentUserService;
 
+    @Autowired
+    private com.arudra.crm.service.LeadTaskFormService leadTaskFormService;
+
+    /** Structured data captured by employees completing this lead's workflow tasks (the Task Data log). */
+    @GetMapping("/{id}/task-submissions")
+    @PreAuthorize(READ)
+    public ResponseEntity<java.util.List<java.util.Map<String, Object>>> getTaskSubmissions(@PathVariable Long id) {
+        return ResponseEntity.ok(leadTaskFormService.getSubmissionsForLead(id));
+    }
+
     // =====================================================================
     // List / search / dashboard / board
     // =====================================================================
@@ -154,6 +164,14 @@ public class LeadController {
     @PreAuthorize(READ)
     public ResponseEntity<List<LeadAssignment>> getAssignments(@PathVariable Long id) {
         return ResponseEntity.ok(leadService.getAssignments(id));
+    }
+
+    @PutMapping("/{id}/referral")
+    @PreAuthorize(WRITE)
+    public ResponseEntity<Lead> updateReferral(@PathVariable Long id,
+            @RequestBody LeadReferralRequest req) {
+        return ResponseEntity.ok(
+                leadService.updateReferral(id, req, currentUserService.getCurrentUser()));
     }
 
     // =====================================================================

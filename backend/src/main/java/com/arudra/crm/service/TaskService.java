@@ -44,6 +44,9 @@ public class TaskService {
     @Autowired
     private TaskChecklistService taskChecklistService;
 
+    @Autowired
+    private WorkflowTriggerService workflowTriggerService;
+
     /** Compact assignment list for the desktop Tasks dialog — deliberately not the raw entity (avoids dumping the full User->roles->permissions graph). */
     public List<Task> getTasksByProject(Long projectId) {
         return taskRepository.findByProjectId(projectId);
@@ -115,6 +118,7 @@ public class TaskService {
 
     public Task updateTask(Long id, Task taskDetails) {
         Task task = getTaskById(id);
+        String previousStatus = task.getStatus();
         task.setTaskName(taskDetails.getTaskName());
         task.setDescription(taskDetails.getDescription());
         task.setProject(taskDetails.getProject());
@@ -136,15 +140,23 @@ public class TaskService {
         } else {
             task.setParentTask(null);
         }
-        
-        return taskRepository.save(task);
+
+        Task saved = taskRepository.save(task);
+        if (!"COMPLETED".equals(previousStatus) && "COMPLETED".equals(saved.getStatus())) {
+            workflowTriggerService.onTaskCompleted(saved);
+        }
+        return saved;
     }
-    
+
     public void updateTaskStatusAndOrder(Long id, String status, Integer orderIndex) {
         Task task = getTaskById(id);
+        String previousStatus = task.getStatus();
         task.setStatus(status);
         task.setOrderIndex(orderIndex);
-        taskRepository.save(task);
+        Task saved = taskRepository.save(task);
+        if (!"COMPLETED".equals(previousStatus) && "COMPLETED".equals(status)) {
+            workflowTriggerService.onTaskCompleted(saved);
+        }
     }
 
     public void deleteTask(Long id) {

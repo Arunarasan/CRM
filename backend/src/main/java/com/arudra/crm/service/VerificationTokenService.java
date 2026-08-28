@@ -18,6 +18,9 @@ public class VerificationTokenService {
     /** Purpose value for password-reset one-time codes. */
     public static final String PURPOSE_PASSWORD_RESET_OTP = "PASSWORD_RESET_OTP";
 
+    /** Purpose value for sign-up email-verification one-time codes. */
+    public static final String PURPOSE_EMAIL_VERIFICATION_OTP = "EMAIL_VERIFICATION_OTP";
+
     private static final SecureRandom RANDOM = new SecureRandom();
 
     @Autowired
@@ -64,6 +67,30 @@ public class VerificationTokenService {
      */
     public Optional<VerificationToken> verifyPasswordResetOtp(User user, String otp) {
         return verificationTokenRepository.findByUserAndPurpose(user, PURPOSE_PASSWORD_RESET_OTP)
+                .filter(t -> t.getToken().equals(otp))
+                .filter(t -> !isExpired(t));
+    }
+
+    /** Issues a fresh numeric email-verification OTP, invalidating any previous one for the user. */
+    public VerificationToken createEmailVerificationOtp(User user, int length, int expiryMinutes) {
+        verificationTokenRepository.deleteByUserAndPurpose(user, PURPOSE_EMAIL_VERIFICATION_OTP);
+
+        String code = generateNumericCode(length);
+        while (verificationTokenRepository.findByToken(code).isPresent()) {
+            code = generateNumericCode(length);
+        }
+
+        VerificationToken token = new VerificationToken();
+        token.setUser(user);
+        token.setToken(code);
+        token.setPurpose(PURPOSE_EMAIL_VERIFICATION_OTP);
+        token.setExpiryDate(LocalDateTime.now().plusMinutes(expiryMinutes));
+        return verificationTokenRepository.save(token);
+    }
+
+    /** Returns the matching, non-expired email-verification token, or empty if wrong/expired. */
+    public Optional<VerificationToken> verifyEmailVerificationOtp(User user, String otp) {
+        return verificationTokenRepository.findByUserAndPurpose(user, PURPOSE_EMAIL_VERIFICATION_OTP)
                 .filter(t -> t.getToken().equals(otp))
                 .filter(t -> !isExpired(t));
     }

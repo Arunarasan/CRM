@@ -32,7 +32,7 @@ export default function ContractorDashboard() {
     { label: "Active Work Packages", value: data.activeWorkPackages, icon: PackageOpen, to: "/contractors/work-packages?status=IN_PROGRESS", tone: "bg-cyan-50 text-cyan-600" },
     { label: "Delayed Packages", value: data.delayedWorkPackages, icon: AlertTriangle, to: "/contractors/reports", tone: "bg-rose-50 text-rose-600" },
     { label: "Pending Bills", value: data.pendingBills, icon: Receipt, to: "/contractors/bills?status=SUBMITTED", tone: "bg-amber-50 text-amber-600" },
-    { label: "Pending Payments", value: currency(data.pendingPaymentValue), icon: Wallet, to: "/contractors/payments", tone: "bg-indigo-50 text-indigo-600" },
+    { label: "Pending Payments", value: currency(data.pendingPaymentValue), icon: Wallet, to: "/contractors/payments", tone: "bg-emerald-50 text-emerald-600" },
     { label: "Today's Progress", value: data.todaysProgressReports, icon: HardHat, to: "/contractors/progress", tone: "bg-teal-50 text-teal-600" },
     { label: "Quality Issues", value: data.openQualityIssues, icon: ShieldAlert, to: "/contractors/quality", tone: "bg-orange-50 text-orange-600" },
     { label: "Retention Held", value: currency(data.retentionHeld), icon: PiggyBank, to: "/contractors/payments", tone: "bg-violet-50 text-violet-600" },

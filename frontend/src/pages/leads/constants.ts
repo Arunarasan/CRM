@@ -29,6 +29,9 @@ export const LEAD_STAGES = [
 export const TEMPERATURES = ["Hot", "Warm", "Cold"];
 export const PRIORITIES = ["Low", "Medium", "High", "Urgent"];
 
+// Who referred a lead when Lead Source = "Referral".
+export const REFERRAL_TYPES = ["Existing Customer", "Employee", "Other"];
+
 export const TASK_TYPES = [
   "Call Customer", "Site Visit", "Measurement", "Design", "Quotation", "Reminder", "Meeting",
 ];
@@ -64,19 +67,19 @@ export const BOARD_DROP_STATUS: Record<string, string> = {
 export const TEMPERATURE_STYLES: Record<string, string> = {
   Hot: "bg-red-100 text-red-700",
   Warm: "bg-amber-100 text-amber-700",
-  Cold: "bg-sky-100 text-sky-700",
+  Cold: "bg-emerald-100 text-emerald-700",
 };
 
 export const PRIORITY_STYLES: Record<string, string> = {
   Urgent: "bg-red-100 text-red-700",
   High: "bg-orange-100 text-orange-700",
-  Medium: "bg-blue-100 text-blue-700",
+  Medium: "bg-emerald-100 text-emerald-700",
   Low: "bg-slate-100 text-slate-600",
 };
 
 export const STATUS_STYLES: Record<string, string> = {
-  "New": "bg-blue-100 text-blue-700",
-  "Contacted": "bg-indigo-100 text-indigo-700",
+  "New": "bg-emerald-100 text-emerald-700",
+  "Contacted": "bg-emerald-100 text-emerald-700",
   "Follow-up": "bg-violet-100 text-violet-700",
   "Interested": "bg-purple-100 text-purple-700",
   "Site Visit Scheduled": "bg-cyan-100 text-cyan-700",
@@ -99,6 +102,78 @@ export const STATUS_STYLES: Record<string, string> = {
 
 export function statusStyle(status?: string) {
   return STATUS_STYLES[status || ""] || "bg-muted text-muted-foreground";
+}
+
+export const STAGE_STYLES: Record<string, string> = {
+  "New Lead": "bg-emerald-100 text-emerald-700",
+  "First Contact": "bg-emerald-100 text-emerald-700",
+  "Requirement Discussion": "bg-violet-100 text-violet-700",
+  "Follow-up": "bg-purple-100 text-purple-700",
+  "Site Visit": "bg-cyan-100 text-cyan-700",
+  "Measurement": "bg-teal-100 text-teal-700",
+  "Quotation": "bg-amber-100 text-amber-700",
+  "Negotiation": "bg-orange-100 text-orange-700",
+  "Approval": "bg-lime-100 text-lime-700",
+  "Project": "bg-green-100 text-green-700",
+};
+
+export function stageStyle(stage?: string) {
+  return STAGE_STYLES[stage || ""] || statusStyle(stage);
+}
+
+/** Two-letter initials from a display name, e.g. "Arun Kumar" -> "AK". */
+export function initials(name?: string) {
+  if (!name) return "?";
+  const parts = name.trim().split(/\s+/);
+  const first = parts[0]?.[0] || "";
+  const last = parts.length > 1 ? parts[parts.length - 1][0] : "";
+  return (first + last).toUpperCase() || "?";
+}
+
+/** Deterministic soft avatar color from a name, so each owner keeps one hue. */
+const AVATAR_COLORS = [
+  "bg-emerald-100 text-emerald-700", "bg-emerald-100 text-emerald-700",
+  "bg-amber-100 text-amber-700", "bg-violet-100 text-violet-700",
+  "bg-rose-100 text-rose-700", "bg-cyan-100 text-cyan-700",
+  "bg-emerald-100 text-emerald-700", "bg-teal-100 text-teal-700",
+];
+export function avatarColor(name?: string) {
+  if (!name) return "bg-muted text-muted-foreground";
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}
+
+/** Short human relative time, e.g. "Just now", "10 mins ago", "Yesterday", "2 days ago". */
+export function relativeTime(value?: string | null) {
+  if (!value) return "—";
+  const then = new Date(value).getTime();
+  if (Number.isNaN(then)) return "—";
+  const diff = Date.now() - then;
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "Just now";
+  if (mins < 60) return `${mins} min${mins === 1 ? "" : "s"} ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return "Yesterday";
+  if (days < 7) return `${days} days ago`;
+  return formatDate(value);
+}
+
+/** Tone for a next-follow-up date: overdue (red), today (green), upcoming (muted). */
+export function followUpTone(value?: string | null): { label: string; className: string } {
+  if (!value) return { label: "—", className: "text-muted-foreground" };
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return { label: "—", className: "text-muted-foreground" };
+  const today = new Date();
+  const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const startOfDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const dayDiff = Math.round((startOfDate.getTime() - startOfToday.getTime()) / 86400000);
+  if (dayDiff < 0) return { label: formatDate(value), className: "text-red-600 font-medium" };
+  if (dayDiff === 0) return { label: "Today", className: "text-green-600 font-semibold" };
+  if (dayDiff === 1) return { label: "Tomorrow", className: "text-emerald-600 font-medium" };
+  return { label: formatDate(value), className: "text-foreground" };
 }
 
 export function formatINR(value?: number | null) {
@@ -194,6 +269,13 @@ export interface Lead {
   assignedDesigner?: UserSummary;
   assignedEngineer?: UserSummary;
   projectManager?: UserSummary;
+  // Referral (captured at creation when leadSource === "Referral")
+  referralType?: string; // "Existing Customer" | "Employee" | "Other"
+  referredByCustomer?: { id: number; name?: string };
+  referredByEmployee?: UserSummary;
+  referrerName?: string;
+  referrerContact?: string;
+  referralNotes?: string;
   nextFollowUpDate?: string;
   nextFollowUpTime?: string;
   lastFollowUp?: string;
@@ -246,6 +328,9 @@ export interface DashboardMetrics {
   todayLeads: number;
   weekLeads: number;
   monthLeads: number;
+  newLeads: number;
+  contactedLeads: number;
+  interestedLeads: number;
   hotLeads: number;
   warmLeads: number;
   coldLeads: number;

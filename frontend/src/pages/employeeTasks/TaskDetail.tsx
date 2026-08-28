@@ -10,6 +10,9 @@ import CheckInBar from './components/CheckInBar';
 import ProgressSheet from './components/ProgressSheet';
 import IssueReportSheet from './components/IssueReportSheet';
 import MaterialUsageSheet from './components/MaterialUsageSheet';
+import LeadTaskFormSheet from './components/LeadTaskFormSheet';
+import TimeTracker from './components/TimeTracker';
+import { UserPlus, ClipboardList } from 'lucide-react';
 
 export default function TaskDetail() {
   const { id } = useParams<{ id: string }>();
@@ -18,6 +21,7 @@ export default function TaskDetail() {
   const [task, setTask] = useState<TaskDetailType | null>(null);
   const [note, setNote] = useState('');
   const [sheet, setSheet] = useState<'progress' | 'issue' | 'material' | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
@@ -58,6 +62,14 @@ export default function TaskDetail() {
     return null;
   })();
 
+  // Lead-workflow tasks capture structured data on completion (writes onto the lead page).
+  const isLeadForm = !!task.formType;
+  const canSubmitForm = isLeadForm && !locked
+    && ['ASSIGNED', 'ACCEPTED', 'IN_PROGRESS', 'PAUSED'].includes(mine ?? '');
+  // Module-driven tasks (Measurement/BOQ) are done in a dedicated module and close automatically —
+  // never completed by hand here.
+  const moduleDriven = !!task.moduleDriven;
+
   return (
     <div className="flex flex-col gap-3 p-3 pb-28">
       <button onClick={() => navigate(-1)} className="flex w-fit items-center gap-1 text-xs font-medium text-muted-foreground">
@@ -79,6 +91,13 @@ export default function TaskDetail() {
         </div>
       </div>
 
+      {moduleDriven && !locked && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800">
+          This task is done in its dedicated module. Open it below — the task closes
+          <span className="font-semibold"> automatically</span> once the work is finalized there. It can't be marked done from here.
+        </div>
+      )}
+
       {task.status === 'WAITING_APPROVAL' && (
         <div className="rounded-xl border border-purple-200 bg-purple-50 p-3 text-xs text-purple-800">
           Submitted — waiting for manager approval. This task is locked and can’t be updated until a manager reviews it.
@@ -89,6 +108,19 @@ export default function TaskDetail() {
           This task is {task.status === 'CANCELLED' ? 'cancelled' : 'completed'} and locked — no further updates can be added.
         </div>
       )}
+
+      {/* Collaborative tasks: let an eligible employee who isn't already on the team join in. */}
+      {!mine && !locked && (task.assignmentType === 'MULTIPLE_EMPLOYEES' || task.assignmentType === 'TEAM') && task.team.length > 0 && (
+        <button
+          onClick={async () => { setBusy(true); try { await employeeTaskApi.join(taskId); load(); } finally { setBusy(false); } }}
+          disabled={busy}
+          className="flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 py-2.5 text-sm font-semibold text-white active:scale-[0.99] disabled:opacity-50"
+        >
+          <UserPlus className="h-4 w-4" /> Join this task
+        </button>
+      )}
+
+      {mine && <TimeTracker taskId={taskId} disabled={locked} />}
 
       <CheckInBar taskId={taskId} checkins={task.checkins} onChanged={load} locked={locked} />
 
@@ -184,7 +216,22 @@ export default function TaskDetail() {
                 <primaryAction.icon className="h-4 w-4" /> {primaryAction.label}
               </button>
             )}
-            {mine === 'IN_PROGRESS' && (
+            {moduleDriven && task.moduleLink ? (
+              <button
+                onClick={() => navigate(task.moduleLink!)}
+                className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 py-2.5 text-sm font-semibold text-white"
+              >
+                <ClipboardList className="h-4 w-4" /> {task.moduleLabel ?? 'Open module'}
+              </button>
+            ) : canSubmitForm ? (
+              <button
+                onClick={() => setFormOpen(true)}
+                disabled={busy}
+                className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 py-2.5 text-sm font-semibold text-white"
+              >
+                <ClipboardList className="h-4 w-4" /> Complete &amp; Submit Details
+              </button>
+            ) : !moduleDriven && mine === 'IN_PROGRESS' && (
               <button
                 onClick={() => doAction('complete')}
                 disabled={busy}
@@ -211,6 +258,15 @@ export default function TaskDetail() {
       <ProgressSheet taskId={taskId} open={sheet === 'progress'} onOpenChange={(o) => setSheet(o ? 'progress' : null)} onSaved={load} />
       <IssueReportSheet taskId={taskId} open={sheet === 'issue'} onOpenChange={(o) => setSheet(o ? 'issue' : null)} onSaved={load} />
       <MaterialUsageSheet taskId={taskId} open={sheet === 'material'} onOpenChange={(o) => setSheet(o ? 'material' : null)} onSaved={load} />
+      {isLeadForm && task.formType && (
+        <LeadTaskFormSheet
+          taskId={taskId}
+          formType={task.formType}
+          open={formOpen}
+          onOpenChange={setFormOpen}
+          onSaved={() => { setFormOpen(false); load(); navigate('/employee/tasks'); }}
+        />
+      )}
     </div>
   );
 }

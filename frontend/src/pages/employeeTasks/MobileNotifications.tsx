@@ -8,7 +8,7 @@ interface NotificationItem {
 }
 
 const ICONS: Record<string, ReactElement> = {
-  TASK: <CheckCircle2 className="h-5 w-5 text-blue-500" />,
+  TASK: <CheckCircle2 className="h-5 w-5 text-emerald-500" />,
   PROJECT: <Briefcase className="h-5 w-5 text-orange-500" />,
   LEAD: <AlertCircle className="h-5 w-5 text-purple-500" />,
 };
@@ -73,7 +73,7 @@ export default function MobileNotifications() {
           items.map((n) => (
             <div
               key={n.id}
-              className={`flex items-stretch gap-2 border-b last:border-0 ${n.read ? 'bg-card' : 'bg-blue-50/50'}`}
+              className={`flex items-stretch gap-2 border-b last:border-0 ${n.read ? 'bg-card' : 'bg-emerald-50/50'}`}
             >
               <button onClick={() => openNotification(n)} className="flex min-w-0 flex-1 gap-3 p-3 text-left">
                 <span className="mt-0.5 shrink-0">{ICONS[n.type] ?? <Bell className="h-5 w-5 text-slate-500" />}</span>
@@ -82,7 +82,7 @@ export default function MobileNotifications() {
                   <span className="block text-xs text-muted-foreground">{n.message}</span>
                   <span className="block text-[10px] text-muted-foreground">{new Date(n.createdAt).toLocaleString()}</span>
                 </span>
-                {!n.read && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-blue-600" />}
+                {!n.read && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-emerald-600" />}
               </button>
               <button onClick={() => remove(n.id)} className="flex shrink-0 items-center px-3 text-muted-foreground active:text-destructive" aria-label="Delete notification">
                 <X className="h-4 w-4" />

@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { inventoryApi } from "@/api/inventoryApi";
+import { toast } from "@/components/ui/toast";
+import { apiError } from "@/lib/apiError";
 import type { MaterialRequest, Product, Warehouse } from "@/types/inventory";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,10 +10,11 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Plus, Trash2 } from "lucide-react";
 import ProductSearchSelect from "./components/ProductSearchSelect";
+import SearchableSelect from "@/components/ui/searchable-select";
 
 const STATUS_TONE: Record<string, string> = {
   PENDING: "bg-slate-100 text-slate-700",
-  APPROVED: "bg-blue-100 text-blue-700",
+  APPROVED: "bg-emerald-100 text-emerald-700",
   REJECTED: "bg-red-100 text-red-700",
   ISSUED: "bg-emerald-100 text-emerald-700",
 };
@@ -45,19 +48,19 @@ export default function MaterialRequests() {
   };
 
   const create = () => {
-    if (lines.length === 0) { alert("Add at least one material"); return; }
+    if (lines.length === 0) { toast.error("Add at least one material."); return; }
     inventoryApi.createMaterialRequest({
       warehouseId: warehouseId ? Number(warehouseId) : undefined,
       items: lines.map((l) => ({ productId: l.product.id, quantity: l.quantity })),
       remarks,
     }).then(() => {
       setDialogOpen(false); setWarehouseId(""); setRemarks(""); setLines([]);
-      load(filter);
-    }).catch((e) => alert(e?.response?.data?.message || "Failed to create request"));
+      load(filter); toast.success("Material request created.");
+    }).catch((e) => toast.error(apiError(e, "Failed to create request.")));
   };
 
   const act = (action: (id: number) => Promise<unknown>, id: number) => {
-    action(id).then(() => load(filter)).catch((e) => alert(e?.response?.data?.message || "Action failed"));
+    action(id).then(() => load(filter)).catch((e) => toast.error(apiError(e, "Action failed.")));
   };
 
   return (
@@ -111,10 +114,9 @@ export default function MaterialRequests() {
           <div className="space-y-3 py-2">
             <div className="space-y-1">
               <Label>Warehouse</Label>
-              <select className="w-full border rounded-md h-9 px-2 text-sm bg-white" value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}>
-                <option value="">Select...</option>
-                {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-              </select>
+              <SearchableSelect value={warehouseId} onChange={setWarehouseId}
+                options={warehouses.map((w) => ({ value: String(w.id), label: w.name }))}
+                placeholder="Search warehouse…" clearLabel="— none —" />
             </div>
 
             <div className="border rounded-lg p-3 space-y-2">

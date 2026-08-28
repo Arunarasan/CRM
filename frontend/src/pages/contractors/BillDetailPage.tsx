@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ArrowLeft, CheckCircle2, XCircle, Wallet } from "lucide-react";
+import { useGoBack } from "@/hooks/useGoBack";
 
 const currency = (n?: number) => `₹${(n ?? 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 
@@ -21,6 +22,7 @@ const STAGE_LABEL: Record<string, string> = {
 export default function BillDetailPage() {
   const { id } = useParams();
   const billId = Number(id);
+  const goBack = useGoBack("/contractors/bills");
   const [detail, setDetail] = useState<BillDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -52,9 +54,9 @@ export default function BillDetailPage() {
 
   return (
     <div className="space-y-5">
-      <Link to="/contractors/bills" className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800">
-        <ArrowLeft className="w-4 h-4" /> All bills
-      </Link>
+      <button type="button" onClick={goBack} className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800">
+        <ArrowLeft className="w-4 h-4" /> Back
+      </button>
 
       <div className="bg-white border rounded-2xl shadow-sm p-6">
         <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">

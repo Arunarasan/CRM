@@ -49,7 +49,7 @@ export const RESOURCE_TYPE_LABELS: Record<string, string> = {
 };
 
 export const RESOURCE_TYPE_STYLES: Record<string, string> = {
-  EMPLOYEE: 'bg-indigo-100 text-indigo-700',
+  EMPLOYEE: 'bg-emerald-100 text-emerald-700',
   CONTRACTOR: 'bg-amber-100 text-amber-700',
   FREELANCER: 'bg-teal-100 text-teal-700',
   SUBCONTRACTOR: 'bg-orange-100 text-orange-700',
@@ -70,7 +70,7 @@ export const WORKFORCE_STATUSES: WorkforceStatus[] = ['AVAILABLE', 'BUSY', 'ON_L
 export const WORKFORCE_STATUS_TONE: Record<string, string> = {
   AVAILABLE: 'bg-emerald-100 text-emerald-700',
   BUSY: 'bg-amber-100 text-amber-700',
-  ON_LEAVE: 'bg-sky-100 text-sky-700',
+  ON_LEAVE: 'bg-emerald-100 text-emerald-700',
   INACTIVE: 'bg-slate-100 text-slate-600',
 };
 

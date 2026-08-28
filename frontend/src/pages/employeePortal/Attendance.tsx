@@ -8,7 +8,7 @@ import ClockWidget from './ClockWidget';
 const DAY_TONE: Record<string, string> = {
   PRESENT: 'bg-emerald-500 text-white',
   HALF_DAY: 'bg-amber-400 text-white',
-  LEAVE: 'bg-sky-500 text-white',
+  LEAVE: 'bg-emerald-500 text-white',
   ABSENT: 'bg-red-500 text-white',
 };
 

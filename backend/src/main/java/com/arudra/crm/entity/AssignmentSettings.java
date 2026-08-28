@@ -22,6 +22,10 @@ public class AssignmentSettings extends BaseEntity {
     @Column(name = "max_tasks_per_day", nullable = false)
     private Integer maxTasksPerDay = 5;
 
+    /** Max concurrently-held tasks (owned + participating) an employee may pick/join. */
+    @Column(name = "max_active_tasks", nullable = false)
+    private Integer maxActiveTasks = 3;
+
     @Column(name = "max_working_hours", nullable = false, precision = 5, scale = 2)
     private BigDecimal maxWorkingHours = new BigDecimal("8.00");
 

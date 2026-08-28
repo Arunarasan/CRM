@@ -309,6 +309,28 @@ public class Lead extends BaseEntity {
     @Column(name = "quotation_date")
     private LocalDate quotationDate;
 
+    // --- Referral (who referred this lead; captured at creation) ---
+    @Column(name = "referral_type", length = 30)
+    private String referralType; // Existing Customer, Employee, Other
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "referred_by_customer_id")
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "assignedEmployee", "tags"})
+    private Customer referredByCustomer;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "referred_by_employee_id")
+    private User referredByEmployee;
+
+    @Column(name = "referrer_name", length = 200)
+    private String referrerName;
+
+    @Column(name = "referrer_contact", length = 50)
+    private String referrerContact;
+
+    @Column(name = "referral_notes", columnDefinition = "TEXT")
+    private String referralNotes;
+
     // --- Conversion ---
     @Column(name = "is_converted", nullable = false)
     private Boolean isConverted = false;

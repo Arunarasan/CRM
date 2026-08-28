@@ -67,13 +67,13 @@ export default function MeasurementList() {
   useEffect(() => { setPage(0); }, [debouncedSearch, filters]);
 
   const stats: StatCard[] = useMemo(() => [
-    { label: "Today's Measurements", value: dashboard?.todaysMeasurements, icon: CalendarDays, className: "bg-blue-100 text-blue-600" },
+    { label: "Today's Measurements", value: dashboard?.todaysMeasurements, icon: CalendarDays, className: "bg-emerald-100 text-emerald-600" },
     { label: "Pending", value: dashboard?.pending, icon: Clock, className: "bg-amber-100 text-amber-600" },
     { label: "Under Review", value: dashboard?.underReview, icon: ClipboardCheck, className: "bg-violet-100 text-violet-600" },
     { label: "Completed", value: dashboard?.completed, icon: CheckCircle, className: "bg-emerald-100 text-emerald-600" },
     { label: "Approved", value: dashboard?.approved, icon: Award, className: "bg-green-100 text-green-600" },
     { label: "Revision Requests", value: dashboard?.revisionRequests, icon: RotateCcw, className: "bg-red-100 text-red-600" },
-    { label: "This Month", value: dashboard?.measurementsThisMonth, icon: Ruler, className: "bg-indigo-100 text-indigo-600" },
+    { label: "This Month", value: dashboard?.measurementsThisMonth, icon: Ruler, className: "bg-emerald-100 text-emerald-600" },
     {
       label: "Avg. Completion",
       value: dashboard?.averageCompletionHours != null ? `${dashboard.averageCompletionHours}h` : "—",
@@ -99,9 +99,14 @@ export default function MeasurementList() {
             )}
           </p>
         </div>
-        <Button onClick={() => navigate("/site-visits")}>
-          <Plus className="mr-2 h-4 w-4" /> New from Site Visit
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => navigate("/measurements/catalog")}>
+            Item Catalog
+          </Button>
+          <Button onClick={() => navigate("/site-visits")}>
+            <Plus className="mr-2 h-4 w-4" /> New from Site Visit
+          </Button>
+        </div>
       </div>
 
       {/* KPI Cards */}

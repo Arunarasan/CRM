@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 import { format } from "date-fns";
 import { purchaseApi } from "@/api/purchaseApi";
 import { inventoryApi } from "@/api/inventoryApi";
+import { toast } from "@/components/ui/toast";
+import { apiError } from "@/lib/apiError";
+import SearchableSelect from "@/components/ui/searchable-select";
 import type { PurchaseOrder, PurchaseOrderItem, PurchaseReturn, PurchaseReturnItem } from "@/types/purchase";
 import type { Warehouse } from "@/types/inventory";
 import { Button } from "@/components/ui/button";
@@ -60,26 +63,26 @@ export default function ReturnsPage() {
   };
 
   const create = () => {
-    if (!form.purchaseOrderId) return alert("Select the purchase order");
-    if (!form.warehouseId) return alert("Select the warehouse the material leaves from");
+    if (!form.purchaseOrderId) return toast.error("Select the purchase order.");
+    if (!form.warehouseId) return toast.error("Select the warehouse the material leaves from.");
     const items = poItems
       .filter((it) => (returnQty[it.id] || 0) > 0)
       .map((it) => ({ product: { id: it.product.id }, quantity: returnQty[it.id], unitPrice: it.unitPrice }));
-    if (items.length === 0) return alert("Enter a return quantity for at least one line");
+    if (items.length === 0) return toast.error("Enter a return quantity for at least one line.");
     purchaseApi.createReturn({
       purchaseOrder: { id: Number(form.purchaseOrderId) },
       warehouse: { id: Number(form.warehouseId) },
       reasonType: form.reasonType,
       notes: form.notes,
     }, items)
-      .then(() => { setIsCreateOpen(false); setForm({ reasonType: "DAMAGED" }); setReturnQty({}); load(); })
-      .catch((e) => alert(e?.response?.data?.message || "Failed to create return"));
+      .then(() => { setIsCreateOpen(false); setForm({ reasonType: "DAMAGED" }); setReturnQty({}); load(); toast.success("Return created."); })
+      .catch((e) => toast.error(apiError(e, "Failed to create return.")));
   };
 
   const confirm = (id: number) => {
     purchaseApi.confirmReturn(id)
-      .then(() => { alert("Return confirmed — stock deducted from inventory."); load(); })
-      .catch((e) => alert(e?.response?.data?.message || "Failed to confirm return"));
+      .then(() => { toast.success("Return confirmed — stock deducted from inventory."); load(); })
+      .catch((e) => toast.error(apiError(e, "Failed to confirm return.")));
   };
 
   return (
@@ -134,19 +137,15 @@ export default function ReturnsPage() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="space-y-1.5 sm:col-span-1">
                 <Label className="text-xs">Purchase Order *</Label>
-                <select className="w-full h-10 rounded-md border border-input px-3 text-sm" value={form.purchaseOrderId || ""}
-                  onChange={(e) => setForm({ ...form, purchaseOrderId: e.target.value })}>
-                  <option value="">— Select —</option>
-                  {orders.map((po) => <option key={po.id} value={po.id}>{po.poNumber} · {po.supplier?.name}</option>)}
-                </select>
+                <SearchableSelect value={form.purchaseOrderId || ""} onChange={(v) => setForm({ ...form, purchaseOrderId: v })}
+                  options={orders.map((po) => ({ value: String(po.id), label: po.poNumber, hint: po.supplier?.name }))}
+                  placeholder="Search purchase order…" />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">From Warehouse *</Label>
-                <select className="w-full h-10 rounded-md border border-input px-3 text-sm" value={form.warehouseId || ""}
-                  onChange={(e) => setForm({ ...form, warehouseId: e.target.value })}>
-                  <option value="">— Select —</option>
-                  {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-                </select>
+                <SearchableSelect value={form.warehouseId || ""} onChange={(v) => setForm({ ...form, warehouseId: v })}
+                  options={warehouses.map((w) => ({ value: String(w.id), label: w.name }))}
+                  placeholder="Search warehouse…" />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Reason *</Label>

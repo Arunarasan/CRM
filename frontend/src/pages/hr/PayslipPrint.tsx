@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { payrollApi } from "@/api/payrollApi";
+import { useGoBack } from "@/hooks/useGoBack";
 import type { SalaryRecord } from "@/types/payroll";
 import { inr } from "@/pages/workforce/WorkforceFinanceTab";
 import { Button } from "@/components/ui/button";
@@ -10,6 +11,7 @@ const MONTHS = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep
 
 export default function PayslipPrint() {
   const { id } = useParams();
+  const goBack = useGoBack("/workforce/payroll");
   const [rec, setRec] = useState<SalaryRecord | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -48,9 +50,9 @@ export default function PayslipPrint() {
   return (
     <div className="p-4 md:p-8 max-w-3xl mx-auto">
       <div className="flex items-center justify-between mb-4 print:hidden">
-        <Link to="/hr" className="flex items-center gap-1 text-sm text-muted-foreground hover:text-primary">
+        <button type="button" onClick={goBack} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-primary">
           <ArrowLeft className="w-4 h-4" /> Back
-        </Link>
+        </button>
         <Button onClick={() => window.print()}><Printer className="w-4 h-4 mr-1" /> Print / Save PDF</Button>
       </div>
 
