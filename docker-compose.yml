@@ -124,6 +124,15 @@ services:
     depends_on:
       web:
         condition: service_started
+    # Probe Caddy's local admin API (up as soon as Caddy starts, bound to localhost:2019).
+    # /config/ returns the running config with 200 while Caddy is alive. Uses busybox wget,
+    # present in caddy:2-alpine — same tool as the web healthcheck.
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:2019/config/"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     networks:
       - crm-network
 
