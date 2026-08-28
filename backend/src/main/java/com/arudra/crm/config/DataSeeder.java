@@ -588,6 +588,32 @@ public class DataSeeder {
                         "Matte ceramic vase with an organic hand-thrown form.", img("1550581190-9c1c48d21d6c", 800), "3499", null, 4.0, 45, false, 30);
                 seedProduct(productRepo, catBySlug, "Executive Leather Desk Chair", "executive-leather-desk-chair", "JBD-OF-002", "office",
                         "Full-grain leather task chair with a brushed-steel frame.", img("1595515106969-1ce29566ff1c", 800), "32999", "28999", 5.0, 16, false, 6);
+
+                // Colour/finish options for fresh installs (existing DBs get these via Flyway V57).
+                java.util.Map<String, String> colorsBySlug = java.util.Map.of(
+                        "crystal-gold-chandelier", """
+                                [{"name":"Antique Gold","hex":"#c8a24a","image":"https://images.unsplash.com/photo-1513506003901-1e6a229e2d15?auto=format&fit=crop&w=800&q=80"},{"name":"Brushed Brass","hex":"#b08d57","image":"https://images.unsplash.com/photo-1550581190-9c1c48d21d6c?auto=format&fit=crop&w=800&q=80"},{"name":"Polished Chrome","hex":"#c9ccd1","image":"https://images.unsplash.com/photo-1524758631624-e2822e304c36?auto=format&fit=crop&w=800&q=80"}]""",
+                        "luxury-velvet-chair", """
+                                [{"name":"Forest Green","hex":"#1f3d2b","image":"https://images.unsplash.com/photo-1595515106969-1ce29566ff1c?auto=format&fit=crop&w=800&q=80"},{"name":"Royal Blue","hex":"#26456e","image":"https://images.unsplash.com/photo-1493663284031-b7e3aefcae8e?auto=format&fit=crop&w=800&q=80"},{"name":"Blush Pink","hex":"#d8a7a1","image":"https://images.unsplash.com/photo-1533090161767-e6ffed986c88?auto=format&fit=crop&w=800&q=80"},{"name":"Charcoal","hex":"#2e2e2e","image":"https://images.unsplash.com/photo-1524758631624-e2822e304c36?auto=format&fit=crop&w=800&q=80"}]""",
+                        "marble-coffee-table", """
+                                [{"name":"Carrara White","hex":"#eae7e0"},{"name":"Nero Marquina","hex":"#23211f"},{"name":"Emerald","hex":"#1f5c48"}]""",
+                        "designer-table-lamp", """
+                                [{"name":"Ivory","hex":"#efe9db"},{"name":"Charcoal","hex":"#2e2e2e"},{"name":"Terracotta","hex":"#c26b4a"}]""",
+                        "ivory-boucle-sofa", """
+                                [{"name":"Ivory Boucle","hex":"#efe9db"},{"name":"Sand","hex":"#d8c7a8"},{"name":"Slate Grey","hex":"#6b7078"}]""",
+                        "walnut-display-sideboard", """
+                                [{"name":"Walnut","hex":"#5a3a22"},{"name":"Natural Oak","hex":"#b08d57"},{"name":"Matte Black","hex":"#1c1c1c"}]""",
+                        "sculpted-ceramic-vase", """
+                                [{"name":"Matte White","hex":"#efe9db"},{"name":"Sage","hex":"#9aa88f"},{"name":"Ochre","hex":"#c9a24b"}]""",
+                        "executive-leather-desk-chair", """
+                                [{"name":"Tan Leather","hex":"#a4703c"},{"name":"Black Leather","hex":"#1c1c1c"},{"name":"Oxblood","hex":"#5e2129"}]""");
+                productRepo.findAll().forEach(p -> {
+                    String cj = colorsBySlug.get(p.getSlug());
+                    if (cj != null && (p.getColorsJson() == null || p.getColorsJson().isBlank())) {
+                        p.setColorsJson(cj);
+                        productRepo.save(p);
+                    }
+                });
             }
 
             // Services
