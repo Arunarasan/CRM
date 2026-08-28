@@ -87,15 +87,19 @@ services:
     # container over the internal network. Exposed only to other services.
     expose:
       - "80"
+    # Only wait for the backend container to START, not to pass its healthcheck. nginx proxies
+    # /api lazily (resolver at request time), so web can serve the static SPAs immediately even
+    # if the backend's health probe is briefly pessimistic. This keeps a health flap from
+    # blocking the whole startup chain (and therefore Caddy / TLS).
     depends_on:
       backend:
-        condition: service_healthy
+        condition: service_started
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/healthz"]
       interval: 30s
-      timeout: 3s
-      retries: 3
-      start_period: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     networks:
       - crm-network
 
@@ -114,9 +118,12 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data      # persists issued certificates — do NOT delete
       - caddy_config:/config
+    # Start once web's container is up (not gated on its healthcheck). Caddy must come up so it
+    # can obtain/serve the TLS certificate; if web is momentarily not ready it returns 502 rather
+    # than the entire deploy failing on an unhealthy-dependency error.
     depends_on:
       web:
-        condition: service_healthy
+        condition: service_started
     networks:
       - crm-network
 
