@@ -1,0 +1,17 @@
+# Caddy reverse proxy — automatic HTTPS (Let's Encrypt) in front of the `web` nginx container.
+# Caddy terminates TLS on 443 (and redirects 80→443) and proxies to the internal `web` service.
+#
+# Requirements before this can issue a certificate:
+#   1. jbdecorcdm.com (and www) DNS A records point at this VPS's public IP.
+#   2. Ports 80 AND 443 are open to the internet on the VPS firewall.
+# Let's Encrypt validates over HTTP-01 on port 80, so both must be reachable.
+
+# Canonical host: redirect www → apex, then serve.
+www.jbdecorcdm.com {
+    redir https://jbdecorcdm.com{uri} permanent
+}
+
+jbdecorcdm.com {
+    encode zstd gzip
+    reverse_proxy web:80
+}

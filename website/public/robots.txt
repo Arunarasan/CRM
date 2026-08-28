@@ -9,4 +9,4 @@ Disallow: /checkout
 Disallow: /cart
 Disallow: /crm
 
-Sitemap: https://jbdecor.com/sitemap.xml
+Sitemap: https://jbdecorcdm.com/sitemap.xml
