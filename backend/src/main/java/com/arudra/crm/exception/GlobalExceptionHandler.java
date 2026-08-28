@@ -128,6 +128,25 @@ public class GlobalExceptionHandler {
         return new ResponseEntity<>(apiError, HttpStatus.CONFLICT);
     }
 
+    /**
+     * A missing or malformed request body (empty POST, invalid JSON, wrong type) is a client error,
+     * not a server fault. Without this it fell through to the generic handler and returned an opaque
+     * 500 — e.g. POST /api/auth/login with no body. Map it to a clean 400.
+     */
+    @ExceptionHandler(org.springframework.http.converter.HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiError> handleUnreadableMessage(
+            org.springframework.http.converter.HttpMessageNotReadableException ex, HttpServletRequest request) {
+
+        log.warn("Malformed request body on {}: {}", request.getRequestURI(), ex.getMostSpecificCause().getMessage());
+        ApiError apiError = new ApiError(
+                HttpStatus.BAD_REQUEST.value(),
+                HttpStatus.BAD_REQUEST.getReasonPhrase(),
+                "Request body is missing or malformed.",
+                request.getRequestURI()
+        );
+        return new ResponseEntity<>(apiError, HttpStatus.BAD_REQUEST);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiError> handleGlobalException(
             Exception ex, HttpServletRequest request) {
