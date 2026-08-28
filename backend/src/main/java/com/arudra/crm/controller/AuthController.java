@@ -195,11 +195,15 @@ public class AuthController {
                         .map(token -> {
                             user.setPassword(passwordEncoder.encode(newPassword));
                             // A successful reset also clears any lockout from prior failed logins
-                            // and satisfies any forced first-login password change.
+                            // and satisfies any forced first-login password change. Completing the
+                            // OTP proves ownership of the email, so mark it verified — this also
+                            // self-heals an account left inactive (email_verified = 0), which the
+                            // login flow would otherwise reject with 403.
                             user.setFailedAttempts(0);
                             user.setAccountNonLocked(true);
                             user.setLockTime(null);
                             user.setMustChangePassword(false);
+                            user.setEmailVerified(true);
                             userRepository.save(user);
                             verificationTokenService.deleteToken(token);
                             return ResponseEntity.ok(Map.of("success", true,
