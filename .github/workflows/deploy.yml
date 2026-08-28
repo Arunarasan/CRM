@@ -123,6 +123,28 @@ jobs:
               exit 1
             fi
 
+            # 4b. Pre-flight: verify required secrets are present (clear, named error
+            #     instead of the terse "VAR is required" that `docker compose config` throws).
+            echo "--> Pre-flight: checking required variables in .env..."
+            REQUIRED_VARS="MYSQL_PASSWORD MYSQL_ROOT_PASSWORD JWT_SECRET"
+            MISSING=""
+            for VAR in $REQUIRED_VARS; do
+              # Require KEY= followed by at least one non-whitespace character.
+              if ! grep -Eq "^[[:space:]]*${VAR}=[[:space:]]*[^[:space:]]" .env; then
+                MISSING="$MISSING $VAR"
+              fi
+            done
+            if [ -n "$MISSING" ]; then
+              echo "======================================================="
+              echo "ERROR: Required variable(s) missing or empty in $APP_DIR/.env:"
+              for VAR in $MISSING; do echo "  - $VAR"; done
+              echo "Add them to $APP_DIR/.env (see .env.example at the repo root), then re-run the deploy."
+              echo "Deployment halted before touching the running containers."
+              echo "======================================================="
+              exit 1
+            fi
+            echo "Required variables present."
+
             # 5. Validate Docker Compose Configuration
             echo "--> Validating Docker Compose Configuration..."
             docker compose config --quiet
