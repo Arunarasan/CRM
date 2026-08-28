@@ -18,7 +18,7 @@ interface Result {
 function useIndex(): Result[] {
   return useMemo(
     () => [
-      ...products.map((p) => ({ label: p.name, sub: 'Product', to: `/shop/${p.slug}`, group: 'Products' })),
+      ...products.map((p) => ({ label: p.name, sub: 'Product', to: `/products/${p.categorySlug}/${p.slug}`, group: 'Products' })),
       ...services.map((s) => ({ label: s.title, sub: 'Service', to: `/services/${s.slug}`, group: 'Services' })),
       ...portfolioProjects.map((p) => ({ label: p.title, sub: p.category, to: `/portfolio/${p.slug}`, group: 'Portfolio' })),
       ...materials.map((m) => ({ label: m.name, sub: m.category, to: `/materials/${m.slug}`, group: 'Materials' })),
@@ -90,7 +90,7 @@ export function SearchOverlay({ open, onClose }: { open: boolean; onClose: () =>
                   {categories.slice(0, 8).map((c) => (
                     <Link
                       key={c.id}
-                      to={`/shop?category=${c.slug}`}
+                      to={`/products/${c.slug}`}
                       onClick={onClose}
                       className="border border-forest/15 bg-white px-3 py-1.5 text-sm text-forest/75 transition-colors hover:border-gold hover:text-gold-dark"
                     >

@@ -69,4 +69,8 @@ public class ShopProduct extends BaseEntity {
     /** JSON array of {label,value} spec rows. */
     @Column(name = "specifications_json", columnDefinition = "TEXT")
     private String specificationsJson;
+
+    /** JSON array of {name,hex,image} colour/finish variants. */
+    @Column(name = "colors_json", columnDefinition = "TEXT")
+    private String colorsJson;
 }

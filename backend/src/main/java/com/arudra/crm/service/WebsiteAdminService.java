@@ -188,6 +188,7 @@ public class WebsiteAdminService {
         p.setDimensions(d.dimensions());
         p.setGalleryJson(writeJson(d.gallery()));
         p.setSpecificationsJson(writeJson(d.specifications()));
+        p.setColorsJson(writeJson(d.colors()));
     }
 
     @Transactional
@@ -215,7 +216,8 @@ public class WebsiteAdminService {
                 p.getRating(), p.getReviewCount(), p.getFeatured(), p.getActive(),
                 p.getMaterial(), p.getDimensions(),
                 readJson(p.getGalleryJson(), new TypeReference<List<String>>() {}, List.of()),
-                readJson(p.getSpecificationsJson(), new TypeReference<List<SpecRow>>() {}, List.of()));
+                readJson(p.getSpecificationsJson(), new TypeReference<List<SpecRow>>() {}, List.of()),
+                readJson(p.getColorsJson(), new TypeReference<List<ColorVariant>>() {}, List.of()));
     }
 
     // =========================================================================================

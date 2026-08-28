@@ -1,30 +1,16 @@
 import { useEffect, useState } from 'react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
-import { Search, Heart, ShoppingBag, User, Menu, X } from 'lucide-react'
+import { Search, User, Menu, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { mainNav } from '@/config/site'
-import { useCartCount } from '@/store/cart'
-import { useWishlistCount } from '@/store/wishlist'
 import { Logo } from './Logo'
 import { SearchOverlay } from './SearchOverlay'
-
-/** Small gold count badge for cart/wishlist icons. */
-function CountBadge({ count }: { count: number }) {
-  if (count <= 0) return null
-  return (
-    <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-gold px-1 text-[10px] font-bold text-forest">
-      {count > 9 ? '9+' : count}
-    </span>
-  )
-}
 
 export function Header() {
   const [scrolled, setScrolled] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const location = useLocation()
-  const cartCount = useCartCount()
-  const wishCount = useWishlistCount()
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24)
@@ -69,17 +55,9 @@ export function Header() {
 
         {/* Right actions */}
         <div className="flex items-center gap-1.5">
-          <button onClick={() => setSearchOpen(true)} aria-label="Search" className="hidden h-10 w-10 items-center justify-center text-ivory/85 transition-colors hover:text-gold sm:flex">
+          <button onClick={() => setSearchOpen(true)} aria-label="Search" className="flex h-10 w-10 items-center justify-center text-ivory/85 transition-colors hover:text-gold">
             <Search className="h-5 w-5" strokeWidth={1.5} />
           </button>
-          <Link to="/wishlist" aria-label="Wishlist" className="relative hidden h-10 w-10 items-center justify-center text-ivory/85 transition-colors hover:text-gold sm:flex">
-            <Heart className="h-5 w-5" strokeWidth={1.5} />
-            <CountBadge count={wishCount} />
-          </Link>
-          <Link to="/cart" aria-label="Cart" className="relative flex h-10 w-10 items-center justify-center text-ivory/85 transition-colors hover:text-gold">
-            <ShoppingBag className="h-5 w-5" strokeWidth={1.5} />
-            <CountBadge count={cartCount} />
-          </Link>
           <Link
             to="/login"
             className="ml-1 hidden items-center gap-2 border border-gold/60 px-4 py-2 text-[13px] font-semibold uppercase tracking-wide text-ivory transition-colors hover:bg-gold hover:text-forest sm:flex"

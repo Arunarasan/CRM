@@ -16,7 +16,7 @@ export function FeaturedProducts() {
         align="left"
         action={
           <Link
-            to="/shop"
+            to="/products"
             className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-gold-dark transition-colors hover:text-forest"
           >
             View All <ArrowRight className="h-4 w-4" />

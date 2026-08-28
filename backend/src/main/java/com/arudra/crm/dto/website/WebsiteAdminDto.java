@@ -17,6 +17,7 @@ public final class WebsiteAdminDto {
 
     // ---- shared nested structures ----
     public record SpecRow(String label, String value) {}
+    public record ColorVariant(String name, String hex, String image) {}
     public record ProcessStep(String title, String description) {}
     public record FaqItem(String question, String answer) {}
     public record TestimonialBlock(String quote, String name, String role) {}
@@ -31,7 +32,7 @@ public final class WebsiteAdminDto {
             BigDecimal price, BigDecimal discountPrice, Integer stock,
             Double rating, Integer reviewCount, Boolean featured, Boolean active,
             String material, String dimensions,
-            List<String> gallery, List<SpecRow> specifications) {}
+            List<String> gallery, List<SpecRow> specifications, List<ColorVariant> colors) {}
 
     public record ServiceDto(
             Long id, String title, String slug, String shortDescription, String imageUrl, String icon,

@@ -24,9 +24,9 @@ export const site = {
 /** Primary navigation shown in the header. */
 export const mainNav = [
   { label: 'Home', to: '/' },
+  { label: 'Products', to: '/products' },
   { label: 'Services', to: '/services' },
   { label: 'Portfolio', to: '/portfolio' },
-  { label: 'Shop', to: '/shop' },
   { label: 'Design Studio', to: '/design-studio' },
   { label: 'Materials', to: '/materials' },
   { label: 'About Us', to: '/about' },

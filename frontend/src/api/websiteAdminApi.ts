@@ -7,6 +7,7 @@ import api from '../lib/api';
  */
 
 export interface SpecRow { label: string; value: string }
+export interface ColorVariant { name: string; hex: string; image?: string }
 export interface ProcessStep { title: string; description: string }
 export interface FaqItem { question: string; answer: string }
 export interface TestimonialBlock { quote: string; name: string; role: string }
@@ -22,7 +23,7 @@ export interface Product {
   price?: number; discountPrice?: number | null; stock?: number;
   rating?: number; reviewCount?: number; featured?: boolean; active?: boolean;
   material?: string; dimensions?: string;
-  gallery?: string[]; specifications?: SpecRow[];
+  gallery?: string[]; specifications?: SpecRow[]; colors?: ColorVariant[];
 }
 
 export interface Service {

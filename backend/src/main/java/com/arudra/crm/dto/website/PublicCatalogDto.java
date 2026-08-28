@@ -21,7 +21,7 @@ public final class PublicCatalogDto {
             BigDecimal price, BigDecimal discountPrice,
             Double rating, Integer reviewCount, Boolean featured, Boolean inStock,
             String material, String dimensions,
-            List<String> gallery, Object specifications) {}
+            List<String> gallery, Object specifications, Object colors) {}
 
     public record ServiceView(
             Long id, String title, String slug, String shortDescription, String image, String icon,

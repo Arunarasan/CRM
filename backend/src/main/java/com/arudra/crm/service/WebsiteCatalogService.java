@@ -92,7 +92,8 @@ public class WebsiteCatalogService {
                 p.getRating(), p.getReviewCount(), p.getFeatured(),
                 p.getStock() != null && p.getStock() > 0,
                 p.getMaterial(), p.getDimensions(),
-                parseStringList(p.getGalleryJson()), parseJson(p.getSpecificationsJson()));
+                parseStringList(p.getGalleryJson()), parseJson(p.getSpecificationsJson()),
+                parseJson(p.getColorsJson()));
     }
 
     // ---- Services ----

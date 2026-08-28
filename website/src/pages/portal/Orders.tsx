@@ -33,7 +33,7 @@ export default function PortalOrders() {
           <div className="flex flex-col items-center gap-4 border border-dashed border-forest/15 bg-white/50 px-6 py-16 text-center">
             <ShoppingBag className="h-10 w-10 text-gold" />
             <p className="text-sm text-forest/55">Your orders will appear here.</p>
-            <Button to="/shop" variant="primary">Explore the Shop</Button>
+            <Button to="/products" variant="primary">Explore the Collection</Button>
           </div>
         ) : (
           <div className="space-y-3">
@@ -61,7 +61,7 @@ export default function PortalOrders() {
       </AsyncSection>
 
       <p className="text-center text-sm text-forest/45">
-        Looking for something new? <Link to="/shop" className="text-gold-dark hover:text-forest">Browse the collection</Link>
+        Looking for something new? <Link to="/products" className="text-gold-dark hover:text-forest">Browse the collection</Link>
       </p>
     </div>
   )

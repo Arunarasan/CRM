@@ -50,6 +50,15 @@ export interface Product {
   inStock: boolean
 }
 
+/** A single colour/finish option for a product, shown as a swatch on the detail page. */
+export interface ColorVariant {
+  name: string
+  /** CSS colour for the swatch dot (hex or named). */
+  hex: string
+  /** Optional image showing the product in this colour; falls back to the main gallery. */
+  image?: string
+}
+
 export interface Service {
   id: number
   title: string

@@ -1,16 +1,18 @@
 import { Suspense, lazy } from 'react'
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, Navigate, useParams } from 'react-router-dom'
 import { PublicLayout } from '@/components/layout/PublicLayout'
 import { CustomerGuard } from '@/components/portal/CustomerGuard'
 import { PortalLayout } from '@/components/portal/PortalLayout'
 import Placeholder from '@/pages/Placeholder'
+import { getProduct } from '@/data/products'
 
 const Home = lazy(() => import('@/pages/Home'))
 const Services = lazy(() => import('@/pages/Services'))
 const ServiceDetail = lazy(() => import('@/pages/ServiceDetail'))
 const Portfolio = lazy(() => import('@/pages/Portfolio'))
 const PortfolioDetail = lazy(() => import('@/pages/PortfolioDetail'))
-const Shop = lazy(() => import('@/pages/Shop'))
+const Products = lazy(() => import('@/pages/Products'))
+const CategoryProducts = lazy(() => import('@/pages/CategoryProducts'))
 const Materials = lazy(() => import('@/pages/Materials'))
 const MaterialDetail = lazy(() => import('@/pages/MaterialDetail'))
 const About = lazy(() => import('@/pages/About'))
@@ -18,9 +20,6 @@ const Contact = lazy(() => import('@/pages/Contact'))
 const Consultation = lazy(() => import('@/pages/Consultation'))
 const DesignStudio = lazy(() => import('@/pages/DesignStudio'))
 const ProductDetail = lazy(() => import('@/pages/ProductDetail'))
-const Cart = lazy(() => import('@/pages/Cart'))
-const Checkout = lazy(() => import('@/pages/Checkout'))
-const Wishlist = lazy(() => import('@/pages/Wishlist'))
 const Login = lazy(() => import('@/pages/Login'))
 const ForgotPassword = lazy(() => import('@/pages/ForgotPassword'))
 
@@ -39,6 +38,13 @@ const PortalWishlist = lazy(() => import('@/pages/portal/Wishlist'))
 const PortalNotifications = lazy(() => import('@/pages/portal/Notifications'))
 const PortalProfile = lazy(() => import('@/pages/portal/Profile'))
 
+/** Redirect legacy /shop/:slug deep links to the new category → product path. */
+function LegacyProductRedirect() {
+  const { slug = '' } = useParams()
+  const product = getProduct(slug)
+  return <Navigate to={product ? `/products/${product.categorySlug}/${product.slug}` : '/products'} replace />
+}
+
 const PageLoader = () => (
   <div className="flex min-h-[60vh] items-center justify-center">
     <div className="h-10 w-10 animate-spin rounded-full border-2 border-forest/20 border-t-gold" />
@@ -56,17 +62,21 @@ export default function App() {
           <Route path="services/:slug" element={<ServiceDetail />} />
           <Route path="portfolio" element={<Portfolio />} />
           <Route path="portfolio/:slug" element={<PortfolioDetail />} />
-          <Route path="shop" element={<Shop />} />
-          <Route path="shop/:slug" element={<ProductDetail />} />
+          <Route path="products" element={<Products />} />
+          <Route path="products/:category" element={<CategoryProducts />} />
+          <Route path="products/:category/:slug" element={<ProductDetail />} />
           <Route path="materials" element={<Materials />} />
           <Route path="materials/:slug" element={<MaterialDetail />} />
           <Route path="design-studio" element={<DesignStudio />} />
           <Route path="about" element={<About />} />
           <Route path="contact" element={<Contact />} />
           <Route path="consultation" element={<Consultation />} />
-          <Route path="cart" element={<Cart />} />
-          <Route path="checkout" element={<Checkout />} />
-          <Route path="wishlist" element={<Wishlist />} />
+          {/* Legacy shop redirects → catalog */}
+          <Route path="shop" element={<Navigate to="/products" replace />} />
+          <Route path="shop/:slug" element={<LegacyProductRedirect />} />
+          <Route path="cart" element={<Navigate to="/products" replace />} />
+          <Route path="checkout" element={<Navigate to="/products" replace />} />
+          <Route path="wishlist" element={<Navigate to="/products" replace />} />
           <Route path="privacy" element={<Placeholder title="Privacy Policy" />} />
           <Route path="terms" element={<Placeholder title="Terms of Service" />} />
           <Route path="refund" element={<Placeholder title="Refund Policy" />} />

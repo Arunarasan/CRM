@@ -11,7 +11,7 @@ export function ShopByCategory() {
         <div className="mb-8 flex items-center justify-center gap-4">
           <span className="rule-gold" />
           <h2 className="text-center font-serif text-2xl font-semibold uppercase tracking-wide text-forest">
-            Shop by Category
+            Browse by Category
           </h2>
           <span className="rule-gold" />
         </div>

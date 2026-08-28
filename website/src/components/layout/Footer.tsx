@@ -25,23 +25,23 @@ const columns = [
     title: 'Quick Links',
     links: [
       { label: 'Home', to: '/' },
+      { label: 'Products', to: '/products' },
       { label: 'Services', to: '/services' },
       { label: 'Portfolio', to: '/portfolio' },
-      { label: 'Shop', to: '/shop' },
       { label: 'Materials', to: '/materials' },
       { label: 'About', to: '/about' },
       { label: 'Contact', to: '/contact' },
     ],
   },
   {
-    title: 'Services',
+    title: 'Collections',
     links: [
-      { label: 'Interior Design', to: '/services/interior-design' },
-      { label: 'Furniture', to: '/shop?category=furniture' },
-      { label: 'Lighting', to: '/services/lighting-design' },
-      { label: 'Modular Kitchen', to: '/services/modular-kitchen' },
-      { label: 'Wardrobe Design', to: '/services/wardrobe-design' },
-      { label: 'Installation', to: '/services' },
+      { label: 'Furniture', to: '/products/furniture' },
+      { label: 'Lighting', to: '/products/lighting' },
+      { label: 'Décor', to: '/products/decor' },
+      { label: 'Curtains', to: '/products/curtains' },
+      { label: 'Wardrobes', to: '/products/wardrobes' },
+      { label: 'All Collections', to: '/products' },
     ],
   },
   {
@@ -49,8 +49,7 @@ const columns = [
     links: [
       { label: 'My Account', to: '/portal' },
       { label: 'My Projects', to: '/portal/projects' },
-      { label: 'Orders', to: '/portal/orders' },
-      { label: 'Wishlist', to: '/wishlist' },
+      { label: 'Consultation', to: '/consultation' },
       { label: 'Service Requests', to: '/portal/service-requests' },
     ],
   },
@@ -128,12 +127,15 @@ export function Footer() {
       {/* Bottom bar */}
       <div className="border-t border-ivory/10">
         <div className="container flex flex-col items-center justify-between gap-3 py-5 text-xs text-ivory/50 md:flex-row">
-          <p>© {new Date().getFullYear()} {site.name}. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} {site.name} &amp; Arudra Commercial Services. All rights reserved.</p>
           <div className="flex gap-5">
             <Link to="/privacy" className="transition-colors hover:text-gold">Privacy Policy</Link>
             <Link to="/terms" className="transition-colors hover:text-gold">Terms</Link>
             <Link to="/refund" className="transition-colors hover:text-gold">Refund Policy</Link>
           </div>
+        </div>
+        <div className="container border-t border-ivory/5 py-4 text-center text-[11px] text-ivory/40">
+          Designed &amp; developed by <span className="font-medium text-ivory/60">Arun</span>
         </div>
       </div>
     </footer>

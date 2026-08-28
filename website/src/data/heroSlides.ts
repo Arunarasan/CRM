@@ -40,8 +40,8 @@ export const heroSlides: HeroSlide[] = [
     titleAccent: 'Refined Home',
     description:
       'A handpicked collection of lighting, furniture, and décor to complete every space with intention.',
-    primaryButtonText: 'Shop Collection',
-    primaryButtonLink: '/shop',
+    primaryButtonText: 'Explore Collection',
+    primaryButtonLink: '/products',
     secondaryButtonText: 'Design Studio',
     secondaryButtonLink: '/design-studio',
     displayOrder: 3,

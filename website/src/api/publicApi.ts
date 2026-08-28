@@ -1,5 +1,15 @@
 import api from '@/lib/api'
-import type { Product, Category, Service, PortfolioProject, Material, HeroSlide, Testimonial } from '@/types'
+import type { Product, Category, Service, PortfolioProject, Material, HeroSlide, Testimonial, ColorVariant } from '@/types'
+
+/** Rich product detail served by /public/products/{slug} — superset of Product with detail fields. */
+export interface ApiProductDetail extends Product {
+  description?: string
+  material?: string
+  dimensions?: string
+  gallery?: string[]
+  specifications?: { label: string; value: string }[]
+  colors?: ColorVariant[]
+}
 
 /**
  * Public catalog API (`/api/public/**`, unauthenticated). The backend DTO field names mirror these
@@ -12,7 +22,7 @@ export const publicApi = {
   categories: () => api.get<Category[]>('/public/categories').then((r) => r.data),
   products: () => api.get<Product[]>('/public/products').then((r) => r.data),
   featuredProducts: () => api.get<Product[]>('/public/products?featured=true').then((r) => r.data),
-  product: (slug: string) => api.get<Product>(`/public/products/${slug}`).then((r) => r.data),
+  product: (slug: string) => api.get<ApiProductDetail>(`/public/products/${slug}`).then((r) => r.data),
   services: () => api.get<Service[]>('/public/services').then((r) => r.data),
   portfolio: () => api.get<PortfolioProject[]>('/public/portfolio').then((r) => r.data),
   materials: () => api.get<Material[]>('/public/materials').then((r) => r.data),
