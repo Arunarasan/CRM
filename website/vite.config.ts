@@ -17,6 +17,14 @@ export default defineConfig({
     proxy: {
       '/api': { target: process.env.VITE_API_PROXY || 'http://localhost:10000', changeOrigin: true },
       '/uploads': { target: process.env.VITE_API_PROXY || 'http://localhost:10000', changeOrigin: true },
+      // Dev-only: serve the CRM under the SAME origin as the website (mirrors nginx in production),
+      // so the single website login hands its localStorage session straight into the CRM. The CRM
+      // dev server bases itself at /crm/ (frontend/vite.config.ts). ws:true forwards its HMR socket.
+      '/crm': {
+        target: process.env.VITE_CRM_PROXY || 'http://localhost:5173',
+        changeOrigin: true,
+        ws: true,
+      },
     },
   },
   resolve: {

@@ -7,6 +7,9 @@
 # so the SPAs call the backend directly (CORS already permits it).
 
 ARG VITE_API_URL=/api
+# Where the CRM is reachable from the website. Same-origin /crm in this single-container setup;
+# override (e.g. https://crm-host) if the CRM is deployed separately.
+ARG VITE_CRM_URL=/crm/
 
 # ---- Stage 1: build the public website (base /) ----
 FROM node:20-alpine AS website
@@ -15,7 +18,9 @@ COPY website/package.json website/package-lock.json ./
 RUN npm ci
 COPY website/ ./
 ARG VITE_API_URL
+ARG VITE_CRM_URL
 ENV VITE_API_URL=$VITE_API_URL
+ENV VITE_CRM_URL=$VITE_CRM_URL
 RUN npm run build
 
 # ---- Stage 2: build the CRM (production base = /crm/, set in frontend/vite.config.ts) ----

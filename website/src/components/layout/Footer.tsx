@@ -47,10 +47,10 @@ const columns = [
   {
     title: 'Customer',
     links: [
-      { label: 'My Account', to: '/portal' },
-      { label: 'My Projects', to: '/portal/projects' },
-      { label: 'Consultation', to: '/consultation' },
-      { label: 'Service Requests', to: '/portal/service-requests' },
+      { label: 'Book a Consultation', to: '/consultation' },
+      { label: 'Our Services', to: '/services' },
+      { label: 'Portfolio', to: '/portfolio' },
+      { label: 'Contact Us', to: '/contact' },
     ],
   },
 ]

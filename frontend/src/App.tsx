@@ -1,7 +1,7 @@
 import { Suspense, lazy } from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import DashboardLayout from "./layouts/DashboardLayout";
-import { DesktopGuard, EmployeeGuard } from "./components/RouteGuard";
+import { DesktopGuard, EmployeeGuard, RedirectToSignIn } from "./components/RouteGuard";
 import ImageViewerProvider from "./components/ImageViewerProvider";
 import { Toaster } from "./components/ui/toast";
 
@@ -132,8 +132,8 @@ const EmployeeManpowerRequests = lazy(() => import("./pages/employeePortal/Manpo
 const EmployeeDailyReports = lazy(() => import("./pages/employeePortal/DailyReports"));
 const EmployeeTaskManagement = lazy(() => import("./pages/employeePortal/TaskManagement"));
 
-const Login = lazy(() => import("./pages/Login"));
-const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
+// The login/forgot-password pages now live only on the public website (single sign-in);
+// the CRM's /login and /forgot-password routes redirect there via RedirectToSignIn.
 const Users = lazy(() => import("./pages/Users"));
 
 // Placeholder pages
@@ -155,8 +155,9 @@ function App() {
       <Toaster />
       <Suspense fallback={<PageLoader />}>
         <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
+          {/* Single sign-in lives on the public website — /crm/login just hands off to it. */}
+          <Route path="/login" element={<RedirectToSignIn />} />
+          <Route path="/forgot-password" element={<RedirectToSignIn />} />
           
           {/* Protected Routes Wrapper — desktop ERP, blocked for portal-only field employees */}
           <Route path="/" element={<DesktopGuard><DashboardLayout /></DesktopGuard>}>

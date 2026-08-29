@@ -160,6 +160,21 @@ public class Project extends BaseEntity {
     @Column(name = "completion_certificate_base64", columnDefinition = "TEXT")
     private String completionCertificateBase64;
 
+    /** Unguessable token behind the public, no-login tracking link (/track/{token}). Auto-set on create. */
+    @Column(name = "share_token", unique = true, length = 64)
+    private String shareToken;
+
+    /** When false, the public tracking link returns 404 even if the token is known. */
+    @Column(name = "tracking_enabled", nullable = false)
+    private boolean trackingEnabled = true;
+
+    @PrePersist
+    private void assignShareToken() {
+        if (shareToken == null || shareToken.isBlank()) {
+            shareToken = java.util.UUID.randomUUID().toString().replace("-", "");
+        }
+    }
+
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(
             name = "project_employees",

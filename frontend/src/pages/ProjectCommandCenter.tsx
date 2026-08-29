@@ -38,6 +38,7 @@ import QualityTab from "@/pages/projectCommandCenter/tabs/QualityTab";
 import IssuesRisksTab from "@/pages/projectCommandCenter/tabs/IssuesRisksTab";
 import DocumentsTab from "@/pages/projectCommandCenter/tabs/DocumentsTab";
 import LabourTab from "@/pages/projectCommandCenter/tabs/LabourTab";
+import TrackingLinkDialog from "@/components/projects/TrackingLinkDialog";
 import ResourceSelect, { ResourceSelection } from "@/components/workforce/ResourceSelect";
 import { ResourceType } from "@/types/workforce";
 import { useGoBack } from "@/hooks/useGoBack";
@@ -706,6 +707,7 @@ export default function ProjectCommandCenter() {
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          <TrackingLinkDialog projectId={Number(projectId)} />
           {project.status !== 'COMPLETED' && (
             <Button onClick={handleCompleteProject} className="bg-emerald-500 hover:bg-emerald-600 rounded-xl">
               <CheckCircle2 className="w-4 h-4 mr-2"/> Mark Completed

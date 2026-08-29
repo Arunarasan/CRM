@@ -181,6 +181,53 @@ public class ProjectController {
     // Phases
     // =====================================================================
 
+    // ---- Public tracking link (no-login customer page at /track/{token}) ----
+
+    /** Returns the project's share token (generating one if missing) and whether tracking is enabled. */
+    @GetMapping("/{id}/tracking")
+    @PreAuthorize(READ)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getTracking(@PathVariable Long id) {
+        Project p = projectService.ensureShareToken(id);
+        return ResponseEntity.ok(ApiResponse.success(Map.of(
+                "shareToken", p.getShareToken(), "trackingEnabled", p.isTrackingEnabled())));
+    }
+
+    /** Rotates the token, revoking any link already shared. */
+    @PostMapping("/{id}/tracking/regenerate")
+    @PreAuthorize(WRITE)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> regenerateTracking(@PathVariable Long id) {
+        Project p = projectService.regenerateShareToken(id);
+        return ResponseEntity.ok(ApiResponse.success(Map.of(
+                "shareToken", p.getShareToken(), "trackingEnabled", p.isTrackingEnabled()),
+                "A new tracking link has been generated. Old links no longer work."));
+    }
+
+    @PutMapping("/{id}/tracking")
+    @PreAuthorize(WRITE)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> setTracking(
+            @PathVariable Long id, @RequestBody Map<String, Object> body) {
+        boolean enabled = Boolean.parseBoolean(String.valueOf(body.get("enabled")));
+        Project p = projectService.setTrackingEnabled(id, enabled);
+        return ResponseEntity.ok(ApiResponse.success(Map.of(
+                "shareToken", p.getShareToken(), "trackingEnabled", p.isTrackingEnabled()),
+                enabled ? "Public tracking enabled." : "Public tracking disabled."));
+    }
+
+    /** Reviews left by customers on the public tracking page, for moderation. */
+    @GetMapping("/{id}/reviews")
+    @PreAuthorize(READ)
+    public ResponseEntity<ApiResponse<List<ProjectReview>>> getReviews(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.success(projectService.getReviews(id)));
+    }
+
+    @PatchMapping("/reviews/{reviewId}/status")
+    @PreAuthorize(WRITE)
+    public ResponseEntity<ApiResponse<Void>> setReviewStatus(
+            @PathVariable Long reviewId, @RequestBody Map<String, String> body) {
+        projectService.setReviewStatus(reviewId, body.get("status"));
+        return ResponseEntity.ok(ApiResponse.success(null, "Review updated."));
+    }
+
     @GetMapping("/{id}/phases")
     @PreAuthorize(READ)
     public ResponseEntity<ApiResponse<List<ProjectPhase>>> getPhases(@PathVariable Long id) {

@@ -86,6 +86,7 @@ services:
       dockerfile: Dockerfile.web
       args:
         VITE_API_URL: ${VITE_API_URL:-/api}
+        VITE_CRM_URL: ${VITE_CRM_URL:-/crm/}
     container_name: jbdecor-web
     restart: unless-stopped
     # No host port: Caddy owns 80/443 on the host and reverse-proxies to this

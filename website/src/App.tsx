@@ -1,8 +1,6 @@
 import { Suspense, lazy } from 'react'
 import { Routes, Route, Navigate, useParams } from 'react-router-dom'
 import { PublicLayout } from '@/components/layout/PublicLayout'
-import { CustomerGuard } from '@/components/portal/CustomerGuard'
-import { PortalLayout } from '@/components/portal/PortalLayout'
 import Placeholder from '@/pages/Placeholder'
 import { getProduct } from '@/data/products'
 
@@ -20,23 +18,13 @@ const Contact = lazy(() => import('@/pages/Contact'))
 const Consultation = lazy(() => import('@/pages/Consultation'))
 const DesignStudio = lazy(() => import('@/pages/DesignStudio'))
 const ProductDetail = lazy(() => import('@/pages/ProductDetail'))
+
+// Public, no-login project tracking (link-only). Replaces the old login-based customer portal.
+const TrackProject = lazy(() => import('@/pages/TrackProject'))
+
+// Sign-in is retained as the staff door to the CRM (the customer portal itself is retired).
 const Login = lazy(() => import('@/pages/Login'))
 const ForgotPassword = lazy(() => import('@/pages/ForgotPassword'))
-
-// Customer portal
-const PortalDashboard = lazy(() => import('@/pages/portal/Dashboard'))
-const PortalProjects = lazy(() => import('@/pages/portal/Projects'))
-const PortalProjectDetail = lazy(() => import('@/pages/portal/ProjectDetail'))
-const PortalQuotations = lazy(() => import('@/pages/portal/Quotations'))
-const PortalInvoices = lazy(() => import('@/pages/portal/Invoices'))
-const PortalPayments = lazy(() => import('@/pages/portal/Payments'))
-const PortalDocuments = lazy(() => import('@/pages/portal/Documents'))
-const PortalServiceRequests = lazy(() => import('@/pages/portal/ServiceRequests'))
-const PortalServices = lazy(() => import('@/pages/portal/Services'))
-const PortalOrders = lazy(() => import('@/pages/portal/Orders'))
-const PortalWishlist = lazy(() => import('@/pages/portal/Wishlist'))
-const PortalNotifications = lazy(() => import('@/pages/portal/Notifications'))
-const PortalProfile = lazy(() => import('@/pages/portal/Profile'))
 
 /** Redirect legacy /shop/:slug deep links to the new category → product path. */
 function LegacyProductRedirect() {
@@ -55,6 +43,13 @@ export default function App() {
   return (
     <Suspense fallback={<PageLoader />}>
       <Routes>
+        {/* Public, no-login project tracking (standalone, own chrome) */}
+        <Route path="track/:token" element={<TrackProject />} />
+
+        {/* Sign-in (full-screen, outside public chrome) — the staff door to the CRM */}
+        <Route path="login" element={<Login />} />
+        <Route path="forgot-password" element={<ForgotPassword />} />
+
         {/* Public website */}
         <Route element={<PublicLayout />}>
           <Route index element={<Home />} />
@@ -77,31 +72,13 @@ export default function App() {
           <Route path="cart" element={<Navigate to="/products" replace />} />
           <Route path="checkout" element={<Navigate to="/products" replace />} />
           <Route path="wishlist" element={<Navigate to="/products" replace />} />
+          {/* Retired customer portal + self-signup → home (tracking is now link-only, no login) */}
+          <Route path="register" element={<Navigate to="/" replace />} />
+          <Route path="portal/*" element={<Navigate to="/" replace />} />
           <Route path="privacy" element={<Placeholder title="Privacy Policy" />} />
           <Route path="terms" element={<Placeholder title="Terms of Service" />} />
           <Route path="refund" element={<Placeholder title="Refund Policy" />} />
           <Route path="*" element={<Placeholder title="Page Not Found" note="The page you’re looking for doesn’t exist — but our portfolio does." />} />
-        </Route>
-
-        {/* Auth (full-screen, outside public chrome) */}
-        <Route path="login" element={<Login />} />
-        <Route path="forgot-password" element={<ForgotPassword />} />
-
-        {/* Customer portal (protected, own shell) */}
-        <Route path="portal" element={<CustomerGuard><PortalLayout /></CustomerGuard>}>
-          <Route index element={<PortalDashboard />} />
-          <Route path="projects" element={<PortalProjects />} />
-          <Route path="projects/:id" element={<PortalProjectDetail />} />
-          <Route path="quotations" element={<PortalQuotations />} />
-          <Route path="invoices" element={<PortalInvoices />} />
-          <Route path="payments" element={<PortalPayments />} />
-          <Route path="documents" element={<PortalDocuments />} />
-          <Route path="service-requests" element={<PortalServiceRequests />} />
-          <Route path="services" element={<PortalServices />} />
-          <Route path="orders" element={<PortalOrders />} />
-          <Route path="wishlist" element={<PortalWishlist />} />
-          <Route path="notifications" element={<PortalNotifications />} />
-          <Route path="profile" element={<PortalProfile />} />
         </Route>
       </Routes>
     </Suspense>

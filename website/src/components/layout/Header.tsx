@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
-import { Search, User, Menu, X } from 'lucide-react'
+import { Search, LogIn, Menu, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { mainNav } from '@/config/site'
 import { Logo } from './Logo'
@@ -60,9 +60,10 @@ export function Header() {
           </button>
           <Link
             to="/login"
+            title="Team sign-in"
             className="ml-1 hidden items-center gap-2 border border-gold/60 px-4 py-2 text-[13px] font-semibold uppercase tracking-wide text-ivory transition-colors hover:bg-gold hover:text-forest sm:flex"
           >
-            <User className="h-4 w-4" strokeWidth={1.5} />
+            <LogIn className="h-4 w-4" strokeWidth={1.5} />
             Login
           </Link>
           <button
@@ -124,7 +125,7 @@ export function Header() {
             to="/login"
             className="mt-8 flex items-center justify-center gap-2 border border-gold px-4 py-3 text-sm font-semibold uppercase tracking-wide text-ivory transition-colors hover:bg-gold hover:text-forest"
           >
-            <User className="h-4 w-4" /> Login
+            <LogIn className="h-4 w-4" /> Login
           </Link>
         </div>
       </div>

@@ -51,4 +51,6 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
     Page<Project> findByCustomerId(Long customerId, Pageable pageable);
     java.util.List<Project> findByLeadIdOrderByIdDesc(Long leadId);
     boolean existsByBoqId(Long boqId);
+
+    java.util.Optional<Project> findByShareToken(String shareToken);
 }

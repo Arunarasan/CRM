@@ -140,6 +140,46 @@ public class ProjectService {
     @Autowired
     private com.arudra.crm.repository.ProductRepository productRepository;
 
+    @Autowired
+    private com.arudra.crm.repository.ProjectReviewRepository projectReviewRepository;
+
+    // ---- Public tracking link (share token) ----
+
+    /** Ensures the project has a share token (older rows may predate the column) and returns it. */
+    public Project ensureShareToken(Long id) {
+        Project p = getProjectById(id);
+        if (p.getShareToken() == null || p.getShareToken().isBlank()) {
+            p.setShareToken(java.util.UUID.randomUUID().toString().replace("-", ""));
+            p = projectRepository.save(p);
+        }
+        return p;
+    }
+
+    /** Rotates the token, invalidating any previously-shared tracking link. */
+    public Project regenerateShareToken(Long id) {
+        Project p = getProjectById(id);
+        p.setShareToken(java.util.UUID.randomUUID().toString().replace("-", ""));
+        return projectRepository.save(p);
+    }
+
+    /** Turns public tracking on/off without changing the token. */
+    public Project setTrackingEnabled(Long id, boolean enabled) {
+        Project p = getProjectById(id);
+        p.setTrackingEnabled(enabled);
+        return projectRepository.save(p);
+    }
+
+    public java.util.List<ProjectReview> getReviews(Long projectId) {
+        return projectReviewRepository.findByProjectIdAndIsDeletedFalseOrderByCreatedAtDesc(projectId);
+    }
+
+    public void setReviewStatus(Long reviewId, String status) {
+        ProjectReview r = projectReviewRepository.findById(reviewId)
+                .orElseThrow(() -> new IllegalArgumentException("Review not found"));
+        r.setStatus("HIDDEN".equalsIgnoreCase(status) ? "HIDDEN" : "APPROVED");
+        projectReviewRepository.save(r);
+    }
+
     // Status buckets for the Projects portfolio tabs. A project's raw status is mapped into one
     // of these groups; anything not listed (e.g. CANCELLED) shows only under "All".
     private static final java.util.List<String> STATUS_NEW = java.util.List.of("PLANNING", "PENDING", "APPROVED");

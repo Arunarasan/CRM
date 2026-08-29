@@ -128,4 +128,16 @@ export const projectApi = {
   reportEmployeePerformance: () => api.get<any[]>(`${BASE}/reports/employee-performance`).then((r) => r.data),
   reportContractorPerformance: () => api.get<any[]>(`${BASE}/reports/contractor-performance`).then((r) => r.data),
   reportProfitAnalysis: () => api.get<any[]>(`${BASE}/reports/profit-analysis`).then((r) => r.data),
+
+  // Public tracking link (no-login customer page at /track/{token})
+  getTracking: (projectId: number) =>
+    api.get<{ shareToken: string; trackingEnabled: boolean }>(`${BASE}/${projectId}/tracking`).then((r) => r.data),
+  regenerateTracking: (projectId: number) =>
+    api.post<{ shareToken: string; trackingEnabled: boolean }>(`${BASE}/${projectId}/tracking/regenerate`).then((r) => r.data),
+  setTracking: (projectId: number, enabled: boolean) =>
+    api.put<{ shareToken: string; trackingEnabled: boolean }>(`${BASE}/${projectId}/tracking`, { enabled }).then((r) => r.data),
+  getReviews: (projectId: number) =>
+    api.get<any[]>(`${BASE}/${projectId}/reviews`).then((r) => r.data),
+  setReviewStatus: (reviewId: number, status: string) =>
+    api.patch(`${BASE}/reviews/${reviewId}/status`, { status }).then((r) => r.data),
 };

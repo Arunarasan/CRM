@@ -42,6 +42,51 @@ export const publicApi = {
   settings: () => api.get<Record<string, string>>('/public/settings').then((r) => r.data),
   content: (page: string) =>
     api.get<ContentBlock[]>(`/public/content/${page}`).then((r) => r.data),
+
+  // Public, no-login project tracking (link-only)
+  track: (token: string) =>
+    api.get<TrackingData>(`/public/track/${token}`).then((r) => r.data),
+  trackSubmitRequest: (token: string, payload: Record<string, unknown>) =>
+    api.post(`/public/track/${token}/requests`, payload).then((r) => r.data),
+  trackSubmitReview: (token: string, payload: Record<string, unknown>) =>
+    api.post(`/public/track/${token}/reviews`, payload).then((r) => r.data),
+}
+
+export interface TrackingStep {
+  name: string
+  status: 'DONE' | 'CURRENT' | 'PENDING'
+  percent?: number
+  startDate?: string
+  endDate?: string
+}
+
+export interface TrackingUpdate {
+  time?: string
+  description: string
+}
+
+export interface TrackingReview {
+  reviewerName?: string
+  rating: number
+  comment?: string
+  date?: string
+}
+
+export interface TrackingData {
+  projectName: string
+  projectCode?: string
+  status: string
+  progress: number
+  projectType?: string
+  propertyAddress?: string
+  startDate?: string
+  expectedCompletionDate?: string
+  actualCompletionDate?: string
+  customerNotes?: string
+  currentActivity?: string
+  timeline: TrackingStep[]
+  updates: TrackingUpdate[]
+  reviews: TrackingReview[]
 }
 
 export interface ContentBlock {
