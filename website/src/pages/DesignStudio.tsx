@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button'
 import { cn } from '@/lib/utils'
 import { designGroups, roomPreviewImage } from '@/data/designStudio'
 import { images } from '@/config/images'
+import { useSeo } from '@/hooks/useSeo'
 
 const ResetIcon = RotateCcw
 
@@ -20,6 +21,7 @@ const defaults: Selections = {
 }
 
 export default function DesignStudio() {
+  useSeo({ title: 'Design Studio', description: 'Visualise your space with the JB Decor Design Studio — pick a room, style, palette, materials and décor, then share your concept with our design team.' })
   const [sel, setSel] = useState<Selections>(defaults)
 
   const pick = (group: string, value: string, multi?: boolean) => {

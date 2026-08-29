@@ -11,8 +11,10 @@ import { images } from '@/config/images'
 import { cn } from '@/lib/utils'
 import { usePublicData } from '@/hooks/usePublicData'
 import { publicApi } from '@/api/publicApi'
+import { useSeo } from '@/hooks/useSeo'
 
 export default function Materials() {
+  useSeo({ title: 'Materials & Finishes', description: 'Explore the premium materials and finishes JB Decor works with — natural woods, marbles, veneers, laminates, fabrics, glass and hardware for bespoke interiors.' })
   const [active, setActive] = useState('All')
   const [search, setSearch] = useState('')
   const materials = usePublicData(materialsSeed, publicApi.materials)

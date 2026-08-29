@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button'
 import { images } from '@/config/images'
 import { publicApi } from '@/api/publicApi'
 import { toast } from '@/store/toast'
+import { useSeo } from '@/hooks/useSeo'
 
 const assurances = [
   'A complimentary first consultation',
@@ -17,6 +18,7 @@ const assurances = [
 ]
 
 export default function Consultation() {
+  useSeo({ title: 'Book a Free Consultation', description: 'Book a complimentary interior design consultation with JB Decor. Tell us about your space and get a dedicated designer, transparent quotes, and expert guidance.' })
   const [sent, setSent] = useState(false)
   const [sending, setSending] = useState(false)
   const [params] = useSearchParams()

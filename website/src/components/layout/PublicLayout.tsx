@@ -4,6 +4,7 @@ import { Header } from './Header'
 import { Footer } from './Footer'
 import { WhatsAppButton } from './WhatsAppButton'
 import { Toaster } from '@/components/ui/Toaster'
+import { StructuredData } from '@/components/shared/StructuredData'
 
 /** Public site chrome: header, page outlet, footer, floating WhatsApp. */
 export function PublicLayout() {
@@ -16,6 +17,7 @@ export function PublicLayout() {
 
   return (
     <div className="flex min-h-screen flex-col">
+      <StructuredData />
       <Header />
       <main className="flex-1">
         <Outlet />

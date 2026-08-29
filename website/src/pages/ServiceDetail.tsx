@@ -9,10 +9,37 @@ import { CTABand } from '@/components/shared/CTABand'
 import Placeholder from '@/pages/Placeholder'
 import { getService } from '@/data/services'
 import { getServiceDetail } from '@/data/serviceDetails'
+import { useSeo, breadcrumbJsonLd } from '@/hooks/useSeo'
 
 export default function ServiceDetail() {
   const { slug = '' } = useParams()
   const service = getService(slug)
+  useSeo(
+    service
+      ? {
+          title: service.title,
+          description: service.shortDescription,
+          image: service.image,
+          type: 'article',
+          jsonLd: [
+            {
+              '@context': 'https://schema.org',
+              '@type': 'Service',
+              name: service.title,
+              description: service.shortDescription,
+              serviceType: service.title,
+              areaServed: 'IN',
+              provider: { '@type': 'Organization', name: 'JB Decor', url: 'https://jbdecorcdm.com/' },
+            },
+            breadcrumbJsonLd([
+              { name: 'Home', path: '/' },
+              { name: 'Services', path: '/services' },
+              { name: service.title, path: `/services/${slug}` },
+            ]),
+          ],
+        }
+      : { title: 'Service Not Found', noIndex: true },
+  )
   if (!service) return <Placeholder title="Service Not Found" />
   const detail = getServiceDetail(slug)
 

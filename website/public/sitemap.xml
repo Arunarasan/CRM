@@ -1,13 +1,59 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Replace the domain with the production host before go-live. -->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>https://jbdecorcdm.com/</loc><priority>1.0</priority></url>
-  <url><loc>https://jbdecorcdm.com/services</loc><priority>0.9</priority></url>
-  <url><loc>https://jbdecorcdm.com/portfolio</loc><priority>0.9</priority></url>
-  <url><loc>https://jbdecorcdm.com/shop</loc><priority>0.9</priority></url>
-  <url><loc>https://jbdecorcdm.com/materials</loc><priority>0.8</priority></url>
-  <url><loc>https://jbdecorcdm.com/design-studio</loc><priority>0.8</priority></url>
-  <url><loc>https://jbdecorcdm.com/about</loc><priority>0.7</priority></url>
-  <url><loc>https://jbdecorcdm.com/contact</loc><priority>0.7</priority></url>
-  <url><loc>https://jbdecorcdm.com/consultation</loc><priority>0.8</priority></url>
+  <!-- Primary pages -->
+  <url><loc>https://jbdecorcdm.com/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>
+  <url><loc>https://jbdecorcdm.com/products</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://jbdecorcdm.com/services</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://jbdecorcdm.com/portfolio</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://jbdecorcdm.com/materials</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://jbdecorcdm.com/design-studio</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://jbdecorcdm.com/consultation</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://jbdecorcdm.com/about</loc><changefreq>yearly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://jbdecorcdm.com/contact</loc><changefreq>yearly</changefreq><priority>0.7</priority></url>
+
+  <!-- Product categories -->
+  <url><loc>https://jbdecorcdm.com/products/furniture</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://jbdecorcdm.com/products/lighting</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://jbdecorcdm.com/products/decor</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://jbdecorcdm.com/products/curtains</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://jbdecorcdm.com/products/wallpaper</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://jbdecorcdm.com/products/kitchen-accessories</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://jbdecorcdm.com/products/wardrobes</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://jbdecorcdm.com/products/bathroom</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://jbdecorcdm.com/products/dining</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://jbdecorcdm.com/products/office</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+
+  <!-- Services -->
+  <url><loc>https://jbdecorcdm.com/services/interior-design</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://jbdecorcdm.com/services/residential-interiors</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://jbdecorcdm.com/services/commercial-interiors</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://jbdecorcdm.com/services/office-interiors</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://jbdecorcdm.com/services/modular-kitchen</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://jbdecorcdm.com/services/wardrobe-design</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://jbdecorcdm.com/services/false-ceiling</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://jbdecorcdm.com/services/lighting-design</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://jbdecorcdm.com/services/custom-furniture</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://jbdecorcdm.com/services/turnkey-interiors</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://jbdecorcdm.com/services/installation</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://jbdecorcdm.com/services/renovation</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+
+  <!-- Portfolio projects -->
+  <url><loc>https://jbdecorcdm.com/portfolio/emerald-residence</loc><changefreq>yearly</changefreq><priority>0.5</priority></url>
+  <url><loc>https://jbdecorcdm.com/portfolio/hillcrest-villa</loc><changefreq>yearly</changefreq><priority>0.5</priority></url>
+  <url><loc>https://jbdecorcdm.com/portfolio/skyline-apartment</loc><changefreq>yearly</changefreq><priority>0.5</priority></url>
+  <url><loc>https://jbdecorcdm.com/portfolio/meridian-workspace</loc><changefreq>yearly</changefreq><priority>0.5</priority></url>
+  <url><loc>https://jbdecorcdm.com/portfolio/culinary-loft</loc><changefreq>yearly</changefreq><priority>0.5</priority></url>
+  <url><loc>https://jbdecorcdm.com/portfolio/serene-master-suite</loc><changefreq>yearly</changefreq><priority>0.5</priority></url>
+
+  <!-- Materials -->
+  <url><loc>https://jbdecorcdm.com/materials/natural-teak-wood</loc><changefreq>yearly</changefreq><priority>0.4</priority></url>
+  <url><loc>https://jbdecorcdm.com/materials/smoked-oak-veneer</loc><changefreq>yearly</changefreq><priority>0.4</priority></url>
+  <url><loc>https://jbdecorcdm.com/materials/carrara-marble</loc><changefreq>yearly</changefreq><priority>0.4</priority></url>
+  <url><loc>https://jbdecorcdm.com/materials/forest-green-granite</loc><changefreq>yearly</changefreq><priority>0.4</priority></url>
+  <url><loc>https://jbdecorcdm.com/materials/matte-suede-laminate</loc><changefreq>yearly</changefreq><priority>0.4</priority></url>
+  <url><loc>https://jbdecorcdm.com/materials/fluted-glass</loc><changefreq>yearly</changefreq><priority>0.4</priority></url>
+  <url><loc>https://jbdecorcdm.com/materials/belgian-linen-fabric</loc><changefreq>yearly</changefreq><priority>0.4</priority></url>
+  <url><loc>https://jbdecorcdm.com/materials/grasscloth-wallpaper</loc><changefreq>yearly</changefreq><priority>0.4</priority></url>
+  <url><loc>https://jbdecorcdm.com/materials/brushed-brass-hardware</loc><changefreq>yearly</changefreq><priority>0.4</priority></url>
+  <url><loc>https://jbdecorcdm.com/materials/herringbone-wood-flooring</loc><changefreq>yearly</changefreq><priority>0.4</priority></url>
 </urlset>

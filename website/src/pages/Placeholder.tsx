@@ -1,11 +1,14 @@
 import { ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
+import { useSeo } from '@/hooks/useSeo'
 
 /**
  * Elegant "in progress" page for routes whose full build lands in a later phase.
  * Keeps every navigation link valid so the site is fully explorable now.
+ * These pages are thin/unfinished (or a 404), so they are kept out of the index.
  */
 export default function Placeholder({ title, note }: { title: string; note?: string }) {
+  useSeo({ title, description: note, noIndex: true })
   return (
     <section className="bg-ivory">
       <div className="container flex min-h-[60vh] flex-col items-center justify-center py-24 text-center">

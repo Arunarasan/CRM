@@ -7,10 +7,26 @@ import { Button } from '@/components/ui/Button'
 import { CTABand } from '@/components/shared/CTABand'
 import Placeholder from '@/pages/Placeholder'
 import { getMaterial, materials } from '@/data/materials'
+import { useSeo, breadcrumbJsonLd } from '@/hooks/useSeo'
 
 export default function MaterialDetail() {
   const { slug = '' } = useParams()
   const material = getMaterial(slug)
+  useSeo(
+    material
+      ? {
+          title: material.name,
+          description: `${material.name} — ${material.finish} finish in ${material.color}. A premium ${material.category.toLowerCase()} material curated by JB Decor.`,
+          image: material.image,
+          type: 'article',
+          jsonLd: breadcrumbJsonLd([
+            { name: 'Home', path: '/' },
+            { name: 'Materials', path: '/materials' },
+            { name: material.name, path: `/materials/${slug}` },
+          ]),
+        }
+      : { title: 'Material Not Found', noIndex: true },
+  )
   if (!material) return <Placeholder title="Material Not Found" />
   const related = materials.filter((m) => m.category === material.category && m.slug !== slug).slice(0, 3)
 

@@ -3,6 +3,23 @@
  * from environment variables so nothing (numbers, emails, the WhatsApp line) is
  * hardcoded across components.
  */
+/**
+ * Canonical production origin. Every canonical tag, og:url, sitemap entry, and structured-data
+ * URL is built from this so Google sees ONE consistent host (no www / non-www duplication).
+ * Kept without a trailing slash; callers append the path.
+ */
+export const siteUrl = 'https://jbdecorcdm.com'
+
+/** Absolute URL to the brand logo, used as the default social-share (og:image) image. */
+export const logoUrl = `${siteUrl}/jb-decor-logo.png`
+
+/** Turns a relative asset/path into an absolute URL on the canonical host. */
+export function absoluteUrl(pathOrUrl: string): string {
+  if (!pathOrUrl) return siteUrl + '/'
+  if (/^https?:\/\//i.test(pathOrUrl)) return pathOrUrl
+  return siteUrl + (pathOrUrl.startsWith('/') ? pathOrUrl : `/${pathOrUrl}`)
+}
+
 export const site = {
   name: 'JB Decor',
   tagline: 'Premium Interior Design & Décor',

@@ -8,10 +8,26 @@ import { Button } from '@/components/ui/Button'
 import Placeholder from '@/pages/Placeholder'
 import { portfolioProjects } from '@/data/portfolio'
 import { getPortfolioDetail } from '@/data/portfolioDetails'
+import { useSeo, breadcrumbJsonLd } from '@/hooks/useSeo'
 
 export default function PortfolioDetail() {
   const { slug = '' } = useParams()
   const project = portfolioProjects.find((p) => p.slug === slug)
+  useSeo(
+    project
+      ? {
+          title: project.title,
+          description: `${project.title} — a ${project.category.toLowerCase()} interior design project by JB Decor in ${project.location}, completed ${project.year}.`,
+          image: project.image,
+          type: 'article',
+          jsonLd: breadcrumbJsonLd([
+            { name: 'Home', path: '/' },
+            { name: 'Portfolio', path: '/portfolio' },
+            { name: project.title, path: `/portfolio/${slug}` },
+          ]),
+        }
+      : { title: 'Project Not Found', noIndex: true },
+  )
   if (!project) return <Placeholder title="Project Not Found" />
   const detail = getPortfolioDetail(slug)
   const related = portfolioProjects.filter((p) => p.slug !== slug).slice(0, 3)

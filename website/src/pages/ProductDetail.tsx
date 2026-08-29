@@ -15,6 +15,7 @@ import { usePublicData } from '@/hooks/usePublicData'
 import { publicApi, type ApiProductDetail } from '@/api/publicApi'
 import { cn } from '@/lib/utils'
 import { whatsappLink } from '@/config/site'
+import { useSeo, breadcrumbJsonLd } from '@/hooks/useSeo'
 import type { ColorVariant } from '@/types'
 
 interface ProductView {
@@ -91,6 +92,36 @@ export default function ProductDetail() {
     }
     return null
   }, [apiProduct, seed])
+
+  useSeo(
+    view
+      ? {
+          title: view.name,
+          description:
+            view.description ||
+            `${view.name} — made-to-order ${titleCase(view.categorySlug)} by JB Decor. Enquire for finishes, availability, and pricing.`,
+          image: view.gallery[0],
+          type: 'product',
+          jsonLd: [
+            {
+              '@context': 'https://schema.org',
+              '@type': 'Product',
+              name: view.name,
+              description: view.description || undefined,
+              image: view.gallery,
+              sku: view.sku || undefined,
+              category: titleCase(view.categorySlug),
+              brand: { '@type': 'Brand', name: 'JB Decor' },
+            },
+            breadcrumbJsonLd([
+              { name: 'Home', path: '/' },
+              { name: 'Products', path: '/products' },
+              { name: view.name, path: `/products/${view.categorySlug}/${slug}` },
+            ]),
+          ],
+        }
+      : { title: 'Product', noIndex: apiProduct === null && !seed },
+  )
 
   // Still fetching and no seed to show yet.
   if (!view) {
