@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { publicApi, type TrackingData } from '@/api/publicApi'
 import { useSite } from '@/hooks/useSiteSettings'
+import { useSeo } from '@/hooks/useSeo'
 
 /**
  * Public, no-login project tracking page (Amazon/Flipkart order-tracking style). Reached only via
@@ -18,6 +19,9 @@ export default function TrackProject() {
   const [data, setData] = useState<TrackingData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // Private, per-client link — keep it out of search indexes entirely.
+  useSeo({ title: 'Project Tracker', description: 'Track your project with JB Decor.', noIndex: true })
 
   const load = useCallback(() => {
     setLoading(true)

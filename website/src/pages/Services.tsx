@@ -6,11 +6,16 @@ import { services as servicesSeed } from '@/data/services'
 import { images } from '@/config/images'
 import { usePublicData } from '@/hooks/usePublicData'
 import { publicApi } from '@/api/publicApi'
-import { useSeo } from '@/hooks/useSeo'
+import { useSeo, itemListJsonLd } from '@/hooks/useSeo'
 
 export default function Services() {
-  useSeo({ title: 'Our Services', description: 'Interior design, modular kitchens, wardrobes, lighting, false ceilings, and complete turnkey interiors by JB Decor.' })
   const services = usePublicData(servicesSeed, publicApi.services)
+  useSeo({
+    title: 'Our Services',
+    description: 'Interior design, modular kitchens, wardrobes, lighting, false ceilings, and complete turnkey interiors by JB Decor.',
+    jsonLd: itemListJsonLd('JB Decor Services',
+      services.map((s) => ({ name: s.title, path: `/services/${s.slug}` }))),
+  })
   return (
     <>
       <PageHeader

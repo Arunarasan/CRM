@@ -113,3 +113,22 @@ export function breadcrumbJsonLd(items: { name: string; path: string }[]) {
     })),
   }
 }
+
+/**
+ * Builds an ItemList JSON-LD block for a listing page (categories, services, projects…), giving
+ * Google an explicit, ordered set of the page's key links to surface.
+ */
+export function itemListJsonLd(name: string, items: { name: string; path: string }[]) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    name,
+    numberOfItems: items.length,
+    itemListElement: items.map((it, i) => ({
+      '@type': 'ListItem',
+      position: i + 1,
+      name: it.name,
+      url: absoluteUrl(it.path),
+    })),
+  }
+}

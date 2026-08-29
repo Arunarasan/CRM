@@ -5,8 +5,12 @@ Allow: /
 # Keep private/app areas out of the index
 Disallow: /portal
 Disallow: /login
+Disallow: /forgot-password
+Disallow: /register
 Disallow: /checkout
 Disallow: /cart
 Disallow: /crm
+# Per-project tracking links are private (shared directly with each client) — never index them
+Disallow: /track
 
 Sitemap: https://jbdecorcdm.com/sitemap.xml

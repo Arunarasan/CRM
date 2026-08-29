@@ -9,13 +9,18 @@ import { categories as categoriesSeed } from '@/data/categories'
 import { products as productsSeed } from '@/data/products'
 import { usePublicData } from '@/hooks/usePublicData'
 import { publicApi } from '@/api/publicApi'
-import { useSeo } from '@/hooks/useSeo'
+import { useSeo, itemListJsonLd } from '@/hooks/useSeo'
 import { images } from '@/config/images'
 
 export default function Products() {
-  useSeo({ title: 'Our Collections', description: 'Browse JB Decor by category — furniture, lighting, décor, curtains and more. Explore each collection and enquire for made-to-order pieces.' })
   const categories = usePublicData(categoriesSeed, publicApi.categories)
   const products = usePublicData(productsSeed, publicApi.products)
+  useSeo({
+    title: 'Our Collections',
+    description: 'Browse JB Decor by category — furniture, lighting, décor, curtains and more. Explore each collection and enquire for made-to-order pieces.',
+    jsonLd: itemListJsonLd('JB Decor Collections',
+      categories.map((c) => ({ name: c.name, path: `/products/${c.slug}` }))),
+  })
 
   return (
     <>
