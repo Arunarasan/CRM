@@ -30,30 +30,9 @@
     <meta name="twitter:description" content="Bespoke interiors that blend elegance, functionality, and craftsmanship." />
     <meta name="twitter:image" content="https://jbdecorcdm.com/jb-decor-logo.png" />
 
-    <!-- Site-wide structured data (no-JS crawlers see this baseline; pages layer on more) -->
-    <script type="application/ld+json">
-      {
-        "@context": "https://schema.org",
-        "@type": "Organization",
-        "name": "JB Decor",
-        "url": "https://jbdecorcdm.com/",
-        "logo": "https://jbdecorcdm.com/jb-decor-logo.png",
-        "description": "JB Decor crafts bespoke luxury interiors — residential, commercial, and turnkey interior design and décor.",
-        "sameAs": [
-          "https://instagram.com",
-          "https://facebook.com",
-          "https://linkedin.com"
-        ]
-      }
-    </script>
-    <script type="application/ld+json">
-      {
-        "@context": "https://schema.org",
-        "@type": "WebSite",
-        "name": "JB Decor",
-        "url": "https://jbdecorcdm.com/"
-      }
-    </script>
+    <!-- Site-wide structured data (LocalBusiness + Organization + WebSite) is injected at runtime
+         from the CRM-managed site settings — see src/components/shared/StructuredData.tsx — so the
+         business NAP (name, address, phone, email, socials) stays editable in the CRM, not hardcoded. -->
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
