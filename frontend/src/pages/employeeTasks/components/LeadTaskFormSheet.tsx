@@ -124,7 +124,7 @@ export default function LeadTaskFormSheet({ taskId, formType, open, onOpenChange
   };
 
   const renderField = (f: Field) => {
-    const common = 'w-full rounded-md border px-3 py-2 text-sm';
+    const common = 'mt-1.5 w-full rounded-xl border border-[#DDE2DE] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#0A573B]';
     if (f.type === 'select') {
       return (
         <select value={values[f.key] ?? ''} onChange={(e) => set(f.key, e.target.value)} className={common}>
@@ -176,8 +176,8 @@ export default function LeadTaskFormSheet({ taskId, formType, open, onOpenChange
           )}
         </div>
         <DialogFooter>
-          <Button onClick={submit} disabled={saving || uploading} className="w-full">
-            {saving ? 'Saving…' : 'Save & Complete'}
+          <Button onClick={submit} disabled={saving || uploading} className="w-full bg-[#0A573B] text-white hover:bg-[#06452F]">
+            {saving ? 'Saving…' : 'Save & complete'}
           </Button>
         </DialogFooter>
       </DialogContent>

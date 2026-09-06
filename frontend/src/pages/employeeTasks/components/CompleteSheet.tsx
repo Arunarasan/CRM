@@ -50,25 +50,25 @@ export default function CompleteSheet({ taskId, open, onOpenChange, onDone }: {
       <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-[#0A573B]">
-            <CheckCircle2 className="h-5 w-5" /> Complete Task
+            <CheckCircle2 className="h-5 w-5" /> Complete task
           </DialogTitle>
         </DialogHeader>
-        <div className="flex flex-col gap-3">
-          <p className="text-sm text-[#5B625E]">Add a closing note or photo if useful — both are optional.</p>
+        <div className="flex flex-col gap-4">
+          <p className="text-[13px] text-[#5E655D]">Add a closing note or photo if useful — both are optional.</p>
           <div>
             <Label>Completion note</Label>
             <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3}
-              className="w-full rounded-md border px-3 py-2 text-sm" placeholder="What was done?" />
+              className="mt-1.5 w-full rounded-xl border border-[#DDE2DE] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#0A573B]" placeholder="What was done?" />
           </div>
           <div>
             <Label>Photo / attachment</Label>
-            <MediaCapture media={media} onChange={setMedia} />
+            <div className="mt-1.5"><MediaCapture media={media} onChange={setMedia} /></div>
           </div>
         </div>
         <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving} className="flex-1">Cancel</Button>
-          <Button onClick={confirm} disabled={saving} className="flex-1 bg-[#0A573B] hover:bg-[#0A573B]/90">
-            {saving ? 'Completing…' : 'Mark Completed'}
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving} className="flex-1 border-[#D7DED8]">Cancel</Button>
+          <Button onClick={confirm} disabled={saving} className="flex-1 bg-[#0A573B] text-white hover:bg-[#06452F]">
+            {saving ? 'Completing…' : 'Mark completed'}
           </Button>
         </DialogFooter>
       </DialogContent>

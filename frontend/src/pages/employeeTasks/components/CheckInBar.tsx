@@ -41,19 +41,19 @@ export default function CheckInBar({ taskId, checkins, onChanged, locked }: { ta
   };
 
   return (
-    <div className="flex items-center justify-between rounded-xl border bg-card p-3 shadow-sm">
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <MapPin className="h-4 w-4" />
+    <div className="flex items-center justify-between rounded-2xl border border-[#EDE6D8] bg-white p-3.5 shadow-[0_2px_10px_rgba(80,55,20,0.05)]">
+      <div className="flex items-center gap-2 text-[13px] text-[#5E655D]">
+        <MapPin className={`h-4 w-4 ${openCheckIn ? 'text-[#0A573B]' : 'text-[#B79A5C]'}`} />
         {openCheckIn ? `Checked in at ${new Date(openCheckIn.checkInTime!).toLocaleTimeString()}` : 'Not checked in'}
       </div>
       {(!locked || openCheckIn) && (
         <button
           onClick={openCheckIn ? checkOut : checkIn}
           disabled={busy}
-          className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white ${openCheckIn ? 'bg-slate-700' : 'bg-emerald-600'}`}
+          className={`flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-[13px] font-semibold text-white transition active:scale-95 disabled:opacity-50 ${openCheckIn ? 'bg-[#4B524E]' : 'bg-[#0A573B]'}`}
         >
           {openCheckIn ? <LogOut className="h-3.5 w-3.5" /> : <LogIn className="h-3.5 w-3.5" />}
-          {openCheckIn ? 'Check Out' : 'Check In'}
+          {openCheckIn ? 'Check out' : 'Check in'}
         </button>
       )}
     </div>

@@ -591,7 +591,11 @@ public class EmployeeTaskService {
                 ? com.arudra.crm.util.LeadTaskForms.moduleLabel(templateCode) : null);
         detail.put("customer", task.getProject() != null && task.getProject().getCustomer() != null
                 ? task.getProject().getCustomer().getName() : null);
-        detail.put("location", task.getProject() != null ? task.getProject().getPropertyAddress() : null);
+        // Site navigation: a human-readable address for display, plus a ready-to-open maps URL that
+        // prefers the most precise locator available (saved map link → GPS coords → address text), so
+        // the "Navigate to site" button reliably takes a field employee to the right place.
+        detail.put("location", siteAddressText(task.getProject()));
+        detail.put("mapUrl", siteMapUrl(task.getProject()));
         detail.put("floor", task.getRoom() != null ? task.getRoom().getFloorName() : null);
         detail.put("estimatedHours", task.getEstimatedHours());
         detail.put("actualHours", task.getActualHours());
@@ -615,6 +619,55 @@ public class EmployeeTaskService {
         detail.put("checkins", checkInRepository.findByTaskIdOrderByCheckInTimeDesc(taskId).stream()
                 .map(this::toCheckInSummary).collect(Collectors.toList()));
         return detail;
+    }
+
+    /** Best human-readable site address for a project: property address, else the customer's site/billing address + city. */
+    private String siteAddressText(com.arudra.crm.entity.Project project) {
+        if (project == null) return null;
+        if (isNotBlank(project.getPropertyAddress())) return project.getPropertyAddress().trim();
+        com.arudra.crm.entity.Customer c = project.getCustomer();
+        if (c == null) return null;
+        String base = isNotBlank(c.getSiteAddress()) ? c.getSiteAddress()
+                : (isNotBlank(c.getBillingAddress()) ? c.getBillingAddress() : null);
+        String tail = java.util.stream.Stream.of(c.getCity(), c.getPincode())
+                .filter(this::isNotBlank).collect(Collectors.joining(", "));
+        if (isNotBlank(base) && isNotBlank(tail)) return base.trim() + ", " + tail;
+        if (isNotBlank(base)) return base.trim();
+        return isNotBlank(tail) ? tail : null;
+    }
+
+    /**
+     * A ready-to-open maps/navigation URL for the project site, most-precise-first:
+     *   1. the customer's saved Google Maps link (used as-is when it's a real URL),
+     *   2. the customer's stored GPS coordinates,
+     *   3. the best address text we can assemble.
+     * Returns null only when there is nothing at all to navigate to.
+     */
+    private String siteMapUrl(com.arudra.crm.entity.Project project) {
+        if (project == null) return null;
+        com.arudra.crm.entity.Customer c = project.getCustomer();
+        if (c != null) {
+            String saved = c.getGoogleMapLocation();
+            if (isNotBlank(saved)) {
+                String s = saved.trim();
+                if (s.startsWith("http://") || s.startsWith("https://")) return s;
+                return mapsQuery(s);
+            }
+            if (c.getLatitude() != null && c.getLongitude() != null) {
+                return mapsQuery(c.getLatitude() + "," + c.getLongitude());
+            }
+        }
+        String address = siteAddressText(project);
+        return isNotBlank(address) ? mapsQuery(address) : null;
+    }
+
+    private String mapsQuery(String query) {
+        return "https://www.google.com/maps/search/?api=1&query="
+                + java.net.URLEncoder.encode(query, java.nio.charset.StandardCharsets.UTF_8);
+    }
+
+    private boolean isNotBlank(String s) {
+        return s != null && !s.trim().isEmpty();
     }
 
     // ---------------------------------------------------------------- Assignment (manager side)

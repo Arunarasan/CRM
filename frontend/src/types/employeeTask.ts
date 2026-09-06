@@ -179,6 +179,7 @@ export interface TaskDetail extends TaskCard {
   moduleLabel?: string | null;
   customer: string | null;
   location: string | null;
+  mapUrl?: string | null;
   estimatedHours: number | null;
   actualHours: number | null;
   startDate: string | null;

@@ -34,31 +34,34 @@ export default function ProgressSheet({ taskId, open, onOpenChange, onSaved }: {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-sm">
-        <DialogHeader><DialogTitle>Update Progress</DialogTitle></DialogHeader>
-        <div className="flex flex-col gap-3">
+        <DialogHeader><DialogTitle>Update progress</DialogTitle></DialogHeader>
+        <div className="flex flex-col gap-4">
           <div>
-            <Label>Progress: {progressPercent}%</Label>
+            <div className="mb-1.5 flex items-center justify-between">
+              <Label>Progress</Label>
+              <span className="text-[15px] font-bold text-[#0A573B]">{progressPercent}%</span>
+            </div>
             <input type="range" min={0} max={100} step={5} value={progressPercent}
-              onChange={(e) => setProgressPercent(Number(e.target.value))} className="w-full" />
+              onChange={(e) => setProgressPercent(Number(e.target.value))} className="w-full accent-[#0A573B]" />
           </div>
           <div>
             <Label>Time spent (minutes)</Label>
             <input type="number" min={0} value={timeSpentMinutes}
               onChange={(e) => setTimeSpentMinutes(e.target.value === '' ? '' : Number(e.target.value))}
-              className="w-full rounded-md border px-3 py-2 text-sm" />
+              className="mt-1.5 w-full rounded-xl border border-[#DDE2DE] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#0A573B]" />
           </div>
           <div>
             <Label>Remarks</Label>
             <textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} rows={3}
-              className="w-full rounded-md border px-3 py-2 text-sm" placeholder="What did you complete?" />
+              className="mt-1.5 w-full rounded-xl border border-[#DDE2DE] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#0A573B]" placeholder="What did you complete?" />
           </div>
           <div>
-            <Label>Photos / Video / Voice note</Label>
-            <MediaCapture media={media} onChange={setMedia} />
+            <Label>Photos / video / voice note</Label>
+            <div className="mt-1.5"><MediaCapture media={media} onChange={setMedia} /></div>
           </div>
         </div>
         <DialogFooter>
-          <Button onClick={submit} disabled={saving} className="w-full">{saving ? 'Saving…' : 'Save Progress'}</Button>
+          <Button onClick={submit} disabled={saving} className="w-full bg-[#0A573B] text-white hover:bg-[#06452F]">{saving ? 'Saving…' : 'Save progress'}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

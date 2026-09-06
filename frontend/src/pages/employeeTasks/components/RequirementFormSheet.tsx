@@ -282,23 +282,23 @@ function Section({ id, icon, title, count, openSecs, toggle, children }: {
 }) {
   const isOpen = openSecs.has(id);
   return (
-    <div className="rounded-xl border bg-card">
-      <button type="button" onClick={() => toggle(id)} className="flex w-full items-center gap-2 px-3 py-2.5 text-left">
-        <span className="text-primary">{icon}</span>
-        <span className="text-sm font-semibold">{title}</span>
+    <div className="overflow-hidden rounded-2xl border border-[#EDE6D8] bg-white shadow-[0_1px_6px_rgba(80,55,20,0.04)]">
+      <button type="button" onClick={() => toggle(id)} className="flex w-full items-center gap-2.5 px-3.5 py-3 text-left">
+        <span className="text-[#9B6B32]">{icon}</span>
+        <span className="text-[14px] font-semibold text-[#22271F]">{title}</span>
         {count > 0 && (
-          <span className="flex items-center gap-0.5 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">
+          <span className="flex items-center gap-0.5 rounded-full bg-[#E7F2EC] px-1.5 py-0.5 text-[10px] font-semibold text-[#2C7050]">
             <Check className="h-2.5 w-2.5" /> {count}
           </span>
         )}
-        <ChevronDown className={`ml-auto h-4 w-4 text-muted-foreground transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`ml-auto h-4 w-4 text-[#B4B0A4] transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
-      {isOpen && <div className="flex flex-col gap-3 border-t px-3 py-3">{children}</div>}
+      {isOpen && <div className="flex flex-col gap-3 border-t border-[#F1ECE2] px-3.5 py-3.5">{children}</div>}
     </div>
   );
 }
 
-const inputCls = 'mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm';
+const inputCls = 'mt-1 w-full rounded-xl border border-[#DDE2DE] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#0A573B]';
 function Text({ label, value, onChange, type = 'text', placeholder }: { label: string; value?: string; onChange: (v: string) => void; type?: string; placeholder?: string }) {
   return (
     <div>

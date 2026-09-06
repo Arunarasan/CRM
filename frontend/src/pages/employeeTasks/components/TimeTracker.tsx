@@ -36,28 +36,29 @@ export default function TimeTracker({ taskId, disabled }: { taskId: number; disa
 
   if (disabled) return null;
 
+  const btn = 'flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2.5 text-[14px] font-semibold text-white transition active:scale-[0.99] disabled:opacity-50';
   return (
-    <div className="rounded-xl border bg-card p-3 shadow-sm">
-      <div className="mb-2 flex items-center justify-between">
-        <h3 className="flex items-center gap-1.5 text-sm font-semibold"><Clock className="h-4 w-4 text-primary" /> Work Timer</h3>
-        <span className="text-sm font-bold tabular-nums">{label}</span>
+    <div className="rounded-2xl border border-[#EDE6D8] bg-white p-4 shadow-[0_2px_10px_rgba(80,55,20,0.05)]">
+      <div className="mb-2.5 flex items-center justify-between">
+        <h3 className="flex items-center gap-1.5 text-[14px] font-semibold text-[#1A211E]"><Clock className="h-4 w-4 text-[#0A573B]" /> Work timer</h3>
+        <span className="text-[15px] font-bold tabular-nums text-[#0A573B]">{label}</span>
       </div>
-      {error && <p className="mb-2 text-[11px] text-destructive">{error}</p>}
+      {error && <p className="mb-2 text-[11px] text-[#B94B45]">{error}</p>}
       <div className="flex gap-2">
         {!running && !paused && (
           <button disabled={busy} onClick={() => run(() => employeeTaskApi.timeStart(taskId))}
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-emerald-600 py-2.5 text-sm font-semibold text-white active:scale-[0.99] disabled:opacity-50">
+            className={`${btn} bg-[#0A573B]`}>
             <Play className="h-4 w-4" /> Start
           </button>
         )}
         {running && (
           <>
             <button disabled={busy} onClick={() => run(() => employeeTaskApi.timePause(taskId))}
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-amber-600 py-2.5 text-sm font-semibold text-white active:scale-[0.99] disabled:opacity-50">
+              className={`${btn} bg-[#BC8748]`}>
               <Pause className="h-4 w-4" /> Pause
             </button>
             <button disabled={busy} onClick={() => run(() => employeeTaskApi.timeStop(taskId))}
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-slate-700 py-2.5 text-sm font-semibold text-white active:scale-[0.99] disabled:opacity-50">
+              className={`${btn} bg-[#4B524E]`}>
               <Square className="h-4 w-4" /> Stop
             </button>
           </>
@@ -65,17 +66,17 @@ export default function TimeTracker({ taskId, disabled }: { taskId: number; disa
         {paused && (
           <>
             <button disabled={busy} onClick={() => run(() => employeeTaskApi.timeResume(taskId))}
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-emerald-600 py-2.5 text-sm font-semibold text-white active:scale-[0.99] disabled:opacity-50">
+              className={`${btn} bg-[#0A573B]`}>
               <Play className="h-4 w-4" /> Resume
             </button>
             <button disabled={busy} onClick={() => run(() => employeeTaskApi.timeStop(taskId))}
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-slate-700 py-2.5 text-sm font-semibold text-white active:scale-[0.99] disabled:opacity-50">
+              className={`${btn} bg-[#4B524E]`}>
               <Square className="h-4 w-4" /> Stop
             </button>
           </>
         )}
       </div>
-      {paused && <p className="mt-1.5 text-[11px] text-amber-600">Paused — resume when you're back on it.</p>}
+      {paused && <p className="mt-2 text-[11px] font-medium text-[#9B6B32]">Paused — resume when you're back on it.</p>}
     </div>
   );
 }

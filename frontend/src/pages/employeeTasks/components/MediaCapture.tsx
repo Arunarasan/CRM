@@ -72,16 +72,16 @@ export default function MediaCapture({ media, onChange }: { media: ProgressMedia
     <div className="flex flex-col gap-2">
       <div className="flex gap-2">
         <button type="button" onClick={() => photoInput.current?.click()} disabled={uploading}
-          className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border bg-card py-2 text-xs font-medium">
-          <Camera className="h-4 w-4" /> Photo
+          className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-[#E4DECF] bg-white py-2.5 text-xs font-medium text-[#4B524E] active:scale-95">
+          <Camera className="h-4 w-4 text-[#0A573B]" /> Photo
         </button>
         <button type="button" onClick={() => videoInput.current?.click()} disabled={uploading}
-          className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border bg-card py-2 text-xs font-medium">
-          <Video className="h-4 w-4" /> Video
+          className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-[#E4DECF] bg-white py-2.5 text-xs font-medium text-[#4B524E] active:scale-95">
+          <Video className="h-4 w-4 text-[#0A573B]" /> Video
         </button>
         <button type="button" onClick={recording ? stopRecording : startRecording} disabled={uploading}
-          className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg border py-2 text-xs font-medium ${recording ? 'border-red-500 bg-red-50 text-red-600' : 'bg-card'}`}>
-          {recording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />} {recording ? 'Stop' : 'Voice'}
+          className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl border py-2.5 text-xs font-medium active:scale-95 ${recording ? 'border-[#E4B4AE] bg-[#FBE9E7] text-[#B94B45]' : 'border-[#E4DECF] bg-white text-[#4B524E]'}`}>
+          {recording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4 text-[#9B6B32]" />} {recording ? 'Stop' : 'Voice'}
         </button>
       </div>
       <input ref={photoInput} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => onFileSelected(e, 'PHOTO')} />
