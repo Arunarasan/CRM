@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useParams, useSearchParams } from "react-router-dom";
 import { financeApi } from "@/api/financeApi";
 import type { Invoice, InvoiceItem, CustomerPayment } from "@/types/finance";
 import { PAYMENT_METHODS } from "@/types/finance";
@@ -10,14 +10,23 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
+import {
   currency, currencyFull, INVOICE_STATUS_TONE, INVOICE_STATUS_LABEL, stageLabel,
 } from "./helpers";
-import { ArrowLeft, CheckCircle2, Send, XCircle, IndianRupee, RotateCcw } from "lucide-react";
+import { printInvoice } from "../projectFinance/printInvoice";
+import { printReceipt } from "./printReceipt";
+import { fetchCompanyProfile, type CompanyProfile } from "@/lib/companyProfile";
+import { ArrowLeft, CheckCircle2, Send, XCircle, IndianRupee, RotateCcw, Printer, ChevronDown } from "lucide-react";
 
 export default function InvoiceDetailPage() {
   const { id } = useParams();
   const invId = Number(id);
   const goBack = useGoBack("/billing/invoices");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const autoPrinted = useRef(false);
+  const [company, setCompany] = useState<CompanyProfile | undefined>(undefined);
 
   const [inv, setInv] = useState<Invoice | null>(null);
   const [items, setItems] = useState<InvoiceItem[]>([]);
@@ -38,6 +47,25 @@ export default function InvoiceDetailPage() {
   }, [invId]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { fetchCompanyProfile().then(setCompany).catch(() => {}); }, []);
+
+  const doPrint = useCallback((fmt: "receipt" | "invoice") => {
+    if (!inv) return;
+    if (fmt === "receipt") printReceipt(inv, items, company);
+    else printInvoice(inv, items, inv.project ?? undefined, company);
+  }, [inv, items, company]);
+
+  // Auto-print once after a counter sale (?print=receipt|invoice), then strip the flag.
+  // Waits for the company profile so the first bill already carries the real shop details.
+  useEffect(() => {
+    const fmt = searchParams.get("print");
+    if (!fmt || autoPrinted.current || !inv || items.length === 0 || !company) return;
+    autoPrinted.current = true;
+    doPrint(fmt === "invoice" ? "invoice" : "receipt");
+    const next = new URLSearchParams(searchParams);
+    next.delete("print");
+    setSearchParams(next, { replace: true });
+  }, [searchParams, inv, items, company, doPrint, setSearchParams]);
 
   const run = async (fn: () => Promise<Invoice>, successMsg?: string) => {
     setBusy(true);
@@ -89,6 +117,15 @@ export default function InvoiceDetailPage() {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="sm" variant="outline"><Printer className="w-4 h-4 mr-1" /> Print <ChevronDown className="w-3.5 h-3.5 ml-1" /></Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => doPrint("receipt")}>POS Receipt (80mm)</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => doPrint("invoice")}>Tax Invoice (A4)</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           {canIssue && <Button size="sm" disabled={busy} onClick={() => run(() => financeApi.issueInvoice(invId), "Invoice issued.")}><CheckCircle2 className="w-4 h-4 mr-1" /> Issue</Button>}
           {canSend && <Button size="sm" variant="outline" disabled={busy} onClick={() => run(() => financeApi.sendInvoice(invId), "Marked as sent.")}><Send className="w-4 h-4 mr-1" /> Mark Sent</Button>}
           {canPay && <Button size="sm" disabled={busy} onClick={() => setPayOpen((o) => !o)}><IndianRupee className="w-4 h-4 mr-1" /> Record Payment</Button>}

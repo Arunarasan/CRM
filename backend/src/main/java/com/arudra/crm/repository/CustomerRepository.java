@@ -24,4 +24,7 @@ public interface CustomerRepository extends JpaRepository<Customer, Long>, JpaSp
     /** Match an existing customer for website guest checkout (email first, then phone). */
     java.util.Optional<Customer> findFirstByEmailIgnoreCaseAndIsDeletedFalseOrderByIdAsc(String email);
     java.util.Optional<Customer> findFirstByPhoneAndIsDeletedFalseOrderByIdAsc(String phone);
+
+    /** Canonical anonymous walk-in customer (reused for nameless counter sales). */
+    java.util.Optional<Customer> findFirstByNameIgnoreCaseAndCustomerSegmentAndIsDeletedFalseOrderByIdAsc(String name, String customerSegment);
 }

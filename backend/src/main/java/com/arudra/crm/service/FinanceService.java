@@ -246,7 +246,15 @@ public class FinanceService {
         String name = req.customerName == null ? "" : req.customerName.trim();
         String phone = emptyToNull(req.customerPhone);
         String email = emptyToNull(req.customerEmail);
-        if (name.isEmpty()) throw new RuntimeException("A walk-in sale needs a customer name");
+
+        // Anonymous quick sale (no name, no contact): reuse one canonical walk-in customer
+        // so repeated counter sales don't spawn duplicate rows.
+        if (name.isEmpty() && phone == null && email == null) {
+            return customerRepository
+                    .findFirstByNameIgnoreCaseAndCustomerSegmentAndIsDeletedFalseOrderByIdAsc(WALK_IN_CUSTOMER_NAME, "WALK_IN")
+                    .orElseGet(() -> newWalkInCustomer(WALK_IN_CUSTOMER_NAME, null, null));
+        }
+        if (name.isEmpty()) name = WALK_IN_CUSTOMER_NAME; // contact given but no name typed
 
         Customer existing = null;
         if (email != null) {
@@ -257,6 +265,12 @@ public class FinanceService {
         }
         if (existing != null) return existing;
 
+        return newWalkInCustomer(name, email, phone);
+    }
+
+    private static final String WALK_IN_CUSTOMER_NAME = "Walk-in Customer";
+
+    private Customer newWalkInCustomer(String name, String email, String phone) {
         Customer c = new Customer();
         c.setName(name);
         if (email != null) c.setEmail(email);

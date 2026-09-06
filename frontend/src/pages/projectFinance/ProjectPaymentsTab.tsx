@@ -14,6 +14,7 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/components/ui/toast";
 import { printInvoice } from "./printInvoice";
+import { fetchCompanyProfile } from "@/lib/companyProfile";
 import CompletionBillingTracker from "./CompletionBillingTracker";
 
 const inr = (n?: number | null) =>
@@ -106,8 +107,10 @@ export default function ProjectPaymentsTab({ project, onChanged }: { project: an
 
   const doPrint = async (inv: Invoice) => {
     try {
-      const [full, items] = await Promise.all([financeApi.getInvoice(inv.id), financeApi.getInvoiceItems(inv.id)]);
-      printInvoice(full, items, project);
+      const [full, items, company] = await Promise.all([
+        financeApi.getInvoice(inv.id), financeApi.getInvoiceItems(inv.id), fetchCompanyProfile(),
+      ]);
+      printInvoice(full, items, project, company);
     } catch {
       toast.error("Could not open the invoice for printing.");
     }

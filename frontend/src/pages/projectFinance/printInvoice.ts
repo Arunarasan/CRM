@@ -1,10 +1,12 @@
 import type { Invoice, InvoiceItem } from "@/types/finance";
+import type { CompanyProfile } from "@/lib/companyProfile";
 
 /**
  * Opens a print-ready window with a formatted tax invoice and triggers the browser print dialog.
  * Self-contained (inline styles) so it prints cleanly without the app's chrome.
  */
-export function printInvoice(invoice: Invoice, items: InvoiceItem[], project?: any) {
+export function printInvoice(invoice: Invoice, items: InvoiceItem[], project?: any, company?: CompanyProfile) {
+  const co = company ?? { name: "ARUDRA", tagline: "Commercial Services" };
   const inr = (n?: number | null) =>
     "₹" + Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const esc = (s: unknown) =>
@@ -56,7 +58,13 @@ export function printInvoice(invoice: Invoice, items: InvoiceItem[], project?: a
     @media print { body { margin: 0; padding: 16px; } .noprint { display: none; } }
   </style></head><body>
     <div class="head">
-      <div><div class="brand">ARUDRA</div><div class="muted">Commercial Services</div></div>
+      <div>
+        <div class="brand">${esc(co.name)}</div>
+        ${co.tagline ? `<div class="muted">${esc(co.tagline)}</div>` : ""}
+        ${co.address ? `<div class="muted">${esc(co.address)}</div>` : ""}
+        ${co.phone || co.email ? `<div class="muted">${esc([co.phone, co.email].filter(Boolean).join(" · "))}</div>` : ""}
+        ${co.gstin ? `<div class="muted">GSTIN: ${esc(co.gstin)}</div>` : ""}
+      </div>
       <div class="title">
         <h1>TAX INVOICE</h1>
         <div>${esc(invoice.invoiceNumber)}</div>

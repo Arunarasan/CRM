@@ -64,6 +64,9 @@ export default function CounterSalePage() {
   const [collectNow, setCollectNow] = useState(true);
   const [paymentMethod, setPaymentMethod] = useState("CASH");
 
+  // bill print — auto-opens the chosen format right after checkout
+  const [printFormat, setPrintFormat] = useState<"receipt" | "invoice" | "none">("receipt");
+
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -145,11 +148,10 @@ export default function CounterSalePage() {
   }, [lines, installOn, installCharge, discountType, discountValue]);
 
   const itemCount = lines.reduce((s, l) => s + (l.name.trim() ? l.qty : 0), 0);
-  const canSave = (!!adopted || !!phoneMatch || custName.trim().length > 0)
-    && (lines.some((l) => l.name.trim() && l.qty > 0) || (installOn && Number(installCharge) > 0));
+  // A walk-in needs no name — a nameless sale bills the canonical "Walk-in Customer".
+  const canSave = lines.some((l) => l.name.trim() && l.qty > 0) || (installOn && Number(installCharge) > 0);
 
   const save = async () => {
-    if (!adopted && !phoneMatch && !custName.trim()) { toast.error("Enter the customer's name."); return; }
     const validItems = lines.filter((l) => l.name.trim() && l.qty > 0);
     if (validItems.length === 0 && !(installOn && Number(installCharge) > 0)) { toast.error("Add at least one item."); return; }
     setSaving(true);
@@ -174,7 +176,8 @@ export default function CounterSalePage() {
         collectNow, paymentMethod: collectNow ? paymentMethod : null,
       });
       toast.success(`${created.invoiceNumber} saved${collectNow ? " · paid" : ""}.`);
-      navigate(`/billing/invoices/${created.id}`);
+      const printQ = printFormat === "none" ? "" : `?print=${printFormat}`;
+      navigate(`/billing/invoices/${created.id}${printQ}`);
     } catch (e) {
       toast.error(apiError(e, "Could not complete the sale."));
       setSaving(false);
@@ -283,8 +286,8 @@ export default function CounterSalePage() {
               ) : (
                 <div className="space-y-1.5">
                   <div className="grid grid-cols-2 gap-2">
-                    <Input value={custName} onChange={(e) => setCustName(e.target.value)} placeholder="Name" className="h-9" />
-                    <Input value={custPhone} onChange={(e) => setCustPhone(e.target.value)} placeholder="Phone" className="h-9" />
+                    <Input value={custName} onChange={(e) => setCustName(e.target.value)} placeholder="Name (optional)" className="h-9" />
+                    <Input value={custPhone} onChange={(e) => setCustPhone(e.target.value)} placeholder="Phone (optional)" className="h-9" />
                   </div>
                   {phoneMatch ? (
                     <button type="button" onClick={adoptCustomer}
@@ -357,7 +360,18 @@ export default function CounterSalePage() {
           </div>
 
           {/* checkout */}
-          <div className="border-t p-3">
+          <div className="border-t p-3 space-y-2.5">
+            <div className="flex items-center gap-2 text-xs text-slate-600">
+              <span className="shrink-0">Print bill</span>
+              <div className="ml-auto inline-flex rounded-md border overflow-hidden text-[11px]">
+                {([["receipt", "Receipt"], ["invoice", "A4"], ["none", "Off"]] as const).map(([v, label]) => (
+                  <button key={v} onClick={() => setPrintFormat(v)}
+                    className={`px-2.5 py-1 ${printFormat === v ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
             <Button className="w-full h-12 text-base" onClick={save} disabled={saving || !canSave}>
               {saving ? "Saving…" : collectNow ? `Charge ${currency(totals.grand)}` : `Save Bill · ${currency(totals.grand)}`}
             </Button>
