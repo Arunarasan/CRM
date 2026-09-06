@@ -16,7 +16,8 @@ interface Box { x: number; y: number; w: number; h: number; }
 
 const STAGE_MAX_W = 560;
 const STAGE_MAX_H = 380;
-const HANDLE = 12; // px hit target for resize handles
+const HANDLE = 14; // px visible size of a resize handle
+const HIT = 32;    // px touch/click hit target centred on each handle
 
 const ASPECTS: { label: string; value: number | null }[] = [
   { label: "Free", value: null },
@@ -73,6 +74,24 @@ export default function ImageEditor({
   const stageRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ mode: DragMode; startX: number; startY: number; box: Box } | null>(null);
 
+  // Track the viewport so the stage fits tablets/phones instead of overflowing the dialog.
+  const [viewport, setViewport] = useState(() =>
+    typeof window !== "undefined"
+      ? { w: window.innerWidth, h: window.innerHeight }
+      : { w: 1024, h: 768 });
+  useEffect(() => {
+    const onResize = () => setViewport({ w: window.innerWidth, h: window.innerHeight });
+    window.addEventListener("resize", onResize);
+    window.addEventListener("orientationchange", onResize);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("orientationchange", onResize);
+    };
+  }, []);
+  // Leave room for dialog padding (width) and the header + toolbars + footer (height).
+  const stageMaxW = Math.min(STAGE_MAX_W, viewport.w - 64);
+  const stageMaxH = Math.min(STAGE_MAX_H, Math.max(220, viewport.h - 360));
+
   // Load the source image whenever the modal opens with a (new) file.
   useEffect(() => {
     if (!open) return;
@@ -99,9 +118,9 @@ export default function ImageEditor({
   // Fit the oriented image into the stage; dispScale maps display px → oriented full-res px.
   const display = useMemo(() => {
     if (!oriented) return null;
-    const scale = Math.min(STAGE_MAX_W / oriented.w, STAGE_MAX_H / oriented.h, 1);
+    const scale = Math.min(stageMaxW / oriented.w, stageMaxH / oriented.h, 1);
     return { w: Math.round(oriented.w * scale), h: Math.round(oriented.h * scale), scale };
-  }, [oriented]);
+  }, [oriented, stageMaxW, stageMaxH]);
 
   // Draw the oriented preview into the visible canvas whenever the orientation changes.
   useEffect(() => {
@@ -165,11 +184,14 @@ export default function ImageEditor({
       setCrop(clampBox({ x, y, w, h }));
     };
     const onUp = () => { dragRef.current = null; };
-    window.addEventListener("pointermove", onMove);
+    // passive:false so the browser doesn't pre-empt the drag with a scroll gesture on touch.
+    window.addEventListener("pointermove", onMove, { passive: false });
     window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
     return () => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
     };
   }, [display, aspect, clampBox]);
 
@@ -231,7 +253,7 @@ export default function ImageEditor({
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onCancel(); }}>
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="max-w-3xl max-h-[92vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2"><CropIcon className="h-5 w-5" /> Edit image</DialogTitle>
           <DialogDescription>Crop, rotate and compress before uploading.</DialogDescription>
@@ -255,7 +277,7 @@ export default function ImageEditor({
                 <canvas ref={canvasRef} className="absolute inset-0 rounded" />
                 {crop && (
                   <div
-                    className="absolute cursor-move border-2 border-primary"
+                    className="absolute cursor-move border-2 border-primary touch-none"
                     style={{
                       left: crop.x, top: crop.y, width: crop.w, height: crop.h,
                       boxShadow: "0 0 0 9999px rgba(0,0,0,0.45)",
@@ -350,28 +372,37 @@ export default function ImageEditor({
   );
 }
 
-/** Resize handle positioned by compass direction over the crop box. */
+/**
+ * Resize handle positioned by compass direction over the crop box. A large transparent
+ * hit box (HIT) makes it comfortable to grab with a fingertip; a smaller dot (HANDLE) is
+ * what's actually drawn. touch-none stops the browser stealing the gesture as a scroll.
+ */
 function Handle({ pos, onPointerDown }: { pos: string; onPointerDown: (e: React.PointerEvent) => void }) {
-  const style: React.CSSProperties = { width: HANDLE, height: HANDLE };
   const cursor =
     pos === "n" || pos === "s" ? "ns-resize" :
     pos === "e" || pos === "w" ? "ew-resize" :
     pos === "nw" || pos === "se" ? "nwse-resize" : "nesw-resize";
+  // Centre the HIT box on the corner/edge of the crop box.
   const map: Record<string, React.CSSProperties> = {
-    nw: { left: -HANDLE / 2, top: -HANDLE / 2 },
-    n: { left: `calc(50% - ${HANDLE / 2}px)`, top: -HANDLE / 2 },
-    ne: { right: -HANDLE / 2, top: -HANDLE / 2 },
-    e: { right: -HANDLE / 2, top: `calc(50% - ${HANDLE / 2}px)` },
-    se: { right: -HANDLE / 2, bottom: -HANDLE / 2 },
-    s: { left: `calc(50% - ${HANDLE / 2}px)`, bottom: -HANDLE / 2 },
-    sw: { left: -HANDLE / 2, bottom: -HANDLE / 2 },
-    w: { left: -HANDLE / 2, top: `calc(50% - ${HANDLE / 2}px)` },
+    nw: { left: -HIT / 2, top: -HIT / 2 },
+    n: { left: `calc(50% - ${HIT / 2}px)`, top: -HIT / 2 },
+    ne: { right: -HIT / 2, top: -HIT / 2 },
+    e: { right: -HIT / 2, top: `calc(50% - ${HIT / 2}px)` },
+    se: { right: -HIT / 2, bottom: -HIT / 2 },
+    s: { left: `calc(50% - ${HIT / 2}px)`, bottom: -HIT / 2 },
+    sw: { left: -HIT / 2, bottom: -HIT / 2 },
+    w: { left: -HIT / 2, top: `calc(50% - ${HIT / 2}px)` },
   };
   return (
     <div
       onPointerDown={onPointerDown}
-      className="absolute rounded-sm border border-primary bg-white shadow"
-      style={{ ...style, ...map[pos], cursor }}
-    />
+      className="absolute flex items-center justify-center touch-none"
+      style={{ width: HIT, height: HIT, ...map[pos], cursor }}
+    >
+      <div
+        className="rounded-sm border border-primary bg-white shadow"
+        style={{ width: HANDLE, height: HANDLE }}
+      />
+    </div>
   );
 }
