@@ -143,6 +143,9 @@ public class ProjectService {
     @Autowired
     private com.arudra.crm.repository.ProjectReviewRepository projectReviewRepository;
 
+    @Autowired
+    private com.arudra.crm.repository.TaskMaterialUsageRepository taskMaterialUsageRepository;
+
     // ---- Public tracking link (share token) ----
 
     /** Ensures the project has a share token (older rows may predate the column) and returns it. */
@@ -213,6 +216,9 @@ public class ProjectService {
             case "UNASSIGNED":
                 result = projectRepository.findUnassignedTeam(s, pageRequest);
                 break;
+            case "DELAYED":
+                result = projectRepository.findDelayed(java.time.LocalDate.now(), s, pageRequest);
+                break;
             default:
                 result = s.isEmpty()
                         ? projectRepository.findAll(pageRequest)
@@ -249,6 +255,7 @@ public class ProjectService {
         counts.put("onHold", projectRepository.countByStatusCategory(STATUS_ON_HOLD));
         counts.put("completed", projectRepository.countByStatusCategory(STATUS_COMPLETED));
         counts.put("unassigned", projectRepository.countUnassignedTeam());
+        counts.put("delayed", projectRepository.countDelayed(java.time.LocalDate.now()));
         return counts;
     }
 
@@ -1142,6 +1149,36 @@ public class ProjectService {
         return new java.util.ArrayList<>(byProduct.values());
     }
 
+    /**
+     * Material actually consumed on this project's tasks — one row per usage record, carrying which
+     * product, how much, on which task, and who reported using it. This is the "material → task → person"
+     * traceability the Project Command Center surfaces (data comes from task_material_usage, recorded by
+     * field employees while executing tasks). Newest first.
+     */
+    public List<Map<String, Object>> getTaskMaterialUsage(Long projectId) {
+        return taskMaterialUsageRepository.findByTaskProjectIdOrderByUsedAtDesc(projectId).stream()
+                .map(u -> {
+                    Map<String, Object> m = new java.util.LinkedHashMap<>();
+                    Product p = u.getProduct();
+                    Task t = u.getTask();
+                    m.put("id", u.getId());
+                    m.put("productId", p != null ? p.getId() : null);
+                    m.put("productName", p != null ? p.getName() : null);
+                    m.put("materialCode", p != null ? p.getMaterialCode() : null);
+                    m.put("quantityUsed", u.getQuantityUsed());
+                    m.put("unit", u.getUnit() != null ? u.getUnit() : (p != null ? p.getUnit() : null));
+                    m.put("usedById", u.getUsedBy() != null ? u.getUsedBy().getId() : null);
+                    m.put("usedByName", u.getUsedBy() != null ? u.getUsedBy().getName() : null);
+                    m.put("usedAt", u.getUsedAt());
+                    m.put("remarks", u.getRemarks());
+                    m.put("taskId", t != null ? t.getId() : null);
+                    m.put("taskName", t != null ? t.getTaskName() : null);
+                    m.put("taskStatus", t != null ? t.getStatus() : null);
+                    return m;
+                })
+                .collect(java.util.stream.Collectors.toList());
+    }
+
     // =====================================================================
     // Daily log children (employees present / materials used / photos+videos)
     // =====================================================================
@@ -1609,6 +1646,16 @@ public class ProjectService {
      */
     @Transactional
     public Map<String, Object> reconcileProjectWithBoq(Long projectId, User user) {
+        return reconcileProjectWithBoq(projectId, user, true);
+    }
+
+    /**
+     * @param generateTasks when {@code false}, builds phases/rooms/work-items/materials from the BOQ
+     *        but creates NO tasks and touches no existing task — used at automatic project creation,
+     *        where projects deliberately get no automatic tasks. Manual "Generate from BOQ" passes true.
+     */
+    @Transactional
+    public Map<String, Object> reconcileProjectWithBoq(Long projectId, User user, boolean generateTasks) {
         Project project = getProjectById(projectId);
         Boq boq = project.getBoq();
         if (boq == null) {
@@ -1622,14 +1669,14 @@ public class ProjectService {
             List<BoqItem> items = allItems.stream()
                     .filter(i -> i.getPhase() != null && i.getPhase().getId().equals(boqPhase.getId()))
                     .toList();
-            reconcilePhaseBucket(project, boqPhase, items, counters);
+            reconcilePhaseBucket(project, boqPhase, items, counters, generateTasks);
         }
         // Items with no BOQ phase — the norm for measurement-generated BOQs, which carry floor/room
         // structure but no phases. Bucketed under a default project phase so generation still
         // produces rooms/tasks/materials instead of silently doing nothing.
         List<BoqItem> unphased = allItems.stream().filter(i -> i.getPhase() == null).toList();
         if (!unphased.isEmpty()) {
-            reconcilePhaseBucket(project, null, unphased, counters);
+            reconcilePhaseBucket(project, null, unphased, counters, generateTasks);
         }
 
         // Newly generated items start at 0% — recompute every room so stale room/phase/project
@@ -1656,8 +1703,9 @@ public class ProjectService {
         int phasesCreated, roomsCreated, tasksCreated, tasksCancelled, tasksReactivated, materialsCreated, materialsReleased;
     }
 
-    /** Reconciles one phase bucket: a real BoqPhase, or (boqPhase == null) the default bucket for unphased items. */
-    private void reconcilePhaseBucket(Project project, BoqPhase boqPhase, List<BoqItem> items, Counters counters) {
+    /** Reconciles one phase bucket: a real BoqPhase, or (boqPhase == null) the default bucket for unphased items.
+     *  {@code generateTasks=false} builds rooms/items/materials only — no task is created, reactivated or cancelled. */
+    private void reconcilePhaseBucket(Project project, BoqPhase boqPhase, List<BoqItem> items, Counters counters, boolean generateTasks) {
         ProjectPhase phase;
         boolean phaseActive;
         if (boqPhase != null) {
@@ -1698,15 +1746,17 @@ public class ProjectService {
                 boolean itemActive = phaseActive && !Boolean.FALSE.equals(boqItem.getIsActive());
 
                 if (!itemActive) {
-                    Task existingTask = taskRepository.findByGeneratedFromBoqItemId(boqItem.getId()).orElse(null);
-                    if (existingTask != null && !"CANCELLED".equals(existingTask.getStatus())) {
-                        existingTask.setStatus("CANCELLED");
-                        taskRepository.save(existingTask);
-                        counters.tasksCancelled++;
-                        if (existingTask.getAssignedEmployee() != null) {
-                            notificationService.dispatch("Task Cancelled",
-                                    "\"" + existingTask.getTaskName() + "\" was cancelled following a BOQ scope change.",
-                                    "TASK", existingTask.getAssignedEmployee().getId(), "/tasks/" + existingTask.getId());
+                    if (generateTasks) {
+                        Task existingTask = taskRepository.findByGeneratedFromBoqItemId(boqItem.getId()).orElse(null);
+                        if (existingTask != null && !"CANCELLED".equals(existingTask.getStatus())) {
+                            existingTask.setStatus("CANCELLED");
+                            taskRepository.save(existingTask);
+                            counters.tasksCancelled++;
+                            if (existingTask.getAssignedEmployee() != null) {
+                                notificationService.dispatch("Task Cancelled",
+                                        "\"" + existingTask.getTaskName() + "\" was cancelled following a BOQ scope change.",
+                                        "TASK", existingTask.getAssignedEmployee().getId(), "/tasks/" + existingTask.getId());
+                            }
                         }
                     }
                     continue;
@@ -1749,33 +1799,37 @@ public class ProjectService {
                 roomItem.setUnit(boqItem.getUnit());
                 roomItemRepository.save(roomItem);
 
-                Task task = taskRepository.findByGeneratedFromBoqItemId(boqItem.getId()).orElse(null);
-                if (task == null) {
-                    task = new Task();
-                    task.setProject(project);
-                    task.setPhase(phase);
-                    task.setRoom(room);
-                    task.setTaskName(boqItem.getItemName());
-                    task.setDescription(boqItem.getDescription());
-                    task.setPriority("MEDIUM");
-                    task.setStatus("PENDING");
-                    task.setGeneratedFromBoqItemId(boqItem.getId());
-                    taskRepository.save(task);
-                    taskChecklistService.ensureDefaultChecklist(task);
-                    counters.tasksCreated++;
-                } else {
-                    task.setTaskName(boqItem.getItemName());
-                    task.setDescription(boqItem.getDescription());
-                    if ("CANCELLED".equals(task.getStatus())) {
+                // Projects get no automatic tasks — skip all task creation/reactivation unless a PM
+                // explicitly asked to generate them (generateTasks). Rooms/items/materials still build.
+                if (generateTasks) {
+                    Task task = taskRepository.findByGeneratedFromBoqItemId(boqItem.getId()).orElse(null);
+                    if (task == null) {
+                        task = new Task();
+                        task.setProject(project);
+                        task.setPhase(phase);
+                        task.setRoom(room);
+                        task.setTaskName(boqItem.getItemName());
+                        task.setDescription(boqItem.getDescription());
+                        task.setPriority("MEDIUM");
                         task.setStatus("PENDING");
-                        counters.tasksReactivated++;
-                        if (task.getAssignedEmployee() != null) {
-                            notificationService.dispatch("Task Reactivated",
-                                    "\"" + task.getTaskName() + "\" is back in scope following a BOQ change.",
-                                    "TASK", task.getAssignedEmployee().getId(), "/tasks/" + task.getId());
+                        task.setGeneratedFromBoqItemId(boqItem.getId());
+                        taskRepository.save(task);
+                        taskChecklistService.ensureDefaultChecklist(task);
+                        counters.tasksCreated++;
+                    } else {
+                        task.setTaskName(boqItem.getItemName());
+                        task.setDescription(boqItem.getDescription());
+                        if ("CANCELLED".equals(task.getStatus())) {
+                            task.setStatus("PENDING");
+                            counters.tasksReactivated++;
+                            if (task.getAssignedEmployee() != null) {
+                                notificationService.dispatch("Task Reactivated",
+                                        "\"" + task.getTaskName() + "\" is back in scope following a BOQ change.",
+                                        "TASK", task.getAssignedEmployee().getId(), "/tasks/" + task.getId());
+                            }
                         }
+                        taskRepository.save(task);
                     }
-                    taskRepository.save(task);
                 }
 
                 for (BoqItemMaterial material : boqItemMaterialRepository.findByItemId(boqItem.getId())) {

@@ -21,6 +21,15 @@ const REPORTS: { key: ReportKey; label: string }[] = [
 const firstOfYear = () => `${new Date().getFullYear()}-01-01`;
 const today = () => new Date().toISOString().slice(0, 10);
 
+// Friendly labels for the consolidated expense sources.
+const SOURCE_LABEL: Record<string, string> = {
+  SUPPLIER_PAYMENTS: "Supplier / Goods",
+  CONTRACTOR_PAYMENTS: "Contractors",
+  PAYROLL: "Payroll / Salary",
+  PROJECT_EXPENSES: "Project Expenses",
+  COMPANY_OVERHEAD: "Company Overhead",
+};
+
 export default function FinanceReportsPage() {
   const [report, setReport] = useState<ReportKey>("revenue");
   const [from, setFrom] = useState(firstOfYear());
@@ -83,15 +92,15 @@ export default function FinanceReportsPage() {
       {loading && <div className="p-8 text-sm text-muted-foreground">Building report…</div>}
 
       {!loading && data && report === "revenue" && chart([
-        { key: "invoiced", name: "Invoiced", color: "#114f39" },
-        { key: "collected", name: "Collected", color: "#10b981" },
+        { key: "invoiced", name: "Invoiced", color: "#06452F" },
+        { key: "collected", name: "Collected", color: "#2F8F65" },
       ])}
 
       {!loading && data && report === "cashflow" && (
         <>
           {chart([
-            { key: "moneyIn", name: "Money In", color: "#10b981" },
-            { key: "moneyOut", name: "Money Out", color: "#f43f5e" },
+            { key: "moneyIn", name: "Money In", color: "#2F8F65" },
+            { key: "moneyOut", name: "Money Out", color: "#B94A48" },
           ])}
           <div className="bg-white border rounded-2xl shadow-sm overflow-x-auto">
             <table className="w-full text-sm min-w-[480px]">
@@ -114,20 +123,21 @@ export default function FinanceReportsPage() {
       )}
 
       {!loading && data && report === "pvs" && chart([
-        { key: "sales", name: "Sales (Invoices)", color: "#114f39" },
-        { key: "purchases", name: "Purchases (Bills)", color: "#f59e0b" },
+        { key: "sales", name: "Sales (Invoices)", color: "#06452F" },
+        { key: "purchases", name: "Purchases (Bills)", color: "#BC8748" },
       ])}
 
       {!loading && data && report === "expenses" && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="bg-white border rounded-2xl shadow-sm p-5">
-            <h3 className="font-bold text-slate-800 text-sm mb-4">Expenses by Category</h3>
+            <h3 className="font-bold text-slate-800 text-sm mb-1">Expenses by Source</h3>
+            <p className="text-xs text-muted-foreground mb-4">All money the company paid out (cash basis).</p>
             <div className="space-y-2">
-              {Object.entries((data.byCategory ?? {}) as Record<string, number>).map(([cat, amt]) => {
+              {Object.entries((data.bySource ?? {}) as Record<string, number>).map(([src, amt]) => {
                 const total = Number(data.total) || 1;
                 return (
-                  <div key={cat} className="flex items-center gap-3 text-sm">
-                    <span className="w-28 font-semibold text-slate-600">{stageLabel(cat)}</span>
+                  <div key={src} className="flex items-center gap-3 text-sm">
+                    <span className="w-36 font-semibold text-slate-600">{SOURCE_LABEL[src] ?? stageLabel(src)}</span>
                     <div className="flex-1 bg-slate-100 rounded-full h-2.5 overflow-hidden">
                       <div className="h-full bg-rose-500 rounded-full" style={{ width: `${(amt / total) * 100}%` }} />
                     </div>
@@ -140,19 +150,47 @@ export default function FinanceReportsPage() {
               <span>Total</span><span>{currency(Number(data.total))}</span>
             </div>
           </div>
+
+          {Object.keys((data.overheadByCategory ?? {}) as Record<string, number>).length > 0 && (
+            <div className="bg-white border rounded-2xl shadow-sm p-5">
+              <h3 className="font-bold text-slate-800 text-sm mb-1">Company Overhead by Category</h3>
+              <p className="text-xs text-muted-foreground mb-4">Rent, utilities, marketing & other charges.</p>
+              <div className="space-y-2">
+                {Object.entries((data.overheadByCategory ?? {}) as Record<string, number>).map(([cat, amt]) => (
+                  <div key={cat} className="flex items-center justify-between text-sm border-b last:border-0 py-1.5">
+                    <span className="font-semibold text-slate-600">{stageLabel(cat)}</span>
+                    <span className="font-bold">{currency(amt)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
       {!loading && data && report === "pnl" && (
         <div className="max-w-lg bg-white border rounded-2xl shadow-sm p-6">
-          <h3 className="font-bold text-slate-800 mb-4">Profit &amp; Loss · {String(data.from)} → {String(data.to)}</h3>
-          <dl className="space-y-2.5 text-sm">
-            <div className="flex justify-between"><dt>Revenue (Invoiced)</dt><dd className="font-bold text-emerald-700">{currencyFull(Number(data.revenue))}</dd></div>
-            <div className="flex justify-between"><dt>Project Expenses</dt><dd className="font-semibold text-rose-600">- {currencyFull(Number(data.projectExpenses))}</dd></div>
-            <div className="flex justify-between"><dt>Payroll</dt><dd className="font-semibold text-rose-600">- {currencyFull(Number(data.payroll))}</dd></div>
+          <h3 className="font-bold text-slate-800 mb-1">Profit &amp; Loss · {String(data.from)} → {String(data.to)}</h3>
+          <p className="text-xs text-muted-foreground mb-4">Cash basis — money actually received vs money paid out.</p>
+          <dl className="space-y-2 text-sm">
+            <div className="text-[11px] uppercase font-bold text-slate-400 tracking-wide">Income</div>
+            <div className="flex justify-between"><dt>Customer Collections</dt><dd className="font-semibold text-emerald-700">{currencyFull(Number(data.collections))}</dd></div>
+            <div className="flex justify-between"><dt>Other Income</dt><dd className="font-semibold text-emerald-700">{currencyFull(Number(data.otherIncome))}</dd></div>
+            <div className="flex justify-between border-t pt-2"><dt className="font-bold">Total Income</dt><dd className="font-bold text-emerald-700">{currencyFull(Number(data.totalIncome))}</dd></div>
+
+            <div className="text-[11px] uppercase font-bold text-slate-400 tracking-wide pt-3">Expenses</div>
+            {Object.entries((data.expensesBySource ?? {}) as Record<string, number>).map(([src, amt]) => (
+              <div key={src} className="flex justify-between"><dt>{SOURCE_LABEL[src] ?? stageLabel(src)}</dt>
+                <dd className="font-semibold text-rose-600">- {currencyFull(Number(amt))}</dd></div>
+            ))}
+            <div className="flex justify-between border-t pt-2"><dt className="font-bold">Total Expenses</dt><dd className="font-bold text-rose-600">- {currencyFull(Number(data.totalExpenses))}</dd></div>
+
             <div className="flex justify-between border-t pt-3 text-base">
               <dt className="font-black">Net Profit</dt>
               <dd className={`font-black ${Number(data.netProfit) >= 0 ? "text-emerald-700" : "text-red-600"}`}>{currencyFull(Number(data.netProfit))}</dd>
+            </div>
+            <div className="flex justify-between text-xs text-muted-foreground pt-1">
+              <dt>Invoiced (accrual, for reference)</dt><dd>{currencyFull(Number(data.invoiced))}</dd>
             </div>
           </dl>
         </div>

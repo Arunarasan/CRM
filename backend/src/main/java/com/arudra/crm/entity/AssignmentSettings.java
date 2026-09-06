@@ -26,6 +26,13 @@ public class AssignmentSettings extends BaseEntity {
     @Column(name = "max_active_tasks", nullable = false)
     private Integer maxActiveTasks = 3;
 
+    /**
+     * Minutes a quick data-entry lead task may sit CLAIMED-but-not-STARTED before it is auto-released
+     * back to the shared task board (pool). 0 disables the auto-release. See TaskClaimExpiryScheduler.
+     */
+    @Column(name = "data_entry_hold_minutes", nullable = false)
+    private Integer dataEntryHoldMinutes = 10;
+
     @Column(name = "max_working_hours", nullable = false, precision = 5, scale = 2)
     private BigDecimal maxWorkingHours = new BigDecimal("8.00");
 

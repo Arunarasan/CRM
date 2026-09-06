@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { HTMLAttributes, ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -28,6 +28,8 @@ interface ResponsiveListProps<T> {
   /** Card body for a single row on phones. */
   renderCard: (row: T) => ReactNode;
   onRowClick?: (row: T) => void;
+  /** Extra props (e.g. hover-info bindings) applied to each desktop table row. */
+  getRowProps?: (row: T) => HTMLAttributes<HTMLTableRowElement>;
   loading?: boolean;
   skeletonRows?: number;
   emptyIcon: LucideIcon;
@@ -37,7 +39,7 @@ interface ResponsiveListProps<T> {
 }
 
 export default function ResponsiveList<T>({
-  items, columns, getRowKey, renderCard, onRowClick,
+  items, columns, getRowKey, renderCard, onRowClick, getRowProps,
   loading = false, skeletonRows = 6,
   emptyIcon, emptyTitle, emptyDescription, emptyAction,
 }: ResponsiveListProps<T>) {
@@ -76,6 +78,7 @@ export default function ResponsiveList<T>({
                   key={getRowKey(row)}
                   className={onRowClick ? "cursor-pointer" : undefined}
                   onClick={onRowClick ? () => onRowClick(row) : undefined}
+                  {...(getRowProps ? getRowProps(row) : {})}
                 >
                   {columns.map((c) => (
                     <TableCell key={c.key} className={c.cellClassName}>{c.cell(row)}</TableCell>

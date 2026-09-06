@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader } from "@/components/ui/card";
 import { ShieldAlert, Loader2 } from "lucide-react";
 import api from "@/lib/api";
+import Logo from "@/components/brand/Logo";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -56,8 +57,8 @@ export default function Login() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-muted/40 p-4">
       <Card className="w-full max-w-md shadow-lg">
-        <CardHeader className="space-y-1 text-center">
-          <CardTitle className="text-2xl font-bold tracking-tight">Arudra CRM</CardTitle>
+        <CardHeader className="space-y-2 text-center items-center">
+          <Logo size="lg" />
           <CardDescription>
             Enter your credentials to access your account
           </CardDescription>

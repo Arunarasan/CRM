@@ -15,7 +15,7 @@ import { leadApi } from "./leads/leadApi";
 import {
   LEAD_STAGES, LEAD_STATUSES, PRIORITY_STYLES, TEMPERATURE_STYLES,
   formatDate, formatINR, statusStyle,
-  type Lead, type UserSummary,
+  type Lead, type UserSummary, type LeadCreator,
 } from "./leads/constants";
 import { SelectField, TextAreaField, selectClass } from "./leads/fields";
 import { useGoBack } from "@/hooks/useGoBack";
@@ -24,7 +24,9 @@ import ConvertLeadDialog from "./leads/ConvertLeadDialog";
 import NextStepBanner from "./leads/NextStepBanner";
 import { useLeadJourney, type JourneyStepId } from "./leads/journey";
 import OverviewTab from "./leads/tabs/OverviewTab";
+import EntityDailyReports from "@/components/hr/EntityDailyReports";
 import SalesJourneyTab from "./leads/tabs/SalesJourneyTab";
+import LeadTasksHub from "./leads/tabs/LeadTasksHub";
 import ActivityTab from "./leads/tabs/ActivityTab";
 import DocumentsTab from "./leads/tabs/DocumentsTab";
 import TimelineTab from "./leads/tabs/TimelineTab";
@@ -34,11 +36,11 @@ const TAB_TRIGGER_CLASS =
 
 // The consolidated tab set. Old deep-links (?tab=measurements, ?tab=followups, …) still resolve
 // to the new home so bookmarks and cross-page links keep working after the tab collapse.
-const TABS = ["overview", "journey", "activity", "documents", "timeline"] as const;
+const TABS = ["overview", "journey", "tasks", "activity", "documents", "timeline"] as const;
 const LEGACY_TAB_MAP: Record<string, string> = {
   customer: "overview", requirements: "overview",
   sitevisits: "journey", measurements: "journey", boqs: "journey", quotations: "journey",
-  projects: "journey", tasks: "journey", taskdata: "journey",
+  projects: "journey", taskdata: "tasks",
   followups: "activity", communication: "activity", notes: "activity",
 };
 function normalizeTab(t: string) {
@@ -50,6 +52,7 @@ export default function LeadProfile() {
   const [searchParams] = useSearchParams();
   const goBack = useGoBack("/leads");
   const [lead, setLead] = useState<Lead | null>(null);
+  const [creator, setCreator] = useState<LeadCreator | null>(null);
   const [users, setUsers] = useState<UserSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(normalizeTab(searchParams.get("tab") || "overview"));
@@ -80,7 +83,8 @@ export default function LeadProfile() {
   useEffect(() => {
     fetchLead();
     leadApi.assignableUsers().then((res) => setUsers(res.data)).catch(console.error);
-  }, [fetchLead]);
+    if (id) leadApi.createdBy(id).then((res) => setCreator(res.data)).catch(() => setCreator(null));
+  }, [fetchLead, id]);
 
   if (loading) {
     return (
@@ -140,6 +144,13 @@ export default function LeadProfile() {
                 </a>
               )}
               {lead.leadSource && <span>Source: {lead.leadSource}</span>}
+              {(creator?.name || lead.leadOwner?.name) && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-700 font-medium">
+                  {creator?.fromEmployeePortal ? "Added by employee:" : "Added by:"} {creator?.name || lead.leadOwner?.name}
+                  {creator?.employeeCode && <span className="text-emerald-600/80">· {creator.employeeCode}</span>}
+                  {creator?.designation && <span className="text-emerald-600/60">· {creator.designation}</span>}
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -241,8 +252,8 @@ export default function LeadProfile() {
         <div className="overflow-x-auto pb-2">
           <TabsList className="w-full justify-start border-b rounded-none pb-px bg-transparent h-auto p-0 space-x-6 min-w-max flex">
             {[
-              ["overview", "Overview"], ["journey", "Sales Journey"], ["activity", "Activity"],
-              ["documents", "Documents"], ["timeline", "Timeline"],
+              ["overview", "Overview"], ["journey", "Sales Journey"], ["tasks", "Tasks"],
+              ["activity", "Activity"], ["documents", "Documents"], ["timeline", "Timeline"],
             ].map(([value, label]) => (
               <TabsTrigger key={value} value={value} className={TAB_TRIGGER_CLASS}>{label}</TabsTrigger>
             ))}
@@ -266,8 +277,12 @@ export default function LeadProfile() {
               onConvert={() => setConvertOpen(true)}
             />
           </TabsContent>
-          <TabsContent value="activity">
+          <TabsContent value="tasks">
+            <LeadTasksHub leadId={id} users={users} />
+          </TabsContent>
+          <TabsContent value="activity" className="space-y-4">
             <ActivityTab leadId={id} onChanged={fetchLead} />
+            <EntityDailyReports leadId={Number(id)} title="Field Daily Reports for this Lead" />
           </TabsContent>
           <TabsContent value="documents">
             <DocumentsTab leadId={id} />

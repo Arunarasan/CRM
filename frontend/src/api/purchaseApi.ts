@@ -2,7 +2,8 @@ import api from '../lib/api';
 import {
   Supplier, SupplierProfile, PurchaseRequest, PurchaseOrder, PurchaseOrderItem,
   GoodsReceiptNote, GoodsReceiptNoteItem, GrnPhoto, PurchaseBill, PurchasePayment,
-  PurchaseReturn, PurchaseReturnItem, PurchaseDashboard, PriceComparisonRow,
+  PurchaseReturn, PurchaseReturnItem, PurchaseDashboard, PriceComparisonRow, PurchaseOverview,
+  GoodsReceiptLogPage,
 } from '../types/purchase';
 
 // Thin typed wrapper around /api/purchases and the purchase-scoped /api/reports endpoints —
@@ -21,6 +22,7 @@ export const purchaseApi = {
     api.get<Supplier[]>(`${BASE}/suppliers${search ? `?search=${encodeURIComponent(search)}` : ''}`).then((r) => r.data),
   getSupplier: (id: number) => api.get<Supplier>(`${BASE}/suppliers/${id}`).then((r) => r.data),
   getSupplierProfile: (id: number) => api.get<SupplierProfile>(`${BASE}/suppliers/${id}/profile`).then((r) => r.data),
+  paySupplier: (id: number, payment: Record<string, unknown>) => api.post(`${BASE}/suppliers/${id}/pay`, payment).then((r) => r.data),
   createSupplier: (supplier: Partial<Supplier>) => api.post<Supplier>(`${BASE}/suppliers`, supplier).then((r) => r.data),
   updateSupplier: (id: number, supplier: Partial<Supplier>) => api.put<Supplier>(`${BASE}/suppliers/${id}`, supplier).then((r) => r.data),
 
@@ -84,12 +86,22 @@ export const purchaseApi = {
     api.post<GoodsReceiptNote>(`${BASE}/grns/${grnId}/quality-check`, { qcStatus, reason, remarks }).then((r) => r.data),
   approveGrn: (grnId: number) => api.post<GoodsReceiptNote>(`${BASE}/grns/${grnId}/approve`).then((r) => r.data),
 
+  // Goods-receipt approval log (admin audit)
+  getGoodsReceiptLogs: (params: { approvedById?: number; page?: number; size?: number } = {}) => {
+    const q = new URLSearchParams();
+    if (params.approvedById) q.set('approvedById', String(params.approvedById));
+    q.set('page', String(params.page ?? 0));
+    q.set('size', String(params.size ?? 20));
+    return api.get<GoodsReceiptLogPage>(`${BASE}/goods-receipt-logs?${q.toString()}`).then((r) => r.data);
+  },
+
   // Bills & payments
   getAllBills: () => api.get<PurchaseBill[]>(`${BASE}/bills`).then((r) => r.data),
   getBillsForPo: (poId: number) => api.get<PurchaseBill[]>(`${BASE}/orders/${poId}/bills`).then((r) => r.data),
   createBill: (bill: Record<string, unknown>) => api.post<PurchaseBill>(`${BASE}/bills`, bill).then((r) => r.data),
   getAllPayments: () => api.get<PurchasePayment[]>(`${BASE}/payments`).then((r) => r.data),
   getPaymentsForBill: (billId: number) => api.get<PurchasePayment[]>(`${BASE}/bills/${billId}/payments`).then((r) => r.data),
+  getPaymentsForPo: (poId: number) => api.get<PurchasePayment[]>(`${BASE}/orders/${poId}/payments`).then((r) => r.data),
   addPayment: (payment: Record<string, unknown>) => api.post<PurchasePayment>(`${BASE}/payments`, payment).then((r) => r.data),
 
   // Returns
@@ -106,6 +118,7 @@ export const purchaseApi = {
     if (to) query.set('to', to);
     return api.get(`/reports/purchases/summary?${query.toString()}`).then((r) => r.data);
   },
+  getPurchaseOverview: () => api.get(`/reports/purchases/overview`).then((r) => r.data as PurchaseOverview),
   getSupplierPerformance: () => api.get(`/reports/purchases/supplier-performance`).then((r) => r.data),
   getPendingDeliveries: () => api.get(`/reports/purchases/pending-deliveries`).then((r) => r.data),
   getOutstandingPayments: () => api.get(`/reports/purchases/outstanding-payments`).then((r) => r.data),

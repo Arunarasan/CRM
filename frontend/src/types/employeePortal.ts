@@ -203,6 +203,36 @@ export interface EmployeeDocumentEntry {
   uploadedDate: string | null;
 }
 
+/** An employee self-edit awaiting (or resolved by) admin approval. */
+export interface ProfileChangeRequest {
+  id: number;
+  changeType: 'PROFILE' | 'DOCUMENT';
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  proposedPhone: string | null;
+  proposedEmergencyName: string | null;
+  proposedEmergencyPhone: string | null;
+  proposedPhotoUrl: string | null;
+  docName: string | null;
+  docType: string | null;
+  docFileUrl: string | null;
+  reviewRemarks: string | null;
+  reviewedAt: string | null;
+  createdAt: string | null;
+}
+
+export interface ProfileChangeBody {
+  phone?: string;
+  emergencyContactName?: string;
+  emergencyContactPhone?: string;
+  profilePhotoUrl?: string;
+}
+
+export interface DocumentSubmitBody {
+  documentName: string;
+  documentType: string;
+  fileUrl: string;
+}
+
 export interface MyProject {
   id: number;
   projectName: string;
@@ -353,6 +383,7 @@ export interface DailyReportEntry {
 
 export interface DailyReportCreateBody {
   projectId?: number | null;
+  leadId?: number | null;
   taskId?: number | null;
   reportDate?: string;
   todaysWork?: string;
@@ -473,4 +504,49 @@ export interface PayrollRequestCreateBody {
   targetYear?: number;
   loanId?: number;
   advanceId?: number;
+}
+
+// --- Goods receipt (portal) ---
+export interface IncomingReceiptLine {
+  productId: number;
+  productName: string;
+  unit?: string | null;
+  ordered: number;
+  received: number;
+  outstanding: number;
+}
+
+export interface IncomingReceiptPo {
+  purchaseOrderId: number;
+  poNumber: string;
+  supplierName?: string | null;
+  status: string;
+  expectedDeliveryDate?: string | null;
+  warehouseId?: number | null;
+  warehouseName?: string | null;
+  items: IncomingReceiptLine[];
+}
+
+export interface ReceiptWarehouse { id: number; name: string }
+
+export interface GoodsReceiptSubmission {
+  purchaseOrderId: number;
+  warehouseId?: number | null;
+  supplierInvoiceNumber?: string | null;
+  vehicleNumber?: string | null;
+  qcStatus?: string;
+  qcRemarks?: string | null;
+  notes?: string | null;
+  photoUrls?: string[];
+  items: { productId: number; receivedQuantity: number; damagedQuantity?: number; remarks?: string | null }[];
+}
+
+export interface MyReceipt {
+  id: number;
+  grnNumber: string;
+  status: string;
+  qcStatus?: string;
+  date?: string;
+  warehouse?: { name?: string } | null;
+  purchaseOrder?: { id?: number; poNumber?: string } | null;
 }

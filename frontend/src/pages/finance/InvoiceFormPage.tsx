@@ -22,7 +22,7 @@ const blankLine = (): Line => ({ key: keySeed++, description: "", hsnCode: "", u
 
 export default function InvoiceFormPage() {
   const navigate = useNavigate();
-  const goBack = useGoBack("/finance/invoices");
+  const goBack = useGoBack("/billing/invoices");
 
   const [customers, setCustomers] = useState<CustomerLite[]>([]);
   const [projects, setProjects] = useState<ProjectLite[]>([]);
@@ -88,7 +88,7 @@ export default function InvoiceFormPage() {
       }));
       const created = await financeApi.createInvoice(invoice, items);
       toast.success(`${created.invoiceNumber} created as a draft.`);
-      navigate(`/finance/invoices/${created.id}`);
+      navigate(`/billing/invoices/${created.id}`);
     } catch (e) {
       toast.error(apiError(e, "Could not create the invoice."));
       setSaving(false);

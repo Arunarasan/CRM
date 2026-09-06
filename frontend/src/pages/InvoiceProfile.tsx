@@ -4,5 +4,5 @@ import { Navigate, useParams } from "react-router-dom";
 // module, so forward to the Finance invoice detail page, preserving the id.
 export default function InvoiceProfile() {
   const { id } = useParams();
-  return <Navigate to={id ? `/finance/invoices/${id}` : "/finance/invoices"} replace />;
+  return <Navigate to={id ? `/billing/invoices/${id}` : "/billing/invoices"} replace />;
 }

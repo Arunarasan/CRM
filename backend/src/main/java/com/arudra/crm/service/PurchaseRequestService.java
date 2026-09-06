@@ -331,7 +331,9 @@ public class PurchaseRequestService {
     // annotation never applies (self-invocation) and lazy Product proxies would explode.
     // Daily reorder scan (was every 30 min — far more often than reorder decisions actually change,
     // which just churned notifications). A PENDING purchase request already blocks re-drafting.
-    @Scheduled(cron = "0 15 8 * * *")
+    // Auto-drafting disabled 2026-08-29: low stock is now a live pick-list shown while BUILDING a
+    // purchase order (see /reports/purchases/overview buyNow), not a background PR generator. The
+    // scan method is kept for the manual on-demand endpoint but no longer runs on a schedule.
     @Transactional
     public void scanLowStock() {
         runScan();

@@ -34,10 +34,12 @@ import ApprovalsTab from "@/pages/projectCommandCenter/tabs/ApprovalsTab";
 import ChangeRequestsTab from "@/pages/projectCommandCenter/tabs/ChangeRequestsTab";
 import DailyLogsTab from "@/pages/projectCommandCenter/tabs/DailyLogsTab";
 import FieldProgressTab from "@/pages/projectCommandCenter/tabs/FieldProgressTab";
+import EntityDailyReports from "@/components/hr/EntityDailyReports";
 import QualityTab from "@/pages/projectCommandCenter/tabs/QualityTab";
 import IssuesRisksTab from "@/pages/projectCommandCenter/tabs/IssuesRisksTab";
 import DocumentsTab from "@/pages/projectCommandCenter/tabs/DocumentsTab";
 import LabourTab from "@/pages/projectCommandCenter/tabs/LabourTab";
+import ServiceWarrantyTab from "@/pages/projectCommandCenter/tabs/ServiceWarrantyTab";
 import TrackingLinkDialog from "@/components/projects/TrackingLinkDialog";
 import ResourceSelect, { ResourceSelection } from "@/components/workforce/ResourceSelect";
 import { ResourceType } from "@/types/workforce";
@@ -84,8 +86,8 @@ const progressBarColor = (pct: number) => pct >= 100 ? 'bg-emerald-500' : pct >=
 const TAB_GROUPS: { id: string; label: string; sections: [string, string][] }[] = [
   { id: "overview", label: "Overview", sections: [["overview", "Overview"]] },
   { id: "execution", label: "Execution", sections: [
-    ["phases", "Phases & Rooms"], ["execution", "Daily Logs"], ["fieldProgress", "Tasks"],
-    ["quality", "Quality Control"], ["issues", "Issues & Risks"],
+    ["phases", "Phases & Rooms"], ["execution", "Daily Logs & Reports"],
+    ["fieldProgress", "Tasks"], ["quality", "Quality & Issues"],
   ] },
   { id: "commercial", label: "Commercial", sections: [
     ["payments", "Payments & Invoices"], ["approvals", "Approvals"], ["changeRequests", "Change Requests"],
@@ -94,6 +96,8 @@ const TAB_GROUPS: { id: string; label: string; sections: [string, string][] }[] 
     ["materials", "Materials"], ["contractors", "Contractors"], ["labour", "Labour"],
   ] },
   { id: "documents", label: "Documents", sections: [["media", "Documents"]] },
+  // Shown only once the project is COMPLETED (see the tab-strip filter below).
+  { id: "service", label: "Service & Warranty", sections: [["serviceWarranty", "Service & Warranty"]] },
 ];
 const groupOf = (section: string) =>
   TAB_GROUPS.find((g) => g.sections.some(([v]) => v === section)) || TAB_GROUPS[0];
@@ -150,6 +154,7 @@ export default function ProjectCommandCenter() {
   const [warehouses, setWarehouses] = useState<any[]>([]);
   const [materialTransactions, setMaterialTransactions] = useState<any[]>([]);
   const [purchaseSummary, setPurchaseSummary] = useState<any[]>([]);
+  const [materialUsage, setMaterialUsage] = useState<any[]>([]);
   const [stockMove, setStockMove] = useState<{ open: boolean; direction: 'IN' | 'OUT'; productId: string; type: string; quantity: number; warehouseId: string; reference: string }>(
     { open: false, direction: 'IN', productId: '', type: 'PURCHASE', quantity: 1, warehouseId: '', reference: '' });
   const [newProduct, setNewProduct] = useState({ open: false, name: '', unit: '', costPrice: '', sellingPrice: '', brand: '' });
@@ -212,6 +217,7 @@ export default function ProjectCommandCenter() {
     inventoryApi.getWarehouses().then(setWarehouses).catch(() => {});
     projectApi.getMaterialTransactions(projectId).then(setMaterialTransactions).catch(() => {});
     projectApi.getMaterialPurchaseSummary(projectId).then(setPurchaseSummary).catch(() => {});
+    projectApi.getTaskMaterialUsage(projectId).then(setMaterialUsage).catch(() => {});
     changeRequestApi.getByProject(projectId).then(setChangeRequests).catch(err => console.error("Failed to fetch change requests", err));
     api.get(`/tasks/project/${projectId}`).then(res => setFieldTasks(res.data)).catch(err => console.error("Failed to fetch field tasks", err));
   };
@@ -448,6 +454,7 @@ export default function ProjectCommandCenter() {
     projectApi.getMaterials(projectId).then(setMaterials).catch(() => {});
     projectApi.getMaterialTransactions(projectId).then(setMaterialTransactions).catch(() => {});
     projectApi.getMaterialPurchaseSummary(projectId).then(setPurchaseSummary).catch(() => {});
+    projectApi.getTaskMaterialUsage(projectId).then(setMaterialUsage).catch(() => {});
   };
 
   const openStockMove = (direction: 'IN' | 'OUT', productId?: number) => {
@@ -529,11 +536,28 @@ export default function ProjectCommandCenter() {
       .catch(_err => toast.error("Failed to add stage"));
   };
 
-  const handleCompleteProject = () => {
-    if (confirm("Mark this project as COMPLETED?")) {
-      api.post(`/projects/${id}/complete`, { certificate: "placeholder-cert-data" })
-        .then(() => fetchProjectData())
-        .catch(_err => toast.error("Failed to complete project"));
+  const handleCompleteProject = async () => {
+    if (!confirm("Mark this project as COMPLETED?")) return;
+    try {
+      await api.post(`/projects/${id}/complete`, { certificate: "placeholder-cert-data" });
+      await fetchProjectData();
+      toast.success("Project marked completed");
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || "Failed to complete project";
+      // The completion gate rejects with a readiness summary; let an approver override the checklist.
+      if (/ready to complete/i.test(msg)) {
+        if (confirm(`${msg}\n\nComplete anyway (override the readiness checklist)?`)) {
+          try {
+            await api.post(`/projects/${id}/complete`, { certificate: "placeholder-cert-data", force: "true" });
+            await fetchProjectData();
+            toast.success("Project marked completed");
+          } catch (e: any) {
+            toast.error(e?.response?.data?.message || "Failed to complete project");
+          }
+        }
+      } else {
+        toast.error(msg);
+      }
     }
   };
 
@@ -765,7 +789,7 @@ export default function ProjectCommandCenter() {
               <div className="mb-6 space-y-2">
                 {/* Primary strip — the 5 areas of work */}
                 <div className="bg-white p-1 border border-slate-100 shadow-[0_1px_2px_rgba(0,0,0,0.03)] rounded-2xl flex flex-wrap w-full lg:w-fit gap-1 justify-start">
-                  {TAB_GROUPS.map((g) => {
+                  {TAB_GROUPS.filter((g) => g.id !== "service" || project.status === "COMPLETED").map((g) => {
                     const isActive = g.id === active.id;
                     return (
                       <button
@@ -796,7 +820,7 @@ export default function ProjectCommandCenter() {
                           className={`rounded-lg px-3 py-1 text-xs font-medium transition flex items-center gap-1.5 shrink-0 ${isActive ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200" : "text-slate-500 hover:bg-slate-50"}`}
                         >
                           {label}
-                          {value === "issues" && issueCount > 0 && (
+                          {value === "quality" && issueCount > 0 && (
                             <span className="bg-red-100 text-red-600 px-1.5 rounded-full text-[10px] font-bold">{issueCount}</span>
                           )}
                         </button>
@@ -1510,6 +1534,54 @@ export default function ProjectCommandCenter() {
                 </div>
               </div>
 
+              {/* MATERIAL USAGE — which material, which task, who used it */}
+              <div className="bg-white border border-slate-100 rounded-2xl shadow-[0_1px_2px_rgba(0,0,0,0.03)] overflow-hidden">
+                <div className="p-4 border-b bg-slate-50 flex items-center justify-between">
+                  <h3 className="font-bold text-slate-800 flex items-center"><Package className="w-4 h-4 mr-2 text-emerald-600"/> Material Usage — by Task &amp; Person</h3>
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">{materialUsage.length} record{materialUsage.length === 1 ? '' : 's'}</span>
+                </div>
+                <div className="max-h-[420px] overflow-y-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-white text-xs font-bold text-slate-500 uppercase sticky top-0">
+                      <tr>
+                        <th className="text-left p-3">Material</th>
+                        <th className="text-left p-3">Used on Task</th>
+                        <th className="text-left p-3">Used By</th>
+                        <th className="text-right p-3">Qty</th>
+                        <th className="text-left p-3">Date</th>
+                        <th className="text-left p-3">Remarks</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {materialUsage.map((u: any) => (
+                        <tr key={u.id} className="border-t hover:bg-slate-50/60">
+                          <td className="p-3 font-medium text-slate-800">{u.productName}<div className="text-[11px] text-slate-400">{u.materialCode}</div></td>
+                          <td className="p-3">
+                            {u.taskId ? (
+                              <button
+                                type="button"
+                                onClick={() => navigate(`/projects/${projectId}/tasks/${u.taskId}`)}
+                                className="text-emerald-700 hover:underline font-medium text-left"
+                              >
+                                {u.taskName || `Task #${u.taskId}`}
+                              </button>
+                            ) : <span className="text-slate-400">—</span>}
+                            {u.taskStatus && <div className="text-[11px] text-slate-400">{u.taskStatus}</div>}
+                          </td>
+                          <td className="p-3 text-slate-700">{u.usedByName || <span className="text-slate-400">—</span>}</td>
+                          <td className="p-3 text-right font-bold text-red-500">−{Number(u.quantityUsed || 0).toLocaleString('en-IN')} {u.unit}</td>
+                          <td className="p-3 text-xs text-slate-500">{u.usedAt ? format(new Date(u.usedAt), 'MMM d, HH:mm') : '-'}</td>
+                          <td className="p-3 text-xs text-slate-500 max-w-[220px] truncate" title={u.remarks || ''}>{u.remarks || '—'}</td>
+                        </tr>
+                      ))}
+                      {materialUsage.length === 0 && (
+                        <tr><td colSpan={6} className="text-center text-slate-400 py-10">No material usage reported on this project's tasks yet.<div className="text-xs mt-1">Field employees log consumption while executing a task; it appears here.</div></td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
               {/* STOCK MOVEMENT DIALOG */}
               <Dialog open={stockMove.open} onOpenChange={(o) => setStockMove(s => ({ ...s, open: o }))}>
                 <DialogContent>
@@ -1603,9 +1675,12 @@ export default function ProjectCommandCenter() {
               <ChangeRequestsTab projectId={projectId} phases={phases} changeRequests={changeRequests} onChangeRequestsChanged={() => changeRequestApi.getByProject(projectId).then(setChangeRequests)} onFullRefresh={fetchProjectData} />
             </TabsContent>
 
-            {/* EXECUTION LOGS TAB */}
-            <TabsContent value="execution" className="space-y-6 mt-0 h-full outline-none">
+            {/* DAILY LOGS & REPORTS — the site's execution logs + the employees' submitted daily reports, together */}
+            <TabsContent value="execution" className="space-y-8 mt-0 h-full outline-none">
               <DailyLogsTab projectId={projectId} dailyLogs={dailyLogs} onChanged={fetchCore} />
+              <div className="border-t border-slate-100 pt-8">
+                <EntityDailyReports projectId={projectId} />
+              </div>
             </TabsContent>
 
             {/* FIELD PROGRESS TAB — read-only view into the mobile Employee Task module (manager: live progress + employee timeline) */}
@@ -1623,19 +1698,22 @@ export default function ProjectCommandCenter() {
               <LabourTab projectId={projectId} onManageTasks={() => setActiveTab("fieldProgress")} />
             </TabsContent>
 
-            {/* QUALITY CONTROL TAB */}
-            <TabsContent value="quality" className="space-y-6 mt-0 h-full outline-none">
+            {/* QUALITY & ISSUES — inspections plus issues/risks, together */}
+            <TabsContent value="quality" className="space-y-8 mt-0 h-full outline-none">
               <QualityTab projectId={projectId} qualityChecks={qualityChecks} onChanged={fetchCore} />
-            </TabsContent>
-
-            {/* ISSUES & RISKS TAB */}
-            <TabsContent value="issues" className="space-y-8 mt-0 h-full outline-none">
-              <IssuesRisksTab projectId={projectId} issues={issues} risks={risks} onChanged={fetchCore} onStatsChanged={fetchStats} />
+              <div className="border-t border-slate-100 pt-8">
+                <IssuesRisksTab projectId={projectId} issues={issues} risks={risks} onChanged={fetchCore} onStatsChanged={fetchStats} />
+              </div>
             </TabsContent>
 
             {/* MEDIA TAB */}
             <TabsContent value="media" className="mt-0 h-full outline-none">
               <DocumentsTab projectId={projectId} documents={documents} onChanged={fetchCore} />
+            </TabsContent>
+
+            {/* SERVICE & WARRANTY TAB (completed projects) */}
+            <TabsContent value="serviceWarranty" className="mt-0 h-full outline-none">
+              <ServiceWarrantyTab projectId={Number(projectId)} />
             </TabsContent>
 
 

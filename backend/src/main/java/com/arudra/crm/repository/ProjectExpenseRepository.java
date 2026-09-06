@@ -25,6 +25,12 @@ public interface ProjectExpenseRepository extends JpaRepository<ProjectExpense, 
     /** Idempotency key for auto-synced rows. */
     Optional<ProjectExpense> findBySourceAndReferenceIdAndIsDeletedFalse(String source, Long referenceId);
 
+    /**
+     * Live rows of one source within a date window. The Cash Book uses this for MANUAL rows only —
+     * synced rows (purchase/contractor/salary) would double-count against those modules' own payments.
+     */
+    List<ProjectExpense> findBySourceAndExpenseDateBetweenAndIsDeletedFalse(String source, LocalDate from, LocalDate to);
+
     @Query("select coalesce(sum(e.amount), 0) from ProjectExpense e " +
            "where e.project.id = :projectId and e.isDeleted = false")
     BigDecimal totalForProject(@Param("projectId") Long projectId);

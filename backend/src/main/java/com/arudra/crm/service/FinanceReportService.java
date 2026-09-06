@@ -5,6 +5,7 @@ import com.arudra.crm.repository.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -25,6 +26,7 @@ public class FinanceReportService {
     @Autowired private SalaryRecordRepository salaryRecordRepository;
     @Autowired private PurchaseBillRepository purchaseBillRepository;
     @Autowired private PaymentScheduleRepository scheduleRepository;
+    @Autowired private CompanyTransactionRepository companyTransactionRepository;
 
     private static final List<String> NOT_REVENUE = List.of("DRAFT", "CANCELLED");
 
@@ -43,7 +45,8 @@ public class FinanceReportService {
         BigDecimal outstanding = invoiceRepository.sumBalanceDueByStatuses(FinanceService.OPEN_INVOICE_STATUSES);
         BigDecimal overdueAmount = invoiceRepository.sumOverdueBalance(FinanceService.OPEN_INVOICE_STATUSES, today);
         long pendingInvoices = invoiceRepository.countByStatusIn(FinanceService.OPEN_INVOICE_STATUSES);
-        BigDecimal monthExpenses = expenseRepository.totalBetween(monthStart, monthEnd);
+        BigDecimal monthExpenses = expenseTotalsBySource(monthStart, monthEnd)
+                .values().stream().reduce(BigDecimal.ZERO, BigDecimal::add);
 
         List<Map<String, Object>> upcoming = new ArrayList<>();
         for (Invoice i : invoiceRepository.findByStatusInAndDueDateBetween(
@@ -92,37 +95,98 @@ public class FinanceReportService {
         return report(from, to, months);
     }
 
-    /** Expense totals by category plus month buckets. */
+    /**
+     * Consolidated expense report on a cash basis: every expense record the company actually pays —
+     * supplier (goods) payments, contractor payments, payroll, manual project costs and company
+     * overhead ("other charges") — broken down by source and, for overhead, by category.
+     */
     public Map<String, Object> getExpenseReport(LocalDate from, LocalDate to) {
-        Map<String, BigDecimal> byCategory = new LinkedHashMap<>();
-        for (Object[] row : expenseRepository.totalsByCategoryBetween(from, to)) {
-            byCategory.put((String) row[0], (BigDecimal) row[1]);
+        Map<String, BigDecimal> bySource = expenseTotalsBySource(from, to);
+        BigDecimal total = bySource.values().stream().reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        Map<String, BigDecimal> overheadByCategory = new LinkedHashMap<>();
+        for (Object[] row : companyTransactionRepository.totalsByCategoryBetween("EXPENSE", from, to)) {
+            overheadByCategory.put((String) row[0], (BigDecimal) row[1]);
         }
+        Map<String, BigDecimal> projectByCategory = new LinkedHashMap<>();
+        for (Object[] row : expenseRepository.totalsByCategoryBetween(from, to)) {
+            projectByCategory.put((String) row[0], (BigDecimal) row[1]);
+        }
+
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("from", from);
         result.put("to", to);
-        result.put("byCategory", byCategory);
-        result.put("total", byCategory.values().stream().reduce(BigDecimal.ZERO, BigDecimal::add));
+        result.put("bySource", bySource);
+        result.put("overheadByCategory", overheadByCategory);
+        result.put("projectByCategory", projectByCategory);
+        result.put("total", total);
         return result;
     }
 
-    /** Simple P&L: revenue (invoiced), project expenses, payroll, net. */
+    /**
+     * Cash-basis P&L: money in (customer collections + other income) vs money out (all expense
+     * records), with the expense breakdown by source and the accrual context (invoiced / outstanding)
+     * alongside for reference.
+     */
     public Map<String, Object> getProfitAndLoss(LocalDate from, LocalDate to) {
-        BigDecimal revenue = invoiceRepository.sumInvoicedBetween(from, to);
-        BigDecimal projectExpenses = expenseRepository.totalBetween(from, to);
-        BigDecimal payroll = BigDecimal.ZERO;
-        for (SalaryRecord s : salaryRecordRepository.findByStatusAndPaymentDateBetween("PAID", from, to)) {
-            if (s.getNetSalary() != null) payroll = payroll.add(s.getNetSalary());
-        }
+        BigDecimal collections = nz(paymentRepository.sumConfirmedBetween(from, to));
+        BigDecimal otherIncome = nz(companyTransactionRepository.totalBetween("INCOME", from, to));
+        BigDecimal totalIncome = collections.add(otherIncome);
+
+        Map<String, BigDecimal> bySource = expenseTotalsBySource(from, to);
+        BigDecimal totalExpenses = bySource.values().stream().reduce(BigDecimal.ZERO, BigDecimal::add);
+
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("from", from);
         result.put("to", to);
-        result.put("revenue", revenue);
-        result.put("projectExpenses", projectExpenses);
-        result.put("payroll", payroll);
-        result.put("totalExpenses", projectExpenses.add(payroll));
-        result.put("netProfit", revenue.subtract(projectExpenses).subtract(payroll));
+        result.put("collections", collections);
+        result.put("otherIncome", otherIncome);
+        result.put("totalIncome", totalIncome);
+        // Accrual context for reference — revenue billed regardless of collection.
+        result.put("invoiced", nz(invoiceRepository.sumInvoicedBetween(from, to)));
+        result.put("expensesBySource", bySource);
+        // Back-compat named lines some callers/screens still read.
+        result.put("payroll", bySource.getOrDefault("PAYROLL", BigDecimal.ZERO));
+        result.put("projectExpenses", bySource.getOrDefault("PROJECT_EXPENSES", BigDecimal.ZERO));
+        result.put("totalExpenses", totalExpenses);
+        result.put("netProfit", totalIncome.subtract(totalExpenses));
         return result;
+    }
+
+    /**
+     * Every expense the company pays in the window, grouped by originating source (cash basis).
+     * Supplier/contractor use PAYMENTS (not bills) and project expenses are limited to MANUAL rows,
+     * so nothing is double-counted against the modules that own those payments.
+     */
+    private Map<String, BigDecimal> expenseTotalsBySource(LocalDate from, LocalDate to) {
+        BigDecimal supplier = BigDecimal.ZERO;
+        for (PurchasePayment p : purchasePaymentRepository.findByPaymentDateBetween(from, to)) {
+            if (Boolean.TRUE.equals(p.getIsDeleted()) || p.getAmount() == null) continue;
+            supplier = supplier.add(p.getAmount());
+        }
+        BigDecimal contractor = BigDecimal.ZERO;
+        for (ContractorPayment p : contractorPaymentRepository.findByStatusAndPaymentDateBetween("PAID", from, to)) {
+            if (Boolean.TRUE.equals(p.getIsDeleted()) || p.getAmount() == null) continue;
+            contractor = contractor.add(p.getAmount());
+        }
+        BigDecimal payroll = BigDecimal.ZERO;
+        for (SalaryRecord s : salaryRecordRepository.findByStatusAndPaymentDateBetween("PAID", from, to)) {
+            if (Boolean.TRUE.equals(s.getIsDeleted()) || s.getNetSalary() == null) continue;
+            payroll = payroll.add(s.getNetSalary());
+        }
+        BigDecimal projectManual = BigDecimal.ZERO;
+        for (ProjectExpense e : expenseRepository.findBySourceAndExpenseDateBetweenAndIsDeletedFalse("MANUAL", from, to)) {
+            if (e.getAmount() != null) projectManual = projectManual.add(e.getAmount());
+        }
+        BigDecimal overhead = nz(companyTransactionRepository.totalBetween("EXPENSE", from, to));
+
+        Map<String, BigDecimal> bySource = new LinkedHashMap<>();
+        bySource.put("SUPPLIER_PAYMENTS", supplier);
+        bySource.put("CONTRACTOR_PAYMENTS", contractor);
+        bySource.put("PAYROLL", payroll);
+        bySource.put("PROJECT_EXPENSES", projectManual);
+        bySource.put("COMPANY_OVERHEAD", overhead);
+        return bySource;
     }
 
     /** Output-tax summary (CGST/SGST/IGST) plus HSN-wise breakup. */
@@ -200,6 +264,133 @@ public class FinanceReportService {
             addToBucket(months, b.getDate(), "purchases", b.getTotalAmount());
         }
         return report(from, to, months);
+    }
+
+    // =====================================================================
+    // Cash Book — unified money-in / money-out register across every source
+    // =====================================================================
+
+    /**
+     * The consolidated Cash Book: every actual cash movement in the window pulled from all modules —
+     * customer collections and other income IN; supplier, contractor, payroll, manual project costs
+     * and company overhead OUT. {@code direction} (IN/OUT), {@code source} and {@code search} filter
+     * the returned rows; the summary totals always reflect the full window so the cards stay stable.
+     */
+    @Transactional(readOnly = true)
+    public Map<String, Object> getCashbook(LocalDate from, LocalDate to, String direction, String source, String search) {
+        List<Map<String, Object>> all = new ArrayList<>();
+
+        // ---- Money IN ----
+        for (CustomerPayment p : paymentRepository.findByStatusAndPaymentDateBetweenAndIsDeletedFalse("CONFIRMED", from, to)) {
+            all.add(row(p.getId(), p.getPaymentDate(), "IN", "CUSTOMER_PAYMENT", "Customer Collection",
+                    p.getCustomer() != null ? p.getCustomer().getName() : null,
+                    p.getPaymentNumber(), p.getPaymentMethod(), null, p.getAmount()));
+        }
+        for (CompanyTransaction t : companyTransactionRepository.findByDirectionAndTxnDateBetweenAndIsDeletedFalse("INCOME", from, to)) {
+            all.add(row(t.getId(), t.getTxnDate(), "IN", "COMPANY_INCOME", t.getCategory(),
+                    t.getPartyName(), t.getReferenceNumber() != null ? t.getReferenceNumber() : t.getTxnNumber(),
+                    t.getPaymentMethod(), t.getDescription(), t.getAmount()));
+        }
+
+        // ---- Money OUT ----
+        for (PurchasePayment p : purchasePaymentRepository.findByPaymentDateBetween(from, to)) {
+            if (Boolean.TRUE.equals(p.getIsDeleted())) continue;
+            all.add(row(p.getId(), p.getPaymentDate(), "OUT", "SUPPLIER_PAYMENT", p.getPaymentType(),
+                    p.getSupplier() != null ? p.getSupplier().getName() : null,
+                    p.getReferenceNumber(), p.getPaymentMethod(), null, p.getAmount()));
+        }
+        for (ContractorPayment p : contractorPaymentRepository.findByStatusAndPaymentDateBetween("PAID", from, to)) {
+            if (Boolean.TRUE.equals(p.getIsDeleted())) continue;
+            all.add(row(p.getId(), p.getPaymentDate(), "OUT", "CONTRACTOR_PAYMENT", p.getPaymentType(),
+                    p.getContractor() != null ? p.getContractor().getName() : null,
+                    p.getReferenceNumber(), p.getPaymentMode(), null, p.getAmount()));
+        }
+        for (SalaryRecord s : salaryRecordRepository.findByStatusAndPaymentDateBetween("PAID", from, to)) {
+            if (Boolean.TRUE.equals(s.getIsDeleted())) continue;
+            all.add(row(s.getId(), s.getPaymentDate(), "OUT", "PAYROLL", "Salary",
+                    employeeName(s), s.getPayslipNumber(), null, null, s.getNetSalary()));
+        }
+        for (ProjectExpense e : expenseRepository.findBySourceAndExpenseDateBetweenAndIsDeletedFalse("MANUAL", from, to)) {
+            all.add(row(e.getId(), e.getExpenseDate(), "OUT", "PROJECT_EXPENSE", e.getCategory(),
+                    e.getVendor(), null, e.getPaymentMethod(), e.getDescription(), e.getAmount()));
+        }
+        for (CompanyTransaction t : companyTransactionRepository.findByDirectionAndTxnDateBetweenAndIsDeletedFalse("EXPENSE", from, to)) {
+            all.add(row(t.getId(), t.getTxnDate(), "OUT", "COMPANY_EXPENSE", t.getCategory(),
+                    t.getPartyName(), t.getReferenceNumber() != null ? t.getReferenceNumber() : t.getTxnNumber(),
+                    t.getPaymentMethod(), t.getDescription(), t.getAmount()));
+        }
+
+        // ---- Summary over the whole window (independent of the row filters) ----
+        BigDecimal totalIn = BigDecimal.ZERO, totalOut = BigDecimal.ZERO;
+        Map<String, BigDecimal> bySource = new LinkedHashMap<>();
+        for (Map<String, Object> r : all) {
+            BigDecimal amt = (BigDecimal) r.get("amount");
+            if (amt == null) continue;
+            if ("IN".equals(r.get("direction"))) totalIn = totalIn.add(amt);
+            else totalOut = totalOut.add(amt);
+            String src = (String) r.get("source");
+            bySource.merge(src, amt, BigDecimal::add);
+        }
+
+        // ---- Row filters ----
+        String q = (search == null || search.isBlank()) ? null : search.trim().toLowerCase();
+        List<Map<String, Object>> entries = new ArrayList<>();
+        for (Map<String, Object> r : all) {
+            if (direction != null && !direction.isBlank() && !direction.equalsIgnoreCase((String) r.get("direction"))) continue;
+            if (source != null && !source.isBlank() && !source.equals(r.get("source"))) continue;
+            if (q != null && !rowMatches(r, q)) continue;
+            entries.add(r);
+        }
+        entries.sort((a, b) -> {
+            LocalDate da = (LocalDate) a.get("date"), db = (LocalDate) b.get("date");
+            if (da == null && db == null) return 0;
+            if (da == null) return 1;
+            if (db == null) return -1;
+            return db.compareTo(da);
+        });
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("from", from);
+        result.put("to", to);
+        result.put("totalIn", totalIn);
+        result.put("totalOut", totalOut);
+        result.put("net", totalIn.subtract(totalOut));
+        result.put("bySource", bySource);
+        result.put("count", entries.size());
+        result.put("entries", entries);
+        return result;
+    }
+
+    private Map<String, Object> row(Long id, LocalDate date, String direction, String source, String category,
+                                    String party, String reference, String method, String description, BigDecimal amount) {
+        Map<String, Object> r = new LinkedHashMap<>();
+        r.put("id", id);
+        r.put("date", date);
+        r.put("direction", direction);
+        r.put("source", source);
+        r.put("category", category);
+        r.put("party", party);
+        r.put("reference", reference);
+        r.put("method", method);
+        r.put("description", description);
+        r.put("amount", amount == null ? BigDecimal.ZERO : amount);
+        return r;
+    }
+
+    private boolean rowMatches(Map<String, Object> r, String q) {
+        for (String key : List.of("party", "reference", "description", "category")) {
+            Object v = r.get(key);
+            if (v != null && v.toString().toLowerCase().contains(q)) return true;
+        }
+        return false;
+    }
+
+    private String employeeName(SalaryRecord s) {
+        if (s.getEmployee() == null) return null;
+        String first = s.getEmployee().getFirstName();
+        String last = s.getEmployee().getLastName();
+        String name = ((first == null ? "" : first) + " " + (last == null ? "" : last)).trim();
+        return name.isEmpty() ? null : name;
     }
 
     // =====================================================================

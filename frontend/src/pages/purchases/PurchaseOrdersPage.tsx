@@ -9,9 +9,50 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import SearchableSelect from "@/components/ui/searchable-select";
+import { useHoverInfo, InfoRow } from "@/components/ui/hover-info";
 import { Plus, ArrowRight, Search } from "lucide-react";
 
 const currency = (n?: number) => `₹${(n ?? 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
+
+const humanizeStatus = (s: string) =>
+  s.split("_").map((w) => w.charAt(0) + w.slice(1).toLowerCase()).join(" ");
+
+// The clickable filter tiles: "All" plus every PO status, each with a live count.
+const TILE_STATUSES = ["", ...PO_STATUSES];
+
+/** Rich card shown when hovering a PO row. */
+function POInfo({ po }: { po: PurchaseOrder }) {
+  return (
+    <div>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <span className="font-bold text-slate-800">{po.poNumber}</span>
+        <Badge className={PO_STATUS_TONE[po.status]}>{humanizeStatus(po.status)}</Badge>
+      </div>
+      <div className="divide-y divide-slate-100">
+        <div className="pb-1.5">
+          <InfoRow label="Supplier" value={po.supplier?.name} />
+          <InfoRow label="Contact" value={po.supplier?.contactPerson} />
+          <InfoRow label="Phone" value={po.supplier?.phone} />
+        </div>
+        <div className="py-1.5">
+          <InfoRow label="Project" value={po.project?.projectName} />
+          <InfoRow label="Warehouse" value={po.warehouse?.name} />
+          <InfoRow label="Order date" value={po.date ? format(new Date(po.date), "MMM d, yyyy") : undefined} />
+          <InfoRow label="Expected" value={po.expectedDeliveryDate} />
+          <InfoRow label="Payment terms" value={po.paymentTerms} />
+        </div>
+        <div className="pt-1.5">
+          <InfoRow label="Subtotal" value={po.subtotal != null ? currency(po.subtotal) : undefined} />
+          <InfoRow label="Tax" value={po.taxAmount ? currency(po.taxAmount) : undefined} />
+          <InfoRow label="Transport" value={po.transportationCost ? currency(po.transportationCost) : undefined} />
+          <InfoRow label="Discount" value={po.discountAmount ? `− ${currency(po.discountAmount)}` : undefined} />
+          <InfoRow label="Total" value={currency(po.totalAmount)} accent="text-slate-900 font-bold" />
+        </div>
+        {po.notes && <p className="pt-2 text-xs italic text-slate-500">“{po.notes}”</p>}
+      </div>
+    </div>
+  );
+}
 
 export default function PurchaseOrdersPage() {
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
@@ -21,8 +62,21 @@ export default function PurchaseOrdersPage() {
   const [supplierId, setSupplierId] = useState("");
   const [search, setSearch] = useState("");
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [counts, setCounts] = useState<Record<string, number>>({});
+  const info = useHoverInfo();
 
   useEffect(() => { purchaseApi.getSuppliers().then(setSuppliers).catch(console.error); }, []);
+
+  // Per-status counts for the filter tiles (one broad fetch; refreshed only on mount).
+  useEffect(() => {
+    purchaseApi.getPurchaseOrders({ size: 1000 })
+      .then((res) => {
+        const c: Record<string, number> = { "": res.totalElements ?? (res.content || []).length };
+        (res.content || []).forEach((o) => { c[o.status] = (c[o.status] || 0) + 1; });
+        setCounts(c);
+      })
+      .catch(console.error);
+  }, []);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -38,6 +92,31 @@ export default function PurchaseOrdersPage() {
 
   return (
     <div className="space-y-4">
+      {/* Status filter tiles */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+        {TILE_STATUSES.map((s) => {
+          const active = status === s;
+          const label = s === "" ? "All Orders" : humanizeStatus(s);
+          const dot = s === "" ? "bg-slate-400" : ((PO_STATUS_TONE[s]?.split(" ")[0] || "bg-slate-300").replace("-100", "-500").replace("-200", "-500"));
+          return (
+            <button
+              key={s || "all"}
+              type="button"
+              onClick={() => { setStatus(s); setPage(0); }}
+              aria-pressed={active}
+              className={`rounded-xl border bg-white p-3 text-left shadow-sm transition-all hover:border-slate-300 hover:shadow ${active ? "ring-2 ring-primary border-primary" : ""}`}
+            >
+              <span className="text-lg font-black leading-none text-slate-800">{counts[s] ?? 0}</span>
+              <div className="mt-1.5 flex items-center gap-1.5">
+                <span className={`h-2 w-2 shrink-0 rounded-full ${dot}`} />
+                <span className="text-xs font-semibold text-slate-500 truncate">{label}</span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2 justify-between">
         <div className="flex flex-wrap gap-2 items-center">
           <div className="relative">
@@ -45,11 +124,6 @@ export default function PurchaseOrdersPage() {
             <Input className="pl-9 w-56" placeholder="Search PO / supplier…" value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(0); }} />
           </div>
-          <select className="h-10 rounded-md border border-input px-3 text-sm" value={status}
-            onChange={(e) => { setStatus(e.target.value); setPage(0); }}>
-            <option value="">All statuses</option>
-            {PO_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-          </select>
           <div className="w-52">
             <SearchableSelect value={supplierId} onChange={(v) => { setSupplierId(v); setPage(0); }}
               options={suppliers.map((s) => ({ value: String(s.id), label: s.name }))}
@@ -78,7 +152,7 @@ export default function PurchaseOrdersPage() {
             </TableHeader>
             <TableBody>
               {orders.map((po) => (
-                <TableRow key={po.id}>
+                <TableRow key={po.id} {...info.bind(<POInfo po={po} />)}>
                   <TableCell className="font-bold text-slate-800">{po.poNumber}</TableCell>
                   <TableCell className="text-slate-500">{po.date ? format(new Date(po.date), "MMM d, yyyy") : "—"}</TableCell>
                   <TableCell className="font-semibold text-slate-700">{po.supplier?.name}</TableCell>
@@ -107,6 +181,7 @@ export default function PurchaseOrdersPage() {
           </div>
         )}
       </div>
+      {info.portal}
     </div>
   );
 }

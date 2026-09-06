@@ -33,6 +33,8 @@ public class LeadTaskFormService {
     @Autowired private LeadTaskSubmissionRepository submissionRepository;
     @Autowired private LeadService leadService;
     @Autowired private EmployeeTaskService employeeTaskService;
+    @Autowired private TaskGenerationService taskGenerationService;
+    @Autowired private UserRepository userRepository;
     @Autowired private ObjectMapper objectMapper;
 
     /** Template-code → form type. Tasks with no mapping have no structured form (generic complete). */
@@ -83,18 +85,108 @@ public class LeadTaskFormService {
         sub.setSubmittedAt(LocalDateTime.now());
         submissionRepository.save(sub);
 
-        // 2. Apply to the native lead records the admin already sees.
-        try {
-            applyToLead(formType, lead, employee, outcome, notes, nextFollowUp, data);
-        } catch (Exception e) {
-            // Data capture must not be lost if a downstream lead update hiccups.
-            log.error("Failed to apply lead-task form ({}) for task {} lead {}", formType, taskId, lead.getId(), e);
+        // 1b. Requirement task "next step" branch: schedule the site visit (advance, carrying the date
+        //     to the Site Visit task) OR log a follow-up and keep the requirement task OPEN so it can be
+        //     re-collected later (the draft submission preserves what was captured so far).
+        if ("REQUIREMENT".equals(formType)) {
+            LocalDate visitDate = date(data.get("siteVisitDate"));
+            LocalDate followUpDate = date(data.get("followUpDate"));
+            if (visitDate == null && followUpDate != null) {
+                LeadFollowup f = new LeadFollowup();
+                f.setFollowupDate(LocalDate.now());
+                f.setMethod(strOr(data.get("followUpMethod"), "Call"));
+                f.setNotes(strOr(data.get("followUpNotes"), notes));
+                f.setOutcome("Follow-up scheduled");
+                f.setStatus("Planned");
+                f.setNextFollowupDate(followUpDate);
+                f.setReminderEnabled(true);
+                leadService.addFollowup(lead.getId(), f, employee); // updates lead follow-up fields + timeline
+
+                // Spawn a fresh, dated "Collect Requirement" task for the next attempt (unlimited repeats).
+                // Spawn BEFORE completing this one so the LEAD_QUALIFICATION phase keeps an open task and
+                // the workflow never advances to Site Visit on a follow-up.
+                long attempts = submissionRepository.findByLeadIdOrderBySubmittedAtDesc(lead.getId()).stream()
+                        .filter(s -> "REQUIREMENT".equals(s.getFormType())).count();
+                Task next = taskGenerationService.spawnRepeatLeadTask(
+                        lead.getId(), "TT_COLLECT_REQUIREMENT", followUpDate,
+                        "Collect Requirement (Follow-up " + attempts + ")", employee);
+                if (next != null) {
+                    // Carry what was captured so far onto the new task so the next form pre-fills.
+                    LeadTaskSubmission draft = new LeadTaskSubmission();
+                    draft.setTaskId(next.getId());
+                    draft.setLeadId(lead.getId());
+                    draft.setFormType("REQUIREMENT");
+                    draft.setTaskName(next.getTaskName());
+                    draft.setDataJson(sub.getDataJson());
+                    draft.setNotes(notes);
+                    draft.setSubmittedById(employee.getId());
+                    draft.setSubmittedByName(employee.getName());
+                    draft.setSubmittedAt(LocalDateTime.now());
+                    draft.setApplied(true); // prefill-only carry-forward — not a real submission to re-apply
+                    submissionRepository.save(draft);
+                }
+
+                // Close this attempt as COMPLETED right away (a follow-up needs no manager approval, and
+                // an un-approved attempt would block the phase). Applies the captured data to the lead.
+                employeeTaskService.finalizeLeadAttempt(taskId, employee);
+                return toSummary(sub);
+            }
+            if (visitDate != null) {
+                // Record the operational visit date immediately so the Site Visit task materialises with
+                // this due date; the full requirement data still applies to the lead on approval.
+                lead.setSiteVisitDate(visitDate);
+                lead.setSiteVisitRequired(true);
+                leadRepository.save(lead);
+            }
         }
 
-        // 3. Complete the task through the normal lifecycle (respects OWNER_APPROVAL + workflow advance).
+        // 2. Complete the task through the normal lifecycle. The captured data is NOT written onto the
+        //    lead here — it is applied only when the task is truly finalized (auto-finalize, or manager
+        //    approval), via the LeadTaskCompletedEvent handled in onLeadTaskCompleted below. For an
+        //    OWNER_APPROVAL task this means the lead updates only after the manager approves it.
         employeeTaskService.complete(taskId, employee, notes);
 
         return toSummary(sub);
+    }
+
+    /** Latest captured draft for a lead task (so re-collecting a follow-up shows what was already entered). */
+    public Map<String, Object> getLatestDraft(Long taskId) {
+        return submissionRepository.findByTaskIdOrderBySubmittedAtDesc(taskId).stream().findFirst()
+                .map(s -> {
+                    Map<String, Object> m = new HashMap<>(readJsonMap(s.getDataJson()));
+                    if (s.getNotes() != null) m.put("notes", s.getNotes());
+                    if (s.getNextFollowUpDate() != null) m.put("nextFollowUpDate", s.getNextFollowUpDate().toString());
+                    return m;
+                })
+                .orElse(Map.of());
+    }
+
+    /**
+     * Applies a task's captured form data onto the native lead once the task is finalized/approved.
+     * Fired for every task completion; a no-op for tasks that carry no pending submission.
+     */
+    @org.springframework.context.event.EventListener
+    @Transactional
+    public void onLeadTaskCompleted(com.arudra.crm.event.LeadTaskCompletedEvent event) {
+        LeadTaskSubmission sub = submissionRepository
+                .findFirstByTaskIdAndAppliedFalseOrderBySubmittedAtDescIdDesc(event.getTaskId())
+                .orElse(null);
+        if (sub == null) return;
+        Lead lead = leadRepository.findById(sub.getLeadId()).orElse(null);
+        if (lead == null) return;
+        User submitter = sub.getSubmittedById() == null ? null
+                : userRepository.findById(sub.getSubmittedById()).orElse(null);
+        Map<String, Object> data = new HashMap<>(readJsonMap(sub.getDataJson()));
+        try {
+            applyToLead(sub.getFormType(), lead, submitter, sub.getOutcome(), sub.getNotes(),
+                    sub.getNextFollowUpDate(), data);
+            sub.setApplied(true);
+            submissionRepository.save(sub);
+        } catch (Exception e) {
+            // Never lose the captured submission if a downstream lead update hiccups.
+            log.error("Failed to apply lead-task form ({}) for task {} lead {}",
+                    sub.getFormType(), sub.getTaskId(), lead.getId(), e);
+        }
     }
 
     private void applyToLead(String formType, Lead lead, User employee, String outcome, String notes,
@@ -114,19 +206,70 @@ public class LeadTaskFormService {
                 leadService.addFollowup(lead.getId(), f, employee); // updates lead follow-up fields + timeline
             }
             case "REQUIREMENT" -> {
+                // Lead summary + contact
+                setIf(str(data.get("name")), lead::setName);
+                setIf(str(data.get("companyName")), lead::setCompanyName);
+                setIf(str(data.get("contactPerson")), lead::setContactPerson);
+                setIf(str(data.get("mobileNumber")), lead::setMobileNumber);
+                setIf(str(data.get("alternateMobile")), lead::setAlternateMobile);
+                setIf(str(data.get("whatsappNumber")), lead::setWhatsappNumber);
+                setIf(str(data.get("email")), lead::setEmail);
+                setIf(str(data.get("gstNumber")), lead::setGstNumber);
+                // Classification
+                setIf(str(data.get("leadType")), lead::setLeadType);
+                setIf(str(data.get("priority")), lead::setPriority);
+                setIf(str(data.get("leadTemperature")), lead::setLeadTemperature);
+                // Address
+                setIf(str(data.get("address")), lead::setAddress);
+                setIf(str(data.get("city")), lead::setCity);
+                setIf(str(data.get("district")), lead::setDistrict);
+                setIf(str(data.get("state")), lead::setState);
+                setIf(str(data.get("pincode")), lead::setPincode);
+                setIf(str(data.get("landmark")), lead::setLandmark);
+                setIf(str(data.get("googleMapLocation")), lead::setGoogleMapLocation);
+                // Property
+                setIf(str(data.get("propertyType")), lead::setPropertyType);
+                setIf(str(data.get("currentConstructionStage")), lead::setCurrentConstructionStage);
+                setIf(intVal(data.get("floorCount")), lead::setFloorCount);
+                setIf(dec(data.get("areaSqft")), lead::setAreaSqft);
+                setIf(str(data.get("propertyName")), lead::setPropertyName);
+                setIf(str(data.get("siteAddress")), lead::setSiteAddress);
+                setIf(dec(data.get("expectedWorkArea")), lead::setExpectedWorkArea);
+                // Requirement scope (free text)
                 setIf(str(data.get("customerRequirements")), lead::setCustomerRequirements);
                 setIf(str(data.get("projectDescription")), lead::setProjectDescription);
                 setIf(str(data.get("requirementCategory")), lead::setRequirementCategory);
                 setIf(str(data.get("roomsRequired")), lead::setRoomsRequired);
+                setIf(str(data.get("specialRequests")), lead::setSpecialRequests);
+                // Scope-of-work checklist — authoritative, so set whenever the key is present.
+                setBool(data, "reqKitchen", lead::setReqKitchen);
+                setBool(data, "reqWardrobe", lead::setReqWardrobe);
+                setBool(data, "reqTvUnit", lead::setReqTvUnit);
+                setBool(data, "reqFalseCeiling", lead::setReqFalseCeiling);
+                setBool(data, "reqPainting", lead::setReqPainting);
+                setBool(data, "reqFlooring", lead::setReqFlooring);
+                setBool(data, "reqElectrical", lead::setReqElectrical);
+                setBool(data, "reqPlumbing", lead::setReqPlumbing);
+                setBool(data, "reqWoodFinish", lead::setReqWoodFinish);
+                // Preferences
                 setIf(str(data.get("preferredDesignStyle")), lead::setPreferredDesignStyle);
                 setIf(str(data.get("preferredMaterial")), lead::setPreferredMaterial);
+                setIf(str(data.get("preferredColorTheme")), lead::setPreferredColorTheme);
+                // Budget & timeline
                 setIf(dec(data.get("estimatedBudget")), lead::setEstimatedBudget);
                 setIf(dec(data.get("minimumBudget")), lead::setMinimumBudget);
                 setIf(dec(data.get("maximumBudget")), lead::setMaximumBudget);
+                setIf(dec(data.get("expectedProjectValue")), lead::setExpectedProjectValue);
+                setIf(str(data.get("paymentPreference")), lead::setPaymentPreference);
+                setIf(date(data.get("expectedStartDate")), lead::setExpectedStartDate);
+                setIf(date(data.get("expectedEndDate")), lead::setExpectedEndDate);
                 setIf(date(data.get("preferredCompletionDate")), lead::setPreferredCompletionDate);
+                setIf(str(data.get("estimatedDuration")), lead::setEstimatedDuration);
                 leadRepository.save(lead);
-                leadService.addNote(lead.getId(), "Requirement captured: "
-                        + orDash(str(data.get("customerRequirements"))), employee);
+                String summary = str(data.get("projectDescription"));
+                if (summary == null) summary = str(data.get("customerRequirements"));
+                if (summary == null) summary = str(data.get("roomsRequired"));
+                leadService.addNote(lead.getId(), "Requirement captured: " + orDash(summary), employee);
             }
             case "QUALIFY" -> {
                 String decision = strOr(data.get("decision"), outcome);   // Qualified | Not Qualified | Nurture
@@ -222,6 +365,29 @@ public class LeadTaskFormService {
     }
     private <T> void setIf(T val, java.util.function.Consumer<T> setter) {
         if (val != null) setter.accept(val);
+    }
+
+    private Integer intVal(Object o) {
+        String s = str(o);
+        if (s == null) return null;
+        try { return Integer.valueOf(s.replaceAll("[^0-9-]", "")); } catch (NumberFormatException e) { return null; }
+    }
+
+    /** Parses a checkbox value from JSON boolean or common truthy strings. */
+    private Boolean bool(Object o) {
+        if (o == null) return null;
+        if (o instanceof Boolean b) return b;
+        String s = String.valueOf(o).trim().toLowerCase();
+        if (s.isEmpty()) return null;
+        return s.equals("true") || s.equals("yes") || s.equals("on") || s.equals("1");
+    }
+
+    /** Only writes the scope flag when the key is present (so an absent key never clears an existing value). */
+    private void setBool(Map<String, Object> data, String key, java.util.function.Consumer<Boolean> setter) {
+        if (data.containsKey(key)) {
+            Boolean b = bool(data.get(key));
+            setter.accept(b != null ? b : Boolean.FALSE);
+        }
     }
 
     private String writeJson(Object o) {

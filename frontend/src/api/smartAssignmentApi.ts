@@ -58,6 +58,8 @@ export const smartAssignmentApi = {
   // --- Merged Tasks & Employees board ---
   taskBoard: () => api.get<TaskBoardRow[]>(`${BASE}/task-board`).then((r) => r.data),
   roster: () => api.get<RosterRow[]>(`${BASE}/roster`).then((r) => r.data),
+  // Manager override: grant a held data-entry task a fresh hold window from the board.
+  extendTaskHold: (id: number) => api.post<boolean>(`${BASE}/tasks/${id}/extend-hold`).then((r) => r.data),
 };
 
 export type TaskBucket = 'UNASSIGNED' | 'ASSIGNED' | 'IN_PROGRESS' | 'NEEDS_APPROVAL' | 'COMPLETED';
@@ -75,12 +77,21 @@ export interface TaskBoardRow {
   taskName: string;
   projectId: number | null;
   project: string | null;
+  leadId: number | null;
+  lead: string | null;
   status: string;
   priority: string | null;
   dueDate: string | null;
   bucket: TaskBucket;
+  category: TaskCategory;
+  categoryLabel: string;
   assignees: TaskAssigneeView[];
+  dataEntry?: boolean; // quick data-entry lead task — capacity-exempt, has a hold timer
+  holdExpiresAt?: string | null; // ISO time this held data-entry task auto-releases (countdown)
 }
+
+export type TaskCategory =
+  | 'LEAD' | 'PROJECT' | 'FIELD_WORK' | 'INSTALLATION' | 'ENQUIRY' | 'OTHER';
 
 export interface RosterRow {
   employeeId: number;

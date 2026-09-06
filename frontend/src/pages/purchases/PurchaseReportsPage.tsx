@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { purchaseApi } from "@/api/purchaseApi";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { Star } from "lucide-react";
 
 const currency = (n?: number) => `₹${(n ?? 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
@@ -9,9 +9,6 @@ const currency = (n?: number) => `₹${(n ?? 0).toLocaleString("en-IN", { maximu
 const REPORTS = [
   { key: "summary", label: "Purchase Summary" },
   { key: "suppliers", label: "Supplier Performance" },
-  { key: "deliveries", label: "Pending Deliveries" },
-  { key: "outstanding", label: "Outstanding Payments" },
-  { key: "trends", label: "Purchase Trends" },
   { key: "materials", label: "Material Cost Analysis" },
 ] as const;
 
@@ -24,13 +21,8 @@ export default function PurchaseReportsPage() {
     setRows([]);
     if (active === "summary") purchaseApi.getPurchaseSummary().then(setSummary).catch(console.error);
     if (active === "suppliers") purchaseApi.getSupplierPerformance().then(setRows).catch(console.error);
-    if (active === "deliveries") purchaseApi.getPendingDeliveries().then(setRows).catch(console.error);
-    if (active === "outstanding") purchaseApi.getOutstandingPayments().then(setRows).catch(console.error);
-    if (active === "trends") purchaseApi.getPurchaseTrends().then(setRows).catch(console.error);
     if (active === "materials") purchaseApi.getMaterialCostAnalysis().then(setRows).catch(console.error);
   }, [active]);
-
-  const maxTrend = Math.max(1, ...rows.map((r: any) => r.value ?? 0));
 
   return (
     <div className="space-y-4">
@@ -45,7 +37,7 @@ export default function PurchaseReportsPage() {
 
       {active === "summary" && summary && (
         <div className="space-y-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 gap-4">
             <div className="bg-white border rounded-2xl p-5 shadow-sm">
               <div className="text-2xl font-black text-slate-900">{summary.totalOrders}</div>
               <div className="text-xs font-semibold text-slate-500 mt-1">Purchase Orders</div>
@@ -54,15 +46,41 @@ export default function PurchaseReportsPage() {
               <div className="text-2xl font-black text-slate-900">{currency(summary.totalPurchaseValue)}</div>
               <div className="text-xs font-semibold text-slate-500 mt-1">Total Purchase Value</div>
             </div>
-            <div className="bg-white border rounded-2xl p-5 shadow-sm">
-              <div className="text-2xl font-black text-slate-900">{summary.totalRequests}</div>
-              <div className="text-xs font-semibold text-slate-500 mt-1">Purchase Requests</div>
-            </div>
-            <div className="bg-white border rounded-2xl p-5 shadow-sm">
-              <div className="text-2xl font-black text-amber-600">{summary.pendingRequests}</div>
-              <div className="text-xs font-semibold text-slate-500 mt-1">Pending Requests</div>
-            </div>
           </div>
+
+          {/* Paid vs Pending */}
+          <div className="bg-white border rounded-2xl shadow-sm p-5">
+            <div className="flex items-center justify-between text-sm mb-3">
+              <span className="font-bold text-slate-700">Paid vs Pending</span>
+              <span className="text-slate-400">of {currency(summary.totalPurchaseValue)} ordered</span>
+            </div>
+            <div className="grid grid-cols-2 gap-4 mb-3">
+              <div className="rounded-xl border p-4">
+                <div className="text-2xl font-black text-sky-700">{currency(summary.totalPaid)}</div>
+                <div className="text-xs font-semibold text-slate-500 mt-1">Paid to suppliers</div>
+              </div>
+              <div className="rounded-xl border p-4">
+                <div className={`text-2xl font-black ${(summary.totalPending ?? 0) > 0 ? "text-red-600" : "text-emerald-600"}`}>{currency(summary.totalPending)}</div>
+                <div className="text-xs font-semibold text-slate-500 mt-1">Pending payment</div>
+              </div>
+            </div>
+            {(() => {
+              const ordered = summary.totalPurchaseValue || 0;
+              const paidPct = ordered > 0 ? Math.min(100, Math.round(((summary.totalPaid || 0) / ordered) * 100)) : 0;
+              return (
+                <div>
+                  <div className="h-2.5 rounded-full bg-slate-100 overflow-hidden flex">
+                    <div className="h-full bg-sky-500" style={{ width: `${paidPct}%` }} />
+                    <div className="h-full bg-red-400" style={{ width: `${100 - paidPct}%` }} />
+                  </div>
+                  <div className="flex justify-between text-[11px] text-slate-400 mt-1">
+                    <span>{paidPct}% paid</span><span>{100 - paidPct}% pending</span>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+
           <div className="bg-white border rounded-2xl shadow-sm overflow-hidden">
             <div className="p-4 border-b bg-slate-50 font-bold text-sm text-slate-700">Orders by Status</div>
             <div className="p-4 flex flex-wrap gap-3">
@@ -83,88 +101,30 @@ export default function PurchaseReportsPage() {
           <Table>
             <TableHeader><TableRow className="bg-slate-50">
               <TableHead>Supplier</TableHead><TableHead>Rating</TableHead><TableHead className="text-right">Orders</TableHead>
-              <TableHead className="text-right">Value</TableHead><TableHead className="text-right">On-time %</TableHead>
-              <TableHead className="text-right">Outstanding</TableHead>
+              <TableHead className="text-right">Ordered</TableHead><TableHead className="text-right">Paid</TableHead>
+              <TableHead className="text-right">Pending</TableHead><TableHead className="text-right">On-time</TableHead>
             </TableRow></TableHeader>
             <TableBody>
               {rows.map((r: any) => (
                 <TableRow key={r.supplierId}>
-                  <TableCell className="font-bold text-slate-800">{r.supplierName}</TableCell>
+                  <TableCell className="font-bold text-slate-800">
+                    <Link to={`/purchases/suppliers/${r.supplierId}`} className="hover:text-primary hover:underline">{r.supplierName}</Link>
+                  </TableCell>
                   <TableCell><span className="inline-flex items-center gap-1 text-amber-500 font-bold">{r.rating ?? "—"} <Star className="w-3 h-3 fill-amber-400 text-amber-400" /></span></TableCell>
                   <TableCell className="text-right">{r.totalOrders}</TableCell>
                   <TableCell className="text-right font-bold">{currency(r.totalValue)}</TableCell>
-                  <TableCell className="text-right">{r.onTimeDeliveryPercent != null ? `${r.onTimeDeliveryPercent}%` : "—"}</TableCell>
-                  <TableCell className="text-right text-red-600 font-bold">{currency(r.outstandingBalance)}</TableCell>
+                  <TableCell className="text-right text-sky-700">{currency(r.paid)}</TableCell>
+                  <TableCell className={`text-right font-bold ${r.pending > 0 ? "text-red-600" : "text-slate-400"}`}>{currency(r.pending)}</TableCell>
+                  <TableCell className="text-right">
+                    {r.onTimeDeliveryPercent != null ? (
+                      <span>{r.onTimeDeliveryPercent}%{r.lateOrders > 0 && <span className="text-red-500 text-xs"> · {r.lateOrders} late</span>}</span>
+                    ) : "—"}
+                  </TableCell>
                 </TableRow>
               ))}
-              {rows.length === 0 && <TableRow><TableCell colSpan={6} className="text-center py-8 text-slate-500">No supplier activity yet.</TableCell></TableRow>}
+              {rows.length === 0 && <TableRow><TableCell colSpan={7} className="text-center py-8 text-slate-500">No supplier activity yet.</TableCell></TableRow>}
             </TableBody>
           </Table>
-        </div>
-      )}
-
-      {active === "deliveries" && (
-        <div className="bg-white border rounded-2xl shadow-sm overflow-hidden overflow-x-auto">
-          <Table>
-            <TableHeader><TableRow className="bg-slate-50">
-              <TableHead>PO</TableHead><TableHead>Supplier</TableHead><TableHead>Status</TableHead>
-              <TableHead>Expected</TableHead><TableHead className="text-right">Days Overdue</TableHead><TableHead className="text-right">Value</TableHead>
-            </TableRow></TableHeader>
-            <TableBody>
-              {rows.map((r: any) => (
-                <TableRow key={r.poId}>
-                  <TableCell className="font-bold text-slate-800">{r.poNumber}</TableCell>
-                  <TableCell>{r.supplierName}</TableCell>
-                  <TableCell><Badge className="bg-emerald-100 text-emerald-700">{r.status}</Badge></TableCell>
-                  <TableCell className="text-slate-500">{r.expectedDeliveryDate || "—"}</TableCell>
-                  <TableCell className={`text-right font-bold ${r.daysOverdue > 0 ? "text-red-600" : "text-slate-400"}`}>{r.daysOverdue}</TableCell>
-                  <TableCell className="text-right font-bold">{currency(r.totalAmount)}</TableCell>
-                </TableRow>
-              ))}
-              {rows.length === 0 && <TableRow><TableCell colSpan={6} className="text-center py-8 text-slate-500">No pending deliveries.</TableCell></TableRow>}
-            </TableBody>
-          </Table>
-        </div>
-      )}
-
-      {active === "outstanding" && (
-        <div className="bg-white border rounded-2xl shadow-sm overflow-hidden overflow-x-auto">
-          <Table>
-            <TableHeader><TableRow className="bg-slate-50">
-              <TableHead>Invoice</TableHead><TableHead>Supplier</TableHead><TableHead>PO</TableHead>
-              <TableHead>Due</TableHead><TableHead className="text-right">Billed</TableHead>
-              <TableHead className="text-right">Paid</TableHead><TableHead className="text-right">Balance</TableHead>
-            </TableRow></TableHeader>
-            <TableBody>
-              {rows.map((r: any) => (
-                <TableRow key={r.billId}>
-                  <TableCell className="font-bold text-slate-800">{r.billNumber}</TableCell>
-                  <TableCell>{r.supplierName}</TableCell>
-                  <TableCell className="text-slate-500">{r.poNumber || "—"}</TableCell>
-                  <TableCell className={r.overdue ? "text-red-600 font-bold" : "text-slate-500"}>{r.dueDate || "—"}</TableCell>
-                  <TableCell className="text-right">{currency(r.totalAmount)}</TableCell>
-                  <TableCell className="text-right text-emerald-600">{currency(r.paidAmount)}</TableCell>
-                  <TableCell className="text-right font-black text-red-600">{currency(r.balance)}</TableCell>
-                </TableRow>
-              ))}
-              {rows.length === 0 && <TableRow><TableCell colSpan={7} className="text-center py-8 text-slate-500">Nothing outstanding.</TableCell></TableRow>}
-            </TableBody>
-          </Table>
-        </div>
-      )}
-
-      {active === "trends" && (
-        <div className="bg-white border rounded-2xl shadow-sm p-6">
-          <div className="font-bold text-sm text-slate-700 mb-4">Monthly Purchase Value (last 12 months)</div>
-          <div className="flex items-end gap-2 h-48 overflow-x-auto">
-            {rows.map((r: any) => (
-              <div key={r.month} className="flex flex-col items-center gap-1 min-w-[52px] flex-1">
-                <div className="text-[10px] font-bold text-slate-600">{r.value > 0 ? currency(r.value) : ""}</div>
-                <div className="w-full bg-primary/80 rounded-t-md" style={{ height: `${Math.max((r.value / maxTrend) * 100, 2)}%` }} />
-                <div className="text-[10px] text-slate-400 whitespace-nowrap">{r.month}</div>
-              </div>
-            ))}
-          </div>
         </div>
       )}
 

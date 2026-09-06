@@ -1,10 +1,12 @@
 package com.arudra.crm.entity;
 
+import com.arudra.crm.util.StringListConverter;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 @Getter
 @Setter
@@ -89,6 +91,74 @@ public class Product extends BaseEntity {
 
     @Column(name = "image_url", length = 500)
     private String imageUrl;
+
+    /** Additional catalogue photos beyond the primary imageUrl (swatches, close-ups, room shots). */
+    @Convert(converter = StringListConverter.class)
+    @Column(name = "image_urls", columnDefinition = "TEXT")
+    private List<String> imageUrls;
+
+    // ----- Fabric / cloth specifications (curtains, upholstery, sheers…) -----
+
+    /** Fibre/material make-up, e.g. "Cotton", "Polyester", "Velvet", "Linen blend". */
+    @Column(name = "fabric_composition", length = 150)
+    private String fabricComposition;
+
+    /** Usable width of the cloth on the roll, e.g. "54 inch", "108 inch", "140 cm". */
+    @Column(name = "fabric_width", length = 60)
+    private String fabricWidth;
+
+    /** Fabric weight in grams per square metre. */
+    @Column(name = "gsm")
+    private Integer gsm;
+
+    /** Weave / print pattern, e.g. "Plain", "Floral", "Geometric", "Jacquard". */
+    @Column(length = 120)
+    private String pattern;
+
+    /** Primary colour of the material. */
+    @Column(length = 80)
+    private String color;
+
+    /** Broad colour group for filtering, e.g. "Neutrals", "Blues", "Earthy". */
+    @Column(name = "color_family", length = 60)
+    private String colorFamily;
+
+    /** Standard cut / panel sizes stocked, e.g. "5 ft", "7 ft", "9 ft", "Custom". */
+    @Convert(converter = StringListConverter.class)
+    @Column(name = "available_sizes", columnDefinition = "TEXT")
+    private List<String> availableSizes;
+
+    // ----- Window suitability & design structure -----
+
+    /** Covering category, e.g. "Curtain", "Roman Blind", "Roller Blind", "Sheer", "Wallpaper". */
+    @Column(name = "product_type", length = 80)
+    private String productType;
+
+    /** Window shapes this product suits, e.g. "Bay", "Sliding", "French", "Skylight". */
+    @Convert(converter = StringListConverter.class)
+    @Column(name = "suitable_window_types", columnDefinition = "TEXT")
+    private List<String> suitableWindowTypes;
+
+    /** How it is fixed, e.g. "Inside mount", "Outside mount", "Ceiling", "Wall track". */
+    @Column(name = "mounting_type", length = 80)
+    private String mountingType;
+
+    /** Light control level, e.g. "Sheer", "Semi-opaque", "Room darkening", "Blackout". */
+    @Column(length = 60)
+    private String opacity;
+
+    /** Rooms the product is recommended for, e.g. "Living room", "Bedroom", "Kitchen". */
+    @Convert(converter = StringListConverter.class)
+    @Column(name = "suitable_rooms", columnDefinition = "TEXT")
+    private List<String> suitableRooms;
+
+    /** Visual style, e.g. "Modern", "Classic", "Minimalist", "Traditional". */
+    @Column(name = "design_style", length = 80)
+    private String designStyle;
+
+    /** Free-text notes on the design/structure plan (pleats, lining, hardware, install notes). */
+    @Column(name = "structure_notes", columnDefinition = "TEXT")
+    private String structureNotes;
 
     @Column(nullable = false, length = 20)
     private String status = "ACTIVE"; // ACTIVE, INACTIVE

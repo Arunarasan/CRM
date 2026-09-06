@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
-  Images, LayoutGrid, ShoppingBag, Wrench, FolderKanban, Layers, Quote, ExternalLink, ClipboardList, Inbox,
+  Images, LayoutGrid, ShoppingBag, Wrench, FolderKanban, Layers, Quote, ExternalLink, Inbox,
   FileText, Settings, Star,
 } from 'lucide-react';
 
@@ -24,8 +24,7 @@ const GROUPS: { label: string; tabs: Tab[] }[] = [
   {
     label: 'Inbox',
     tabs: [
-      { to: '/website/orders', label: 'Orders', icon: ClipboardList },
-      { to: '/website/service-requests', label: 'Requests', icon: Inbox },
+      { to: '/website/enquiries', label: 'Enquiries', icon: Inbox },
       { to: '/website/reviews', label: 'Reviews', icon: Star },
     ],
   },

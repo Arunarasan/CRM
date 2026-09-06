@@ -130,6 +130,32 @@ export const serviceRequestsApi = {
     api.post<ServiceRequestDetail>(`/website/service-requests/${id}/reply`, { message }).then((r) => r.data),
 };
 
+// ---- Website enquiries (inbound from the public site; triaged here, then converted to a lead) ----
+export interface EnquirySummary {
+  id: number; name: string; channel: string; interest?: string;
+  status: string; converted: boolean; createdAt?: string;
+}
+
+export interface EnquiryDetail extends EnquirySummary {
+  sourceLabel?: string; phone?: string; email?: string; city?: string;
+  productSlug?: string; propertyType?: string; area?: string; budget?: string;
+  preferredDate?: string; message?: string; leadId?: number | null; taskId?: number | null;
+}
+
+export const ENQUIRY_STATUSES = ['NEW', 'IN_PROGRESS', 'CONVERTED', 'CLOSED'] as const;
+export const ENQUIRY_CHANNEL_LABELS: Record<string, string> = {
+  CONTACT: 'Contact', CONSULTATION: 'Consultation', PRODUCT_QUOTE: 'Product Quote',
+};
+
+export const enquiriesApi = {
+  list: (status?: string) =>
+    api.get<EnquirySummary[]>('/website/enquiries', { params: status && status !== 'ALL' ? { status } : {} }).then((r) => r.data),
+  get: (id: number) => api.get<EnquiryDetail>(`/website/enquiries/${id}`).then((r) => r.data),
+  updateStatus: (id: number, status: string) =>
+    api.patch<EnquiryDetail>(`/website/enquiries/${id}/status`, { status }).then((r) => r.data),
+  convert: (id: number) => api.post<EnquiryDetail>(`/website/enquiries/${id}/convert`).then((r) => r.data),
+};
+
 // ---- Site settings (brand / contact / social) ----
 export interface SiteSetting {
   id?: number; key: string; value?: string; group?: string; label?: string;
@@ -173,6 +199,7 @@ export const websiteAdminApi = {
   content: crud<ContentBlock>('content'),
   orders: ordersApi,
   serviceRequests: serviceRequestsApi,
+  enquiries: enquiriesApi,
   settings: settingsApi,
   reviews: reviewsApi,
 };

@@ -12,4 +12,10 @@ export const taskApi = {
     api.post<any>(`${BASE}/${taskId}/dependencies`, { dependsOnTaskId }).then((r) => r.data),
   removeDependency: (taskId: number, dependsOnTaskId: number) =>
     api.delete(`${BASE}/${taskId}/dependencies/${dependsOnTaskId}`),
+  // Focused edit (name/priority/due date/description/status) that preserves project + assignment.
+  editBasics: (taskId: number, payload: { taskName?: string; priority?: string; status?: string; dueDate?: string | null; description?: string }) =>
+    api.put<any>(`${BASE}/${taskId}/basics`, payload).then((r) => r.data),
+  remove: (taskId: number) => api.delete(`${BASE}/${taskId}`),
+  // Full task details ({ task, comments, attachments }) — used to prefill the editor.
+  details: (taskId: number) => api.get<any>(`${BASE}/${taskId}`).then((r) => r.data),
 };

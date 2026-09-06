@@ -23,6 +23,8 @@ public class PurchaseReportService {
     @Autowired private PurchasePaymentRepository paymentRepository;
     @Autowired private PurchaseRequestRepository purchaseRequestRepository;
     @Autowired private SupplierRepository supplierRepository;
+    @Autowired private InventoryItemRepository inventoryItemRepository;
+    @Autowired private ProductSupplierService productSupplierService;
 
     private boolean inRange(LocalDate date, LocalDate from, LocalDate to) {
         if (date == null) return false;
@@ -49,13 +51,108 @@ public class PurchaseReportService {
             }
         }
 
+        // Paid vs pending across the period's (non-cancelled) orders: pending = ordered − paid.
+        BigDecimal totalPaid = BigDecimal.ZERO;
+        for (PurchaseOrder po : orders) {
+            if ("CANCELLED".equals(po.getStatus()) || "REJECTED".equals(po.getStatus())) continue;
+            totalPaid = totalPaid.add(paymentRepository.findByPurchaseOrderId(po.getId()).stream()
+                    .map(PurchasePayment::getAmount).filter(Objects::nonNull).reduce(BigDecimal.ZERO, BigDecimal::add));
+        }
+        BigDecimal totalPending = totalValue.subtract(totalPaid).max(BigDecimal.ZERO);
+
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("totalOrders", orders.size());
         result.put("totalPurchaseValue", totalValue);
+        result.put("totalPaid", totalPaid);
+        result.put("totalPending", totalPending);
         result.put("countByStatus", countByStatus);
         result.put("valueByStatus", valueByStatus);
         result.put("totalRequests", purchaseRequestRepository.count());
         result.put("pendingRequests", purchaseRequestRepository.countByStatus("PENDING"));
+        return result;
+    }
+
+    /**
+     * Plain-language "Purchasing Home" overview — answers the owner's four questions in one call:
+     * how much was ordered/landed/paid/still-to-pay (totals + per-supplier ledger), what stock needs
+     * buying from suppliers now (below reorder level), and what's ordered but not yet landed (open POs).
+     * Landed value = Σ(receivedQuantity × unitPrice) on PO items — the value physically received.
+     */
+    public Map<String, Object> overview() {
+        List<Map<String, Object>> suppliers = new ArrayList<>();
+        BigDecimal totOrdered = BigDecimal.ZERO, totLanded = BigDecimal.ZERO,
+                   totPaid = BigDecimal.ZERO, totToPay = BigDecimal.ZERO;
+
+        for (Supplier supplier : supplierRepository.findAllByOrderByNameAsc()) {
+            List<PurchaseOrder> orders = poRepository.findBySupplierIdOrderByIdDesc(supplier.getId());
+            if (orders.isEmpty()) continue;
+
+            BigDecimal ordered = BigDecimal.ZERO, landed = BigDecimal.ZERO;
+            for (PurchaseOrder po : orders) {
+                if ("CANCELLED".equals(po.getStatus()) || "REJECTED".equals(po.getStatus())) continue;
+                if (po.getTotalAmount() != null) ordered = ordered.add(po.getTotalAmount());
+                for (PurchaseOrderItem it : poiRepository.findByPurchaseOrderId(po.getId())) {
+                    if (it.getReceivedQuantity() != null && it.getReceivedQuantity() > 0 && it.getUnitPrice() != null) {
+                        landed = landed.add(it.getUnitPrice().multiply(BigDecimal.valueOf(it.getReceivedQuantity())));
+                    }
+                }
+            }
+            BigDecimal paid = paymentRepository.findBySupplierIdOrderByPaymentDateDesc(supplier.getId()).stream()
+                    .map(PurchasePayment::getAmount).filter(Objects::nonNull)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            // Pending consistently = ordered − paid (order-first model), clamped at 0; overpayment is
+            // supplier-account credit, not a negative "still to pay". Matches order/profile/report screens.
+            BigDecimal toPay = ordered.subtract(paid).max(BigDecimal.ZERO);
+            BigDecimal yetToLand = ordered.subtract(landed).max(BigDecimal.ZERO);
+
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("supplierId", supplier.getId());
+            row.put("supplierName", supplier.getName());
+            row.put("ordered", ordered);
+            row.put("landed", landed);
+            row.put("paid", paid);
+            row.put("toPay", toPay);
+            row.put("yetToLand", yetToLand);
+            suppliers.add(row);
+
+            totOrdered = totOrdered.add(ordered);
+            totLanded = totLanded.add(landed);
+            totPaid = totPaid.add(paid);
+            totToPay = totToPay.add(toPay);
+        }
+        suppliers.sort((a, b) -> ((BigDecimal) b.get("toPay")).compareTo((BigDecimal) a.get("toPay")));
+
+        // Buy now — inventory at/below reorder level, with a suggested (preferred) supplier.
+        List<Map<String, Object>> buyNow = new ArrayList<>();
+        for (InventoryItem item : inventoryItemRepository.findAll()) {
+            Product p = item.getProduct();
+            Integer reorder = p.getReorderLevel();
+            if (reorder == null || reorder <= 0 || item.getAvailableQuantity() > reorder) continue;
+            Supplier pref = productSupplierService.getPreferredSupplier(p.getId()).orElse(null);
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("productId", p.getId());
+            row.put("productName", p.getName());
+            row.put("unit", p.getUnit());
+            row.put("currentStock", item.getAvailableQuantity());
+            row.put("reorderLevel", reorder);
+            row.put("warehouseName", item.getWarehouse() != null ? item.getWarehouse().getName() : null);
+            row.put("suggestedSupplierId", pref != null ? pref.getId() : null);
+            row.put("suggestedSupplierName", pref != null ? pref.getName() : null);
+            buyNow.add(row);
+        }
+
+        Map<String, Object> totals = new LinkedHashMap<>();
+        totals.put("ordered", totOrdered);
+        totals.put("landed", totLanded);
+        totals.put("paid", totPaid);
+        totals.put("toPay", totToPay);
+        totals.put("yetToLand", totOrdered.subtract(totLanded).max(BigDecimal.ZERO));
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("totals", totals);
+        result.put("suppliers", suppliers);
+        result.put("buyNow", buyNow);
+        result.put("incoming", pendingDeliveries()); // open POs still expecting material
         return result;
     }
 
@@ -71,21 +168,23 @@ public class PurchaseReportService {
                     .map(PurchaseOrder::getTotalAmount).filter(Objects::nonNull)
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-            int completed = 0, onTime = 0;
+            // On-time from actual goods-receipt dates vs expected date (any received, non-cancelled PO).
+            int delivered = 0, onTime = 0, late = 0, delayDays = 0;
             for (PurchaseOrder po : orders) {
-                if (!"COMPLETED".equals(po.getStatus()) || po.getExpectedDeliveryDate() == null) continue;
-                completed++;
+                if (po.getExpectedDeliveryDate() == null
+                        || "CANCELLED".equals(po.getStatus()) || "REJECTED".equals(po.getStatus())) continue;
                 Optional<LocalDate> firstReceipt = grnRepository.findByPurchaseOrderId(po.getId()).stream()
-                        .map(g -> g.getDate().toLocalDate()).min(Comparator.naturalOrder());
-                if (firstReceipt.isPresent() && !firstReceipt.get().isAfter(po.getExpectedDeliveryDate())) onTime++;
+                        .filter(g -> g.getDate() != null).map(g -> g.getDate().toLocalDate()).min(Comparator.naturalOrder());
+                if (firstReceipt.isEmpty()) continue;
+                delivered++;
+                if (!firstReceipt.get().isAfter(po.getExpectedDeliveryDate())) onTime++;
+                else { late++; delayDays += (int) java.time.temporal.ChronoUnit.DAYS.between(po.getExpectedDeliveryDate(), firstReceipt.get()); }
             }
 
-            BigDecimal billed = billRepository.findBySupplierId(supplier.getId()).stream()
-                    .map(PurchaseBill::getTotalAmount).filter(Objects::nonNull)
-                    .reduce(BigDecimal.ZERO, BigDecimal::add);
             BigDecimal paid = paymentRepository.findBySupplierIdOrderByPaymentDateDesc(supplier.getId()).stream()
                     .map(PurchasePayment::getAmount).filter(Objects::nonNull)
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
+            BigDecimal pending = totalValue.subtract(paid).max(BigDecimal.ZERO);
 
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("supplierId", supplier.getId());
@@ -93,9 +192,13 @@ public class PurchaseReportService {
             row.put("rating", supplier.getPerformanceRating());
             row.put("totalOrders", orders.size());
             row.put("totalValue", totalValue);
-            row.put("completedOrders", completed);
-            row.put("onTimeDeliveryPercent", completed > 0 ? Math.round(onTime * 100.0 / completed) : null);
-            row.put("outstandingBalance", billed.subtract(paid));
+            row.put("paid", paid);
+            row.put("pending", pending);
+            row.put("deliveredOrders", delivered);
+            row.put("onTimeOrders", onTime);
+            row.put("lateOrders", late);
+            row.put("avgDelayDays", late > 0 ? Math.round((float) delayDays / late) : 0);
+            row.put("onTimeDeliveryPercent", delivered > 0 ? Math.round(onTime * 100.0 / delivered) : null);
             rows.add(row);
         }
         rows.sort((a, b) -> ((BigDecimal) b.get("totalValue")).compareTo((BigDecimal) a.get("totalValue")));

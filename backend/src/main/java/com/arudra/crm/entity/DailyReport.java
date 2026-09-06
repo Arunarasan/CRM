@@ -36,6 +36,13 @@ public class DailyReport extends BaseEntity {
     @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "project", "assignedEmployee", "contractor", "phase", "room", "parentTask", "dependencies"})
     private Task task;
 
+    // Optional link to a lead the report is about (e.g. a field visit for a specific enquiry).
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "lead_id")
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "leadOwner", "assignedSalesExecutive", "assignedEngineer",
+            "assignedDesigner", "projectManager", "customer"})
+    private Lead lead;
+
     @Column(name = "report_date", nullable = false)
     private LocalDate reportDate;
 

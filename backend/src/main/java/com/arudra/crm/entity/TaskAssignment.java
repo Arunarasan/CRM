@@ -59,6 +59,13 @@ public class TaskAssignment extends BaseEntity {
     @Column(name = "accepted_at")
     private LocalDateTime acceptedAt;
 
+    /**
+     * When set, the data-entry hold countdown is measured from here instead of the claim time —
+     * a worker who is still working can extend the window so the task isn't auto-released mid-work.
+     */
+    @Column(name = "hold_extended_at")
+    private LocalDateTime holdExtendedAt;
+
     @Column(name = "started_at")
     private LocalDateTime startedAt;
 

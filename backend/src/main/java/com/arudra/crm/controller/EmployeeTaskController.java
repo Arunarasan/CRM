@@ -157,6 +157,12 @@ public class EmployeeTaskController {
         return ResponseEntity.ok(ApiResponse.success(employeeTaskService.start(id, me())));
     }
 
+    @PostMapping("/{id}/extend-hold")
+    @PreAuthorize(EXECUTE)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> extendHold(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.success(employeeTaskService.extendHold(id, me())));
+    }
+
     @PostMapping("/{id}/pause")
     @PreAuthorize(EXECUTE)
     public ResponseEntity<ApiResponse<Task>> pause(@PathVariable Long id, @RequestBody(required = false) Map<String, String> body) {
@@ -187,6 +193,45 @@ public class EmployeeTaskController {
     public ResponseEntity<ApiResponse<Map<String, Object>>> submitLeadForm(
             @PathVariable Long id, @RequestBody(required = false) Map<String, Object> body) {
         return ResponseEntity.ok(ApiResponse.success(leadTaskFormService.submit(id, me(), body)));
+    }
+
+    /** Latest captured draft for this lead task, so a re-collected follow-up shows what was already entered. */
+    @GetMapping("/{id}/lead-form/draft")
+    @PreAuthorize(EXECUTE)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> leadFormDraft(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.success(leadTaskFormService.getLatestDraft(id)));
+    }
+
+    /** Field employee flags a second site visit is needed → spawn a repeat visit task, hold BOQ.
+     *  Lead-scoped: the in-portal visit screen is opened by leadId. */
+    @PostMapping("/lead/{leadId}/revisit")
+    @PreAuthorize(EXECUTE)
+    public ResponseEntity<ApiResponse<Task>> scheduleRevisit(@PathVariable Long leadId,
+            @RequestBody(required = false) Map<String, Object> body) {
+        java.time.LocalDate date = null;
+        if (body != null && body.get("nextVisitDate") != null && !String.valueOf(body.get("nextVisitDate")).isBlank()) {
+            date = java.time.LocalDate.parse(String.valueOf(body.get("nextVisitDate")).substring(0, 10));
+        }
+        String notes = body != null ? (String) body.get("notes") : null;
+        return ResponseEntity.ok(ApiResponse.success(employeeTaskService.scheduleRevisitForLead(leadId, me(), date, notes)));
+    }
+
+    /** Employee/admin closes the deal from the BOQ & Quotation task → approve + convert to a project.
+     *  Lead-scoped: the in-portal BOQ & Quotation screen is opened by leadId. */
+    @PostMapping("/lead/{leadId}/convert-project")
+    @PreAuthorize(EXECUTE)
+    public ResponseEntity<ApiResponse<List<Project>>> convertProject(@PathVariable Long leadId,
+            @RequestBody(required = false) Map<String, Object> body) {
+        BigDecimal advance = null;
+        String method = null;
+        if (body != null) {
+            Object raw = body.get("advanceAmount");
+            if (raw != null && !String.valueOf(raw).isBlank()) {
+                try { advance = new BigDecimal(String.valueOf(raw).replace(",", "")); } catch (NumberFormatException ignored) { }
+            }
+            method = body.get("advancePaymentMethod") != null ? String.valueOf(body.get("advancePaymentMethod")) : null;
+        }
+        return ResponseEntity.ok(ApiResponse.success(employeeTaskService.convertLeadToProject(leadId, me(), advance, method)));
     }
 
     @PostMapping("/{id}/approve")

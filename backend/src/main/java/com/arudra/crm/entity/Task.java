@@ -153,4 +153,8 @@ public class Task extends BaseEntity {
 
     @Column(name = "quotation_id")
     private Long quotationId;
+
+    /** Set for the installation task auto-created from a counter-sale invoice (plain id, no FK). */
+    @Column(name = "invoice_id")
+    private Long invoiceId;
 }

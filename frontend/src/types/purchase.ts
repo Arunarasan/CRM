@@ -33,12 +33,28 @@ export interface SupplierProfile {
   totalOrderedValue: number;
   totalBilled: number;
   totalPaid: number;
+  pendingAmount: number;
   outstandingBalance: number;
   creditLimit?: number;
   onTimeDeliveryPercent?: number | null;
+  deliveredOrders: number;
+  onTimeOrders: number;
+  lateOrders: number;
+  avgDelayDays: number;
+  autoRating?: number | null;
   completedOrders: number;
+  pendingOrders: PendingOrderRow[];
   pastPurchases: PurchaseOrder[];
   recentPayments: PurchasePayment[];
+}
+
+export interface PendingOrderRow {
+  id: number;
+  poNumber: string;
+  date?: string;
+  totalAmount: number;
+  paid: number;
+  pending: number;
 }
 
 export type PurchaseRequestStatus = "PENDING" | "APPROVED" | "REJECTED" | "CONVERTED";
@@ -192,6 +208,7 @@ export interface PurchasePayment {
   paymentDate: string;
   paymentMethod?: string;
   referenceNumber?: string;
+  proofUrl?: string;
   notes?: string;
 }
 
@@ -232,6 +249,53 @@ export interface PurchaseDashboard {
   todaysDeliveries: PurchaseOrder[];
   delayedDeliveries: PurchaseOrder[];
   lowStockMaterials: number;
+}
+
+// Plain-language "Purchasing Home" overview (GET /reports/purchases/overview).
+export interface PurchaseOverviewTotals {
+  ordered: number;
+  landed: number;
+  paid: number;
+  toPay: number;
+  yetToLand: number;
+}
+
+export interface SupplierLedgerRow {
+  supplierId: number;
+  supplierName: string;
+  ordered: number;
+  landed: number;
+  paid: number;
+  toPay: number;
+  yetToLand: number;
+}
+
+export interface BuyNowRow {
+  productId: number;
+  productName: string;
+  unit?: string;
+  currentStock: number;
+  reorderLevel: number;
+  warehouseName?: string;
+  suggestedSupplierId?: number | null;
+  suggestedSupplierName?: string | null;
+}
+
+export interface IncomingRow {
+  poId: number;
+  poNumber: string;
+  supplierName?: string;
+  status: string;
+  expectedDeliveryDate?: string | null;
+  totalAmount?: number;
+  daysOverdue: number;
+}
+
+export interface PurchaseOverview {
+  totals: PurchaseOverviewTotals;
+  suppliers: SupplierLedgerRow[];
+  buyNow: BuyNowRow[];
+  incoming: IncomingRow[];
 }
 
 export interface PriceComparisonRow {
@@ -275,3 +339,29 @@ export const PRIORITY_TONE: Record<string, string> = {
   HIGH: "bg-orange-100 text-orange-700",
   URGENT: "bg-red-100 text-red-700",
 };
+
+// --- Goods-receipt approval log (admin audit) ---
+export interface GoodsReceiptLog {
+  id: number;
+  grnId?: number | null;
+  grnNumber?: string | null;
+  purchaseOrderId?: number | null;
+  poNumber?: string | null;
+  supplierName?: string | null;
+  warehouseName?: string | null;
+  approvedById?: number | null;
+  approvedByName?: string | null;
+  approvedByRole?: string | null;
+  source?: string | null; // PORTAL | DESKTOP
+  itemsSummary?: string | null;
+  totalAcceptedQty?: number | null;
+  qcStatus?: string | null;
+  approvedAt?: string | null;
+}
+
+export interface GoodsReceiptLogPage {
+  content: GoodsReceiptLog[];
+  totalElements: number;
+  totalPages: number;
+  number: number;
+}

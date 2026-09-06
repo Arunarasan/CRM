@@ -163,6 +163,28 @@ public class TaskService {
         Task task = getTaskById(id);
         taskRepository.delete(task);
     }
+
+    /**
+     * Focused edit for the project task board — updates only the human-editable fields
+     * (name, priority, due date, description, and optionally status), leaving the project,
+     * assignment, order and workflow links intact. Unlike {@link #updateTask}, a partial
+     * body will not null out the untouched columns.
+     */
+    public Task editTaskBasics(Long id, String taskName, String priority, String status,
+                               java.time.LocalDate dueDate, String description) {
+        Task task = getTaskById(id);
+        String previousStatus = task.getStatus();
+        if (taskName != null && !taskName.isBlank()) task.setTaskName(taskName);
+        if (priority != null) task.setPriority(priority);
+        if (status != null) task.setStatus(status);
+        if (dueDate != null) task.setDueDate(dueDate);
+        if (description != null) task.setDescription(description);
+        Task saved = taskRepository.save(task);
+        if (!"COMPLETED".equals(previousStatus) && "COMPLETED".equals(saved.getStatus())) {
+            workflowTriggerService.onTaskCompleted(saved);
+        }
+        return saved;
+    }
     
     public TaskComment addComment(Long taskId, TaskComment comment, User user) {
         Task task = getTaskById(taskId);

@@ -1,20 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Plus, X, Camera, Video, Trash2, CalendarDays } from 'lucide-react';
 import { employeePortalApi } from '@/api/employeePortalApi';
-import { DailyReportEntry, DailyReportCreateBody, MyProject } from '@/types/employeePortal';
+import { DailyReportEntry, DailyReportCreateBody, MyProject, LeadSummary } from '@/types/employeePortal';
 import { uploadFile } from '@/lib/uploadFile';
 import { PortalHeader, StatusPill, EmptyState } from './_shared';
 
 interface Media { mediaType: string; fileUrl: string }
 const today = () => new Date().toISOString().slice(0, 10);
 const emptyForm = (): DailyReportCreateBody => ({
-  projectId: null, reportDate: today(), todaysWork: '', hoursWorked: '', completedWork: '',
+  projectId: null, leadId: null, reportDate: today(), todaysWork: '', hoursWorked: '', completedWork: '',
   pendingWork: '', problems: '', materialUsed: '', materialRequired: '', remarks: '',
 });
 
 export default function DailyReports() {
   const [list, setList] = useState<DailyReportEntry[]>([]);
   const [projects, setProjects] = useState<MyProject[]>([]);
+  const [leads, setLeads] = useState<LeadSummary[]>([]);
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -27,6 +28,7 @@ export default function DailyReports() {
   const load = useCallback(() => {
     employeePortalApi.dailyReports().then(setList).catch(() => {});
     employeePortalApi.projects().then(setProjects).catch(() => {});
+    employeePortalApi.leads().then(setLeads).catch(() => {});
   }, []);
   useEffect(() => { load(); }, [load]);
 
@@ -132,6 +134,13 @@ export default function DailyReports() {
                 <select value={form.projectId ?? ''} onChange={(e) => set('projectId', e.target.value ? Number(e.target.value) : null)} className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm">
                   <option value="">— Select project (optional) —</option>
                   {projects.map((p) => <option key={p.id} value={p.id}>{p.projectName}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Lead</label>
+                <select value={form.leadId ?? ''} onChange={(e) => set('leadId', e.target.value ? Number(e.target.value) : null)} className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm">
+                  <option value="">— Link a lead (optional) —</option>
+                  {leads.map((l) => <option key={l.id} value={l.id}>{l.name}{l.leadNumber ? ` (${l.leadNumber})` : ''}</option>)}
                 </select>
               </div>
               <Area label="Today's work" value={form.todaysWork} onChange={(v) => set('todaysWork', v)} placeholder="What did you work on today?" />

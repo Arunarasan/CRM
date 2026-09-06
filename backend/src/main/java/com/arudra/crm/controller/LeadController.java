@@ -35,11 +35,22 @@ public class LeadController {
     @Autowired
     private com.arudra.crm.service.LeadTaskFormService leadTaskFormService;
 
+    @Autowired
+    private com.arudra.crm.service.SmartAssignmentService smartAssignmentService;
+
     /** Structured data captured by employees completing this lead's workflow tasks (the Task Data log). */
     @GetMapping("/{id}/task-submissions")
     @PreAuthorize(READ)
     public ResponseEntity<java.util.List<java.util.Map<String, Object>>> getTaskSubmissions(@PathVariable Long id) {
         return ResponseEntity.ok(leadTaskFormService.getSubmissionsForLead(id));
+    }
+
+    /** The lead's auto-generated workflow tasks (Requirement → Site Visit → BOQ → Quotation), in order,
+     *  so the lead profile's task-reminder panel can show and assign the same tasks as the global board. */
+    @GetMapping("/{id}/workflow-tasks")
+    @PreAuthorize(READ)
+    public ResponseEntity<java.util.List<java.util.Map<String, Object>>> getWorkflowTasks(@PathVariable Long id) {
+        return ResponseEntity.ok(smartAssignmentService.tasksForLead(id));
     }
 
     // =====================================================================
@@ -63,13 +74,14 @@ public class LeadController {
             @RequestParam(required = false) BigDecimal budgetMax,
             @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) LocalDate dateFrom,
             @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) LocalDate dateTo,
+            @RequestParam(required = false) Boolean followUpDue,
             @RequestParam(required = false) String sortBy,
             @RequestParam(required = false, defaultValue = "desc") String sortDir,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
         return ResponseEntity.ok(leadService.getLeads(search, status, stage, source, leadType,
                 priority, temperature, city, assignedEmployeeId, isConverted,
-                budgetMin, budgetMax, dateFrom, dateTo, sortBy, sortDir, page, size));
+                budgetMin, budgetMax, dateFrom, dateTo, followUpDue, sortBy, sortDir, page, size));
     }
 
     @GetMapping("/dashboard")
@@ -111,6 +123,13 @@ public class LeadController {
     @PreAuthorize(READ)
     public ResponseEntity<Lead> getLeadById(@PathVariable Long id) {
         return ResponseEntity.ok(leadService.getLeadById(id));
+    }
+
+    /** Who added this lead — name + employee code/designation (resolved for field-portal leads). */
+    @GetMapping("/{id}/created-by")
+    @PreAuthorize(READ)
+    public ResponseEntity<Map<String, Object>> getLeadCreator(@PathVariable Long id) {
+        return ResponseEntity.ok(leadService.getLeadCreator(id));
     }
 
     @PostMapping
@@ -282,6 +301,21 @@ public class LeadController {
             @PathVariable Long taskId, @RequestParam String status) {
         return ResponseEntity.ok(
                 leadService.updateTaskStatus(id, taskId, status, currentUserService.getCurrentUser()));
+    }
+
+    @PutMapping("/{id}/tasks/{taskId}")
+    @PreAuthorize(WRITE)
+    public ResponseEntity<LeadReminder> updateTask(@PathVariable Long id,
+            @PathVariable Long taskId, @RequestBody LeadReminder task) {
+        return ResponseEntity.ok(
+                leadService.updateTask(id, taskId, task, currentUserService.getCurrentUser()));
+    }
+
+    @DeleteMapping("/{id}/tasks/{taskId}")
+    @PreAuthorize(WRITE)
+    public ResponseEntity<Void> deleteTask(@PathVariable Long id, @PathVariable Long taskId) {
+        leadService.deleteTask(id, taskId, currentUserService.getCurrentUser());
+        return ResponseEntity.noContent().build();
     }
 
     // =====================================================================

@@ -2,7 +2,7 @@ import api from '../lib/api';
 import {
   Product, Warehouse, WarehouseStockSummary, InventoryCategory, InventoryItem,
   InventoryTransaction, ProductAvailability, InventoryDashboard,
-  StockTransfer, MaterialRequest, DamageEntry, PurchaseRequest, ProductSupplier,
+  StockTransfer, MaterialRequest, DamageEntry, ProductSupplier,
 } from '../types/inventory';
 
 // Thin typed wrapper around /api/inventory, /api/purchases (purchase-requests), and the
@@ -81,13 +81,6 @@ export const inventoryApi = {
   reportDamage: (payload: { productId: number; warehouseId: number; quantity: number; reason?: string; photoUrl?: string; responsiblePersonId?: number }) =>
     api.post<DamageEntry>(`${BASE}/damage-entries`, payload).then((r) => r.data),
   writeOffDamage: (id: number) => api.post<DamageEntry>(`${BASE}/damage-entries/${id}/write-off`).then((r) => r.data),
-
-  // Purchase requests (system-generated low-stock queue)
-  getPurchaseRequests: (status?: string) => api.get<PurchaseRequest[]>(`${BASE}/purchase-requests${status ? `?status=${status}` : ''}`).then((r) => r.data),
-  triggerPurchaseRequestScan: () => api.post<{ created: number }>(`${BASE}/purchase-requests/scan`).then((r) => r.data),
-  convertPurchaseRequest: (id: number) => api.post(`${BASE}/purchase-requests/${id}/convert`).then((r) => r.data),
-  rejectPurchaseRequest: (id: number, reason?: string) =>
-    api.post<PurchaseRequest>(`${BASE}/purchase-requests/${id}/reject${reason ? `?reason=${encodeURIComponent(reason)}` : ''}`).then((r) => r.data),
 
   // Inventory reports
   getInventorySummaryReport: () => api.get(`/reports/inventory/summary`).then((r) => r.data),

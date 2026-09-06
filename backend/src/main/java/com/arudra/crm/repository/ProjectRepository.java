@@ -46,6 +46,17 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
            "AND p.assignedEmployees IS EMPTY AND UPPER(p.status) NOT IN ('COMPLETED','CLOSED','CANCELLED')")
     long countUnassignedTeam();
 
+    /** Overdue projects: past their end date and not finished/cancelled — mirrors the dashboard's delayed count. */
+    @Query("SELECT p FROM Project p LEFT JOIN p.customer c WHERE p.endDate < :today " +
+           "AND UPPER(p.status) NOT IN ('COMPLETED','CANCELLED') AND " +
+           "(:search = '' OR LOWER(p.projectName) LIKE LOWER(CONCAT('%', :search, '%')) " +
+           "OR LOWER(c.name) LIKE LOWER(CONCAT('%', :search, '%')))")
+    Page<Project> findDelayed(@Param("today") java.time.LocalDate today,
+                              @Param("search") String search, Pageable pageable);
+
+    @Query("SELECT COUNT(p) FROM Project p WHERE p.endDate < :today AND UPPER(p.status) NOT IN ('COMPLETED','CANCELLED')")
+    long countDelayed(@Param("today") java.time.LocalDate today);
+
     java.util.List<Project> findByStatus(String status);
     java.util.List<Project> findByCustomerId(Long customerId);
     Page<Project> findByCustomerId(Long customerId, Pageable pageable);

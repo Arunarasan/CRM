@@ -1,5 +1,6 @@
 package com.arudra.crm.service;
 
+import com.arudra.crm.dto.GoodsReceiptSubmission;
 import com.arudra.crm.entity.*;
 import com.arudra.crm.repository.*;
 import com.arudra.crm.security.CurrentUserService;
@@ -45,6 +46,9 @@ public class PurchaseService {
     @Autowired private NotificationService notificationService;
     @Autowired private UserRepository userRepository;
     @Autowired private CurrentUserService currentUserService;
+    @Autowired private ProductRepository productRepository;
+    @Autowired private WarehouseRepository warehouseRepository;
+    @Autowired private GoodsReceiptApprovalLogRepository approvalLogRepository;
     @Autowired @org.springframework.context.annotation.Lazy private ProjectFinanceService projectFinanceService;
 
     // =====================================================================
@@ -116,18 +120,31 @@ public class PurchaseService {
                 .map(PurchaseOrder::getTotalAmount).filter(Objects::nonNull)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        // On-time delivery: completed POs whose first GRN landed on/before the expected date.
-        int completed = 0, onTime = 0;
+        // On-time delivery from actual goods-receipt dates vs the expected date (any received PO).
+        DeliveryStats delivery = computeDeliveryStats(orders);
+        Integer onTimePercent = delivery.onTimePercent();
+        // Pending in the order-first model = ordered − paid (bills are optional and often unused).
+        BigDecimal pending = totalOrdered.subtract(totalPaid).max(BigDecimal.ZERO);
+
+        // Per-order pending balances (oldest first) — the queue a lump supplier payment splits across.
+        List<Map<String, Object>> pendingOrders = new ArrayList<>();
         for (PurchaseOrder po : orders) {
-            if (!"COMPLETED".equals(po.getStatus()) || po.getExpectedDeliveryDate() == null) continue;
-            completed++;
-            List<GoodsReceiptNote> grns = grnRepository.findByPurchaseOrderId(po.getId());
-            Optional<LocalDateTime> firstReceipt = grns.stream()
-                    .map(GoodsReceiptNote::getDate).filter(Objects::nonNull).min(Comparator.naturalOrder());
-            if (firstReceipt.isPresent() && !firstReceipt.get().toLocalDate().isAfter(po.getExpectedDeliveryDate())) {
-                onTime++;
-            }
+            if ("CANCELLED".equals(po.getStatus()) || "REJECTED".equals(po.getStatus())) continue;
+            BigDecimal poTotal = po.getTotalAmount() != null ? po.getTotalAmount() : BigDecimal.ZERO;
+            BigDecimal poPaid = paymentRepository.findByPurchaseOrderId(po.getId()).stream()
+                    .map(PurchasePayment::getAmount).filter(Objects::nonNull).reduce(BigDecimal.ZERO, BigDecimal::add);
+            BigDecimal poPending = poTotal.subtract(poPaid);
+            if (poPending.signum() <= 0) continue;
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", po.getId());
+            m.put("poNumber", po.getPoNumber());
+            m.put("date", po.getDate());
+            m.put("totalAmount", poTotal);
+            m.put("paid", poPaid);
+            m.put("pending", poPending);
+            pendingOrders.add(m);
         }
+        Collections.reverse(pendingOrders); // orders came newest-first; queue pays oldest first
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("supplier", supplier);
@@ -135,13 +152,128 @@ public class PurchaseService {
         result.put("totalOrderedValue", totalOrdered);
         result.put("totalBilled", totalBilled);
         result.put("totalPaid", totalPaid);
+        result.put("pendingAmount", pending);
         result.put("outstandingBalance", totalBilled.subtract(totalPaid));
         result.put("creditLimit", supplier.getCreditLimit());
-        result.put("onTimeDeliveryPercent", completed > 0 ? Math.round(onTime * 100.0 / completed) : null);
-        result.put("completedOrders", completed);
+        result.put("onTimeDeliveryPercent", onTimePercent);
+        result.put("deliveredOrders", delivery.delivered);
+        result.put("onTimeOrders", delivery.onTime);
+        result.put("lateOrders", delivery.late);
+        result.put("avgDelayDays", delivery.avgDelayDays());
+        result.put("autoRating", onTimePercent != null ? ratingFromOnTime(onTimePercent) : null);
+        result.put("completedOrders", delivery.delivered);
+        result.put("pendingOrders", pendingOrders);
         result.put("pastPurchases", orders.stream().limit(25).toList());
         result.put("recentPayments", payments.stream().limit(10).toList());
         return result;
+    }
+
+    /**
+     * Records one lump payment to a supplier and auto-splits it across their open orders,
+     * oldest first (queue). Each order gets a PurchasePayment for its allocated share until the
+     * amount runs out; any remainder beyond all balances is saved as an ADVANCE to the supplier
+     * (no order). The date/method/reference/proof/notes from the template apply to every split.
+     */
+    @Transactional
+    public List<PurchasePayment> paySupplier(Long supplierId, PurchasePayment template) {
+        Supplier supplier = getSupplier(supplierId);
+        BigDecimal amount = template.getAmount();
+        if (amount == null || amount.signum() <= 0) {
+            throw new IllegalArgumentException("Enter an amount to pay.");
+        }
+        List<PurchaseOrder> orders = poRepository.findBySupplierIdOrderByIdDesc(supplierId);
+        Collections.reverse(orders); // oldest first
+
+        BigDecimal remaining = amount;
+        List<PurchasePayment> created = new ArrayList<>();
+        for (PurchaseOrder po : orders) {
+            if (remaining.signum() <= 0) break;
+            if ("CANCELLED".equals(po.getStatus()) || "REJECTED".equals(po.getStatus())) continue;
+            BigDecimal poTotal = po.getTotalAmount() != null ? po.getTotalAmount() : BigDecimal.ZERO;
+            BigDecimal poPaid = paymentRepository.findByPurchaseOrderId(po.getId()).stream()
+                    .map(PurchasePayment::getAmount).filter(Objects::nonNull).reduce(BigDecimal.ZERO, BigDecimal::add);
+            BigDecimal poPending = poTotal.subtract(poPaid);
+            if (poPending.signum() <= 0) continue;
+            BigDecimal alloc = remaining.min(poPending);
+            PurchasePayment p = newSupplierPaymentFrom(template, supplier);
+            p.setPurchaseOrder(po);
+            p.setAmount(alloc);
+            p.setPaymentType("PARTIAL");
+            created.add(paymentRepository.save(p));
+            remaining = remaining.subtract(alloc);
+        }
+        if (remaining.signum() > 0) {
+            PurchasePayment advance = newSupplierPaymentFrom(template, supplier);
+            advance.setAmount(remaining);
+            advance.setPaymentType("ADVANCE"); // supplier-account credit, not tied to an order
+            created.add(paymentRepository.save(advance));
+        }
+        return created;
+    }
+
+    private PurchasePayment newSupplierPaymentFrom(PurchasePayment template, Supplier supplier) {
+        PurchasePayment p = new PurchasePayment();
+        p.setSupplier(supplier);
+        p.setPaymentDate(template.getPaymentDate() != null ? template.getPaymentDate() : LocalDate.now());
+        p.setPaymentMethod(template.getPaymentMethod());
+        p.setReferenceNumber(template.getReferenceNumber());
+        p.setProofUrl(template.getProofUrl());
+        p.setNotes(template.getNotes());
+        return p;
+    }
+
+    /** Bucket of on-time delivery figures derived from goods-receipt dates. */
+    private static class DeliveryStats {
+        int delivered, onTime, late, totalDelayDays;
+        Integer onTimePercent() { return delivered > 0 ? (int) Math.round(onTime * 100.0 / delivered) : null; }
+        int avgDelayDays() { return late > 0 ? Math.round((float) totalDelayDays / late) : 0; }
+    }
+
+    /**
+     * On-time performance from the employee's goods-receipt date vs the PO's expected delivery date.
+     * Counts any PO that has an expected date AND at least one goods receipt (regardless of PO status);
+     * the earliest receipt is the delivery date. On/before expected = on time, after = late.
+     */
+    private DeliveryStats computeDeliveryStats(List<PurchaseOrder> orders) {
+        DeliveryStats st = new DeliveryStats();
+        for (PurchaseOrder po : orders) {
+            if (po.getExpectedDeliveryDate() == null) continue;
+            if ("CANCELLED".equals(po.getStatus()) || "REJECTED".equals(po.getStatus())) continue;
+            Optional<LocalDate> firstReceipt = grnRepository.findByPurchaseOrderId(po.getId()).stream()
+                    .map(GoodsReceiptNote::getDate).filter(Objects::nonNull)
+                    .map(LocalDateTime::toLocalDate).min(Comparator.naturalOrder());
+            if (firstReceipt.isEmpty()) continue; // not received yet — doesn't count for or against on-time
+            st.delivered++;
+            LocalDate got = firstReceipt.get(), expected = po.getExpectedDeliveryDate();
+            if (!got.isAfter(expected)) st.onTime++;
+            else { st.late++; st.totalDelayDays += (int) java.time.temporal.ChronoUnit.DAYS.between(expected, got); }
+        }
+        return st;
+    }
+
+    /** Star rating (1–5) derived from on-time delivery percentage. */
+    private int ratingFromOnTime(int pct) {
+        if (pct >= 95) return 5;
+        if (pct >= 85) return 4;
+        if (pct >= 70) return 3;
+        if (pct >= 50) return 2;
+        return 1;
+    }
+
+    /**
+     * Recomputes a supplier's star rating from its on-time delivery record and saves it.
+     * Called after each goods receipt is approved so the rating reflects real performance.
+     * Leaves the existing (manual) rating untouched until there is at least one delivery to judge.
+     */
+    @Transactional
+    public void recalcSupplierRating(Long supplierId) {
+        Supplier s = supplierRepository.findById(supplierId).orElse(null);
+        if (s == null) return;
+        DeliveryStats st = computeDeliveryStats(poRepository.findBySupplierIdOrderByIdDesc(supplierId));
+        Integer pct = st.onTimePercent();
+        if (pct == null) return; // no deliveries yet — keep whatever rating is set
+        s.setPerformanceRating(ratingFromOnTime(pct));
+        supplierRepository.save(s);
     }
 
     // =====================================================================
@@ -353,6 +485,12 @@ public class PurchaseService {
 
     @Transactional
     public GoodsReceiptNote approveGrn(Long grnId) {
+        return approveGrn(grnId, "DESKTOP");
+    }
+
+    /** @param source PORTAL (employee mobile) or DESKTOP (order page) — recorded on the approval log. */
+    @Transactional
+    public GoodsReceiptNote approveGrn(Long grnId, String source) {
         GoodsReceiptNote grn = grnRepository.findById(grnId).orElseThrow();
         if ("APPROVED".equals(grn.getStatus())) {
             throw new IllegalStateException("GRN is already approved");
@@ -417,12 +555,201 @@ public class PurchaseService {
 
         grn.setStatus("APPROVED");
         checkAndUpdatePoStatus(po.getId());
+        // Auto-update the supplier's star rating from its on-time delivery record (receipt vs expected date).
+        if (po.getSupplier() != null) recalcSupplierRating(po.getSupplier().getId());
 
         notifyRoles("Material Received",
                 grn.getGrnNumber() + " received against " + po.getPoNumber() + " at " + grn.getWarehouse().getName(),
                 "GRN", "/purchases/orders/" + po.getId());
 
-        return grnRepository.save(grn);
+        GoodsReceiptNote saved = grnRepository.save(grn);
+        writeApprovalLog(saved, items, source);
+        return saved;
+    }
+
+    /** Append-only audit row so the admin can see who approved every goods receipt and from where. */
+    private void writeApprovalLog(GoodsReceiptNote grn, List<GoodsReceiptNoteItem> items, String source) {
+        try {
+            GoodsReceiptApprovalLog log = new GoodsReceiptApprovalLog();
+            log.setGrnId(grn.getId());
+            log.setGrnNumber(grn.getGrnNumber());
+            PurchaseOrder po = grn.getPurchaseOrder();
+            if (po != null) {
+                log.setPurchaseOrderId(po.getId());
+                log.setPoNumber(po.getPoNumber());
+                if (po.getSupplier() != null) log.setSupplierName(po.getSupplier().getName());
+            }
+            if (grn.getWarehouse() != null) log.setWarehouseName(grn.getWarehouse().getName());
+
+            User u = grn.getReceivedByUser() != null ? grn.getReceivedByUser() : currentUserService.getCurrentUser();
+            if (u != null) {
+                log.setApprovedById(u.getId());
+                log.setApprovedByName(u.getName());
+                log.setApprovedByRole(primaryRoleName(u));
+            }
+            log.setSource(source);
+            log.setQcStatus(grn.getQcStatus());
+
+            int totalAccepted = 0;
+            StringBuilder sb = new StringBuilder();
+            for (GoodsReceiptNoteItem item : items) {
+                int accepted = item.getAcceptedQuantity() != null ? item.getAcceptedQuantity() : 0;
+                totalAccepted += accepted;
+                String name = item.getProduct() != null ? item.getProduct().getName() : "Item";
+                if (sb.length() > 0) sb.append(", ");
+                sb.append(name).append(" ×").append(accepted);
+                int damaged = item.getDamagedQuantity() != null ? item.getDamagedQuantity() : 0;
+                if (damaged > 0) sb.append(" (").append(damaged).append(" damaged)");
+            }
+            log.setTotalAcceptedQty(totalAccepted);
+            log.setItemsSummary(sb.toString());
+            log.setApprovedAt(LocalDateTime.now());
+            approvalLogRepository.save(log);
+        } catch (Exception ignored) {
+            // Audit logging must never break the receipt itself.
+        }
+    }
+
+    private String primaryRoleName(User u) {
+        try {
+            if (u.getRoles() != null) {
+                for (Role r : u.getRoles()) {
+                    if (r != null && r.getName() != null) return r.getName();
+                }
+            }
+        } catch (Exception ignored) { /* lazy roles unavailable */ }
+        return null;
+    }
+
+    // =====================================================================
+    // Goods receipt — portal (employee mobile) + admin log
+    // =====================================================================
+
+    /** Open purchase orders still awaiting delivery, with each line's ordered/received/outstanding qty. */
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getIncomingForReceipt() {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (PurchaseOrder po : poRepository.findByStatusIn(OPEN_PO_STATUSES)) {
+            List<Map<String, Object>> lines = new ArrayList<>();
+            int outstandingLines = 0;
+            for (PurchaseOrderItem poi : poiRepository.findByPurchaseOrderId(po.getId())) {
+                int ordered = poi.getQuantity() != null ? poi.getQuantity() : 0;
+                int received = poi.getReceivedQuantity() != null ? poi.getReceivedQuantity() : 0;
+                int outstanding = Math.max(ordered - received, 0);
+                if (outstanding <= 0) continue;
+                outstandingLines++;
+                Map<String, Object> line = new LinkedHashMap<>();
+                line.put("productId", poi.getProduct().getId());
+                line.put("productName", poi.getProduct().getName());
+                line.put("unit", poi.getProduct().getUnit());
+                line.put("ordered", ordered);
+                line.put("received", received);
+                line.put("outstanding", outstanding);
+                lines.add(line);
+            }
+            if (outstandingLines == 0) continue;
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("purchaseOrderId", po.getId());
+            row.put("poNumber", po.getPoNumber());
+            row.put("supplierName", po.getSupplier() != null ? po.getSupplier().getName() : null);
+            row.put("status", po.getStatus());
+            row.put("expectedDeliveryDate", po.getExpectedDeliveryDate());
+            row.put("warehouseId", po.getWarehouse() != null ? po.getWarehouse().getId() : null);
+            row.put("warehouseName", po.getWarehouse() != null ? po.getWarehouse().getName() : null);
+            row.put("items", lines);
+            out.add(row);
+        }
+        return out;
+    }
+
+    /** Warehouses an employee can receive stock into (used when a PO has no destination warehouse set). */
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getReceiptWarehouses() {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (Warehouse w : warehouseRepository.findAll()) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", w.getId());
+            m.put("name", w.getName());
+            out.add(m);
+        }
+        return out;
+    }
+
+    /** Receive goods against a PO and approve the receipt in one step (create GRN → QC → approve). */
+    @Transactional
+    public GoodsReceiptNote receiveAndApprove(GoodsReceiptSubmission sub, String source) {
+        if (sub == null || sub.purchaseOrderId == null) {
+            throw new IllegalArgumentException("A purchase order is required to receive goods");
+        }
+        if (sub.items == null || sub.items.isEmpty()) {
+            throw new IllegalArgumentException("Add at least one received line");
+        }
+        PurchaseOrder po = poRepository.findById(sub.purchaseOrderId)
+                .orElseThrow(() -> new IllegalArgumentException("Purchase order not found"));
+
+        Warehouse warehouse = sub.warehouseId != null
+                ? warehouseRepository.findById(sub.warehouseId)
+                    .orElseThrow(() -> new IllegalArgumentException("Warehouse not found"))
+                : po.getWarehouse();
+        if (warehouse == null) {
+            throw new IllegalArgumentException("Choose a warehouse to receive the goods into");
+        }
+
+        GoodsReceiptNote grn = new GoodsReceiptNote();
+        grn.setPurchaseOrder(po);
+        grn.setWarehouse(warehouse);
+        grn.setSupplierInvoiceNumber(blankToNull(sub.supplierInvoiceNumber));
+        grn.setVehicleNumber(blankToNull(sub.vehicleNumber));
+        grn.setNotes(blankToNull(sub.notes));
+
+        List<GoodsReceiptNoteItem> items = new ArrayList<>();
+        for (GoodsReceiptSubmission.Line line : sub.items) {
+            if (line == null || line.productId == null) continue;
+            int received = line.receivedQuantity != null ? line.receivedQuantity : 0;
+            if (received <= 0) continue;
+            int damaged = line.damagedQuantity != null ? Math.max(line.damagedQuantity, 0) : 0;
+            if (damaged > received) damaged = received;
+            GoodsReceiptNoteItem item = new GoodsReceiptNoteItem();
+            item.setProduct(productRepository.findById(line.productId)
+                    .orElseThrow(() -> new IllegalArgumentException("Product not found")));
+            item.setReceivedQuantity(received);
+            item.setDamagedQuantity(damaged);
+            item.setAcceptedQuantity(Math.max(received - damaged, 0));
+            item.setRemarks(blankToNull(line.remarks));
+            items.add(item);
+        }
+        if (items.isEmpty()) {
+            throw new IllegalArgumentException("Enter a received quantity for at least one line");
+        }
+
+        GoodsReceiptNote savedGrn = createGrn(grn, items, sub.photoUrls);
+
+        String qc = (sub.qcStatus == null || sub.qcStatus.isBlank()) ? "PASS" : sub.qcStatus.trim();
+        recordQualityCheck(savedGrn.getId(), qc, null, blankToNull(sub.qcRemarks));
+        if ("REJECT".equals(qc)) {
+            // A rejected delivery is not approved; admin raises a return. Leave the GRN as DRAFT.
+            return grnRepository.findById(savedGrn.getId()).orElse(savedGrn);
+        }
+        return approveGrn(savedGrn.getId(), source);
+    }
+
+    /** GRNs recorded (received) by a given user — the portal "my receipts" history. */
+    @Transactional(readOnly = true)
+    public List<GoodsReceiptNote> getReceiptsByUser(Long userId) {
+        return grnRepository.findTop30ByReceivedByUserIdOrderByIdDesc(userId);
+    }
+
+    /** Admin goods-receipt approval log, newest first; optionally filtered to one approver. */
+    @Transactional(readOnly = true)
+    public Page<GoodsReceiptApprovalLog> getApprovalLogs(Long approvedById, int page, int size) {
+        PageRequest pr = PageRequest.of(page, size);
+        return approvedById != null
+                ? approvalLogRepository.findByApprovedByIdOrderByApprovedAtDesc(approvedById, pr)
+                : approvalLogRepository.findAllByOrderByApprovedAtDesc(pr);
+    }
+
+    private static String blankToNull(String s) {
+        return (s == null || s.isBlank()) ? null : s.trim();
     }
 
     private void checkAndUpdatePoStatus(Long poId) {
@@ -480,6 +807,11 @@ public class PurchaseService {
 
     public List<PurchasePayment> getPaymentsForBill(Long billId) {
         return paymentRepository.findByPurchaseBillId(billId);
+    }
+
+    /** All payments recorded against a purchase order (used for the order's Paid/Pending summary). */
+    public List<PurchasePayment> getPaymentsForPo(Long poId) {
+        return paymentRepository.findByPurchaseOrderId(poId);
     }
 
     public List<PurchasePayment> getAllPayments() {

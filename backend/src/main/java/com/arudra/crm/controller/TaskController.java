@@ -101,6 +101,22 @@ public class TaskController {
         return ResponseEntity.ok(taskService.updateTask(id, task));
     }
     
+    /** Focused edit (name / priority / due date / description / status) that preserves the
+     *  task's project, assignment and workflow links — used by the project task board. */
+    @PutMapping("/{id}/basics")
+    public ResponseEntity<Task> editTaskBasics(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+        Object due = body.get("dueDate");
+        java.time.LocalDate dueDate = (due == null || String.valueOf(due).isBlank())
+                ? null : java.time.LocalDate.parse(String.valueOf(due));
+        return ResponseEntity.ok(taskService.editTaskBasics(
+                id,
+                (String) body.get("taskName"),
+                (String) body.get("priority"),
+                (String) body.get("status"),
+                dueDate,
+                (String) body.get("description")));
+    }
+
     @PutMapping("/{id}/status")
     public ResponseEntity<Void> updateTaskStatusAndOrder(
             @PathVariable Long id, 

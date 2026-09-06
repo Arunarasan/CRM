@@ -22,9 +22,32 @@ public class WebsiteAdminController {
     private static final String WRITE = "hasAuthority('ROLE_ADMIN') or hasAuthority('WEBSITE_WRITE')";
 
     private final WebsiteAdminService svc;
+    private final com.arudra.crm.service.WebsiteEnquiryService enquiryService;
 
-    public WebsiteAdminController(WebsiteAdminService svc) {
+    public WebsiteAdminController(WebsiteAdminService svc,
+                                  com.arudra.crm.service.WebsiteEnquiryService enquiryService) {
         this.svc = svc;
+        this.enquiryService = enquiryService;
+    }
+
+    // ---- Enquiries (Website inbox) ----
+    @GetMapping("/enquiries") @PreAuthorize(READ)
+    public ResponseEntity<ApiResponse<List<com.arudra.crm.dto.website.WebsiteEnquiryDto.Summary>>> enquiries(
+            @RequestParam(required = false) String status) {
+        return ok(enquiryService.list(status));
+    }
+    @GetMapping("/enquiries/{id}") @PreAuthorize(READ)
+    public ResponseEntity<ApiResponse<com.arudra.crm.dto.website.WebsiteEnquiryDto.Detail>> enquiry(@PathVariable Long id) {
+        return ok(enquiryService.get(id));
+    }
+    @PatchMapping("/enquiries/{id}/status") @PreAuthorize(WRITE)
+    public ResponseEntity<ApiResponse<com.arudra.crm.dto.website.WebsiteEnquiryDto.Detail>> updateEnquiryStatus(
+            @PathVariable Long id, @RequestBody java.util.Map<String, String> body) {
+        return ok(enquiryService.updateStatus(id, body.get("status")));
+    }
+    @PostMapping("/enquiries/{id}/convert") @PreAuthorize(WRITE)
+    public ResponseEntity<ApiResponse<com.arudra.crm.dto.website.WebsiteEnquiryDto.Detail>> convertEnquiry(@PathVariable Long id) {
+        return ok(enquiryService.convertToLead(id));
     }
 
     // ---- Categories ----

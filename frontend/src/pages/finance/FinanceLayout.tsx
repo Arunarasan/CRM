@@ -1,28 +1,24 @@
 import { NavLink, Outlet } from "react-router-dom";
 import {
-  LayoutDashboard, FileText, Wallet, AlertCircle,
-  BookOpen, TrendingUp, Receipt, BarChart3,
+  LayoutDashboard, Wallet, BookOpen, Receipt, ArrowLeftRight,
 } from "lucide-react";
 
 const TABS = [
   { to: "/finance", label: "Dashboard", icon: LayoutDashboard, end: true },
-  { to: "/finance/invoices", label: "Invoices", icon: FileText },
+  { to: "/finance/cashbook", label: "Cash Book", icon: ArrowLeftRight },
   { to: "/finance/payments", label: "Payments", icon: Wallet },
-  { to: "/finance/outstanding", label: "Outstanding", icon: AlertCircle },
-  { to: "/finance/ledger", label: "Ledger", icon: BookOpen },
-  { to: "/finance/profitability", label: "Profitability", icon: TrendingUp },
+  { to: "/finance/accounts", label: "Accounts", icon: BookOpen },
   { to: "/finance/expenses", label: "Expenses", icon: Receipt },
-  { to: "/finance/reports", label: "Reports", icon: BarChart3 },
 ];
 
 export default function FinanceLayout() {
   return (
     <div className="p-4 md:p-8 h-full flex flex-col bg-slate-50">
       <div className="mb-6 shrink-0">
-        <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-slate-900">Billing &amp; Finance</h1>
+        <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-slate-900">Finance</h1>
         <p className="text-muted-foreground mt-1">
-          Project revenue, GST invoicing, payment collection, customer ledgers, expenses and
-          profitability reports — the central financial system.
+          Cash book, payment collection, customer accounts &amp; project profit, and expenses —
+          the money side of the business. Sales &amp; invoices live under Billing.
         </p>
       </div>
 

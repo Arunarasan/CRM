@@ -2,7 +2,8 @@ import { LeadStatusData } from "@/types/dashboard";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-const COLORS = ['#114f39', '#c8981e', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#6366f1'];
+// On-brand chart palette — forest greens through champagne gold.
+const COLORS = ['#06452F', '#BC8748', '#0A573B', '#D9B06B', '#2F8F65', '#4779A8', '#9B6B32'];
 
 export default function LeadPipelineChart({ data, isLoading }: { data: LeadStatusData[], isLoading: boolean }) {
   if (isLoading) {

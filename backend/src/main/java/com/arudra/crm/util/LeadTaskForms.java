@@ -35,7 +35,7 @@ public final class LeadTaskForms {
     public static boolean isModuleDriven(String templateCode) {
         return switch (templateCode == null ? "" : templateCode) {
             case "TT_MEASURE_SITE", "TT_PREPARE_BOQ", "TT_SCHEDULE_VISIT", "TT_CONDUCT_VISIT",
-                 "TT_VISIT_MEASURE", "TT_GENERATE_QUOTE" -> true;
+                 "TT_VISIT_MEASURE", "TT_GENERATE_QUOTE", "TT_BOQ_QUOTE" -> true;
             default -> false;
         };
     }
@@ -49,12 +49,14 @@ public final class LeadTaskForms {
         if (leadId == null) return null;
         return switch (templateCode == null ? "" : templateCode) {
             case "TT_MEASURE_SITE" -> "/measurements/new?leadId=" + leadId;
-            // Combined step: start on the Site Visit (records the visit), then its "Create Measurement"
-            // hand-off opens the pre-filled Measurement module — one task, both records, one trip.
-            case "TT_VISIT_MEASURE" -> "/site-visits/new?leadId=" + leadId;
+            // Combined step: a single compact in-portal page records the site visit AND the room-by-room
+            // measurement, creating both real records in one trip (measurement completion advances the workflow).
+            case "TT_VISIT_MEASURE" -> "/employee/visit-measure/new?leadId=" + leadId;
             case "TT_SCHEDULE_VISIT", "TT_CONDUCT_VISIT" -> "/site-visits/new?leadId=" + leadId;
-            case "TT_PREPARE_BOQ" -> "/boq/new?leadId=" + leadId;
-            case "TT_GENERATE_QUOTE" -> "/quotations/new?leadId=" + leadId;
+            case "TT_PREPARE_BOQ" -> "/employee/boq/new?leadId=" + leadId;
+            case "TT_GENERATE_QUOTE" -> "/employee/quotation/new?leadId=" + leadId;
+            // Combined step: one page does the BOQ then the quotation in a two-step flow.
+            case "TT_BOQ_QUOTE" -> "/employee/boq-quote/new?leadId=" + leadId;
             default -> null;
         };
     }
@@ -68,6 +70,7 @@ public final class LeadTaskForms {
             case "TT_SCHEDULE_VISIT" -> "Open Site Visit page";
             case "TT_CONDUCT_VISIT" -> "Open Site Visit page";
             case "TT_GENERATE_QUOTE" -> "Open Quotation page";
+            case "TT_BOQ_QUOTE" -> "Open BOQ & Quotation";
             default -> null;
         };
     }

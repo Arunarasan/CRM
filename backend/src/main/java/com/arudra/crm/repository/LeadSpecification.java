@@ -71,6 +71,19 @@ public class LeadSpecification {
         };
     }
 
+    /** Open leads whose next follow-up is overdue — mirrors the dashboard's "pending follow-ups". */
+    public static Specification<Lead> followUpDue(Boolean due) {
+        return (root, query, criteriaBuilder) -> {
+            if (!Boolean.TRUE.equals(due)) return null;
+            return criteriaBuilder.and(
+                    criteriaBuilder.isNotNull(root.get("nextFollowUpDate")),
+                    criteriaBuilder.lessThan(root.get("nextFollowUpDate"), LocalDate.now()),
+                    criteriaBuilder.isFalse(root.get("isConverted")),
+                    criteriaBuilder.not(root.get("status").in(com.arudra.crm.util.LeadWorkflow.CLOSED_STATUSES))
+            );
+        };
+    }
+
     public static Specification<Lead> isConverted(Boolean converted) {
         return (root, query, criteriaBuilder) -> {
             if (converted == null) return null;

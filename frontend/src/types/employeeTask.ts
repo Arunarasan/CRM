@@ -33,6 +33,8 @@ export interface TaskCard {
   assignedEmployees: string[];
   myAssignmentStatus?: AssignmentStatus;
   canPick?: boolean; // set on pool cards — false when the viewer is at capacity
+  dataEntry?: boolean; // quick data-entry lead task — exempt from the capacity cap
+  holdExpiresAt?: string | null; // ISO time this held data-entry task auto-releases (countdown)
 }
 
 /** Active-task capacity for the current employee. */
@@ -163,7 +165,7 @@ export interface LeadFormPayload {
   notes?: string;
   nextFollowUpDate?: string;
   media?: LeadFormMedia[];
-  data?: Record<string, string>;
+  data?: Record<string, string | number | boolean | null>;
 }
 
 export interface TaskDetail extends TaskCard {

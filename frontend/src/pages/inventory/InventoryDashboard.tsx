@@ -1,25 +1,35 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { inventoryApi } from "@/api/inventoryApi";
 import type { InventoryDashboard as Dashboard, InventoryItem } from "@/types/inventory";
 import { Package, TrendingUp, Lock, AlertTriangle, XCircle, ShoppingCart, ArrowDownCircle, ArrowUpCircle } from "lucide-react";
 
 const currency = (n?: number) => `₹${(n ?? 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
 
-function Tile({ label, value, icon: Icon, tone }: { label: string; value: string | number; icon: any; tone: string }) {
-  return (
-    <div className="bg-white p-5 rounded-2xl border shadow-sm flex items-center gap-4">
-      <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${tone}`}>
+function Tile({ label, value, icon: Icon, tone, onClick }: {
+  label: string; value: string | number; icon: any; tone: string; onClick?: () => void;
+}) {
+  const className = `bg-white p-5 rounded-2xl border shadow-sm flex items-center gap-4 text-left w-full ${
+    onClick ? "cursor-pointer transition-all hover:border-slate-300 hover:shadow-md" : ""
+  }`;
+  const body = (
+    <>
+      <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${tone}`}>
         <Icon className="w-5 h-5" />
       </div>
       <div>
         <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">{label}</div>
         <div className="text-2xl font-black text-slate-800">{value}</div>
       </div>
-    </div>
+    </>
   );
+  return onClick
+    ? <button type="button" onClick={onClick} className={className}>{body}</button>
+    : <div className={className}>{body}</div>;
 }
 
 export default function InventoryDashboard() {
+  const navigate = useNavigate();
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [alerts, setAlerts] = useState<InventoryItem[]>([]);
 
@@ -33,14 +43,14 @@ export default function InventoryDashboard() {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Tile label="Total Materials" value={dashboard.totalMaterials} icon={Package} tone="bg-emerald-100 text-emerald-600" />
-        <Tile label="Available Stock Value" value={currency(dashboard.availableStockValue)} icon={TrendingUp} tone="bg-emerald-100 text-emerald-600" />
-        <Tile label="Reserved Stock Value" value={currency(dashboard.reservedStockValue)} icon={Lock} tone="bg-amber-100 text-amber-600" />
-        <Tile label="Pending Purchase" value={dashboard.pendingPurchaseCount} icon={ShoppingCart} tone="bg-purple-100 text-purple-600" />
-        <Tile label="Low Stock" value={dashboard.lowStockCount} icon={AlertTriangle} tone="bg-orange-100 text-orange-600" />
-        <Tile label="Out of Stock" value={dashboard.outOfStockCount} icon={XCircle} tone="bg-red-100 text-red-600" />
-        <Tile label="Today's Issues" value={dashboard.todaysIssues} icon={ArrowUpCircle} tone="bg-rose-100 text-rose-600" />
-        <Tile label="Today's Returns" value={dashboard.todaysReturns} icon={ArrowDownCircle} tone="bg-teal-100 text-teal-600" />
+        <Tile label="Total Materials" value={dashboard.totalMaterials} icon={Package} tone="bg-emerald-100 text-emerald-600" onClick={() => navigate("/inventory/materials")} />
+        <Tile label="Available Stock Value" value={currency(dashboard.availableStockValue)} icon={TrendingUp} tone="bg-emerald-100 text-emerald-600" onClick={() => navigate("/inventory/materials")} />
+        <Tile label="Reserved Stock Value" value={currency(dashboard.reservedStockValue)} icon={Lock} tone="bg-amber-100 text-amber-600" onClick={() => navigate("/inventory/materials")} />
+        <Tile label="Pending Purchase" value={dashboard.pendingPurchaseCount} icon={ShoppingCart} tone="bg-purple-100 text-purple-600" onClick={() => navigate("/purchases/orders")} />
+        <Tile label="Low Stock" value={dashboard.lowStockCount} icon={AlertTriangle} tone="bg-orange-100 text-orange-600" onClick={() => navigate("/inventory/materials?stock=low")} />
+        <Tile label="Out of Stock" value={dashboard.outOfStockCount} icon={XCircle} tone="bg-red-100 text-red-600" onClick={() => navigate("/inventory/materials?stock=out")} />
+        <Tile label="Today's Issues" value={dashboard.todaysIssues} icon={ArrowUpCircle} tone="bg-rose-100 text-rose-600" onClick={() => navigate("/inventory/stock-movement")} />
+        <Tile label="Today's Returns" value={dashboard.todaysReturns} icon={ArrowDownCircle} tone="bg-teal-100 text-teal-600" onClick={() => navigate("/inventory/stock-movement")} />
       </div>
 
       <div className="bg-white border rounded-2xl shadow-sm overflow-hidden">

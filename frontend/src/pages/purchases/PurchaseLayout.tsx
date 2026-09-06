@@ -1,18 +1,13 @@
 import { NavLink, Outlet } from "react-router-dom";
 import {
-  LayoutDashboard, ClipboardList, ShoppingCart, Building2,
-  PackageCheck, FileText, Wallet, Undo2, BarChart3,
+  LayoutDashboard, ShoppingCart, Building2, BarChart3, PackageCheck,
 } from "lucide-react";
 
 const TABS = [
-  { to: "/purchases", label: "Dashboard", icon: LayoutDashboard, end: true },
-  { to: "/purchases/requests", label: "Purchase Requests", icon: ClipboardList },
-  { to: "/purchases/orders", label: "Purchase Orders", icon: ShoppingCart },
+  { to: "/purchases", label: "Home", icon: LayoutDashboard, end: true },
+  { to: "/purchases/orders", label: "Orders", icon: ShoppingCart },
   { to: "/purchases/suppliers", label: "Suppliers", icon: Building2 },
-  { to: "/purchases/grns", label: "Goods Receipts", icon: PackageCheck },
-  { to: "/purchases/invoices", label: "Bills", icon: FileText },
-  { to: "/purchases/payments", label: "Payments", icon: Wallet },
-  { to: "/purchases/returns", label: "Returns", icon: Undo2 },
+  { to: "/purchases/receipt-log", label: "Receipt Log", icon: PackageCheck },
   { to: "/purchases/reports", label: "Reports", icon: BarChart3 },
 ];
 
@@ -22,8 +17,8 @@ export default function PurchaseLayout() {
       <div className="mb-6 shrink-0">
         <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-slate-900">Purchasing</h1>
         <p className="text-muted-foreground mt-1">
-          Purchase requests, supplier management, purchase orders, goods receipts, bills, payments
-          and returns — the full procurement lifecycle feeding inventory.
+          One order per purchase — items, goods received, payments and returns all live on the order.
+          Build from low stock, receive &amp; pay in one place.
         </p>
       </div>
 

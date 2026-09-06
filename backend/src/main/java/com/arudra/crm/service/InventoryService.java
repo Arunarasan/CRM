@@ -7,6 +7,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
@@ -120,6 +121,24 @@ public class InventoryService {
         product.setSupplier(details.getSupplier());
         product.setDefaultWarehouse(details.getDefaultWarehouse());
         product.setImageUrl(details.getImageUrl());
+        product.setImageUrls(details.getImageUrls());
+        // Fabric / cloth specifications
+        product.setFabricComposition(details.getFabricComposition());
+        product.setFabricWidth(details.getFabricWidth());
+        product.setGsm(details.getGsm());
+        product.setPattern(details.getPattern());
+        product.setColor(details.getColor());
+        product.setColorFamily(details.getColorFamily());
+        product.setAvailableSizes(details.getAvailableSizes());
+        // Window suitability & design structure
+        product.setProductType(details.getProductType());
+        product.setSuitableWindowTypes(details.getSuitableWindowTypes());
+        product.setMountingType(details.getMountingType());
+        product.setOpacity(details.getOpacity());
+        product.setSuitableRooms(details.getSuitableRooms());
+        product.setDesignStyle(details.getDesignStyle());
+        product.setStructureNotes(details.getStructureNotes());
+        if (details.getStatus() != null) product.setStatus(details.getStatus());
         return productRepository.save(product);
     }
 
@@ -271,6 +290,43 @@ public class InventoryService {
             itemRepository.save(item);
         }
         logMovement(productId, null, null, "CONSUMPTION", quantity, referenceType, referenceId);
+    }
+
+    /**
+     * Point-of-sale stock-out for a counter/walk-in invoice line. Deducts the quantity from the
+     * given warehouse (or the product's default / most-stocked warehouse when none is supplied)
+     * and records a CONSUMPTION transaction tagged to the invoice. Returns the warehouse id used,
+     * so the caller can persist it for a later reversal.
+     *
+     * <p>Runs in its own transaction so a stock-out failure (e.g. no warehouse configured) can be
+     * swallowed by the caller without poisoning the counter-sale transaction — billing must not be
+     * blocked by an inventory hiccup.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public Long sellStock(Long productId, Long warehouseId, int quantity, Long invoiceId) {
+        Warehouse warehouse = resolveSaleWarehouse(productId, warehouseId);
+        removeStock(productId, warehouse.getId(), quantity);
+        logMovement(productId, warehouse, null, "CONSUMPTION", quantity, "INVOICE", invoiceId);
+        return warehouse.getId();
+    }
+
+    /** Reverses a counter-sale stock-out (invoice cancelled) — puts the quantity back. */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void reverseSaleStock(Long productId, Long warehouseId, int quantity, Long invoiceId) {
+        Warehouse warehouse = resolveSaleWarehouse(productId, warehouseId);
+        addStock(productId, warehouse.getId(), quantity);
+        logMovement(productId, warehouse, null, "ADJUSTMENT", quantity, "INVOICE_CANCEL", invoiceId);
+    }
+
+    private Warehouse resolveSaleWarehouse(Long productId, Long warehouseId) {
+        if (warehouseId != null) {
+            return warehouseRepository.findById(warehouseId)
+                    .orElseThrow(() -> new RuntimeException("Warehouse not found: " + warehouseId));
+        }
+        Product product = productRepository.findById(productId)
+                .orElseThrow(() -> new RuntimeException("Product not found: " + productId));
+        if (product.getDefaultWarehouse() != null) return product.getDefaultWarehouse();
+        return pickWarehouseForReservation(productId).getWarehouse();
     }
 
     private InventoryItem pickWarehouseForReservation(Long productId) {

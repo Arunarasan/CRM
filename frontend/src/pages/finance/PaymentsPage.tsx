@@ -122,7 +122,7 @@ export default function PaymentsPage() {
                     <td className="px-4 py-3">{p.customer?.name}</td>
                     <td className="px-4 py-3">
                       {p.invoice ? (
-                        <Link to={`/finance/invoices/${p.invoice.id}`} className="text-primary hover:underline">
+                        <Link to={`/billing/invoices/${p.invoice.id}`} className="text-primary hover:underline">
                           {p.invoice.invoiceNumber}
                         </Link>
                       ) : <span className="text-muted-foreground">Advance</span>}

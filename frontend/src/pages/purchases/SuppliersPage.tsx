@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { purchaseApi } from "@/api/purchaseApi";
 import { toast } from "@/components/ui/toast";
-import type { Supplier, SupplierProfile } from "@/types/purchase";
-import { PO_STATUS_TONE } from "@/types/purchase";
+import type { Supplier } from "@/types/purchase";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -19,7 +19,6 @@ export default function SuppliersPage() {
   const [search, setSearch] = useState("");
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [form, setForm] = useState<Partial<Supplier>>(EMPTY);
-  const [profile, setProfile] = useState<SupplierProfile | null>(null);
 
   const load = () => purchaseApi.getSuppliers(search || undefined).then(setSuppliers).catch(console.error);
 
@@ -33,10 +32,6 @@ export default function SuppliersPage() {
     const req = form.id ? purchaseApi.updateSupplier(form.id, form) : purchaseApi.createSupplier(form);
     req.then(() => { setIsFormOpen(false); setForm(EMPTY); load(); toast.success("Supplier saved."); })
       .catch(() => toast.error("Failed to save supplier."));
-  };
-
-  const openProfile = (s: Supplier) => {
-    purchaseApi.getSupplierProfile(s.id).then(setProfile).catch(console.error);
   };
 
   const field = (label: string, key: keyof Supplier, type = "text", placeholder = "") => (
@@ -67,9 +62,9 @@ export default function SuppliersPage() {
                 <Button variant="ghost" size="icon" onClick={() => { setForm(s); setIsFormOpen(true); }}><Pencil className="w-4 h-4" /></Button>
               </div>
             </div>
-            <button className="text-left" onClick={() => openProfile(s)}>
+            <Link to={`/purchases/suppliers/${s.id}`} className="text-left">
               <h3 className="text-base font-bold text-slate-800 hover:text-primary">{s.name}</h3>
-            </button>
+            </Link>
             <p className="text-xs font-semibold text-slate-500 mb-2">{s.contactPerson || "No contact person"} · {s.phone || "—"}</p>
             <div className="flex items-center gap-1 mb-3">
               {[1, 2, 3, 4, 5].map((i) => (
@@ -136,52 +131,6 @@ export default function SuppliersPage() {
             </div>
             <Button className="w-full" onClick={save}>{form.id ? "Save Changes" : "Create Supplier"}</Button>
           </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Profile dialog */}
-      <Dialog open={!!profile} onOpenChange={(open) => !open && setProfile(null)}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          {profile && (
-            <>
-              <DialogHeader><DialogTitle>{profile.supplier.name}</DialogTitle></DialogHeader>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="bg-slate-50 rounded-xl p-3">
-                  <div className="text-lg font-black text-slate-900">{profile.totalOrders}</div>
-                  <div className="text-[11px] font-semibold text-slate-500">Total POs</div>
-                </div>
-                <div className="bg-slate-50 rounded-xl p-3">
-                  <div className="text-lg font-black text-slate-900">{currency(profile.totalOrderedValue)}</div>
-                  <div className="text-[11px] font-semibold text-slate-500">Ordered Value</div>
-                </div>
-                <div className="bg-slate-50 rounded-xl p-3">
-                  <div className="text-lg font-black text-red-600">{currency(profile.outstandingBalance)}</div>
-                  <div className="text-[11px] font-semibold text-slate-500">Outstanding</div>
-                </div>
-                <div className="bg-slate-50 rounded-xl p-3">
-                  <div className="text-lg font-black text-slate-900">{profile.onTimeDeliveryPercent != null ? `${profile.onTimeDeliveryPercent}%` : "—"}</div>
-                  <div className="text-[11px] font-semibold text-slate-500">On-time Delivery</div>
-                </div>
-              </div>
-
-              <h4 className="font-bold text-sm text-slate-700 mt-4 mb-2">Past Purchases</h4>
-              <div className="border rounded-xl divide-y max-h-64 overflow-y-auto">
-                {profile.pastPurchases.map((po) => (
-                  <div key={po.id} className="p-3 flex items-center justify-between text-sm">
-                    <div>
-                      <span className="font-bold text-slate-800">{po.poNumber}</span>
-                      <span className="text-xs text-slate-400 ml-2">{po.date}</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <Badge className={PO_STATUS_TONE[po.status]}>{po.status}</Badge>
-                      <span className="font-bold">{currency(po.totalAmount)}</span>
-                    </div>
-                  </div>
-                ))}
-                {profile.pastPurchases.length === 0 && <div className="p-4 text-center text-xs text-muted-foreground">No purchases yet.</div>}
-              </div>
-            </>
-          )}
         </DialogContent>
       </Dialog>
     </div>

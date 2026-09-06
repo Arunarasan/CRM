@@ -122,12 +122,15 @@ public class WorkflowTriggerService {
     }
 
     /**
-     * A project was created from an approved quotation. Completes the lead workflow, starts the
-     * PROJECT workflow (progressive — Setup phase activates), and generates execution tasks from the
-     * approved BOQ scope. All best-effort so conversion itself never fails.
+     * A project was created from an approved quotation. Completes the lead workflow and materializes
+     * the project's structure (phases/rooms/work-items/materials) from the approved BOQ.
+     * <p>Projects deliberately get NO automatic tasks — only leads carry workflow automation. So we do
+     * NOT start the PROJECT workflow (which would generate the "main tasks"), and the BOQ reconciliation
+     * runs with task generation OFF. A PM can still generate execution tasks on demand via
+     * "Generate from BOQ". All best-effort so conversion itself never fails.
      */
     @Transactional
-    public void onProjectCreated(Project project, boolean generateExecutionTasks) {
+    public void onProjectCreated(Project project, boolean generateProjectStructure) {
         if (project == null || project.getId() == null) return;
         try {
             if (project.getLead() != null) {
@@ -135,12 +138,11 @@ public class WorkflowTriggerService {
                 // workflow on the first call and is a no-op thereafter.
                 advanceLeadPhaseOnEvent(project.getLead().getId(), "LEAD_QUOTATION");
             }
-            workflowService.startProjectWorkflow(project.getId());
-            // Materialize execution tasks/rooms from the linked BOQ (idempotent, safe to re-run).
+            // Build phases/rooms/work-items/materials from the linked BOQ, but WITHOUT tasks.
             // Skipped for floor-split conversions, where each project owns only a slice of the BOQ
             // and per-project generation is done deliberately by a manager instead.
-            if (generateExecutionTasks && project.getBoq() != null) {
-                projectService.reconcileProjectWithBoq(project.getId(), null);
+            if (generateProjectStructure && project.getBoq() != null) {
+                projectService.reconcileProjectWithBoq(project.getId(), null, false);
             }
         } catch (Exception e) {
             log.error("Workflow setup failed for project {} created from quotation", project.getId(), e);

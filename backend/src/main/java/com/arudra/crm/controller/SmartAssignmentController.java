@@ -125,6 +125,13 @@ public class SmartAssignmentController {
         return ResponseEntity.ok(ApiResponse.success(service.taskBoard()));
     }
 
+    /** Grant a held data-entry task a fresh hold window from the board (manager override). */
+    @PostMapping("/tasks/{id}/extend-hold")
+    @PreAuthorize(WRITE)
+    public ResponseEntity<ApiResponse<Boolean>> extendHold(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.success(service.extendTaskHold(id)));
+    }
+
     /** Per-employee roster (tasks now / completed 24h / working now) for the Employees tab. */
     @GetMapping("/roster")
     @PreAuthorize(READ)

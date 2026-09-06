@@ -3,7 +3,7 @@ import { Check, Plus } from 'lucide-react';
 import { employeeTaskApi } from '@/api/employeeTaskApi';
 import { Checklist } from '@/types/employeeTask';
 
-export default function ChecklistPanel({ taskId, checklist, onChanged, locked }: { taskId: number; checklist: Checklist[]; onChanged: () => void; locked?: boolean }) {
+export default function ChecklistPanel({ taskId, checklist, onChanged, locked, title = 'Checklist' }: { taskId: number; checklist: Checklist[]; onChanged: () => void; locked?: boolean; title?: string }) {
   const [newItem, setNewItem] = useState('');
   const [adding, setAdding] = useState(false);
 
@@ -26,7 +26,7 @@ export default function ChecklistPanel({ taskId, checklist, onChanged, locked }:
 
   return (
     <div className="rounded-xl border bg-card p-3 shadow-sm">
-      <h3 className="mb-2 text-sm font-semibold">Checklist</h3>
+      <h3 className="mb-2 text-sm font-semibold">{title}</h3>
       {allItems.length === 0 && <p className="text-xs text-muted-foreground">No checklist items yet.</p>}
       <ul className="flex flex-col gap-1.5">
         {allItems.map((item) => (

@@ -69,6 +69,8 @@ export interface RecommendResult {
 export interface AssignmentSettings {
   id?: number;
   maxTasksPerDay: number;
+  /** Minutes a data-entry lead task may be held before auto-release to the board. 0 = off. */
+  dataEntryHoldMinutes: number;
   maxWorkingHours: number;
   maxOvertimeHours: number;
   autoBalanceEnabled: boolean;

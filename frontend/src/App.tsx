@@ -26,8 +26,7 @@ const ServicesAdmin = lazy(() => import("./pages/website/ServicesAdmin"));
 const PortfolioAdmin = lazy(() => import("./pages/website/PortfolioAdmin"));
 const MaterialsAdmin = lazy(() => import("./pages/website/MaterialsAdmin"));
 const TestimonialsAdmin = lazy(() => import("./pages/website/TestimonialsAdmin"));
-const OrdersAdmin = lazy(() => import("./pages/website/OrdersAdmin"));
-const ServiceRequestsAdmin = lazy(() => import("./pages/website/ServiceRequestsAdmin"));
+const EnquiriesAdmin = lazy(() => import("./pages/website/EnquiriesAdmin"));
 const SettingsAdmin = lazy(() => import("./pages/website/SettingsAdmin"));
 const ContentAdmin = lazy(() => import("./pages/website/ContentAdmin"));
 const ReviewsAdmin = lazy(() => import("./pages/website/ReviewsAdmin"));
@@ -42,6 +41,7 @@ const QuotationDetails = lazy(() => import("./pages/quotations/QuotationDetails"
 const QuotationPrint = lazy(() => import("./pages/quotations/QuotationPrint"));
 const Projects = lazy(() => import("./pages/Projects"));
 const ProjectCommandCenter = lazy(() => import("./pages/ProjectCommandCenter"));
+const TaskReportPage = lazy(() => import("./pages/projectCommandCenter/TaskReportPage"));
 const Tasks = lazy(() => import("./pages/Tasks"));
 const ContractorLayout = lazy(() => import("./pages/contractors/ContractorLayout"));
 const ContractorDashboard = lazy(() => import("./pages/contractors/ContractorDashboard"));
@@ -66,38 +66,36 @@ const StockMovement = lazy(() => import("./pages/inventory/StockMovement"));
 const StockTransfers = lazy(() => import("./pages/inventory/StockTransfers"));
 const MaterialRequests = lazy(() => import("./pages/inventory/MaterialRequests"));
 const DamageEntries = lazy(() => import("./pages/inventory/DamageEntries"));
-const PurchaseRequests = lazy(() => import("./pages/inventory/PurchaseRequests"));
 const PurchaseLayout = lazy(() => import("./pages/purchases/PurchaseLayout"));
 const PurchaseDashboard = lazy(() => import("./pages/purchases/PurchaseDashboard"));
-const PurchaseRequestsPage = lazy(() => import("./pages/purchases/PurchaseRequestsPage"));
 const PurchaseOrdersPage = lazy(() => import("./pages/purchases/PurchaseOrdersPage"));
 const SuppliersPage = lazy(() => import("./pages/purchases/SuppliersPage"));
-const GoodsReceiptsPage = lazy(() => import("./pages/purchases/GoodsReceiptsPage"));
-const PurchaseInvoicesPage = lazy(() => import("./pages/purchases/InvoicesPage"));
-const SupplierPaymentsPage = lazy(() => import("./pages/purchases/PaymentsPage"));
-const PurchaseReturnsPage = lazy(() => import("./pages/purchases/ReturnsPage"));
+const SupplierProfilePage = lazy(() => import("./pages/purchases/SupplierProfilePage"));
 const PurchaseReportsPage = lazy(() => import("./pages/purchases/PurchaseReportsPage"));
+const GoodsReceiptLogPage = lazy(() => import("./pages/purchases/GoodsReceiptLogPage"));
 const PurchaseOrderBuilder = lazy(() => import("./pages/PurchaseOrderBuilder"));
 const PurchaseOrderProfile = lazy(() => import("./pages/PurchaseOrderProfile"));
-const Billing = lazy(() => import("./pages/Billing"));
-const InvoiceBuilder = lazy(() => import("./pages/InvoiceBuilder"));
-const InvoiceProfile = lazy(() => import("./pages/InvoiceProfile"));
+const BillingLayout = lazy(() => import("./pages/finance/BillingLayout"));
+const SalesReturnsPage = lazy(() => import("./pages/finance/SalesReturnsPage"));
+const ProductReturnForm = lazy(() => import("./pages/finance/ProductReturnForm"));
 const FinanceLayout = lazy(() => import("./pages/finance/FinanceLayout"));
 const FinanceDashboard = lazy(() => import("./pages/finance/FinanceDashboard"));
 const FinanceInvoicesPage = lazy(() => import("./pages/finance/InvoicesPage"));
 const FinanceInvoiceFormPage = lazy(() => import("./pages/finance/InvoiceFormPage"));
+const FinanceCounterSalePage = lazy(() => import("./pages/finance/CounterSalePage"));
 const FinanceInvoiceDetailPage = lazy(() => import("./pages/finance/InvoiceDetailPage"));
 const FinancePaymentsPage = lazy(() => import("./pages/finance/PaymentsPage"));
-const FinanceOutstandingPage = lazy(() => import("./pages/finance/OutstandingPage"));
-const FinanceLedgerPage = lazy(() => import("./pages/finance/LedgerPage"));
-const FinanceProfitabilityPage = lazy(() => import("./pages/finance/ProfitabilityPage"));
+const FinanceAccountsPage = lazy(() => import("./pages/finance/AccountsPage"));
 const FinanceExpensesPage = lazy(() => import("./pages/finance/ExpensesPage"));
+const FinanceCashBookPage = lazy(() => import("./pages/finance/CashBookPage"));
 const FinanceReportsPage = lazy(() => import("./pages/finance/FinanceReportsPage"));
 const EmployeeProfile = lazy(() => import("./pages/EmployeeProfile"));
 const WorkforceLayout = lazy(() => import("./pages/workforce/WorkforceLayout"));
 const WorkforceDirectoryPage = lazy(() => import("./pages/workforce/WorkforceDirectoryPage"));
 const WorkforceProfilePage = lazy(() => import("./pages/workforce/WorkforceProfilePage"));
 const WorkforceReportsPage = lazy(() => import("./pages/workforce/WorkforceReportsPage"));
+const DailyReportsPage = lazy(() => import("./pages/workforce/DailyReportsPage"));
+const ProfileApprovalsPage = lazy(() => import("./pages/workforce/ProfileApprovalsPage"));
 const HrFinanceDashboard = lazy(() => import("./pages/hr/HrFinanceDashboard"));
 const CashflowPage = lazy(() => import("./pages/hr/CashflowPage"));
 const HrPerformancePage = lazy(() => import("./pages/hr/HrPerformancePage"));
@@ -105,7 +103,6 @@ const HrLeavePage = lazy(() => import("./pages/hr/HrLeavePage"));
 const HrDepartmentsPage = lazy(() => import("./pages/hr/HrDepartmentsPage"));
 const HrAttendancePage = lazy(() => import("./pages/hr/HrAttendancePage"));
 const PayslipPrint = lazy(() => import("./pages/hr/PayslipPrint"));
-const ReportsHub = lazy(() => import("./pages/ReportsHub"));
 const NotificationCenter = lazy(() => import("./pages/NotificationCenter"));
 
 // Mobile-first Employee Task & Work Execution module — its own layout, not DashboardLayout.
@@ -113,6 +110,10 @@ const MobileLayout = lazy(() => import("./pages/employeeTasks/MobileLayout"));
 const MobileHome = lazy(() => import("./pages/employeeTasks/MobileHome"));
 const TaskListMobile = lazy(() => import("./pages/employeeTasks/TaskList"));
 const TaskDetailMobile = lazy(() => import("./pages/employeeTasks/TaskDetail"));
+const EmployeeVisitMeasure = lazy(() => import("./pages/employeeTasks/EmployeeVisitMeasure"));
+const EmployeeBoq = lazy(() => import("./pages/employeeTasks/EmployeeBoq"));
+const EmployeeQuotation = lazy(() => import("./pages/employeeTasks/EmployeeQuotation"));
+const EmployeeBoqQuote = lazy(() => import("./pages/employeeTasks/EmployeeBoqQuote"));
 const MobileNotifications = lazy(() => import("./pages/employeeTasks/MobileNotifications"));
 
 // Employee Self-Service Portal — HR screens inside the same mobile shell.
@@ -131,13 +132,14 @@ const EmployeeLeads = lazy(() => import("./pages/employeePortal/Leads"));
 const EmployeeManpowerRequests = lazy(() => import("./pages/employeePortal/ManpowerRequests"));
 const EmployeeDailyReports = lazy(() => import("./pages/employeePortal/DailyReports"));
 const EmployeeTaskManagement = lazy(() => import("./pages/employeePortal/TaskManagement"));
+const EmployeeGoodsReceipts = lazy(() => import("./pages/employeePortal/GoodsReceipts"));
 
 // The login/forgot-password pages now live only on the public website (single sign-in);
 // the CRM's /login and /forgot-password routes redirect there via RedirectToSignIn.
 const Users = lazy(() => import("./pages/Users"));
 
-// Placeholder pages
-const Settings = () => <div className="p-6">Settings Module</div>;
+// Admin settings — company profile, preferences, notifications, assignment rules, security.
+const Settings = lazy(() => import("./pages/Settings"));
 
 // Fallback loader
 const PageLoader = () => (
@@ -188,6 +190,7 @@ function App() {
             <Route path="quotations/:id/print" element={<QuotationPrint />} />
             <Route path="projects" element={<Projects />} />
             <Route path="projects/:id" element={<ProjectCommandCenter />} />
+            <Route path="projects/:id/tasks/:taskId" element={<TaskReportPage />} />
             <Route path="tasks" element={<Tasks />} />
             {/* Website / CMS — manage the public marketing site's catalog and content. */}
             <Route path="website" element={<WebsiteLayout />}>
@@ -198,8 +201,10 @@ function App() {
               <Route path="portfolio" element={<PortfolioAdmin />} />
               <Route path="materials" element={<MaterialsAdmin />} />
               <Route path="testimonials" element={<TestimonialsAdmin />} />
-              <Route path="orders" element={<OrdersAdmin />} />
-              <Route path="service-requests" element={<ServiceRequestsAdmin />} />
+              <Route path="enquiries" element={<EnquiriesAdmin />} />
+              {/* Retired tabs — backend data kept, nav removed; old links land on Enquiries. */}
+              <Route path="orders" element={<Navigate to="/website/enquiries" replace />} />
+              <Route path="service-requests" element={<Navigate to="/website/enquiries" replace />} />
               <Route path="content" element={<ContentAdmin />} />
               <Route path="reviews" element={<ReviewsAdmin />} />
               <Route path="settings" element={<SettingsAdmin />} />
@@ -233,36 +238,44 @@ function App() {
               <Route path="transfers" element={<StockTransfers />} />
               <Route path="material-requests" element={<MaterialRequests />} />
               <Route path="damage" element={<DamageEntries />} />
-              <Route path="purchase-requests" element={<PurchaseRequests />} />
             </Route>
             <Route path="purchases" element={<PurchaseLayout />}>
               <Route index element={<PurchaseDashboard />} />
-              <Route path="requests" element={<PurchaseRequestsPage />} />
               <Route path="orders" element={<PurchaseOrdersPage />} />
               <Route path="suppliers" element={<SuppliersPage />} />
-              <Route path="grns" element={<GoodsReceiptsPage />} />
-              <Route path="invoices" element={<PurchaseInvoicesPage />} />
-              <Route path="payments" element={<SupplierPaymentsPage />} />
-              <Route path="returns" element={<PurchaseReturnsPage />} />
+              <Route path="receipt-log" element={<GoodsReceiptLogPage />} />
               <Route path="reports" element={<PurchaseReportsPage />} />
             </Route>
             <Route path="purchases/orders/new" element={<PurchaseOrderBuilder />} />
             <Route path="purchases/orders/:id" element={<PurchaseOrderProfile />} />
-            <Route path="billing" element={<Billing />} />
-            <Route path="billing/invoices/new" element={<InvoiceBuilder />} />
-            <Route path="billing/invoices/:id" element={<InvoiceProfile />} />
+            <Route path="purchases/suppliers/:id" element={<SupplierProfilePage />} />
+            {/* Billing — customer-facing sales: counter sale, invoices, product returns. */}
+            <Route path="billing" element={<BillingLayout />}>
+              <Route index element={<Navigate to="/billing/counter-sale" replace />} />
+              <Route path="counter-sale" element={<FinanceCounterSalePage />} />
+              <Route path="invoices" element={<FinanceInvoicesPage />} />
+              <Route path="returns" element={<SalesReturnsPage />} />
+            </Route>
+            <Route path="billing/invoices/new" element={<FinanceInvoiceFormPage />} />
+            <Route path="billing/invoices/:id" element={<FinanceInvoiceDetailPage />} />
+            <Route path="billing/returns/new" element={<ProductReturnForm />} />
+            {/* Finance — the money side: payments, outstanding, ledger, expenses, profitability. */}
             <Route path="finance" element={<FinanceLayout />}>
               <Route index element={<FinanceDashboard />} />
-              <Route path="invoices" element={<FinanceInvoicesPage />} />
               <Route path="payments" element={<FinancePaymentsPage />} />
-              <Route path="outstanding" element={<FinanceOutstandingPage />} />
-              <Route path="ledger" element={<FinanceLedgerPage />} />
-              <Route path="profitability" element={<FinanceProfitabilityPage />} />
+              <Route path="cashbook" element={<FinanceCashBookPage />} />
+              {/* Accounts = merged Outstanding + Ledger (Customers) and Profitability (Projects). */}
+              <Route path="accounts" element={<FinanceAccountsPage />} />
+              {/* Old deep links keep working (e.g. ledger?customerId=…, profitability). */}
+              <Route path="outstanding" element={<FinanceAccountsPage />} />
+              <Route path="ledger" element={<FinanceAccountsPage />} />
+              <Route path="profitability" element={<FinanceAccountsPage />} />
               <Route path="expenses" element={<FinanceExpensesPage />} />
               <Route path="reports" element={<FinanceReportsPage />} />
             </Route>
-            <Route path="finance/invoices/new" element={<FinanceInvoiceFormPage />} />
-            <Route path="finance/invoices/:id" element={<FinanceInvoiceDetailPage />} />
+            {/* Legacy deep links → new Billing locations. */}
+            <Route path="finance/invoices" element={<Navigate to="/billing/invoices" replace />} />
+            <Route path="finance/counter-sale" element={<Navigate to="/billing/counter-sale" replace />} />
             {/* Unified "HR & Payroll" module — one directory + creation flow for employees and
                 contractors, with payroll / attendance / leave / departments / performance folded
                 in as tabs. The old standalone /hr screen redirects here. Contractor operations
@@ -272,9 +285,11 @@ function App() {
               <Route path="payroll" element={<HrFinanceDashboard />} />
               <Route path="cashflow" element={<CashflowPage />} />
               <Route path="attendance" element={<HrAttendancePage />} />
+              <Route path="daily-reports" element={<DailyReportsPage />} />
               <Route path="leave" element={<HrLeavePage />} />
               <Route path="departments" element={<HrDepartmentsPage />} />
               <Route path="performance" element={<HrPerformancePage />} />
+              <Route path="approvals" element={<ProfileApprovalsPage />} />
               <Route path="reports" element={<WorkforceReportsPage />} />
             </Route>
             <Route path="workforce/:id" element={<WorkforceProfilePage />} />
@@ -282,7 +297,6 @@ function App() {
             <Route path="hr" element={<Navigate to="/workforce" replace />} />
             <Route path="hr/employees/:id" element={<EmployeeProfile />} />
             <Route path="hr/payslip/:id" element={<PayslipPrint />} />
-            <Route path="reports" element={<ReportsHub />} />
             <Route path="notifications" element={<NotificationCenter />} />
             <Route path="settings" element={<Settings />} />
           </Route>
@@ -292,6 +306,10 @@ function App() {
             <Route index element={<MobileHome />} />
             <Route path="tasks" element={<TaskListMobile />} />
             <Route path="tasks/:id" element={<TaskDetailMobile />} />
+            <Route path="visit-measure/new" element={<EmployeeVisitMeasure />} />
+            <Route path="boq/new" element={<EmployeeBoq />} />
+            <Route path="quotation/new" element={<EmployeeQuotation />} />
+            <Route path="boq-quote/new" element={<EmployeeBoqQuote />} />
             <Route path="notifications" element={<MobileNotifications />} />
             {/* Self-service HR portal screens */}
             <Route path="more" element={<EmployeeMore />} />
@@ -303,6 +321,7 @@ function App() {
             <Route path="requests" element={<EmployeeRequests />} />
             <Route path="requests/material" element={<EmployeeMaterialRequests />} />
             <Route path="requests/manpower" element={<EmployeeManpowerRequests />} />
+            <Route path="goods-receipts" element={<EmployeeGoodsReceipts />} />
             <Route path="leads" element={<EmployeeLeads />} />
             <Route path="daily-reports" element={<EmployeeDailyReports />} />
             <Route path="task-management" element={<EmployeeTaskManagement />} />

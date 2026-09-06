@@ -64,4 +64,8 @@ public class LeadTaskSubmission extends BaseEntity {
 
     @Column(name = "submitted_at")
     private LocalDateTime submittedAt;
+
+    /** Whether this submission's data has been applied to the native lead/project (on task approval). */
+    @Column(nullable = false)
+    private Boolean applied = false;
 }

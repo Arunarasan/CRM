@@ -22,6 +22,23 @@ public class CustomerSpecification {
         return (root, query, cb) -> phone == null ? null : cb.like(root.get("phone"), "%" + phone + "%");
     }
 
+    public static Specification<Customer> hasSegment(String segment) {
+        return (root, query, cb) -> segment == null ? null : cb.equal(root.get("customerSegment"), segment);
+    }
+
+    /** Free-text match across name / phone / email (OR), mirroring searchCustomers. */
+    public static Specification<Customer> matchesSearch(String search) {
+        return (root, query, cb) -> {
+            if (search == null || search.isEmpty()) return null;
+            String like = "%" + search.toLowerCase() + "%";
+            return cb.or(
+                cb.like(cb.lower(root.get("name")), like),
+                cb.like(cb.lower(root.get("phone")), like),
+                cb.like(cb.lower(root.get("email")), like)
+            );
+        };
+    }
+
     public static Specification<Customer> hasTag(String tagName) {
         return (root, query, cb) -> {
             if (tagName == null || tagName.isEmpty()) return null;

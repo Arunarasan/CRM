@@ -59,7 +59,7 @@ export default function PayslipPrint() {
       <div className="bg-white border rounded-2xl shadow-sm p-8">
         <div className="flex items-center justify-between border-b pb-4 mb-4">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">Arudra CRM</h1>
+            <h1 className="text-2xl font-bold text-slate-900">JB Decor</h1>
             <p className="text-sm text-muted-foreground">Payslip — {MONTHS[rec.month]} {rec.year}</p>
           </div>
           <div className="text-right text-sm">

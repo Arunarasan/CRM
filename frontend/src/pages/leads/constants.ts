@@ -269,6 +269,7 @@ export interface Lead {
   assignedDesigner?: UserSummary;
   assignedEngineer?: UserSummary;
   projectManager?: UserSummary;
+  leadOwner?: UserSummary; // who created/owns the lead (set when a field employee submits one)
   // Referral (captured at creation when leadSource === "Referral")
   referralType?: string; // "Existing Customer" | "Employee" | "Other"
   referredByCustomer?: { id: number; name?: string };
@@ -292,6 +293,18 @@ export interface Lead {
   updatedAt?: string;
   createdBy?: string;
   updatedBy?: string;
+}
+
+// Who added a lead — resolved for field/employee-portal leads (name + employee code/designation).
+export interface LeadCreator {
+  source?: string;
+  userId?: number;
+  employeeId?: number;
+  name?: string;
+  email?: string;
+  employeeCode?: string;
+  designation?: string;
+  fromEmployeePortal?: boolean;
 }
 
 export interface LeadCard {
@@ -357,9 +370,11 @@ export interface LeadFilters {
   budgetMax: string;
   dateFrom: string;
   dateTo: string;
+  followUpDue: string;
 }
 
 export const EMPTY_FILTERS: LeadFilters = {
   status: "", stage: "", source: "", leadType: "", priority: "", temperature: "",
   assignedEmployeeId: "", isConverted: "", budgetMin: "", budgetMax: "", dateFrom: "", dateTo: "",
+  followUpDue: "",
 };

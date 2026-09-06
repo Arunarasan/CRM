@@ -1,10 +1,13 @@
 package com.arudra.crm.controller;
 
 import com.arudra.crm.dto.ApiResponse;
+import com.arudra.crm.dto.GoodsReceiptSubmission;
 import com.arudra.crm.entity.*;
 import com.arudra.crm.security.CurrentUserService;
 import com.arudra.crm.service.EmployeePortalService;
 import com.arudra.crm.service.EmployeeTimeService;
+import com.arudra.crm.service.ProfileChangeRequestService;
+import com.arudra.crm.service.PurchaseService;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -31,12 +34,17 @@ public class EmployeePortalController {
     private final EmployeePortalService portalService;
     private final EmployeeTimeService timeService;
     private final CurrentUserService currentUserService;
+    private final PurchaseService purchaseService;
+    private final ProfileChangeRequestService profileChangeRequestService;
 
     public EmployeePortalController(EmployeePortalService portalService, EmployeeTimeService timeService,
-                                    CurrentUserService currentUserService) {
+                                    CurrentUserService currentUserService, PurchaseService purchaseService,
+                                    ProfileChangeRequestService profileChangeRequestService) {
         this.portalService = portalService;
         this.timeService = timeService;
         this.currentUserService = currentUserService;
+        this.purchaseService = purchaseService;
+        this.profileChangeRequestService = profileChangeRequestService;
     }
 
     private User me() {
@@ -59,16 +67,61 @@ public class EmployeePortalController {
         return ResponseEntity.ok(ApiResponse.success(portalService.getDashboard(me())));
     }
 
+    // =====================================================================
+    // Goods receipt — any employee can receive & approve incoming goods; the
+    // approval is logged for the admin (see PurchaseService.approveGrn).
+    // =====================================================================
+
+    @GetMapping("/goods-receipts/incoming")
+    @PreAuthorize(PORTAL)
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> incomingGoods() {
+        me(); // ensure authenticated
+        return ResponseEntity.ok(ApiResponse.success(purchaseService.getIncomingForReceipt()));
+    }
+
+    @GetMapping("/goods-receipts/warehouses")
+    @PreAuthorize(PORTAL)
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> receiptWarehouses() {
+        me();
+        return ResponseEntity.ok(ApiResponse.success(purchaseService.getReceiptWarehouses()));
+    }
+
+    @PostMapping("/goods-receipts/receive")
+    @PreAuthorize(PORTAL)
+    public ResponseEntity<ApiResponse<GoodsReceiptNote>> receiveGoods(@RequestBody GoodsReceiptSubmission submission) {
+        me();
+        return ResponseEntity.ok(ApiResponse.success(purchaseService.receiveAndApprove(submission, "PORTAL")));
+    }
+
+    @GetMapping("/goods-receipts/mine")
+    @PreAuthorize(PORTAL)
+    public ResponseEntity<ApiResponse<List<GoodsReceiptNote>>> myReceipts() {
+        return ResponseEntity.ok(ApiResponse.success(purchaseService.getReceiptsByUser(me().getId())));
+    }
+
     @GetMapping("/profile")
     @PreAuthorize(PORTAL)
     public ResponseEntity<ApiResponse<Employee>> profile() {
         return ResponseEntity.ok(ApiResponse.success(portalService.getProfile(me())));
     }
 
+    /**
+     * Submit profile changes for admin approval. Nothing on the master record changes until an admin
+     * approves the request from the HR queue — the response is the PENDING request, not the employee.
+     */
     @PutMapping("/profile")
     @PreAuthorize(PORTAL)
-    public ResponseEntity<ApiResponse<Employee>> updateProfile(@RequestBody Map<String, String> updates) {
-        return ResponseEntity.ok(ApiResponse.success(portalService.updateProfile(me(), updates)));
+    public ResponseEntity<ApiResponse<ProfileChangeRequest>> updateProfile(@RequestBody Map<String, String> updates) {
+        return ResponseEntity.ok(ApiResponse.success(
+                profileChangeRequestService.createProfileChange(me(), updates),
+                "Changes submitted for approval."));
+    }
+
+    /** The employee's own change requests (profile + documents), so the portal can show pending status. */
+    @GetMapping("/profile-change-requests")
+    @PreAuthorize(PORTAL)
+    public ResponseEntity<ApiResponse<List<ProfileChangeRequest>>> myChangeRequests() {
+        return ResponseEntity.ok(ApiResponse.success(profileChangeRequestService.listMine(me())));
     }
 
     @PostMapping("/change-password")
@@ -236,6 +289,15 @@ public class EmployeePortalController {
     @PreAuthorize(PORTAL)
     public ResponseEntity<ApiResponse<List<EmployeeDocument>>> documents() {
         return ResponseEntity.ok(ApiResponse.success(portalService.getDocuments(me())));
+    }
+
+    /** Submit a document for admin approval; it is added to the employee's file only once approved. */
+    @PostMapping("/documents")
+    @PreAuthorize(PORTAL)
+    public ResponseEntity<ApiResponse<ProfileChangeRequest>> submitDocument(@RequestBody Map<String, String> body) {
+        return ResponseEntity.ok(ApiResponse.success(
+                profileChangeRequestService.createDocumentRequest(me(), body),
+                "Document submitted for approval."));
     }
 
     // --- Projects -----------------------------------------------------------

@@ -40,6 +40,7 @@ public class SmartAssignmentService {
     @Autowired private TaskAssignmentRepository assignmentRepository;
     @Autowired private TaskRepository taskRepository;
     @Autowired private ProjectRepository projectRepository;
+    @Autowired private LeadRepository leadRepository;
     @Autowired private DepartmentRepository departmentRepository;
     @Autowired private AssignmentSettingsRepository settingsRepository;
     @Autowired private AssignmentHistoryRepository historyRepository;
@@ -65,6 +66,7 @@ public class SmartAssignmentService {
         AssignmentSettings s = getSettings();
         if (incoming.getMaxTasksPerDay() != null) s.setMaxTasksPerDay(incoming.getMaxTasksPerDay());
         if (incoming.getMaxActiveTasks() != null) s.setMaxActiveTasks(incoming.getMaxActiveTasks());
+        if (incoming.getDataEntryHoldMinutes() != null) s.setDataEntryHoldMinutes(incoming.getDataEntryHoldMinutes());
         if (incoming.getMaxWorkingHours() != null) s.setMaxWorkingHours(incoming.getMaxWorkingHours());
         if (incoming.getMaxOvertimeHours() != null) s.setMaxOvertimeHours(incoming.getMaxOvertimeHours());
         if (incoming.getAutoBalanceEnabled() != null) s.setAutoBalanceEnabled(incoming.getAutoBalanceEnabled());
@@ -609,42 +611,97 @@ public class SmartAssignmentService {
     public List<Map<String, Object>> taskBoard() {
         List<Map<String, Object>> rows = new ArrayList<>();
         for (Task t : taskRepository.findAll()) {
-            List<TaskAssignment> active = assignmentRepository.findByTaskId(t.getId()).stream()
-                    .filter(a -> !"CANCELLED".equalsIgnoreCase(a.getStatus()) && !"REJECTED".equalsIgnoreCase(a.getStatus()))
-                    .collect(Collectors.toList());
-
-            List<Map<String, Object>> assignees = new ArrayList<>();
-            for (TaskAssignment a : active) {
-                Map<String, Object> who = new LinkedHashMap<>();
-                who.put("resourceType", a.getResourceType());
-                who.put("resourceId", a.getResourceId());
-                who.put("name", assigneeName(a));
-                who.put("code", assigneeCode(a));
-                who.put("status", a.getStatus());
-                assignees.add(who);
-            }
-
-            String status = t.getStatus() == null ? "" : t.getStatus().toUpperCase();
-            String bucket;
-            if ("COMPLETED".equals(status)) bucket = "COMPLETED";
-            else if ("WAITING_APPROVAL".equals(status)) bucket = "NEEDS_APPROVAL";
-            else if (Set.of("IN_PROGRESS", "PAUSED", "WAITING_MATERIAL", "REWORK").contains(status)) bucket = "IN_PROGRESS";
-            else if (!assignees.isEmpty()) bucket = "ASSIGNED";
-            else bucket = "UNASSIGNED";
-
-            Map<String, Object> row = new LinkedHashMap<>();
-            row.put("id", t.getId());
-            row.put("taskName", t.getTaskName());
-            row.put("projectId", t.getProject() != null ? t.getProject().getId() : null);
-            row.put("project", t.getProject() != null ? t.getProject().getProjectName() : null);
-            row.put("status", t.getStatus());
-            row.put("priority", t.getPriority());
-            row.put("dueDate", t.getDueDate());
-            row.put("bucket", bucket);
-            row.put("assignees", assignees);
-            rows.add(row);
+            rows.add(buildTaskRow(t));
         }
         return rows;
+    }
+
+    /**
+     * The auto-generated workflow tasks for one lead (Collect Requirement → Site Visit & Measurement
+     * → BOQ → Quotation), in workflow order, so the lead profile's task-reminder panel can show and
+     * assign the same tasks that live on the global board. Reuses the board row shape.
+     */
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> tasksForLead(Long leadId) {
+        if (leadId == null) return List.of();
+        return taskRepository.findByLeadId(leadId).stream()
+                .sorted(Comparator.comparing(t -> t.getOrderIndex() == null ? 0 : t.getOrderIndex()))
+                .map(this::buildTaskRow)
+                .collect(Collectors.toList());
+    }
+
+    /** Grant a fresh data-entry hold window on a task from the board (manager override). */
+    @Transactional
+    public boolean extendTaskHold(Long taskId) {
+        return employeeTaskService.extendHoldForTask(taskId);
+    }
+
+    /** One board row for a task: resolved live assignees, status bucket, origin category, lock flag. */
+    private Map<String, Object> buildTaskRow(Task t) {
+        List<TaskAssignment> active = assignmentRepository.findByTaskId(t.getId()).stream()
+                .filter(a -> !"CANCELLED".equalsIgnoreCase(a.getStatus()) && !"REJECTED".equalsIgnoreCase(a.getStatus()))
+                .collect(Collectors.toList());
+
+        List<Map<String, Object>> assignees = new ArrayList<>();
+        for (TaskAssignment a : active) {
+            Map<String, Object> who = new LinkedHashMap<>();
+            who.put("resourceType", a.getResourceType());
+            who.put("resourceId", a.getResourceId());
+            who.put("name", assigneeName(a));
+            who.put("code", assigneeCode(a));
+            who.put("status", a.getStatus());
+            assignees.add(who);
+        }
+
+        String status = t.getStatus() == null ? "" : t.getStatus().toUpperCase();
+        String bucket;
+        if ("COMPLETED".equals(status)) bucket = "COMPLETED";
+        else if ("WAITING_APPROVAL".equals(status)) bucket = "NEEDS_APPROVAL";
+        else if (Set.of("IN_PROGRESS", "PAUSED", "WAITING_MATERIAL", "REWORK").contains(status)) bucket = "IN_PROGRESS";
+        else if (!assignees.isEmpty()) bucket = "ASSIGNED";
+        else bucket = "UNASSIGNED";
+
+        String[] cat = taskCategory(t);
+
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("id", t.getId());
+        row.put("taskName", t.getTaskName());
+        row.put("projectId", t.getProject() != null ? t.getProject().getId() : null);
+        row.put("project", t.getProject() != null ? t.getProject().getProjectName() : null);
+        // Lead link so the board can jump straight to the originating lead (lead-stage tasks).
+        row.put("leadId", t.getLeadId());
+        row.put("lead", t.getLeadId() == null ? null
+                : leadRepository.findById(t.getLeadId()).map(l -> l.getName()).orElse(null));
+        row.put("status", t.getStatus());
+        row.put("priority", t.getPriority());
+        row.put("dueDate", t.getDueDate());
+        row.put("orderIndex", t.getOrderIndex());
+        row.put("locked", "LOCKED".equalsIgnoreCase(status));
+        row.put("bucket", bucket);
+        row.put("category", cat[0]);
+        row.put("categoryLabel", cat[1]);
+        row.put("assignees", assignees);
+        // Data-entry hold: flag + live auto-release instant so the board can show a countdown timer.
+        row.put("dataEntry", employeeTaskService.isDataEntryLeadTask(t));
+        row.put("holdExpiresAt", employeeTaskService.holdExpiresAt(t, active));
+        return row;
+    }
+
+    /**
+     * Classify a task by where it came from, so the board can group the queue into human-readable
+     * lanes instead of one flat list. Derived purely from existing markers (no schema change):
+     * invoice → installation, service source → service request, leadId → the lead-stage workflow,
+     * a BOQ-item origin → on-site field work, any other project link → project task, else ad-hoc.
+     * Returns [code, label]; order matters — earlier matches win.
+     */
+    private String[] taskCategory(Task t) {
+        String source = t.getSource() == null ? "" : t.getSource().toUpperCase();
+        if (t.getInvoiceId() != null)                            return new String[]{"INSTALLATION", "Installation"};
+        if ("ENQUIRY".equals(source) || "SERVICE_REQUEST".equals(source)) return new String[]{"ENQUIRY", "Enquiry"};
+        if (t.getLeadId() != null)                               return new String[]{"LEAD", "Lead"};
+        if (t.getGeneratedFromBoqItemId() != null)   return new String[]{"FIELD_WORK", "Field Work"};
+        if (t.getProject() != null)                  return new String[]{"PROJECT", "Project"};
+        return new String[]{"OTHER", "Other"};
     }
 
     /**

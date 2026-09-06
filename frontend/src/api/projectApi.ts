@@ -101,6 +101,8 @@ export const projectApi = {
     api.post<any>(`${BASE}/${projectId}/material-transactions`, tx).then((r) => r.data),
   getMaterialPurchaseSummary: (projectId: number) =>
     api.get<any[]>(`${BASE}/${projectId}/material-purchase-summary`).then((r) => r.data),
+  getTaskMaterialUsage: (projectId: number) =>
+    api.get<any[]>(`${BASE}/${projectId}/task-material-usage`).then((r) => r.data),
 
   // Daily log children
   getDailyLogDetail: (logId: number) => api.get<any>(`${BASE}/daily-logs/${logId}`).then((r) => r.data),

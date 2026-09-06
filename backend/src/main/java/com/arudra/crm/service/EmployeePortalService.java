@@ -49,6 +49,7 @@ public class EmployeePortalService {
     @Autowired private PersonalReminderRepository personalReminderRepository;
     @Autowired private ProjectRepository projectRepository;
     @Autowired private TaskRepository taskRepository;
+    @Autowired private ProjectActivityLogRepository projectActivityLogRepository;
     @Autowired private NotificationService notificationService;
     @Autowired private EmployeeBonusRepository bonusRepository;
     @Autowired private EmployeeLoanRepository loanRepository;
@@ -206,21 +207,11 @@ public class EmployeePortalService {
     // Profile self-edit + password
     // =====================================================================
 
-    /**
-     * Updates the fields an employee is allowed to change themselves. Read-only master data
-     * (code, salary, hourly rate, department, designation, manager, joining date) is never touched
-     * here, and the email that links this record to the login account is intentionally excluded.
+    /*
+     * NOTE: Employee self-edits of profile fields (phone / emergency contact / photo) no longer write
+     * directly here — they go through {@link ProfileChangeRequestService} and require admin approval
+     * before touching the master record. Password change (below) stays an instant self-service action.
      */
-    @LogActivity(module = "EMPLOYEE_PORTAL", action = "PROFILE_UPDATE")
-    @Transactional
-    public Employee updateProfile(User currentUser, Map<String, String> updates) {
-        Employee employee = requireEmployee(currentUser);
-        if (updates.containsKey("phone")) employee.setPhone(trimToNull(updates.get("phone")));
-        if (updates.containsKey("emergencyContactName")) employee.setEmergencyContactName(trimToNull(updates.get("emergencyContactName")));
-        if (updates.containsKey("emergencyContactPhone")) employee.setEmergencyContactPhone(trimToNull(updates.get("emergencyContactPhone")));
-        if (updates.containsKey("profilePhotoUrl")) employee.setProfilePhotoUrl(trimToNull(updates.get("profilePhotoUrl")));
-        return employeeRepository.save(employee);
-    }
 
     @LogActivity(module = "EMPLOYEE_PORTAL", action = "PASSWORD_CHANGE")
     @Transactional
@@ -864,6 +855,8 @@ public class EmployeePortalService {
         if (projectId != null) report.setProject(projectRepository.findById(projectId).orElseThrow());
         Long taskId = asLong(body.get("taskId"));
         if (taskId != null) report.setTask(taskRepository.findById(taskId).orElseThrow());
+        Long leadId = asLong(body.get("leadId"));
+        if (leadId != null) report.setLead(leadRepository.findById(leadId).orElseThrow());
         report.setTodaysWork(trimToNull((String) body.get("todaysWork")));
         report.setHoursWorked(asDecimal(body.get("hoursWorked")));
         report.setCompletedWork(trimToNull((String) body.get("completedWork")));
@@ -888,9 +881,29 @@ public class EmployeePortalService {
             }
         }
         DailyReport saved = dailyReportRepository.save(report);
+
+        // Surface the report where the work lives: a project timeline entry and/or a lead activity,
+        // so it shows on the Project Command Center and the Lead profile alongside the HR view.
+        if (saved.getProject() != null) {
+            ProjectActivityLog log = new ProjectActivityLog();
+            log.setProject(saved.getProject());
+            log.setUser(currentUser);
+            log.setRole("Employee");
+            log.setDescription(currentUser.getName() + " submitted a daily report for " + saved.getReportDate()
+                    + (saved.getTodaysWork() != null ? " — " + saved.getTodaysWork() : ""));
+            projectActivityLogRepository.save(log);
+        }
+        if (saved.getLead() != null) {
+            leadService.logActivity(saved.getLead(), "DAILY_REPORT",
+                    currentUser.getName() + " submitted a daily report for " + saved.getReportDate()
+                            + (saved.getTodaysWork() != null ? " — " + saved.getTodaysWork() : ""),
+                    currentUser);
+        }
+
         notifyManagementFor(saved.getProject(), currentUser, "Daily Report",
                 currentUser.getName() + " submitted a report for " + saved.getReportDate(),
-                "DAILY_REPORT", "/projects");
+                "DAILY_REPORT", saved.getLead() != null ? "/leads/" + saved.getLead().getId()
+                        : (saved.getProject() != null ? "/projects/" + saved.getProject().getId() : "/workforce/daily-reports"));
         return saved;
     }
 

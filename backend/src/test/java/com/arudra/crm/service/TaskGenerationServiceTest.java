@@ -2,8 +2,11 @@ package com.arudra.crm.service;
 
 import com.arudra.crm.entity.*;
 import com.arudra.crm.repository.ProjectRepository;
+import com.arudra.crm.repository.TaskAssignmentRepository;
 import com.arudra.crm.repository.TaskRepository;
 import com.arudra.crm.repository.TaskTemplateRepository;
+import com.arudra.crm.repository.WorkflowInstanceRepository;
+import com.arudra.crm.repository.WorkflowPhaseInstanceRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
@@ -28,6 +31,10 @@ class TaskGenerationServiceTest {
     @Mock TaskRepository taskRepository;
     @Mock TaskTemplateRepository taskTemplateRepository;
     @Mock ProjectRepository projectRepository;
+    @Mock TaskPoolNotifier taskPoolNotifier;
+    @Mock WorkflowInstanceRepository workflowInstanceRepository;
+    @Mock WorkflowPhaseInstanceRepository phaseInstanceRepository;
+    @Mock TaskAssignmentRepository assignmentRepository;
     @Spy TaskDependencyService taskDependencyService = new TaskDependencyService();
 
     @InjectMocks TaskGenerationService svc;
@@ -78,7 +85,7 @@ class TaskGenerationServiceTest {
 
     @Test
     void materializePhase_firstTaskAvailable_dependentLocked_andStampsLead() {
-        when(taskTemplateRepository.findByPhaseIdOrderByOrderIndexAsc(10L)).thenReturn(List.of(tplA, tplB));
+        when(taskTemplateRepository.findByPhaseIdAndIsDeletedFalseOrderByOrderIndexAsc(10L)).thenReturn(List.of(tplA, tplB));
         when(taskRepository.findByWorkflowInstanceId(1L)).thenReturn(List.of());
 
         List<Task> created = svc.materializePhase(phaseInstance);
@@ -102,7 +109,7 @@ class TaskGenerationServiceTest {
         existingA.setStatus("COMPLETED");
         existingA.setTaskTemplate(tplA);
         when(taskRepository.findByWorkflowInstanceId(1L)).thenReturn(List.of(existingA));
-        when(taskTemplateRepository.findByPhaseIdOrderByOrderIndexAsc(10L)).thenReturn(List.of(tplA, tplB));
+        when(taskTemplateRepository.findByPhaseIdAndIsDeletedFalseOrderByOrderIndexAsc(10L)).thenReturn(List.of(tplA, tplB));
 
         List<Task> created = svc.materializePhase(phaseInstance);
 
@@ -110,5 +117,35 @@ class TaskGenerationServiceTest {
         assertEquals("B", created.get(0).getTaskName());
         // A is already COMPLETED, so B's dependency is satisfied → B is AVAILABLE.
         assertEquals("AVAILABLE", created.get(0).getStatus());
+    }
+
+    @Test
+    void spawnRepeatLeadTask_createsAFreshOpenTaskInTheSamePhase() {
+        // A repeat "Collect Requirement" (a follow-up attempt) is force-created even though the
+        // template already exists in the run — bypassing the idempotency guard.
+        tplA.setCode("TT_COLLECT_REQUIREMENT");
+        when(workflowInstanceRepository.findFirstByScopeAndLeadIdAndStatus("LEAD", 5L, "ACTIVE"))
+                .thenReturn(java.util.Optional.of(instance));
+        when(phaseInstanceRepository.findByWorkflowInstanceIdOrderByIdAsc(1L)).thenReturn(List.of(phaseInstance));
+        when(taskTemplateRepository.findByPhaseIdAndIsDeletedFalseOrderByOrderIndexAsc(10L)).thenReturn(List.of(tplA));
+
+        java.time.LocalDate due = java.time.LocalDate.now().plusDays(3);
+        Task spawned = svc.spawnRepeatLeadTask(5L, "TT_COLLECT_REQUIREMENT", due,
+                "Collect Requirement (Follow-up 1)", null);
+
+        assertNotNull(spawned);
+        assertEquals("Collect Requirement (Follow-up 1)", spawned.getTaskName());
+        assertEquals("AVAILABLE", spawned.getStatus()); // no deps → open, so the phase stays ACTIVE
+        assertEquals(5L, spawned.getLeadId());
+        assertEquals("WORKFLOW", spawned.getSource());
+        assertEquals(due, spawned.getDueDate());
+        assertEquals(phaseInstance, spawned.getWorkflowPhaseInstance()); // lands in the same phase
+    }
+
+    @Test
+    void spawnRepeatLeadTask_returnsNullWhenNoActiveWorkflow() {
+        when(workflowInstanceRepository.findFirstByScopeAndLeadIdAndStatus("LEAD", 9L, "ACTIVE"))
+                .thenReturn(java.util.Optional.empty());
+        assertNull(svc.spawnRepeatLeadTask(9L, "TT_COLLECT_REQUIREMENT", null, null, null));
     }
 }

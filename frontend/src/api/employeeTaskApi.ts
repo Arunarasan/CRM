@@ -25,6 +25,8 @@ export const employeeTaskApi = {
   capacity: () => api.get<Capacity>(`${BASE}/capacity`).then((r) => r.data),
   pick: (id: number) => api.post(`${BASE}/${id}/pick`).then((r) => r.data),
   join: (id: number) => api.post(`${BASE}/${id}/join`).then((r) => r.data),
+  // Extend the data-entry hold window when still working, so the task isn't auto-released.
+  extendHold: (id: number) => api.post<TaskCard>(`${BASE}/${id}/extend-hold`).then((r) => r.data),
 
   // ---- Task time tracking → payroll approval (Increment 5/6) ----
   timeStart: (id: number) => api.post<TimeLogSummary>(`${BASE}/${id}/time/start`).then((r) => r.data),
@@ -61,6 +63,17 @@ export const employeeTaskApi = {
   // Lead-workflow structured form: captures data, writes it onto the lead, then completes the task.
   submitLeadForm: (id: number, payload: LeadFormPayload) =>
     api.post(`${BASE}/${id}/lead-form`, payload).then((r) => r.data),
+  // Latest captured draft for a lead task — prefill on a re-collected follow-up.
+  leadFormDraft: (id: number) =>
+    api.get<Record<string, any>>(`${BASE}/${id}/lead-form/draft`).then((r) => r.data),
+
+  // Lead-scoped (the in-portal module screens are opened by leadId, not task id):
+  // schedule a second site visit — spawns a repeat visit task and holds the BOQ step.
+  scheduleRevisit: (leadId: number, payload: { nextVisitDate?: string; notes?: string }) =>
+    api.post(`${BASE}/lead/${leadId}/revisit`, payload).then((r) => r.data),
+  // Approve the lead's quotation and convert it to a project (optional advance = first payment).
+  convertProject: (leadId: number, payload: { advanceAmount?: string | number; advancePaymentMethod?: string }) =>
+    api.post(`${BASE}/lead/${leadId}/convert-project`, payload).then((r) => r.data),
   approve: (id: number) => api.post(`${BASE}/${id}/approve`).then((r) => r.data),
   reject: (id: number, remarks: string) => api.post(`${BASE}/${id}/reject`, { remarks }).then((r) => r.data),
 

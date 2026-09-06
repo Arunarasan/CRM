@@ -60,6 +60,23 @@ export interface Product {
   supplier?: EntityRef | null;
   defaultWarehouse?: EntityRef | null;
   imageUrl?: string;
+  imageUrls?: string[];
+  // Fabric / cloth specifications
+  fabricComposition?: string;
+  fabricWidth?: string;
+  gsm?: number;
+  pattern?: string;
+  color?: string;
+  colorFamily?: string;
+  availableSizes?: string[];
+  // Window suitability & design structure
+  productType?: string;
+  suitableWindowTypes?: string[];
+  mountingType?: string;
+  opacity?: string;
+  suitableRooms?: string[];
+  designStyle?: string;
+  structureNotes?: string;
   status?: "ACTIVE" | "INACTIVE";
 }
 
@@ -206,4 +223,53 @@ export const STOCK_ENTRY_TYPES = ["OPENING", "PURCHASE", "ADJUSTMENT", "PROJECT_
 export const INVENTORY_UNITS = [
   "Nos", "Piece", "Meter", "Running Feet", "Square Feet", "Square Meter",
   "Box", "Kg", "Gram", "Litre", "Bag", "Roll", "Sheet", "Bundle",
+] as const;
+
+// ---- Curtain / blind / fabric catalogue option sets (Material Master form) ----
+
+export const PRODUCT_TYPES = [
+  "Curtain", "Sheer Curtain", "Roman Blind", "Roller Blind", "Venetian Blind",
+  "Vertical Blind", "Zebra / Day-Night Blind", "Wallpaper", "Upholstery Fabric",
+  "Cushion / Soft Furnishing", "Curtain Hardware", "Accessory", "Other",
+] as const;
+
+export const FABRIC_WIDTHS = [
+  '44 inch', '54 inch', '108 inch', '118 inch', '140 inch', '280 cm (drop)', 'Custom',
+] as const;
+
+export const FABRIC_PATTERNS = [
+  "Plain / Solid", "Floral", "Geometric", "Stripes", "Abstract",
+  "Jacquard", "Damask", "Textured", "Printed", "Embroidered",
+] as const;
+
+export const COLOR_FAMILIES = [
+  "Neutrals", "Whites & Ivory", "Greys", "Blues", "Greens",
+  "Earthy / Browns", "Reds & Maroons", "Yellows & Golds", "Pastels", "Dark / Blackout",
+] as const;
+
+export const CURTAIN_SIZES = [
+  "Window (5 ft)", "Door (7 ft)", "Long Door (9 ft)", "Full Length (12 ft)", "Custom",
+] as const;
+
+export const WINDOW_TYPES = [
+  "Standard", "Bay Window", "Sliding", "French Door", "Casement",
+  "Skylight", "Picture / Large", "Arched", "Ventilator", "Balcony",
+] as const;
+
+export const MOUNTING_TYPES = [
+  "Inside Mount", "Outside Mount", "Ceiling Mount", "Wall Track", "Rod / Pole",
+] as const;
+
+export const OPACITY_LEVELS = [
+  "Sheer", "Semi-opaque", "Light Filtering", "Room Darkening", "Blackout",
+] as const;
+
+export const ROOM_TYPES = [
+  "Living Room", "Bedroom", "Kids Room", "Kitchen", "Bathroom",
+  "Dining", "Study / Office", "Pooja Room", "Balcony", "Commercial",
+] as const;
+
+export const DESIGN_STYLES = [
+  "Modern", "Contemporary", "Classic", "Traditional", "Minimalist",
+  "Luxury", "Bohemian", "Rustic", "Indian Ethnic",
 ] as const;

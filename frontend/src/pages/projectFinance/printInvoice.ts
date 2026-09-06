@@ -34,13 +34,13 @@ export function printInvoice(invoice: Invoice, items: InvoiceItem[], project?: a
   <style>
     * { box-sizing: border-box; }
     body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; color: #1e293b; margin: 32px; font-size: 13px; }
-    .head { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #114f39; padding-bottom: 16px; }
-    .brand { font-size: 22px; font-weight: 800; color: #114f39; }
+    .head { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #06452F; padding-bottom: 16px; }
+    .brand { font-size: 22px; font-weight: 800; color: #06452F; }
     .title { text-align: right; }
     .title h1 { margin: 0; font-size: 20px; letter-spacing: 1px; }
     .pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; }
-    .paid { background: #dcfce7; color: #15803d; } .unpaid { background: #fee2e2; color: #b91c1c; }
-    .partial { background: #fef3c7; color: #b45309; }
+    .paid { background: #E4F3EB; color: #28704F; } .unpaid { background: #FBE9E8; color: #9B4644; }
+    .partial { background: #FFF1D2; color: #8A6428; }
     .meta { display: flex; justify-content: space-between; margin: 20px 0; gap: 24px; }
     .meta h3 { margin: 0 0 4px; font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: #64748b; }
     table { width: 100%; border-collapse: collapse; margin-top: 8px; }

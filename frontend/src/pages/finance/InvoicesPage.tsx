@@ -8,7 +8,7 @@ import { currency, INVOICE_STATUS_TONE, INVOICE_STATUS_LABEL, stageLabel } from 
 import { Plus, Search } from "lucide-react";
 
 const STATUSES = ["", "DRAFT", "GENERATED", "SENT", "PARTIAL", "PAID", "OVERDUE", "CANCELLED"];
-const TYPES = ["", "QUOTATION", "ADVANCE", "PROGRESS", "FINAL", "PROFORMA"];
+const TYPES = ["", "COUNTER_SALE", "QUOTATION", "ADVANCE", "PROGRESS", "FINAL", "PROFORMA"];
 
 export default function InvoicesPage() {
   const navigate = useNavigate();
@@ -51,7 +51,7 @@ export default function InvoicesPage() {
                onChange={(e) => { setFrom(e.target.value); setPage(0); }} />
         <input type="date" className="border rounded-lg px-3 py-2 text-sm bg-white" value={to}
                onChange={(e) => { setTo(e.target.value); setPage(0); }} />
-        <Button onClick={() => navigate("/finance/invoices/new")}>
+        <Button onClick={() => navigate("/billing/invoices/new")}>
           <Plus className="w-4 h-4 mr-1" /> New Invoice
         </Button>
       </div>
@@ -73,7 +73,7 @@ export default function InvoicesPage() {
           </thead>
           <tbody className="divide-y">
             {(data?.content ?? []).map((i) => (
-              <tr key={i.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => navigate(`/finance/invoices/${i.id}`)}>
+              <tr key={i.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => navigate(`/billing/invoices/${i.id}`)}>
                 <td className="px-4 py-3 font-bold text-slate-800">{i.invoiceNumber}</td>
                 <td className="px-4 py-3">{i.customer?.name}</td>
                 <td className="px-4 py-3 text-muted-foreground">{i.project?.projectName ?? "—"}</td>
@@ -100,7 +100,7 @@ export default function InvoicesPage() {
       {/* Mobile compact cards */}
       <div className="md:hidden space-y-3">
         {(data?.content ?? []).map((i) => (
-          <Link key={i.id} to={`/finance/invoices/${i.id}`} className="block bg-white border rounded-2xl p-4 shadow-sm">
+          <Link key={i.id} to={`/billing/invoices/${i.id}`} className="block bg-white border rounded-2xl p-4 shadow-sm">
             <div className="flex items-center justify-between mb-1">
               <span className="font-bold text-slate-800">{i.invoiceNumber}</span>
               <Badge className={INVOICE_STATUS_TONE[i.status]}>{INVOICE_STATUS_LABEL[i.status]}</Badge>

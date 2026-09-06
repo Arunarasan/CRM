@@ -81,6 +81,10 @@ public class QuotationService {
     @org.springframework.context.annotation.Lazy
     private FinanceService financeService;
 
+    @Autowired
+    @org.springframework.context.annotation.Lazy
+    private ProjectService projectService;
+
     /**
      * Re-resolves {id}-only JSON refs to managed proxies before save. Without this, Hibernate
      * treats a detached entity whose @Version field is null (as JSON binding produces) as
@@ -485,6 +489,28 @@ public class QuotationService {
     // =====================================================================
     // Conversion to project(s)
     // =====================================================================
+
+    /**
+     * Convert an approved quotation to a project (see {@link #convertToProject}), then record an
+     * optional advance as the project's first payment. Shared by the admin desktop path and the
+     * employee's in-portal "Create Project" action so both behave identically. A null/zero advance
+     * simply means "approve & convert" with no payment recorded.
+     */
+    @Transactional
+    public List<Project> convertToProjectWithAdvance(Long id, String splitBy, User user,
+                                                     java.math.BigDecimal advanceAmount, String advanceMethod) {
+        List<Project> projects = convertToProject(id, splitBy, user);
+        if (advanceAmount != null && advanceAmount.signum() > 0 && !projects.isEmpty()) {
+            com.arudra.crm.entity.ProjectPayment p = new com.arudra.crm.entity.ProjectPayment();
+            p.setAmount(advanceAmount);
+            p.setPaymentDate(java.time.LocalDate.now());
+            p.setPaymentMethod(advanceMethod != null && !advanceMethod.isBlank() ? advanceMethod : "Cash");
+            p.setStatus("COMPLETED");
+            p.setRemarks("Advance received on project conversion");
+            projectService.addPayment(projects.get(0).getId(), p, user);
+        }
+        return projects;
+    }
 
     @Transactional
     public List<Project> convertToProject(Long id, String splitBy, User user) {

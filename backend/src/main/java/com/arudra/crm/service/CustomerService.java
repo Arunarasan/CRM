@@ -17,16 +17,15 @@ public class CustomerService {
     @Autowired
     private CustomerRepository customerRepository;
 
-    public Page<Customer> getCustomersAdvanced(String search, String name, String city, String email, String phone, String tag, int page, int size, String sortField, String sortDir) {
+    public Page<Customer> getCustomersAdvanced(String search, String name, String city, String email, String phone, String tag, String segment, int page, int size, String sortField, String sortDir) {
         Sort sort = sortDir.equalsIgnoreCase(Sort.Direction.ASC.name()) ? Sort.by(sortField).ascending() : Sort.by(sortField).descending();
         PageRequest pageRequest = PageRequest.of(page, size, sort);
-        
+
         Specification<Customer> spec = Specification.where(null);
-        
-        if (search != null && !search.isEmpty()) {
-            return customerRepository.searchCustomers(search, pageRequest);
-        }
-        
+
+        // Segment tab (WALK_IN / PROJECT_CLIENT) composes with every other filter below.
+        if (segment != null && !segment.isEmpty()) spec = spec.and(CustomerSpecification.hasSegment(segment));
+        if (search != null && !search.isEmpty()) spec = spec.and(CustomerSpecification.matchesSearch(search));
         if (name != null && !name.isEmpty()) spec = spec.and(CustomerSpecification.hasName(name));
         if (city != null && !city.isEmpty()) spec = spec.and(CustomerSpecification.hasCity(city));
         if (email != null && !email.isEmpty()) spec = spec.and(CustomerSpecification.hasEmail(email));
@@ -38,7 +37,7 @@ public class CustomerService {
 
     // Retaining old method for backward compatibility if used elsewhere
     public Page<Customer> getCustomers(String search, int page, int size) {
-        return getCustomersAdvanced(search, null, null, null, null, null, page, size, "id", "desc");
+        return getCustomersAdvanced(search, null, null, null, null, null, null, page, size, "id", "desc");
     }
 
     public Customer getCustomerById(Long id) {
@@ -94,6 +93,7 @@ public class CustomerService {
         profile.setGstNumber(customer.getGstNumber());
         profile.setCustomerCode(customer.getCustomerCode());
         profile.setCustomerType(customer.getCustomerType());
+        profile.setCustomerSegment(customer.getCustomerSegment());
         profile.setCompanyName(customer.getCompanyName());
         profile.setContactPersonName(customer.getContactPersonName());
         profile.setAlternatePhone(customer.getAlternatePhone());
@@ -320,6 +320,9 @@ public class CustomerService {
         if (customer.getCustomerSince() == null) {
             customer.setCustomerSince(java.time.LocalDate.now());
         }
+        if (customer.getCustomerSegment() == null || customer.getCustomerSegment().isEmpty()) {
+            customer.setCustomerSegment("PROJECT_CLIENT");
+        }
         return customerRepository.save(customer);
     }
 
@@ -341,6 +344,7 @@ public class CustomerService {
         customer.setLongitude(customerDetails.getLongitude());
         customer.setGstNumber(customerDetails.getGstNumber());
         customer.setCustomerType(customerDetails.getCustomerType());
+        if (customerDetails.getCustomerSegment() != null) customer.setCustomerSegment(customerDetails.getCustomerSegment());
         customer.setCompanyName(customerDetails.getCompanyName());
         customer.setContactPersonName(customerDetails.getContactPersonName());
         customer.setAlternatePhone(customerDetails.getAlternatePhone());

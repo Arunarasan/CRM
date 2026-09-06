@@ -37,8 +37,8 @@ export const quotationApi = {
   reserveInventory: (id: number) => api.post(`${BASE}/${id}/reserve-inventory`),
   releaseInventory: (id: number) => api.post(`${BASE}/${id}/release-inventory`),
 
-  convertToProject: (id: number, splitBy?: 'NONE' | 'FLOOR') =>
-    api.post<EntityRef[]>(`${BASE}/${id}/convert-to-project${splitBy ? `?splitBy=${splitBy}` : ''}`).then((r) => r.data),
+  convertToProject: (id: number, splitBy?: 'NONE' | 'FLOOR', advance?: { advanceAmount?: string; advancePaymentMethod?: string }) =>
+    api.post<EntityRef[]>(`${BASE}/${id}/convert-to-project${splitBy ? `?splitBy=${splitBy}` : ''}`, advance || {}).then((r) => r.data),
 
   saveSignature: (id: number, signature: string) =>
     api.put<Quotation>(`${BASE}/${id}/sign`, { signature }).then((r) => r.data),

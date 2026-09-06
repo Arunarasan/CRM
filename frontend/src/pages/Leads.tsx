@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import ResponsiveList, { type Column } from "@/components/ui/responsive-list";
 import FilterSheet from "@/components/ui/filter-sheet";
+import { useHoverInfo, InfoRow } from "@/components/ui/hover-info";
 import { leadApi } from "./leads/leadApi";
 import LeadFormDialog from "./leads/LeadFormDialog";
 import { selectClass } from "./leads/fields";
@@ -26,13 +27,59 @@ type StatCard = {
   label: string;
   value: number | string | undefined;
   icon: React.ElementType;
-  className: string;
+  className: string; // icon chip colour
+  ring: string;      // active-state ring/border colour
+  patch: Partial<LeadFilters>; // filter applied when this card is clicked
 };
 
 const ROWS_PER_PAGE_OPTIONS = [10, 25, 50, 100];
 
+// The KPI cards act as quick-filter tabs; clicking one drives exactly these filter keys
+// (and clears the others among them), so the cards stay mutually exclusive.
+const SEGMENT_KEYS: (keyof LeadFilters)[] = ["status", "stage", "isConverted", "followUpDue"];
+
+/** Rich card shown when hovering a lead row. */
+function LeadInfo({ l }: { l: Lead }) {
+  return (
+    <div>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <div className="font-bold text-slate-800 truncate">{l.name}</div>
+          <div className="font-mono text-[11px] text-slate-400">{l.leadNumber}</div>
+        </div>
+        {l.leadTemperature && (
+          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${TEMPERATURE_STYLES[l.leadTemperature] || "bg-muted text-muted-foreground"}`}>
+            {l.leadTemperature}
+          </span>
+        )}
+      </div>
+      <div className="divide-y divide-slate-100">
+        <div className="pb-1.5">
+          <InfoRow label="Stage" value={l.stage || l.status} />
+          <InfoRow label="Source" value={l.leadSource} />
+          {l.leadOwner?.name && <InfoRow label="Added by" value={l.leadOwner.name} />}
+          <InfoRow label="Type" value={l.leadType} />
+          <InfoRow label="Company" value={l.companyName} />
+        </div>
+        <div className="py-1.5">
+          <InfoRow label="Mobile" value={l.mobileNumber} />
+          <InfoRow label="Email" value={l.email} />
+          <InfoRow label="Location" value={[l.city, l.state].filter(Boolean).join(", ")} />
+        </div>
+        <div className="pt-1.5">
+          <InfoRow label="Owner" value={l.assignedSalesExecutive?.name || "Unassigned"} />
+          <InfoRow label="Est. budget" value={l.estimatedBudget ? formatINR(l.estimatedBudget) : undefined} accent="text-slate-900 font-bold" />
+          <InfoRow label="Next follow-up" value={l.nextFollowUpDate ? formatDate(l.nextFollowUpDate) : undefined} />
+          <InfoRow label="Last contact" value={l.lastContactAt ? relativeTime(l.lastContactAt) : undefined} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Leads() {
   const navigate = useNavigate();
+  const info = useHoverInfo();
   const [viewMode, setViewMode] = useState<"kanban" | "table">("table");
   const [dashboard, setDashboard] = useState<DashboardMetrics | null>(null);
   const [board, setBoard] = useState<BoardColumn[]>([]);
@@ -48,7 +95,6 @@ export default function Leads() {
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState<LeadFilters>({ ...EMPTY_FILTERS });
   const [isAddOpen, setIsAddOpen] = useState(false);
-  const [selected, setSelected] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 350);
@@ -90,7 +136,6 @@ export default function Leads() {
   }, [viewMode, fetchBoard, fetchList]);
 
   useEffect(() => { setPage(0); }, [debouncedSearch, filters, rowsPerPage]);
-  useEffect(() => { setSelected(new Set()); }, [leads]);
 
   const refresh = () => {
     fetchDashboard();
@@ -128,18 +173,33 @@ export default function Leads() {
   };
 
   const stats: StatCard[] = useMemo(() => [
-    { label: "Total Leads", value: dashboard?.totalLeads, icon: Users, className: "bg-emerald-100 text-emerald-600" },
-    { label: "New", value: dashboard?.newLeads, icon: Sparkles, className: "bg-emerald-100 text-emerald-600" },
-    { label: "Contacted", value: dashboard?.contactedLeads, icon: PhoneCall, className: "bg-violet-100 text-violet-600" },
-    { label: "Interested", value: dashboard?.interestedLeads, icon: ThermometerSun, className: "bg-purple-100 text-purple-600" },
-    { label: "Site Visit", value: dashboard?.todaySiteVisits, icon: MapPin, className: "bg-cyan-100 text-cyan-600" },
-    { label: "Converted", value: dashboard?.convertedLeads, icon: CheckCircle, className: "bg-green-100 text-green-600" },
-    { label: "Lost", value: dashboard?.lostLeads, icon: XCircle, className: "bg-rose-100 text-rose-600" },
-    { label: "Follow-ups", value: dashboard?.pendingFollowups, icon: CalendarDays, className: "bg-orange-100 text-orange-600" },
+    { label: "Total Leads", value: dashboard?.totalLeads, icon: Users, className: "bg-emerald-100 text-emerald-600", ring: "ring-emerald-500 border-emerald-500", patch: {} },
+    { label: "New", value: dashboard?.newLeads, icon: Sparkles, className: "bg-emerald-100 text-emerald-600", ring: "ring-emerald-500 border-emerald-500", patch: { status: "New" } },
+    { label: "Contacted", value: dashboard?.contactedLeads, icon: PhoneCall, className: "bg-violet-100 text-violet-600", ring: "ring-violet-500 border-violet-500", patch: { status: "Contacted" } },
+    { label: "Interested", value: dashboard?.interestedLeads, icon: ThermometerSun, className: "bg-purple-100 text-purple-600", ring: "ring-purple-500 border-purple-500", patch: { status: "Interested" } },
+    { label: "Site Visit", value: dashboard?.todaySiteVisits, icon: MapPin, className: "bg-cyan-100 text-cyan-600", ring: "ring-cyan-500 border-cyan-500", patch: { stage: "Site Visit" } },
+    { label: "Converted", value: dashboard?.convertedLeads, icon: CheckCircle, className: "bg-green-100 text-green-600", ring: "ring-green-500 border-green-500", patch: { isConverted: "true" } },
+    { label: "Lost", value: dashboard?.lostLeads, icon: XCircle, className: "bg-rose-100 text-rose-600", ring: "ring-rose-500 border-rose-500", patch: { status: "Lost" } },
+    { label: "Follow-ups", value: dashboard?.pendingFollowups, icon: CalendarDays, className: "bg-orange-100 text-orange-600", ring: "ring-orange-500 border-orange-500", patch: { followUpDue: "true" } },
   ], [dashboard]);
 
   const setFilter = (key: keyof LeadFilters) => (value: string) =>
     setFilters((f) => ({ ...f, [key]: value }));
+
+  // A card is active when the filters match its patch across all segment keys.
+  const isStatActive = (patch: Partial<LeadFilters>) =>
+    SEGMENT_KEYS.every((k) => (filters[k] || "") === ((patch[k] as string) || ""));
+
+  const onStatClick = (patch: Partial<LeadFilters>) => {
+    // Clicking the active card (other than "Total") toggles back to all leads.
+    const target = isStatActive(patch) ? {} : patch;
+    setFilters((f) => {
+      const next = { ...f };
+      SEGMENT_KEYS.forEach((k) => { next[k] = ""; });
+      return { ...next, ...target };
+    });
+    setViewMode("table");
+  };
 
   const activeFilterCount = Object.values(filters).filter((v) => v !== "").length;
 
@@ -151,33 +211,10 @@ export default function Leads() {
     return <span className={`px-2 py-0.5 text-xs rounded-full font-medium whitespace-nowrap ${stageStyle(l.stage) === "bg-muted text-muted-foreground" ? statusStyle(l.status) : stageStyle(l.stage)}`}>{label}</span>;
   };
 
-  const toggleRow = (id: number) => setSelected((prev) => {
-    const next = new Set(prev);
-    next.has(id) ? next.delete(id) : next.add(id);
-    return next;
-  });
-  const allSelected = leads.length > 0 && leads.every((l) => selected.has(l.id));
-  const toggleAll = () => setSelected(allSelected ? new Set() : new Set(leads.map((l) => l.id)));
-
   const columns: Column<Lead>[] = [
-    {
-      key: "select",
-      header: (
-        <input type="checkbox" className="h-4 w-4 rounded border-input accent-primary cursor-pointer"
-          checked={allSelected} onChange={toggleAll} onClick={(e) => e.stopPropagation()} aria-label="Select all" />
-      ),
-      headClassName: "w-8",
-      cellClassName: "w-8",
-      cell: (l) => (
-        <input type="checkbox" className="h-4 w-4 rounded border-input accent-primary cursor-pointer"
-          checked={selected.has(l.id)} onChange={() => toggleRow(l.id)} onClick={(e) => e.stopPropagation()}
-          aria-label={`Select ${l.name}`} />
-      ),
-    },
     {
       key: "lead", header: "Lead Details", cell: (l) => (
         <div className="min-w-[9rem]">
-          <div className="text-[11px] font-mono text-muted-foreground">{l.leadNumber}</div>
           <div className="font-semibold text-foreground truncate">{l.name}</div>
           {(l.city || l.state) && (
             <div className="text-xs text-muted-foreground truncate">{[l.city, l.state].filter(Boolean).join(", ")}</div>
@@ -202,19 +239,15 @@ export default function Leads() {
       ),
     },
     { key: "stage", header: "Stage", cell: (l) => stagePill(l) },
-    { key: "source", header: "Source", cellClassName: "text-sm text-muted-foreground whitespace-nowrap", cell: (l) => l.leadSource || "—" },
     {
-      key: "owner", header: "Owner", cell: (l) => {
-        const name = l.assignedSalesExecutive?.name;
-        return (
-          <div className="flex items-center gap-2 min-w-[7rem]">
-            <span className={`h-7 w-7 rounded-full flex items-center justify-center text-[11px] font-semibold shrink-0 ${avatarColor(name)}`}>
-              {initials(name)}
-            </span>
-            <span className="text-sm truncate">{name || <span className="text-muted-foreground">Unassigned</span>}</span>
-          </div>
-        );
-      },
+      key: "source", header: "Source", cellClassName: "whitespace-nowrap", cell: (l) => (
+        <div className="text-xs">
+          <div className="text-foreground">{l.leadSource || "—"}</div>
+          {l.leadOwner?.name && (
+            <div className="text-muted-foreground">by {l.leadOwner.name}</div>
+          )}
+        </div>
+      ),
     },
     {
       key: "activity", header: "Last Activity", cellClassName: "whitespace-nowrap", cell: (l) => (
@@ -230,7 +263,6 @@ export default function Leads() {
         return <span className={t.className}>{t.label}</span>;
       },
     },
-    { key: "status", header: "Status", cell: (l) => tempPill(l.leadTemperature) },
     {
       key: "actions", header: "", headClassName: "text-right", cellClassName: "text-right", cell: (l) => (
         <div className="flex items-center justify-end gap-0.5" onClick={(e) => e.stopPropagation()}>
@@ -258,7 +290,7 @@ export default function Leads() {
   const showingTo = Math.min((page + 1) * rowsPerPage, totalElements);
 
   return (
-    <div className={`p-6 lg:p-8 space-y-5 flex flex-col animate-in fade-in ${viewMode === "kanban" ? "h-full" : ""}`}>
+    <div className={`p-4 lg:p-6 space-y-3 flex flex-col animate-in fade-in ${viewMode === "kanban" ? "h-full" : ""}`}>
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -291,54 +323,64 @@ export default function Leads() {
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-3">
-        {stats.map((stat) => (
-          <div key={stat.label} className="p-3 bg-card rounded-xl border shadow-sm flex items-center gap-2.5">
-            <div className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${stat.className}`}>
-              <stat.icon size={16} />
-            </div>
-            <div className="min-w-0">
-              <p className="text-[11px] font-medium text-muted-foreground truncate">{stat.label}</p>
-              {dashboard ? (
-                <p className="text-xl font-bold leading-tight">{stat.value ?? 0}</p>
-              ) : (
-                <Skeleton className="h-6 w-8 mt-0.5" />
-              )}
-            </div>
-          </div>
-        ))}
+      {/* KPI cards — double as quick-filter tabs */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-2">
+        {stats.map((stat) => {
+          const active = isStatActive(stat.patch);
+          return (
+            <button
+              key={stat.label}
+              type="button"
+              onClick={() => onStatClick(stat.patch)}
+              title={`Show ${stat.label} leads`}
+              aria-pressed={active}
+              className={`p-2 bg-card rounded-lg border text-left flex items-center gap-2 shadow-sm transition-all hover:border-foreground/20 hover:shadow ${active ? `ring-2 ${stat.ring}` : ""}`}
+            >
+              <div className={`h-7 w-7 rounded-md flex items-center justify-center shrink-0 ${stat.className}`}>
+                <stat.icon size={14} />
+              </div>
+              <div className="min-w-0">
+                {dashboard ? (
+                  <p className="text-lg font-bold leading-none">{stat.value ?? 0}</p>
+                ) : (
+                  <Skeleton className="h-5 w-6" />
+                )}
+                <p className="text-[11px] font-medium text-muted-foreground truncate leading-tight mt-0.5">{stat.label}</p>
+              </div>
+            </button>
+          );
+        })}
       </div>
 
-      {/* Toolbar: search + inline filters */}
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="flex-1 min-w-[240px] flex items-center gap-2 bg-card px-3 rounded-lg border h-10">
+      {/* Toolbar: search + inline filters (single row on desktop) */}
+      <div className="flex flex-wrap md:flex-nowrap items-center gap-2">
+        <div className="flex-1 min-w-[180px] flex items-center gap-2 bg-card px-3 rounded-lg border h-10">
           <Search className="h-4 w-4 text-muted-foreground shrink-0" />
           <Input
-            placeholder="Search by lead number, customer, phone, email, company, city..."
+            placeholder="Search leads..."
             className="border-0 shadow-none focus-visible:ring-0 h-9 px-0 text-sm"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
         {viewMode === "table" && (
-          <>
-            <select className={`${selectClass} w-auto min-w-[7.5rem]`} value={filters.stage} onChange={(e) => setFilter("stage")(e.target.value)}>
+          <div className="flex items-center gap-2 shrink-0 overflow-x-auto">
+            <select className={`${selectClass} w-auto min-w-[6.5rem] shrink-0`} value={filters.stage} onChange={(e) => setFilter("stage")(e.target.value)}>
               <option value="">All Stages</option>
               {LEAD_STAGES.map((o) => <option key={o} value={o}>{o}</option>)}
             </select>
-            <select className={`${selectClass} w-auto min-w-[7.5rem]`} value={filters.source} onChange={(e) => setFilter("source")(e.target.value)}>
+            <select className={`${selectClass} w-auto min-w-[6.5rem] shrink-0`} value={filters.source} onChange={(e) => setFilter("source")(e.target.value)}>
               <option value="">All Sources</option>
               {LEAD_SOURCES.map((o) => <option key={o} value={o}>{o}</option>)}
             </select>
-            <select className={`${selectClass} w-auto min-w-[7.5rem]`} value={filters.assignedEmployeeId} onChange={(e) => setFilter("assignedEmployeeId")(e.target.value)}>
+            <select className={`${selectClass} w-auto min-w-[6.5rem] shrink-0`} value={filters.assignedEmployeeId} onChange={(e) => setFilter("assignedEmployeeId")(e.target.value)}>
               <option value="">All Owners</option>
               {users.map((u) => <option key={u.id} value={String(u.id)}>{u.name}</option>)}
             </select>
-          </>
+          </div>
         )}
         {activeFilterCount > 0 && (
-          <Button variant="ghost" size="sm" onClick={() => { setFilters({ ...EMPTY_FILTERS }); setSearch(""); }}>
+          <Button variant="ghost" size="sm" className="shrink-0" onClick={() => { setFilters({ ...EMPTY_FILTERS }); setSearch(""); }}>
             <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Reset
           </Button>
         )}
@@ -429,17 +471,12 @@ export default function Leads() {
             )
           ) : (
             <>
-              {selected.size > 0 && (
-                <div className="flex items-center justify-between px-4 py-2 bg-primary/10 border border-primary/20 rounded-lg text-sm">
-                  <span className="font-medium">{selected.size} selected</span>
-                  <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>Clear</Button>
-                </div>
-              )}
               <ResponsiveList
                 items={leads}
                 loading={loading}
                 getRowKey={(l) => l.id}
                 onRowClick={(l) => navigate(`/leads/${l.id}`)}
+                getRowProps={(l) => info.bind(<LeadInfo l={l} />)}
                 emptyIcon={Target}
                 emptyTitle="No leads found"
                 emptyDescription="No leads match your search or filters."
@@ -459,6 +496,7 @@ export default function Leads() {
                     <div className="flex items-center gap-2 flex-wrap">
                       {stagePill(l)}
                       {l.leadSource && <span className="text-xs text-muted-foreground">{l.leadSource}</span>}
+                      {l.leadOwner?.name && <span className="text-xs text-muted-foreground">· by {l.leadOwner.name}</span>}
                     </div>
                     <div className="flex items-center justify-between text-xs">
                       <span className="flex items-center gap-1.5 text-muted-foreground">
@@ -580,6 +618,7 @@ export default function Leads() {
         users={users}
         onSaved={() => refresh()}
       />
+      {info.portal}
     </div>
   );
 }

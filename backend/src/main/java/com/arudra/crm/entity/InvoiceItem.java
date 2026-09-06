@@ -36,4 +36,12 @@ public class InvoiceItem extends BaseEntity {
 
     @Column(name = "total_price", precision = 15, scale = 2, nullable = false)
     private BigDecimal totalPrice;
+
+    /** Set when this line is a catalogue product sold on a counter sale (no FK — plain id). */
+    @Column(name = "product_id")
+    private Long productId;
+
+    /** Warehouse the counter-sale stock-out was deducted from, so a cancellation can reverse it. */
+    @Column(name = "source_warehouse_id")
+    private Long sourceWarehouseId;
 }

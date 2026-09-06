@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
 import api from "@/lib/api";
-import { Search, Plus, Filter, Download, Upload, Eye, ChevronRight, Users } from "lucide-react";
+import { Search, Plus, Filter, Download, Upload, Eye, ChevronRight, Users, Store, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import ResponsiveList, { type Column } from "@/components/ui/responsive-list";
 import FilterSheet from "@/components/ui/filter-sheet";
-import CustomerFormDialog from "./customers/CustomerFormDialog";
+import CustomerFormDialog, { type CustomerSegment } from "./customers/CustomerFormDialog";
 import { useNavigate } from "react-router-dom";
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
@@ -18,10 +18,32 @@ interface CustomerProfileDTO {
   phone: string;
   city: string;
   state: string;
+  customerSegment?: string;
   tags: {id: number, name: string}[];
 }
 
 const EMPTY_FILTERS = { name: "", city: "", email: "", phone: "", tag: "" };
+
+const SEGMENT_TABS: { key: "" | CustomerSegment; label: string; Icon?: typeof Store }[] = [
+  { key: "", label: "All" },
+  { key: "PROJECT_CLIENT", label: "Project Clients", Icon: Building2 },
+  { key: "WALK_IN", label: "Walk-in", Icon: Store },
+];
+
+function SegmentBadge({ segment }: { segment?: string }) {
+  if (segment === "WALK_IN") {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 text-xs rounded-full">
+        <Store className="h-3 w-3" /> Walk-in
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary/10 text-primary text-xs rounded-full">
+      <Building2 className="h-3 w-3" /> Project Client
+    </span>
+  );
+}
 
 function Tags({ tags }: { tags: CustomerProfileDTO["tags"] }) {
   if (!tags?.length) return null;
@@ -44,19 +66,23 @@ export default function Customers() {
   const [totalPages, setTotalPages] = useState(1);
   const [showFilters, setShowFilters] = useState(false);
   const [isAddCustomerOpen, setIsAddCustomerOpen] = useState(false);
+  const [addSegment, setAddSegment] = useState<CustomerSegment>("PROJECT_CLIENT");
+  const [segment, setSegment] = useState<"" | CustomerSegment>("");
   const [filters, setFilters] = useState({ ...EMPTY_FILTERS });
+
+  const openAdd = (seg: CustomerSegment) => { setAddSegment(seg); setIsAddCustomerOpen(true); };
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 350);
     return () => clearTimeout(t);
   }, [search]);
 
-  useEffect(() => { setPage(0); }, [debouncedSearch, filters]);
+  useEffect(() => { setPage(0); }, [debouncedSearch, filters, segment]);
 
   useEffect(() => {
     fetchCustomers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch, page, filters]);
+  }, [debouncedSearch, page, filters, segment]);
 
   const fetchCustomers = () => {
     setLoading(true);
@@ -64,6 +90,7 @@ export default function Customers() {
       search: debouncedSearch,
       page: page.toString(),
       size: "10",
+      ...(segment ? { segment } : {}),
       ...Object.fromEntries(Object.entries(filters).filter(([_, v]) => v !== ""))
     });
 
@@ -119,6 +146,7 @@ export default function Customers() {
       ),
     },
     { key: "location", header: "Location", cell: (c) => location(c) },
+    { key: "segment", header: "Segment", cell: (c) => <SegmentBadge segment={c.customerSegment} /> },
     { key: "tags", header: "Tags", cell: (c) => <Tags tags={c.tags} /> },
     {
       key: "actions", header: "", headClassName: "text-right", cellClassName: "text-right",
@@ -138,13 +166,32 @@ export default function Customers() {
           <Button variant="outline" onClick={handleExportExcel}><Download className="mr-2 h-4 w-4" /> Excel</Button>
           <Button variant="outline" onClick={handleExportPDF}><Download className="mr-2 h-4 w-4" /> PDF</Button>
           <Button variant="outline"><Upload className="mr-2 h-4 w-4" /> Import</Button>
-          <Button onClick={() => setIsAddCustomerOpen(true)}><Plus className="mr-2 h-4 w-4" /> Add Customer</Button>
+          <Button variant="outline" onClick={() => openAdd("WALK_IN")}><Store className="mr-2 h-4 w-4" /> Walk-in</Button>
+          <Button onClick={() => openAdd("PROJECT_CLIENT")}><Plus className="mr-2 h-4 w-4" /> Add Client</Button>
         </div>
+      </div>
+
+      {/* Segment tabs */}
+      <div className="flex gap-1 border-b -mb-2">
+        {SEGMENT_TABS.map(({ key, label, Icon }) => {
+          const active = segment === key;
+          return (
+            <button
+              key={key || "all"} onClick={() => setSegment(key)}
+              className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                active ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {Icon && <Icon className="h-4 w-4" />} {label}
+            </button>
+          );
+        })}
       </div>
 
       <CustomerFormDialog
         open={isAddCustomerOpen}
         onOpenChange={setIsAddCustomerOpen}
+        defaultSegment={addSegment}
         onSaved={fetchCustomers}
       />
 
@@ -177,12 +224,15 @@ export default function Customers() {
         emptyIcon={Users}
         emptyTitle="No customers found"
         emptyDescription="No customers match your search or filters. Add your first customer to get started."
-        emptyAction={<Button onClick={() => setIsAddCustomerOpen(true)}><Plus className="mr-2 h-4 w-4" /> Add Customer</Button>}
+        emptyAction={<Button onClick={() => openAdd(segment === "WALK_IN" ? "WALK_IN" : "PROJECT_CLIENT")}><Plus className="mr-2 h-4 w-4" /> Add Customer</Button>}
         columns={columns}
         renderCard={(c) => (
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 space-y-1">
-              <div className="font-medium text-primary truncate">{c.name}</div>
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="font-medium text-primary truncate">{c.name}</span>
+                <SegmentBadge segment={c.customerSegment} />
+              </div>
               {c.phone && <div className="text-sm text-muted-foreground">{c.phone}</div>}
               {c.email && <div className="text-sm text-muted-foreground truncate">{c.email}</div>}
               <div className="text-xs text-muted-foreground">{location(c)}</div>

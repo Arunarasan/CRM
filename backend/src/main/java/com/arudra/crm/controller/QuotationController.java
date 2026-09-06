@@ -1,14 +1,18 @@
 package com.arudra.crm.controller;
 
 import com.arudra.crm.entity.Project;
+import com.arudra.crm.entity.ProjectPayment;
 import com.arudra.crm.entity.Quotation;
 import com.arudra.crm.security.CurrentUserService;
+import com.arudra.crm.service.ProjectService;
 import com.arudra.crm.service.QuotationService;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
@@ -24,10 +28,13 @@ public class QuotationController {
 
     private final QuotationService quotationService;
     private final CurrentUserService currentUserService;
+    private final ProjectService projectService;
 
-    public QuotationController(QuotationService quotationService, CurrentUserService currentUserService) {
+    public QuotationController(QuotationService quotationService, CurrentUserService currentUserService,
+                              ProjectService projectService) {
         this.quotationService = quotationService;
         this.currentUserService = currentUserService;
+        this.projectService = projectService;
     }
 
     @GetMapping
@@ -118,8 +125,22 @@ public class QuotationController {
 
     @PostMapping("/{id}/convert-to-project")
     @PreAuthorize(WRITE)
-    public ResponseEntity<List<Project>> convertToProject(@PathVariable Long id, @RequestParam(required = false) String splitBy) {
-        return ResponseEntity.ok(quotationService.convertToProject(id, splitBy, currentUserService.getCurrentUser()));
+    public ResponseEntity<List<Project>> convertToProject(@PathVariable Long id,
+            @RequestParam(required = false) String splitBy,
+            @RequestBody(required = false) Map<String, Object> body) {
+        // Optional advance payment captured at conversion — recorded against the first project.
+        BigDecimal advance = null;
+        String method = null;
+        if (body != null) {
+            Object raw = body.get("advanceAmount");
+            if (raw != null && !String.valueOf(raw).isBlank()) {
+                try { advance = new BigDecimal(String.valueOf(raw).replace(",", "")); } catch (NumberFormatException ignored) { }
+            }
+            method = body.get("advancePaymentMethod") != null ? String.valueOf(body.get("advancePaymentMethod")) : null;
+        }
+        List<Project> projects = quotationService.convertToProjectWithAdvance(
+                id, splitBy, currentUserService.getCurrentUser(), advance, method);
+        return ResponseEntity.ok(projects);
     }
 
     @PutMapping("/{id}/sign")

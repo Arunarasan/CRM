@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAuth } from "@/hooks/useAuth";
 import { quotationApi } from "@/api/quotationApi";
 import { downloadQuotationPdf } from "@/lib/quotationPdf";
@@ -98,10 +99,16 @@ export default function QuotationDetails() {
   const handleRejectSelected = () => runAction(() => quotationApi.rejectItems(quotationId, Array.from(checked)).then(() => setChecked(new Set())));
   const handleApproveAll = () => runAction(() => quotationApi.approveItems(quotationId, pendingItems.map((i) => i.id!).filter(Boolean)));
 
-  const handleConvert = (splitBy?: "NONE" | "FLOOR") => {
+  // Convert-to-project dialog: optional advance payment captured at conversion.
+  const [convertCfg, setConvertCfg] = useState<{ split?: "FLOOR"; advanceAmount: string; advanceMethod: string } | null>(null);
+  const doConvert = () => {
+    if (!convertCfg) return;
     setBusy(true);
-    quotationApi.convertToProject(quotationId, splitBy)
-      .then(() => navigate("/projects"))
+    quotationApi.convertToProject(quotationId, convertCfg.split, {
+      advanceAmount: convertCfg.advanceAmount || undefined,
+      advancePaymentMethod: convertCfg.advanceMethod,
+    })
+      .then(() => { setConvertCfg(null); navigate("/projects"); })
       .catch((e) => { console.error(e); alert(e?.response?.data?.message || "Conversion failed — approve items first."); })
       .finally(() => setBusy(false));
   };
@@ -207,7 +214,7 @@ export default function QuotationDetails() {
               <Button
                 disabled={busy || status !== "APPROVED"}
                 title={status !== "APPROVED" ? "Customer approval required — a project can only be created from an approved quotation" : undefined}
-                onClick={() => handleConvert()}
+                onClick={() => setConvertCfg({ advanceAmount: "", advanceMethod: "Cash" })}
               >
                 <FileOutput className="mr-2 h-4 w-4" /> Create Project
               </Button>
@@ -215,7 +222,7 @@ export default function QuotationDetails() {
                 variant="outline"
                 disabled={busy || status !== "APPROVED"}
                 title={status !== "APPROVED" ? "Customer approval required — a project can only be created from an approved quotation" : undefined}
-                onClick={() => handleConvert("FLOOR")}
+                onClick={() => setConvertCfg({ split: "FLOOR", advanceAmount: "", advanceMethod: "Cash" })}
               >
                 <Building className="mr-2 h-4 w-4" /> Create Project (Split by Floor)
               </Button>
@@ -318,6 +325,39 @@ export default function QuotationDetails() {
           )}
         </div>
       </div>
+
+      {/* Convert-to-project + advance payment */}
+      <Dialog open={!!convertCfg} onOpenChange={(o) => !o && setConvertCfg(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Create Project{convertCfg?.split ? " (split by floor)" : ""}</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              A project will be created from this approved quotation and the lead workflow will complete.
+              If the customer paid an advance, record it now — it's booked against the new project.
+            </p>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Advance received (₹) — optional</label>
+              <input inputMode="numeric" value={convertCfg?.advanceAmount ?? ""}
+                onChange={(e) => setConvertCfg((c) => c && { ...c, advanceAmount: e.target.value })}
+                placeholder="0" className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Payment method</label>
+              <select value={convertCfg?.advanceMethod ?? "Cash"}
+                onChange={(e) => setConvertCfg((c) => c && { ...c, advanceMethod: e.target.value })}
+                className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm">
+                {["Cash", "Bank Transfer", "UPI", "Cheque", "Card"].map((m) => <option key={m} value={m}>{m}</option>)}
+              </select>
+            </div>
+            <div className="flex justify-end gap-2 border-t pt-3">
+              <Button variant="outline" onClick={() => setConvertCfg(null)} disabled={busy}>Cancel</Button>
+              <Button onClick={doConvert} disabled={busy} className="bg-green-600 hover:bg-green-700 text-white">
+                {busy ? "Creating…" : convertCfg?.advanceAmount ? `Create Project + Record ₹${convertCfg.advanceAmount}` : "Create Project"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

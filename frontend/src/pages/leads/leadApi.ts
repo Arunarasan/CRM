@@ -1,5 +1,5 @@
 import api from "@/lib/api";
-import type { BoardColumn, DashboardMetrics, Lead, LeadFilters, UserSummary } from "./constants";
+import type { BoardColumn, DashboardMetrics, Lead, LeadCreator, LeadFilters, UserSummary } from "./constants";
 
 // Thin typed wrapper around /api/leads endpoints so pages/tabs share one surface.
 
@@ -31,6 +31,7 @@ export const leadApi = {
   assignableUsers: () => api.get<UserSummary[]>("/leads/assignable-users"),
 
   get: (id: string | number) => api.get<Lead>(`/leads/${id}`),
+  createdBy: (id: string | number) => api.get<LeadCreator>(`/leads/${id}/created-by`),
   create: (payload: Partial<Lead>) => api.post<Lead>("/leads", payload),
   update: (id: number, payload: Partial<Lead>) => api.put<Lead>(`/leads/${id}`, payload),
   remove: (id: number) => api.delete(`/leads/${id}`),
@@ -72,6 +73,13 @@ export const leadApi = {
   addTask: (id: string | number, payload: any) => api.post(`/leads/${id}/tasks`, payload),
   updateTaskStatus: (id: string | number, taskId: number, status: string) =>
     api.put(`/leads/${id}/tasks/${taskId}/status?status=${encodeURIComponent(status)}`),
+  updateTask: (id: string | number, taskId: number, payload: any) =>
+    api.put(`/leads/${id}/tasks/${taskId}`, payload),
+  deleteTask: (id: string | number, taskId: number) =>
+    api.delete(`/leads/${id}/tasks/${taskId}`),
+
+  // Auto-generated workflow tasks for the lead (Requirement → Site Visit → BOQ → Quotation).
+  getWorkflowTasks: (id: string | number) => api.get(`/leads/${id}/workflow-tasks`),
 
   getSiteVisits: (id: string | number) => api.get(`/leads/${id}/site-visits`),
   scheduleSiteVisit: (id: string | number, payload: any) => api.post(`/leads/${id}/site-visits`, payload),

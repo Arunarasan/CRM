@@ -102,6 +102,12 @@ public class ReportController {
                 to != null ? LocalDate.parse(to) : null));
     }
 
+    @GetMapping("/purchases/overview")
+    @PreAuthorize(PURCHASE_READ)
+    public ResponseEntity<Map<String, Object>> getPurchaseOverview() {
+        return ResponseEntity.ok(purchaseReportService.overview());
+    }
+
     @GetMapping("/purchases/supplier-performance")
     @PreAuthorize(PURCHASE_READ)
     public ResponseEntity<List<Map<String, Object>>> getSupplierPerformance() {

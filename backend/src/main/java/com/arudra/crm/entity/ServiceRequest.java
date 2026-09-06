@@ -50,6 +50,32 @@ public class ServiceRequest extends BaseEntity {
     @Column(name = "preferred_date")
     private LocalDate preferredDate;
 
+    // ---- Service work: warranty cover + free/paid billing (V77) ----
+
+    /** PORTAL (raised by the customer) | STAFF (logged from the project's Service & Warranty tab). */
+    @Column(nullable = false, length = 20)
+    private String origin = "PORTAL";
+
+    /** SERVICE | PRODUCT | NONE — which warranty the work is claimed under (context only). */
+    @Column(name = "warranty_type", length = 20)
+    private String warrantyType;
+
+    /** FREE (in-warranty goodwill) | PAID — chosen manually by staff; null until decided. */
+    @Column(name = "charge_type", length = 20)
+    private String chargeType;
+
+    /** Agreed charge for a PAID work; also the amount billed when an invoice is raised. */
+    @Column(name = "charge_amount")
+    private java.math.BigDecimal chargeAmount;
+
+    /** The Billing invoice raised for a PAID work, once created. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "invoice_id")
+    private Invoice invoice;
+
+    @Column(name = "resolution_notes", columnDefinition = "TEXT")
+    private String resolutionNotes;
+
     @OneToMany(mappedBy = "serviceRequest", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<ServiceRequestMedia> media = new ArrayList<>();
 }

@@ -392,6 +392,13 @@ public class ProjectController {
         return ResponseEntity.ok(ApiResponse.success(projectService.getMaterialPurchaseSummary(id)));
     }
 
+    /** Material consumed on this project's tasks — which product, how much, on which task, and by whom. */
+    @GetMapping("/{id}/task-material-usage")
+    @PreAuthorize(READ)
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getTaskMaterialUsage(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.success(projectService.getTaskMaterialUsage(id)));
+    }
+
     // =====================================================================
     // Daily log children (employees present / materials used / photos+videos)
     // =====================================================================

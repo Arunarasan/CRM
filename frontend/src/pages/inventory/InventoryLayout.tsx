@@ -1,7 +1,7 @@
 import { NavLink, Outlet } from "react-router-dom";
 import {
   LayoutDashboard, Boxes, Warehouse, ArrowLeftRight,
-  Send, ClipboardList, AlertTriangle, ShoppingCart,
+  Send, ClipboardList, AlertTriangle,
 } from "lucide-react";
 
 const TABS = [
@@ -12,7 +12,6 @@ const TABS = [
   { to: "/inventory/transfers", label: "Transfers", icon: Send },
   { to: "/inventory/material-requests", label: "Material Requests", icon: ClipboardList },
   { to: "/inventory/damage", label: "Damage Entries", icon: AlertTriangle },
-  { to: "/inventory/purchase-requests", label: "Purchase Requests", icon: ShoppingCart },
 ];
 
 export default function InventoryLayout() {

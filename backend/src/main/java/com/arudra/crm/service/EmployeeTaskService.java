@@ -14,8 +14,10 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -65,9 +67,20 @@ public class EmployeeTaskService {
     @Autowired
     private WorkflowTriggerService workflowTriggerService;
     @Autowired
+    private org.springframework.context.ApplicationEventPublisher eventPublisher;
+    @Autowired
     private TaskEligibilityService taskEligibilityService;
     @Autowired
     private AssignmentSettingsRepository assignmentSettingsRepository;
+    @Autowired
+    private TaskPoolNotifier taskPoolNotifier;
+    @Autowired
+    private TaskGenerationService taskGenerationService;
+    @Autowired
+    private QuotationRepository quotationRepository;
+    @Autowired
+    @org.springframework.context.annotation.Lazy
+    private QuotationService quotationService;
 
     private static final List<String> ACTIVE_ASSIGNMENT_STATUSES =
             List.of("ASSIGNED", "ACCEPTED", "IN_PROGRESS", "PAUSED", "WAITING_MATERIAL", "REWORK", "COMPLETED");
@@ -253,7 +266,10 @@ public class EmployeeTaskService {
         if (!isUnassigned(task)) {
             throw new IllegalStateException("This task was already picked by another employee.");
         }
-        assertHasCapacity(employee);
+        // Data-entry lead tasks are exempt from the capacity cap — only manual working tasks count.
+        if (!isDataEntryLeadTask(task)) {
+            assertHasCapacity(employee);
+        }
 
         TaskAssignment a = new TaskAssignment();
         a.setTask(task);
@@ -329,11 +345,17 @@ public class EmployeeTaskService {
 
     // ---------------------------------------------------------------- Capacity
 
-    /** Distinct tasks the employee is actively holding (owned or participating, not yet done). */
+    /**
+     * Distinct manual working tasks the employee is actively holding (owned or participating, not yet
+     * done). Quick data-entry lead tasks are deliberately excluded — capacity governs only the
+     * hands-on field work (installation, stitching, site visit, …), so a data-entry task never eats a
+     * slot and can always be picked up.
+     */
     public int activeTaskCount(Long employeeId) {
         return (int) assignmentRepository.findByEmployeeId(employeeId).stream()
                 .filter(a -> CAPACITY_STATUSES.contains(a.getStatus()))
                 .filter(a -> a.getTask() != null)
+                .filter(a -> !isDataEntryLeadTask(a.getTask()))
                 .map(a -> a.getTask().getId())
                 .distinct().count();
     }
@@ -365,6 +387,171 @@ public class EmployeeTaskService {
         }
     }
 
+    // ---------------------------------------------------------------- Data-entry hold window
+
+    /**
+     * Minutes a quick data-entry lead task may be CLAIMED-but-not-STARTED before it is auto-released
+     * back to the shared task board (pool). 0 disables the auto-release. Configurable via
+     * assignment_settings (singleton); default 10.
+     */
+    public int dataEntryHoldMinutes() {
+        return assignmentSettingsRepository.findById(AssignmentSettings.SINGLETON_ID)
+                .or(() -> assignmentSettingsRepository.findAll().stream().findFirst())
+                .map(AssignmentSettings::getDataEntryHoldMinutes)
+                .orElse(10);
+    }
+
+    /**
+     * A "data-entry" lead task is a quick-form workflow task (Collect Requirement / Contact-Follow-up /
+     * Qualify / Review) — one that carries a structured completion form. Module-driven field tasks
+     * (Site Visit, Measurement, BOQ, Quotation) and non-workflow tasks are never data-entry, so the
+     * hold window never touches them.
+     */
+    public boolean isDataEntryLeadTask(Task task) {
+        return task != null && task.getTaskTemplate() != null
+                && com.arudra.crm.util.LeadTaskForms.formTypeFor(task.getTaskTemplate().getCode()) != null;
+    }
+
+    /**
+     * The instant the hold countdown is measured from. An explicit extension (worker asked for more
+     * time) wins; otherwise the claim time — accepted (self-pick) or assigned (manager).
+     */
+    private LocalDateTime claimTimeOf(TaskAssignment a) {
+        if (a.getHoldExtendedAt() != null) return a.getHoldExtendedAt();
+        if ("ACCEPTED".equals(a.getStatus()) && a.getAcceptedAt() != null) return a.getAcceptedAt();
+        return a.getAssignedDate();
+    }
+
+    /**
+     * The moment a held data-entry task will be auto-released back to the board, or null when the
+     * countdown doesn't apply (not held, already started, or the feature is disabled). Drives the
+     * live countdown timer on the task card. Takes the task's assignments to avoid a re-query.
+     */
+    private LocalDateTime holdExpiryFor(Task task, List<TaskAssignment> assignments) {
+        int holdMinutes = dataEntryHoldMinutes();
+        if (holdMinutes <= 0) return null;
+        List<TaskAssignment> active = assignments.stream()
+                .filter(a -> !"CANCELLED".equals(a.getStatus()) && !"REJECTED".equals(a.getStatus()))
+                .collect(Collectors.toList());
+        if (active.isEmpty()) return null;
+        boolean beingWorked = active.stream().anyMatch(a -> a.getStartedAt() != null
+                || !("ASSIGNED".equals(a.getStatus()) || "ACCEPTED".equals(a.getStatus())));
+        if (beingWorked) return null;
+        LocalDateTime latestClaim = active.stream()
+                .map(this::claimTimeOf)
+                .filter(java.util.Objects::nonNull)
+                .max(Comparator.naturalOrder())
+                .orElse(null);
+        return latestClaim == null ? null : latestClaim.plusMinutes(holdMinutes);
+    }
+
+    /**
+     * Public accessor for other views (e.g. the desktop task board): when this data-entry task will
+     * auto-release, or null if the countdown doesn't apply. Pass the task's assignments to avoid a
+     * re-query; the helper filters cancelled/rejected itself.
+     */
+    public LocalDateTime holdExpiresAt(Task task, List<TaskAssignment> assignments) {
+        if (!isDataEntryLeadTask(task)) return null;
+        return holdExpiryFor(task, assignments);
+    }
+
+    /**
+     * Grant a fresh hold window on a held-but-not-started data-entry task by moving every active
+     * assignment's countdown anchor to now. No-op (returns false) if the task isn't a timed data-entry
+     * task, the feature is off, nobody holds it, or it's already started. Used by the worker's
+     * "extend time" action and the manager's board control.
+     */
+    @Transactional
+    public boolean extendHoldForTask(Long taskId) {
+        Task task = getTask(taskId);
+        if (!isDataEntryLeadTask(task) || dataEntryHoldMinutes() <= 0) return false;
+        List<TaskAssignment> active = assignmentRepository.findByTaskId(taskId).stream()
+                .filter(a -> !"CANCELLED".equals(a.getStatus()) && !"REJECTED".equals(a.getStatus()))
+                .collect(Collectors.toList());
+        boolean beingWorked = active.stream().anyMatch(a -> a.getStartedAt() != null
+                || !("ASSIGNED".equals(a.getStatus()) || "ACCEPTED".equals(a.getStatus())));
+        if (active.isEmpty() || beingWorked) return false;
+        LocalDateTime now = LocalDateTime.now();
+        for (TaskAssignment a : active) {
+            a.setHoldExtendedAt(now);
+            assignmentRepository.save(a);
+        }
+        return true;
+    }
+
+    /** Worker self-extend: verifies the caller holds the task, extends it, returns the refreshed card. */
+    @Transactional
+    @LogActivity(module = "EMPLOYEE_TASK", action = "EXTEND_HOLD")
+    public Map<String, Object> extendHold(Long taskId, User employee) {
+        getAssignment(taskId, employee.getId()); // 404 if the caller isn't assigned to this task
+        if (!extendHoldForTask(taskId)) {
+            throw new IllegalStateException("This task can't be extended — it's already started or isn't a timed task.");
+        }
+        return toCard(getTask(taskId), employee.getId());
+    }
+
+    /**
+     * Release a held data-entry lead task back to the task board if it was never started within the
+     * hold window. Called by {@link TaskClaimExpiryScheduler}. Row-locks the task and re-verifies the
+     * guards (still a data-entry task, still only held-not-started, still past the window) so a task a
+     * worker started or completed in the meantime is never yanked away. Returns true if released.
+     */
+    @Transactional
+    @LogActivity(module = "EMPLOYEE_TASK", action = "AUTO_RELEASE")
+    public boolean releaseExpiredHold(Long taskId) {
+        int holdMinutes = dataEntryHoldMinutes();
+        if (holdMinutes <= 0) return false;
+
+        Task task = taskRepository.findByIdForUpdate(taskId).orElse(null);
+        if (task == null || !isDataEntryLeadTask(task)) return false;
+        if ("COMPLETED".equals(task.getStatus()) || "CANCELLED".equals(task.getStatus())) return false;
+
+        List<TaskAssignment> active = assignmentRepository.findByTaskId(taskId).stream()
+                .filter(a -> !"CANCELLED".equals(a.getStatus()) && !"REJECTED".equals(a.getStatus()))
+                .collect(Collectors.toList());
+        if (active.isEmpty()) return false;
+
+        // Someone is actually working it (started, or moved past the held-not-started statuses)? Keep it.
+        boolean beingWorked = active.stream().anyMatch(a -> a.getStartedAt() != null
+                || !("ASSIGNED".equals(a.getStatus()) || "ACCEPTED".equals(a.getStatus())));
+        if (beingWorked) return false;
+
+        // Re-check the window against the most recent claim, so a fresh re-pick resets the clock.
+        LocalDateTime cutoff = LocalDateTime.now().minusMinutes(holdMinutes);
+        LocalDateTime latestClaim = active.stream()
+                .map(this::claimTimeOf)
+                .filter(java.util.Objects::nonNull)
+                .max(Comparator.naturalOrder())
+                .orElse(null);
+        if (latestClaim == null || latestClaim.isAfter(cutoff)) return false;
+
+        Set<Long> notifyUsers = new HashSet<>();
+        for (TaskAssignment a : active) {
+            a.setStatus("CANCELLED");
+            a.setRemarks(appendRemark(a.getRemarks(),
+                    "Auto-released to the task board — not started within " + holdMinutes + " min."));
+            assignmentRepository.save(a);
+            if (a.getEmployee() != null) notifyUsers.add(a.getEmployee().getId());
+        }
+        task.setAssignedEmployee(null); // clear the mirrored display pointer
+        task.setStatus("AVAILABLE");     // back in the pool / on the task board
+        Task saved = taskRepository.save(task);
+
+        // Ping the eligible pool that it's open again, and tell the person who let it lapse.
+        taskPoolNotifier.notifyEligibleEmployees(saved);
+        for (Long uid : notifyUsers) {
+            notificationService.dispatch("Task returned to the board",
+                    "\"" + saved.getTaskName() + "\" was released because it wasn't started within "
+                            + holdMinutes + " minutes.", "TASK", uid, "/employee/tasks?tab=AVAILABLE");
+        }
+        return true;
+    }
+
+    private String appendRemark(String existing, String note) {
+        if (existing == null || existing.isBlank()) return note;
+        return existing + " | " + note;
+    }
+
     /**
      * The eligible, AVAILABLE workflow tasks an employee may pick up — the shared Task Pool. Each
      * card carries {@code canPick} reflecting the employee's remaining capacity.
@@ -377,7 +564,8 @@ public class EmployeeTaskService {
                 .sorted(Comparator.comparing(Task::getDueDate, Comparator.nullsLast(Comparator.naturalOrder())))
                 .map(t -> {
                     Map<String, Object> card = toCard(t, employee.getId());
-                    card.put("canPick", hasCapacity);
+                    // Data-entry tasks ignore the capacity cap, so they're always pickable.
+                    card.put("canPick", hasCapacity || isDataEntryLeadTask(t));
                     return card;
                 })
                 .collect(Collectors.toList());
@@ -585,6 +773,17 @@ public class EmployeeTaskService {
         return recomputeAndSave(task); // → WAITING_APPROVAL once all participants are done
     }
 
+    /**
+     * Force-close a lead data-entry task as COMPLETED (skipping the OWNER_APPROVAL "waiting" step) —
+     * used when a follow-up attempt is recorded and immediately superseded by a freshly spawned task.
+     * Without this the superseded attempt would sit in WAITING_APPROVAL and, being un-approved, block
+     * the phase from ever advancing once the real requirement is finally captured.
+     */
+    @Transactional
+    public Task finalizeLeadAttempt(Long taskId, User employee) {
+        return finalizeTaskCompletion(getTask(taskId), employee);
+    }
+
     /** Finalize a task as COMPLETED, close its assignments, notify, and drive the workflow forward. */
     private Task finalizeTaskCompletion(Task task, User byEmployee) {
         task.setStatus("COMPLETED");
@@ -606,7 +805,73 @@ public class EmployeeTaskService {
         notificationService.dispatchToAdmins("Task Completed", message, "TASK", "/tasks", byEmployee.getId());
 
         workflowTriggerService.onTaskCompleted(saved);
+        // Apply any captured lead-task form data onto the lead now that the task is truly done.
+        eventPublisher.publishEvent(new com.arudra.crm.event.LeadTaskCompletedEvent(saved.getId()));
         return saved;
+    }
+
+    /**
+     * Field employee flags that another site visit is needed. Spawns a fresh, dated
+     * "Site Visit & Measurement" task (a repeat attempt) and closes the current one — WITHOUT touching
+     * the Measurement lifecycle, so {@code onMeasurementCompleted} never fires and the BOQ & Quotation
+     * step stays locked until the final visit is finished normally. The new task is spawned BEFORE this
+     * one is closed, so the phase keeps an open task and the workflow does not advance.
+     */
+    @Transactional
+    @LogActivity(module = "EMPLOYEE_TASK", action = "REVISIT")
+    public Task scheduleRevisit(Long taskId, User employee, LocalDate nextVisitDate, String notes) {
+        Task task = getTask(taskId);
+        String code = task.getTaskTemplate() != null ? task.getTaskTemplate().getCode() : null;
+        if (!"TT_VISIT_MEASURE".equals(code) || task.getLeadId() == null) {
+            throw new IllegalStateException("Another visit can only be scheduled from a Site Visit & Measurement task.");
+        }
+        long visits = taskRepository.findByLeadId(task.getLeadId()).stream()
+                .filter(t -> t.getTaskTemplate() != null && "TT_VISIT_MEASURE".equals(t.getTaskTemplate().getCode()))
+                .count();
+        taskGenerationService.spawnRepeatLeadTask(task.getLeadId(), "TT_VISIT_MEASURE", nextVisitDate,
+                "Site Visit & Measurement (Revisit " + visits + ")", employee);
+        // Close this attempt (records it) without completing the Measurement → no BOQ advance.
+        return finalizeTaskCompletion(task, employee);
+    }
+
+    /** Lead-scoped revisit: resolve the lead's open Site Visit & Measurement task, then schedule the
+     *  next visit. Used by the in-portal visit screen, which is opened by leadId (no task id). */
+    @Transactional
+    public Task scheduleRevisitForLead(Long leadId, User employee, LocalDate nextVisitDate, String notes) {
+        Task current = taskRepository.findByLeadId(leadId).stream()
+                .filter(t -> t.getTaskTemplate() != null && "TT_VISIT_MEASURE".equals(t.getTaskTemplate().getCode()))
+                .filter(t -> !"COMPLETED".equals(t.getStatus()) && !"CANCELLED".equals(t.getStatus()))
+                .max(Comparator.comparing(Task::getId))
+                .orElseThrow(() -> new IllegalStateException("No open Site Visit & Measurement task for this lead."));
+        return scheduleRevisit(current.getId(), employee, nextVisitDate, notes);
+    }
+
+    /**
+     * Employee (or admin) closes the deal straight from the BOQ & Quotation task: approve the lead's
+     * latest quotation and convert it to a project, recording an optional advance as the project's first
+     * payment. Both an advance and a plain approve (no advance) convert. Conversion drives the workflow
+     * (onProjectCreated closes the lead workflow and this task). Lead-scoped because the in-portal
+     * BOQ & Quotation screen is opened by leadId.
+     */
+    @Transactional
+    @LogActivity(module = "EMPLOYEE_TASK", action = "CONVERT_PROJECT")
+    public List<Project> convertLeadToProject(Long leadId, User employee, BigDecimal advanceAmount, String advanceMethod) {
+        if (leadId == null) {
+            throw new IllegalStateException("No lead linked to this task.");
+        }
+        List<Quotation> quotes = quotationRepository.findByLeadIdOrderByCreatedAtDesc(leadId);
+        Quotation quote = quotes.stream().filter(q -> !"REVISED".equals(q.getStatus())).findFirst()
+                .orElse(quotes.isEmpty() ? null : quotes.get(0));
+        if (quote == null || quote.getId() == null) {
+            throw new IllegalStateException("No quotation found for this lead. Create the quotation first.");
+        }
+        // Employee/admin approval: promote the header to APPROVED so conversion's guard passes
+        // (convertToProject also normalizes item-level statuses).
+        if (!"APPROVED".equals(quote.getStatus()) && !"CONVERTED".equals(quote.getStatus())) {
+            quote.setStatus("APPROVED");
+            quotationRepository.save(quote);
+        }
+        return quotationService.convertToProjectWithAdvance(quote.getId(), null, employee, advanceAmount, advanceMethod);
     }
 
     private boolean allActiveAssignmentsCompleted(Task task) {
@@ -633,6 +898,8 @@ public class EmployeeTaskService {
 
         // Drive the workflow forward: unlock dependents / advance the phase (no-op for manual tasks).
         workflowTriggerService.onTaskCompleted(task);
+        // Manager approved → apply the captured form data onto the lead/project.
+        eventPublisher.publishEvent(new com.arudra.crm.event.LeadTaskCompletedEvent(task.getId()));
         return task;
     }
 
@@ -950,6 +1217,12 @@ public class EmployeeTaskService {
                 .filter(a -> !"CANCELLED".equals(a.getStatus()))
                 .map(a -> a.getEmployee() != null ? a.getEmployee().getName() : null)
                 .collect(Collectors.toList()));
+
+        // Data-entry hold: flag the card and, while it's held-but-not-started, expose when it will be
+        // auto-released so the task board can show a live countdown timer.
+        boolean dataEntry = isDataEntryLeadTask(t);
+        card.put("dataEntry", dataEntry);
+        card.put("holdExpiresAt", dataEntry ? holdExpiryFor(t, assignments) : null);
 
         if (viewerEmployeeId != null) {
             assignments.stream()

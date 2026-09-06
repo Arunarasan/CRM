@@ -43,6 +43,9 @@ public class HrController {
     private com.arudra.crm.service.WorkforceAlertService workforceAlertService;
 
     @Autowired
+    private com.arudra.crm.service.ProfileChangeRequestService profileChangeRequestService;
+
+    @Autowired
     private CurrentUserService currentUserService;
 
     // --- Departments ---
@@ -150,6 +153,34 @@ public class HrController {
     @PreAuthorize(HR_WRITE)
     public ResponseEntity<EmployeeDocument> addDocument(@RequestBody EmployeeDocument document) {
         return ResponseEntity.ok(hrService.addDocument(document));
+    }
+
+    // --- Profile change requests (employee self-edits → admin approval) ---
+    @GetMapping("/profile-change-requests")
+    @PreAuthorize(HR_READ)
+    public ResponseEntity<List<ProfileChangeRequest>> profileChangeRequests(
+            @RequestParam(required = false) String status) {
+        return ResponseEntity.ok(profileChangeRequestService.listForAdmin(status));
+    }
+
+    @GetMapping("/employees/{id}/profile-change-requests")
+    @PreAuthorize(HR_READ)
+    public ResponseEntity<List<ProfileChangeRequest>> profileChangeRequestsForEmployee(@PathVariable Long id) {
+        return ResponseEntity.ok(profileChangeRequestService.listForEmployee(id));
+    }
+
+    @PostMapping("/profile-change-requests/{id}/approve")
+    @PreAuthorize(HR_WRITE)
+    public ResponseEntity<ProfileChangeRequest> approveProfileChange(@PathVariable Long id) {
+        return ResponseEntity.ok(profileChangeRequestService.approve(id, currentUserService.getCurrentUser()));
+    }
+
+    @PostMapping("/profile-change-requests/{id}/reject")
+    @PreAuthorize(HR_WRITE)
+    public ResponseEntity<ProfileChangeRequest> rejectProfileChange(@PathVariable Long id,
+                                                                    @RequestBody(required = false) Map<String, String> body) {
+        String remarks = body == null ? null : body.get("remarks");
+        return ResponseEntity.ok(profileChangeRequestService.reject(id, currentUserService.getCurrentUser(), remarks));
     }
 
     // --- Payroll ---

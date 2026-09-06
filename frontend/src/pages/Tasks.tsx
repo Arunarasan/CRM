@@ -5,10 +5,11 @@ import { format } from "date-fns";
 import {
   Plus, Search, RefreshCw, Zap, Users, CheckCircle2, Inbox, ListChecks,
   AlertTriangle, TriangleAlert, Timer, Check, X, GitBranch, UserCheck, Circle,
+  FolderKanban, Target, ExternalLink,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import {
-  smartAssignmentApi, TaskBoardRow, TaskBucket, RosterRow,
+  smartAssignmentApi, TaskBoardRow, TaskBucket, TaskCategory, RosterRow,
 } from "@/api/smartAssignmentApi";
 import { EmployeeRecommendation } from "@/types/assignment";
 import { workflowApi, ConsoleOverview, WorkflowTemplate } from "@/api/workflowApi";
@@ -31,6 +32,48 @@ const priorityColor = (p?: string | null) => {
   }
 };
 
+/**
+ * Live countdown for a held data-entry task on the board: ticks down to the moment it auto-releases
+ * back to the pool if the assignee hasn't started it. Red in the last two minutes, where a manager
+ * can grant more time (the worker's still on it) with a one-click Extend.
+ */
+function HoldTimer({ expiresAt, onExtend }: { expiresAt: string; onExtend?: () => void | Promise<unknown> }) {
+  const [now, setNow] = useState(() => Date.now());
+  const [extending, setExtending] = useState(false);
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const msLeft = new Date(expiresAt).getTime() - now;
+  const expired = msLeft <= 0;
+  const totalSec = Math.max(0, Math.floor(msLeft / 1000));
+  const label = `${Math.floor(totalSec / 60)}:${(totalSec % 60).toString().padStart(2, "0")}`;
+  const urgent = expired || msLeft <= 120_000;
+  const cls = urgent ? "bg-red-100 text-red-700 border-red-200" : "bg-amber-100 text-amber-700 border-amber-200";
+
+  const extend = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!onExtend || extending) return;
+    setExtending(true);
+    try { await onExtend(); } finally { setExtending(false); }
+  };
+
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-bold ${cls}`}>
+        <Timer className="h-3 w-3" />
+        {expired ? "Releasing…" : `${label} to start`}
+      </span>
+      {urgent && !expired && onExtend && (
+        <button onClick={extend} disabled={extending}
+          className="rounded border border-emerald-300 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50">
+          {extending ? "…" : "Extend"}
+        </button>
+      )}
+    </span>
+  );
+}
+
 const BUCKETS: { id: TaskBucket | "ALL"; label: string }[] = [
   { id: "ALL", label: "All" },
   { id: "UNASSIGNED", label: "Unassigned" },
@@ -43,6 +86,18 @@ const BUCKETS: { id: TaskBucket | "ALL"; label: string }[] = [
 // The three buckets whose tasks can still take a (re)assignment inline via Smart Assign.
 const ASSIGNABLE_BUCKETS: TaskBucket[] = ["UNASSIGNED", "ASSIGNED", "IN_PROGRESS"];
 
+// Task "type" lanes — where a task came from. Keeps the flat queue human-readable: lead-stage
+// workflow, project work, on-site field work, walk-in installs, service requests, ad-hoc.
+const CATEGORIES: { id: TaskCategory; label: string; hint: string; badge: string }[] = [
+  { id: "LEAD",         label: "Lead",         hint: "Requirement · Site Visit · BOQ · Quotation", badge: "bg-violet-100 text-violet-700 border-violet-200" },
+  { id: "PROJECT",      label: "Project",      hint: "Main project tasks & rework",                 badge: "bg-blue-100 text-blue-700 border-blue-200" },
+  { id: "FIELD_WORK",   label: "Field Work",   hint: "On-site execution from the BOQ",              badge: "bg-emerald-100 text-emerald-700 border-emerald-200" },
+  { id: "INSTALLATION", label: "Installation", hint: "Walk-in / counter-sale installs",             badge: "bg-amber-100 text-amber-700 border-amber-200" },
+  { id: "ENQUIRY",      label: "Enquiry",      hint: "Website enquiries & customer service requests", badge: "bg-rose-100 text-rose-700 border-rose-200" },
+  { id: "OTHER",        label: "Other",        hint: "Ad-hoc / manually created",                   badge: "bg-slate-100 text-slate-600 border-slate-200" },
+];
+const CATEGORY_BADGE: Record<string, string> = Object.fromEntries(CATEGORIES.map(c => [c.id, c.badge]));
+
 type MainTab = "tasks" | "employees" | "approvals" | "risk" | "templates";
 
 // ============================================================ page
@@ -52,6 +107,7 @@ export default function Tasks() {
   const navigate = useNavigate();
 
   const [tab, setTab] = useState<MainTab>("tasks");
+  const [taskBucket, setTaskBucket] = useState<TaskBucket | "ALL">("ALL"); // Tasks-tab status filter, driven by the stat tiles
   const [board, setBoard] = useState<TaskBoardRow[]>([]);
   const [roster, setRoster] = useState<RosterRow[]>([]);
   const [fullTasks, setFullTasks] = useState<Record<number, any>>({});
@@ -173,14 +229,26 @@ export default function Tasks() {
         </div>
       </div>
 
-      {/* Stat tiles */}
+      {/* Stat tiles — click to filter the task list (or jump to Employees) */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        <StatTile icon={Inbox} tone="text-amber-600" label="Unassigned" value={counts.UNASSIGNED} />
-        <StatTile icon={UserCheck} tone="text-primary" label="Assigned" value={counts.ASSIGNED} />
-        <StatTile icon={ListChecks} tone="text-emerald-600" label="In Progress" value={counts.IN_PROGRESS} />
-        <StatTile icon={AlertTriangle} tone="text-orange-600" label="Need Approval" value={counts.NEEDS_APPROVAL} />
-        <StatTile icon={CheckCircle2} tone="text-emerald-600" label="Completed" value={counts.COMPLETED} />
-        <StatTile icon={Users} tone="text-slate-700" label="Employees" value={roster.length} />
+        {([
+          { icon: Inbox, tone: "text-amber-600", label: "Unassigned", value: counts.UNASSIGNED, bucket: "UNASSIGNED" as const },
+          { icon: UserCheck, tone: "text-primary", label: "Assigned", value: counts.ASSIGNED, bucket: "ASSIGNED" as const },
+          { icon: ListChecks, tone: "text-emerald-600", label: "In Progress", value: counts.IN_PROGRESS, bucket: "IN_PROGRESS" as const },
+          { icon: AlertTriangle, tone: "text-orange-600", label: "Need Approval", value: counts.NEEDS_APPROVAL, bucket: "NEEDS_APPROVAL" as const },
+          { icon: CheckCircle2, tone: "text-emerald-600", label: "Completed", value: counts.COMPLETED, bucket: "COMPLETED" as const },
+        ]).map(({ icon, tone, label, value, bucket }) => (
+          <StatTile
+            key={label} icon={icon} tone={tone} label={label} value={value}
+            active={tab === "tasks" && taskBucket === bucket}
+            onClick={() => { setTab("tasks"); setTaskBucket(taskBucket === bucket && tab === "tasks" ? "ALL" : bucket); }}
+          />
+        ))}
+        <StatTile
+          icon={Users} tone="text-slate-700" label="Employees" value={roster.length}
+          active={tab === "employees"}
+          onClick={() => setTab("employees")}
+        />
       </div>
 
       {/* Tabs */}
@@ -193,7 +261,7 @@ export default function Tasks() {
         ))}
       </div>
 
-      {tab === "tasks" && <TasksTab board={board} counts={counts} onEdit={openTask} onChanged={loadBoard} navigate={navigate} />}
+      {tab === "tasks" && <TasksTab board={board} counts={counts} filter={taskBucket} onFilterChange={setTaskBucket} onEdit={openTask} onChanged={loadBoard} navigate={navigate} />}
       {tab === "employees" && <EmployeesTab roster={roster} board={board} isAdmin={isAdmin} onChanged={loadBoard} />}
       {tab === "approvals" && isAdmin && <ApprovalsTab />}
       {tab === "risk" && isAdmin && <RiskTab navigate={navigate} />}
@@ -204,6 +272,22 @@ export default function Tasks() {
         <DialogContent className="max-w-xl">
           <DialogHeader><DialogTitle>{currentTask.id ? "Edit Task" : "Create Task"}</DialogTitle></DialogHeader>
           <div className="space-y-4 py-2 max-h-[70vh] overflow-y-auto pr-2">
+            {(currentTask.project?.id || currentTask.leadId) && (
+              <div className="flex flex-wrap gap-2">
+                {currentTask.project?.id && (
+                  <button type="button" onClick={() => navigate(`/projects/${currentTask.project.id}`)}
+                    className="inline-flex items-center gap-1.5 rounded-lg border bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100">
+                    <FolderKanban className="h-3.5 w-3.5" /> {currentTask.project.projectName || "Open project"} <ExternalLink className="h-3 w-3" />
+                  </button>
+                )}
+                {currentTask.leadId && (
+                  <button type="button" onClick={() => navigate(`/leads/${currentTask.leadId}`)}
+                    className="inline-flex items-center gap-1.5 rounded-lg border bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700 hover:bg-violet-100">
+                    <Target className="h-3.5 w-3.5" /> Open lead <ExternalLink className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
+            )}
             <div className="space-y-2">
               <Label>Task Title</Label>
               <Input value={currentTask.taskName || ""} onChange={e => setCurrentTask({ ...currentTask, taskName: e.target.value })} placeholder="e.g. Install ceiling lights" />
@@ -316,22 +400,54 @@ export default function Tasks() {
 
 // ============================================================ Tasks tab
 
-function TasksTab({ board, counts, onEdit, onChanged, navigate }: {
+function TasksTab({ board, counts, filter, onFilterChange, onEdit, onChanged, navigate }: {
   board: TaskBoardRow[]; counts: Record<string, number>;
+  filter: TaskBucket | "ALL"; onFilterChange: (b: TaskBucket | "ALL") => void;
   onEdit: (id: number) => void; onChanged: () => void; navigate: (to: string) => void;
 }) {
-  const [filter, setFilter] = useState<TaskBucket | "ALL">("ALL");
+  const setFilter = onFilterChange;
+  const [cat, setCat] = useState<TaskCategory | "ALL">("ALL");
   const [search, setSearch] = useState("");
   const [assignFor, setAssignFor] = useState<TaskBoardRow | null>(null);
 
+  // Category counts respect the active status bucket, so the type lane numbers match what you'd see.
+  const catCounts = useMemo(() => {
+    const c: Record<string, number> = {};
+    board.forEach(t => {
+      if (filter !== "ALL" && t.bucket !== filter) return;
+      c[t.category] = (c[t.category] || 0) + 1;
+    });
+    return c;
+  }, [board, filter]);
+
   const rows = useMemo(() => board.filter(t =>
     (filter === "ALL" || t.bucket === filter) &&
+    (cat === "ALL" || t.category === cat) &&
     t.taskName.toLowerCase().includes(search.toLowerCase())
-  ), [board, filter, search]);
+  ), [board, filter, cat, search]);
 
   return (
     <div className="flex flex-col gap-3">
-      {/* Filter chips */}
+      {/* Type lanes — where each task came from */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-semibold uppercase tracking-wide text-slate-400 mr-0.5">Type</span>
+        <button onClick={() => setCat("ALL")}
+          className={`rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${cat === "ALL" ? "border-primary bg-primary text-primary-foreground" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}>
+          All types <span className={`ml-1 ${cat === "ALL" ? "opacity-80" : "text-slate-400"}`}>{Object.values(catCounts).reduce((a, b) => a + b, 0)}</span>
+        </button>
+        {CATEGORIES.map(c => {
+          const n = catCounts[c.id] || 0;
+          const active = cat === c.id;
+          return (
+            <button key={c.id} onClick={() => setCat(active ? "ALL" : c.id)} title={c.hint}
+              className={`rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${active ? "border-primary bg-primary text-primary-foreground" : `${c.badge} hover:brightness-95`}`}>
+              {c.label} <span className={`ml-1 ${active ? "opacity-80" : "opacity-60"}`}>{n}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Status chips + search */}
       <div className="flex flex-wrap items-center gap-2">
         {BUCKETS.map(b => {
           const n = b.id === "ALL" ? board.length : (counts[b.id] || 0);
@@ -354,7 +470,7 @@ function TasksTab({ board, counts, onEdit, onChanged, navigate }: {
             <thead>
               <tr className="bg-slate-50 border-b text-xs text-slate-500">
                 <th className="p-3 font-semibold">Task</th>
-                <th className="p-3 font-semibold">Project</th>
+                <th className="p-3 font-semibold">Project / Lead</th>
                 <th className="p-3 font-semibold">Assignee(s)</th>
                 <th className="p-3 font-semibold">Status</th>
                 <th className="p-3 font-semibold">Priority</th>
@@ -368,11 +484,30 @@ function TasksTab({ board, counts, onEdit, onChanged, navigate }: {
               )}
               {rows.map(t => (
                 <tr key={t.id} className="border-b last:border-0 hover:bg-slate-50">
-                  <td className="p-3 font-semibold text-slate-800 cursor-pointer" onClick={() => onEdit(t.id)}>{t.taskName}</td>
+                  <td className="p-3 cursor-pointer" onClick={() => onEdit(t.id)}>
+                    <div className="font-semibold text-slate-800">{t.taskName}</div>
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                      <span className={`inline-block rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${CATEGORY_BADGE[t.category] || "bg-slate-100 text-slate-600 border-slate-200"}`}>{t.categoryLabel}</span>
+                      {t.holdExpiresAt && (
+                        <HoldTimer expiresAt={t.holdExpiresAt}
+                          onExtend={() => smartAssignmentApi.extendTaskHold(t.id).then(onChanged)} />
+                      )}
+                    </div>
+                  </td>
                   <td className="p-3 text-slate-500">
-                    {t.project ? (t.projectId
-                      ? <button className="hover:underline" onClick={() => navigate(`/projects/${t.projectId}`)}>{t.project}</button>
-                      : t.project) : "—"}
+                    <div className="flex flex-col gap-0.5">
+                      {t.projectId ? (
+                        <button className="flex items-center gap-1 text-left hover:underline" onClick={() => navigate(`/projects/${t.projectId}`)}>
+                          <FolderKanban className="h-3 w-3 text-blue-500 shrink-0" /> {t.project}
+                        </button>
+                      ) : t.project ? <span>{t.project}</span> : null}
+                      {t.leadId && (
+                        <button className="flex items-center gap-1 text-left hover:underline" onClick={() => navigate(`/leads/${t.leadId}`)}>
+                          <Target className="h-3 w-3 text-violet-500 shrink-0" /> {t.lead || `Lead #${t.leadId}`}
+                        </button>
+                      )}
+                      {!t.projectId && !t.project && !t.leadId && "—"}
+                    </div>
                   </td>
                   <td className="p-3">
                     {t.assignees.length === 0
@@ -701,12 +836,20 @@ function TemplatesTab() {
 
 // ============================================================ bits
 
-function StatTile({ icon: Icon, tone, label, value }: { icon: any; tone: string; label: string; value: number }) {
-  return (
-    <div className="rounded-xl border bg-card p-3 shadow-sm">
+function StatTile({ icon: Icon, tone, label, value, onClick, active }: {
+  icon: any; tone: string; label: string; value: number; onClick?: () => void; active?: boolean;
+}) {
+  const className = `rounded-xl border bg-card p-3 shadow-sm text-left w-full transition-all ${
+    onClick ? "cursor-pointer hover:border-foreground/30 hover:shadow" : ""
+  } ${active ? "ring-2 ring-primary" : ""}`;
+  const body = (
+    <>
       <Icon className={`h-5 w-5 ${tone}`} />
       <p className="mt-1 text-2xl font-bold leading-none">{value}</p>
       <p className="mt-1 text-xs text-muted-foreground">{label}</p>
-    </div>
+    </>
   );
+  return onClick
+    ? <button type="button" onClick={onClick} aria-pressed={active} className={className}>{body}</button>
+    : <div className={className}>{body}</div>;
 }

@@ -597,6 +597,18 @@ function SettingsTab() {
           <NumberField label="Max overtime hours" value={s.maxOvertimeHours} step={0.5} onChange={(v) => set('maxOvertimeHours', v)} />
           <NumberField label="Min suitability score" value={s.minSuitabilityScore} onChange={(v) => set('minSuitabilityScore', v)} />
           <NumberField label="Min performance score" value={s.minPerformanceScore} onChange={(v) => set('minPerformanceScore', v)} />
+          <NumberField
+            label="Data-entry hold (minutes)"
+            value={s.dataEntryHoldMinutes ?? 10}
+            onChange={(v) => set('dataEntryHoldMinutes', v)}
+          />
+        </CardContent>
+        <CardContent className="pt-0">
+          <p className="text-xs text-muted-foreground">
+            Quick data-entry lead tasks (Collect Requirement, Contact / Follow-up, Qualify, Review)
+            auto-release back to the task board if the assignee doesn't start them within this many
+            minutes. Set to 0 to disable.
+          </p>
         </CardContent>
       </Card>
 

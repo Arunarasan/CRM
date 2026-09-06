@@ -1,6 +1,8 @@
 package com.arudra.crm.service;
 
+import com.arudra.crm.dto.CounterSaleRequest;
 import com.arudra.crm.dto.InvoicePaymentSplit;
+import com.arudra.crm.dto.lead.UserSummaryDTO;
 import com.arudra.crm.entity.*;
 import com.arudra.crm.repository.*;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -43,6 +45,8 @@ public class FinanceService {
     @Autowired private UserRepository userRepository;
     @Autowired private NotificationService notificationService;
     @Autowired private DocumentNumberService documentNumberService;
+    @Autowired private InventoryService inventoryService;
+    @Autowired private TaskService taskService;
 
     // =====================================================================
     // Numbering — allocated atomically (see DocumentNumberService); the old
@@ -124,6 +128,229 @@ public class FinanceService {
                 "Invoice for ₹" + saved.getTotalAmount() + " created for " + saved.getCustomer().getName(),
                 "INVOICE_GENERATED", "/finance/invoices/" + saved.getId());
         return saved;
+    }
+
+    // =====================================================================
+    // Counter / walk-in sale
+    // =====================================================================
+
+    /** Employees a counter-sale installation task can be assigned to (id + name). */
+    public List<UserSummaryDTO> getAssignableEmployees() {
+        return userRepository.findAll().stream()
+                .filter(u -> !Boolean.TRUE.equals(u.getIsDeleted()))
+                .map(UserSummaryDTO::from)
+                .toList();
+    }
+
+    /**
+     * Creates a walk-in / counter-sale invoice: a project-less GST invoice for products sold over
+     * the counter (optionally plus an installation charge). Resolves or creates the walk-in customer,
+     * deducts inventory stock for catalogue lines, optionally collects payment on the spot, and — when
+     * installation is requested — spins off a Task (assigned to a chosen employee, or left in the pool).
+     */
+    @Transactional
+    public Invoice createCounterSale(CounterSaleRequest req, User user) {
+        Customer customer = resolveCounterCustomer(req);
+
+        Invoice invoice = new Invoice();
+        invoice.setCustomer(customer);
+        invoice.setInvoiceType("COUNTER_SALE");
+        invoice.setGstType("IGST".equals(req.gstType) ? "IGST" : "CGST_SGST");
+        invoice.setDate(LocalDate.now());
+        invoice.setPlaceOfSupply(emptyToNull(req.placeOfSupply));
+        invoice.setDiscountType(req.discountType);
+        invoice.setDiscountValue(req.discountValue);
+        invoice.setNotes(emptyToNull(req.notes));
+        invoice.setTerms(emptyToNull(req.terms));
+        invoice.setStatus("GENERATED"); // a counter sale is a real, issued sale — not a draft
+
+        List<InvoiceItem> items = new ArrayList<>();
+        if (req.items != null) {
+            for (CounterSaleRequest.Item li : req.items) {
+                if (li == null || li.description == null || li.description.isBlank()) continue;
+                InvoiceItem item = new InvoiceItem();
+                item.setDescription(li.description.trim());
+                item.setHsnCode(emptyToNull(li.hsnCode));
+                item.setUnit(emptyToNull(li.unit));
+                item.setQuantity(li.quantity == null || li.quantity < 1 ? 1 : li.quantity);
+                item.setUnitPrice(li.unitPrice == null ? BigDecimal.ZERO : li.unitPrice);
+                item.setGstRate(li.gstRate == null ? BigDecimal.ZERO : li.gstRate);
+                item.setProductId(li.productId);
+                item.setSourceWarehouseId(li.warehouseId); // per-line override; resolved below
+                items.add(item);
+            }
+        }
+
+        CounterSaleRequest.Installation inst = req.installation;
+        boolean hasInstallation = inst != null && inst.enabled;
+        if (hasInstallation && inst.charge != null && inst.charge.signum() > 0) {
+            InvoiceItem line = new InvoiceItem();
+            line.setDescription("Installation Charges");
+            line.setUnit("Job");
+            line.setQuantity(1);
+            line.setUnitPrice(inst.charge);
+            line.setGstRate(inst.gstRate == null ? BigDecimal.valueOf(18) : inst.gstRate);
+            items.add(line);
+        }
+        if (items.isEmpty()) {
+            throw new RuntimeException("A counter sale needs at least one product or charge line");
+        }
+
+        invoice.setId(null);
+        invoice.setInvoiceNumber(nextInvoiceNumber());
+        computeTotals(invoice, items);
+        Invoice saved = invoiceRepository.save(invoice);
+
+        for (InvoiceItem item : items) {
+            item.setId(null);
+            item.setInvoice(saved);
+            if (req.deductStock && item.getProductId() != null) {
+                try {
+                    Long warehouseId = item.getSourceWarehouseId() != null ? item.getSourceWarehouseId() : req.warehouseId;
+                    Long usedWarehouse = inventoryService.sellStock(item.getProductId(), warehouseId, item.getQuantity(), saved.getId());
+                    item.setSourceWarehouseId(usedWarehouse);
+                } catch (Exception ex) {
+                    // A stock hiccup must never block billing the customer at the counter.
+                    item.setSourceWarehouseId(null);
+                }
+            }
+            invoiceItemRepository.save(item);
+        }
+
+        postInvoiceToLedger(saved);
+
+        if (hasInstallation) {
+            createInstallationTask(saved, customer, inst);
+        }
+
+        if (req.collectNow) {
+            BigDecimal balance = saved.getBalanceDue() != null ? saved.getBalanceDue() : saved.getTotalAmount();
+            if (balance != null && balance.signum() > 0) {
+                String method = (req.paymentMethod == null || req.paymentMethod.isBlank()) ? "CASH" : req.paymentMethod;
+                markInvoicePaid(saved.getId(), List.of(new InvoicePaymentSplit(method, balance, null)), user);
+            }
+        }
+
+        notifyFinanceUsers("Counter sale " + saved.getInvoiceNumber(),
+                "Counter sale for ₹" + saved.getTotalAmount() + " billed to " + customer.getName(),
+                "INVOICE_GENERATED", "/finance/invoices/" + saved.getId());
+        return getInvoice(saved.getId());
+    }
+
+    /** Existing customer by id, else find-or-create a walk-in by phone/email, else a fresh record. */
+    private Customer resolveCounterCustomer(CounterSaleRequest req) {
+        if (req.customerId != null) {
+            return customerRepository.findById(req.customerId)
+                    .orElseThrow(() -> new RuntimeException("Customer not found: " + req.customerId));
+        }
+        String name = req.customerName == null ? "" : req.customerName.trim();
+        String phone = emptyToNull(req.customerPhone);
+        String email = emptyToNull(req.customerEmail);
+        if (name.isEmpty()) throw new RuntimeException("A walk-in sale needs a customer name");
+
+        Customer existing = null;
+        if (email != null) {
+            existing = customerRepository.findFirstByEmailIgnoreCaseAndIsDeletedFalseOrderByIdAsc(email).orElse(null);
+        }
+        if (existing == null && phone != null) {
+            existing = customerRepository.findFirstByPhoneAndIsDeletedFalseOrderByIdAsc(phone).orElse(null);
+        }
+        if (existing != null) return existing;
+
+        Customer c = new Customer();
+        c.setName(name);
+        if (email != null) c.setEmail(email);
+        if (phone != null) c.setPhone(phone);
+        c.setCustomerType("Individual");
+        c.setCustomerSegment("WALK_IN");
+        c.setStatus("Active");
+        c.setCustomerSince(LocalDate.now());
+        c.setCustomerCode("CUST-" + System.currentTimeMillis());
+        return customerRepository.save(c);
+    }
+
+    private void createInstallationTask(Invoice invoice, Customer customer, CounterSaleRequest.Installation inst) {
+        Task task = new Task();
+        task.setTaskName("Installation — " + invoice.getInvoiceNumber() + " (" + customer.getName() + ")");
+        task.setStatus("PENDING");
+        task.setPriority("MEDIUM");
+        task.setSource("MANUAL");
+        task.setInvoiceId(invoice.getId());
+        task.setCustomerId(customer.getId());
+
+        StringBuilder desc = new StringBuilder("Product installation for counter sale " + invoice.getInvoiceNumber() + ".");
+        if (customer.getPhone() != null && !customer.getPhone().isBlank()) {
+            desc.append(" Customer contact: ").append(customer.getPhone()).append('.');
+        }
+        if (inst.notes != null && !inst.notes.isBlank()) desc.append('\n').append(inst.notes.trim());
+        task.setDescription(desc.toString());
+
+        if (inst.scheduledDate != null && !inst.scheduledDate.isBlank()) {
+            try { task.setDueDate(LocalDate.parse(inst.scheduledDate.trim())); } catch (Exception ignored) { /* leave unset */ }
+        }
+        if (inst.employeeId != null) {
+            userRepository.findById(inst.employeeId).ifPresent(task::setAssignedEmployee);
+            task.setAssignmentType("SINGLE_EMPLOYEE");
+        } else {
+            task.setAssignmentType("TEAM"); // unassigned pool — any eligible employee can pick it up
+        }
+        taskService.createTask(task); // seeds a checklist + notifies the assignee (if any)
+    }
+
+    /**
+     * Raise a real Billing invoice for a PAID post-completion service work (see
+     * ProjectServiceWarrantyService). One service-charge line billed to the project's customer, issued
+     * as GENERATED and posted to the ledger like any other sale — so it flows into finance/outstanding.
+     */
+    @Transactional
+    public Invoice createServiceInvoice(ServiceRequest sr, BigDecimal chargeAmount, BigDecimal gstRate,
+                                        String gstType, boolean collectNow, String paymentMethod, User user) {
+        if (sr.getCustomer() == null) {
+            throw new RuntimeException("Service work has no customer to bill");
+        }
+        if (chargeAmount == null || chargeAmount.signum() <= 0) {
+            throw new RuntimeException("A service charge amount greater than zero is required");
+        }
+
+        Invoice invoice = new Invoice();
+        invoice.setCustomer(sr.getCustomer());
+        if (sr.getProject() != null) invoice.setProject(sr.getProject());
+        invoice.setInvoiceType("SERVICE");
+        invoice.setGstType("IGST".equals(gstType) ? "IGST" : "CGST_SGST");
+        invoice.setDate(LocalDate.now());
+        invoice.setStatus("GENERATED");
+        invoice.setNotes("Post-completion service: " + sr.getSubject());
+
+        InvoiceItem line = new InvoiceItem();
+        line.setDescription("Service — " + sr.getSubject());
+        line.setUnit("Job");
+        line.setQuantity(1);
+        line.setUnitPrice(chargeAmount);
+        line.setGstRate(gstRate == null ? BigDecimal.valueOf(18) : gstRate);
+        List<InvoiceItem> items = new ArrayList<>(List.of(line));
+
+        invoice.setInvoiceNumber(nextInvoiceNumber());
+        computeTotals(invoice, items);
+        Invoice saved = invoiceRepository.save(invoice);
+        for (InvoiceItem item : items) {
+            item.setId(null);
+            item.setInvoice(saved);
+            invoiceItemRepository.save(item);
+        }
+        postInvoiceToLedger(saved);
+
+        if (collectNow) {
+            BigDecimal balance = saved.getBalanceDue() != null ? saved.getBalanceDue() : saved.getTotalAmount();
+            if (balance != null && balance.signum() > 0) {
+                String method = (paymentMethod == null || paymentMethod.isBlank()) ? "CASH" : paymentMethod;
+                markInvoicePaid(saved.getId(), List.of(new InvoicePaymentSplit(method, balance, null)), user);
+            }
+        }
+
+        notifyFinanceUsers("Service invoice " + saved.getInvoiceNumber(),
+                "Service charge of ₹" + saved.getTotalAmount() + " billed to " + sr.getCustomer().getName(),
+                "INVOICE_GENERATED", "/finance/invoices/" + saved.getId());
+        return getInvoice(saved.getId());
     }
 
     /** Recomputes an existing DRAFT invoice's lines and totals (issued invoices are immutable). */
@@ -251,6 +478,9 @@ public class FinanceService {
     @Transactional
     public Invoice cancelInvoice(Long id, String reason) {
         Invoice invoice = getInvoice(id);
+        if ("CANCELLED".equals(invoice.getStatus())) {
+            return invoice; // already cancelled — don't re-post the reversal or re-add stock
+        }
         if ("PAID".equals(invoice.getStatus())) {
             throw new RuntimeException("A fully paid invoice cannot be cancelled; issue a credit note or refund");
         }
@@ -262,6 +492,17 @@ public class FinanceService {
         invoice.setCancelledReason(reason);
         invoice.setBalanceDue(BigDecimal.ZERO);
         Invoice saved = invoiceRepository.save(invoice);
+        // Put counter-sale stock back on cancellation (each product line remembers its warehouse).
+        if ("COUNTER_SALE".equals(saved.getInvoiceType())) {
+            for (InvoiceItem item : invoiceItemRepository.findByInvoiceId(saved.getId())) {
+                if (item.getProductId() != null && item.getSourceWarehouseId() != null) {
+                    try {
+                        inventoryService.reverseSaleStock(item.getProductId(), item.getSourceWarehouseId(),
+                                item.getQuantity(), saved.getId());
+                    } catch (Exception ignored) { /* audit-only reversal; don't block the cancel */ }
+                }
+            }
+        }
         if (wasPosted && !ledgerRepository.existsByReferenceTypeAndReferenceIdAndEntryType("INVOICE", id, "REVERSAL")) {
             postLedger(saved.getCustomer(), saved.getProject(), LocalDate.now(), "REVERSAL", "INVOICE", id,
                     saved.getInvoiceNumber(), "Invoice " + saved.getInvoiceNumber() + " cancelled" +

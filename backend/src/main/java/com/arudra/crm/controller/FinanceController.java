@@ -34,6 +34,8 @@ public class FinanceController {
     @Autowired private FinanceService financeService;
     @Autowired private ProjectFinanceService projectFinanceService;
     @Autowired private FinanceReportService reportService;
+    @Autowired private com.arudra.crm.service.SalesReturnService salesReturnService;
+    @Autowired private com.arudra.crm.service.CompanyTransactionService companyTransactionService;
     @Autowired private CurrentUserService currentUserService;
 
     // =====================================================================
@@ -83,6 +85,20 @@ public class FinanceController {
     @PreAuthorize(WRITE)
     public ResponseEntity<Invoice> createInvoice(@RequestBody InvoiceRequest request) {
         return ResponseEntity.ok(financeService.createInvoice(request.invoice, request.items));
+    }
+
+    /** Walk-in / counter sale: project-less product invoice (+ optional installation task). */
+    @PostMapping("/counter-sale")
+    @PreAuthorize(WRITE)
+    public ResponseEntity<Invoice> createCounterSale(@RequestBody com.arudra.crm.dto.CounterSaleRequest request) {
+        return ResponseEntity.ok(financeService.createCounterSale(request, currentUserService.getCurrentUser()));
+    }
+
+    /** Employees an installation task can be assigned to. */
+    @GetMapping("/assignable-employees")
+    @PreAuthorize(READ)
+    public ResponseEntity<List<com.arudra.crm.dto.lead.UserSummaryDTO>> assignableEmployees() {
+        return ResponseEntity.ok(financeService.getAssignableEmployees());
     }
 
     @PutMapping("/invoices/{id}")
@@ -209,6 +225,42 @@ public class FinanceController {
     @PreAuthorize(APPROVE)
     public ResponseEntity<CreditDebitNote> cancelNote(@PathVariable Long id) {
         return ResponseEntity.ok(financeService.cancelNote(id));
+    }
+
+    // =====================================================================
+    // Sales / product returns
+    // =====================================================================
+
+    /** Which lines (and how much) can still be returned from an invoice. */
+    @GetMapping("/invoices/{id}/returnable")
+    @PreAuthorize(READ)
+    public ResponseEntity<Map<String, Object>> returnableItems(@PathVariable Long id) {
+        return ResponseEntity.ok(salesReturnService.getReturnableItems(id));
+    }
+
+    @GetMapping("/sales-returns")
+    @PreAuthorize(READ)
+    public ResponseEntity<Page<SalesReturn>> getSalesReturns(@RequestParam(defaultValue = "0") int page,
+                                                             @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(salesReturnService.getReturns(page, size));
+    }
+
+    @GetMapping("/sales-returns/{id}")
+    @PreAuthorize(READ)
+    public ResponseEntity<SalesReturn> getSalesReturn(@PathVariable Long id) {
+        return ResponseEntity.ok(salesReturnService.getReturn(id));
+    }
+
+    @GetMapping("/sales-returns/{id}/items")
+    @PreAuthorize(READ)
+    public ResponseEntity<List<SalesReturnItem>> getSalesReturnItems(@PathVariable Long id) {
+        return ResponseEntity.ok(salesReturnService.getReturnItems(id));
+    }
+
+    @PostMapping("/sales-returns")
+    @PreAuthorize(WRITE)
+    public ResponseEntity<SalesReturn> createSalesReturn(@RequestBody com.arudra.crm.dto.SalesReturnRequest request) {
+        return ResponseEntity.ok(salesReturnService.createReturn(request, currentUserService.getCurrentUser()));
     }
 
     // =====================================================================
@@ -362,6 +414,100 @@ public class FinanceController {
     @PreAuthorize(READ)
     public ResponseEntity<List<Map<String, Object>>> getAllProfitability() {
         return ResponseEntity.ok(projectFinanceService.getAllProjectProfitability());
+    }
+
+    // =====================================================================
+    // Cash Book — consolidated money in / money out across every source
+    // =====================================================================
+
+    /** Unified cash register: customer + other income IN; supplier, contractor, payroll, project & overhead OUT. */
+    @GetMapping("/cashbook")
+    @PreAuthorize(READ)
+    public ResponseEntity<Map<String, Object>> cashbook(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) String direction,
+            @RequestParam(required = false) String source,
+            @RequestParam(required = false) String search) {
+        LocalDate end = to != null ? to : LocalDate.now();
+        LocalDate start = from != null ? from : end.withDayOfMonth(1);
+        return ResponseEntity.ok(reportService.getCashbook(start, end, direction, source, search));
+    }
+
+    // =====================================================================
+    // Company transactions — record other income & company overhead ("other charges")
+    // =====================================================================
+
+    @GetMapping("/company-transactions")
+    @PreAuthorize(READ)
+    public ResponseEntity<Page<CompanyTransaction>> getCompanyTransactions(
+            @RequestParam(required = false) String direction,
+            @RequestParam(required = false) String category,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(companyTransactionService.search(direction, category, from, to, search, page, size));
+    }
+
+    /** Suggested income / expense categories for the entry forms (free text is still accepted). */
+    @GetMapping("/company-transactions/categories")
+    @PreAuthorize(READ)
+    public ResponseEntity<Map<String, Object>> companyTransactionCategories() {
+        return ResponseEntity.ok(Map.of(
+                "income", com.arudra.crm.service.CompanyTransactionService.INCOME_CATEGORIES,
+                "expense", com.arudra.crm.service.CompanyTransactionService.EXPENSE_CATEGORIES));
+    }
+
+    @PostMapping("/company-transactions")
+    @PreAuthorize(WRITE)
+    public ResponseEntity<CompanyTransaction> addCompanyTransaction(@RequestBody CompanyTransaction txn) {
+        return ResponseEntity.ok(companyTransactionService.record(txn, currentUserService.getCurrentUser()));
+    }
+
+    @DeleteMapping("/company-transactions/{id}")
+    @PreAuthorize(WRITE)
+    public ResponseEntity<Void> deleteCompanyTransaction(@PathVariable Long id) {
+        companyTransactionService.delete(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    // =====================================================================
+    // Recurring expense heads (rent, electricity, internet…)
+    // =====================================================================
+
+    @GetMapping("/recurring-expenses")
+    @PreAuthorize(READ)
+    public ResponseEntity<List<RecurringExpense>> getRecurringExpenses(
+            @RequestParam(defaultValue = "false") boolean activeOnly) {
+        return ResponseEntity.ok(companyTransactionService.listRecurring(activeOnly));
+    }
+
+    @GetMapping("/recurring-expenses/{id}/history")
+    @PreAuthorize(READ)
+    public ResponseEntity<List<CompanyTransaction>> getRecurringHistory(@PathVariable Long id) {
+        return ResponseEntity.ok(companyTransactionService.recurringHistory(id));
+    }
+
+    @PostMapping("/recurring-expenses")
+    @PreAuthorize(WRITE)
+    public ResponseEntity<RecurringExpense> saveRecurringExpense(@RequestBody RecurringExpense head) {
+        return ResponseEntity.ok(companyTransactionService.saveRecurring(head, currentUserService.getCurrentUser()));
+    }
+
+    @PutMapping("/recurring-expenses/{id}")
+    @PreAuthorize(WRITE)
+    public ResponseEntity<RecurringExpense> updateRecurringExpense(@PathVariable Long id, @RequestBody RecurringExpense head) {
+        head.setId(id);
+        return ResponseEntity.ok(companyTransactionService.saveRecurring(head, currentUserService.getCurrentUser()));
+    }
+
+    @DeleteMapping("/recurring-expenses/{id}")
+    @PreAuthorize(WRITE)
+    public ResponseEntity<Void> deleteRecurringExpense(@PathVariable Long id) {
+        companyTransactionService.deleteRecurring(id);
+        return ResponseEntity.noContent().build();
     }
 
     // =====================================================================

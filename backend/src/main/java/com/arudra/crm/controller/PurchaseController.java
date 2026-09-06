@@ -20,6 +20,8 @@ public class PurchaseController {
     private static final String READ = "hasAuthority('ROLE_ADMIN') or hasAuthority('PURCHASE_READ')";
     private static final String WRITE = "hasAuthority('ROLE_ADMIN') or hasAuthority('PURCHASE_WRITE')";
     private static final String APPROVE = "hasAuthority('ROLE_ADMIN') or hasAuthority('PURCHASE_APPROVE')";
+    /** Receiving/checking goods is a shop-floor task open to any logged-in employee (per owner's workflow). */
+    private static final String ANY = "isAuthenticated()";
 
     @Autowired
     private PurchaseService purchaseService;
@@ -42,6 +44,12 @@ public class PurchaseController {
     @PreAuthorize(READ)
     public ResponseEntity<Supplier> getSupplier(@PathVariable Long id) {
         return ResponseEntity.ok(purchaseService.getSupplier(id));
+    }
+
+    @PostMapping("/suppliers/{id}/pay")
+    @PreAuthorize(WRITE)
+    public ResponseEntity<List<PurchasePayment>> paySupplier(@PathVariable Long id, @RequestBody PurchasePayment payment) {
+        return ResponseEntity.ok(purchaseService.paySupplier(id, payment));
     }
 
     @GetMapping("/suppliers/{id}/profile")
@@ -164,7 +172,7 @@ public class PurchaseController {
     }
 
     @PostMapping("/grns")
-    @PreAuthorize(WRITE)
+    @PreAuthorize(ANY)
     public ResponseEntity<GoodsReceiptNote> createGrn(@RequestBody CreateGrnRequest request) {
         return ResponseEntity.ok(purchaseService.createGrn(request.grn, request.items, request.photoUrls));
     }
@@ -176,15 +184,25 @@ public class PurchaseController {
     }
 
     @PostMapping("/grns/{id}/quality-check")
-    @PreAuthorize(WRITE)
+    @PreAuthorize(ANY)
     public ResponseEntity<GoodsReceiptNote> recordQualityCheck(@PathVariable Long id, @RequestBody QcRequest request) {
         return ResponseEntity.ok(purchaseService.recordQualityCheck(id, request.qcStatus, request.reason, request.remarks));
     }
 
     @PostMapping("/grns/{id}/approve")
-    @PreAuthorize(APPROVE)
+    @PreAuthorize(ANY)
     public ResponseEntity<GoodsReceiptNote> approveGrn(@PathVariable Long id) {
         return ResponseEntity.ok(purchaseService.approveGrn(id));
+    }
+
+    /** Admin-facing goods-receipt approval log — who approved each receipt, when, and from where. */
+    @GetMapping("/goods-receipt-logs")
+    @PreAuthorize(READ)
+    public ResponseEntity<Page<GoodsReceiptApprovalLog>> goodsReceiptLogs(
+            @RequestParam(required = false) Long approvedById,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(purchaseService.getApprovalLogs(approvedById, page, size));
     }
 
     // --- Bills & Payments ---
@@ -216,6 +234,12 @@ public class PurchaseController {
     @PreAuthorize(READ)
     public ResponseEntity<List<PurchasePayment>> getPaymentsForBill(@PathVariable Long id) {
         return ResponseEntity.ok(purchaseService.getPaymentsForBill(id));
+    }
+
+    @GetMapping("/orders/{id}/payments")
+    @PreAuthorize(READ)
+    public ResponseEntity<List<PurchasePayment>> getPaymentsForPo(@PathVariable Long id) {
+        return ResponseEntity.ok(purchaseService.getPaymentsForPo(id));
     }
 
     @PostMapping("/payments")

@@ -194,6 +194,70 @@ export interface ProjectExpense {
   notes?: string;
 }
 
+// --- Company transactions & consolidated Cash Book ---
+
+export type TxnDirection = "INCOME" | "EXPENSE";
+
+/** A company-level cash movement with no other home: other income + overhead ("other charges"). */
+export interface CompanyTransaction {
+  id: number;
+  txnNumber?: string;
+  direction: TxnDirection;
+  category: string;
+  partyType?: string | null;
+  partyName?: string | null;
+  amount: number;
+  txnDate: string;
+  paymentMethod?: string | null;
+  referenceNumber?: string | null;
+  project?: FinRef | null;
+  description?: string | null;
+  recurringExpenseId?: number | null;
+  documentUrl?: string | null;
+  notes?: string | null;
+  recordedBy?: FinRef | null;
+}
+
+/** A standing recurring overhead head (rent, electricity…). A template — payments are recorded by hand. */
+export interface RecurringExpense {
+  id: number;
+  name: string;
+  category: string;
+  defaultAmount?: number | null;
+  partyName?: string | null;
+  paymentMethod?: string | null;
+  frequency?: string;
+  dayOfMonth?: number | null;
+  active?: boolean;
+  notes?: string | null;
+}
+
+/** One line in the consolidated Cash Book — a single inflow or outflow from any module. */
+export interface CashbookEntry {
+  id: number;
+  date: string;
+  direction: "IN" | "OUT";
+  /** CUSTOMER_PAYMENT, COMPANY_INCOME, SUPPLIER_PAYMENT, CONTRACTOR_PAYMENT, PAYROLL, PROJECT_EXPENSE, COMPANY_EXPENSE */
+  source: string;
+  category?: string | null;
+  party?: string | null;
+  reference?: string | null;
+  method?: string | null;
+  description?: string | null;
+  amount: number;
+}
+
+export interface Cashbook {
+  from: string;
+  to: string;
+  totalIn: number;
+  totalOut: number;
+  net: number;
+  bySource: Record<string, number>;
+  count: number;
+  entries: CashbookEntry[];
+}
+
 export interface LedgerRow {
   id: number;
   date: string;
@@ -278,4 +342,55 @@ export interface PageResp<T> {
   totalElements: number;
   totalPages: number;
   number?: number;
+}
+
+// --- Sales / product returns ---
+export interface ReturnableLine {
+  invoiceItemId: number;
+  productId?: number | null;
+  description: string;
+  hsnCode?: string | null;
+  unit?: string | null;
+  soldQty: number;
+  returnedQty: number;
+  returnableQty: number;
+  unitPrice: number;
+  gstRate?: number | null;
+}
+
+export interface ReturnableInvoice {
+  invoiceId: number;
+  invoiceNumber: string;
+  invoiceType?: string;
+  customerId?: number | null;
+  customerName?: string | null;
+  items: ReturnableLine[];
+}
+
+export interface SalesReturn {
+  id: number;
+  returnNumber: string;
+  invoice?: { id?: number; invoiceNumber?: string } | null;
+  customer?: { id?: number; name?: string } | null;
+  date?: string;
+  reason?: string | null;
+  subTotal?: number;
+  gstAmount?: number;
+  totalAmount?: number;
+  settlementMode?: string; // REFUND | CREDIT_NOTE
+  refundMethod?: string | null;
+  restocked?: boolean;
+  status?: string;
+}
+
+export interface SalesReturnItem {
+  id: number;
+  invoiceItemId?: number | null;
+  productId?: number | null;
+  description?: string;
+  hsnCode?: string | null;
+  quantity: number;
+  unitPrice: number;
+  gstRate?: number | null;
+  lineTotal: number;
 }

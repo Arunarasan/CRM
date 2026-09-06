@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import api from "@/lib/api";
 import { purchaseApi } from "@/api/purchaseApi";
 import { inventoryApi } from "@/api/inventoryApi";
-import type { Supplier } from "@/types/purchase";
+import type { Supplier, BuyNowRow } from "@/types/purchase";
 import type { Product, Warehouse } from "@/types/inventory";
 import { useGoBack } from "@/hooks/useGoBack";
 import { apiError } from "@/lib/apiError";
@@ -43,11 +43,27 @@ export default function PurchaseOrderBuilder() {
   const [lines, setLines] = useState<Line[]>([blankLine()]);
   const [saving, setSaving] = useState(false);
 
+  const [lowStock, setLowStock] = useState<BuyNowRow[]>([]);
+  const [showLowStock, setShowLowStock] = useState(true);
+
   useEffect(() => {
     purchaseApi.getSuppliers().then(setSuppliers).catch(() => toast.error("Could not load suppliers."));
     inventoryApi.getWarehouses().then(setWarehouses).catch(() => {});
     api.get("/projects?size=200").then((r) => setProjects(r.data?.content ?? r.data ?? [])).catch(() => {});
+    purchaseApi.getPurchaseOverview().then((o) => setLowStock(o.buyNow || [])).catch(() => {});
   }, []);
+
+  // Pull a low-stock material into the order. Prefills the supplier if none chosen yet.
+  const addFromLowStock = (row: BuyNowRow) => {
+    if (lines.some((l) => l.product?.id === row.productId)) { toast.info(`${row.productName} is already on the order.`); return; }
+    const product = { id: row.productId, name: row.productName, unit: row.unit } as Product;
+    const need = Math.max((row.reorderLevel || 0) - (row.currentStock || 0), 1);
+    setLines((ls) => {
+      const withoutBlank = ls.filter((l) => l.product);
+      return [...withoutBlank, { key: keySeed++, product, quantity: need, unitPrice: 0 }];
+    });
+    if (!supplierId && row.suggestedSupplierId) setSupplierId(String(row.suggestedSupplierId));
+  };
 
   const setLine = (key: number, patch: Partial<Line>) =>
     setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
@@ -139,6 +155,35 @@ export default function PurchaseOrderBuilder() {
               <Plus className="w-4 h-4 mr-1" /> Add item
             </Button>
           </div>
+
+          {/* Low-stock reference — tap to add materials that need reordering */}
+          {lowStock.length > 0 && (
+            <div className="rounded-xl border border-red-200 bg-red-50/50 p-3">
+              <button type="button" onClick={() => setShowLowStock((v) => !v)}
+                className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-red-600">
+                <PackageSearch className="w-4 h-4" /> Low stock — tap to add ({lowStock.length}) {showLowStock ? "▾" : "▸"}
+              </button>
+              {showLowStock && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {lowStock.map((r) => {
+                    const added = lines.some((l) => l.product?.id === r.productId);
+                    return (
+                      <button type="button" key={r.productId} onClick={() => addFromLowStock(r)} disabled={added}
+                        className={`rounded-lg border px-2.5 py-1.5 text-xs text-left transition-colors ${
+                          added ? "border-slate-200 bg-slate-100 text-slate-400" : "border-red-200 bg-white hover:border-red-400"}`}>
+                        <div className="font-semibold text-slate-800">{r.productName}</div>
+                        <div className="text-[11px] text-slate-500">
+                          {r.currentStock} {r.unit} left · reorder {r.reorderLevel}
+                          {r.suggestedSupplierName ? ` · ${r.suggestedSupplierName}` : ""}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
           {lines.map((l) => (
             <div key={l.key} className="grid grid-cols-1 md:grid-cols-12 gap-2 items-center border-b pb-3 last:border-0 last:pb-0">
               <div className="md:col-span-6">

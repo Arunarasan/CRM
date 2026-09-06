@@ -11,5 +11,7 @@ public interface GoodsReceiptNoteRepository extends JpaRepository<GoodsReceiptNo
     List<GoodsReceiptNote> findByPurchaseOrderId(Long purchaseOrderId);
     boolean existsByGrnNumber(String grnNumber);
     List<GoodsReceiptNote> findAllByOrderByIdDesc();
+    List<GoodsReceiptNote> findByStatusOrderByIdDesc(String status);
+    List<GoodsReceiptNote> findTop30ByReceivedByUserIdOrderByIdDesc(Long receivedByUserId);
     long countByStatus(String status);
 }

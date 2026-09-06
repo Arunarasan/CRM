@@ -64,6 +64,9 @@ public class Customer extends BaseEntity {
     @Column(name = "customer_type", length = 50)
     private String customerType; // Individual, Business, Builder, Architect, Contractor
 
+    @Column(name = "customer_segment", length = 30)
+    private String customerSegment = "PROJECT_CLIENT"; // WALK_IN (counter sale) | PROJECT_CLIENT
+
     @Column(name = "company_name", length = 200)
     private String companyName;
 

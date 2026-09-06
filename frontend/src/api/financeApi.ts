@@ -3,6 +3,8 @@ import {
   Invoice, InvoiceItem, CustomerPayment, CreditDebitNote, Refund, PaymentSchedule,
   ProjectExpense, CustomerLedger, CustomerOutstanding, ProjectProfitability,
   FinanceDashboard, PageResp, BillingProgress,
+  ReturnableInvoice, SalesReturn, SalesReturnItem,
+  Cashbook, CompanyTransaction, RecurringExpense,
 } from '../types/finance';
 
 // Thin typed wrapper around /api/finance — mirrors purchaseApi.ts's conventions.
@@ -42,6 +44,12 @@ export const financeApi = {
     api.post<Invoice>(`${BASE}/invoices/${id}/mark-paid`, splits).then((r) => r.data),
   markInvoiceUnpaid: (id: number) =>
     api.post<Invoice>(`${BASE}/invoices/${id}/mark-unpaid`).then((r) => r.data),
+  // Walk-in / counter sale
+  createCounterSale: (payload: Record<string, unknown>) =>
+    api.post<Invoice>(`${BASE}/counter-sale`, payload).then((r) => r.data),
+  getAssignableEmployees: () =>
+    api.get<{ id: number; name: string }[]>(`${BASE}/assignable-employees`).then((r) => r.data),
+
   generateFromQuotation: (quotationId: number, advancePercent?: number, draft = true) =>
     api.post<Invoice>(`${BASE}/invoices/generate-from-quotation/${quotationId}${qs({ advancePercent, draft })}`).then((r) => r.data),
   generateStageInvoice: (scheduleId: number) =>
@@ -59,6 +67,16 @@ export const financeApi = {
   approvePayment: (id: number) => api.post<CustomerPayment>(`${BASE}/payments/${id}/approve`).then((r) => r.data),
   rejectPayment: (id: number, reason?: string) =>
     api.post<CustomerPayment>(`${BASE}/payments/${id}/reject${qs({ reason })}`).then((r) => r.data),
+
+  // Sales / product returns
+  getReturnableItems: (invoiceId: number) =>
+    api.get<ReturnableInvoice>(`${BASE}/invoices/${invoiceId}/returnable`).then((r) => r.data),
+  getSalesReturns: (page = 0, size = 20) =>
+    api.get<PageResp<SalesReturn>>(`${BASE}/sales-returns${qs({ page, size })}`).then((r) => r.data),
+  getSalesReturn: (id: number) => api.get<SalesReturn>(`${BASE}/sales-returns/${id}`).then((r) => r.data),
+  getSalesReturnItems: (id: number) => api.get<SalesReturnItem[]>(`${BASE}/sales-returns/${id}/items`).then((r) => r.data),
+  createSalesReturn: (payload: Record<string, unknown>) =>
+    api.post<SalesReturn>(`${BASE}/sales-returns`, payload).then((r) => r.data),
 
   // Credit / debit notes
   getNotes: (page = 0, size = 20) =>
@@ -109,6 +127,34 @@ export const financeApi = {
   getProjectProfitability: (projectId: number) =>
     api.get<ProjectProfitability>(`${BASE}/projects/${projectId}/profitability`).then((r) => r.data),
   getAllProfitability: () => api.get<ProjectProfitability[]>(`${BASE}/profitability`).then((r) => r.data),
+
+  // Cash Book — consolidated money in / money out across every source
+  getCashbook: (params: { from?: string; to?: string; direction?: string; source?: string; search?: string } = {}) =>
+    api.get<Cashbook>(`${BASE}/cashbook${qs(params)}`).then((r) => r.data),
+
+  // Company transactions — other income & company overhead ("other charges")
+  getCompanyTransactions: (params: {
+    page?: number; size?: number; direction?: string; category?: string; from?: string; to?: string; search?: string;
+  } = {}) => api.get<PageResp<CompanyTransaction>>(
+    `${BASE}/company-transactions${qs({ page: params.page ?? 0, size: params.size ?? 20, ...params })}`).then((r) => r.data),
+  getCompanyTransactionCategories: () =>
+    api.get<{ income: string[]; expense: string[] }>(`${BASE}/company-transactions/categories`).then((r) => r.data),
+  addCompanyTransaction: (txn: Record<string, unknown>) =>
+    api.post<CompanyTransaction>(`${BASE}/company-transactions`, txn).then((r) => r.data),
+  deleteCompanyTransaction: (id: number) =>
+    api.delete(`${BASE}/company-transactions/${id}`).then(() => undefined),
+
+  // Recurring expense heads (rent, electricity, internet…)
+  getRecurringExpenses: (activeOnly = false) =>
+    api.get<RecurringExpense[]>(`${BASE}/recurring-expenses${qs({ activeOnly })}`).then((r) => r.data),
+  getRecurringHistory: (id: number) =>
+    api.get<CompanyTransaction[]>(`${BASE}/recurring-expenses/${id}/history`).then((r) => r.data),
+  saveRecurringExpense: (head: Record<string, unknown>) =>
+    api.post<RecurringExpense>(`${BASE}/recurring-expenses`, head).then((r) => r.data),
+  updateRecurringExpense: (id: number, head: Record<string, unknown>) =>
+    api.put<RecurringExpense>(`${BASE}/recurring-expenses/${id}`, head).then((r) => r.data),
+  deleteRecurringExpense: (id: number) =>
+    api.delete(`${BASE}/recurring-expenses/${id}`).then(() => undefined),
 
   // Reports
   getRevenueReport: (from: string, to: string) =>

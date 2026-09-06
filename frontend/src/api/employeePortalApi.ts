@@ -6,6 +6,8 @@ import {
   LeadSummary, LeadCreateBody, ManpowerRequestEntry, ManpowerRequestCreateBody,
   DailyReportEntry, DailyReportCreateBody, PersonalReminderEntry, ReminderCreateBody,
   MyBonuses, MonthlyEarning, PayrollRequestEntry, PayrollRequestCreateBody, MyLoan, MyAdvance,
+  IncomingReceiptPo, ReceiptWarehouse, GoodsReceiptSubmission, MyReceipt,
+  ProfileChangeRequest, ProfileChangeBody, DocumentSubmitBody,
 } from '../types/employeePortal';
 
 // Thin typed wrapper around /api/employee-portal — the employee self-service surface.
@@ -18,8 +20,13 @@ export const employeePortalApi = {
   me: () => api.get<EmployeeProfile>(`${BASE}/me`).then((r) => r.data),
   dashboard: () => api.get<EmployeeDashboard>(`${BASE}/dashboard`).then((r) => r.data),
   profile: () => api.get<EmployeeProfile>(`${BASE}/profile`).then((r) => r.data),
-  updateProfile: (updates: Partial<Record<'phone' | 'emergencyContactName' | 'emergencyContactPhone' | 'profilePhotoUrl', string>>) =>
-    api.put<EmployeeProfile>(`${BASE}/profile`, updates).then((r) => r.data),
+  // Profile self-edits now go through admin approval — this submits a PENDING change request.
+  submitProfileChange: (updates: ProfileChangeBody) =>
+    api.put<ProfileChangeRequest>(`${BASE}/profile`, updates).then((r) => r.data),
+  profileChangeRequests: () =>
+    api.get<ProfileChangeRequest[]>(`${BASE}/profile-change-requests`).then((r) => r.data),
+  submitDocument: (body: DocumentSubmitBody) =>
+    api.post<ProfileChangeRequest>(`${BASE}/documents`, body).then((r) => r.data),
   changePassword: (currentPassword: string, newPassword: string) =>
     api.post(`${BASE}/change-password`, { currentPassword, newPassword }).then((r) => r.data),
 
@@ -40,6 +47,13 @@ export const employeePortalApi = {
   endBreak: () => api.post<TimeStatus>(`${BASE}/attendance/break/end`).then((r) => r.data),
   timesheet: (period: 'DAILY' | 'WEEKLY' | 'MONTHLY') =>
     api.get<Timesheet>(`${BASE}/timesheet?period=${period}`).then((r) => r.data),
+
+  // Goods receipt — receive & approve incoming purchase-order goods
+  incomingReceipts: () => api.get<IncomingReceiptPo[]>(`${BASE}/goods-receipts/incoming`).then((r) => r.data),
+  receiptWarehouses: () => api.get<ReceiptWarehouse[]>(`${BASE}/goods-receipts/warehouses`).then((r) => r.data),
+  receiveGoods: (payload: GoodsReceiptSubmission) =>
+    api.post<MyReceipt>(`${BASE}/goods-receipts/receive`, payload).then((r) => r.data),
+  myReceipts: () => api.get<MyReceipt[]>(`${BASE}/goods-receipts/mine`).then((r) => r.data),
 
   leaves: () => api.get<LeaveRequestEntry[]>(`${BASE}/leaves`).then((r) => r.data),
   leaveBalance: () => api.get<LeaveBalance>(`${BASE}/leaves/balance`).then((r) => r.data),

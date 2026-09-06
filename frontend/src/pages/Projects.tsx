@@ -11,12 +11,13 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import ResponsiveList, { type Column } from "@/components/ui/responsive-list";
 import FilterSheet from "@/components/ui/filter-sheet";
+import { useHoverInfo, InfoRow } from "@/components/ui/hover-info";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { useNavigate } from "react-router-dom";
 
-type SegmentKey = "all" | "new" | "inProgress" | "completed" | "onHold" | "unassigned";
+type SegmentKey = "all" | "new" | "inProgress" | "completed" | "onHold" | "unassigned" | "delayed";
 
 interface SegmentCounts {
   all: number;
@@ -25,6 +26,7 @@ interface SegmentCounts {
   completed: number;
   onHold: number;
   unassigned: number;
+  delayed: number;
 }
 
 interface ProjectRow {
@@ -32,7 +34,7 @@ interface ProjectRow {
   projectCode?: string;
   projectName: string;
   projectType?: string;
-  customer?: { id: number; name?: string };
+  customer?: { id: number; name?: string; companyName?: string; city?: string };
   projectManager?: { id: number; name?: string };
   status: string;
   progress: number;
@@ -50,6 +52,7 @@ const SEGMENT_CATEGORY: Record<SegmentKey, string> = {
   completed: "COMPLETED",
   onHold: "ON_HOLD",
   unassigned: "UNASSIGNED",
+  delayed: "DELAYED",
 };
 
 const SEGMENTS: { key: SegmentKey; label: string }[] = [
@@ -89,21 +92,6 @@ const humanize = (s?: string) =>
 const initials = (name?: string) =>
   (name || "?").trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? "").join("") || "?";
 
-const formatDate = (iso?: string) => {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
-};
-
-const isOverdue = (endDate?: string, status?: string) => {
-  if (!endDate) return false;
-  const done = ["COMPLETED", "CLOSED", "CANCELLED"].includes((status || "").toUpperCase());
-  if (done) return false;
-  const d = new Date(endDate);
-  return !isNaN(d.getTime()) && d.getTime() < Date.now();
-};
-
 function StatusBadge({ status }: { status: string }) {
   return (
     <Badge className={`${statusStyle(status)} border-transparent`}>{humanize(status)}</Badge>
@@ -139,6 +127,38 @@ function Owner({ pm }: { pm?: { name?: string } }) {
   );
 }
 
+/** Rich card shown when hovering a project row. */
+function ProjectInfo({ p }: { p: ProjectRow }) {
+  return (
+    <div>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <div className="font-bold text-slate-800 truncate">{p.projectName}</div>
+          {p.projectCode && <div className="font-mono text-[11px] text-slate-400">{p.projectCode}</div>}
+        </div>
+        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${statusStyle(p.status)}`}>{humanize(p.status)}</span>
+      </div>
+      <div className="divide-y divide-slate-100">
+        <div className="pb-1.5">
+          <InfoRow label="Customer" value={p.customer?.name} />
+          <InfoRow label="Company" value={p.customer?.companyName} />
+          <InfoRow label="City" value={p.customer?.city} />
+          <InfoRow label="Type" value={p.projectType} />
+        </div>
+        <div className="py-1.5">
+          <InfoRow label="Manager" value={p.projectManager?.name || "Unassigned"} />
+          <InfoRow label="Start" value={p.startDate} />
+          <InfoRow label="End" value={p.endDate} />
+        </div>
+        <div className="pt-1.5">
+          <InfoRow label="Progress" value={`${p.progress ?? 0}%`} accent="text-slate-900 font-bold" />
+          <InfoRow label="Tasks done" value={`${p.taskDone ?? 0} / ${p.taskTotal ?? 0}`} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** Small styled native select that matches the toolbar pill look in both themes. */
 function FilterSelect({
   value, onChange, options, placeholder,
@@ -167,6 +187,7 @@ function FilterSelect({
 
 export default function Projects() {
   const navigate = useNavigate();
+  const info = useHoverInfo();
   const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -245,37 +266,30 @@ export default function Projects() {
 
   const activeFilterCount = (customerFilter ? 1 : 0) + (ownerFilter ? 1 : 0);
 
-  const kpis = [
-    { label: "Running", value: dashboard?.runningProjects ?? 0, icon: Activity, tint: "bg-emerald-500/10 text-emerald-500" },
-    { label: "Completed", value: dashboard?.completedProjects ?? 0, icon: CheckCircle2, tint: "bg-emerald-500/10 text-emerald-500" },
-    { label: "Delayed", value: dashboard?.delayedProjects ?? 0, icon: AlertTriangle, tint: "bg-rose-500/10 text-rose-500" },
-    { label: "Pending Tasks", value: dashboard?.pendingTasks ?? 0, icon: ListChecks, tint: "bg-amber-500/10 text-amber-500" },
+  // KPI tiles double as quick filters — clicking one drives the list segment (or navigates).
+  const kpis: {
+    label: string; value: number; icon: typeof Activity; tint: string; ring: string;
+    segment?: SegmentKey; onClick?: () => void;
+  }[] = [
+    { label: "Running", value: dashboard?.runningProjects ?? 0, icon: Activity, tint: "bg-emerald-500/10 text-emerald-500", ring: "ring-emerald-500", segment: "inProgress" },
+    { label: "Completed", value: dashboard?.completedProjects ?? 0, icon: CheckCircle2, tint: "bg-emerald-500/10 text-emerald-500", ring: "ring-emerald-500", segment: "completed" },
+    { label: "Delayed", value: dashboard?.delayedProjects ?? 0, icon: AlertTriangle, tint: "bg-rose-500/10 text-rose-500", ring: "ring-rose-500", segment: "delayed" },
+    { label: "Pending Tasks", value: dashboard?.pendingTasks ?? 0, icon: ListChecks, tint: "bg-amber-500/10 text-amber-500", ring: "ring-amber-500", onClick: () => navigate("/tasks") },
   ];
 
+  const onKpiClick = (kpi: (typeof kpis)[number]) => {
+    if (kpi.onClick) { kpi.onClick(); return; }
+    if (!kpi.segment) return;
+    selectSegment(segment === kpi.segment ? "all" : kpi.segment);
+    setViewMode("list");
+  };
+
   const columns: Column<ProjectRow>[] = [
-    {
-      key: "project", header: "Project",
-      cell: (p) => (
-        <div className="min-w-0">
-          {p.projectCode && <div className="text-[11px] font-mono text-muted-foreground">{p.projectCode}</div>}
-          <div className="font-medium text-primary truncate">{p.projectName}</div>
-          {p.customer?.name && <div className="text-xs text-muted-foreground truncate">{p.customer.name}</div>}
-        </div>
-      ),
-    },
-    { key: "type", header: "Type", cell: (p) => <span className="text-sm text-muted-foreground">{p.projectType || "—"}</span> },
+    { key: "customer", header: "Customer", cell: (p) => <span className="text-sm">{p.customer?.name || "—"}</span> },
+    { key: "company", header: "Company", cell: (p) => <span className="text-sm text-muted-foreground">{p.customer?.companyName || "—"}</span> },
+    { key: "city", header: "City", cell: (p) => <span className="text-sm text-muted-foreground">{p.customer?.city || "—"}</span> },
     { key: "status", header: "Status", cell: (p) => <StatusBadge status={p.status} /> },
     { key: "progress", header: "Progress", headClassName: "w-40", cellClassName: "w-40", cell: (p) => <ProgressBar value={p.progress} /> },
-    { key: "owner", header: "Owner", cell: (p) => <Owner pm={p.projectManager} /> },
-    { key: "start", header: "Start Date", cellClassName: "whitespace-nowrap", cell: (p) => <span className="text-sm text-muted-foreground">{formatDate(p.startDate)}</span> },
-    {
-      key: "end", header: "End Date", cellClassName: "whitespace-nowrap",
-      cell: (p) => (
-        <span className={`text-sm ${isOverdue(p.endDate, p.status) ? "text-rose-600 dark:text-rose-400 font-medium" : "text-muted-foreground"}`}>
-          {formatDate(p.endDate)}
-        </span>
-      ),
-    },
     {
       key: "tasks", header: "Tasks", cellClassName: "whitespace-nowrap",
       cell: (p) => (
@@ -355,17 +369,28 @@ export default function Projects() {
         </div>
       </div>
 
-      {/* KPI row */}
+      {/* KPI row — tiles double as quick filters */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        {kpis.map(({ label, value, icon: Icon, tint }) => (
-          <div key={label} className="bg-card p-4 sm:p-5 rounded-xl border flex items-center gap-3 sm:gap-4">
-            <div className={`p-2.5 sm:p-3 rounded-lg ${tint}`}><Icon className="h-5 w-5" /></div>
-            <div>
-              <div className="text-xl sm:text-2xl font-bold">{value}</div>
-              <div className="text-xs font-medium text-muted-foreground">{label}</div>
-            </div>
-          </div>
-        ))}
+        {kpis.map((kpi) => {
+          const { label, value, icon: Icon, tint, ring, segment: seg } = kpi;
+          const active = seg ? segment === seg : false;
+          return (
+            <button
+              key={label}
+              type="button"
+              onClick={() => onKpiClick(kpi)}
+              title={seg ? `Show ${label} projects` : `Go to ${label}`}
+              aria-pressed={active}
+              className={`bg-card p-4 sm:p-5 rounded-xl border flex items-center gap-3 sm:gap-4 text-left transition-all hover:border-foreground/20 hover:shadow-sm ${active ? `ring-2 ${ring}` : ""}`}
+            >
+              <div className={`p-2.5 sm:p-3 rounded-lg ${tint}`}><Icon className="h-5 w-5" /></div>
+              <div>
+                <div className="text-xl sm:text-2xl font-bold">{value}</div>
+                <div className="text-xs font-medium text-muted-foreground">{label}</div>
+              </div>
+            </button>
+          );
+        })}
       </div>
 
       {/* Toolbar: search + dropdowns + filters */}
@@ -421,6 +446,7 @@ export default function Projects() {
           loading={loading}
           getRowKey={(p) => p.id}
           onRowClick={(p) => navigate(`/projects/${p.id}`)}
+          getRowProps={(p) => info.bind(<ProjectInfo p={p} />)}
           emptyIcon={FolderKanban}
           emptyTitle="No projects found"
           emptyDescription="No projects match your search or filters."
@@ -429,21 +455,19 @@ export default function Projects() {
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 space-y-1.5 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
-                  {p.projectCode && <span className="text-[11px] font-mono text-muted-foreground">{p.projectCode}</span>}
                   <StatusBadge status={p.status} />
                 </div>
-                <div className="font-semibold text-primary truncate">{p.projectName}</div>
-                {p.customer?.name && <div className="text-sm text-muted-foreground truncate">{p.customer.name}</div>}
+                {p.customer?.name && <div className="font-semibold text-foreground truncate">{p.customer.name}</div>}
+                {(p.customer?.companyName || p.customer?.city) && (
+                  <div className="text-xs text-muted-foreground truncate">
+                    {[p.customer?.companyName, p.customer?.city].filter(Boolean).join(" · ")}
+                  </div>
+                )}
                 <ProgressBar value={p.progress} />
-                <div className="flex items-center justify-between gap-2 pt-1">
-                  <Owner pm={p.projectManager} />
+                <div className="flex items-center justify-end gap-2 pt-1">
                   <span className="text-xs text-muted-foreground whitespace-nowrap">
                     Tasks {p.taskDone ?? 0}/{p.taskTotal ?? 0}
                   </span>
-                </div>
-                <div className="flex items-center gap-3 text-xs text-muted-foreground pt-0.5">
-                  <span>Start {formatDate(p.startDate)}</span>
-                  <span className={isOverdue(p.endDate, p.status) ? "text-rose-600 dark:text-rose-400 font-medium" : ""}>End {formatDate(p.endDate)}</span>
                 </div>
               </div>
               <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
@@ -531,6 +555,7 @@ export default function Projects() {
         </div>
         <p className="text-xs text-muted-foreground">Customer & owner filters apply to the projects on this page.</p>
       </FilterSheet>
+      {info.portal}
     </div>
   );
 }

@@ -10,6 +10,9 @@ import java.util.List;
 public interface ServiceRequestRepository extends JpaRepository<ServiceRequest, Long> {
     List<ServiceRequest> findByCustomer_IdAndIsDeletedFalseOrderByCreatedAtDesc(Long customerId);
 
+    // ---- Project Service & Warranty tab ----
+    List<ServiceRequest> findByProject_IdAndIsDeletedFalseOrderByCreatedAtDesc(Long projectId);
+
     // ---- CRM admin (service-request inbox) ----
     List<ServiceRequest> findByIsDeletedFalseOrderByCreatedAtDesc();
     List<ServiceRequest> findByStatusAndIsDeletedFalseOrderByCreatedAtDesc(String status);

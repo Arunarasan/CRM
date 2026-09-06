@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, Fragment } from "react";
-import { useParams, useSearchParams } from "react-router-dom";
+import { useParams, useSearchParams, Link } from "react-router-dom";
 import { useGoBack } from "@/hooks/useGoBack";
 import api from "@/lib/api";
 import { workforceApi } from "@/api/workforceApi";
@@ -10,7 +10,10 @@ import { format } from "date-fns";
 import {
   ArrowLeft, Briefcase, FileText, CalendarClock, HandCoins, Award, Plus, Download, Pencil,
   Mail, Phone, Calendar, IdCard, CheckSquare, FolderKanban, ChevronRight, ChevronDown, ListChecks,
+  Target, ClipboardList,
 } from "lucide-react";
+import { dailyReportApi, type AdminDailyReport, type EmployeeLeadSummary } from "@/api/dailyReportApi";
+import DailyReportCard from "@/components/hr/DailyReportCard";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
@@ -18,6 +21,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import FileUploadField from "@/components/FileUploadField";
+import ProfileApprovalsPanel from "./workforce/ProfileApprovalsPanel";
+import { profileApprovalsApi, type AdminProfileChangeRequest } from "@/api/profileApprovalsApi";
 import PerformanceScoreCard from "./hr/PerformanceScoreCard";
 import WorkforceFinanceTab from "./workforce/WorkforceFinanceTab";
 import AddWorkforceDialog from "./workforce/AddWorkforceDialog";
@@ -43,7 +48,7 @@ const tenure = (doj?: string | null) => {
   return [y ? `${y}y` : "", m ? `${m}m` : ""].filter(Boolean).join(" ") || "0m";
 };
 
-const VALID_TABS = ["overview", "attendance", "payroll", "documents", "performance"];
+const VALID_TABS = ["overview", "attendance", "leads", "reports", "payroll", "documents", "performance"];
 
 export default function EmployeeProfile() {
   const { id } = useParams();
@@ -57,8 +62,12 @@ export default function EmployeeProfile() {
   const [leaves, setLeaves] = useState<any[]>([]);
   const [workStats, setWorkStats] = useState<{ tasksDone: number; projectsDone: number } | null>(null);
   const [documents, setDocuments] = useState<any[]>([]);
+  const [changeRequests, setChangeRequests] = useState<AdminProfileChangeRequest[]>([]);
   const [performance, setPerformance] = useState<any[]>([]);
   const [score, setScore] = useState<any>(null);
+  // Field submissions from the employee's portal (leads raised + daily reports).
+  const [empLeads, setEmpLeads] = useState<EmployeeLeadSummary[]>([]);
+  const [empReports, setEmpReports] = useState<AdminDailyReport[]>([]);
 
   // Daily attendance + task-hours sheet (per month)
   const nowD = new Date();
@@ -93,6 +102,9 @@ export default function EmployeeProfile() {
     loadDetail(res.data?.workforce?.id);
   });
   const loadDocuments = () => api.get(`/hr/employees/${id}/documents`).then(res => setDocuments(res.data));
+  const loadChangeRequests = () => profileApprovalsApi.forEmployee(Number(id)).then(setChangeRequests).catch(() => setChangeRequests([]));
+  // After a profile change is approved the master record changes — refresh both.
+  const onChangeResolved = () => { loadChangeRequests(); loadEmployee(); loadDocuments(); };
   const loadPerformance = () => {
     api.get(`/hr/employees/${id}/performance`).then(res => setPerformance(res.data));
     api.get(`/hr/employees/${id}/performance/score`).then(res => setScore(res.data)).catch(() => setScore(null));
@@ -104,7 +116,10 @@ export default function EmployeeProfile() {
     api.get(`/hr/employees/${id}/leaves`).then(res => setLeaves(res.data)).catch(() => setLeaves([]));
     api.get(`/hr/employees/${id}/work-stats`).then(res => setWorkStats(res.data)).catch(() => setWorkStats(null));
     loadDocuments();
+    loadChangeRequests();
     loadPerformance();
+    dailyReportApi.leadsForEmployee(Number(id)).then(setEmpLeads).catch(() => setEmpLeads([]));
+    dailyReportApi.forEmployee(Number(id)).then(setEmpReports).catch(() => setEmpReports([]));
     workforceApi.meta().then(setMeta).catch(() => {});
   }, [id]);
 
@@ -206,9 +221,11 @@ export default function EmployeeProfile() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full flex flex-col">
-          <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 bg-white border shadow-sm p-1 h-auto md:h-12 rounded-xl mb-6 shrink-0">
+          <TabsList className="grid w-full grid-cols-2 md:grid-cols-7 bg-white border shadow-sm p-1 h-auto md:h-12 rounded-xl mb-6 shrink-0">
             <TabTrig value="overview" icon={<Briefcase className="w-4 h-4 mr-2" />}>Overview</TabTrig>
             <TabTrig value="attendance" icon={<CalendarClock className="w-4 h-4 mr-2" />}>Time &amp; Leave</TabTrig>
+            <TabTrig value="leads" icon={<Target className="w-4 h-4 mr-2" />}>Leads</TabTrig>
+            <TabTrig value="reports" icon={<ClipboardList className="w-4 h-4 mr-2" />}>Reports</TabTrig>
             <TabTrig value="payroll" icon={<HandCoins className="w-4 h-4 mr-2" />}>Payroll</TabTrig>
             <TabTrig value="documents" icon={<FileText className="w-4 h-4 mr-2" />}>Documents</TabTrig>
             <TabTrig value="performance" icon={<Award className="w-4 h-4 mr-2" />}>Performance</TabTrig>
@@ -216,6 +233,15 @@ export default function EmployeeProfile() {
 
           {/* ---- Overview (inline-editable cards, lead-profile style) ---- */}
           <TabsContent value="overview">
+            {changeRequests.some(r => r.status === "PENDING") && (
+              <div className="mb-6">
+                <h3 className="mb-2 text-sm font-semibold text-slate-900">Pending Self-Service Changes</h3>
+                <ProfileApprovalsPanel
+                  requests={changeRequests.filter(r => r.status === "PENDING")}
+                  onChanged={onChangeResolved}
+                />
+              </div>
+            )}
             {detail
               ? <EmployeeOverviewTab detail={detail} meta={meta} canEdit onChanged={loadEmployee} />
               : <div className="text-center py-12 text-slate-500 bg-white border rounded-2xl">
@@ -369,6 +395,68 @@ export default function EmployeeProfile() {
             </div>
           </TabsContent>
 
+          {/* ---- Leads raised from the field ---- */}
+          <TabsContent value="leads">
+            <div className="bg-white border rounded-2xl shadow-sm">
+              <div className="p-5 border-b flex items-center gap-2">
+                <Target className="w-5 h-5 text-emerald-600" />
+                <h3 className="font-bold text-slate-800">Leads Added by this Employee</h3>
+                <span className="ml-auto text-sm text-slate-500">{empLeads.length} total</span>
+              </div>
+              {empLeads.length === 0 ? (
+                <div className="p-10 text-center text-slate-500">No leads submitted by this employee yet.</div>
+              ) : (
+                <ul className="divide-y">
+                  {empLeads.map((l) => (
+                    <li key={l.id}>
+                      <Link to={`/leads/${l.id}`} className="flex items-center justify-between gap-3 px-5 py-3 hover:bg-slate-50">
+                        <div className="min-w-0">
+                          <div className="font-semibold text-slate-900 truncate">{l.name}</div>
+                          <div className="text-xs text-slate-500 flex flex-wrap gap-x-2">
+                            <span className="font-mono">{l.leadNumber}</span>
+                            {l.city && <span>· {l.city}</span>}
+                            {l.requirementCategory && <span>· {l.requirementCategory}</span>}
+                            {l.createdAt && <span>· {fmtDate(l.createdAt)}</span>}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {l.estimatedBudget != null && <span className="text-sm font-semibold text-slate-700">{inr(l.estimatedBudget)}</span>}
+                          <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${l.isConverted ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>
+                            {l.isConverted ? "Converted" : (l.status || "New")}
+                          </span>
+                          <ChevronRight className="w-4 h-4 text-slate-400" />
+                        </div>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </TabsContent>
+
+          {/* ---- Daily reports submitted from the field ---- */}
+          <TabsContent value="reports">
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <ClipboardList className="w-5 h-5 text-emerald-600" />
+                <h3 className="font-bold text-slate-800">Daily Reports</h3>
+                <span className="ml-auto text-sm text-slate-500">{empReports.length} total</span>
+              </div>
+              {empReports.length === 0 ? (
+                <div className="p-10 text-center text-slate-500 bg-white border rounded-2xl">No daily reports submitted yet.</div>
+              ) : (
+                empReports.map((r) => (
+                  <DailyReportCard
+                    key={r.id}
+                    report={r}
+                    showEmployee={false}
+                    onReviewed={(u) => setEmpReports((rs) => rs.map((x) => (x.id === u.id ? u : x)))}
+                  />
+                ))
+              )}
+            </div>
+          </TabsContent>
+
           {/* ---- Payroll (wage settings + full financial: structure, payslips, advances, loans) ---- */}
           <TabsContent value="payroll">
             <div className="space-y-6">
@@ -381,6 +469,15 @@ export default function EmployeeProfile() {
 
           {/* ---- Documents ---- */}
           <TabsContent value="documents">
+            {changeRequests.some(r => r.changeType === "DOCUMENT" && r.status === "PENDING") && (
+              <div className="mb-6">
+                <h3 className="mb-2 text-sm font-semibold text-slate-900">Documents Awaiting Approval</h3>
+                <ProfileApprovalsPanel
+                  requests={changeRequests.filter(r => r.changeType === "DOCUMENT" && r.status === "PENDING")}
+                  onChanged={onChangeResolved}
+                />
+              </div>
+            )}
             <div className="flex justify-between items-center mb-4">
               <h3 className="font-bold text-slate-800">Documents ({documents.length})</h3>
               <Button onClick={() => setIsDocOpen(true)}><Plus className="w-4 h-4 mr-2" /> Add document</Button>

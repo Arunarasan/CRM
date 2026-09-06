@@ -53,6 +53,9 @@ public class AuthController {
     @Autowired
     private LoginHistoryRepository loginHistoryRepository;
 
+    @Autowired
+    private com.arudra.crm.security.CurrentUserService currentUserService;
+
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody AuthRequest authRequest, HttpServletRequest request) {
         String ipAddress = request.getRemoteAddr();
@@ -211,5 +214,33 @@ public class AuthController {
                         }))
                 .orElse(ResponseEntity.badRequest().body(Map.of("success", false,
                         "message", "Invalid or expired code.")));
+    }
+
+    /**
+     * Self-service password change for the signed-in user (any role — admin/staff on the
+     * desktop ERP). Verifies the current password before setting the new one. The employee
+     * mobile portal has its own equivalent under /api/employee-portal/change-password.
+     */
+    @PostMapping("/change-password")
+    public ResponseEntity<?> changeOwnPassword(@RequestBody Map<String, String> body) {
+        User user = currentUserService.getCurrentUser();
+        if (user == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("success", false, "message", "Not signed in."));
+        }
+        String current = body.getOrDefault("currentPassword", "");
+        String next = body.getOrDefault("newPassword", "");
+        if (next.length() < 6) {
+            return ResponseEntity.badRequest().body(Map.of("success", false,
+                    "message", "New password must be at least 6 characters."));
+        }
+        if (!passwordEncoder.matches(current, user.getPassword())) {
+            return ResponseEntity.badRequest().body(Map.of("success", false,
+                    "message", "Current password is incorrect."));
+        }
+        user.setPassword(passwordEncoder.encode(next));
+        user.setMustChangePassword(false);
+        userRepository.save(user);
+        return ResponseEntity.ok(Map.of("success", true, "message", "Password updated."));
     }
 }

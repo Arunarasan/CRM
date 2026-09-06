@@ -23,6 +23,7 @@ public class CustomerMapper {
         dto.setGstNumber(customer.getGstNumber());
         dto.setCustomerCode(customer.getCustomerCode());
         dto.setCustomerType(customer.getCustomerType());
+        dto.setCustomerSegment(customer.getCustomerSegment());
         dto.setCompanyName(customer.getCompanyName());
         dto.setContactPersonName(customer.getContactPersonName());
         dto.setAlternatePhone(customer.getAlternatePhone());
@@ -57,6 +58,7 @@ public class CustomerMapper {
         customer.setGstNumber(dto.getGstNumber());
         customer.setCustomerCode(dto.getCustomerCode());
         customer.setCustomerType(dto.getCustomerType());
+        if (dto.getCustomerSegment() != null) customer.setCustomerSegment(dto.getCustomerSegment());
         customer.setCompanyName(dto.getCompanyName());
         customer.setContactPersonName(dto.getContactPersonName());
         customer.setAlternatePhone(dto.getAlternatePhone());

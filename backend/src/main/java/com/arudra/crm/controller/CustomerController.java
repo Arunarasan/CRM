@@ -28,12 +28,13 @@ public class CustomerController {
             @RequestParam(required = false) String email,
             @RequestParam(required = false) String phone,
             @RequestParam(required = false) String tag,
+            @RequestParam(required = false) String segment,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(defaultValue = "id") String sortField,
             @RequestParam(defaultValue = "desc") String sortDir
     ) {
-        Page<CustomerDTO> customers = customerService.getCustomersAdvanced(search, name, city, email, phone, tag, page, size, sortField, sortDir)
+        Page<CustomerDTO> customers = customerService.getCustomersAdvanced(search, name, city, email, phone, tag, segment, page, size, sortField, sortDir)
                 .map(CustomerMapper::toDTO);
         return ResponseEntity.ok(ApiResponse.success(customers));
     }

@@ -10,8 +10,6 @@ import MeasurementsTab from "./MeasurementsTab";
 import BoqTab from "./BoqTab";
 import QuotationsTab from "./QuotationsTab";
 import ProjectsTab from "./ProjectsTab";
-import TasksTab from "./TasksTab";
-import TaskDataTab from "./TaskDataTab";
 
 /**
  * One guided view of the whole pre-sales pipeline. Each milestone is a collapsible stage that
@@ -21,7 +19,6 @@ import TaskDataTab from "./TaskDataTab";
 export default function SalesJourneyTab({
   leadId,
   lead,
-  users,
   journey,
   focusStep,
   onChanged,
@@ -99,12 +96,6 @@ export default function SalesJourneyTab({
           </div>
         );
       })}
-
-      {/* Supporting detail that spans the whole journey, kept out of the way until needed. */}
-      <div className="pt-2 space-y-3">
-        <TasksTab leadId={leadId} users={users} />
-        <TaskDataTab leadId={leadId} />
-      </div>
     </div>
   );
 
@@ -196,25 +187,51 @@ function RequirementSummary({ lead, onEdit }: { lead: Lead; onEdit: () => void }
       <CardContent className="space-y-3 text-sm">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <Field label="Property Type" value={(lead as any).propertyType} />
+          <Field label="Construction Stage" value={(lead as any).currentConstructionStage} />
+          <Field label="Floors" value={(lead as any).floorCount} />
           <Field label="Area (sq.ft)" value={(lead as any).areaSqft} />
+          <Field label="Category" value={(lead as any).requirementCategory} />
           <Field label="Design Style" value={(lead as any).preferredDesignStyle} />
+          <Field label="Material" value={(lead as any).preferredMaterial} />
+          <Field label="Colour Theme" value={(lead as any).preferredColorTheme} />
           <Field label="Est. Budget" value={formatINR((lead as any).estimatedBudget)} />
+          <Field label="Budget Range" value={budgetRange(lead)} />
+          <Field label="Payment" value={(lead as any).paymentPreference} />
+          <Field label="Target Completion" value={(lead as any).preferredCompletionDate} />
         </div>
+        {(lead as any).roomsRequired && <Field label="Rooms Required" value={(lead as any).roomsRequired} />}
         {scope.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {scope.map((s) => (
-              <span key={s} className="px-2.5 py-0.5 bg-primary/10 text-primary text-xs rounded-full font-medium">✓ {s}</span>
-            ))}
+          <div>
+            <span className="text-muted-foreground block text-xs mb-1">Scope of Work</span>
+            <div className="flex flex-wrap gap-1.5">
+              {scope.map((s) => (
+                <span key={s} className="px-2.5 py-0.5 bg-primary/10 text-primary text-xs rounded-full font-medium">✓ {s}</span>
+              ))}
+            </div>
           </div>
         )}
         {((lead as any).projectDescription || (lead as any).customerRequirements) && (
-          <p className="text-muted-foreground">
-            {(lead as any).projectDescription || (lead as any).customerRequirements}
-          </p>
+          <div>
+            <span className="text-muted-foreground block text-xs mb-0.5">Requirement</span>
+            <p className="text-foreground/90">{(lead as any).projectDescription || (lead as any).customerRequirements}</p>
+          </div>
+        )}
+        {(lead as any).specialRequests && (
+          <div>
+            <span className="text-muted-foreground block text-xs mb-0.5">Special Requests</span>
+            <p className="text-foreground/90">{(lead as any).specialRequests}</p>
+          </div>
         )}
       </CardContent>
     </Card>
   );
+}
+
+function budgetRange(lead: Lead): string | undefined {
+  const min = (lead as any).minimumBudget;
+  const max = (lead as any).maximumBudget;
+  if (min == null && max == null) return undefined;
+  return `${min != null ? formatINR(min) : "—"} – ${max != null ? formatINR(max) : "—"}`;
 }
 
 function Field({ label, value }: { label: string; value?: React.ReactNode }) {

@@ -9,4 +9,7 @@ import java.util.List;
 @Repository
 public interface TaskMaterialUsageRepository extends JpaRepository<TaskMaterialUsage, Long> {
     List<TaskMaterialUsage> findByTaskIdOrderByUsedAtDesc(Long taskId);
+
+    /** All material actually consumed on any task belonging to this project, newest first. */
+    List<TaskMaterialUsage> findByTaskProjectIdOrderByUsedAtDesc(Long projectId);
 }

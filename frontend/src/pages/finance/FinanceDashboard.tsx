@@ -27,13 +27,13 @@ export default function FinanceDashboard() {
 
   const tiles = [
     { label: "Today's Collection", value: currency(data.todaysCollection), icon: Wallet, tone: "bg-emerald-50 text-emerald-600", to: "/finance/payments" },
-    { label: "Monthly Revenue (Invoiced)", value: currency(data.monthRevenue), icon: TrendingUp, tone: "bg-emerald-50 text-emerald-600", to: "/finance/invoices" },
+    { label: "Monthly Revenue (Invoiced)", value: currency(data.monthRevenue), icon: TrendingUp, tone: "bg-emerald-50 text-emerald-600", to: "/billing/invoices" },
     { label: "Monthly Collection", value: currency(data.monthCollection), icon: PiggyBank, tone: "bg-cyan-50 text-cyan-600", to: "/finance/payments" },
-    { label: "Total Outstanding", value: currency(data.totalOutstanding), icon: AlertCircle, tone: "bg-amber-50 text-amber-600", to: "/finance/outstanding" },
-    { label: "Overdue Amount", value: currency(data.overdueAmount), icon: AlertCircle, tone: "bg-red-50 text-red-600", to: "/finance/outstanding" },
-    { label: "Pending Invoices", value: data.pendingInvoices, icon: FileText, tone: "bg-emerald-50 text-emerald-600", to: "/finance/invoices" },
+    { label: "Total Outstanding", value: currency(data.totalOutstanding), icon: AlertCircle, tone: "bg-amber-50 text-amber-600", to: "/finance/accounts" },
+    { label: "Overdue Amount", value: currency(data.overdueAmount), icon: AlertCircle, tone: "bg-red-50 text-red-600", to: "/finance/accounts" },
+    { label: "Pending Invoices", value: data.pendingInvoices, icon: FileText, tone: "bg-emerald-50 text-emerald-600", to: "/billing/invoices" },
     { label: "Monthly Expenses", value: currency(data.monthExpenses), icon: Receipt, tone: "bg-rose-50 text-rose-600", to: "/finance/expenses" },
-    { label: "Monthly Profit", value: currency(data.monthProfit), icon: TrendingUp, tone: data.monthProfit >= 0 ? "bg-emerald-50 text-emerald-600" : "bg-red-50 text-red-600", to: "/finance/profitability" },
+    { label: "Monthly Profit", value: currency(data.monthProfit), icon: TrendingUp, tone: data.monthProfit >= 0 ? "bg-emerald-50 text-emerald-600" : "bg-red-50 text-red-600", to: "/finance/accounts?view=projects" },
   ];
 
   return (
@@ -69,8 +69,8 @@ export default function FinanceDashboard() {
               <YAxis fontSize={12} tickFormatter={(v: number) => `₹${(v / 1000).toFixed(0)}k`} />
               <Tooltip formatter={(v) => currency(Number(v))} />
               <Legend />
-              <Bar dataKey="moneyIn" name="Money In" fill="#10b981" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="moneyOut" name="Money Out" fill="#f43f5e" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="moneyIn" name="Money In" fill="#2F8F65" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="moneyOut" name="Money Out" fill="#B94A48" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -84,7 +84,7 @@ export default function FinanceDashboard() {
           </div>
           <div className="divide-y">
             {data.upcomingDues.map((d) => (
-              <Link key={d.invoiceId} to={`/finance/invoices/${d.invoiceId}`} className="p-4 flex items-center justify-between hover:bg-slate-50">
+              <Link key={d.invoiceId} to={`/billing/invoices/${d.invoiceId}`} className="p-4 flex items-center justify-between hover:bg-slate-50">
                 <div>
                   <div className="font-bold text-sm text-slate-800">{d.invoiceNumber}</div>
                   <div className="text-xs text-muted-foreground">{d.customerName} · due {d.dueDate}</div>
@@ -124,7 +124,7 @@ export default function FinanceDashboard() {
           </div>
           <div className="divide-y">
             {data.recentInvoices.map((i) => (
-              <Link key={i.id} to={`/finance/invoices/${i.id}`} className="p-4 flex items-center justify-between hover:bg-slate-50">
+              <Link key={i.id} to={`/billing/invoices/${i.id}`} className="p-4 flex items-center justify-between hover:bg-slate-50">
                 <div>
                   <div className="font-bold text-sm text-slate-800">{i.invoiceNumber}</div>
                   <div className="text-xs text-muted-foreground">{i.customer?.name} · {currency(i.totalAmount)}</div>

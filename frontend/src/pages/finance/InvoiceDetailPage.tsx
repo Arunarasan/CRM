@@ -17,7 +17,7 @@ import { ArrowLeft, CheckCircle2, Send, XCircle, IndianRupee, RotateCcw } from "
 export default function InvoiceDetailPage() {
   const { id } = useParams();
   const invId = Number(id);
-  const goBack = useGoBack("/finance/invoices");
+  const goBack = useGoBack("/billing/invoices");
 
   const [inv, setInv] = useState<Invoice | null>(null);
   const [items, setItems] = useState<InvoiceItem[]>([]);

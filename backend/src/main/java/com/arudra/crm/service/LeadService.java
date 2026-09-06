@@ -58,6 +58,7 @@ public class LeadService {
     @Autowired private CustomerRepository customerRepository;
     @Autowired private ProjectRepository projectRepository;
     @Autowired private UserRepository userRepository;
+    @Autowired private EmployeeRepository employeeRepository;
     @Autowired private LeadActivityRepository leadActivityRepository;
     @Autowired private LeadAssignmentRepository leadAssignmentRepository;
     @Autowired private LeadFollowupRepository leadFollowupRepository;
@@ -82,7 +83,7 @@ public class LeadService {
             String leadType, String priority, String temperature, String city,
             Long assignedEmployeeId, Boolean isConverted,
             BigDecimal budgetMin, BigDecimal budgetMax,
-            LocalDate dateFrom, LocalDate dateTo,
+            LocalDate dateFrom, LocalDate dateTo, Boolean followUpDue,
             String sortBy, String sortDir, int page, int size) {
 
         String sortField = (sortBy != null && SORTABLE_FIELDS.contains(sortBy)) ? sortBy : "id";
@@ -102,6 +103,7 @@ public class LeadService {
                 .and(LeadSpecification.hasAssignedEmployee(assignedEmployeeId))
                 .and(LeadSpecification.budgetBetween(budgetMin, budgetMax))
                 .and(LeadSpecification.createdBetween(dateFrom, dateTo))
+                .and(LeadSpecification.followUpDue(followUpDue))
                 .and(LeadSpecification.matchesSearch(search));
 
         return leadRepository.findAll(spec, pageRequest);
@@ -626,6 +628,59 @@ public class LeadService {
         return saved;
     }
 
+    /** Full edit of a lead task — title, type, priority, schedule, assignee, status, description.
+     *  Only non-null fields are applied (description is always applied so it can be cleared). */
+    @Transactional
+    public LeadReminder updateTask(Long leadId, Long taskId, LeadReminder patch, User currentUser) {
+        LeadReminder task = leadReminderRepository.findById(taskId)
+                .orElseThrow(() -> new ResourceNotFoundException("Task not found with id: " + taskId));
+        if (!task.getLead().getId().equals(leadId)) {
+            throw new ResourceNotFoundException("Task does not belong to lead " + leadId);
+        }
+        if (patch.getTitle() != null) task.setTitle(patch.getTitle());
+        if (patch.getTaskType() != null) task.setTaskType(patch.getTaskType());
+        if (patch.getPriority() != null) task.setPriority(patch.getPriority());
+        if (patch.getReminderTime() != null) task.setReminderTime(patch.getReminderTime());
+        if (patch.getDescription() != null) task.setDescription(patch.getDescription());
+        if (patch.getStatus() != null) {
+            task.setStatus(patch.getStatus());
+            boolean done = "Completed".equalsIgnoreCase(patch.getStatus());
+            task.setIsCompleted(done);
+            task.setCompletedAt(done ? LocalDateTime.now() : null);
+        }
+        User priorAssignee = task.getAssignedTo();
+        if (patch.getAssignedTo() != null && patch.getAssignedTo().getId() != null) {
+            task.setAssignedTo(patch.getAssignedTo());
+        }
+        LeadReminder saved = leadReminderRepository.save(task);
+        logActivity(task.getLead(), "TASK_UPDATED",
+                "Task \"" + (task.getTitle() != null ? task.getTitle() : task.getTaskType()) + "\" updated",
+                currentUser);
+        // Notify a newly-assigned owner (unless they reassigned it to themselves).
+        User newAssignee = saved.getAssignedTo();
+        boolean reassigned = newAssignee != null
+                && (priorAssignee == null || !newAssignee.getId().equals(priorAssignee.getId()));
+        if (reassigned && (currentUser == null || !newAssignee.getId().equals(currentUser.getId()))) {
+            notificationService.dispatch("Lead task assigned",
+                    "Task \"" + saved.getTitle() + "\" on " + task.getLead().getLeadNumber() + " assigned to you.",
+                    "LEAD", newAssignee.getId(), "/leads/" + task.getLead().getId());
+        }
+        return saved;
+    }
+
+    @Transactional
+    public void deleteTask(Long leadId, Long taskId, User currentUser) {
+        LeadReminder task = leadReminderRepository.findById(taskId)
+                .orElseThrow(() -> new ResourceNotFoundException("Task not found with id: " + taskId));
+        if (!task.getLead().getId().equals(leadId)) {
+            throw new ResourceNotFoundException("Task does not belong to lead " + leadId);
+        }
+        Lead lead = task.getLead();
+        String label = task.getTitle() != null ? task.getTitle() : task.getTaskType();
+        leadReminderRepository.delete(task);
+        logActivity(lead, "TASK_DELETED", "Task \"" + label + "\" deleted", currentUser);
+    }
+
     // =====================================================================
     // Linked modules: site visits, measurements, quotations
     // =====================================================================
@@ -948,6 +1003,37 @@ public class LeadService {
     // =====================================================================
     // Helpers
     // =====================================================================
+
+    /**
+     * Who created this lead, resolved for display. The owner is a {@link User}; the human-friendly
+     * employee code / designation live on the {@link Employee} master, bridged by shared email
+     * (the same bridge the employee portal uses). Returns nulls gracefully for admin-created leads.
+     */
+    public Map<String, Object> getLeadCreator(Long leadId) {
+        Lead lead = getLeadById(leadId);
+        Map<String, Object> out = new java.util.LinkedHashMap<>();
+        out.put("source", lead.getLeadSource());
+        User owner = lead.getLeadOwner();
+        out.put("userId", owner != null ? owner.getId() : null);
+        out.put("name", owner != null ? owner.getName() : lead.getCreatedBy());
+        out.put("email", owner != null ? owner.getEmail() : null);
+        out.put("employeeCode", null);
+        out.put("designation", null);
+        if (owner != null && owner.getEmail() != null) {
+            employeeRepository.findByEmailIgnoreCaseAndIsDeletedFalse(owner.getEmail()).ifPresent(emp -> {
+                out.put("employeeCode", emp.getEmployeeCode());
+                out.put("designation", emp.getDesignation());
+                out.put("name", (emp.getFirstName() != null || emp.getLastName() != null)
+                        ? (java.util.stream.Stream.of(emp.getFirstName(), emp.getLastName())
+                            .filter(java.util.Objects::nonNull).reduce((a, b) -> a + " " + b).orElse(owner.getName()))
+                        : owner.getName());
+                out.put("employeeId", emp.getId());
+            });
+        }
+        // True when the lead came in through the field/employee portal (owner set + Employee source).
+        out.put("fromEmployeePortal", owner != null && "Employee".equalsIgnoreCase(String.valueOf(lead.getLeadSource())));
+        return out;
+    }
 
     public void logActivity(Lead lead, String action, String description, User performedBy) {
         LeadActivity activity = new LeadActivity();

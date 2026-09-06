@@ -1,31 +1,89 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Search, AlertTriangle, Clock, CalendarCheck, ListChecks,
-  CalendarDays, Plane, Wallet, FolderKanban, UserCircle,
+  ChevronDown, CalendarDays, CalendarCheck, ListChecks,
+  Plane, Wallet, FolderKanban, ChevronRight,
   UserPlus, Boxes, Users, ClipboardList, TrendingUp, Activity,
 } from 'lucide-react';
 import { employeeTaskApi } from '@/api/employeeTaskApi';
 import { employeePortalApi } from '@/api/employeePortalApi';
 import { HomeSummary } from '@/types/employeeTask';
 import { EmployeeDashboard } from '@/types/employeePortal';
-import { runOrQueue } from '@/hooks/useOfflineQueue';
-import TaskCard from './components/TaskCard';
 import { StatusPill, inr } from '../employeePortal/_shared';
 import ClockWidget from '../employeePortal/ClockWidget';
+import { useT } from '@/i18n';
 
-const STAT_TILES = [
-  { key: 'dueToday' as const, label: 'Today', icon: CalendarCheck, color: 'text-primary' },
-  { key: 'overdue' as const, label: 'Overdue', icon: AlertTriangle, color: 'text-red-600' },
-  { key: 'upcoming' as const, label: 'Upcoming', icon: Clock, color: 'text-amber-600' },
-  { key: 'completedToday' as const, label: 'Done Today', icon: ListChecks, color: 'text-emerald-600' },
-];
+// Premium card surface shared across the dashboard.
+const CARD = 'rounded-2xl border border-[#ECEAE5] bg-white shadow-[0_4px_14px_rgba(0,35,22,0.05)]';
+
+/** Returns the i18n key for the time-of-day greeting. */
+function greetingKey(): string {
+  const h = new Date().getHours();
+  if (h < 12) return 'portal.home.goodMorning';
+  if (h < 17) return 'portal.home.goodAfternoon';
+  return 'portal.home.goodEvening';
+}
+
+/** KPI card — square icon tile + title + big number + contextual subline. */
+function Kpi({
+  title, value, icon: Icon, tone, sub, subTone = 'muted', onClick,
+}: {
+  title: string;
+  value: React.ReactNode;
+  icon: React.ComponentType<{ className?: string }>;
+  tone: 'forest' | 'gold';
+  sub?: React.ReactNode;
+  subTone?: 'muted' | 'success' | 'danger' | 'warning';
+  onClick: () => void;
+}) {
+  const tile = tone === 'forest' ? 'bg-[#06452F]' : 'bg-[#C48A16]';
+  const subColor = {
+    muted: 'text-[#858B87]',
+    success: 'text-[#28704F]',
+    danger: 'text-[#B94B45]',
+    warning: 'text-[#B27A12]',
+  }[subTone];
+  return (
+    <button onClick={onClick} className={`${CARD} flex flex-col p-4 text-left active:scale-[0.98]`}>
+      <div className="flex items-center gap-3">
+        <span className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${tile}`}>
+          <Icon className="h-6 w-6 text-white" />
+        </span>
+        <span className="text-[13px] font-medium leading-tight text-[#4B524E]">{title}</span>
+      </div>
+      <span className="mt-3 text-[26px] font-bold leading-none text-[#111817] tabular-nums">{value}</span>
+      {sub != null && <span className={`mt-2 text-[11px] font-medium ${subColor}`}>{sub}</span>}
+    </button>
+  );
+}
+
+/** Section header — title + optional gold "View All". */
+function SectionHead({ title, icon: Icon, onViewAll }: {
+  title: string;
+  icon?: React.ComponentType<{ className?: string }>;
+  onViewAll?: () => void;
+}) {
+  const { t } = useT();
+  return (
+    <div className="mb-3 flex items-center justify-between px-0.5">
+      <h2 className="flex items-center gap-1.5 text-[19px] font-semibold text-[#111817]">
+        {Icon && <Icon className="h-[18px] w-[18px] text-[#06452F]" />}
+        {title}
+      </h2>
+      {onViewAll && (
+        <button onClick={onViewAll} className="flex items-center gap-0.5 text-[14px] font-semibold text-[#B27A12] active:opacity-70">
+          {t('portal.home.viewAll')} <ChevronRight className="h-4 w-4" />
+        </button>
+      )}
+    </div>
+  );
+}
 
 export default function MobileHome() {
   const [home, setHome] = useState<HomeSummary | null>(null);
   const [dash, setDash] = useState<EmployeeDashboard | null>(null);
-  const [search, setSearch] = useState('');
   const navigate = useNavigate();
+  const { t } = useT();
 
   const load = useCallback(() => {
     employeeTaskApi.home().then(setHome).catch(() => {});
@@ -34,233 +92,198 @@ export default function MobileHome() {
 
   useEffect(() => { load(); }, [load]);
 
-  const withRefresh = (fn: () => Promise<unknown>) => fn().finally(load);
-  const onStart = (id: number) => withRefresh(() => runOrQueue({ method: 'post', url: `/employee-tasks/${id}/start`, description: 'Start task' }));
-  const onPause = (id: number) => withRefresh(() => runOrQueue({ method: 'post', url: `/employee-tasks/${id}/pause`, description: 'Pause task' }));
-  const onComplete = (id: number) => withRefresh(() => runOrQueue({ method: 'post', url: `/employee-tasks/${id}/complete`, description: 'Complete task' }));
+  const firstName = dash?.employee?.firstName ?? 'there';
+  const today = new Date().toLocaleDateString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric', weekday: 'long',
+  });
 
-  const onSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    navigate(`/employee/tasks${search ? `?search=${encodeURIComponent(search)}` : ''}`);
-  };
-
-  const firstName = dash?.employee?.firstName;
+  const overdue = home?.overdue ?? 0;
+  const doneToday = home?.completedToday ?? 0;
+  const pending = dash?.pendingLeaves ?? 0;
 
   return (
-    <div className="flex flex-col gap-4 p-3">
-      {/* Greeting + profile completion */}
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-xs text-muted-foreground">Welcome back</p>
-          <h1 className="text-lg font-bold leading-tight">{firstName ?? 'Employee'}</h1>
+    <div className="flex flex-col">
+      {/* Greeting hero — continues the forest header */}
+      <div className="bg-[#012B1D] px-5 pb-11 pt-1">
+        <h1 className="text-[25px] font-bold leading-tight text-white">
+          {t(greetingKey())}, {firstName}! <span className="align-middle">👋</span>
+        </h1>
+        <p className="mt-1 text-[15px] text-[#D4E0DA]">{t('portal.home.hereToday')}</p>
+      </div>
+
+      <div className="-mt-7 flex flex-col gap-6 px-5 pb-6">
+        {/* Floating date selector */}
+        <div className="flex h-[60px] items-center gap-3 rounded-2xl border border-[#DCDDD9] bg-white px-4 shadow-[0_4px_16px_rgba(0,35,22,0.08)]">
+          <CalendarDays className="h-5 w-5 text-[#06452F]" />
+          <span className="flex-1 text-[15px] font-semibold text-[#111817]">{today}</span>
+          <ChevronDown className="h-5 w-5 text-[#06452F]" />
         </div>
-        <button
-          onClick={() => navigate('/employee/profile')}
-          className="flex items-center gap-2 rounded-full border bg-card p-1 pr-3 shadow-sm active:bg-accent"
-        >
-          {dash?.employee?.profilePhotoUrl ? (
-            <img src={dash.employee.profilePhotoUrl} alt="" className="h-8 w-8 rounded-full object-cover" />
-          ) : (
-            <UserCircle className="h-8 w-8 text-muted-foreground" />
-          )}
-          <span className="text-xs font-semibold">{dash ? `${dash.profileCompletion}%` : '–'}</span>
-        </button>
-      </div>
 
-      <form onSubmit={onSearchSubmit} className="flex items-center gap-2 rounded-xl border bg-card px-3 py-2.5 shadow-sm">
-        <Search className="h-4 w-4 text-muted-foreground" />
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search tasks, projects…"
-          className="flex-1 bg-transparent text-sm outline-none"
-        />
-      </form>
+        {/* Today's earnings + live session time — the money-forward hero of the home screen */}
+        <ClockWidget onChange={load} />
 
-      {/* Time-clock + hourly earnings */}
-      <ClockWidget onChange={load} />
+        {/* KPI grid */}
+        <div className="grid grid-cols-2 gap-3.5">
+          <Kpi
+            title={t('portal.home.myTasks')} icon={ListChecks} tone="gold"
+            value={home?.activeTaskCount ?? '–'}
+            sub={overdue > 0 ? t('portal.home.overdue', { count: overdue }) : t('portal.home.doneToday', { count: doneToday })}
+            subTone={overdue > 0 ? 'danger' : 'success'}
+            onClick={() => navigate('/employee/tasks')}
+          />
+          <Kpi
+            title={t('portal.home.dueToday')} icon={CalendarCheck} tone="forest"
+            value={home?.dueToday ?? '–'}
+            sub={home ? t('portal.home.upcoming', { count: home.upcoming }) : undefined}
+            onClick={() => navigate('/employee/tasks')}
+          />
+          <Kpi
+            title={t('portal.home.myProjects')} icon={FolderKanban} tone="forest"
+            value={dash?.assignedProjects ?? '–'}
+            sub={t('portal.home.assignedToMe')}
+            onClick={() => navigate('/employee/projects')}
+          />
+          <Kpi
+            title={t('portal.home.leaveBalance')} icon={Plane} tone="gold"
+            value={dash ? <>{dash.leaveBalance}<span className="ml-1 text-sm font-semibold text-[#858B87]">{t('portal.home.days')}</span></> : '–'}
+            sub={pending > 0 ? t('portal.home.pendingCount', { count: pending }) : t('portal.home.upToDate')}
+            subTone={pending > 0 ? 'warning' : 'success'}
+            onClick={() => navigate('/employee/leave')}
+          />
+        </div>
 
-      {/* My Work: capacity + available pool shortcut */}
-      {home && home.maxActiveTasks != null && (
-        <button
-          onClick={() => navigate('/employee/tasks?tab=AVAILABLE')}
-          className="flex items-center justify-between rounded-xl border bg-card px-3 py-2.5 text-left shadow-sm active:bg-accent/40"
-        >
-          <div>
-            <p className="text-xs text-muted-foreground">Task capacity</p>
-            <p className="text-lg font-bold leading-none">{home.activeTaskCount ?? 0} / {home.maxActiveTasks}</p>
-          </div>
-          <div className="text-right">
-            <p className="text-xs text-muted-foreground">Available for you</p>
-            <p className="text-lg font-bold leading-none text-primary">{home.availableCount ?? 0} →</p>
-          </div>
-        </button>
-      )}
-
-      {/* Quick actions */}
-      <div className="grid grid-cols-4 gap-2">
-        {[
-          { label: 'Add Lead', icon: UserPlus, color: 'text-emerald-600', to: '/employee/leads' },
-          { label: 'Material', icon: Boxes, color: 'text-orange-600', to: '/employee/requests/material' },
-          { label: 'Manpower', icon: Users, color: 'text-emerald-600', to: '/employee/requests/manpower' },
-          { label: 'Report', icon: ClipboardList, color: 'text-emerald-600', to: '/employee/daily-reports' },
-        ].map(({ label, icon: Icon, color, to }) => (
-          <button key={label} onClick={() => navigate(to)} className="flex flex-col items-center gap-1 rounded-xl border bg-card p-2 text-center shadow-sm active:bg-accent/40">
-            <Icon className={`h-5 w-5 ${color}`} />
-            <span className="text-[10px] font-medium leading-tight text-muted-foreground">{label}</span>
-          </button>
-        ))}
-      </div>
-
-      {/* Self-service summary cards */}
-      <div className="grid grid-cols-2 gap-3">
-        <button
-          onClick={() => navigate('/employee/attendance')}
-          className="flex flex-col items-start gap-1 rounded-xl border bg-card p-3 text-left shadow-sm active:bg-accent/40"
-        >
-          <CalendarDays className="h-5 w-5 text-primary" />
-          <span className="text-xs text-muted-foreground">Attendance</span>
-          <StatusPill status={dash?.todayAttendance ?? 'NOT_MARKED'} />
-        </button>
-
-        <button
-          onClick={() => navigate('/employee/leave')}
-          className="flex flex-col items-start gap-1 rounded-xl border bg-card p-3 text-left shadow-sm active:bg-accent/40"
-        >
-          <Plane className="h-5 w-5 text-emerald-600" />
-          <span className="text-xs text-muted-foreground">Leave Balance</span>
-          <span className="text-xl font-bold leading-none">{dash ? dash.leaveBalance : '–'}<span className="ml-1 text-xs font-normal text-muted-foreground">days</span></span>
-          {dash && dash.pendingLeaves > 0 && (
-            <span className="text-[11px] text-amber-600">{dash.pendingLeaves} pending</span>
-          )}
-        </button>
-
-        <button
-          onClick={() => navigate('/employee/salary')}
-          className="flex flex-col items-start gap-1 rounded-xl border bg-card p-3 text-left shadow-sm active:bg-accent/40"
-        >
-          <Wallet className="h-5 w-5 text-emerald-600" />
-          <span className="text-xs text-muted-foreground">Salary{dash?.lastSalaryMonth ? ` · ${dash.lastSalaryMonth}` : ''}</span>
-          <StatusPill status={dash?.lastSalaryStatus ?? 'NONE'} />
-        </button>
-
-        <button
-          onClick={() => navigate('/employee/projects')}
-          className="flex flex-col items-start gap-1 rounded-xl border bg-card p-3 text-left shadow-sm active:bg-accent/40"
-        >
-          <FolderKanban className="h-5 w-5 text-violet-600" />
-          <span className="text-xs text-muted-foreground">My Projects</span>
-          <span className="text-xl font-bold leading-none">{dash ? dash.assignedProjects : '–'}</span>
-        </button>
-      </div>
-
-      {/* Task stat tiles */}
-      <div className="grid grid-cols-4 gap-2">
-        {STAT_TILES.map(({ key, label, icon: Icon, color }) => (
+        {/* Task capacity + available pool shortcut */}
+        {home && home.maxActiveTasks != null && (
           <button
-            key={key}
-            onClick={() => navigate(key === 'completedToday' ? '/employee/tasks?status=COMPLETED' : '/employee/tasks')}
-            className="flex flex-col items-center gap-0.5 rounded-xl border bg-card p-2 text-center shadow-sm active:bg-accent/40"
+            onClick={() => navigate('/employee/tasks?tab=AVAILABLE')}
+            className={`${CARD} flex items-center justify-between px-4 py-3.5 text-left active:scale-[0.99]`}
           >
-            <Icon className={`h-4 w-4 ${color}`} />
-            <span className="text-lg font-bold leading-none">{home ? home[key] : '–'}</span>
-            <span className="text-[10px] leading-tight text-muted-foreground">{label}</span>
+            <div>
+              <p className="text-xs text-[#858B87]">{t('portal.home.taskCapacity')}</p>
+              <p className="text-lg font-bold leading-none text-[#111817]">{home.activeTaskCount ?? 0} / {home.maxActiveTasks}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs text-[#858B87]">{t('portal.home.availableForYou')}</p>
+              <p className="flex items-center justify-end gap-1 text-lg font-bold leading-none text-[#06452F]">
+                {home.availableCount ?? 0} <ChevronRight className="h-4 w-4" />
+              </p>
+            </div>
           </button>
-        ))}
-      </div>
+        )}
 
-      <div>
-        <h2 className="mb-2 px-1 text-sm font-semibold text-muted-foreground">Today &amp; Overdue</h2>
-        <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
-          {home && home.todaysTasks.length > 0 ? (
-            home.todaysTasks.map((task) => (
-              <TaskCard key={task.id} task={task} onStart={onStart} onPause={onPause} onComplete={onComplete} />
-            ))
-          ) : (
-            <p className="p-6 text-center text-sm text-muted-foreground">Nothing due today. 🎉</p>
-          )}
-        </div>
-      </div>
-
-      {/* My Performance */}
-      {dash?.performance && (
+        {/* Quick actions */}
         <div>
-          <h2 className="mb-2 flex items-center gap-1.5 px-1 text-sm font-semibold text-muted-foreground">
-            <TrendingUp className="h-4 w-4" /> My Performance
-          </h2>
-          <div className="grid grid-cols-3 gap-2">
+          <SectionHead title={t('portal.home.quickActions')} />
+          <div className="grid grid-cols-4 gap-3">
             {[
-              { label: 'Done / week', value: dash.performance.tasksCompletedThisWeek },
-              { label: 'Pending', value: dash.performance.tasksPending },
-              { label: 'Attendance', value: `${dash.performance.attendancePercentage}%` },
-              { label: 'Hrs today', value: dash.performance.hoursToday ?? 0 },
-              { label: 'Hrs / week', value: dash.performance.hoursThisWeek ?? 0 },
-              { label: 'Overtime', value: dash.performance.overtimeHours ?? 0 },
-              { label: 'This month', value: inr(dash.performance.monthEarnings), wide: true },
-              { label: 'Productivity', value: `${dash.performance.productivityScore}%`, wide: true },
-            ].map((s) => (
-              <div key={s.label} className={`rounded-xl border bg-card p-2.5 shadow-sm ${s.wide ? 'col-span-1' : ''}`}>
-                <p className="text-base font-bold leading-none">{s.value}</p>
-                <p className="mt-1 text-[10px] leading-tight text-muted-foreground">{s.label}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* My Requests */}
-      {dash?.requests && (
-        <div>
-          <h2 className="mb-2 flex items-center gap-1.5 px-1 text-sm font-semibold text-muted-foreground">
-            <Boxes className="h-4 w-4" /> My Requests
-          </h2>
-          <div className="grid grid-cols-3 gap-2">
-            {[
-              { label: 'Material', value: dash.requests.materialRequests, to: '/employee/requests/material' },
-              { label: 'Manpower', value: dash.requests.manpowerRequests, to: '/employee/requests/manpower' },
-              { label: 'Leads', value: dash.requests.leads, to: '/employee/leads' },
-              { label: 'Reports', value: dash.requests.dailyReports, to: '/employee/daily-reports' },
-              { label: 'Leave', value: dash.requests.leaveRequests, to: '/employee/leave' },
-              { label: 'To approve', value: dash.requests.pendingApprovals, to: '/employee/requests' },
-            ].map((s) => (
-              <button key={s.label} onClick={() => navigate(s.to)} className="rounded-xl border bg-card p-2.5 text-left shadow-sm active:bg-accent/40">
-                <p className="text-base font-bold leading-none">{s.value}</p>
-                <p className="mt-1 text-[10px] leading-tight text-muted-foreground">{s.label}</p>
+              { labelKey: 'portal.home.addLead', icon: UserPlus, to: '/employee/leads' },
+              { labelKey: 'portal.home.material', icon: Boxes, to: '/employee/requests/material' },
+              { labelKey: 'portal.home.manpower', icon: Users, to: '/employee/requests/manpower' },
+              { labelKey: 'portal.home.report', icon: ClipboardList, to: '/employee/daily-reports' },
+            ].map(({ labelKey, icon: Icon, to }) => (
+              <button key={to} onClick={() => navigate(to)} className={`${CARD} flex flex-col items-center gap-2 py-3 text-center active:scale-95`}>
+                <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#E7F2EC]">
+                  <Icon className="h-5 w-5 text-[#06452F]" />
+                </span>
+                <span className="text-[10.5px] font-medium leading-tight text-[#4B524E]">{t(labelKey)}</span>
               </button>
             ))}
           </div>
         </div>
-      )}
 
-      {/* Recent Activity */}
-      {dash?.recentActivity && Object.values(dash.recentActivity).some(Boolean) && (
-        <div>
-          <h2 className="mb-2 flex items-center gap-1.5 px-1 text-sm font-semibold text-muted-foreground">
-            <Activity className="h-4 w-4" /> Recent Activity
-          </h2>
-          <div className="divide-y overflow-hidden rounded-xl border bg-card shadow-sm">
-            {[
-              { key: 'latestDailyReport', label: 'Daily report' },
-              { key: 'latestMaterialRequest', label: 'Material request' },
-              { key: 'latestManpowerRequest', label: 'Manpower request' },
-              { key: 'latestLead', label: 'Lead' },
-              { key: 'lastAttendance', label: 'Attendance' },
-            ].map(({ key, label }) => {
-              const item = dash.recentActivity?.[key];
-              if (!item) return null;
-              return (
-                <div key={key} className="flex items-center justify-between gap-3 px-3 py-2.5">
-                  <div className="min-w-0">
-                    <p className="text-[11px] text-muted-foreground">{label}</p>
-                    <p className="truncate text-sm font-medium">{item.label}</p>
-                  </div>
-                  {item.status && <StatusPill status={String(item.status).toUpperCase()} />}
-                </div>
-              );
-            })}
-          </div>
+        {/* Attendance + Salary quick access */}
+        <div className="grid grid-cols-2 gap-3.5">
+          <button onClick={() => navigate('/employee/attendance')} className={`${CARD} flex flex-col items-start gap-2 p-4 text-left active:scale-[0.98]`}>
+            <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#06452F]">
+              <CalendarDays className="h-5 w-5 text-white" />
+            </span>
+            <span className="text-[13px] font-medium text-[#4B524E]">{t('portal.home.todaysAttendance')}</span>
+            <StatusPill status={dash?.todayAttendance ?? 'NOT_MARKED'} />
+          </button>
+
+          <button onClick={() => navigate('/employee/salary')} className={`${CARD} flex flex-col items-start gap-2 p-4 text-left active:scale-[0.98]`}>
+            <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#C48A16]">
+              <Wallet className="h-5 w-5 text-white" />
+            </span>
+            <span className="text-[13px] font-medium text-[#4B524E]">{t('portal.home.salary')}{dash?.lastSalaryMonth ? ` · ${dash.lastSalaryMonth}` : ''}</span>
+            <StatusPill status={dash?.lastSalaryStatus ?? 'NONE'} />
+          </button>
         </div>
-      )}
+
+        {/* My Performance */}
+        {dash?.performance && (
+          <div>
+            <SectionHead title={t('portal.home.myPerformance')} icon={TrendingUp} />
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { key: 'donePerWeek', label: t('portal.home.donePerWeek'), value: dash.performance.tasksCompletedThisWeek },
+                { key: 'pending', label: t('portal.home.pendingLabel'), value: dash.performance.tasksPending },
+                { key: 'attendance', label: t('portal.home.attendance'), value: `${dash.performance.attendancePercentage}%` },
+                { key: 'hrsToday', label: t('portal.home.hrsToday'), value: dash.performance.hoursToday ?? 0 },
+                { key: 'hrsWeek', label: t('portal.home.hrsWeek'), value: dash.performance.hoursThisWeek ?? 0 },
+                { key: 'overtime', label: t('portal.home.overtime'), value: dash.performance.overtimeHours ?? 0 },
+                { key: 'thisMonth', label: t('portal.home.thisMonth'), value: inr(dash.performance.monthEarnings) },
+                { key: 'productivity', label: t('portal.home.productivity'), value: `${dash.performance.productivityScore}%` },
+              ].map((s) => (
+                <div key={s.key} className={`${CARD} p-3`}>
+                  <p className="text-base font-bold leading-none text-[#111817]">{s.value}</p>
+                  <p className="mt-1.5 text-[10px] leading-tight text-[#858B87]">{s.label}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* My Requests */}
+        {dash?.requests && (
+          <div>
+            <SectionHead title={t('portal.home.myRequests')} icon={Boxes} />
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { label: t('portal.home.material'), value: dash.requests.materialRequests, to: '/employee/requests/material' },
+                { label: t('portal.home.manpower'), value: dash.requests.manpowerRequests, to: '/employee/requests/manpower' },
+                { label: t('portal.home.leads'), value: dash.requests.leads, to: '/employee/leads' },
+                { label: t('portal.home.reports'), value: dash.requests.dailyReports, to: '/employee/daily-reports' },
+                { label: t('portal.home.leave'), value: dash.requests.leaveRequests, to: '/employee/leave' },
+                { label: t('portal.home.toApprove'), value: dash.requests.pendingApprovals, to: '/employee/requests' },
+              ].map((s) => (
+                <button key={s.to} onClick={() => navigate(s.to)} className={`${CARD} p-3 text-left active:scale-[0.98]`}>
+                  <p className="text-base font-bold leading-none text-[#111817]">{s.value}</p>
+                  <p className="mt-1.5 text-[10px] leading-tight text-[#858B87]">{s.label}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Recent Activity */}
+        {dash?.recentActivity && Object.values(dash.recentActivity).some(Boolean) && (
+          <div>
+            <SectionHead title={t('portal.home.recentActivity')} icon={Activity} />
+            <div className={`${CARD} divide-y divide-[#ECEBE7] overflow-hidden`}>
+              {[
+                { key: 'latestDailyReport', label: t('portal.home.dailyReport') },
+                { key: 'latestMaterialRequest', label: t('portal.home.materialRequest') },
+                { key: 'latestManpowerRequest', label: t('portal.home.manpowerRequest') },
+                { key: 'latestLead', label: t('portal.home.lead') },
+                { key: 'lastAttendance', label: t('portal.home.attendance') },
+              ].map(({ key, label }) => {
+                const item = dash.recentActivity?.[key];
+                if (!item) return null;
+                return (
+                  <div key={key} className="flex items-center justify-between gap-3 px-4 py-3">
+                    <div className="min-w-0">
+                      <p className="text-[11px] text-[#858B87]">{label}</p>
+                      <p className="truncate text-sm font-medium text-[#111817]">{item.label}</p>
+                    </div>
+                    {item.status && <StatusPill status={String(item.status).toUpperCase()} />}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

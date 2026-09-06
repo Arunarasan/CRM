@@ -109,6 +109,33 @@ public class Project extends BaseEntity {
     @Column(name = "warranty_end_date")
     private LocalDate warrantyEndDate;
 
+    // ---- Post-completion warranty cover (activated once the project is COMPLETED) ----
+
+    /** True once staff activate warranty on the completed project (see ProjectServiceWarrantyService). */
+    @Column(name = "warranty_activated", nullable = false)
+    private boolean warrantyActivated = false;
+
+    /** When cover begins — defaults to the handover/completion date at activation. */
+    @Column(name = "warranty_start_date")
+    private LocalDate warrantyStartDate;
+
+    /** Workmanship/service warranty period; end date is computed from start + months at activation. */
+    @Column(name = "service_warranty_months")
+    private Integer serviceWarrantyMonths;
+
+    @Column(name = "service_warranty_end_date")
+    private LocalDate serviceWarrantyEndDate;
+
+    /** Product/material warranty period; end date is computed from start + months at activation. */
+    @Column(name = "product_warranty_months")
+    private Integer productWarrantyMonths;
+
+    @Column(name = "product_warranty_end_date")
+    private LocalDate productWarrantyEndDate;
+
+    @Column(name = "warranty_notes", columnDefinition = "TEXT")
+    private String warrantyNotes;
+
     @NotBlank
     @Column(nullable = false, length = 50)
     private String status; // PLANNING, PENDING, APPROVED, RUNNING, PAUSED, ON_HOLD, COMPLETED, CANCELLED, CLOSED

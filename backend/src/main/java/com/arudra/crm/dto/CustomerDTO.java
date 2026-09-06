@@ -21,6 +21,7 @@ public class CustomerDTO {
     private String gstNumber;
     private String customerCode;
     private String customerType;
+    private String customerSegment;
     private String companyName;
     private String contactPersonName;
     private String alternatePhone;

@@ -48,6 +48,10 @@ public class PurchasePayment extends BaseEntity {
     @Column(name = "reference_number", length = 100)
     private String referenceNumber;
 
+    /** Uploaded payment proof — screenshot of the bank/UPI transfer or a scanned receipt. */
+    @Column(name = "proof_url", length = 500)
+    private String proofUrl;
+
     @Column(columnDefinition = "TEXT")
     private String notes;
 }

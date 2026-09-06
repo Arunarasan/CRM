@@ -20,6 +20,7 @@ public interface TaskAssignmentRepository extends JpaRepository<TaskAssignment, 
     List<TaskAssignment> findByResourceTypeAndResourceId(String resourceType, Long resourceId);
     Optional<TaskAssignment> findByTaskIdAndResourceTypeAndResourceId(Long taskId, String resourceType, Long resourceId);
     List<TaskAssignment> findByStatusNot(String status);
+    List<TaskAssignment> findByStatusIn(List<String> statuses);
 
     /** All task assignments across a project's tasks — for the project's people/labour roster. */
     List<TaskAssignment> findByTaskProjectId(Long projectId);
