@@ -112,6 +112,16 @@ export default function ProductDetail() {
               sku: view.sku || undefined,
               category: titleCase(view.categorySlug),
               brand: { '@type': 'Brand', name: 'JB Decor' },
+              // Rich-result stars — only when we actually have reviews, else Google flags it.
+              ...(view.reviewCount > 0 && view.rating > 0
+                ? {
+                    aggregateRating: {
+                      '@type': 'AggregateRating',
+                      ratingValue: view.rating,
+                      reviewCount: view.reviewCount,
+                    },
+                  }
+                : {}),
             },
             breadcrumbJsonLd([
               { name: 'Home', path: '/' },

@@ -7,8 +7,11 @@ import com.arudra.crm.dto.website.WebsiteLeadRequest;
 import com.arudra.crm.dto.website.SiteContentDto.ContentBlockDto;
 import com.arudra.crm.service.WebsiteCatalogService;
 import com.arudra.crm.service.WebsiteContentService;
+import com.arudra.crm.service.SitemapService;
+import com.arudra.crm.service.WebsiteEnquiryService;
 import com.arudra.crm.service.WebsiteLeadService;
 import com.arudra.crm.service.WebsiteOrderService;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -29,13 +32,30 @@ public class PublicWebsiteController {
     private final WebsiteLeadService leadService;
     private final WebsiteOrderService orderService;
     private final WebsiteContentService contentService;
+    private final WebsiteEnquiryService enquiryService;
+    private final SitemapService sitemapService;
 
     public PublicWebsiteController(WebsiteCatalogService catalog, WebsiteLeadService leadService,
-                                   WebsiteOrderService orderService, WebsiteContentService contentService) {
+                                   WebsiteOrderService orderService, WebsiteContentService contentService,
+                                   WebsiteEnquiryService enquiryService, SitemapService sitemapService) {
         this.catalog = catalog;
         this.leadService = leadService;
         this.orderService = orderService;
         this.contentService = contentService;
+        this.enquiryService = enquiryService;
+        this.sitemapService = sitemapService;
+    }
+
+    /**
+     * Live-generated sitemap covering the static marketing routes plus every CMS-managed category,
+     * product, service, portfolio project, and material. Proxied to the canonical /sitemap.xml at
+     * the edge. Returns raw XML (not the ApiResponse envelope) so search engines parse it directly.
+     */
+    @GetMapping(value = "/sitemap.xml", produces = MediaType.APPLICATION_XML_VALUE)
+    public ResponseEntity<String> sitemap() {
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_XML)
+                .body(sitemapService.buildXml());
     }
 
     // ---- Catalog ----
@@ -103,19 +123,26 @@ public class PublicWebsiteController {
         return ResponseEntity.ok(ApiResponse.success(catalog.testimonials()));
     }
 
-    // ---- Enquiries → CRM leads ----
+    // ---- Enquiries → Website Enquiry inbox (admin triages, then converts to a CRM lead) ----
     @PostMapping("/leads")
     public ResponseEntity<ApiResponse<Void>> contact(@RequestBody WebsiteLeadRequest req) {
-        leadService.createFromWebsite(req, "Website Contact");
+        enquiryService.createFromForm(req, "CONTACT", "Website Contact");
         return ResponseEntity.ok(ApiResponse.success(null,
                 "Thank you — your enquiry has reached our team."));
     }
 
     @PostMapping("/consultations")
     public ResponseEntity<ApiResponse<Void>> consultation(@RequestBody WebsiteLeadRequest req) {
-        leadService.createFromWebsite(req, "Website Consultation");
+        enquiryService.createFromForm(req, "CONSULTATION", "Website Consultation");
         return ResponseEntity.ok(ApiResponse.success(null,
                 "Thank you — our design team will be in touch shortly."));
+    }
+
+    @PostMapping("/enquiries/product-quote")
+    public ResponseEntity<ApiResponse<Void>> productQuote(@RequestBody com.arudra.crm.dto.website.WebsiteEnquiryDto.ProductQuoteRequest req) {
+        enquiryService.createProductQuote(req);
+        return ResponseEntity.ok(ApiResponse.success(null,
+                "Thank you — we'll send you a quote shortly."));
     }
 
     // ---- Shop checkout → CRM order ----

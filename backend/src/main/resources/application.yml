@@ -65,6 +65,9 @@ jwt:
 
 app:
   name: ${APP_NAME:Arudra CRM}
+  # Canonical public website origin (no trailing slash). Used to build absolute URLs in the
+  # dynamically generated sitemap so Google sees one consistent host.
+  public-site-url: ${PUBLIC_SITE_URL:https://jbdecorcdm.com}
   mail:
     # From address on OTP emails. Defaults to the SMTP username when blank.
     from: ${MAIL_FROM:${MAIL_USERNAME:no-reply@arudra.com}}

@@ -24,11 +24,22 @@ export function StructuredData() {
       })
 
     const description = `${site.name} — ${site.tagline}. ${site.positioning}`
+    // Structured address — only include the parts that are actually set, so an unfilled
+    // city/region/postal doesn't emit empty fields Google penalises.
     const address = {
       '@type': 'PostalAddress',
       streetAddress: site.address,
-      addressCountry: 'IN',
+      ...(site.city ? { addressLocality: site.city } : {}),
+      ...(site.region ? { addressRegion: site.region } : {}),
+      ...(site.postalCode ? { postalCode: site.postalCode } : {}),
+      addressCountry: site.country || 'IN',
     }
+    // Map pin for the local pack — only when real coordinates are configured.
+    const lat = parseFloat(site.geoLat)
+    const lng = parseFloat(site.geoLng)
+    const geo = Number.isFinite(lat) && Number.isFinite(lng)
+      ? { '@type': 'GeoCoordinates', latitude: lat, longitude: lng }
+      : null
 
     const blocks = [
       {
@@ -50,6 +61,7 @@ export function StructuredData() {
           closes: '19:00',
         },
         priceRange: '₹₹₹',
+        ...(geo ? { geo } : {}),
         ...(sameAs.length ? { sameAs } : {}),
       },
       {

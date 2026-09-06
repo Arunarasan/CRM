@@ -28,6 +28,14 @@ export const site = {
   phone: import.meta.env.VITE_CONTACT_PHONE || '+91 90000 00000',
   email: import.meta.env.VITE_CONTACT_EMAIL || 'hello@jbdecor.com',
   address: import.meta.env.VITE_CONTACT_ADDRESS || 'JB Decor Studio, Bengaluru, India',
+  // Structured address parts power LocalBusiness geo/local-pack signals. Blank by default —
+  // set in the CRM (contact.city / region / postalCode / geo) or via env; omitted when unset.
+  city: import.meta.env.VITE_CONTACT_CITY || '',
+  region: import.meta.env.VITE_CONTACT_REGION || '',
+  postalCode: import.meta.env.VITE_CONTACT_POSTAL || '',
+  country: import.meta.env.VITE_CONTACT_COUNTRY || 'IN',
+  geoLat: import.meta.env.VITE_CONTACT_GEO_LAT || '',
+  geoLng: import.meta.env.VITE_CONTACT_GEO_LNG || '',
   crmUrl: import.meta.env.VITE_CRM_URL || '/crm',
   businessHours: 'Mon – Sat · 10:00 AM – 7:00 PM',
   social: {

@@ -33,6 +33,12 @@ function LegacyProductRedirect() {
   return <Navigate to={product ? `/products/${product.categorySlug}/${product.slug}` : '/products'} replace />
 }
 
+/** Redirect legacy /collection/:slug category links to the new /products/:category path. */
+function LegacyCollectionRedirect() {
+  const { slug = '' } = useParams()
+  return <Navigate to={slug ? `/products/${slug}` : '/products'} replace />
+}
+
 const PageLoader = () => (
   <div className="flex min-h-[60vh] items-center justify-center">
     <div className="h-10 w-10 animate-spin rounded-full border-2 border-forest/20 border-t-gold" />
@@ -69,6 +75,9 @@ export default function App() {
           {/* Legacy shop redirects → catalog */}
           <Route path="shop" element={<Navigate to="/products" replace />} />
           <Route path="shop/:slug" element={<LegacyProductRedirect />} />
+          {/* Legacy /collection/:slug category links → /products/:category */}
+          <Route path="collection" element={<Navigate to="/products" replace />} />
+          <Route path="collection/:slug" element={<LegacyCollectionRedirect />} />
           <Route path="cart" element={<Navigate to="/products" replace />} />
           <Route path="checkout" element={<Navigate to="/products" replace />} />
           <Route path="wishlist" element={<Navigate to="/products" replace />} />

@@ -18,6 +18,12 @@ export interface SiteConfig {
   phone: string
   email: string
   address: string
+  city: string
+  region: string
+  postalCode: string
+  country: string
+  geoLat: string
+  geoLng: string
   crmUrl: string
   businessHours: string
   social: { instagram: string; facebook: string; pinterest: string; linkedin: string }
@@ -38,6 +44,12 @@ function merge(s: Record<string, string>): SiteConfig {
     email: g('contact.email', base.email),
     whatsappNumber: g('contact.whatsapp', base.whatsappNumber),
     address: g('contact.address', base.address),
+    city: g('contact.city', base.city),
+    region: g('contact.region', base.region),
+    postalCode: g('contact.postalCode', base.postalCode),
+    country: g('contact.country', base.country),
+    geoLat: g('contact.geoLat', base.geoLat),
+    geoLng: g('contact.geoLng', base.geoLng),
     businessHours: g('contact.businessHours', base.businessHours),
     social: {
       instagram: g('social.instagram', base.social.instagram),
