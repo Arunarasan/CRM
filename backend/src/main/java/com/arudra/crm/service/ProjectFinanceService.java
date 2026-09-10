@@ -30,6 +30,7 @@ public class ProjectFinanceService {
     @Autowired private ContractorBillRepository contractorBillRepository;
     @Autowired private InvoiceRepository invoiceRepository;
     @Autowired private CustomerPaymentRepository paymentRepository;
+    @Autowired private PurchasePaymentRepository purchasePaymentRepository;
 
     // =====================================================================
     // Expenses
@@ -227,6 +228,17 @@ public class ProjectFinanceService {
         BigDecimal profitPercent = invoiced.signum() == 0 ? BigDecimal.ZERO
                 : netProfit.multiply(BigDecimal.valueOf(100)).divide(invoiced, 2, RoundingMode.HALF_UP);
 
+        // ---- Cash basis: money that has actually moved to date ----
+        // Revenue = what the customer has really paid us; costs = what we have really paid out.
+        BigDecimal customerPaid = collected;
+        BigDecimal contractorPaid = nz(contractorPaymentRepository.sumPaidForProject(projectId));
+        BigDecimal purchasePaid = nz(purchasePaymentRepository.sumForProject(projectId));
+        BigDecimal otherExpensesPaid = nz(expenseRepository.totalForProjectBySource(projectId, "MANUAL"));
+        BigDecimal cashOut = contractorPaid.add(purchasePaid).add(otherExpensesPaid);
+        BigDecimal cashProfit = customerPaid.subtract(cashOut);
+        BigDecimal cashMarginPercent = customerPaid.signum() == 0 ? BigDecimal.ZERO
+                : cashProfit.multiply(BigDecimal.valueOf(100)).divide(customerPaid, 2, RoundingMode.HALF_UP);
+
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("projectId", projectId);
         result.put("projectName", project.getProjectName());
@@ -245,6 +257,18 @@ public class ProjectFinanceService {
         result.put("grossProfit", grossProfit);
         result.put("netProfit", netProfit);
         result.put("profitPercent", profitPercent);
+        // Cash-basis view (actual money in vs actual money out)
+        result.put("customerPaid", customerPaid);
+        result.put("contractorPaid", contractorPaid);
+        result.put("purchasePaid", purchasePaid);
+        result.put("otherExpensesPaid", otherExpensesPaid);
+        result.put("cashOut", cashOut);
+        result.put("cashProfit", cashProfit);
+        result.put("cashMarginPercent", cashMarginPercent);
         return result;
+    }
+
+    private static BigDecimal nz(BigDecimal v) {
+        return v == null ? BigDecimal.ZERO : v;
     }
 }

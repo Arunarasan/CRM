@@ -68,6 +68,13 @@ app:
   # Canonical public website origin (no trailing slash). Used to build absolute URLs in the
   # dynamically generated sitemap so Google sees one consistent host.
   public-site-url: ${PUBLIC_SITE_URL:https://jbdecorcdm.com}
+  # WebAuthn (device biometric) for attendance clock-in. rp-id MUST be the registrable domain the
+  # CRM is served from (e.g. "crm.arudra.com"; "localhost" in dev) — NOT a URL. origin is the exact
+  # scheme+host+port the portal is loaded from and MUST match at register + assert time.
+  webauthn:
+    rp-id: ${WEBAUTHN_RP_ID:localhost}
+    rp-name: ${WEBAUTHN_RP_NAME:${APP_NAME:Arudra CRM}}
+    origin: ${WEBAUTHN_ORIGIN:http://localhost:5173}
   mail:
     # From address on OTP emails. Defaults to the SMTP username when blank.
     from: ${MAIL_FROM:${MAIL_USERNAME:no-reply@arudra.com}}

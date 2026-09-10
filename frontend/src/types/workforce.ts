@@ -148,6 +148,7 @@ export interface EmployeeDetailsInput {
   salaryType?: string;
   shift?: string;
   attendanceRequired?: boolean;
+  attendanceMethod?: string; // GEO | OFFICE_DEVICE | ANY
   leavePolicy?: string;
   payrollEnabled?: boolean;
   pfNumber?: string;

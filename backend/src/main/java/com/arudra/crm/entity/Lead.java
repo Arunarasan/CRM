@@ -55,6 +55,9 @@ public class Lead extends BaseEntity {
     @Column(name = "lead_temperature", length = 20)
     private String leadTemperature; // Hot, Warm, Cold
 
+    @Column(name = "rating")
+    private Integer rating; // manual 1-5 star quality rating captured at creation
+
     // --- Customer Information ---
     @Column(name = "company_name", length = 150)
     private String companyName;
@@ -127,7 +130,10 @@ public class Lead extends BaseEntity {
 
     // --- Requirement Details ---
     @Column(name = "requirement_category", length = 100)
-    private String requirementCategory;
+    private String requirementCategory; // catalog category name chosen at capture
+
+    @Column(name = "requirement_product", length = 1000)
+    private String requirementProduct; // one or more catalog product names, comma-separated
 
     @Column(name = "project_description", columnDefinition = "TEXT")
     private String projectDescription;

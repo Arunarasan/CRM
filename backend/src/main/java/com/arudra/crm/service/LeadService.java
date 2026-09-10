@@ -264,6 +264,7 @@ public class LeadService {
         lead.setLeadSource(d.getLeadSource());
         lead.setPriority(d.getPriority());
         if (d.getLeadTemperature() != null) lead.setLeadTemperature(d.getLeadTemperature());
+        lead.setRating(d.getRating());
 
         // Customer
         lead.setCompanyName(d.getCompanyName());
@@ -292,6 +293,7 @@ public class LeadService {
 
         // Requirements
         lead.setRequirementCategory(d.getRequirementCategory());
+        lead.setRequirementProduct(d.getRequirementProduct());
         lead.setProjectDescription(d.getProjectDescription());
         lead.setCustomerRequirements(d.getCustomerRequirements());
         lead.setPreferredDesignStyle(d.getPreferredDesignStyle());
@@ -321,6 +323,9 @@ public class LeadService {
         lead.setPaymentPreference(d.getPaymentPreference());
         lead.setExpectedStartDate(d.getExpectedStartDate());
         lead.setExpectedEndDate(d.getExpectedEndDate());
+
+        // Follow-up (captured on the create form; keep it editable on update too)
+        lead.setNextFollowUpDate(d.getNextFollowUpDate());
 
         Lead updatedLead = leadRepository.save(lead);
         logActivity(updatedLead, "UPDATED", "Lead details updated.", currentUser);

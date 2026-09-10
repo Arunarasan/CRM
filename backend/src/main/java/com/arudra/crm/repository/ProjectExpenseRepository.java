@@ -35,6 +35,11 @@ public interface ProjectExpenseRepository extends JpaRepository<ProjectExpense, 
            "where e.project.id = :projectId and e.isDeleted = false")
     BigDecimal totalForProject(@Param("projectId") Long projectId);
 
+    /** Total of one source (e.g. MANUAL out-of-pocket expenses) booked on a project. */
+    @Query("select coalesce(sum(e.amount), 0) from ProjectExpense e " +
+           "where e.project.id = :projectId and e.source = :source and e.isDeleted = false")
+    BigDecimal totalForProjectBySource(@Param("projectId") Long projectId, @Param("source") String source);
+
     @Query("select e.category, coalesce(sum(e.amount), 0) from ProjectExpense e " +
            "where e.project.id = :projectId and e.isDeleted = false group by e.category")
     List<Object[]> totalsByCategoryForProject(@Param("projectId") Long projectId);

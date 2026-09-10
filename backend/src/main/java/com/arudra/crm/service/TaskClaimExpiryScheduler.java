@@ -1,15 +1,11 @@
 package com.arudra.crm.service;
 
-import com.arudra.crm.entity.TaskAssignment;
-import com.arudra.crm.repository.TaskAssignmentRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
-import java.time.LocalDateTime;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -33,7 +29,6 @@ public class TaskClaimExpiryScheduler {
     /** Assignment statuses meaning "claimed but not started" — the only ones eligible for release. */
     private static final List<String> HELD_NOT_STARTED = List.of("ASSIGNED", "ACCEPTED");
 
-    @Autowired private TaskAssignmentRepository assignmentRepository;
     @Autowired private EmployeeTaskService employeeTaskService;
 
     @Scheduled(fixedDelay = 60_000, initialDelay = 60_000)
@@ -41,16 +36,10 @@ public class TaskClaimExpiryScheduler {
         int holdMinutes = employeeTaskService.dataEntryHoldMinutes();
         if (holdMinutes <= 0) return; // feature disabled
 
-        LocalDateTime cutoff = LocalDateTime.now().minusMinutes(holdMinutes);
-        Set<Long> candidateTaskIds = new HashSet<>();
-        for (TaskAssignment a : assignmentRepository.findByStatusIn(HELD_NOT_STARTED)) {
-            if (a.getTask() == null || a.getStartedAt() != null) continue;
-            LocalDateTime claimed = "ACCEPTED".equals(a.getStatus()) && a.getAcceptedAt() != null
-                    ? a.getAcceptedAt() : a.getAssignedDate();
-            if (claimed == null || claimed.isAfter(cutoff)) continue; // still within the window
-            if (!employeeTaskService.isDataEntryLeadTask(a.getTask())) continue;
-            candidateTaskIds.add(a.getTask().getId());
-        }
+        // The scan runs inside its own read-only transaction (in EmployeeTaskService) so the lazy
+        // Task/TaskTemplate proxies on each held assignment can initialize. The release loop below
+        // stays non-transactional so releaseExpiredHold() opens its own read-write transaction.
+        Set<Long> candidateTaskIds = employeeTaskService.findExpiredHoldTaskIds(HELD_NOT_STARTED, holdMinutes);
 
         int released = 0;
         for (Long taskId : candidateTaskIds) {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { AlertTriangle, ChevronDown, X } from "lucide-react";
 import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -10,12 +10,18 @@ import {
   CONSTRUCTION_STATUSES, LEAD_SOURCES, LEAD_TYPES, PRIORITIES, REFERRAL_TYPES, TEMPERATURES,
   type Lead, type UserSummary,
 } from "./constants";
-import { CheckboxField, SectionTitle, SelectField, TextAreaField, TextField } from "./fields";
+import { CheckboxField, SectionTitle, SelectField, selectClass, StarRating, TextAreaField, TextField } from "./fields";
 import MultiImageCaptureField, { type CapturedImage } from "@/components/MultiImageCaptureField";
+import AudioCaptureField, { type CapturedAudio } from "@/components/AudioCaptureField";
 
 const EMPTY_FORM: Partial<Lead> = {
   name: "", mobileNumber: "", priority: "Medium", leadTemperature: "Warm", status: "New",
 };
+
+// Catalog rows the requirement pickers read from the public website catalog endpoints.
+type CatalogCategory = { id: number; name: string; slug: string };
+type CatalogProduct = { id: number; name: string; slug: string; categorySlug?: string };
+type DupLead = { id: number; leadNumber: string; name: string; status: string; mobileNumber: string };
 
 export default function LeadFormDialog({
   open, onOpenChange, lead, users, onSaved,
@@ -28,8 +34,12 @@ export default function LeadFormDialog({
 }) {
   const [form, setForm] = useState<Partial<Lead>>(EMPTY_FORM);
   const [images, setImages] = useState<CapturedImage[]>([]);
+  const [audioClips, setAudioClips] = useState<CapturedAudio[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [categories, setCategories] = useState<CatalogCategory[]>([]);
+  const [products, setProducts] = useState<CatalogProduct[]>([]);
+  const [dupLeads, setDupLeads] = useState<DupLead[]>([]);
   // Advanced sections (project, budget, assignment, images) stay collapsed for a new lead so
   // the create form is short; an existing lead opens expanded so all its data is visible.
   const [showMore, setShowMore] = useState(false);
@@ -38,37 +48,58 @@ export default function LeadFormDialog({
     if (open) {
       setForm(lead ? { ...lead } : { ...EMPTY_FORM });
       setImages([]);
+      setAudioClips([]);
       setError("");
       setShowMore(!!lead);
+      setDupLeads([]);
     }
   }, [open, lead]);
 
+  // Requirement pickers read the public website catalog (categories + products). Load once
+  // when the dialog first opens; failures leave the dropdowns empty but never block saving.
+  useEffect(() => {
+    if (!open || categories.length) return;
+    api.get("/public/categories").then((res) => setCategories(res.data || [])).catch(() => {});
+    api.get("/public/products").then((res) => setProducts(res.data || [])).catch(() => {});
+  }, [open, categories.length]);
+
+  const selectedCategory = categories.find((c) => c.name === form.requirementCategory);
+  const productOptions = products
+    .filter((p) => !selectedCategory || p.categorySlug === selectedCategory.slug)
+    .map((p) => p.name);
+
+  // A lead can carry several products; they are stored comma-separated in requirementProduct.
+  // The category above only filters which products the picker lists — chosen products persist
+  // even after the category is switched, so a lead can span categories.
+  const selectedProducts = (form.requirementProduct || "").split(",").map((s) => s.trim()).filter(Boolean);
+  const applyProducts = (names: string[]) => setForm((f) => ({ ...f, requirementProduct: names.join(", ") }));
+  const addProduct = (name: string) => {
+    if (name && !selectedProducts.includes(name)) applyProducts([...selectedProducts, name]);
+  };
+  const removeProduct = (name: string) => applyProducts(selectedProducts.filter((p) => p !== name));
+
   const set = (key: keyof Lead) => (value: any) => setForm((f) => ({ ...f, [key]: value }));
 
-  // Reuse a customer the system already knows: pull their full record and prefill the lead.
-  const prefillFromCustomer = (customerId: number) => {
-    api.get(`/customers/${customerId}`).then((res) => {
-      const c = res.data || {};
-      setForm((f) => ({
-        ...f,
-        name: c.name || f.name,
-        companyName: c.companyName ?? f.companyName,
-        contactPerson: c.contactPersonName ?? f.contactPerson,
-        mobileNumber: c.phone ?? f.mobileNumber,
-        alternateMobile: c.alternatePhone ?? f.alternateMobile,
-        whatsappNumber: c.whatsappNumber ?? f.whatsappNumber,
-        email: c.email ?? f.email,
-        gstNumber: c.gstNumber ?? f.gstNumber,
-        address: c.billingAddress ?? f.address,
-        siteAddress: c.siteAddress ?? f.siteAddress,
-        city: c.city ?? f.city,
-        district: c.district ?? f.district,
-        state: c.state ?? f.state,
-        pincode: c.pincode ?? f.pincode,
-      }));
-      toast.success(`Prefilled from ${c.name || "customer"}`);
-    }).catch(() => toast.error("Could not load that customer's details."));
-  };
+  // Live duplicate guard: as a new lead's phone number is entered, look for existing leads on
+  // the same number so the user can open that lead instead of creating a duplicate. Never blocks.
+  useEffect(() => {
+    if (lead) { setDupLeads([]); return; } // only while creating
+    const digits = (form.mobileNumber || "").replace(/\D/g, "");
+    if (digits.length < 7) { setDupLeads([]); return; }
+    const t = setTimeout(() => {
+      api.get(`/leads?search=${encodeURIComponent(digits)}&size=5`)
+        .then((res) => {
+          const rows = (res.data?.content || []) as DupLead[];
+          setDupLeads(rows.filter((r) =>
+            [r.mobileNumber, (r as any).alternateMobile, (r as any).whatsappNumber]
+              .filter(Boolean)
+              .some((m: string) => m.replace(/\D/g, "").includes(digits))
+          ));
+        })
+        .catch(() => setDupLeads([]));
+    }, 400);
+    return () => clearTimeout(t);
+  }, [form.mobileNumber, lead]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,7 +108,7 @@ export default function LeadFormDialog({
     const payload: any = { ...form };
     // strip empty strings for numeric/date fields so Jackson doesn't choke
     ["estimatedBudget", "minimumBudget", "maximumBudget", "expectedProjectValue",
-      "areaSqft", "expectedWorkArea", "floorCount"].forEach((k) => {
+      "areaSqft", "expectedWorkArea", "floorCount", "rating"].forEach((k) => {
       if (payload[k] === "" || payload[k] === null) delete payload[k];
     });
     ["expectedStartDate", "expectedEndDate", "preferredCompletionDate", "nextFollowUpDate"].forEach((k) => {
@@ -116,15 +147,25 @@ export default function LeadFormDialog({
         const savedLead = res.data;
         // Persist any images captured on the form as LeadDocuments so they travel to the
         // project on conversion (copyLeadDocumentsToProject reads lead documents).
-        if (images.length && savedLead?.id) {
-          await Promise.all(images.map((img) =>
-            leadApi.addDocument(savedLead.id, {
-              fileName: img.fileName,
-              fileUrl: img.url,
-              category: "Site Photos",
-              documentType: "Image",
-            }).catch((e) => console.error("Failed to attach lead image", e))
-          ));
+        if (savedLead?.id && (images.length || audioClips.length)) {
+          await Promise.all([
+            ...images.map((img) =>
+              leadApi.addDocument(savedLead.id, {
+                fileName: img.fileName,
+                fileUrl: img.url,
+                category: "Site Photos",
+                documentType: "Image",
+              }).catch((e) => console.error("Failed to attach lead image", e))
+            ),
+            ...audioClips.map((clip) =>
+              leadApi.addDocument(savedLead.id, {
+                fileName: clip.fileName,
+                fileUrl: clip.url,
+                category: "Voice Notes",
+                documentType: "Audio",
+              }).catch((e) => console.error("Failed to attach lead audio", e))
+            ),
+          ]);
         }
         toast.success(lead ? "Lead updated" : `Lead ${savedLead?.leadNumber || ""} created`.trim());
         onOpenChange(false);
@@ -164,23 +205,98 @@ export default function LeadFormDialog({
         <DialogHeader>
           <DialogTitle>{lead ? `Edit Lead ${lead.leadNumber}` : "Create New Lead"}</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {!lead && (
-            <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground">
-                Existing customer? Link them to auto-fill their details (optional)
-              </label>
-              <ExistingCustomerSearch onPick={prefillFromCustomer} />
+        <form onSubmit={handleSubmit} className="space-y-5">
+          {/* Essentials — the only fields shown when creating a lead. */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <TextField label="Customer Name" required value={form.name} onChange={set("name")} placeholder="Full name / lead title" />
+            <TextField label="Phone Number" required type="tel" inputMode="tel" autoComplete="tel" value={form.mobileNumber} onChange={set("mobileNumber")} placeholder="10-digit mobile" />
+          </div>
+
+          {/* Duplicate guard: existing leads on the same number, so a duplicate isn't created. */}
+          {dupLeads.length > 0 && (
+            <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 text-sm text-amber-900">
+              <div className="flex items-center gap-1.5 font-medium">
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                This number is already on {dupLeads.length} lead{dupLeads.length > 1 ? "s" : ""}
+              </div>
+              <div className="mt-1.5 space-y-1">
+                {dupLeads.map((l) => (
+                  <a
+                    key={l.id}
+                    href={`${import.meta.env.BASE_URL}leads/${l.id}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center justify-between rounded-md bg-white/70 px-2 py-1 hover:bg-white transition-colors"
+                  >
+                    <span className="font-medium">{l.leadNumber} · {l.name}</span>
+                    <span className="text-xs text-amber-700">{l.status} ↗</span>
+                  </a>
+                ))}
+              </div>
             </div>
           )}
 
-          <SectionTitle>Lead Details</SectionTitle>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            <TextField label="Lead Title / Customer Name" required value={form.name} onChange={set("name")} />
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <SelectField label="Lead Source" value={form.leadSource} onChange={set("leadSource")} options={LEAD_SOURCES} />
-            <SelectField label="Lead Type" value={form.leadType} onChange={set("leadType")} options={LEAD_TYPES} />
-            <SelectField label="Priority" value={form.priority} onChange={set("priority")} options={PRIORITIES} allowEmpty={false} />
-            <SelectField label="Lead Temperature" value={form.leadTemperature} onChange={set("leadTemperature")} options={TEMPERATURES} allowEmpty={false} />
+            <SelectField
+              label="Requirement Category"
+              value={form.requirementCategory}
+              onChange={set("requirementCategory")}
+              options={categories.map((c) => c.name)}
+            />
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Products</label>
+              {/* Add-and-reset picker: choosing an option appends it, then the select clears. */}
+              <select
+                className={selectClass}
+                value=""
+                onChange={(e) => addProduct(e.target.value)}
+              >
+                <option value="">Add a product...</option>
+                {productOptions.filter((p) => !selectedProducts.includes(p)).map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {selectedProducts.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {selectedProducts.map((p) => (
+                <span key={p} className="inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary px-2.5 py-1 text-xs font-medium">
+                  {p}
+                  <button type="button" onClick={() => removeProduct(p)} aria-label={`Remove ${p}`} className="hover:text-destructive">
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+
+          <TextAreaField label="Address" rows={2} value={form.address} onChange={set("address")} />
+
+          {/* Attachments — available right at creation so field/office staff can capture site
+              photos and record a voice note describing the requirement without expanding. */}
+          <div className="rounded-lg border bg-muted/20 p-3 space-y-4">
+            <SectionTitle>Photos &amp; Voice Notes</SectionTitle>
+            <MultiImageCaptureField
+              label="Capture or add photos (property, site, reference)"
+              module="LEAD"
+              value={images}
+              onChange={setImages}
+            />
+            <AudioCaptureField
+              label="Record or upload a voice note"
+              module="LEAD"
+              value={audioClips}
+              onChange={setAudioClips}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <TextField label="Next Follow-up Date" type="date" value={form.nextFollowUpDate} onChange={set("nextFollowUpDate")} />
+            <TextField label="Estimated Budget (₹)" type="number" inputMode="numeric" value={form.estimatedBudget} onChange={set("estimatedBudget")} />
+            <StarRating label="Rating" value={form.rating} onChange={set("rating")} />
           </div>
 
           {/* When the lead came in via a referral, capture who referred it (an existing customer,
@@ -257,39 +373,42 @@ export default function LeadFormDialog({
             </div>
           )}
 
-          <SectionTitle>Customer Information</SectionTitle>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            <TextField label="Company Name" value={form.companyName} onChange={set("companyName")} />
-            <TextField label="Contact Person" value={form.contactPerson} onChange={set("contactPerson")} />
-            <TextField label="Primary Mobile" required type="tel" inputMode="tel" autoComplete="tel" value={form.mobileNumber} onChange={set("mobileNumber")} />
-            <TextField label="Alternative Mobile" type="tel" inputMode="tel" value={form.alternateMobile} onChange={set("alternateMobile")} />
-            <TextField label="WhatsApp Number" type="tel" inputMode="tel" value={form.whatsappNumber} onChange={set("whatsappNumber")} />
-            <TextField label="Email" type="email" value={form.email} onChange={set("email")} />
-            <TextField label="GST Number" value={form.gstNumber} onChange={set("gstNumber")} />
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="col-span-2">
-              <TextAreaField label="Address" rows={2} value={form.address} onChange={set("address")} />
-            </div>
-            <TextField label="City" value={form.city} onChange={set("city")} />
-            <TextField label="District" value={form.district} onChange={set("district")} />
-            <TextField label="State" value={form.state} onChange={set("state")} />
-            <TextField label="Pincode" inputMode="numeric" value={form.pincode} onChange={set("pincode")} />
-            <div className="col-span-2">
-              <TextAreaField label="Project / Site Address" rows={2} value={form.siteAddress} onChange={set("siteAddress")} />
-            </div>
-          </div>
-
           {!showMore ? (
             <button
               type="button"
               onClick={() => setShowMore(true)}
               className="flex items-center gap-1.5 text-sm text-primary hover:underline"
             >
-              <ChevronDown className="h-4 w-4" /> Add project, budget &amp; assignment details
+              <ChevronDown className="h-4 w-4" /> Add contact, address, project &amp; budget details
             </button>
           ) : (
           <>
+          <SectionTitle>Classification</SectionTitle>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            <SelectField label="Lead Type" value={form.leadType} onChange={set("leadType")} options={LEAD_TYPES} />
+            <SelectField label="Priority" value={form.priority} onChange={set("priority")} options={PRIORITIES} allowEmpty={false} />
+            <SelectField label="Lead Temperature" value={form.leadTemperature} onChange={set("leadTemperature")} options={TEMPERATURES} allowEmpty={false} />
+          </div>
+
+          <SectionTitle>Customer Information</SectionTitle>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            <TextField label="Company Name" value={form.companyName} onChange={set("companyName")} />
+            <TextField label="Contact Person" value={form.contactPerson} onChange={set("contactPerson")} />
+            <TextField label="Alternative Mobile" type="tel" inputMode="tel" value={form.alternateMobile} onChange={set("alternateMobile")} />
+            <TextField label="WhatsApp Number" type="tel" inputMode="tel" value={form.whatsappNumber} onChange={set("whatsappNumber")} />
+            <TextField label="Email" type="email" value={form.email} onChange={set("email")} />
+            <TextField label="GST Number" value={form.gstNumber} onChange={set("gstNumber")} />
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <TextField label="City" value={form.city} onChange={set("city")} />
+            <TextField label="District" value={form.district} onChange={set("district")} />
+            <TextField label="State" value={form.state} onChange={set("state")} />
+            <TextField label="Pincode" inputMode="numeric" value={form.pincode} onChange={set("pincode")} />
+            <div className="col-span-2 md:col-span-4">
+              <TextAreaField label="Project / Site Address" rows={2} value={form.siteAddress} onChange={set("siteAddress")} />
+            </div>
+          </div>
+
           <SectionTitle>Property & Requirements</SectionTitle>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             <TextField label="Property Type" value={form.propertyType} onChange={set("propertyType")} placeholder="e.g. Flat, Independent House" />
@@ -320,7 +439,6 @@ export default function LeadFormDialog({
 
           <SectionTitle>Budget & Timeline</SectionTitle>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            <TextField label="Estimated Budget (₹)" type="number" value={form.estimatedBudget} onChange={set("estimatedBudget")} />
             <TextField label="Expected Project Value (₹)" type="number" value={form.expectedProjectValue} onChange={set("expectedProjectValue")} />
             <TextField label="Expected Start Date" type="date" value={form.expectedStartDate} onChange={set("expectedStartDate")} />
             <TextField label="Expected Completion" type="date" value={form.expectedEndDate} onChange={set("expectedEndDate")} />
@@ -333,13 +451,6 @@ export default function LeadFormDialog({
             {userPicker("Engineer", "assignedEngineer")}
           </div>
 
-          <SectionTitle>Property / Site Images</SectionTitle>
-          <MultiImageCaptureField
-            label="Capture or add photos (property, site, reference)"
-            module="LEAD"
-            value={images}
-            onChange={setImages}
-          />
           </>
           )}
 

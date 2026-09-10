@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Loader2, Save, KeyRound, Moon, Sun, Globe, BellRing, Clock, CheckCircle2, XCircle, Check } from 'lucide-react';
+import { Loader2, Save, KeyRound, Moon, Sun, Globe, BellRing, Clock, CheckCircle2, XCircle, Check, Fingerprint, Trash2, Plus } from 'lucide-react';
 import { employeePortalApi } from '@/api/employeePortalApi';
 import { ProfileChangeRequest } from '@/types/employeePortal';
 import ImageCaptureField from '@/components/ImageCaptureField';
 import { PortalHeader } from './_shared';
+import { register as webauthnRegister, platformAuthenticatorAvailable, webauthnSupported, secureContextOk, describeWebauthnError } from '@/lib/webauthn';
 import { Theme, getTheme, setTheme, getNotifPrefs, setNotifPrefs, NotifPrefs } from '@/lib/theme';
 import { useT, Lang } from '@/i18n';
 
@@ -29,6 +30,138 @@ function Field({ label, value, onChange, placeholder }: { label: string; value: 
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return <h3 className="px-4 pb-1 pt-5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{children}</h3>;
+}
+
+type Cred = { id: number; deviceLabel: string; lastUsedAt: string | null; createdAt: string | null };
+
+/**
+ * Device-biometric enrolment for attendance. Registers this phone/tablet's fingerprint (or face /
+ * Windows Hello) as a WebAuthn credential so office-device clock-ins verify without a password.
+ */
+function BiometricSection() {
+  const [creds, setCreds] = useState<Cred[]>([]);
+  const [available, setAvailable] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  const [err, setErr] = useState('');
+  const [method, setMethod] = useState<string>('GEO');
+  const [requested, setRequested] = useState<string | null>(null);
+  const [switching, setSwitching] = useState(false);
+
+  const load = () => employeePortalApi.webauthnCredentials().then(setCreds).catch(() => setCreds([]));
+  const loadStatus = () => employeePortalApi.timeStatus().then((s) => {
+    setMethod(s.attendanceMethod ?? 'GEO');
+    setRequested(s.attendanceMethodRequested ?? null);
+  }).catch(() => {});
+  useEffect(() => { load(); loadStatus(); platformAuthenticatorAvailable().then(setAvailable); }, []);
+
+  const requestBiometric = async () => {
+    setMsg(''); setErr(''); setSwitching(true);
+    try {
+      const s = await employeePortalApi.requestBiometricAttendance();
+      setRequested(s.attendanceMethodRequested ?? 'ANY');
+      setMsg('Requested. An admin will approve biometric attendance for you.');
+    } catch (e: any) { setErr(e?.message || 'Could not send the request.'); }
+    finally { setSwitching(false); }
+  };
+
+  const cancelRequest = async () => {
+    setMsg(''); setErr(''); setSwitching(true);
+    try { const s = await employeePortalApi.cancelMethodRequest(); setRequested(s.attendanceMethodRequested ?? null); }
+    catch (e: any) { setErr(e?.message || 'Could not cancel.'); }
+    finally { setSwitching(false); }
+  };
+
+  const biometricActive = method === 'OFFICE_DEVICE' || method === 'ANY';
+
+  const registerDevice = async () => {
+    setMsg(''); setErr('');
+    if (!secureContextOk()) { setErr(describeWebauthnError({})); return; }
+    setBusy(true);
+    try {
+      const options = await employeePortalApi.webauthnRegisterOptions();
+      const att = await webauthnRegister(options);
+      const label = (typeof navigator !== 'undefined' && /iPhone|iPad|Android|Mobile/.test(navigator.userAgent))
+        ? 'My phone' : 'This device';
+      await employeePortalApi.webauthnRegisterVerify({ ...att, deviceLabel: label });
+      setMsg('Device registered. You can now clock in with your fingerprint.');
+      load();
+    } catch (e: any) {
+      // Server-side failure carries a message; browser DOMExceptions get friendly guidance.
+      setErr(e?.response?.data?.message || describeWebauthnError(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const removeCred = async (id: number) => {
+    if (!confirm('Remove this device?')) return;
+    try { await employeePortalApi.webauthnDeleteCredential(id); setCreds((c) => c.filter((x) => x.id !== id)); }
+    catch (e: any) { setErr(e?.message || 'Could not remove device.'); }
+  };
+
+  if (!webauthnSupported()) return null;
+  const insecure = !secureContextOk();
+
+  return (
+    <div className="mx-3 flex flex-col gap-3 rounded-xl border bg-card p-4 shadow-sm">
+      {/* Attendance mode — request a switch to biometric (admin-approved) */}
+      <div className="rounded-lg border bg-muted/30 p-3">
+        <p className="text-xs font-medium">
+          Attendance mode: <span className="font-semibold">{biometricActive ? 'Biometric enabled' : 'Location (geo-fence)'}</span>
+        </p>
+        {biometricActive ? (
+          <p className="mt-1 text-[11px] text-emerald-600">You can clock in with your fingerprint on a registered device.</p>
+        ) : requested ? (
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <span className="text-[11px] text-amber-600">Requested — awaiting admin approval.</span>
+            <button onClick={cancelRequest} disabled={switching} className="text-[11px] font-medium text-muted-foreground underline disabled:opacity-60">Cancel</button>
+          </div>
+        ) : (
+          <button onClick={requestBiometric} disabled={switching}
+            className="mt-2 flex items-center gap-2 rounded-lg border border-primary/40 bg-primary/5 px-3 py-2 text-xs font-semibold text-primary active:scale-[0.99] disabled:opacity-60">
+            {switching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Fingerprint className="h-4 w-4" />} Switch to biometric attendance
+          </button>
+        )}
+      </div>
+
+      <p className="flex items-center gap-2 text-[11px] text-muted-foreground">
+        <Fingerprint className="h-4 w-4 text-primary" />
+        Register your fingerprint / face on this device to verify office clock-ins.
+      </p>
+
+      {creds.length > 0 && (
+        <ul className="flex flex-col divide-y rounded-lg border">
+          {creds.map((c) => (
+            <li key={c.id} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
+              <span className="flex items-center gap-2"><Fingerprint className="h-4 w-4 text-emerald-600" /> {c.deviceLabel}</span>
+              <button onClick={() => removeCred(c.id)} className="rounded p-1 text-muted-foreground hover:text-destructive" title="Remove">
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {insecure && (
+        <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          Biometric needs a secure (HTTPS) connection. Open the portal at its https:// address (not an IP) to register.
+        </p>
+      )}
+      {!insecure && available === false && (
+        <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          This device has no fingerprint / face unlock set up, so biometric clock-in isn't available here.
+        </p>
+      )}
+      {err && <p className="text-xs text-destructive">{err}</p>}
+      {msg && <p className="text-xs text-emerald-600">{msg}</p>}
+
+      <button onClick={registerDevice} disabled={busy || insecure || available === false}
+        className="flex items-center justify-center gap-2 rounded-lg bg-primary py-2.5 text-sm font-semibold text-primary-foreground active:scale-[0.99] disabled:opacity-60">
+        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Register this device
+      </button>
+    </div>
+  );
 }
 
 export default function Settings() {
@@ -176,6 +309,9 @@ export default function Settings() {
           </div>
         ))}
       </div>
+
+      <SectionTitle>Device biometric</SectionTitle>
+      <BiometricSection />
 
       <SectionTitle>{t('portal.changePassword')}</SectionTitle>
       <div className="mx-3 flex flex-col gap-3 rounded-xl border bg-card p-4 shadow-sm">

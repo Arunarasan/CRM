@@ -38,7 +38,7 @@ export const TASK_TYPES = [
 
 export const DOCUMENT_CATEGORIES = [
   "Property Images", "Reference Images", "Floor Plans", "Customer Documents",
-  "Site Photos", "Videos", "Agreements", "Other",
+  "Site Photos", "Voice Notes", "Videos", "Agreements", "Other",
 ];
 
 export const COMMUNICATION_TYPES = [
@@ -214,6 +214,7 @@ export interface Lead {
   status: string;
   stage?: string;
   leadTemperature?: string;
+  rating?: number; // manual 1-5 star quality rating
   companyName?: string;
   contactPerson?: string;
   mobileNumber: string;
@@ -236,6 +237,7 @@ export interface Lead {
   expectedWorkArea?: number;
   currentConstructionStage?: string;
   requirementCategory?: string;
+  requirementProduct?: string;
   projectDescription?: string;
   customerRequirements?: string;
   preferredDesignStyle?: string;

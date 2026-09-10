@@ -168,12 +168,85 @@ export interface LeadFormPayload {
   data?: Record<string, string | number | boolean | null>;
 }
 
+/** Read-only snapshot of the original lead (as captured), shown on lead-workflow tasks so the field
+ *  employee has full context. Mirrors EmployeeTaskService.toLeadInfo — all fields optional/nullable. */
+export interface LeadInfo {
+  id?: number;
+  leadNumber?: string | null;
+  name?: string | null;
+  companyName?: string | null;
+  contactPerson?: string | null;
+  leadType?: string | null;
+  leadSource?: string | null;
+  priority?: string | null;
+  status?: string | null;
+  stage?: string | null;
+  leadTemperature?: string | null;
+  rating?: number | null;
+  mobileNumber?: string | null;
+  alternateMobile?: string | null;
+  whatsappNumber?: string | null;
+  email?: string | null;
+  gstNumber?: string | null;
+  address?: string | null;
+  city?: string | null;
+  district?: string | null;
+  state?: string | null;
+  pincode?: string | null;
+  landmark?: string | null;
+  googleMapLocation?: string | null;
+  propertyType?: string | null;
+  propertyName?: string | null;
+  siteAddress?: string | null;
+  currentConstructionStage?: string | null;
+  floorCount?: number | null;
+  areaSqft?: number | string | null;
+  expectedWorkArea?: number | string | null;
+  requirementCategory?: string | null;
+  requirementProduct?: string | null;
+  projectDescription?: string | null;
+  customerRequirements?: string | null;
+  roomsRequired?: string | null;
+  specialRequests?: string | null;
+  preferredDesignStyle?: string | null;
+  preferredMaterial?: string | null;
+  preferredColorTheme?: string | null;
+  estimatedDuration?: string | null;
+  preferredCompletionDate?: string | null;
+  scope?: string[];
+  estimatedBudget?: number | string | null;
+  minimumBudget?: number | string | null;
+  maximumBudget?: number | string | null;
+  expectedProjectValue?: number | string | null;
+  paymentPreference?: string | null;
+  expectedStartDate?: string | null;
+  expectedEndDate?: string | null;
+  nextFollowUpDate?: string | null;
+  followUpNotes?: string | null;
+  siteVisitDate?: string | null;
+  referralType?: string | null;
+  referrerName?: string | null;
+  referrerContact?: string | null;
+  referralNotes?: string | null;
+  remarks?: string | null;
+  media?: LeadMediaItem[];
+}
+
+/** A photo / voice note / video / file attached to the lead at capture. */
+export interface LeadMediaItem {
+  fileName?: string | null;
+  fileUrl: string;
+  category?: string | null;
+  kind: 'IMAGE' | 'AUDIO' | 'VIDEO' | 'FILE';
+}
+
 export interface TaskDetail extends TaskCard {
   description: string | null;
   assignmentType: 'SINGLE_EMPLOYEE' | 'MULTIPLE_EMPLOYEES' | 'TEAM' | null;
   completionRule: string | null;
   formType?: LeadFormType | null;
   leadId?: number | null;
+  lead?: LeadInfo | null;
   moduleDriven?: boolean;
   moduleLink?: string | null;
   moduleLabel?: string | null;

@@ -20,6 +20,16 @@ const GRID = "grid grid-cols-2 md:grid-cols-4 gap-6";
 
 const GENDERS = ["MALE", "FEMALE", "OTHER"];
 
+// Attendance clock-in verification method (Employee.attendanceMethod).
+const ATT_METHOD_OPTIONS = [
+  { value: "GEO", label: "Geo-fence (own phone)" },
+  { value: "OFFICE_DEVICE", label: "Office device (biometric)" },
+  { value: "ANY", label: "Either" },
+];
+const ATT_METHOD_LABELS: Record<string, string> = {
+  GEO: "Geo-fence", OFFICE_DEVICE: "Office device", ANY: "Either",
+};
+
 // --- shared cells (identical outer markup in view/edit so the grid never shifts) ---------------
 function InfoItem({ label, value }: { label: string; value?: React.ReactNode }) {
   return (
@@ -359,6 +369,7 @@ function EmploymentCard({ detail, meta, canEdit, save }: CardProps & { meta: Wor
       shift: emp.shift ?? "",
       salaryType: emp.salaryType ?? "",
       attendanceRequired: emp.attendanceRequired ?? true,
+      attendanceMethod: emp.attendanceMethod ?? "GEO",
       leavePolicy: emp.leavePolicy ?? "",
     }),
     (d) => save({}, {
@@ -368,6 +379,7 @@ function EmploymentCard({ detail, meta, canEdit, save }: CardProps & { meta: Wor
       shift: d.shift || undefined,
       salaryType: d.salaryType || undefined,
       attendanceRequired: d.attendanceRequired,
+      attendanceMethod: d.attendanceMethod || undefined,
       leavePolicy: d.leavePolicy || undefined,
     }),
   );
@@ -400,6 +412,9 @@ function EmploymentCard({ detail, meta, canEdit, save }: CardProps & { meta: Wor
                    onChange={(ev) => edit.set("attendanceRequired")(ev.target.checked)} />
             Required
           </label>
+        </Cell>
+        <Cell label="Clock-in verification" editing={e} view={ATT_METHOD_LABELS[emp.attendanceMethod] ?? "Geo-fence"}>
+          <SelectInput value={edit.draft.attendanceMethod} onChange={edit.set("attendanceMethod")} options={ATT_METHOD_OPTIONS} />
         </Cell>
         <Cell label="Leave policy" editing={e} view={emp.leavePolicy}>
           <TextInput value={edit.draft.leavePolicy} onChange={edit.set("leavePolicy")} />

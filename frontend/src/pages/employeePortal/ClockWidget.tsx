@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { LogIn, LogOut, Coffee, Play, Loader2, TrendingUp, ArrowRight } from 'lucide-react';
+import { LogIn, LogOut, Coffee, Play, Loader2, TrendingUp, ArrowRight, MapPin, ShieldCheck, ShieldAlert } from 'lucide-react';
 import { employeePortalApi } from '@/api/employeePortalApi';
 import { TimeStatus } from '@/types/employeePortal';
+import { assert as webauthnAssert } from '@/lib/webauthn';
+import { getBestPosition } from '@/lib/geo';
 import { inr } from './_shared';
 
 /**
@@ -16,6 +18,7 @@ export default function ClockWidget({ onChange }: { onChange?: () => void }) {
   const [status, setStatus] = useState<TimeStatus | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState('');
+  const [geoAccuracy, setGeoAccuracy] = useState<number | null>(null); // live best-fix accuracy while locating
   const [, forceTick] = useState(0);
   const tickRef = useRef<number | null>(null);
   // Wall-clock instant of the last server sync — the running timer/earnings project forward from here.
@@ -47,6 +50,34 @@ export default function ClockWidget({ onChange }: { onChange?: () => void }) {
 
   const sessions = status?.sessions ?? [];
   const sessionCount = status?.sessionsToday ?? 0;
+  const lastSession = sessions.length > 0 ? sessions[sessions.length - 1] : null;
+
+  // Clock in with the device's best available location (samples GPS for a few seconds to converge)
+  // plus, when the employee's method is office-device / either and a credential is registered, a
+  // WebAuthn biometric assertion. Both are best-effort — a denied fix or cancelled biometric still
+  // clocks in; the server flags it.
+  const clockInWithGeo = async () => {
+    setGeoAccuracy(null);
+    const geo = await getBestPosition({ onProgress: (f) => setGeoAccuracy(Math.round(f.accuracy)) });
+    const deviceInfo = typeof navigator !== 'undefined' ? navigator.userAgent?.slice(0, 250) : undefined;
+
+    const method = status?.attendanceMethod ?? 'GEO';
+    const wantsBiometric = (method === 'OFFICE_DEVICE' || method === 'ANY') && !!status?.biometricRegistered;
+    let assertion;
+    if (wantsBiometric) {
+      try {
+        const options = await employeePortalApi.webauthnAssertOptions();
+        assertion = (await webauthnAssert(options)) ?? undefined;
+      } catch {
+        assertion = undefined; // fall through — server records it unverified / flagged
+      }
+    }
+    await employeePortalApi.clockIn({
+      lat: geo?.lat, lng: geo?.lng,
+      accuracyMeters: geo?.accuracy != null ? Math.round(geo.accuracy) : undefined,
+      deviceInfo, assertion,
+    });
+  };
 
   // Seconds worked so far today = server total (all sessions) + time elapsed since the last sync
   // while running. todayHours already sums closed + open sessions up to the sync instant.
@@ -111,12 +142,31 @@ export default function ClockWidget({ onChange }: { onChange?: () => void }) {
 
         {error && <p className="mt-2 rounded-md bg-black/25 p-2 text-xs text-amber-100">{error}</p>}
 
+        {/* Verification result of the latest session */}
+        {lastSession?.flagged ? (
+          <div className="mt-3 flex items-start gap-2 rounded-xl bg-amber-400/20 px-3 py-2 text-[12px] text-amber-50">
+            <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-200" />
+            <span><b>Sent for approval.</b> {lastSession.flagReason || 'Attendance could not be auto-verified.'}</span>
+          </div>
+        ) : lastSession?.verified && (lastSession.verificationMethod === 'GEO' || lastSession.verificationMethod === 'BIOMETRIC') ? (
+          <div className="mt-3 flex items-center gap-2 rounded-xl bg-white/10 px-3 py-2 text-[12px] text-emerald-50">
+            <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-200" />
+            <span>{lastSession.verificationMethod === 'BIOMETRIC' ? 'Biometric verified.' : 'Location verified.'}</span>
+          </div>
+        ) : !clockedIn && sessionCount === 0 ? (
+          <p className="mt-3 flex items-center gap-1.5 text-[11px] text-emerald-100/80">
+            <MapPin className="h-3 w-3" /> Your location is checked when you clock in.
+          </p>
+        ) : null}
+
         {/* Actions */}
         <div className="mt-3 grid grid-cols-2 gap-2">
           {!clockedIn && (
-            <button onClick={() => act('in', () => employeePortalApi.clockIn())} disabled={!!busy}
+            <button onClick={() => act('in', clockInWithGeo)} disabled={!!busy}
               className="col-span-2 flex items-center justify-center gap-2 rounded-xl bg-white py-3 text-sm font-bold text-emerald-700 shadow-sm active:scale-[0.99] disabled:opacity-60">
-              {busy === 'in' ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogIn className="h-4 w-4" />} {sessionCount > 0 ? 'Clock In Again' : 'Clock In'}
+              {busy === 'in'
+                ? <><Loader2 className="h-4 w-4 animate-spin" /> Locating…{geoAccuracy != null ? ` ±${geoAccuracy}m` : ''}</>
+                : <><LogIn className="h-4 w-4" /> {sessionCount > 0 ? 'Clock In Again' : 'Clock In'}</>}
             </button>
           )}
           {clockedIn && !onBreak && (

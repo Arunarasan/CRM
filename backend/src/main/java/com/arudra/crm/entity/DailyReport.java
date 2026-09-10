@@ -73,6 +73,20 @@ public class DailyReport extends BaseEntity {
     @Column(name = "manager_comment", columnDefinition = "TEXT")
     private String managerComment;
 
+    // Cash collected from the customer on site, logged in this report. A positive amount on a
+    // project report spawns a PENDING_APPROVAL customer payment; cashPaymentId links to it.
+    @Column(name = "cash_collected", precision = 15, scale = 2)
+    private BigDecimal cashCollected;
+
+    @Column(name = "cash_payment_method", length = 50)
+    private String cashPaymentMethod;
+
+    @Column(name = "cash_reference", length = 100)
+    private String cashReference;
+
+    @Column(name = "cash_payment_id")
+    private Long cashPaymentId;
+
     @Column(nullable = false, length = 20)
     private String status = "SUBMITTED"; // SUBMITTED, REVIEWED
 

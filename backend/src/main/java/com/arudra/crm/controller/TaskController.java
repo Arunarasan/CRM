@@ -117,6 +117,14 @@ public class TaskController {
                 (String) body.get("description")));
     }
 
+    /** Set a task's completion percent (0-100) and optional stage — drives the project handover bar. */
+    @PutMapping("/{id}/progress")
+    public ResponseEntity<Task> updateTaskProgress(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+        Integer progress = body.get("progress") != null ? ((Number) body.get("progress")).intValue() : null;
+        String stage = (String) body.get("stage");
+        return ResponseEntity.ok(taskService.updateTaskProgress(id, progress, stage));
+    }
+
     @PutMapping("/{id}/status")
     public ResponseEntity<Void> updateTaskStatusAndOrder(
             @PathVariable Long id, 

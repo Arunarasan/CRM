@@ -40,8 +40,23 @@ export const employeePortalApi = {
 
   // Time-clock + hourly earnings
   timeStatus: () => api.get<TimeStatus>(`${BASE}/time`).then((r) => r.data),
-  clockIn: (payload?: { lat?: number; lng?: number; locationLabel?: string; deviceInfo?: string }) =>
-    api.post<TimeStatus>(`${BASE}/attendance/clock-in`, payload ?? {}).then((r) => r.data),
+  clockIn: (payload?: {
+    lat?: number; lng?: number; accuracyMeters?: number; locationLabel?: string; deviceInfo?: string;
+    assertion?: { credentialId: string; authenticatorData: string; clientDataJSON: string; signature: string; userHandle: string | null };
+  }) => api.post<TimeStatus>(`${BASE}/attendance/clock-in`, payload ?? {}).then((r) => r.data),
+
+  // Self-service switch to biometric attendance (admin-approved)
+  requestBiometricAttendance: () => api.post<TimeStatus>(`${BASE}/attendance/request-biometric`).then((r) => r.data),
+  cancelMethodRequest: () => api.post<TimeStatus>(`${BASE}/attendance/cancel-method-request`).then((r) => r.data),
+
+  // WebAuthn (device biometric) for attendance
+  webauthnRegisterOptions: () => api.post<any>(`${BASE}/webauthn/register/options`).then((r) => r.data),
+  webauthnRegisterVerify: (body: { attestationObject: string; clientDataJSON: string; deviceLabel?: string }) =>
+    api.post(`${BASE}/webauthn/register/verify`, body).then((r) => r.data),
+  webauthnAssertOptions: () => api.post<any>(`${BASE}/webauthn/assert/options`).then((r) => r.data),
+  webauthnCredentials: () =>
+    api.get<{ id: number; deviceLabel: string; lastUsedAt: string | null; createdAt: string | null }[]>(`${BASE}/webauthn/credentials`).then((r) => r.data),
+  webauthnDeleteCredential: (id: number) => api.delete(`${BASE}/webauthn/credentials/${id}`).then((r) => r.data),
   clockOut: () => api.post<TimeStatus>(`${BASE}/attendance/clock-out`).then((r) => r.data),
   startBreak: () => api.post<TimeStatus>(`${BASE}/attendance/break/start`).then((r) => r.data),
   endBreak: () => api.post<TimeStatus>(`${BASE}/attendance/break/end`).then((r) => r.data),

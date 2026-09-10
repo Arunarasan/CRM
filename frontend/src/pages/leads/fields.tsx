@@ -1,3 +1,4 @@
+import { Star } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
 // Small form primitives shared by the lead dialogs (native selects, styled like
@@ -108,6 +109,40 @@ export function CheckboxField({
       />
       {label}
     </label>
+  );
+}
+
+export function StarRating({
+  label, value, onChange, max = 5,
+}: {
+  label: string;
+  value?: number | null;
+  onChange: (value: number | undefined) => void;
+  max?: number;
+}) {
+  const current = value ?? 0;
+  return (
+    <Field label={label}>
+      <div className="flex items-center gap-1 h-10">
+        {Array.from({ length: max }, (_, i) => i + 1).map((star) => (
+          <button
+            key={star}
+            type="button"
+            // Click the current top star again to clear the rating.
+            onClick={() => onChange(star === current ? undefined : star)}
+            className="p-0.5 text-muted-foreground/40 hover:scale-110 transition-transform"
+            aria-label={`${star} star${star === 1 ? "" : "s"}`}
+          >
+            <Star
+              className={`h-6 w-6 ${star <= current ? "fill-amber-400 text-amber-400" : ""}`}
+            />
+          </button>
+        ))}
+        {current > 0 && (
+          <span className="ml-1 text-sm text-muted-foreground">{current}/{max}</span>
+        )}
+      </div>
+    </Field>
   );
 }
 

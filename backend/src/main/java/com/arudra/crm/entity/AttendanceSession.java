@@ -49,6 +49,10 @@ public class AttendanceSession extends BaseEntity {
     @Column(name = "check_in_lng", precision = 10, scale = 6)
     private BigDecimal checkInLng;
 
+    /** GPS accuracy radius (metres) the device reported at check-in; widens the geofence tolerance. */
+    @Column(name = "accuracy_meters")
+    private Integer accuracyMeters;
+
     @Column(name = "location_label", length = 255)
     private String locationLabel;
 
@@ -58,4 +62,38 @@ public class AttendanceSession extends BaseEntity {
     /** True once admins have been alerted that this session ran past the shift without a clock-out. */
     @Column(name = "overtime_alert_sent", nullable = false)
     private Boolean overtimeAlertSent = false;
+
+    // --- Clock-in verification (V83) ------------------------------------------
+    /** How this session was checked: GEO | BIOMETRIC | DEVICE | NONE. */
+    @Column(name = "verification_method", length = 20)
+    private String verificationMethod;
+
+    /** The verification check passed. */
+    @Column(nullable = false)
+    private Boolean verified = false;
+
+    /** The check did NOT pass and this session needs HR review. */
+    @Column(nullable = false)
+    private Boolean flagged = false;
+
+    @Column(name = "flag_reason", length = 255)
+    private String flagReason;
+
+    /** Distance (metres) from the nearest office geofence at clock-in, when GEO-checked. */
+    @Column(name = "distance_meters")
+    private Integer distanceMeters;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "office_location_id")
+    private AttendanceLocation officeLocation;
+
+    /** NULL when not flagged; PENDING / APPROVED / REJECTED once flagged. */
+    @Column(name = "approval_status", length = 20)
+    private String approvalStatus;
+
+    @Column(name = "approved_by", length = 255)
+    private String approvedBy;
+
+    @Column(name = "approved_at")
+    private java.time.LocalDateTime approvedAt;
 }

@@ -59,6 +59,13 @@ public class Project extends BaseEntity {
     @Column(name = "property_address", columnDefinition = "TEXT")
     private String propertyAddress;
 
+    /** Customer handover stamp — set when the project is handed over at 100% completion. */
+    @Column(name = "handover_date")
+    private java.time.LocalDate handoverDate;
+
+    @Column(name = "handover_notes", length = 500)
+    private String handoverNotes;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "project_manager_id")
     @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "roles"})

@@ -10,9 +10,18 @@ import { SelectField, TextAreaField, TextField } from "../fields";
 import { ListSkeleton, useLeadList } from "./shared";
 import FileUploadField from "@/components/FileUploadField";
 import ImageCaptureField from "@/components/ImageCaptureField";
+import AudioCaptureField, { type CapturedAudio } from "@/components/AudioCaptureField";
 import { resolveFileUrl } from "@/lib/uploadFile";
 
 const EMPTY = { fileName: "", fileUrl: "", category: "Property Images", documentType: "", description: "" };
+
+// Classify a document so photos render as thumbnails and voice notes as inline players.
+// Prefer the stored documentType (set on capture); fall back to the file extension.
+const extOf = (doc: any) => ((doc.fileName || doc.fileUrl || "").split("?")[0].split(".").pop() || "").toLowerCase();
+const IMAGE_EXT = ["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg", "heic", "heif"];
+const AUDIO_EXT = ["mp3", "wav", "ogg", "webm", "m4a", "aac", "opus", "oga"];
+const isImageDoc = (doc: any) => doc.documentType === "Image" || IMAGE_EXT.includes(extOf(doc));
+const isAudioDoc = (doc: any) => doc.documentType === "Audio" || AUDIO_EXT.includes(extOf(doc));
 
 export default function DocumentsTab({ leadId }: { leadId: string }) {
   const { items, loading, reload } = useLeadList<any>(() => leadApi.getDocuments(leadId), [leadId]);
@@ -57,27 +66,70 @@ export default function DocumentsTab({ leadId }: { leadId: string }) {
               <div key={category}>
                 <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">{category}</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  {(docs as any[]).map((doc) => (
-                    <div key={doc.id} className="border rounded-lg p-3 flex items-center gap-3 bg-muted/30">
-                      <FileIcon className="h-8 w-8 text-muted-foreground shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        {doc.fileUrl ? (
-                          <a href={resolveFileUrl(doc.fileUrl)} target="_blank" rel="noreferrer" className="text-sm font-medium text-primary hover:underline truncate block">
-                            {doc.fileName}
-                          </a>
-                        ) : (
-                          <span className="text-sm font-medium truncate block">{doc.fileName}</span>
-                        )}
-                        <div className="text-xs text-muted-foreground">
-                          {doc.documentType || "File"} · {formatDate(doc.createdAt)}
-                          {doc.uploadedBy?.name ? ` · ${doc.uploadedBy.name}` : ""}
-                        </div>
+                  {(docs as any[]).map((doc) => {
+                    const url = doc.fileUrl ? resolveFileUrl(doc.fileUrl) : "";
+                    const meta = (
+                      <div className="text-xs text-muted-foreground">
+                        {doc.documentType || "File"} · {formatDate(doc.createdAt)}
+                        {doc.uploadedBy?.name ? ` · ${doc.uploadedBy.name}` : ""}
                       </div>
-                      <Button variant="ghost" size="icon" className="text-destructive shrink-0" onClick={() => remove(doc)}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))}
+                    );
+                    // Photo: thumbnail preview that opens full size in a new tab.
+                    if (isImageDoc(doc) && url) {
+                      return (
+                        <div key={doc.id} className="border rounded-lg p-3 flex items-center gap-3 bg-muted/30">
+                          <a href={url} target="_blank" rel="noreferrer" className="shrink-0">
+                            <img src={url} alt={doc.fileName} className="h-14 w-14 rounded-md object-cover border" />
+                          </a>
+                          <div className="flex-1 min-w-0">
+                            <a href={url} target="_blank" rel="noreferrer" className="text-sm font-medium text-primary hover:underline truncate block">
+                              {doc.fileName}
+                            </a>
+                            {meta}
+                          </div>
+                          <Button variant="ghost" size="icon" className="text-destructive shrink-0" onClick={() => remove(doc)}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      );
+                    }
+                    // Voice note / audio: inline player.
+                    if (isAudioDoc(doc) && url) {
+                      return (
+                        <div key={doc.id} className="border rounded-lg p-3 flex flex-col gap-2 bg-muted/30">
+                          <div className="flex items-center gap-3">
+                            <div className="flex-1 min-w-0">
+                              <span className="text-sm font-medium truncate block">{doc.fileName}</span>
+                              {meta}
+                            </div>
+                            <Button variant="ghost" size="icon" className="text-destructive shrink-0" onClick={() => remove(doc)}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                          <audio controls src={url} className="h-9 w-full" />
+                        </div>
+                      );
+                    }
+                    // Everything else: generic file row.
+                    return (
+                      <div key={doc.id} className="border rounded-lg p-3 flex items-center gap-3 bg-muted/30">
+                        <FileIcon className="h-8 w-8 text-muted-foreground shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          {url ? (
+                            <a href={url} target="_blank" rel="noreferrer" className="text-sm font-medium text-primary hover:underline truncate block">
+                              {doc.fileName}
+                            </a>
+                          ) : (
+                            <span className="text-sm font-medium truncate block">{doc.fileName}</span>
+                          )}
+                          {meta}
+                        </div>
+                        <Button variant="ghost" size="icon" className="text-destructive shrink-0" onClick={() => remove(doc)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             ))}
@@ -114,6 +166,25 @@ export default function DocumentsTab({ leadId }: { leadId: string }) {
                 fileName: f.fileName || fileName || "",
                 documentType: f.documentType && f.documentType !== "Image" ? f.documentType : (fileName ? fileName.split(".").pop()?.toUpperCase() : ""),
               }))}
+            />
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span className="h-px flex-1 bg-border" /> or record a voice note <span className="h-px flex-1 bg-border" />
+            </div>
+            <AudioCaptureField
+              label="Voice note"
+              module="LEAD"
+              value={form.documentType === "Audio" && form.fileUrl ? [{ url: form.fileUrl, fileName: form.fileName || "voice-note" }] : []}
+              onChange={(clips: CapturedAudio[]) => {
+                const last = clips[clips.length - 1];
+                if (!last) { setForm((f: any) => ({ ...f, fileUrl: "", documentType: f.documentType === "Audio" ? "" : f.documentType })); return; }
+                setForm((f: any) => ({
+                  ...f,
+                  fileUrl: last.url,
+                  fileName: f.fileName || last.fileName || "",
+                  category: f.category || "Voice Notes",
+                  documentType: "Audio",
+                }));
+              }}
             />
             <TextField label="File Name" required value={form.fileName} onChange={set("fileName")} />
             <div className="grid grid-cols-2 gap-4">

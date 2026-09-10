@@ -41,6 +41,8 @@ public class EmployeeTimeService {
     @Autowired private EmployeeRepository employeeRepository;
     @Autowired private AttendanceRepository attendanceRepository;
     @Autowired private AttendanceSessionRepository sessionRepository;
+    @Autowired private AttendanceVerificationService verificationService;
+    @Autowired private com.arudra.crm.repository.EmployeeWebauthnCredentialRepository webauthnCredentialRepository;
 
     // --- scoping -----------------------------------------------------------
 
@@ -70,7 +72,8 @@ public class EmployeeTimeService {
 
     @LogActivity(module = "ATTENDANCE", action = "CLOCK_IN")
     @Transactional
-    public Attendance clockIn(User user, BigDecimal lat, BigDecimal lng, String locationLabel, String deviceInfo) {
+    public Attendance clockIn(User user, BigDecimal lat, BigDecimal lng, Integer accuracyMeters, String locationLabel,
+                              String deviceInfo, boolean biometricVerified) {
         Employee employee = requireEmployee(user);
         Attendance att = todayRow(employee.getId());
         if (att == null) {
@@ -88,8 +91,12 @@ public class EmployeeTimeService {
         s.setCheckInTime(LocalTime.now().withNano(0));
         s.setCheckInLat(lat);
         s.setCheckInLng(lng);
+        s.setAccuracyMeters(accuracyMeters);
         s.setLocationLabel(locationLabel);
         s.setDeviceInfo(deviceInfo);
+        // Verify against the employee's required method (geo-fence / biometric). Soft: never blocks,
+        // flags for HR approval on failure. Stamps the result onto the session.
+        verificationService.verify(s, employee, biometricVerified);
         sessionRepository.save(s);
 
         att.setStatus("PRESENT");
@@ -181,6 +188,10 @@ public class EmployeeTimeService {
         m.put("breakMinutes", sessions.stream().mapToInt(s -> s.getBreakMinutes() == null ? 0 : s.getBreakMinutes()).sum());
         m.put("sessionsToday", sessions.size());
         m.put("hourlyRate", employee.getHourlyRate());
+        // Attendance verification hints for the clock UI.
+        m.put("attendanceMethod", employee.getAttendanceMethod() == null ? "GEO" : employee.getAttendanceMethod());
+        m.put("attendanceMethodRequested", employee.getAttendanceMethodRequested());
+        m.put("biometricRegistered", webauthnCredentialRepository.existsByEmployeeIdAndIsDeletedFalse(employee.getId()));
 
         BigDecimal[] live = today == null ? new BigDecimal[]{BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO}
                 : computeFigures(today, employee, asOf);
@@ -206,6 +217,11 @@ public class EmployeeTimeService {
             sm.put("breakMinutes", s.getBreakMinutes() == null ? 0 : s.getBreakMinutes());
             sm.put("onBreak", s.getCheckOutTime() == null && s.getBreakStart() != null);
             sm.put("running", s.getCheckOutTime() == null);
+            sm.put("verificationMethod", s.getVerificationMethod());
+            sm.put("verified", Boolean.TRUE.equals(s.getVerified()));
+            sm.put("flagged", Boolean.TRUE.equals(s.getFlagged()));
+            sm.put("flagReason", s.getFlagReason());
+            sm.put("approvalStatus", s.getApprovalStatus());
             sessionList.add(sm);
         }
         m.put("sessions", sessionList);
@@ -214,6 +230,26 @@ public class EmployeeTimeService {
 
     public Map<String, Object> getEarnings(User user) {
         return getStatus(user); // same snapshot; kept as a distinct endpoint for clarity
+    }
+
+    // --- self-service attendance-method switch (admin-approved) ------------
+
+    /** Employee requests to switch to biometric attendance (resolves to ANY on admin approval). */
+    @Transactional
+    public void requestBiometricAttendance(User user) {
+        Employee e = requireEmployee(user);
+        e.setAttendanceMethodRequested("ANY");
+        e.setAttendanceMethodRequestedAt(java.time.LocalDateTime.now());
+        employeeRepository.save(e);
+    }
+
+    /** Employee withdraws a pending method-change request. */
+    @Transactional
+    public void cancelMethodRequest(User user) {
+        Employee e = requireEmployee(user);
+        e.setAttendanceMethodRequested(null);
+        e.setAttendanceMethodRequestedAt(null);
+        employeeRepository.save(e);
     }
 
     private BigDecimal earningsBetween(Employee employee, LocalDate from, LocalDate to, LocalTime asOf) {

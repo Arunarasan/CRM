@@ -12,6 +12,47 @@ import {
 
 const BASE = '/projects';
 
+/** One stage task in the customer-handover flow. */
+export interface HandoverTask {
+  id: number;
+  taskName: string;
+  stage?: string;
+  progress: number;
+  status?: string;
+  dueDate?: string | null;
+  required?: boolean;
+}
+
+/** Handover board for a project: stage tasks + rolled-up % + gate. */
+export interface HandoverBoard {
+  projectId: number;
+  projectStatus?: string;
+  tasks: HandoverTask[];
+  taskCount: number;
+  progressPercent: number;
+  allComplete: boolean;
+  canHandover: boolean;
+  handoverDate?: string | null;
+  handoverNotes?: string | null;
+  stages: string[];
+}
+
+/** Compact work item for the batch "Update Work" sheet (across all rooms of a project). */
+export interface ProjectItemBrief {
+  id: number;
+  itemName: string;
+  itemType?: string;
+  progress: number;
+  status?: string;
+  locked?: boolean;
+  delayed?: boolean;
+  roomId?: number;
+  roomName?: string;
+  floorName?: string;
+  phaseId?: number;
+  phaseName?: string;
+}
+
 /** One person (employee or contractor) working on a project, aggregated from task assignments. */
 export interface ProjectResource {
   resourceType: string;
@@ -74,6 +115,13 @@ export const projectApi = {
     itemId: number,
     payload: { progress?: number; status?: string; remarks?: string; photos?: string },
   ) => api.put<ProjectRoomItem>(`${BASE}/items/${itemId}/progress`, payload).then((r) => r.data),
+  // All work items of a project (compact) — for the "Update Work" batch sheet.
+  getAllItems: (projectId: number) =>
+    api.get<ProjectItemBrief[]>(`${BASE}/${projectId}/items`).then((r) => r.data),
+  // Batch update several work items at once (a day's work in one action).
+  bulkUpdateItemProgress: (
+    payload: { itemIds: number[]; progress?: number; status?: string; remarks?: string; photos?: string },
+  ) => api.put<{ updated: number; skipped: number }>(`${BASE}/items/bulk-progress`, payload).then((r) => r.data),
   reopenItem: (itemId: number) =>
     api.post<ProjectRoomItem>(`${BASE}/items/${itemId}/reopen`).then((r) => r.data),
   getItemTimeline: (itemId: number) =>
@@ -83,6 +131,12 @@ export const projectApi = {
   // Progress dashboard (live cards + floor breakdown)
   getProgressDashboard: (projectId: number) =>
     api.get<ProjectProgressDashboard>(`${BASE}/${projectId}/progress-dashboard`).then((r) => r.data),
+
+  // Customer handover flow
+  getHandover: (projectId: number) =>
+    api.get<HandoverBoard>(`${BASE}/${projectId}/handover`).then((r) => r.data),
+  handoverProject: (projectId: number, notes?: string) =>
+    api.post(`${BASE}/${projectId}/handover`, { notes }).then((r) => r.data),
 
   // Materials
   getMaterials: (projectId: number) =>

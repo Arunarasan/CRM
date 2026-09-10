@@ -365,6 +365,8 @@ public class WorkforceService {
         e.setSalaryType(d.getSalaryType());
         e.setShift(d.getShift());
         if (d.getAttendanceRequired() != null) e.setAttendanceRequired(d.getAttendanceRequired());
+        if (d.getAttendanceMethod() != null && !d.getAttendanceMethod().isBlank())
+            e.setAttendanceMethod(d.getAttendanceMethod());
         e.setLeavePolicy(d.getLeavePolicy());
         if (d.getPayrollEnabled() != null) e.setPayrollEnabled(d.getPayrollEnabled());
         e.setPfNumber(d.getPfNumber());

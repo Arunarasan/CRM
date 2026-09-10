@@ -3,7 +3,7 @@ import { Outlet, Link, NavLink, useLocation } from "react-router-dom";
 import {
   Bell, LogOut, Menu, X, LayoutDashboard, Users, Target, FolderKanban, ChevronLeft,
   ListChecks, Package, ShoppingCart, ReceiptText, Wallet, Contact, Globe,
-  Settings as SettingsIcon, ShieldCheck, Search, MessageSquare, ChevronDown, Sparkles,
+  Settings as SettingsIcon, ShieldCheck, Search, MessageSquare, ChevronDown, Sparkles, ArrowRight,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
@@ -56,6 +56,7 @@ function logout() {
 export default function DashboardLayout() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
   const { authorities, isAdmin, hasAuthority, isFieldEmployee } = useAuth();
   const currentUser = getCurrentUser();
@@ -82,34 +83,34 @@ export default function DashboardLayout() {
       .catch(() => {});
   };
 
-  // Nav items live inside the deep-forest sidebar, so they carry their own dark palette:
-  // ivory label, gold icon, and a gold left-bar + tinted wash on the active route.
-  const navLinkClass = ({ isActive }: { isActive: boolean }) =>
-    `px-3.5 py-2.5 rounded-lg flex items-center justify-between gap-2 group transition-colors border-l-[3px] ${
+  // Nav items live inside the deep-forest sidebar: ivory label, gold icon, and — on the active
+  // route — a glassy gold→forest gradient pill with a soft gold glow.
+  const navLinkClass = (mini: boolean) => ({ isActive }: { isActive: boolean }) =>
+    `px-3 py-2.5 rounded-xl flex items-center ${mini ? "justify-center" : "justify-between"} gap-2 group transition-all ${
       isActive
-        ? "bg-gold/[0.18] text-white font-semibold border-[#D9B06B]"
-        : "text-[#E9EFEB] border-transparent hover:bg-white/[0.06]"
+        ? "bg-gradient-to-r from-[#D9B06B]/25 via-[#2f7d5c]/15 to-transparent text-white font-semibold ring-1 ring-[#D9B06B]/50 shadow-[0_0_16px_rgba(217,176,107,0.22)]"
+        : "text-[#E9EFEB] hover:bg-white/[0.06]"
     }`;
 
-  const NavItemInner = ({ Icon, label, isActive }: { Icon: typeof LayoutDashboard; label: string; isActive?: boolean }) => (
-    <span className="flex items-center gap-3 min-w-0">
+  const NavItemInner = ({ Icon, label, isActive, mini }: { Icon: typeof LayoutDashboard; label: string; isActive?: boolean; mini?: boolean }) => (
+    <span className={`flex items-center ${mini ? "" : "gap-3"} min-w-0`}>
       <Icon className={`w-[18px] h-[18px] shrink-0 transition-colors ${isActive ? "text-[#D9B06B]" : "text-[#D9B06B]/80 group-hover:text-[#D9B06B]"}`} />
-      <span className="truncate">{label}</span>
+      {!mini && <span className="truncate">{label}</span>}
     </span>
   );
 
   // Shared navigation body — rendered inside both the desktop sidebar and the mobile drawer.
   // The nav list is the only scrolling region; the logo header (above) and the logout footer
   // (below) stay pinned so logging out never requires scrolling.
-  const NavBody = () => (
+  const NavBody = ({ mini = false }: { mini?: boolean }) => (
     <>
-    <nav className="flex flex-col gap-1 p-4 flex-1 min-h-0 overflow-y-auto">
+    <nav className="flex flex-col gap-1 p-3 flex-1 min-h-0 overflow-y-auto">
       {NAV_ITEMS.filter(canSee).map((item) => (
-        <NavLink key={item.to} to={item.to} className={navLinkClass}>
+        <NavLink key={item.to} to={item.to} className={navLinkClass(mini)} title={mini ? t(item.labelKey) : undefined}>
           {({ isActive }) => (
             <>
-              <NavItemInner Icon={item.icon} label={t(item.labelKey)} isActive={isActive} />
-              {item.underMaintenance && (
+              <NavItemInner Icon={item.icon} label={t(item.labelKey)} isActive={isActive} mini={mini} />
+              {!mini && item.underMaintenance && (
                 <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gold/20 text-[#F0D19B] border border-gold/30">
                   Maint.
                 </span>
@@ -118,46 +119,56 @@ export default function DashboardLayout() {
           )}
         </NavLink>
       ))}
-      <NavLink to="/notifications" className={navLinkClass}>
+      <NavLink to="/notifications" className={navLinkClass(mini)} title={mini ? t('nav.notifications') : undefined}>
         {({ isActive }) => (
           <>
-            <NavItemInner Icon={Bell} label={t('nav.notifications')} isActive={isActive} />
-            {unreadCount > 0 && <span className="bg-gold text-[#1a1205] text-[10px] font-bold px-2 py-0.5 rounded-full">{unreadCount}</span>}
+            <NavItemInner Icon={Bell} label={t('nav.notifications')} isActive={isActive} mini={mini} />
+            {!mini && unreadCount > 0 && <span className="bg-gold text-[#1a1205] text-[10px] font-bold px-2 py-0.5 rounded-full">{unreadCount}</span>}
           </>
         )}
       </NavLink>
       {(legacySession || isAdmin) && (
         <>
-          <NavLink to="/users" className={navLinkClass}>
-            {({ isActive }) => <NavItemInner Icon={ShieldCheck} label={t('nav.users')} isActive={isActive} />}
+          <NavLink to="/users" className={navLinkClass(mini)} title={mini ? t('nav.users') : undefined}>
+            {({ isActive }) => <NavItemInner Icon={ShieldCheck} label={t('nav.users')} isActive={isActive} mini={mini} />}
           </NavLink>
-          <NavLink to="/settings" className={navLinkClass}>
-            {({ isActive }) => <NavItemInner Icon={SettingsIcon} label={t('nav.settings')} isActive={isActive} />}
+          <NavLink to="/settings" className={navLinkClass(mini)} title={mini ? t('nav.settings') : undefined}>
+            {({ isActive }) => <NavItemInner Icon={SettingsIcon} label={t('nav.settings')} isActive={isActive} mini={mini} />}
           </NavLink>
         </>
       )}
-      {/* Decorative brand card + copyright — scroll with the nav list */}
-      <div className="mt-auto pt-4 space-y-3">
-        <div
-          className="relative overflow-hidden rounded-xl p-4 border border-white/10"
-          style={{ background: "linear-gradient(135deg, rgba(188,135,72,0.28) 0%, rgba(0,53,34,0.55) 55%, rgba(1,35,22,0.85) 100%)" }}
-        >
-          <Sparkles className="w-5 h-5 text-[#F0D19B] mb-2" />
-          <p className="font-script text-[#F5EBD3] text-lg leading-snug">
-            {t('nav.tagline')}
-          </p>
+      {/* Decorative brand card + copyright — hidden when collapsed to icons */}
+      {!mini && (
+        <div className="mt-auto pt-4 space-y-3">
+          <div className="border-t border-white/10 pt-4">
+            <div
+              className="relative overflow-hidden rounded-2xl p-4 border border-[#D9B06B]/30 flex items-center gap-3"
+              style={{ background: "linear-gradient(135deg, rgba(188,135,72,0.28) 0%, rgba(0,53,34,0.55) 55%, rgba(1,35,22,0.85) 100%)" }}
+            >
+              <div className="flex-1 min-w-0">
+                <Sparkles className="w-5 h-5 text-[#F0D19B] mb-1.5" />
+                <p className="font-script text-[#F5EBD3] text-base leading-snug">
+                  {t('nav.tagline')}
+                </p>
+              </div>
+              <div className="h-9 w-9 rounded-full border border-[#D9B06B]/50 grid place-items-center text-[#F0D19B] shrink-0">
+                <ArrowRight className="w-4 h-4" />
+              </div>
+            </div>
+            <p className="text-[11px] text-[#8FA69B] text-center pt-3 pb-1">© {new Date().getFullYear()} JB Decor</p>
+          </div>
         </div>
-        <p className="text-[11px] text-[#8FA69B] text-center pb-1">© {new Date().getFullYear()} JB Decor</p>
-      </div>
+      )}
     </nav>
 
     {/* Logout pinned to the bottom of the sidebar — always reachable without scrolling */}
-    <div className="shrink-0 border-t border-white/10 p-4">
+    <div className="shrink-0 border-t border-white/10 p-3">
       <button
         onClick={logout}
-        className="w-full px-3.5 py-2.5 rounded-lg flex items-center gap-3 text-left text-[#E9EFEB] hover:bg-destructive/90 hover:text-white transition-colors"
+        title={mini ? t('nav.logout') : undefined}
+        className={`w-full px-3 py-2.5 rounded-xl flex items-center ${mini ? "justify-center" : "gap-3"} text-left text-[#E9EFEB] hover:bg-destructive/90 hover:text-white transition-colors`}
       >
-        <LogOut className="w-[18px] h-[18px] text-[#D9B06B]/80" /> {t('nav.logout')}
+        <LogOut className="w-[18px] h-[18px] text-[#D9B06B]/80" /> {!mini && t('nav.logout')}
       </button>
     </div>
     </>
@@ -201,15 +212,23 @@ export default function DashboardLayout() {
 
   return (
     <div className="flex h-screen w-full bg-background">
-      {/* Desktop sidebar — persistent deep-forest navigation from lg up */}
+      {/* Desktop sidebar — persistent deep-forest navigation from lg up; a floating rounded panel
+          that can collapse to an icon rail. */}
       <aside
-        className="hidden lg:flex w-64 flex-col overflow-hidden shrink-0 border-r border-black/20 text-[#F5F4EE]"
+        className={`hidden lg:flex ${collapsed ? "w-[76px]" : "w-64"} flex-col overflow-hidden shrink-0 text-[#F5F4EE] m-3 rounded-[26px] shadow-2xl ring-1 ring-black/20 transition-[width] duration-200`}
         style={{ background: "linear-gradient(180deg, #012316 0%, #003522 100%)" }}
       >
-        <div className="px-5 py-6 flex items-center shrink-0 border-b border-white/10" style={{ background: "#012316" }}>
-          <Logo />
+        <div className={`px-4 py-5 flex items-center ${collapsed ? "justify-center" : "justify-between"} shrink-0 border-b border-white/10`} style={{ background: "#012316" }}>
+          {!collapsed && <Logo />}
+          <button
+            onClick={() => setCollapsed((c) => !c)}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            className="p-1.5 rounded-lg text-[#D9B06B] hover:bg-white/10 transition-colors"
+          >
+            <ChevronLeft className={`w-5 h-5 transition-transform ${collapsed ? "rotate-180" : ""}`} />
+          </button>
         </div>
-        <NavBody />
+        <NavBody mini={collapsed} />
       </aside>
 
       {/* Mobile / tablet drawer — off-canvas below lg */}

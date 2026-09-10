@@ -56,6 +56,7 @@ public class EmployeePortalService {
     @Autowired private EmployeeAdvanceRepository advanceRepository;
     @Autowired private PayrollRequestRepository payrollRequestRepository;
     @Autowired private PayrollService payrollService;
+    @Autowired private FinanceService financeService;
 
     /** Annual leave allowance used to derive a simple balance until a policy engine exists. */
     private static final int DEFAULT_ANNUAL_LEAVE = 24;
@@ -735,6 +736,8 @@ public class EmployeePortalService {
         lead.setAddress(trimToNull((String) body.get("address")));
         lead.setCity(trimToNull((String) body.get("city")));
         lead.setRequirementCategory(trimToNull((String) body.get("requirementCategory")));
+        lead.setRequirementProduct(trimToNull((String) body.get("requirementProduct")));
+        lead.setRating(asInteger(body.get("rating")));
         lead.setCustomerRequirements(trimToNull((String) body.get("requirement")));
         lead.setRemarks(trimToNull((String) body.get("notes")));
         lead.setEstimatedBudget(asDecimal(body.get("estimatedBudget")));
@@ -747,6 +750,27 @@ public class EmployeePortalService {
         lead.setLeadSource("Employee");
         lead.setLeadOwner(currentUser);
         Lead saved = leadService.createLead(lead, currentUser);
+        // Attach any photos / voice notes captured on the form as LeadDocuments, so they travel
+        // to the project on conversion (copyLeadDocumentsToProject reads lead documents).
+        Object docs = body.get("documents");
+        if (docs instanceof List<?> list) {
+            for (Object o : list) {
+                if (!(o instanceof Map<?, ?> dm)) continue;
+                String fileUrl = trimToNull((String) dm.get("fileUrl"));
+                if (fileUrl == null) continue;
+                LeadDocument doc = new LeadDocument();
+                doc.setFileUrl(fileUrl);
+                String fileName = trimToNull((String) dm.get("fileName"));
+                doc.setFileName(fileName != null ? fileName : "attachment");
+                doc.setDocumentType(trimToNull((String) dm.get("documentType")));
+                doc.setCategory(trimToNull((String) dm.get("category")));
+                try {
+                    leadService.addDocument(saved.getId(), doc, currentUser);
+                } catch (Exception e) {
+                    // A bad attachment must never lose the lead the employee just filed.
+                }
+            }
+        }
         return leadSummary(saved);
     }
 
@@ -761,6 +785,7 @@ public class EmployeePortalService {
         m.put("status", l.getStatus());
         m.put("stage", l.getStage());
         m.put("requirementCategory", l.getRequirementCategory());
+        m.put("requirementProduct", l.getRequirementProduct());
         m.put("estimatedBudget", l.getEstimatedBudget());
         m.put("siteVisitDate", l.getSiteVisitDate());
         m.put("createdAt", l.getCreatedAt());
@@ -775,6 +800,11 @@ public class EmployeePortalService {
     private static java.math.BigDecimal asDecimal(Object v) {
         if (v == null || String.valueOf(v).isBlank()) return null;
         return new java.math.BigDecimal(String.valueOf(v));
+    }
+
+    private static Integer asInteger(Object v) {
+        if (v == null || String.valueOf(v).isBlank()) return null;
+        return new java.math.BigDecimal(String.valueOf(v).trim()).intValue();
     }
 
     private static LocalDate asDate(Object v) {
@@ -865,6 +895,9 @@ public class EmployeePortalService {
         report.setMaterialUsed(trimToNull((String) body.get("materialUsed")));
         report.setMaterialRequired(trimToNull((String) body.get("materialRequired")));
         report.setRemarks(trimToNull((String) body.get("remarks")));
+        report.setCashCollected(asDecimal(body.get("cashCollected")));
+        report.setCashPaymentMethod(trimToNull((String) body.get("cashPaymentMethod")));
+        report.setCashReference(trimToNull((String) body.get("cashReference")));
         report.setStatus("SUBMITTED");
 
         List<Map<String, Object>> media = (List<Map<String, Object>>) body.get("media");
@@ -881,6 +914,31 @@ public class EmployeePortalService {
             }
         }
         DailyReport saved = dailyReportRepository.save(report);
+
+        // Cash collected on site → a PENDING_APPROVAL customer payment finance can confirm.
+        if (saved.getCashCollected() != null && saved.getCashCollected().signum() > 0
+                && saved.getProject() != null && saved.getProject().getCustomer() != null) {
+            try {
+                CustomerPayment payment = new CustomerPayment();
+                payment.setCustomer(saved.getProject().getCustomer());
+                payment.setProject(saved.getProject());
+                payment.setAmount(saved.getCashCollected());
+                payment.setPaymentType("PARTIAL");
+                payment.setStatus("PENDING_APPROVAL");
+                payment.setPaymentDate(saved.getReportDate() != null ? saved.getReportDate() : LocalDate.now());
+                payment.setPaymentMethod(saved.getCashPaymentMethod() != null ? saved.getCashPaymentMethod() : "CASH");
+                payment.setReferenceNumber(saved.getCashReference());
+                payment.setCollectedBy(currentUser);
+                payment.setRemarks("Collected on site — daily report " + saved.getReportDate()
+                        + " by " + currentUser.getName());
+                CustomerPayment savedPayment = financeService.recordPayment(payment, currentUser);
+                saved.setCashPaymentId(savedPayment.getId());
+                saved = dailyReportRepository.save(saved);
+            } catch (RuntimeException ex) {
+                // Never fail the report over the payment; log and move on.
+                System.err.println("Daily-report cash payment failed: " + ex.getMessage());
+            }
+        }
 
         // Surface the report where the work lives: a project timeline entry and/or a lead activity,
         // so it shows on the Project Command Center and the Lead profile alongside the HR view.

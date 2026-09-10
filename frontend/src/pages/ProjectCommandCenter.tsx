@@ -7,9 +7,11 @@ import { employeeTaskApi } from "@/api/employeeTaskApi";
 import { boqApi } from "@/api/boqApi";
 import { changeRequestApi } from "@/api/changeRequestApi";
 import { inventoryApi } from "@/api/inventoryApi";
-import { ProjectPhase, ProjectRoom, ProjectRoomItem, ProjectMaterialRequirement, ProjectProgress, ProjectProgressDashboard, ProjectItemProgressLog, GenerateFromBoqResult, WORK_ITEM_STATUSES } from "@/types/project";
+import { ProjectPhase, ProjectRoom, ProjectRoomItem, ProjectMaterialRequirement, ProjectProgressDashboard, ProjectItemProgressLog, GenerateFromBoqResult, WORK_ITEM_STATUSES } from "@/types/project";
 import { ProjectChangeRequest } from "@/types/changeRequest";
 import ProjectPaymentsTab from "@/pages/projectFinance/ProjectPaymentsTab";
+import BulkWorkUpdateDialog from "@/pages/projectCommandCenter/BulkWorkUpdateDialog";
+import HandoverTab from "@/pages/projectCommandCenter/HandoverTab";
 import CameraCaptureButton from "@/components/CameraCaptureButton";
 import { format, differenceInDays } from "date-fns";
 import {
@@ -19,7 +21,9 @@ import {
   ChevronDown, ChevronRight, ShoppingCart, ClipboardCheck,
   Phone, Mail, Play, History, RotateCcw, Lock,
   MoreHorizontal, MapPin, MessageCircle, Wallet, Users,
-  CalendarClock, Pencil, Check, X
+  Pencil, Check, X,
+  Copy, Calendar, Clock, Flag, Building2, FileText, IndianRupee,
+  BarChart3, StickyNote, FileBarChart, Home, Settings, ClipboardList,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
@@ -66,12 +70,12 @@ const cellInput = "w-full h-8 rounded-md border border-input bg-background px-2 
 
 /** One overview row: label + value (view), or label + editor (edit). Read-only rows omit children. */
 function EditRow({ label, editing, view, children, danger }: {
-  label: string; editing: boolean; view: React.ReactNode; children?: React.ReactNode; danger?: boolean;
+  label: React.ReactNode; editing: boolean; view: React.ReactNode; children?: React.ReactNode; danger?: boolean;
 }) {
   const showEdit = editing && !!children;
   return (
     <div className="flex items-baseline justify-between gap-3 border-b border-dashed border-slate-100 pb-2">
-      <span className="text-xs font-medium text-slate-400 shrink-0">{label}</span>
+      <span className="text-xs font-medium text-slate-400 shrink-0 flex items-center gap-1.5">{label}</span>
       {showEdit
         ? <div className="min-w-0 flex-1 pl-3">{children}</div>
         : <span className={`text-sm font-semibold text-right ${danger ? 'text-rose-600' : 'text-slate-700'}`}>{view}</span>}
@@ -83,21 +87,22 @@ const progressBarColor = (pct: number) => pct >= 100 ? 'bg-emerald-500' : pct >=
 // The 12 operational sections grouped into 5 task-shaped areas, so the tab bar reads as
 // "where in the project am I working" instead of a wall of equal chips. Each section keeps its
 // own content block untouched — this is purely how they're navigated.
-const TAB_GROUPS: { id: string; label: string; sections: [string, string][] }[] = [
-  { id: "overview", label: "Overview", sections: [["overview", "Overview"]] },
-  { id: "execution", label: "Execution", sections: [
+const TAB_GROUPS: { id: string; label: string; icon: React.ComponentType<{ className?: string }>; sections: [string, string][] }[] = [
+  { id: "overview", label: "Overview", icon: ClipboardList, sections: [["overview", "Overview"]] },
+  { id: "execution", label: "Execution", icon: Layers, sections: [
     ["phases", "Phases & Rooms"], ["execution", "Daily Logs & Reports"],
     ["fieldProgress", "Tasks"], ["quality", "Quality & Issues"],
   ] },
-  { id: "commercial", label: "Commercial", sections: [
+  { id: "commercial", label: "Commercial", icon: Wallet, sections: [
     ["payments", "Payments & Invoices"], ["approvals", "Approvals"], ["changeRequests", "Change Requests"],
   ] },
-  { id: "resources", label: "Resources", sections: [
+  { id: "resources", label: "Resources", icon: Package, sections: [
     ["materials", "Materials"], ["contractors", "Contractors"], ["labour", "Labour"],
   ] },
-  { id: "documents", label: "Documents", sections: [["media", "Documents"]] },
+  { id: "handover", label: "Handover", icon: CheckCircle2, sections: [["handover", "Handover"]] },
+  { id: "documents", label: "Documents", icon: FileText, sections: [["media", "Documents"]] },
   // Shown only once the project is COMPLETED (see the tab-strip filter below).
-  { id: "service", label: "Service & Warranty", sections: [["serviceWarranty", "Service & Warranty"]] },
+  { id: "service", label: "Service & Warranty", icon: Settings, sections: [["serviceWarranty", "Service & Warranty"]] },
 ];
 const groupOf = (section: string) =>
   TAB_GROUPS.find((g) => g.sections.some(([v]) => v === section)) || TAB_GROUPS[0];
@@ -110,7 +115,6 @@ export default function ProjectCommandCenter() {
   const [activeTab, setActiveTab] = useState("overview");
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [progress, setProgress] = useState<ProjectProgress | null>(null);
   const [stats, setStats] = useState<any>(null);
 
   // Phases & Rooms
@@ -121,14 +125,15 @@ export default function ProjectCommandCenter() {
   const [itemsByRoom, setItemsByRoom] = useState<Record<number, ProjectRoomItem[]>>({});
   const [newPhase, setNewPhase] = useState({ name: '', sequence: 1, budget: 0 });
   const [masterBoq, setMasterBoq] = useState<any>(null);
+  const [bulkOpen, setBulkOpen] = useState(false); // "Update Work" batch sheet
+  const [scrolled, setScrolled] = useState(false); // collapses the big header into a compact sticky bar
 
   // "Build from approved quotation" picker (replaces the old blind "Generate from BOQ" button)
   const [quotationPicker, setQuotationPicker] = useState<{ open: boolean; list: AvailableQuotation[]; loading: boolean; selectedId: number | null; generating: boolean }>(
     { open: false, list: [], loading: false, selectedId: null, generating: false });
 
-  // Inline editing of the Overview cards (Project Overview + Financial Health budget, and Project Details)
+  // Inline editing of the Overview card (key facts + budget + description/address/requirements)
   const [editingOverview, setEditingOverview] = useState(false);
-  const [editingDetails, setEditingDetails] = useState(false);
   const [savingProject, setSavingProject] = useState(false);
   const [pform, setPform] = useState<Record<string, any>>({});
 
@@ -209,7 +214,6 @@ export default function ProjectCommandCenter() {
   const fetchProjectData = () => {
     fetchCore();
     fetchStats();
-    projectApi.getProgress(projectId).then(setProgress).catch(err => console.error("Failed to fetch progress", err));
     projectApi.getProgressDashboard(projectId).then(setProgressDashboard).catch(err => console.error("Failed to fetch progress dashboard", err));
     projectApi.getPhases(projectId).then(setPhases).catch(err => console.error("Failed to fetch phases", err));
     projectApi.getMaterials(projectId).then(setMaterials).catch(err => console.error("Failed to fetch materials", err));
@@ -289,7 +293,6 @@ export default function ProjectCommandCenter() {
     projectApi.getItems(roomId).then(items => setItemsByRoom(prev => ({ ...prev, [roomId]: items })));
     projectApi.getRooms(phaseId).then(rooms => setRoomsByPhase(prev => ({ ...prev, [phaseId]: rooms })));
     projectApi.getPhases(projectId).then(setPhases);
-    projectApi.getProgress(projectId).then(setProgress).catch(() => {});
     projectApi.getProgressDashboard(projectId).then(setProgressDashboard).catch(() => {});
   };
 
@@ -580,7 +583,7 @@ export default function ProjectCommandCenter() {
 
   // --- Inline overview editing -------------------------------------------------
   // updateProject is a full replace, so we merge the edited fields onto the whole project object.
-  const startEdit = (which: 'overview' | 'details') => {
+  const startEdit = (_which?: 'overview' | 'details') => {
     setPform({
       projectType: project.projectType ?? '',
       projectCategory: project.projectCategory ?? '',
@@ -593,7 +596,7 @@ export default function ProjectCommandCenter() {
       projectDescription: project.projectDescription ?? '',
       customerNotes: project.customerNotes ?? '',
     });
-    if (which === 'overview') setEditingOverview(true); else setEditingDetails(true);
+    setEditingOverview(true);
   };
 
   const num = (v: any) => (v === '' || v === null || v === undefined ? null : Number(v));
@@ -606,6 +609,7 @@ export default function ProjectCommandCenter() {
       .finally(() => setSavingProject(false));
   };
 
+  // One Edit on Project Overview now persists the key facts AND the descriptive fields.
   const saveOverview = () => saveProjectFields({
     projectType: pform.projectType || null,
     projectCategory: pform.projectCategory || null,
@@ -614,13 +618,10 @@ export default function ProjectCommandCenter() {
     endDate: pform.endDate || null,
     estimatedCost: num(pform.estimatedCost),
     budget: num(pform.budget),
-  }, () => setEditingOverview(false));
-
-  const saveDetails = () => saveProjectFields({
     propertyAddress: pform.propertyAddress || null,
     projectDescription: pform.projectDescription || null,
     customerNotes: pform.customerNotes || null,
-  }, () => setEditingDetails(false));
+  }, () => setEditingOverview(false));
 
   const daysRemainingText = daysRemaining === null ? '—' : daysRemaining < 0 ? `${Math.abs(daysRemaining)} Days Over` : `${daysRemaining} Days`;
 
@@ -696,115 +697,207 @@ export default function ProjectCommandCenter() {
   };
 
   return (
-    <div className="flex flex-col h-full bg-slate-50/50 relative">
+    <div className="flex flex-col h-full bg-slate-50/50 relative overflow-hidden">
+      {/* Single smooth-scroll surface: the whole top scrolls away, only the tab bar pins. */}
+      <div onScroll={(e) => setScrolled((e.target as HTMLDivElement).scrollTop > 120)} className="flex-1 overflow-y-auto scroll-smooth">
 
-      {/* Enhanced Top Header */}
-      <div className="bg-white border-b border-slate-100 px-4 sm:px-6 lg:px-8 py-4 sm:py-5 flex flex-wrap items-start justify-between shrink-0 z-10 gap-3">
-        <div className="flex items-start gap-2 sm:gap-3 min-w-0">
-          <Button variant="ghost" size="icon" onClick={goBack} title="Back" className="mt-0.5 text-slate-400 hover:text-slate-600 shrink-0"><ArrowLeft className="h-4 w-4" /></Button>
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-lg sm:text-xl lg:text-2xl font-semibold tracking-tight text-slate-800 truncate">{project.projectCode} - {project.projectName}</h1>
-              <span className={`px-2.5 py-0.5 text-[11px] rounded-full font-semibold uppercase tracking-wide ${
-                project.status === 'RUNNING' ? 'bg-emerald-100 text-emerald-700' :
-                project.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-700' :
-                'bg-slate-100 text-slate-500'
-              }`}>
-                {project.status.replace(/_/g, ' ')}
-              </span>
-              {(stats?.health === 'WARNING' || stats?.health === 'CRITICAL') && (
-                <span className={`px-2.5 py-0.5 text-[11px] rounded-full font-semibold uppercase tracking-wide ${
-                  stats.health === 'CRITICAL' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'
-                }`}>
-                  {stats.health === 'CRITICAL' ? 'Critical' : 'Warning'}
-                </span>
-              )}
-            </div>
-            <div className="text-slate-400 flex items-center gap-3 sm:gap-4 text-xs sm:text-sm mt-2 flex-wrap">
-              <span className="flex items-center gap-1"><User className="w-4 h-4"/> {project.customer?.name}</span>
-              {project.customer?.phone && (
-                <a href={`tel:${project.customer.phone}`} className="flex items-center gap-1 hover:text-emerald-600"><Phone className="w-4 h-4 text-emerald-400"/> {project.customer.phone}</a>
-              )}
-              <span className="flex items-center gap-1"><Mail className="w-4 h-4 text-emerald-400"/> {project.customer?.email || 'N/A'}</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 shrink-0">
-          <TrackingLinkDialog projectId={Number(projectId)} />
-          {project.status !== 'COMPLETED' && (
-            <Button onClick={handleCompleteProject} className="bg-emerald-500 hover:bg-emerald-600 rounded-xl">
-              <CheckCircle2 className="w-4 h-4 mr-2"/> Mark Completed
-            </Button>
-          )}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon" className="rounded-xl border-slate-200 text-slate-500"><MoreHorizontal className="h-4 w-4" /></Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              {['PLANNING', 'PENDING', 'APPROVED'].includes(project.status) && (
-                <>
-                  <DropdownMenuItem onSelect={handleStartExecution}><Play className="w-4 h-4 mr-2"/> Start Execution</DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                </>
-              )}
-              <DropdownMenuItem asChild><Link to={`/tasks?projectId=${projectId}`}>View Tasks</Link></DropdownMenuItem>
-              {project.customer?.id && (
-                <DropdownMenuItem asChild><Link to={`/customers/${project.customer.id}`}>View Customer</Link></DropdownMenuItem>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
+      {/* Breadcrumb */}
+      <div className="bg-white px-4 sm:px-6 lg:px-8 pt-2.5 shrink-0 z-10">
+        <div className="flex items-center gap-1.5 text-sm text-slate-400">
+          <Link to="/" className="hover:text-emerald-600 flex items-center gap-1"><Home className="w-3.5 h-3.5" /></Link>
+          <ChevronRight className="w-3.5 h-3.5" />
+          <Link to="/projects" className="hover:text-emerald-600">Projects</Link>
+          <ChevronRight className="w-3.5 h-3.5" />
+          <span className="text-slate-600 font-medium truncate">{project.customer?.name || project.projectCode}</span>
         </div>
       </div>
 
-      {/* Quick Stats (below header) */}
-      {stats && (
-        <div className="bg-white border-b border-slate-100 px-4 sm:px-6 lg:px-8 py-4 shrink-0 z-10">
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-            {[
-              { label: "Today's Tasks", value: stats.tasks?.inProgress || 0, bg: 'bg-emerald-50', ring: 'border-emerald-100', text: 'text-emerald-700', sub: 'text-emerald-400' },
-              { label: 'Delayed Tasks', value: stats.tasks?.delayed || 0, bg: 'bg-rose-50', ring: 'border-rose-100', text: 'text-rose-700', sub: 'text-rose-400' },
-              { label: 'Open Issues', value: stats.issues?.open || 0, bg: 'bg-orange-50', ring: 'border-orange-100', text: 'text-orange-700', sub: 'text-orange-400' },
-              { label: 'Pending Approvals', value: stats.approvals?.pending || 0, bg: 'bg-amber-50', ring: 'border-amber-100', text: 'text-amber-700', sub: 'text-amber-400' },
-              { label: 'Employees Working', value: stats.todayManpower || 0, bg: 'bg-emerald-50', ring: 'border-emerald-100', text: 'text-emerald-700', sub: 'text-emerald-400' },
-              { label: 'Site Visits', value: stats.siteVisitsToday || 0, bg: 'bg-violet-50', ring: 'border-violet-100', text: 'text-violet-700', sub: 'text-violet-400' },
-            ].map((s) => (
-              <div key={s.label} className={`${s.bg} ${s.ring} border rounded-xl px-3 py-2.5 flex flex-col`}>
-                <span className={`text-[11px] font-medium ${s.sub} mb-0.5 truncate`}>{s.label}</span>
-                <span className={`text-xl font-bold ${s.text}`}>{s.value}</span>
+      {/* Premium header band */}
+      <div className="bg-white px-4 sm:px-6 lg:px-8 pt-2 shrink-0 z-10">
+        <div className="relative overflow-hidden rounded-2xl border border-emerald-100/70 bg-gradient-to-r from-emerald-50/60 via-white to-amber-50/40 px-4 sm:px-5 py-3">
+          {/* Decorative watermark — faint, centered, wide screens only so it never sits under the cards */}
+          <div className="pointer-events-none absolute inset-y-0 left-1/2 hidden -translate-x-1/2 items-center 2xl:flex">
+            <p className="font-serif italic text-xl leading-tight text-emerald-900/[0.07] text-center select-none whitespace-nowrap">
+              From Concept to Completion<br/>Beautifully Together
+            </p>
+          </div>
+
+          <div className="relative flex flex-wrap items-start justify-between gap-4">
+            <div className="flex items-start gap-2 sm:gap-3 min-w-0">
+              <Button variant="ghost" size="icon" onClick={goBack} title="Back" className="mt-1 h-8 w-8 rounded-full bg-white/70 text-slate-500 hover:text-slate-700 shrink-0 shadow-sm"><ArrowLeft className="h-4 w-4" /></Button>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h1 className="text-lg sm:text-xl lg:text-2xl font-bold tracking-tight text-slate-800 truncate">{project.customer?.name || project.projectName}</h1>
+                  {project.customer?.city && (
+                    <span className="inline-flex items-center gap-1 text-sm font-medium text-slate-400"><MapPin className="w-3.5 h-3.5 text-emerald-500" />{project.customer.city}</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 mt-1 flex-wrap text-xs">
+                  <span className="font-mono font-semibold text-slate-500 bg-slate-100 rounded px-2 py-0.5">{project.projectCode}</span>
+                  <button type="button" title="Copy project code"
+                    onClick={() => { navigator.clipboard?.writeText(project.projectCode || '').then(() => toast.success('Project code copied')).catch(() => {}); }}
+                    className="text-slate-300 hover:text-emerald-600"><Copy className="w-3.5 h-3.5" /></button>
+                  {project.projectName && <span className="text-slate-400 truncate">{project.projectName}</span>}
+                </div>
+                <div className="text-slate-400 flex items-center gap-3 sm:gap-4 text-xs sm:text-sm mt-1.5 flex-wrap">
+                  <span className="flex items-center gap-1"><User className="w-4 h-4"/> Customer ID: {project.customer?.id ?? '—'}</span>
+                  <span className="flex items-center gap-1"><Mail className="w-4 h-4 text-emerald-400"/> {project.customer?.email || 'N/A'}</span>
+                  {project.customer?.phone && (
+                    <a href={`tel:${project.customer.phone}`} className="flex items-center gap-1 hover:text-emerald-600"><Phone className="w-4 h-4 text-emerald-400"/> {project.customer.phone}</a>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 mt-2 flex-wrap">
+                  <span className={`px-2.5 py-0.5 text-[11px] rounded-full font-semibold uppercase tracking-wide ${
+                    project.status === 'RUNNING' ? 'bg-emerald-100 text-emerald-700' :
+                    project.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-700' :
+                    'bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100'
+                  }`}>
+                    {project.status.replace(/_/g, ' ')}
+                  </span>
+                  {(stats?.health === 'WARNING' || stats?.health === 'CRITICAL') && (
+                    <span className={`px-2.5 py-0.5 text-[11px] rounded-full font-semibold uppercase tracking-wide ${
+                      stats.health === 'CRITICAL' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'
+                    }`}>
+                      {stats.health === 'CRITICAL' ? 'Critical' : 'Warning'}
+                    </span>
+                  )}
+                </div>
               </div>
+            </div>
+
+            <div className="flex flex-col items-end gap-2">
+              <div className="flex items-center gap-2 shrink-0">
+                <TrackingLinkDialog projectId={Number(projectId)} />
+                <Button variant="outline" className="rounded-xl border-slate-200 text-slate-600 bg-white" onClick={() => { setActiveTab('overview'); startEdit('overview'); }}>
+                  <Pencil className="w-4 h-4 mr-2" /> Edit Project
+                </Button>
+                {project.status !== 'COMPLETED' && (
+                  <Button onClick={handleCompleteProject} className="bg-emerald-500 hover:bg-emerald-600 rounded-xl">
+                    <CheckCircle2 className="w-4 h-4 mr-2"/> Mark Completed
+                  </Button>
+                )}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="icon" className="rounded-xl border-slate-200 text-slate-500 bg-white"><MoreHorizontal className="h-4 w-4" /></Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    {['PLANNING', 'PENDING', 'APPROVED'].includes(project.status) && (
+                      <>
+                        <DropdownMenuItem onSelect={handleStartExecution}><Play className="w-4 h-4 mr-2"/> Start Execution</DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                      </>
+                    )}
+                    <DropdownMenuItem asChild><Link to={`/tasks?projectId=${projectId}`}>View Tasks</Link></DropdownMenuItem>
+                    {project.customer?.id && (
+                      <DropdownMenuItem asChild><Link to={`/customers/${project.customer.id}`}>View Customer</Link></DropdownMenuItem>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+
+              {/* Date cards */}
+              <div className="flex items-stretch gap-2">
+                <div className="flex items-center gap-2 rounded-xl bg-white border border-slate-200 px-3 py-2 shadow-sm">
+                  <Calendar className="w-5 h-5 text-emerald-500 shrink-0" />
+                  <div>
+                    <div className="text-[10px] font-semibold uppercase text-slate-400">Start Date</div>
+                    <div className="text-sm font-bold text-slate-700 whitespace-nowrap">{shortDate(project.startDate)}</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 rounded-xl bg-white border border-slate-200 px-3 py-2 shadow-sm">
+                  <Clock className={`w-5 h-5 shrink-0 ${daysRemaining !== null && daysRemaining < 0 ? 'text-rose-500' : 'text-amber-500'}`} />
+                  <div>
+                    <div className="text-[10px] font-semibold uppercase text-slate-400">Days Remaining</div>
+                    <div className={`text-sm font-bold whitespace-nowrap ${daysRemaining !== null && daysRemaining < 0 ? 'text-rose-600' : 'text-slate-700'}`}>{daysRemainingText}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Quick Stats strip */}
+      {stats && (
+        <div className="bg-white px-4 sm:px-6 lg:px-8 py-2.5 shrink-0 z-10">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+            {[
+              { label: "Today's Tasks", value: stats.tasks?.inProgress || 0, sub: 'Nothing for today', icon: CheckCircle2, bg: 'bg-emerald-50/70', ring: 'border-emerald-100', chip: 'bg-emerald-100 text-emerald-600', text: 'text-slate-800', tab: 'fieldProgress' },
+              { label: 'Delayed Tasks', value: stats.tasks?.delayed || 0, sub: 'Need attention', icon: Clock, bg: 'bg-rose-50/70', ring: 'border-rose-100', chip: 'bg-rose-100 text-rose-600', text: 'text-slate-800', tab: 'fieldProgress' },
+              { label: 'Open Issues', value: stats.issues?.open || 0, sub: 'All clear', icon: AlertTriangle, bg: 'bg-orange-50/70', ring: 'border-orange-100', chip: 'bg-orange-100 text-orange-600', text: 'text-slate-800', tab: 'quality' },
+              { label: 'Pending Approvals', value: stats.approvals?.pending || 0, sub: 'Awaiting approval', icon: FileText, bg: 'bg-violet-50/70', ring: 'border-violet-100', chip: 'bg-violet-100 text-violet-600', text: 'text-slate-800', tab: 'approvals' },
+              { label: 'Employees Working', value: stats.todayManpower || 0, sub: 'Not assigned', icon: Users, bg: 'bg-emerald-50/70', ring: 'border-emerald-100', chip: 'bg-emerald-100 text-emerald-600', text: 'text-slate-800', tab: 'labour' },
+              { label: 'Site Visits', value: stats.siteVisitsToday || 0, sub: 'No visits yet', icon: MapPin, bg: 'bg-sky-50/70', ring: 'border-sky-100', chip: 'bg-sky-100 text-sky-600', text: 'text-slate-800', tab: 'execution' },
+            ].map((s) => (
+              <button key={s.label} type="button" onClick={() => setActiveTab(s.tab)}
+                className={`${s.bg} ${s.ring} border rounded-xl px-3 py-2 flex flex-col text-left transition hover:shadow-sm group`}>
+                <div className="flex items-center justify-between">
+                  <span className={`flex h-7 w-7 items-center justify-center rounded-lg ${s.chip}`}><s.icon className="w-3.5 h-3.5" /></span>
+                  <ChevronRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-400" />
+                </div>
+                <span className="text-[11px] font-semibold text-slate-500 mt-1.5 truncate">{s.label}</span>
+                <span className={`text-xl font-black ${s.text} leading-tight`}>{s.value}</span>
+                <span className="text-[10px] font-medium text-slate-400 truncate">{s.sub}</span>
+              </button>
             ))}
           </div>
         </div>
       )}
 
-      <div className="flex-1 overflow-hidden flex flex-col">
-        <div className="flex-1 overflow-hidden flex flex-col p-4 sm:p-6 lg:p-8">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full flex flex-col h-full">
+      <div className="flex flex-col">
+        <div className="px-4 sm:px-6 lg:px-8 pt-3 pb-4">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
 
           {(() => {
             const active = groupOf(activeTab);
             const issueCount = issues.length + risks.length;
             return (
-              <div className="mb-6 space-y-2">
-                {/* Primary strip — the 5 areas of work */}
-                <div className="bg-white p-1 border border-slate-100 shadow-[0_1px_2px_rgba(0,0,0,0.03)] rounded-2xl flex flex-wrap w-full lg:w-fit gap-1 justify-start">
-                  {TAB_GROUPS.filter((g) => g.id !== "service" || project.status === "COMPLETED").map((g) => {
-                    const isActive = g.id === active.id;
-                    return (
-                      <button
-                        key={g.id}
-                        type="button"
-                        onClick={() => setActiveTab(g.sections[0][0])}
-                        className={`rounded-xl px-3.5 py-1.5 text-sm font-medium transition flex items-center gap-2 shrink-0 ${isActive ? "bg-slate-100 text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
-                      >
-                        {g.label}
-                        {g.id === "execution" && issueCount > 0 && (
-                          <span className="bg-red-100 text-red-600 px-1.5 rounded-full text-[10px] font-bold">{issueCount}</span>
-                        )}
-                      </button>
-                    );
-                  })}
+              <div className="sticky top-0 z-20 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-2 mb-3 bg-slate-50/95 backdrop-blur-sm space-y-2">
+                {/* Compact header — slides in on scroll so the project stays identifiable once the big header leaves */}
+                <div className={`flex items-center justify-between gap-2 overflow-hidden transition-all duration-300 ${scrolled ? 'max-h-14 opacity-100' : 'max-h-0 opacity-0'}`}>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <button type="button" onClick={goBack} title="Back" className="text-slate-400 hover:text-slate-600 shrink-0"><ArrowLeft className="h-4 w-4" /></button>
+                    <span className="font-bold text-slate-800 truncate">{project.customer?.name || project.projectCode}</span>
+                    {project.customer?.city && <span className="text-xs text-slate-400 shrink-0 hidden sm:inline">· {project.customer.city}</span>}
+                    <span className="px-2 py-0.5 text-[10px] rounded-full font-semibold uppercase bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100 shrink-0">{project.status.replace(/_/g, ' ')}</span>
+                  </div>
+                  {project.status !== 'COMPLETED' && (
+                    <Button size="sm" onClick={handleCompleteProject} className="bg-emerald-500 hover:bg-emerald-600 rounded-lg h-8 shrink-0"><CheckCircle2 className="w-4 h-4 mr-1.5"/> Mark Completed</Button>
+                  )}
+                </div>
+                {/* Primary strip — the areas of work + Generate Report */}
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="bg-white p-1 border border-slate-100 shadow-[0_1px_2px_rgba(0,0,0,0.03)] rounded-2xl flex flex-wrap gap-1 justify-start">
+                    {TAB_GROUPS.filter((g) => g.id !== "service" || project.status === "COMPLETED").map((g) => {
+                      const isActive = g.id === active.id;
+                      const Icon = g.icon;
+                      return (
+                        <button
+                          key={g.id}
+                          type="button"
+                          onClick={() => setActiveTab(g.sections[0][0])}
+                          className={`rounded-xl px-3.5 py-2 text-sm font-medium transition flex items-center gap-2 shrink-0 ${isActive ? "bg-emerald-500 text-white shadow-sm" : "text-slate-500 hover:bg-slate-50 hover:text-slate-700"}`}
+                        >
+                          <Icon className="w-4 h-4" />
+                          {g.label}
+                          {g.id === "execution" && issueCount > 0 && (
+                            <span className={`px-1.5 rounded-full text-[10px] font-bold ${isActive ? "bg-white/25 text-white" : "bg-red-100 text-red-600"}`}>{issueCount}</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" className="rounded-xl border-slate-200 text-slate-600 bg-white shrink-0">
+                        <FileBarChart className="w-4 h-4 mr-2 text-emerald-600" /> Generate Report <ChevronDown className="w-4 h-4 ml-2" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onSelect={() => window.print()}><FileBarChart className="w-4 h-4 mr-2" /> Print this page</DropdownMenuItem>
+                      <DropdownMenuItem asChild><Link to="/reports">Open Reports</Link></DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
 
                 {/* Secondary strip — sections inside the active area */}
@@ -832,15 +925,16 @@ export default function ProjectCommandCenter() {
             );
           })()}
 
-          <div className="flex-1 overflow-y-auto pb-20">
+          <div className="pb-20">
             
             {/* OVERVIEW TAB */}
-            <TabsContent value="overview" className="space-y-6 mt-0 h-full outline-none">
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6">
+            <TabsContent value="overview" className="space-y-3 mt-0 h-full outline-none">
+              {/* Band A — key facts · financial+progress · customer/actions, packed in one row */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
 
                 {/* Project Overview — key facts (inline editable) */}
-                <div className="lg:col-span-6 bg-white rounded-2xl border border-slate-100 p-5 sm:p-6 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
-                  <div className="mb-4 flex items-center justify-between">
+                <div className="lg:col-span-5 bg-white rounded-2xl border border-slate-100 p-3 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+                  <div className="mb-2 flex items-center justify-between">
                     <h3 className="text-sm font-bold text-slate-700 flex items-center"><ClipboardCheck className="w-4 h-4 mr-2 text-emerald-600"/> Project Overview</h3>
                     {!editingOverview ? (
                       <button type="button" onClick={() => startEdit('overview')} className="text-slate-400 hover:text-emerald-600" title="Edit"><Pencil className="w-4 h-4" /></button>
@@ -851,256 +945,227 @@ export default function ProjectCommandCenter() {
                       </div>
                     )}
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3.5">
-                    <EditRow label="Project Type" editing={editingOverview} view={project.projectType || '—'}>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5">
+                    <EditRow label={<><FileText className="w-3.5 h-3.5 text-slate-300"/> Project Type</>} editing={editingOverview} view={project.projectType || '—'}>
                       <input className={cellInput} value={pform.projectType} onChange={e => setPform({ ...pform, projectType: e.target.value })} placeholder="Residential, Commercial…" />
                     </EditRow>
-                    <EditRow label="Property Type" editing={editingOverview} view={project.projectCategory || '—'}>
+                    <EditRow label={<><Building2 className="w-3.5 h-3.5 text-slate-300"/> Property Type</>} editing={editingOverview} view={project.projectCategory || '—'}>
                       <input className={cellInput} value={pform.projectCategory} onChange={e => setPform({ ...pform, projectCategory: e.target.value })} placeholder="Apartment, Villa…" />
                     </EditRow>
-                    <EditRow label="Priority" editing={editingOverview} view={project.priority || '—'}>
+                    <EditRow label={<><Flag className="w-3.5 h-3.5 text-slate-300"/> Priority</>} editing={editingOverview}
+                      view={project.priority ? <span className="px-2 py-0.5 rounded-md bg-amber-100 text-amber-700 text-[11px] font-bold uppercase">{project.priority}</span> : '—'}>
                       <select className={cellInput} value={pform.priority} onChange={e => setPform({ ...pform, priority: e.target.value })}>
                         {['LOW', 'MEDIUM', 'HIGH', 'URGENT'].map(p => <option key={p} value={p}>{p}</option>)}
                       </select>
                     </EditRow>
-                    <EditRow label="Project Manager" editing={editingOverview} view={project.projectManager?.name || '—'} />
-                    <EditRow label="Start Date" editing={editingOverview} view={shortDate(project.startDate)}>
+                    <EditRow label={<><User className="w-3.5 h-3.5 text-slate-300"/> Project Manager</>} editing={editingOverview} view={project.projectManager?.name || '—'} />
+                    <EditRow label={<><Calendar className="w-3.5 h-3.5 text-slate-300"/> Start Date</>} editing={editingOverview} view={shortDate(project.startDate)}>
                       <input type="date" className={cellInput} value={pform.startDate} onChange={e => setPform({ ...pform, startDate: e.target.value })} />
                     </EditRow>
-                    <EditRow label="Target Completion" editing={editingOverview} view={shortDate(project.endDate)}>
+                    <EditRow label={<><Flag className="w-3.5 h-3.5 text-slate-300"/> Target Completion</>} editing={editingOverview} view={shortDate(project.endDate)}>
                       <input type="date" className={cellInput} value={pform.endDate} onChange={e => setPform({ ...pform, endDate: e.target.value })} />
                     </EditRow>
-                    <EditRow label="Days Remaining" editing={editingOverview} danger={daysRemaining !== null && daysRemaining < 0} view={daysRemainingText} />
-                    <EditRow label="Project Value" editing={editingOverview} view={project.estimatedCost ? inr(project.estimatedCost) : (project.budget ? inr(project.budget) : '—')}>
+                    <EditRow label={<><Clock className="w-3.5 h-3.5 text-slate-300"/> Days Remaining</>} editing={editingOverview}
+                      view={<span className={`px-2 py-0.5 rounded-md text-[11px] font-bold ${daysRemaining !== null && daysRemaining < 0 ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}`}>{daysRemainingText}</span>} />
+                    <EditRow label={<><IndianRupee className="w-3.5 h-3.5 text-slate-300"/> Project Value</>} editing={editingOverview} view={project.estimatedCost ? inr(project.estimatedCost) : (project.budget ? inr(project.budget) : '—')}>
                       <input type="number" min={0} className={cellInput} value={pform.estimatedCost} onChange={e => setPform({ ...pform, estimatedCost: e.target.value })} placeholder="Estimated value" />
                     </EditRow>
                   </div>
-                </div>
 
-                {/* Financial Health */}
-                <div className="lg:col-span-3 bg-white rounded-2xl border border-slate-100 p-5 sm:p-6 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
-                  <h3 className="text-sm font-bold text-slate-700 mb-4 flex items-center"><Wallet className="w-4 h-4 mr-2 text-emerald-600"/> Financial Health</h3>
-                  <div className="mb-2">
-                    {editingOverview ? (
-                      <input type="number" min={0} className={cellInput + " text-lg font-bold"} value={pform.budget} onChange={e => setPform({ ...pform, budget: e.target.value })} placeholder="Budget" />
-                    ) : (
-                      <div className="text-2xl font-bold text-slate-800">{inr(project.budget)}</div>
-                    )}
-                    <div className="text-xs font-medium text-slate-400">Allocated Budget {editingOverview && <span className="text-emerald-500">· editing</span>}</div>
+                  {/* Description (+ address & requirements when editing) */}
+                  <div className="mt-2.5 pt-2 border-t border-slate-100">
+                    <div className="text-[11px] font-semibold text-slate-400 mb-1 uppercase tracking-wider flex items-center gap-1.5"><FileText className="w-3.5 h-3.5"/> Description</div>
+                    {editingOverview
+                      ? <textarea className="w-full min-h-[60px] rounded-md border border-input bg-background px-3 py-2 text-sm" value={pform.projectDescription} onChange={e => setPform({ ...pform, projectDescription: e.target.value })} placeholder="Scope / description of the project" />
+                      : <div className="text-sm font-medium text-slate-700 whitespace-pre-line">{project.projectDescription || <span className="text-slate-400 font-normal">No description added yet. Click edit to add project details.</span>}</div>}
                   </div>
-                  <div className="mb-4">
-                    <div className="text-2xl font-bold text-slate-800">{inr(project.spentAmount)}</div>
-                    <div className="text-xs font-medium text-slate-400">Spent Amount</div>
-                  </div>
-                  <div>
-                    <div className="flex justify-between text-xs font-semibold mb-1.5">
-                      <span className="text-slate-500">Utilization</span>
-                      <span className={profitOrLoss < 0 ? 'text-rose-500' : 'text-slate-700'}>{utilizationPct}%</span>
-                    </div>
-                    <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
-                      <div className={`h-2.5 rounded-full transition-all ${profitOrLoss < 0 ? 'bg-rose-500' : 'bg-emerald-500'}`}
-                        style={{ width: `${Math.min(100, utilizationPct)}%` }} />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Overall Progress — donut */}
-                <div className="lg:col-span-3 bg-white rounded-2xl border border-slate-100 p-5 sm:p-6 shadow-[0_1px_2px_rgba(0,0,0,0.03)] flex flex-col items-center justify-center">
-                  <h3 className="text-sm font-bold text-slate-700 mb-3 self-start flex items-center"><Activity className="w-4 h-4 mr-2 text-emerald-600"/> Overall Progress</h3>
-                  <div className="relative h-32 w-32">
-                    <svg viewBox="0 0 100 100" className="h-full w-full -rotate-90">
-                      <circle cx="50" cy="50" r="42" fill="none" stroke="currentColor" strokeWidth="9" className="text-slate-100" />
-                      <circle cx="50" cy="50" r="42" fill="none" strokeWidth="9" strokeLinecap="round"
-                        className={(project.progress || 0) >= 100 ? 'text-emerald-500' : 'text-emerald-600'}
-                        stroke="currentColor"
-                        strokeDasharray={2 * Math.PI * 42}
-                        strokeDashoffset={2 * Math.PI * 42 * (1 - Math.min(100, project.progress || 0) / 100)} />
-                    </svg>
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <span className="text-2xl font-black text-slate-800">{project.progress || 0}%</span>
-                    </div>
-                  </div>
-                </div>
-
-              </div>
-
-              {/* Upcoming Deadlines · Customer Snapshot · Quick Actions */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
-
-                {/* Upcoming Deadlines */}
-                <div className="bg-white rounded-2xl border border-slate-100 p-5 sm:p-6 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
-                  <h3 className="text-sm font-bold text-slate-700 mb-4 flex items-center"><CalendarClock className="w-4 h-4 mr-2 text-slate-400"/> Upcoming Deadlines</h3>
-                  <div className="space-y-3">
-                    {(stats?.tasks?.delayed ?? 0) > 0 && (
-                      <div className="bg-rose-50 p-3 rounded-lg border border-rose-100">
-                        <div className="text-[11px] font-bold text-rose-600 uppercase tracking-wide mb-1">Overdue Tasks</div>
-                        <div className="text-sm font-medium text-rose-800">{stats.tasks.delayed} task{stats.tasks.delayed === 1 ? '' : 's'} require immediate attention</div>
+                  {editingOverview && (
+                    <div className="mt-3 space-y-3">
+                      <div>
+                        <div className="text-[11px] font-semibold text-slate-400 mb-1 uppercase tracking-wider">Property Address</div>
+                        <textarea className="w-full min-h-[48px] rounded-md border border-input bg-background px-3 py-2 text-sm" value={pform.propertyAddress} onChange={e => setPform({ ...pform, propertyAddress: e.target.value })} placeholder="Site / property address" />
                       </div>
-                    )}
-                    <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
-                      <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">Target Completion</div>
-                      <div className="text-sm font-medium text-slate-800">{shortDate(project.endDate)}</div>
+                      <div>
+                        <div className="text-[11px] font-semibold text-slate-400 mb-1 uppercase tracking-wider">Customer Requirements</div>
+                        <textarea className="w-full min-h-[48px] rounded-md border border-input bg-background px-3 py-2 text-sm" value={pform.customerNotes} onChange={e => setPform({ ...pform, customerNotes: e.target.value })} placeholder="What the customer asked for" />
+                      </div>
                     </div>
-                  </div>
-                </div>
-
-                {/* Customer Snapshot */}
-                <div className="bg-white rounded-2xl border border-slate-100 p-5 sm:p-6 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
-                  <h3 className="text-sm font-bold text-slate-700 mb-4 flex items-center"><User className="w-4 h-4 mr-2 text-slate-400"/> Customer Snapshot</h3>
-                  <div className="font-bold text-slate-700 text-sm">{project.customer?.name || '—'}</div>
-                  <div className="text-xs text-slate-500 flex items-center gap-1 mt-1 mb-4"><MapPin className="w-3.5 h-3.5 shrink-0"/> {project.customer?.address || 'No address on file'}</div>
-                  <div className="flex gap-2">
-                    <Button asChild size="sm" variant="outline" className="flex-1 bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100" disabled={!project.customer?.phone}>
-                      <a href={project.customer?.phone ? `tel:${project.customer.phone}` : undefined}><Phone className="w-3.5 h-3.5 mr-1"/> Call</a>
-                    </Button>
-                    <Button asChild size="sm" variant="outline" className="flex-1 bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100">
-                      <a href={project.customer?.phone ? `https://wa.me/${String(project.customer.phone).replace(/\D/g, '')}` : undefined} target="_blank" rel="noreferrer"><MessageCircle className="w-3.5 h-3.5 mr-1"/> WhatsApp</a>
-                    </Button>
-                  </div>
-                  {project.customer?.id && (
-                    <Link to={`/customers/${project.customer.id}`} className="block text-center text-xs font-semibold text-emerald-600 hover:text-emerald-700 mt-3">View Customer</Link>
                   )}
                 </div>
 
-                {/* Quick Actions */}
-                <div className="bg-white rounded-2xl border border-slate-100 p-5 sm:p-6 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
-                  <h3 className="text-sm font-bold text-slate-700 mb-4 flex items-center"><Sparkles className="w-4 h-4 mr-2 text-slate-400"/> Quick Actions</h3>
-                  <div className="grid grid-cols-2 gap-2">
-                    {([
-                      { label: 'Add Task', icon: CheckSquare, view: 'create_task', color: 'text-emerald-500' },
-                      { label: 'Assign Resource', icon: Users, view: 'assign_employee', color: 'text-emerald-500' },
-                      { label: 'Report Issue', icon: AlertTriangle, view: 'report_issue', color: 'text-rose-500' },
-                      { label: 'Purchase Request', icon: ShoppingCart, view: 'purchase_request', color: 'text-violet-500' },
-                    ] as const).map((a) => (
-                      <button key={a.label} type="button"
-                        onClick={() => { setQuickActionView(a.view); setQuickActionOpen(true); }}
-                        className="flex items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 hover:bg-slate-100 px-3 py-2.5 text-xs font-semibold text-slate-700 text-left transition-colors">
-                        <a.icon className={`w-4 h-4 shrink-0 ${a.color}`} /> <span className="truncate">{a.label}</span>
-                      </button>
-                    ))}
+                {/* Project Progress — donut + legend + planning tip */}
+                <div className="lg:col-span-4 bg-white rounded-2xl border border-slate-100 p-3 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+                  <h3 className="text-sm font-bold text-slate-700 mb-2 flex items-center"><Activity className="w-4 h-4 mr-2 text-emerald-600"/> Project Progress</h3>
+                  <div className="flex items-center gap-4">
+                    <div className="relative h-24 w-24 shrink-0">
+                      <svg viewBox="0 0 100 100" className="h-full w-full -rotate-90">
+                        <circle cx="50" cy="50" r="42" fill="none" stroke="currentColor" strokeWidth="10" className="text-slate-100" />
+                        <circle cx="50" cy="50" r="42" fill="none" strokeWidth="10" strokeLinecap="round"
+                          className={(project.progress || 0) >= 100 ? 'text-emerald-500' : 'text-emerald-600'}
+                          stroke="currentColor"
+                          strokeDasharray={2 * Math.PI * 42}
+                          strokeDashoffset={2 * Math.PI * 42 * (1 - Math.min(100, project.progress || 0) / 100)} />
+                      </svg>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center">
+                        <span className="text-xl font-black text-slate-800 leading-none">{project.progress || 0}%</span>
+                        <span className="text-[9px] font-semibold uppercase text-slate-400 mt-0.5">Complete</span>
+                      </div>
+                    </div>
+                    <div className="min-w-0 flex-1 space-y-1.5 text-sm">
+                      <div className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-slate-300 shrink-0"/><span className="font-bold text-slate-700">{project.progress || 0}%</span><span className="text-slate-400">Execution</span></div>
+                      <div className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-sky-500 shrink-0"/><span className="font-bold text-slate-700">{stats?.tasks?.completed ?? 0} of {stats?.tasks?.total ?? 0}</span><span className="text-slate-400">Tasks Completed</span></div>
+                      <div className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-amber-500 shrink-0"/><span className="font-bold text-slate-700">{stats?.tasks?.delayed ?? 0}</span><span className="text-slate-400">Delayed Tasks</span></div>
+                      <div className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-rose-500 shrink-0"/><span className="font-bold text-slate-700">{stats?.issues?.open ?? 0}</span><span className="text-slate-400">Open Issues</span></div>
+                    </div>
                   </div>
+                  {(project.status === 'PLANNING' || (project.progress || 0) === 0) && (
+                    <div className="mt-2.5 flex items-start gap-2 rounded-xl bg-sky-50 border border-sky-100 p-2.5 text-[11px] text-sky-800">
+                      <Sparkles className="w-4 h-4 shrink-0 text-sky-500 mt-0.5" />
+                      <span>Project is in planning stage. Start adding tasks, resources and documents to track progress effectively.</span>
+                    </div>
+                  )}
                 </div>
 
+                {/* Right column — Financial Summary + Quick Actions */}
+                <div className="lg:col-span-3 space-y-3">
+                  {/* Financial Summary */}
+                  <div className="bg-white rounded-2xl border border-slate-100 p-3 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-sm font-bold text-slate-700 flex items-center"><Wallet className="w-4 h-4 mr-2 text-emerald-600"/> Financial Summary</h3>
+                      <button type="button" onClick={() => setActiveTab('payments')} className="text-[11px] font-semibold text-emerald-600 hover:text-emerald-700">View Details</button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="rounded-xl bg-emerald-50/70 border border-emerald-100 p-3">
+                        <Wallet className="w-4 h-4 text-emerald-600 mb-1.5" />
+                        {editingOverview
+                          ? <input type="number" min={0} className={cellInput + " font-bold"} value={pform.budget} onChange={e => setPform({ ...pform, budget: e.target.value })} placeholder="Budget" />
+                          : <div className="text-lg font-black text-slate-800 leading-tight truncate">{inr(project.budget)}</div>}
+                        <div className="text-[10px] font-medium text-slate-400 mt-0.5">Total Budget</div>
+                      </div>
+                      <div className="rounded-xl bg-violet-50/70 border border-violet-100 p-3">
+                        <BarChart3 className="w-4 h-4 text-violet-600 mb-1.5" />
+                        <div className="text-lg font-black text-slate-800 leading-tight truncate">{inr(project.spentAmount)}</div>
+                        <div className="text-[10px] font-medium text-slate-400 mt-0.5">Amount Spent</div>
+                      </div>
+                    </div>
+                    <div className="mt-3">
+                      <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                        <div className={`h-2 rounded-full transition-all ${profitOrLoss < 0 ? 'bg-rose-500' : 'bg-emerald-500'}`} style={{ width: `${Math.min(100, utilizationPct)}%` }} />
+                      </div>
+                      <div className="mt-1 text-right text-[11px] font-semibold text-slate-500">{utilizationPct}% Utilization</div>
+                    </div>
+                    {!project.budget && (
+                      <div className="mt-2 flex items-start gap-1.5 rounded-lg bg-slate-50 p-2 text-[11px] text-slate-400"><IndianRupee className="w-3.5 h-3.5 shrink-0 mt-0.5"/> Add budget details to track project expenses and profitability.</div>
+                    )}
+                  </div>
+
+                  {/* Quick Actions */}
+                  <div className="bg-white rounded-2xl border border-slate-100 p-3 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+                    <h3 className="text-sm font-bold text-slate-700 mb-2.5 flex items-center"><Sparkles className="w-4 h-4 mr-2 text-slate-400"/> Quick Actions</h3>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {([
+                        { label: 'Add Task', icon: CheckSquare, color: 'text-emerald-500', onClick: () => { setQuickActionView('create_task'); setQuickActionOpen(true); } },
+                        { label: 'Issue', icon: AlertTriangle, color: 'text-amber-500', onClick: () => { setQuickActionView('report_issue'); setQuickActionOpen(true); } },
+                        { label: 'Assign', icon: Users, color: 'text-amber-500', onClick: () => { setQuickActionView('assign_employee'); setQuickActionOpen(true); } },
+                        { label: 'Site Visit', icon: MapPin, color: 'text-violet-500', onClick: () => setActiveTab('execution') },
+                        { label: 'Call', icon: Phone, color: 'text-slate-500', href: project.customer?.phone ? `tel:${project.customer.phone}` : undefined },
+                        { label: 'WhatsApp', icon: MessageCircle, color: 'text-emerald-500', href: project.customer?.phone ? `https://wa.me/${String(project.customer.phone).replace(/\D/g, '')}` : undefined },
+                        { label: 'Purchase', icon: ShoppingCart, color: 'text-violet-500', onClick: () => { setQuickActionView('purchase_request'); setQuickActionOpen(true); } },
+                        { label: 'More', icon: MoreHorizontal, color: 'text-slate-500', onClick: () => { setQuickActionView('menu'); setQuickActionOpen(true); } },
+                      ] as const).map((a) => {
+                        const cls = "flex flex-col items-center gap-1 rounded-lg border border-slate-100 bg-slate-50 hover:bg-slate-100 px-1 py-2 text-[10px] font-semibold text-slate-600 text-center transition-colors";
+                        return ('href' in a)
+                          ? <a key={a.label} href={(a as any).href} target={a.label === 'WhatsApp' ? '_blank' : undefined} rel="noreferrer" className={cls}><a.icon className={`w-4 h-4 ${a.color}`} /><span className="truncate w-full">{a.label}</span></a>
+                          : <button key={a.label} type="button" onClick={(a as any).onClick} className={cls}><a.icon className={`w-4 h-4 ${a.color}`} /><span className="truncate w-full">{a.label}</span></button>;
+                      })}
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              {/* Recent Activity */}
-              <div className="bg-white rounded-2xl border border-slate-100 p-5 sm:p-6 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
-                <h3 className="text-sm font-bold text-slate-700 mb-4 flex items-center"><History className="w-4 h-4 mr-2 text-slate-400"/> Recent Activity</h3>
-                {activityFeed.length > 0 ? (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400 border-b border-slate-100">
-                          <th className="py-2 pr-4 font-semibold">Date</th>
-                          <th className="py-2 pr-4 font-semibold">Activity</th>
-                          <th className="py-2 pr-4 font-semibold">By</th>
-                          <th className="py-2 font-semibold">Details</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-50">
-                        {activityFeed.map((a, i) => (
-                          <tr key={i} className="text-slate-600">
-                            <td className="py-2.5 pr-4 whitespace-nowrap text-slate-500">{a.date ? format(new Date(a.date), 'dd MMM yyyy') : '—'}</td>
-                            <td className="py-2.5 pr-4 whitespace-nowrap font-medium text-slate-700">{a.activity}</td>
-                            <td className="py-2.5 pr-4 whitespace-nowrap">{a.by || '—'}</td>
-                            <td className="py-2.5 max-w-xs truncate" title={a.details}>{a.details}</td>
-                          </tr>
+              {/* Band B — team · activity · notes */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
+
+                {/* Project Team */}
+                <div className="lg:col-span-5 bg-white rounded-2xl border border-slate-100 p-3 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-bold text-slate-700 flex items-center"><Users className="w-4 h-4 mr-2 text-emerald-600"/> Project Team</h3>
+                    <Link to={`/tasks?projectId=${projectId}`} className="text-[11px] font-semibold text-emerald-600 hover:text-emerald-700">Assign Team</Link>
+                  </div>
+                  {(() => {
+                    const team = ([['Project Manager', project.projectManager], ['Sales', project.salesExecutive], ['Designer', project.designer], ['Site Engineer', project.siteEngineer]] as [string, any][]).filter(([, u]) => u);
+                    return team.length > 0 ? (
+                      <div className="space-y-2">
+                        {team.map(([role, u]) => (
+                          <div key={role} className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50/60 px-3 py-2">
+                            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 text-sm font-bold shrink-0">{(u.name || '?').charAt(0).toUpperCase()}</span>
+                            <div className="min-w-0">
+                              <div className="text-sm font-semibold text-slate-700 truncate">{u.name}</div>
+                              <div className="text-[11px] text-slate-400">{role}</div>
+                            </div>
+                          </div>
                         ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : (
-                  <div className="py-8 text-center text-sm text-slate-400">No recent activity yet.</div>
-                )}
-              </div>
+                      </div>
+                    ) : (
+                      <div className="py-6 text-center">
+                        <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 text-slate-300"><Users className="w-7 h-7" /></span>
+                        <div className="text-sm font-semibold text-slate-600 mt-3">No team members assigned yet</div>
+                        <div className="text-xs text-slate-400 mt-0.5">Assign team members to collaborate on this project.</div>
+                        <Button asChild size="sm" className="mt-3 bg-emerald-500 hover:bg-emerald-600 rounded-xl">
+                          <Link to={`/tasks?projectId=${projectId}`}><Plus className="w-4 h-4 mr-1.5"/> Assign Team</Link>
+                        </Button>
+                      </div>
+                    );
+                  })()}
+                </div>
 
-              {/* Project Details — inline editable (address / description / customer requirements) */}
-              <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
-                <div className="mb-4 flex items-center justify-between">
-                  <h3 className="text-lg font-bold text-slate-800 flex items-center"><ClipboardCheck className="w-5 h-5 mr-2 text-emerald-600"/> Project Details</h3>
-                  {!editingDetails ? (
-                    <button type="button" onClick={() => startEdit('details')} className="text-slate-400 hover:text-emerald-600" title="Edit"><Pencil className="w-4 h-4" /></button>
+                {/* Recent Activity — timeline, scroll-capped */}
+                <div className="lg:col-span-4 bg-white rounded-2xl border border-slate-100 p-3 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-bold text-slate-700 flex items-center"><History className="w-4 h-4 mr-2 text-emerald-600"/> Recent Activity</h3>
+                    <button type="button" onClick={() => setActiveTab('execution')} className="text-[11px] font-semibold text-emerald-600 hover:text-emerald-700">View All</button>
+                  </div>
+                  {activityFeed.length > 0 ? (
+                    <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
+                      {activityFeed.map((a, i) => (
+                        <div key={i} className="flex gap-3">
+                          <div className="flex flex-col items-center">
+                            <span className={`h-2.5 w-2.5 rounded-full shrink-0 mt-1 ${i === 0 ? 'bg-emerald-500' : 'bg-sky-500'}`} />
+                            {i < activityFeed.length - 1 && <span className="w-px flex-1 bg-slate-100 my-1" />}
+                          </div>
+                          <div className="min-w-0 flex-1 -mt-0.5 pb-1">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="text-sm font-semibold text-slate-700">{a.activity}</div>
+                              {a.date && <div className="text-[10px] text-slate-400 text-right whitespace-nowrap leading-tight">{format(new Date(a.date), 'dd MMM yyyy')}<br/>{format(new Date(a.date), 'hh:mm a')}</div>}
+                            </div>
+                            {(a.details || a.by) && <div className="text-xs text-slate-400 truncate" title={a.details}>{a.details}{a.by ? ` · ${a.by}` : ''}</div>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   ) : (
-                    <div className="flex items-center gap-2">
-                      <button type="button" onClick={saveDetails} disabled={savingProject} className="text-emerald-600 hover:text-emerald-700 disabled:opacity-50" title="Save"><Check className="w-4 h-4" /></button>
-                      <button type="button" onClick={() => setEditingDetails(false)} className="text-slate-400 hover:text-rose-500" title="Cancel"><X className="w-4 h-4" /></button>
-                    </div>
+                    <div className="py-8 text-center text-sm text-slate-400">No recent activity yet.</div>
                   )}
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
-                  <div className="md:col-span-2">
-                    <div className="text-xs font-semibold text-slate-400 mb-1 uppercase tracking-wider">Property Address</div>
-                    {editingDetails
-                      ? <textarea className="w-full min-h-[64px] rounded-md border border-input bg-background px-3 py-2 text-sm" value={pform.propertyAddress} onChange={e => setPform({ ...pform, propertyAddress: e.target.value })} placeholder="Site / property address" />
-                      : <div className="text-sm font-medium text-slate-700 whitespace-pre-line">{project.propertyAddress || '—'}</div>}
+
+                {/* Notes & Comments */}
+                <div className="lg:col-span-3 bg-white rounded-2xl border border-slate-100 p-3 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-sm font-bold text-slate-700 flex items-center"><StickyNote className="w-4 h-4 mr-2 text-emerald-600"/> Notes &amp; Comments</h3>
+                    <button type="button" onClick={() => toast.success('Notes & comments are coming soon.')} className="text-[11px] font-semibold text-emerald-600 hover:text-emerald-700">Add Note</button>
                   </div>
-                  <div>
-                    <div className="text-xs font-semibold text-slate-400 mb-1 uppercase tracking-wider">Property Type</div>
-                    <div className="text-sm font-medium text-slate-700">{[project.projectType, project.projectCategory].filter(Boolean).join(' · ') || '—'}</div>
+                  <div className="py-5 text-center">
+                    <span className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-300"><MessageCircle className="w-5 h-5" /></span>
+                    <div className="text-sm font-semibold text-slate-500 mt-2">No notes yet</div>
+                    <div className="text-xs text-slate-400 mt-0.5">Add notes, updates or comments about this project.</div>
                   </div>
-                  <div>
-                    <div className="text-xs font-semibold text-slate-400 mb-1 uppercase tracking-wider">Estimated Value</div>
-                    <div className="text-sm font-medium text-slate-700">{project.estimatedCost ? inr(project.estimatedCost) : '—'}</div>
-                  </div>
-                  <div className="md:col-span-2">
-                    <div className="text-xs font-semibold text-slate-400 mb-1 uppercase tracking-wider">Description</div>
-                    {editingDetails
-                      ? <textarea className="w-full min-h-[80px] rounded-md border border-input bg-background px-3 py-2 text-sm" value={pform.projectDescription} onChange={e => setPform({ ...pform, projectDescription: e.target.value })} placeholder="Scope / description of the project" />
-                      : <div className="text-sm font-medium text-slate-700 whitespace-pre-line">{project.projectDescription || '—'}</div>}
-                  </div>
-                  <div className="md:col-span-2">
-                    <div className="text-xs font-semibold text-slate-400 mb-1 uppercase tracking-wider">Customer Requirements</div>
-                    {editingDetails
-                      ? <textarea className="w-full min-h-[80px] rounded-md border border-input bg-background px-3 py-2 text-sm" value={pform.customerNotes} onChange={e => setPform({ ...pform, customerNotes: e.target.value })} placeholder="What the customer asked for" />
-                      : <div className="text-sm font-medium text-slate-700 whitespace-pre-line">{project.customerNotes || '—'}</div>}
-                  </div>
-                  {(project.projectManager || project.salesExecutive || project.designer || project.siteEngineer) && (
-                    <div className="md:col-span-2">
-                      <div className="text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Team</div>
-                      <div className="flex flex-wrap gap-2">
-                        {([['Project Manager', project.projectManager], ['Sales', project.salesExecutive], ['Designer', project.designer], ['Site Engineer', project.siteEngineer]] as [string, any][])
-                          .filter(([, u]) => u)
-                          .map(([role, u]) => (
-                            <span key={role} className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
-                              <User className="w-3 h-3"/> {role}: {u.name}
-                            </span>
-                          ))}
-                      </div>
-                    </div>
-                  )}
                 </div>
               </div>
-
-              {/* Progress rollup */}
-              {progress && (
-                <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
-                  <h3 className="text-lg font-bold text-slate-800 flex items-center mb-4"><Activity className="w-5 h-5 mr-2 text-emerald-600"/> Progress Rollup</h3>
-                  <div className="grid grid-cols-3 md:grid-cols-6 gap-4">
-                    {[
-                      { label: 'Overall', value: progress.overallPercent },
-                      { label: 'Phase', value: progress.phasePercent },
-                      { label: 'Room', value: progress.roomPercent },
-                      { label: 'Task', value: progress.taskPercent },
-                      { label: 'Material', value: progress.materialPercent },
-                      { label: 'Financial', value: progress.financialPercent },
-                    ].map(p => (
-                      <div key={p.label}>
-                        <div className="flex justify-between text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">
-                          <span>{p.label}</span><span>{p.value}%</span>
-                        </div>
-                        <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
-                          <div className="h-2.5 rounded-full bg-emerald-600 transition-all" style={{ width: `${Math.min(100, p.value)}%` }}></div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
 
               {/* Gantt / Stages */}
-              <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
-                <div className="flex items-center justify-between border-b pb-4">
-                  <h3 className="text-lg font-bold text-slate-800 flex items-center"><TrendingUp className="w-5 h-5 mr-2 text-emerald-600"/> Project Stages & Gantt</h3>
+              <div className="bg-white rounded-2xl border border-slate-100 p-3 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+                <div className="flex items-center justify-between border-b pb-2.5 mb-1">
+                  <h3 className="text-sm font-bold text-slate-700 flex items-center"><TrendingUp className="w-4 h-4 mr-2 text-emerald-600"/> Project Stages &amp; Gantt</h3>
                   <Dialog>
                     <DialogTrigger asChild>
                       <Button size="sm" variant="outline"><Plus className="w-4 h-4 mr-2"/> Add Stage</Button>
@@ -1121,12 +1186,24 @@ export default function ProjectCommandCenter() {
                     </DialogContent>
                   </Dialog>
                 </div>
-                
+
                 {stages.length > 0 ? getGanttTimeline() : (
-                  <div className="py-12 text-center text-slate-500">
+                  <div className="py-6 text-center text-sm text-slate-500">
                     No stages added yet. Add stages to generate the Gantt chart.
                   </div>
                 )}
+              </div>
+
+              {/* Brand banner */}
+              <div className="relative overflow-hidden rounded-2xl border border-emerald-100/70 bg-gradient-to-r from-emerald-50/70 via-white to-amber-50/50 px-5 py-3 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-100 text-emerald-600"><Building2 className="w-4 h-4" /></span>
+                  <p className="font-serif italic text-sm sm:text-base text-emerald-900/70">“Well Planned Projects Turn Houses into Homes.”</p>
+                </div>
+                <div className="text-right">
+                  <div className="text-sm font-black tracking-tight text-emerald-800">JB DECOR</div>
+                  <div className="text-[11px] text-slate-400">Crafted for Better Living</div>
+                </div>
               </div>
             </TabsContent>
 
@@ -1213,6 +1290,9 @@ export default function ProjectCommandCenter() {
               <div className="flex items-center justify-between">
                 <h2 className="text-2xl font-bold text-slate-800 flex items-center"><Layers className="w-5 h-5 mr-2 text-emerald-600"/> Phases & Rooms</h2>
                 <div className="flex gap-3">
+                  <Button variant="outline" onClick={() => setBulkOpen(true)}>
+                    <CheckSquare className="w-4 h-4 mr-2 text-emerald-600"/> Update Work
+                  </Button>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button variant="outline"><Sparkles className="w-4 h-4 mr-2"/> Change plan <ChevronDown className="w-4 h-4 ml-2"/></Button>
@@ -1246,6 +1326,18 @@ export default function ProjectCommandCenter() {
                   </Dialog>
                 </div>
               </div>
+
+              {/* Batch "Update Work" sheet — record a day's progress across many items at once. */}
+              <BulkWorkUpdateDialog
+                projectId={projectId}
+                open={bulkOpen}
+                onOpenChange={setBulkOpen}
+                onApplied={() => {
+                  fetchProjectData();
+                  if (expandedRoom) projectApi.getItems(expandedRoom)
+                    .then(items => setItemsByRoom(prev => ({ ...prev, [expandedRoom]: items }))).catch(() => {});
+                }}
+              />
 
               {/* Build-from-approved-quotation picker — replaces the old blind "Generate from BOQ". */}
               <Dialog open={quotationPicker.open} onOpenChange={(o) => setQuotationPicker(s => ({ ...s, open: o }))}>
@@ -1707,6 +1799,10 @@ export default function ProjectCommandCenter() {
             </TabsContent>
 
             {/* MEDIA TAB */}
+            <TabsContent value="handover" className="mt-0 h-full outline-none">
+              <HandoverTab project={project} onChanged={fetchProjectData} />
+            </TabsContent>
+
             <TabsContent value="media" className="mt-0 h-full outline-none">
               <DocumentsTab projectId={projectId} documents={documents} onChanged={fetchCore} />
             </TabsContent>
@@ -1720,6 +1816,7 @@ export default function ProjectCommandCenter() {
           </div>
         </Tabs>
         </div>
+      </div>
       </div>
 
       {/* Floating Action Button */}

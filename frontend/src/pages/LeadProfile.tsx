@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, Link, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft, Phone, Mail, Building, CheckCircle2, MoreVertical, Edit, XCircle,
-  MessageCircle, MapPin, Check,
+  MessageCircle, Check, CalendarClock, CalendarPlus, TrendingUp, Crown, ArrowRight,
+  LayoutGrid, ListChecks, Activity as ActivityIcon, FileText, Route, Clock, Star,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -12,8 +13,9 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { leadApi } from "./leads/leadApi";
+import { toast } from "@/components/ui/toast";
 import {
-  LEAD_STAGES, LEAD_STATUSES, PRIORITY_STYLES, TEMPERATURE_STYLES,
+  LEAD_STATUSES, PRIORITY_STYLES, TEMPERATURE_STYLES,
   formatDate, formatINR, statusStyle,
   type Lead, type UserSummary, type LeadCreator,
 } from "./leads/constants";
@@ -21,7 +23,6 @@ import { SelectField, TextAreaField, selectClass } from "./leads/fields";
 import { useGoBack } from "@/hooks/useGoBack";
 import LeadFormDialog from "./leads/LeadFormDialog";
 import ConvertLeadDialog from "./leads/ConvertLeadDialog";
-import NextStepBanner from "./leads/NextStepBanner";
 import { useLeadJourney, type JourneyStepId } from "./leads/journey";
 import OverviewTab from "./leads/tabs/OverviewTab";
 import EntityDailyReports from "@/components/hr/EntityDailyReports";
@@ -45,6 +46,47 @@ const LEGACY_TAB_MAP: Record<string, string> = {
 };
 function normalizeTab(t: string) {
   return (TABS as readonly string[]).includes(t) ? t : LEGACY_TAB_MAP[t] || "overview";
+}
+
+type ActionIcon = React.ComponentType<{ className?: string }>;
+
+// A labeled, tappable action in the header (icon tile + caption below).
+function HeaderAction({
+  icon: Icon, label, href, onClick, external, tone = "text-primary",
+}: {
+  icon: ActionIcon; label: string; href?: string; onClick?: () => void; external?: boolean; tone?: string;
+}) {
+  const tile = (
+    <span className="flex flex-col items-center gap-1">
+      <span className={`h-11 w-11 rounded-xl border bg-card shadow-sm grid place-items-center transition-colors group-hover:bg-accent ${tone}`}>
+        <Icon className="h-[18px] w-[18px]" />
+      </span>
+      <span className="text-[11px] text-muted-foreground">{label}</span>
+    </span>
+  );
+  return href
+    ? <a href={href} target={external ? "_blank" : undefined} rel={external ? "noreferrer" : undefined} className="group">{tile}</a>
+    : <button type="button" onClick={onClick} className="group">{tile}</button>;
+}
+
+// One at-a-glance metric tile in the header strip.
+function StatTile({
+  icon: Icon, label, value, hint, tone = "bg-primary/10 text-primary",
+}: {
+  icon: ActionIcon; label: string; value: React.ReactNode; hint?: React.ReactNode; tone?: string;
+}) {
+  return (
+    <div className="rounded-2xl border bg-card shadow-sm p-4 flex items-center gap-3">
+      <div className={`h-11 w-11 rounded-xl grid place-items-center shrink-0 ${tone}`}>
+        <Icon className="h-5 w-5" />
+      </div>
+      <div className="min-w-0">
+        <div className="text-xs text-muted-foreground">{label}</div>
+        <div className="font-bold leading-tight truncate">{value}</div>
+        {hint && <div className="text-xs text-muted-foreground truncate">{hint}</div>}
+      </div>
+    </div>
+  );
 }
 
 export default function LeadProfile() {
@@ -79,6 +121,11 @@ export default function LeadProfile() {
     if (journey.currentStep) setFocusStep({ id: journey.currentStep.id, nonce: Date.now() });
     setActiveTab("journey");
   };
+  // Open a specific journey step (from the Overview "Next Step" card).
+  const goToStep = (stepId: JourneyStepId) => {
+    setFocusStep({ id: stepId, nonce: Date.now() });
+    setActiveTab("journey");
+  };
 
   useEffect(() => {
     fetchLead();
@@ -98,7 +145,47 @@ export default function LeadProfile() {
   if (!lead || !id) return <div className="p-8 text-destructive">Failed to load lead profile.</div>;
 
   const isOpen = !lead.isConverted && !["Lost", "Cancelled"].includes(lead.status);
-  const currentStageIndex = LEAD_STAGES.indexOf(lead.stage || "New Lead");
+  const products = (lead.requirementProduct || "").split(",").map((s) => s.trim()).filter(Boolean);
+  const lastContact = lead.lastContactAt || lead.lastFollowUp;
+  const fuDays = lead.nextFollowUpDate
+    ? Math.ceil((new Date(lead.nextFollowUpDate).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)) / 86400000)
+    : null;
+  const fuHint = fuDays == null ? "Not scheduled"
+    : fuDays < 0 ? `${-fuDays} day${fuDays === -1 ? "" : "s"} overdue`
+    : fuDays === 0 ? "Today"
+    : `${fuDays} day${fuDays === 1 ? "" : "s"} left`;
+
+  // Click a header star to set the rating (or the current top star again to clear). Sends the full
+  // lead with the new rating — updateLead is a full replace — mirroring the card save cleanup.
+  const setRating = (star: number) => {
+    if (!lead || !isOpen) return;
+    const payload: any = { ...lead, rating: lead.rating === star ? null : star };
+    ["estimatedBudget", "minimumBudget", "maximumBudget", "expectedProjectValue",
+      "areaSqft", "expectedWorkArea", "floorCount"].forEach((k) => {
+      if (payload[k] === "" || payload[k] == null) delete payload[k];
+    });
+    ["expectedStartDate", "expectedEndDate", "preferredCompletionDate", "nextFollowUpDate"].forEach((k) => {
+      if (!payload[k]) delete payload[k];
+    });
+    if (payload.assignedSalesExecutive?.id) payload.assignedSalesExecutive = { id: payload.assignedSalesExecutive.id };
+    else delete payload.assignedSalesExecutive;
+    if (payload.assignedDesigner?.id) payload.assignedDesigner = { id: payload.assignedDesigner.id };
+    else delete payload.assignedDesigner;
+    if (payload.assignedEngineer?.id) payload.assignedEngineer = { id: payload.assignedEngineer.id };
+    else delete payload.assignedEngineer;
+    payload.rating = lead.rating === star ? null : star; // re-apply after cleanup (null passes through)
+    delete payload.projectManager;
+    delete payload.convertedToCustomer;
+    delete payload.convertedToProject;
+    delete payload.referredByCustomer;
+    delete payload.referredByEmployee;
+    leadApi.update(lead.id, payload)
+      .then(() => { toast.success("Rating updated"); fetchLead(); })
+      .catch((err) => {
+        console.error("Failed to update rating", err);
+        toast.error(err?.response?.data?.message || "Couldn't save the rating.");
+      });
+  };
 
   return (
     <div className="p-6 lg:p-8 space-y-5 h-full bg-background flex flex-col overflow-y-auto animate-in fade-in">
@@ -130,6 +217,20 @@ export default function LeadProfile() {
               {lead.isConverted && (
                 <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full font-medium">CONVERTED</span>
               )}
+              <span className="inline-flex items-center gap-0.5 ml-0.5" title={lead.rating ? `Rating ${lead.rating}/5` : "Rate this lead"}>
+                {[1, 2, 3, 4, 5].map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setRating(s)}
+                    disabled={!isOpen}
+                    aria-label={`Set rating ${s}`}
+                    className={isOpen ? "hover:scale-110 transition-transform cursor-pointer" : "cursor-default"}
+                  >
+                    <Star className={`h-4 w-4 ${s <= (lead.rating || 0) ? "fill-amber-400 text-amber-400" : "text-muted-foreground/30"}`} />
+                  </button>
+                ))}
+              </span>
             </div>
             <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground mt-1">
               {lead.companyName && <span className="flex items-center gap-1"><Building className="h-3 w-3" /> {lead.companyName}</span>}
@@ -152,17 +253,36 @@ export default function LeadProfile() {
                 </span>
               )}
             </div>
+            {(products.length > 0 || lead.requirementCategory) && (
+              <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                {lead.requirementCategory && (
+                  <span className="text-xs text-muted-foreground">{lead.requirementCategory}:</span>
+                )}
+                {products.map((p) => (
+                  <span key={p} className="px-2 py-0.5 bg-primary/10 text-primary text-xs rounded-full font-medium">{p}</span>
+                ))}
+              </div>
+            )}
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-4">
           {isOpen && (
             <>
-              <Button onClick={() => setConvertOpen(true)} className="bg-green-600 hover:bg-green-700 text-white">
-                <CheckCircle2 className="mr-2 h-4 w-4" /> Convert
+              <Button onClick={() => setConvertOpen(true)} className="bg-green-600 hover:bg-green-700 text-white rounded-full shadow-sm">
+                <CheckCircle2 className="mr-2 h-4 w-4" /> Convert to Project
               </Button>
+              <div className="flex items-center gap-2">
+                {lead.mobileNumber && <HeaderAction icon={Phone} label="Call" href={`tel:${lead.mobileNumber}`} tone="text-emerald-600" />}
+                {(lead.whatsappNumber || lead.mobileNumber) && (
+                  <HeaderAction icon={MessageCircle} label="WhatsApp" external
+                    href={`https://wa.me/${(lead.whatsappNumber || lead.mobileNumber).replace(/[^0-9]/g, "")}`} tone="text-green-600" />
+                )}
+                {lead.email && <HeaderAction icon={Mail} label="Email" href={`mailto:${lead.email}`} tone="text-orange-500" />}
+                <HeaderAction icon={CalendarPlus} label="Add Task" onClick={() => setActiveTab("tasks")} />
+              </div>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="icon"><MoreVertical className="h-4 w-4" /></Button>
+                  <Button variant="outline" size="icon" className="rounded-full"><MoreVertical className="h-4 w-4" /></Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem onClick={() => setEditOpen(true)}><Edit className="h-4 w-4 mr-2" /> Edit Lead</DropdownMenuItem>
@@ -186,83 +306,68 @@ export default function LeadProfile() {
         </div>
       </div>
 
-      {/* Stage progress tracker */}
-      <div className="bg-card border rounded-xl p-4 md:p-5 shadow-sm">
-        <div className="flex justify-between items-start w-full max-w-6xl mx-auto">
-          {LEAD_STAGES.map((stage, index) => {
-            const done = index < currentStageIndex;
-            const current = index === currentStageIndex;
-            return (
-              <div key={stage} className="flex-1 relative">
-                <div className="flex flex-col items-center relative z-10">
-                  <div className={`h-8 w-8 md:h-10 md:w-10 rounded-full flex items-center justify-center text-xs md:text-sm font-bold border-2 transition-colors bg-background shrink-0
-                    ${done ? "bg-primary border-primary text-primary-foreground"
-                      : current ? "border-primary text-primary bg-primary/10"
-                      : "border-muted-foreground/30 text-muted-foreground"}`}>
-                    {done ? <Check className="h-4 w-4 md:h-5 md:w-5" /> : index + 1}
-                  </div>
-                  <div className="h-10 flex items-start justify-center mt-2 w-full">
-                    <span className={`text-[9px] md:text-xs whitespace-normal text-center leading-tight px-1 ${current ? "font-bold text-primary" : done ? "text-foreground" : "text-muted-foreground"}`}>
-                      {stage}
-                    </span>
-                  </div>
-                </div>
-                {index < LEAD_STAGES.length - 1 && (
-                  <div className={`absolute top-4 md:top-5 left-1/2 w-full h-[2px] z-0 
-                    ${index < currentStageIndex ? "bg-primary" : "bg-muted-foreground/20"}`} />
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Quick actions */}
-      <div className="flex flex-wrap gap-2 bg-card p-2 rounded-xl border shadow-sm">
-        <Button variant="ghost" size="sm" asChild>
-          <a href={`tel:${lead.mobileNumber}`}><Phone className="h-4 w-4 mr-2 text-emerald-500" /> Call</a>
-        </Button>
-        <Button variant="ghost" size="sm" asChild>
-          <a href={`https://wa.me/${(lead.whatsappNumber || lead.mobileNumber)?.replace(/[^0-9]/g, "")}`} target="_blank" rel="noreferrer">
-            <MessageCircle className="h-4 w-4 mr-2 text-green-500" /> WhatsApp
-          </a>
-        </Button>
-        {lead.email && (
-          <Button variant="ghost" size="sm" asChild>
-            <a href={`mailto:${lead.email}`}><Mail className="h-4 w-4 mr-2 text-orange-500" /> Email</a>
-          </Button>
+      {/* At-a-glance metric tiles + the "what's next" convert CTA. */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <StatTile
+          icon={CalendarClock}
+          label="Next Follow-up"
+          value={lead.nextFollowUpDate ? formatDate(lead.nextFollowUpDate) : "—"}
+          hint={<span className={fuDays != null && fuDays < 0 ? "text-red-500 font-medium" : fuDays === 0 ? "text-emerald-600 font-medium" : ""}>{fuHint}</span>}
+          tone="bg-amber-50 text-amber-500"
+        />
+        <StatTile
+          icon={Phone}
+          label="Last Contact"
+          value={lastContact ? formatDate(lastContact) : "—"}
+          hint={lastContact ? "Most recent touchpoint" : "No contact yet"}
+          tone="bg-sky-50 text-sky-500"
+        />
+        <StatTile
+          icon={TrendingUp}
+          label="Expected Value"
+          value={lead.expectedProjectValue ? formatINR(lead.expectedProjectValue) : formatINR(lead.estimatedBudget)}
+          hint={lead.expectedProjectValue || lead.estimatedBudget ? "Projected deal size" : "Not estimated"}
+          tone="bg-violet-50 text-violet-500"
+        />
+        {isOpen ? (
+          <button
+            type="button"
+            onClick={goToNextStep}
+            className="group text-left rounded-2xl p-4 bg-gradient-to-br from-primary to-primary/75 text-primary-foreground shadow-sm flex items-center gap-3"
+          >
+            <div className="h-11 w-11 rounded-xl bg-white/15 grid place-items-center shrink-0">
+              <Crown className="h-5 w-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="font-semibold leading-tight">Potential Customer</div>
+              <div className="text-xs opacity-90 mt-0.5">Take the next step and convert this lead to a project.</div>
+            </div>
+            <ArrowRight className="h-5 w-5 opacity-80 shrink-0 group-hover:translate-x-0.5 transition-transform" />
+          </button>
+        ) : (
+          <StatTile icon={CheckCircle2} label="Status" value={lead.status} hint={lead.isConverted ? "Converted" : undefined} />
         )}
-        {lead.googleMapLocation && (
-          <Button variant="ghost" size="sm" asChild>
-            <a href={lead.googleMapLocation} target="_blank" rel="noreferrer"><MapPin className="h-4 w-4 mr-2 text-red-500" /> Location</a>
-          </Button>
-        )}
-        <div className="ml-auto flex items-center gap-4 px-3 text-sm">
-          <span className="text-muted-foreground">Budget: <span className="font-semibold text-foreground">{formatINR(lead.estimatedBudget)}</span></span>
-          <span className="text-muted-foreground">Next follow-up: <span className="font-semibold text-foreground">{formatDate(lead.nextFollowUpDate)}</span></span>
-          <span className="text-muted-foreground">Last contact: <span className="font-semibold text-foreground">{formatDate(lead.lastContactAt || lead.lastFollowUp)}</span></span>
-        </div>
       </div>
-
-      {/* The single "what's next" prompt — always visible, jumps straight to the right stage. */}
-      <NextStepBanner journey={journey} onGo={goToNextStep} />
 
       {/* Tabs — the 15-tab pipeline is collapsed into 5 task-shaped groups. */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <div className="overflow-x-auto pb-2">
           <TabsList className="w-full justify-start border-b rounded-none pb-px bg-transparent h-auto p-0 space-x-6 min-w-max flex">
-            {[
-              ["overview", "Overview"], ["journey", "Sales Journey"], ["tasks", "Tasks"],
-              ["activity", "Activity"], ["documents", "Documents"], ["timeline", "Timeline"],
-            ].map(([value, label]) => (
-              <TabsTrigger key={value} value={value} className={TAB_TRIGGER_CLASS}>{label}</TabsTrigger>
+            {([
+              ["overview", "Overview", LayoutGrid], ["tasks", "Tasks", ListChecks],
+              ["activity", "Activity", ActivityIcon], ["documents", "Documents", FileText],
+              ["journey", "Sales Journey", Route], ["timeline", "Timeline", Clock],
+            ] as const).map(([value, label, Icon]) => (
+              <TabsTrigger key={value} value={value} className={TAB_TRIGGER_CLASS}>
+                <span className="flex items-center gap-1.5"><Icon className="h-4 w-4" /> {label}</span>
+              </TabsTrigger>
             ))}
           </TabsList>
         </div>
 
         <div className="mt-6">
           <TabsContent value="overview" className="space-y-4">
-            <OverviewTab lead={lead} users={users} canEdit={isOpen} onChanged={fetchLead} />
+            <OverviewTab lead={lead} users={users} canEdit={isOpen} journey={journey} onGoStep={goToStep} onChanged={fetchLead} />
           </TabsContent>
 
           <TabsContent value="journey">

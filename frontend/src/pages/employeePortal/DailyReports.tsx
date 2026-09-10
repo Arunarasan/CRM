@@ -10,6 +10,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 const emptyForm = (): DailyReportCreateBody => ({
   projectId: null, leadId: null, reportDate: today(), todaysWork: '', hoursWorked: '', completedWork: '',
   pendingWork: '', problems: '', materialUsed: '', materialRequired: '', remarks: '',
+  cashCollected: '', cashPaymentMethod: 'CASH', cashReference: '',
 });
 
 export default function DailyReports() {
@@ -177,6 +178,32 @@ export default function DailyReports() {
                   </div>
                 )}
               </div>
+
+              {/* Cash collected from the customer — raises a payment for finance to approve.
+                  Needs a project (that's where the customer + money go). */}
+              {form.projectId ? (
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3">
+                  <div className="text-xs font-semibold text-emerald-800 mb-2">💵 Cash collected from customer (optional)</div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground">Amount ₹</label>
+                      <input type="number" min={0} step="1" value={form.cashCollected as string}
+                        onChange={(e) => set('cashCollected', e.target.value)}
+                        className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" placeholder="0" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground">Method</label>
+                      <select value={form.cashPaymentMethod ?? 'CASH'} onChange={(e) => set('cashPaymentMethod', e.target.value)}
+                        className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm">
+                        {['CASH', 'UPI', 'BANK_TRANSFER', 'CHEQUE', 'NEFT'].map((m) => <option key={m} value={m}>{m.replace('_', ' ')}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <input value={form.cashReference ?? ''} onChange={(e) => set('cashReference', e.target.value)}
+                    className="mt-2 w-full rounded-lg border bg-background px-3 py-2 text-sm" placeholder="Reference / txn no. (optional)" />
+                  <p className="mt-1.5 text-[11px] text-emerald-700/80">Sent to the office for approval and added to the project's payments.</p>
+                </div>
+              ) : null}
 
               <Area label="Remarks" value={form.remarks} onChange={(v) => set('remarks', v)} rows={2} />
 

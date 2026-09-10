@@ -8,6 +8,7 @@ import com.arudra.crm.service.EmployeePortalService;
 import com.arudra.crm.service.EmployeeTimeService;
 import com.arudra.crm.service.ProfileChangeRequestService;
 import com.arudra.crm.service.PurchaseService;
+import com.arudra.crm.service.WebAuthnService;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -36,15 +37,18 @@ public class EmployeePortalController {
     private final CurrentUserService currentUserService;
     private final PurchaseService purchaseService;
     private final ProfileChangeRequestService profileChangeRequestService;
+    private final WebAuthnService webAuthnService;
 
     public EmployeePortalController(EmployeePortalService portalService, EmployeeTimeService timeService,
                                     CurrentUserService currentUserService, PurchaseService purchaseService,
-                                    ProfileChangeRequestService profileChangeRequestService) {
+                                    ProfileChangeRequestService profileChangeRequestService,
+                                    WebAuthnService webAuthnService) {
         this.portalService = portalService;
         this.timeService = timeService;
         this.currentUserService = currentUserService;
         this.purchaseService = purchaseService;
         this.profileChangeRequestService = profileChangeRequestService;
+        this.webAuthnService = webAuthnService;
     }
 
     private User me() {
@@ -144,8 +148,25 @@ public class EmployeePortalController {
     public static class ClockInBody {
         public BigDecimal lat;
         public BigDecimal lng;
+        public Integer accuracyMeters;
         public String locationLabel;
         public String deviceInfo;
+        /** Optional WebAuthn assertion (from navigator.credentials.get) proving device biometric. */
+        public AssertionBody assertion;
+    }
+
+    public static class AssertionBody {
+        public String credentialId;
+        public String authenticatorData;
+        public String clientDataJSON;
+        public String signature;
+        public String userHandle;
+    }
+
+    public static class RegisterVerifyBody {
+        public String attestationObject;
+        public String clientDataJSON;
+        public String deviceLabel;
     }
 
     // Each clock action returns the fresh live status snapshot (same shape as GET /time) so the
@@ -155,7 +176,13 @@ public class EmployeePortalController {
     public ResponseEntity<ApiResponse<Map<String, Object>>> clockIn(@RequestBody(required = false) ClockInBody body) {
         ClockInBody b = body == null ? new ClockInBody() : body;
         User u = me();
-        timeService.clockIn(u, b.lat, b.lng, b.locationLabel, b.deviceInfo);
+        boolean biometricVerified = false;
+        if (b.assertion != null) {
+            Employee emp = timeService.requireEmployee(u);
+            biometricVerified = webAuthnService.verifyAssertion(emp, b.assertion.credentialId,
+                    b.assertion.authenticatorData, b.assertion.clientDataJSON, b.assertion.signature, b.assertion.userHandle);
+        }
+        timeService.clockIn(u, b.lat, b.lng, b.accuracyMeters, b.locationLabel, b.deviceInfo, biometricVerified);
         return ResponseEntity.ok(ApiResponse.success(timeService.getStatus(u)));
     }
 
@@ -187,6 +214,58 @@ public class EmployeePortalController {
     @PreAuthorize(PORTAL)
     public ResponseEntity<ApiResponse<Map<String, Object>>> timeStatus() {
         return ResponseEntity.ok(ApiResponse.success(timeService.getStatus(me())));
+    }
+
+    // Employee opts into biometric attendance — parked for admin approval, then becomes their method.
+    @PostMapping("/attendance/request-biometric")
+    @PreAuthorize(PORTAL)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> requestBiometric() {
+        User u = me();
+        timeService.requestBiometricAttendance(u);
+        return ResponseEntity.ok(ApiResponse.success(timeService.getStatus(u)));
+    }
+
+    @PostMapping("/attendance/cancel-method-request")
+    @PreAuthorize(PORTAL)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> cancelMethodRequest() {
+        User u = me();
+        timeService.cancelMethodRequest(u);
+        return ResponseEntity.ok(ApiResponse.success(timeService.getStatus(u)));
+    }
+
+    // --- WebAuthn (device biometric) for attendance ------------------------
+    @PostMapping("/webauthn/register/options")
+    @PreAuthorize(PORTAL)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> webauthnRegisterOptions(
+            @RequestHeader(value = "Origin", required = false) String origin) {
+        return ResponseEntity.ok(ApiResponse.success(webAuthnService.registrationOptions(timeService.requireEmployee(me()), origin)));
+    }
+
+    @PostMapping("/webauthn/register/verify")
+    @PreAuthorize(PORTAL)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> webauthnRegisterVerify(@RequestBody RegisterVerifyBody body) {
+        webAuthnService.registerVerify(timeService.requireEmployee(me()), body.attestationObject, body.clientDataJSON, body.deviceLabel);
+        return ResponseEntity.ok(ApiResponse.success(Map.of("registered", true)));
+    }
+
+    @PostMapping("/webauthn/assert/options")
+    @PreAuthorize(PORTAL)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> webauthnAssertOptions(
+            @RequestHeader(value = "Origin", required = false) String origin) {
+        return ResponseEntity.ok(ApiResponse.success(webAuthnService.assertionOptions(timeService.requireEmployee(me()), origin)));
+    }
+
+    @GetMapping("/webauthn/credentials")
+    @PreAuthorize(PORTAL)
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> webauthnCredentials() {
+        return ResponseEntity.ok(ApiResponse.success(webAuthnService.listCredentials(timeService.requireEmployee(me()))));
+    }
+
+    @DeleteMapping("/webauthn/credentials/{id}")
+    @PreAuthorize(PORTAL)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> webauthnDeleteCredential(@PathVariable Long id) {
+        webAuthnService.deleteCredential(timeService.requireEmployee(me()), id);
+        return ResponseEntity.ok(ApiResponse.success(Map.of("deleted", true)));
     }
 
     @GetMapping("/earnings")

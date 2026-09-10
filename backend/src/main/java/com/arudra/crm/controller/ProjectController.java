@@ -292,6 +292,13 @@ public class ProjectController {
         return ResponseEntity.ok(ApiResponse.success(projectService.getItems(roomId)));
     }
 
+    /** All work items of a project (compact) — feeds the "Update Work" batch sheet. */
+    @GetMapping("/{projectId}/items")
+    @PreAuthorize(READ)
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getAllItems(@PathVariable Long projectId) {
+        return ResponseEntity.ok(ApiResponse.success(projectService.getAllItemsForProject(projectId)));
+    }
+
     @PostMapping("/rooms/{roomId}/items")
     @PreAuthorize(WRITE)
     public ResponseEntity<ApiResponse<ProjectRoomItem>> addItem(@PathVariable Long roomId, @RequestBody ProjectRoomItem item) {
@@ -316,6 +323,24 @@ public class ProjectController {
         String photos = payload.get("photos") != null ? String.valueOf(payload.get("photos")) : null;
         return ResponseEntity.ok(ApiResponse.success(projectService.updateItemProgress(
                 itemId, progress, status, remarks, photos, currentUserService.getCurrentUser())));
+    }
+
+    /**
+     * Batch progress update — one action records a day's work across many items. Literal
+     * "/items/bulk-progress" takes precedence over "/items/{itemId}", so no collision.
+     */
+    @PutMapping("/items/bulk-progress")
+    @PreAuthorize(WRITE)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> bulkUpdateItemProgress(@RequestBody Map<String, Object> payload) {
+        @SuppressWarnings("unchecked")
+        List<Long> itemIds = ((List<Object>) payload.getOrDefault("itemIds", java.util.List.of()))
+                .stream().filter(java.util.Objects::nonNull).map(v -> ((Number) v).longValue()).toList();
+        Integer progress = payload.get("progress") != null ? ((Number) payload.get("progress")).intValue() : null;
+        String status = (String) payload.get("status");
+        String remarks = (String) payload.get("remarks");
+        String photos = payload.get("photos") != null ? String.valueOf(payload.get("photos")) : null;
+        return ResponseEntity.ok(ApiResponse.success(projectService.bulkUpdateItemProgress(
+                itemIds, progress, status, remarks, photos, currentUserService.getCurrentUser())));
     }
 
     /** Reopen a completed/locked work item — Manager/Admin only. */
@@ -450,6 +475,26 @@ public class ProjectController {
         String remarks = payload != null ? payload.get("remarks") : null;
         return ResponseEntity.ok(ApiResponse.success(
                 projectService.decideApproval(approvalId, false, remarks, currentUserService.getCurrentUser())));
+    }
+
+    // =====================================================================
+    // Customer handover flow
+    // =====================================================================
+
+    /** Handover board: stage tasks + rolled-up % + whether the project can be handed over. */
+    @GetMapping("/{id}/handover")
+    @PreAuthorize(READ)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getHandover(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.success(projectService.getHandover(id)));
+    }
+
+    /** Hand the project over to the customer (requires every stage task at 100%). */
+    @PostMapping("/{id}/handover")
+    @PreAuthorize(WRITE)
+    public ResponseEntity<ApiResponse<Project>> handover(@PathVariable Long id,
+                                                         @RequestBody(required = false) Map<String, String> body) {
+        String notes = body != null ? body.get("notes") : null;
+        return ResponseEntity.ok(ApiResponse.success(projectService.handoverProject(id, notes)));
     }
 
     // =====================================================================

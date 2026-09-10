@@ -34,6 +34,11 @@ export interface TimeSession {
   breakMinutes: number;
   onBreak: boolean;
   running: boolean;
+  verificationMethod?: string | null; // GEO | BIOMETRIC | DEVICE | NONE
+  verified?: boolean;
+  flagged?: boolean;
+  flagReason?: string | null;
+  approvalStatus?: string | null; // PENDING | APPROVED | REJECTED
 }
 
 export interface TimeStatus {
@@ -52,6 +57,9 @@ export interface TimeStatus {
   standardDailyHours: number;
   dailyTargetEarnings: number | null;
   sessions: TimeSession[];
+  attendanceMethod?: string; // GEO | OFFICE_DEVICE | ANY
+  attendanceMethodRequested?: string | null; // pending admin-approved switch
+  biometricRegistered?: boolean;
 }
 
 export interface EmployeeDashboard {
@@ -310,6 +318,7 @@ export interface LeadSummary {
   status: string;
   stage: string | null;
   requirementCategory: string | null;
+  requirementProduct: string | null;
   estimatedBudget: number | null;
   siteVisitDate: string | null;
   createdAt: string | null;
@@ -322,10 +331,14 @@ export interface LeadCreateBody {
   address?: string;
   city?: string;
   requirementCategory?: string;
+  requirementProduct?: string;
   requirement?: string;
   estimatedBudget?: number | string;
+  rating?: number;
   preferredVisitDate?: string;
   notes?: string;
+  /** Photos + voice notes captured at creation, persisted server-side as LeadDocuments. */
+  documents?: { fileName: string; fileUrl: string; documentType: string; category: string }[];
 }
 
 // --- Phase 3 net-new modules --------------------------------------------
@@ -377,6 +390,8 @@ export interface DailyReportEntry {
   materialRequired: string | null;
   remarks: string | null;
   managerComment: string | null;
+  cashCollected?: number | null;
+  cashPaymentMethod?: string | null;
   media: DailyReportMediaItem[];
   createdAt?: string;
 }
@@ -394,6 +409,9 @@ export interface DailyReportCreateBody {
   materialUsed?: string;
   materialRequired?: string;
   remarks?: string;
+  cashCollected?: number | string;
+  cashPaymentMethod?: string;
+  cashReference?: string;
   media?: { mediaType: string; fileUrl: string; caption?: string }[];
 }
 

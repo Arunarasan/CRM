@@ -79,6 +79,10 @@ public class EmployeeTaskService {
     @Autowired
     private QuotationRepository quotationRepository;
     @Autowired
+    private com.arudra.crm.repository.LeadRepository leadRepository;
+    @Autowired
+    private com.arudra.crm.repository.LeadDocumentRepository leadDocumentRepository;
+    @Autowired
     @org.springframework.context.annotation.Lazy
     private QuotationService quotationService;
 
@@ -413,6 +417,28 @@ public class EmployeeTaskService {
     }
 
     /**
+     * Scans currently-held (claimed-but-not-started) assignments and returns the ids of the data-entry
+     * lead tasks whose hold window has expired — the candidates {@link TaskClaimExpiryScheduler} will
+     * then release. Runs in a read-only transaction so the lazy {@code Task}/{@code TaskTemplate}
+     * proxies on each assignment can initialize (without a session, {@link #isDataEntryLeadTask} would
+     * throw {@code LazyInitializationException}). Read-only and cheap; never writes.
+     */
+    @Transactional(readOnly = true)
+    public Set<Long> findExpiredHoldTaskIds(List<String> heldStatuses, int holdMinutes) {
+        if (holdMinutes <= 0) return Set.of();
+        LocalDateTime cutoff = LocalDateTime.now().minusMinutes(holdMinutes);
+        Set<Long> candidateTaskIds = new HashSet<>();
+        for (TaskAssignment a : assignmentRepository.findByStatusIn(heldStatuses)) {
+            if (a.getTask() == null || a.getStartedAt() != null) continue;
+            LocalDateTime claimed = claimTimeOf(a);
+            if (claimed == null || claimed.isAfter(cutoff)) continue; // still within the window
+            if (!isDataEntryLeadTask(a.getTask())) continue;
+            candidateTaskIds.add(a.getTask().getId());
+        }
+        return candidateTaskIds;
+    }
+
+    /**
      * The instant the hold countdown is measured from. An explicit extension (worker asked for more
      * time) wins; otherwise the claim time — accepted (self-pick) or assigned (manager).
      */
@@ -589,6 +615,13 @@ public class EmployeeTaskService {
                 ? com.arudra.crm.util.LeadTaskForms.moduleLink(templateCode, task.getLeadId()) : null);
         detail.put("moduleLabel", moduleDriven
                 ? com.arudra.crm.util.LeadTaskForms.moduleLabel(templateCode) : null);
+        // Original lead picture — so a field employee working a lead task (Collect Requirement, Follow-up,
+        // Site Visit…) can see who the customer is and what they asked for at capture, without opening the
+        // edit form. Read-only, primitives-only map (no entity refs → no lazy/cyclic serialization).
+        if (task.getLeadId() != null) {
+            leadRepository.findById(task.getLeadId())
+                    .ifPresent(lead -> detail.put("lead", toLeadInfo(lead)));
+        }
         detail.put("customer", task.getProject() != null && task.getProject().getCustomer() != null
                 ? task.getProject().getCustomer().getName() : null);
         // Site navigation: a human-readable address for display, plus a ready-to-open maps URL that
@@ -619,6 +652,122 @@ public class EmployeeTaskService {
         detail.put("checkins", checkInRepository.findByTaskIdOrderByCheckInTimeDesc(taskId).stream()
                 .map(this::toCheckInSummary).collect(Collectors.toList()));
         return detail;
+    }
+
+    /**
+     * Compact, read-only snapshot of the lead as captured — the same picture the office sees on the
+     * lead's Overview, flattened to primitives so the mobile task page can show it without any extra
+     * request. Ordered by how a field employee reads it: who, how to reach them, what they want, the
+     * property, budget/timeline, and how the lead came in.
+     */
+    private Map<String, Object> toLeadInfo(com.arudra.crm.entity.Lead l) {
+        Map<String, Object> m = new java.util.LinkedHashMap<>();
+        // Who
+        m.put("id", l.getId());
+        m.put("leadNumber", l.getLeadNumber());
+        m.put("name", l.getName());
+        m.put("companyName", l.getCompanyName());
+        m.put("contactPerson", l.getContactPerson());
+        m.put("leadType", l.getLeadType());
+        m.put("leadSource", l.getLeadSource());
+        m.put("priority", l.getPriority());
+        m.put("status", l.getStatus());
+        m.put("stage", l.getStage());
+        m.put("leadTemperature", l.getLeadTemperature());
+        m.put("rating", l.getRating());
+        // How to reach them
+        m.put("mobileNumber", l.getMobileNumber());
+        m.put("alternateMobile", l.getAlternateMobile());
+        m.put("whatsappNumber", l.getWhatsappNumber());
+        m.put("email", l.getEmail());
+        m.put("gstNumber", l.getGstNumber());
+        // Where
+        m.put("address", l.getAddress());
+        m.put("city", l.getCity());
+        m.put("district", l.getDistrict());
+        m.put("state", l.getState());
+        m.put("pincode", l.getPincode());
+        m.put("landmark", l.getLandmark());
+        m.put("googleMapLocation", l.getGoogleMapLocation());
+        // Property
+        m.put("propertyType", l.getPropertyType());
+        m.put("propertyName", l.getPropertyName());
+        m.put("siteAddress", l.getSiteAddress());
+        m.put("currentConstructionStage", l.getCurrentConstructionStage());
+        m.put("floorCount", l.getFloorCount());
+        m.put("areaSqft", l.getAreaSqft());
+        m.put("expectedWorkArea", l.getExpectedWorkArea());
+        // What they want
+        m.put("requirementCategory", l.getRequirementCategory());
+        m.put("requirementProduct", l.getRequirementProduct());
+        m.put("projectDescription", l.getProjectDescription());
+        m.put("customerRequirements", l.getCustomerRequirements());
+        m.put("roomsRequired", l.getRoomsRequired());
+        m.put("specialRequests", l.getSpecialRequests());
+        m.put("preferredDesignStyle", l.getPreferredDesignStyle());
+        m.put("preferredMaterial", l.getPreferredMaterial());
+        m.put("preferredColorTheme", l.getPreferredColorTheme());
+        m.put("estimatedDuration", l.getEstimatedDuration());
+        m.put("preferredCompletionDate", l.getPreferredCompletionDate());
+        // Scope checklist → the enabled labels only (what to build)
+        List<String> scope = new java.util.ArrayList<>();
+        if (Boolean.TRUE.equals(l.getReqKitchen())) scope.add("Modular Kitchen");
+        if (Boolean.TRUE.equals(l.getReqWardrobe())) scope.add("Wardrobe");
+        if (Boolean.TRUE.equals(l.getReqTvUnit())) scope.add("TV Unit");
+        if (Boolean.TRUE.equals(l.getReqFalseCeiling())) scope.add("False Ceiling");
+        if (Boolean.TRUE.equals(l.getReqPainting())) scope.add("Painting");
+        if (Boolean.TRUE.equals(l.getReqFlooring())) scope.add("Flooring");
+        if (Boolean.TRUE.equals(l.getReqElectrical())) scope.add("Electrical");
+        if (Boolean.TRUE.equals(l.getReqPlumbing())) scope.add("Plumbing");
+        if (Boolean.TRUE.equals(l.getReqWoodFinish())) scope.add("Wood Finish");
+        m.put("scope", scope);
+        // Budget & timeline
+        m.put("estimatedBudget", l.getEstimatedBudget());
+        m.put("minimumBudget", l.getMinimumBudget());
+        m.put("maximumBudget", l.getMaximumBudget());
+        m.put("expectedProjectValue", l.getExpectedProjectValue());
+        m.put("paymentPreference", l.getPaymentPreference());
+        m.put("expectedStartDate", l.getExpectedStartDate());
+        m.put("expectedEndDate", l.getExpectedEndDate());
+        // Follow-up context
+        m.put("nextFollowUpDate", l.getNextFollowUpDate());
+        m.put("followUpNotes", l.getFollowUpNotes());
+        m.put("siteVisitDate", l.getSiteVisitDate());
+        // How the lead came in
+        m.put("referralType", l.getReferralType());
+        m.put("referrerName", l.getReferrerName());
+        m.put("referrerContact", l.getReferrerContact());
+        m.put("referralNotes", l.getReferralNotes());
+        m.put("remarks", l.getRemarks());
+        // Media captured with the lead — the photos and voice notes the office/employee attached at
+        // capture. Each classified into a coarse kind so the app can render a thumbnail, an audio
+        // player, a video, or a file link.
+        m.put("media", leadDocumentRepository.findByLeadId(l.getId()).stream()
+                .filter(d -> isNotBlank(d.getFileUrl()))
+                .map(d -> {
+                    Map<String, Object> md = new java.util.LinkedHashMap<>();
+                    md.put("fileName", d.getFileName());
+                    md.put("fileUrl", d.getFileUrl());
+                    md.put("category", d.getCategory());
+                    md.put("kind", mediaKind(d));
+                    return md;
+                })
+                .collect(Collectors.toList()));
+        return m;
+    }
+
+    /** Coarse media kind (IMAGE / AUDIO / VIDEO / FILE) from the document type, category, or file extension. */
+    private String mediaKind(com.arudra.crm.entity.LeadDocument d) {
+        String type = (d.getDocumentType() == null ? "" : d.getDocumentType()).toLowerCase();
+        String cat = (d.getCategory() == null ? "" : d.getCategory()).toLowerCase();
+        String url = (d.getFileUrl() == null ? "" : d.getFileUrl()).toLowerCase();
+        if (type.contains("image") || cat.contains("photo") || cat.contains("image")
+                || url.matches(".*\\.(jpg|jpeg|png|gif|webp|bmp|heic)(\\?.*)?$")) return "IMAGE";
+        if (type.contains("audio") || cat.contains("voice") || cat.contains("audio")
+                || url.matches(".*\\.(mp3|wav|m4a|aac|ogg|webm|opus)(\\?.*)?$")) return "AUDIO";
+        if (type.contains("video") || cat.contains("video")
+                || url.matches(".*\\.(mp4|mov|avi|mkv|webm)(\\?.*)?$")) return "VIDEO";
+        return "FILE";
     }
 
     /** Best human-readable site address for a project: property address, else the customer's site/billing address + city. */

@@ -33,4 +33,9 @@ public interface ContractorPaymentRepository extends JpaRepository<ContractorPay
     @Query("SELECT COALESCE(SUM(p.amount), 0) FROM ContractorPayment p " +
            "WHERE p.workPackage.id = :workPackageId AND p.status = 'PAID' AND p.isDeleted = false")
     BigDecimal sumPaidByWorkPackage(@Param("workPackageId") Long workPackageId);
+
+    /** Actual cash disbursed to contractors on a project (cash-basis cost). */
+    @Query("SELECT COALESCE(SUM(p.amount), 0) FROM ContractorPayment p " +
+           "WHERE p.project.id = :projectId AND p.status = 'PAID' AND p.isDeleted = false")
+    BigDecimal sumPaidForProject(@Param("projectId") Long projectId);
 }

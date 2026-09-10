@@ -312,6 +312,14 @@ export interface ProjectProfitability {
   grossProfit: number;
   netProfit: number;
   profitPercent: number;
+  // Cash basis — money that has actually moved to date
+  customerPaid: number;
+  contractorPaid: number;
+  purchasePaid: number;
+  otherExpensesPaid: number;
+  cashOut: number;
+  cashProfit: number;
+  cashMarginPercent: number;
 }
 
 export interface MonthBucket {

@@ -3,11 +3,12 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft, Camera, AlertTriangle, Package, Play, Pause, CheckCircle2, ThumbsUp,
   Navigation, ChevronDown, UserPlus, ClipboardList, MapPin, Image as ImageIcon,
-  Users, MessageSquare,
+  Users, MessageSquare, Phone, MessageCircle, Star, Home, Wallet, FileText, UserCircle, Mic,
 } from 'lucide-react';
 import api from '@/lib/api';
 import { employeeTaskApi } from '@/api/employeeTaskApi';
-import { TaskDetail as TaskDetailType } from '@/types/employeeTask';
+import { TaskDetail as TaskDetailType, LeadInfo } from '@/types/employeeTask';
+import { resolveFileUrl } from '@/lib/uploadFile';
 import { runOrQueue } from '@/hooks/useOfflineQueue';
 import ChecklistPanel from './components/ChecklistPanel';
 import CheckInBar from './components/CheckInBar';
@@ -39,6 +40,275 @@ function Disclosure({ title, count, icon, children }: {
       </button>
       {open && <div className="px-4 pb-4 pt-0.5">{children}</div>}
     </div>
+  );
+}
+
+/* ------------------------------------------------------------------ Lead details (read-only) */
+
+const has = (v: unknown) => v != null && String(v).trim() !== '';
+const telHref = (s?: string | null) => 'tel:' + (s || '').replace(/[^\d+]/g, '');
+const waHref = (s?: string | null) => 'https://wa.me/' + (s || '').replace(/[^\d]/g, '');
+const money = (v: unknown) => (has(v) ? '₹' + Number(v).toLocaleString('en-IN') : null);
+const mapsSearch = (q: string) => 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(q);
+const fmtDate = (s?: string | null) =>
+  has(s) ? new Date(s as string).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : null;
+
+/** A labelled read-only value; renders nothing when empty so the card never shows blank rows. */
+function LField({ label, value }: { label: string; value?: React.ReactNode }) {
+  if (value == null || value === '' || (Array.isArray(value) && value.length === 0)) return null;
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-[10.5px] font-semibold uppercase tracking-wide text-[#A6A99E]">{label}</span>
+      <span className="whitespace-pre-wrap break-words text-[13.5px] leading-snug text-[#33392F]">{value}</span>
+    </div>
+  );
+}
+
+/**
+ * The original lead as it was captured — shown on lead-workflow tasks so a field employee knows who the
+ * customer is and what they asked for before collecting/confirming the requirement. Read-only; the
+ * "what they want" block is open by default, the rest tucked into quiet disclosures.
+ */
+function LeadDetailsCard({ lead }: { lead: LeadInfo }) {
+  const phone = lead.mobileNumber || lead.alternateMobile || lead.whatsappNumber;
+  const wa = lead.whatsappNumber || lead.mobileNumber;
+  const budget =
+    money(lead.estimatedBudget) ||
+    (has(lead.minimumBudget) || has(lead.maximumBudget)
+      ? [money(lead.minimumBudget), money(lead.maximumBudget)].filter(Boolean).join(' – ')
+      : null);
+  const description = lead.projectDescription || lead.customerRequirements;
+  const finish = [lead.preferredDesignStyle, lead.preferredMaterial, lead.preferredColorTheme].filter(has).join(' · ');
+  const timeline = [
+    fmtDate(lead.expectedStartDate) && `Start ${fmtDate(lead.expectedStartDate)}`,
+    fmtDate(lead.preferredCompletionDate) && `Target ${fmtDate(lead.preferredCompletionDate)}`,
+    lead.estimatedDuration,
+  ].filter(Boolean).join(' · ');
+  const addr = [lead.address, lead.city, lead.district, lead.state, lead.pincode].filter(has).join(', ');
+  const mapHref = has(lead.googleMapLocation)
+    ? ((lead.googleMapLocation as string).startsWith('http') ? (lead.googleMapLocation as string) : mapsSearch(lead.googleMapLocation as string))
+    : (has(addr) ? mapsSearch(addr) : null);
+  const rating = Number(lead.rating) || 0;
+  const media = lead.media || [];
+  const images = media.filter((m) => m.kind === 'IMAGE');
+  const audios = media.filter((m) => m.kind === 'AUDIO');
+  const videos = media.filter((m) => m.kind === 'VIDEO');
+  const files = media.filter((m) => m.kind === 'FILE');
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-[#EDE6D8] bg-white shadow-[0_4px_16px_rgba(80,55,20,0.06)]">
+      <div className="h-1 bg-gradient-to-r from-[#BC8748] via-[#BC8748] to-[#0A573B]" />
+      <div className="p-4">
+        <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-[#9B6B32]">Lead information</p>
+        {/* Header */}
+        <div className="flex items-start gap-2.5">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#FBF6EC] text-[#9B6B32]">
+            <UserCircle className="h-5 w-5" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <p className="truncate text-[15px] font-bold text-[#1A211E]">{lead.name || 'Lead'}</p>
+              {rating > 0 && (
+                <span className="flex shrink-0 items-center gap-0.5 text-[#C6971F]">
+                  {Array.from({ length: rating }).map((_, i) => <Star key={i} className="h-3 w-3 fill-current" />)}
+                </span>
+              )}
+            </div>
+            <p className="text-[11.5px] text-[#8A8F86]">
+              {[lead.leadNumber, lead.companyName].filter(has).join(' · ') || 'Details captured when the lead was created'}
+            </p>
+          </div>
+        </div>
+
+        {/* Badges */}
+        {(has(lead.leadTemperature) || has(lead.priority) || has(lead.leadType) || has(lead.leadSource)) && (
+          <div className="mt-2.5 flex flex-wrap gap-1.5">
+            {has(lead.leadTemperature) && <Pill tone="warm">{lead.leadTemperature}</Pill>}
+            {has(lead.priority) && <Pill>{lead.priority} priority</Pill>}
+            {has(lead.leadType) && <Pill>{lead.leadType}</Pill>}
+            {has(lead.leadSource) && <Pill>via {lead.leadSource}</Pill>}
+          </div>
+        )}
+
+        {/* Quick contact */}
+        {(has(phone) || has(wa) || has(lead.email)) && (
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            {has(phone) && (
+              <a href={telHref(phone)} className="flex items-center justify-center gap-1.5 rounded-xl border border-[#D7DED8] bg-white py-2.5 text-[13px] font-semibold text-[#0A573B] active:scale-[0.99]">
+                <Phone className="h-4 w-4" /> Call
+              </a>
+            )}
+            {has(wa) && (
+              <a href={waHref(wa)} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-1.5 rounded-xl border border-[#D7DED8] bg-white py-2.5 text-[13px] font-semibold text-[#0A573B] active:scale-[0.99]">
+                <MessageCircle className="h-4 w-4" /> WhatsApp
+              </a>
+            )}
+          </div>
+        )}
+        {(has(phone) || has(lead.email)) && (
+          <div className="mt-2 flex flex-col gap-0.5 text-[12.5px] text-[#5E655D]">
+            {has(phone) && <span>{[lead.mobileNumber, lead.alternateMobile, lead.whatsappNumber && `WA ${lead.whatsappNumber}`].filter(has).join(' · ')}</span>}
+            {has(lead.email) && <span className="break-all">{lead.email}</span>}
+          </div>
+        )}
+
+        {/* Site location — always visible: where to go, a one-tap navigate link, and the agreed
+            visit date. Essential for Site Visit & Measurement tasks (and handy on any lead task). */}
+        {(has(addr) || has(lead.landmark) || mapHref || fmtDate(lead.siteVisitDate)) && (
+          <div className="mt-3 rounded-xl border border-[#EFE9DC] bg-[#FBFAF6] p-3.5">
+            <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#9B6B32]">
+              <MapPin className="h-3.5 w-3.5" /> Site location
+            </p>
+            {has(addr) && <p className="text-[13.5px] leading-snug text-[#33392F]">{addr}</p>}
+            {has(lead.landmark) && <p className="mt-0.5 text-[12.5px] text-[#5E655D]">Landmark: {lead.landmark}</p>}
+            {fmtDate(lead.siteVisitDate) && (
+              <p className="mt-1 text-[12.5px] font-medium text-[#2C7050]">Scheduled visit: {fmtDate(lead.siteVisitDate)}</p>
+            )}
+            {mapHref && (
+              <a href={mapHref} target="_blank" rel="noopener noreferrer"
+                className="mt-2.5 flex items-center justify-center gap-2 rounded-xl bg-[#0A573B] py-2.5 text-[14px] font-semibold text-white active:scale-[0.99]">
+                <Navigation className="h-4 w-4" /> Navigate to site
+              </a>
+            )}
+          </div>
+        )}
+
+        {/* What the customer wants — the centrepiece for a Collect Requirement task */}
+        {(has(lead.requirementCategory) || has(lead.requirementProduct) || has(description) ||
+          has(lead.roomsRequired) || (lead.scope && lead.scope.length > 0) || has(finish) ||
+          has(lead.specialRequests) || budget) && (
+          <div className="mt-3.5 rounded-xl bg-[#F0F5F1] p-3.5">
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#2C7050]">What the customer wants</p>
+            <div className="flex flex-col gap-2.5">
+              <LField label="Category" value={lead.requirementCategory} />
+              {has(lead.requirementProduct) && (
+                <div className="flex flex-col gap-1">
+                  <span className="text-[10.5px] font-semibold uppercase tracking-wide text-[#A6A99E]">Products asked</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(lead.requirementProduct as string).split(',').map((p) => p.trim()).filter(Boolean).map((p) => (
+                      <span key={p} className="rounded-full bg-white px-2.5 py-1 text-[11.5px] font-medium text-[#9B6B32] ring-1 ring-[#E4D8BF]">{p}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <LField label="Requirement" value={description} />
+              <LField label="Rooms" value={lead.roomsRequired} />
+              {lead.scope && lead.scope.length > 0 && (
+                <div className="flex flex-col gap-1">
+                  <span className="text-[10.5px] font-semibold uppercase tracking-wide text-[#A6A99E]">Scope of work</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {lead.scope.map((s) => (
+                      <span key={s} className="rounded-full bg-white px-2.5 py-1 text-[11.5px] font-medium text-[#2C7050] ring-1 ring-[#CFE3D6]">{s}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <LField label="Preferences" value={finish || undefined} />
+              <LField label="Special requests" value={lead.specialRequests} />
+              <LField label="Budget" value={budget || undefined} />
+              <LField label="Timeline" value={timeline || undefined} />
+            </div>
+          </div>
+        )}
+
+        {/* Photos & voice notes captured with the lead */}
+        {media.length > 0 && (
+          <div className="mt-3.5 rounded-xl border border-[#EFE9DC] bg-[#FBFAF6] p-3.5">
+            <p className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#9B6B32]">
+              <Camera className="h-3.5 w-3.5" /> Photos &amp; voice notes
+            </p>
+            {images.length > 0 && (
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {images.map((m, i) => (
+                  <a key={i} href={resolveFileUrl(m.fileUrl)} target="_blank" rel="noopener noreferrer" className="shrink-0">
+                    <img src={resolveFileUrl(m.fileUrl)} alt={m.fileName || 'lead photo'} className="h-20 w-20 rounded-lg object-cover ring-1 ring-[#E4DECF]" />
+                  </a>
+                ))}
+              </div>
+            )}
+            {videos.length > 0 && (
+              <div className="mt-2 flex flex-col gap-2">
+                {videos.map((m, i) => (
+                  <video key={i} src={resolveFileUrl(m.fileUrl)} controls className="w-full rounded-lg" />
+                ))}
+              </div>
+            )}
+            {audios.length > 0 && (
+              <div className="mt-2 flex flex-col gap-2">
+                {audios.map((m, i) => (
+                  <div key={i} className="flex items-center gap-2 rounded-lg bg-white px-2.5 py-2 ring-1 ring-[#E4DECF]">
+                    <Mic className="h-4 w-4 shrink-0 text-[#9B6B32]" />
+                    <audio src={resolveFileUrl(m.fileUrl)} controls className="h-9 w-full" />
+                  </div>
+                ))}
+              </div>
+            )}
+            {files.length > 0 && (
+              <div className="mt-2 flex flex-col gap-1">
+                {files.map((m, i) => (
+                  <a key={i} href={resolveFileUrl(m.fileUrl)} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 text-[13px] font-medium text-[#0A573B]">
+                    <FileText className="h-3.5 w-3.5" /> {m.fileName || 'Attachment'}
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* The rest — quiet disclosures so the screen stays calm (address & map now shown above) */}
+        <div className="mt-3 divide-y divide-[#F1ECE2] overflow-hidden rounded-xl border border-[#EFE9DC]">
+          {(has(lead.propertyType) || has(lead.propertyName) || has(lead.siteAddress) ||
+            has(lead.currentConstructionStage) || has(lead.floorCount) || has(lead.areaSqft) || has(lead.expectedWorkArea)) && (
+            <Disclosure title="Property" icon={<Home className="h-4 w-4" />}>
+              <div className="grid grid-cols-2 gap-2.5">
+                <LField label="Type" value={lead.propertyType} />
+                <LField label="Name" value={lead.propertyName} />
+                <LField label="Construction stage" value={lead.currentConstructionStage} />
+                <LField label="Floors" value={has(lead.floorCount) ? String(lead.floorCount) : undefined} />
+                <LField label="Total area" value={has(lead.areaSqft) ? `${lead.areaSqft} sq.ft` : undefined} />
+                <LField label="Work area" value={has(lead.expectedWorkArea) ? `${lead.expectedWorkArea} sq.ft` : undefined} />
+              </div>
+              <div className="mt-2.5"><LField label="Site address" value={lead.siteAddress} /></div>
+            </Disclosure>
+          )}
+
+          {(budget || has(lead.paymentPreference) || has(lead.expectedProjectValue) || timeline) && (
+            <Disclosure title="Budget & timeline" icon={<Wallet className="h-4 w-4" />}>
+              <div className="grid grid-cols-2 gap-2.5">
+                <LField label="Estimated" value={money(lead.estimatedBudget) || undefined} />
+                <LField label="Range" value={has(lead.minimumBudget) || has(lead.maximumBudget) ? [money(lead.minimumBudget), money(lead.maximumBudget)].filter(Boolean).join(' – ') : undefined} />
+                <LField label="Expected value" value={money(lead.expectedProjectValue) || undefined} />
+                <LField label="Payment" value={lead.paymentPreference} />
+              </div>
+              <div className="mt-2.5"><LField label="Timeline" value={timeline || undefined} /></div>
+            </Disclosure>
+          )}
+
+          {(has(lead.referralType) || has(lead.referrerName) || has(lead.referralNotes) || has(lead.remarks) ||
+            has(lead.followUpNotes) || fmtDate(lead.nextFollowUpDate)) && (
+            <Disclosure title="Source & notes" icon={<FileText className="h-4 w-4" />}>
+              <div className="flex flex-col gap-2.5">
+                <LField label="Referral" value={[lead.referralType, lead.referrerName, lead.referrerContact].filter(has).join(' · ') || undefined} />
+                <LField label="Referral notes" value={lead.referralNotes} />
+                <LField label="Next follow-up" value={fmtDate(lead.nextFollowUpDate) || undefined} />
+                <LField label="Follow-up notes" value={lead.followUpNotes} />
+                <LField label="Remarks" value={lead.remarks} />
+              </div>
+            </Disclosure>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Pill({ children, tone }: { children: React.ReactNode; tone?: 'warm' }) {
+  return (
+    <span className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${
+      tone === 'warm' ? 'bg-[#FBEFE0] text-[#9B6B32]' : 'bg-[#F1ECE2] text-[#6B7169]'}`}>
+      {children}
+    </span>
   );
 }
 
@@ -184,6 +454,10 @@ export default function TaskDetail() {
           </div>
         </div>
 
+        {/* The original lead picture — who the customer is and what they asked for at capture. Shown for
+            any task tied to a lead so the field employee has full context before collecting/confirming. */}
+        {task.lead && <LeadDetailsCard lead={task.lead} />}
+
         {/* Data-entry hold countdown — turns into an "extend time" alert in the last 2 minutes. */}
         {task.holdExpiresAt && <HoldTimer expiresAt={task.holdExpiresAt} onExtend={extendHold} />}
 
@@ -215,8 +489,14 @@ export default function TaskDetail() {
                   <ClipboardList className="h-4 w-4" />
                 </span>
                 <div>
-                  <p className="text-[15px] font-semibold text-[#1A211E]">Customer information</p>
-                  <p className="text-[12px] text-[#8A8F86]">Saves straight onto the lead for the office.</p>
+                  <p className="text-[15px] font-semibold text-[#1A211E]">
+                    {task.formType === 'REQUIREMENT' ? 'Collect requirement from customer' : 'Customer information'}
+                  </p>
+                  <p className="text-[12px] text-[#8A8F86]">
+                    {task.formType === 'REQUIREMENT'
+                      ? 'Confirm the details above, capture what they want, then submit — it saves onto the lead.'
+                      : 'Saves straight onto the lead for the office.'}
+                  </p>
                 </div>
               </div>
               {locked ? (

@@ -64,6 +64,17 @@ public class Employee extends BaseEntity {
     @Column(name = "attendance_required", nullable = false)
     private Boolean attendanceRequired = true;
 
+    /** Required clock-in verification: GEO (inside a fence) | OFFICE_DEVICE (biometric) | ANY. */
+    @Column(name = "attendance_method", nullable = false, length = 20)
+    private String attendanceMethod = "GEO";
+
+    /** A self-service method switch the employee requested from the portal, pending admin approval. */
+    @Column(name = "attendance_method_requested", length = 20)
+    private String attendanceMethodRequested;
+
+    @Column(name = "attendance_method_requested_at")
+    private java.time.LocalDateTime attendanceMethodRequestedAt;
+
     @Column(name = "leave_policy", length = 100)
     private String leavePolicy;
 

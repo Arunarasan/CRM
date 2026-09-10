@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { AttendanceAdmin } from "@/pages/hr/HrAttendancePage";
 
 // ============================================================ shared helpers
 
@@ -98,7 +99,7 @@ const CATEGORIES: { id: TaskCategory; label: string; hint: string; badge: string
 ];
 const CATEGORY_BADGE: Record<string, string> = Object.fromEntries(CATEGORIES.map(c => [c.id, c.badge]));
 
-type MainTab = "tasks" | "employees" | "approvals" | "risk" | "templates";
+type MainTab = "tasks" | "employees" | "attendance" | "approvals" | "risk" | "templates";
 
 // ============================================================ page
 
@@ -207,6 +208,7 @@ export default function Tasks() {
   const tabs: { id: MainTab; label: string; admin?: boolean; badge?: number }[] = [
     { id: "tasks", label: "Tasks" },
     { id: "employees", label: "Employees" },
+    { id: "attendance", label: "Attendance", admin: true },
     { id: "approvals", label: "Time Approvals", admin: true },
     { id: "risk", label: "Projects at Risk", admin: true },
     { id: "templates", label: "Workflow", admin: true },
@@ -263,6 +265,7 @@ export default function Tasks() {
 
       {tab === "tasks" && <TasksTab board={board} counts={counts} filter={taskBucket} onFilterChange={setTaskBucket} onEdit={openTask} onChanged={loadBoard} navigate={navigate} />}
       {tab === "employees" && <EmployeesTab roster={roster} board={board} isAdmin={isAdmin} onChanged={loadBoard} />}
+      {tab === "attendance" && isAdmin && <AttendanceAdmin />}
       {tab === "approvals" && isAdmin && <ApprovalsTab />}
       {tab === "risk" && isAdmin && <RiskTab navigate={navigate} />}
       {tab === "templates" && isAdmin && <TemplatesTab />}

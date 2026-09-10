@@ -371,18 +371,42 @@ function ProjectsView() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-3 text-center">
-                  <div className="bg-slate-50 rounded-xl p-3">
-                    <div className="font-black text-slate-900">{currency(selected.grossProfit)}</div>
-                    <div className="text-[10px] uppercase font-semibold text-slate-400">Gross Profit</div>
+                <div>
+                  <div className="text-xs uppercase text-slate-400 font-bold mb-2">Invoiced vs Billed (accrual)</div>
+                  <div className="grid grid-cols-3 gap-3 text-center">
+                    <div className="bg-slate-50 rounded-xl p-3">
+                      <div className="font-black text-slate-900">{currency(selected.grossProfit)}</div>
+                      <div className="text-[10px] uppercase font-semibold text-slate-400">Gross Profit</div>
+                    </div>
+                    <div className={`rounded-xl p-3 ${selected.netProfit >= 0 ? "bg-emerald-50" : "bg-red-50"}`}>
+                      <div className={`font-black ${selected.netProfit >= 0 ? "text-emerald-700" : "text-red-700"}`}>{currency(selected.netProfit)}</div>
+                      <div className="text-[10px] uppercase font-semibold text-slate-400">Net Profit</div>
+                    </div>
+                    <div className="bg-slate-50 rounded-xl p-3">
+                      <div className="font-black text-slate-900">{selected.profitPercent}%</div>
+                      <div className="text-[10px] uppercase font-semibold text-slate-400">Profit %</div>
+                    </div>
                   </div>
-                  <div className={`rounded-xl p-3 ${selected.netProfit >= 0 ? "bg-emerald-50" : "bg-red-50"}`}>
-                    <div className={`font-black ${selected.netProfit >= 0 ? "text-emerald-700" : "text-red-700"}`}>{currency(selected.netProfit)}</div>
-                    <div className="text-[10px] uppercase font-semibold text-slate-400">Net Profit</div>
-                  </div>
-                  <div className="bg-slate-50 rounded-xl p-3">
-                    <div className="font-black text-slate-900">{selected.profitPercent}%</div>
-                    <div className="text-[10px] uppercase font-semibold text-slate-400">Profit %</div>
+                </div>
+
+                {/* Actual money in vs out — cash basis */}
+                <div>
+                  <div className="text-xs uppercase text-slate-400 font-bold mb-2">Actual Money (cash basis)</div>
+                  <dl className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-sm mb-3">
+                    <Row label="Customer Paid" value={currency(selected.customerPaid)} tone="text-emerald-700" />
+                    <Row label="Contractor Paid" value={currency(selected.contractorPaid)} tone="text-rose-600" />
+                    <Row label="Product Purchase" value={currency(selected.purchasePaid)} tone="text-rose-600" />
+                    <Row label="Other Expenses" value={currency(selected.otherExpensesPaid)} tone="text-rose-600" />
+                  </dl>
+                  <div className={`rounded-xl p-4 flex items-center justify-between ${selected.cashProfit >= 0 ? "bg-emerald-50" : "bg-red-50"}`}>
+                    <div>
+                      <div className="text-[10px] uppercase font-semibold text-slate-400">Cash Profit</div>
+                      <div className="text-[11px] text-slate-500">Paid in − paid out ({currency(selected.cashOut)} out)</div>
+                    </div>
+                    <div className="text-right">
+                      <div className={`font-black text-lg ${selected.cashProfit >= 0 ? "text-emerald-700" : "text-red-700"}`}>{currency(selected.cashProfit)}</div>
+                      <div className={`text-xs font-bold ${selected.cashProfit >= 0 ? "text-emerald-600" : "text-red-600"}`}>{selected.cashMarginPercent}% margin</div>
+                    </div>
                   </div>
                 </div>
 

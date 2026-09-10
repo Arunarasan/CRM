@@ -12,4 +12,7 @@ public interface AttendanceSessionRepository extends JpaRepository<AttendanceSes
 
     /** Still clocked-in sessions not yet flagged for the "no clock-out" alert. */
     List<AttendanceSession> findByCheckOutTimeIsNullAndOvertimeAlertSentFalse();
+
+    /** Flagged clock-ins awaiting HR review (attendance verification, newest first). */
+    List<AttendanceSession> findByFlaggedTrueAndApprovalStatusOrderByIdDesc(String approvalStatus);
 }

@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -477,6 +478,101 @@ public class ProjectService {
         return projectRepository.save(project);
     }
 
+    // =====================================================================
+    // Customer handover flow — stage tasks + progress bar + handover
+    // =====================================================================
+
+    /** Recommended (not fixed) stages; Installation is auto-seeded and required. */
+    private static final List<String> HANDOVER_STAGES =
+            List.of("Material", "Stitching", "Making", "Works", "Installation");
+
+    private int stageOrder(String stage) {
+        int i = HANDOVER_STAGES.indexOf(stage);
+        return i < 0 ? HANDOVER_STAGES.size() : i;
+    }
+
+    /** Ensure the fixed "Installation" handover task exists for a project. */
+    private void ensureInstallationTask(Project project) {
+        boolean has = taskRepository.findByProjectId(project.getId()).stream()
+                .anyMatch(t -> "Installation".equalsIgnoreCase(t.getStage()) && !Boolean.TRUE.equals(t.getIsDeleted()));
+        if (has) return;
+        Task t = new Task();
+        t.setTaskName("Installation");
+        t.setStage("Installation");
+        t.setProject(project);
+        t.setStatus("PENDING");
+        t.setPriority("MEDIUM");
+        t.setProgress(0);
+        t.setSource("MANUAL");
+        taskRepository.save(t);
+    }
+
+    /** Handover board: the project's stage tasks, the rolled-up % and whether handover can happen. */
+    @Transactional
+    public Map<String, Object> getHandover(Long projectId) {
+        Project project = getProjectById(projectId);
+        ensureInstallationTask(project);
+        List<Task> tasks = taskRepository.findByProjectId(projectId).stream()
+                .filter(t -> t.getStage() != null && !Boolean.TRUE.equals(t.getIsDeleted()))
+                .sorted(java.util.Comparator
+                        .comparingInt((Task t) -> stageOrder(t.getStage()))
+                        .thenComparing(t -> t.getId() == null ? 0L : t.getId()))
+                .toList();
+
+        List<Map<String, Object>> rows = new java.util.ArrayList<>();
+        int sum = 0;
+        for (Task t : tasks) {
+            int p = t.getProgress() == null ? 0 : t.getProgress();
+            sum += p;
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", t.getId());
+            m.put("taskName", t.getTaskName());
+            m.put("stage", t.getStage());
+            m.put("progress", p);
+            m.put("status", t.getStatus());
+            m.put("dueDate", t.getDueDate());
+            m.put("required", "Installation".equalsIgnoreCase(t.getStage()));
+            rows.add(m);
+        }
+        int pct = tasks.isEmpty() ? 0 : Math.round((float) sum / tasks.size());
+        boolean allComplete = !tasks.isEmpty()
+                && tasks.stream().allMatch(t -> (t.getProgress() == null ? 0 : t.getProgress()) >= 100);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("projectId", projectId);
+        result.put("projectStatus", project.getStatus());
+        result.put("tasks", rows);
+        result.put("taskCount", tasks.size());
+        result.put("progressPercent", pct);
+        result.put("allComplete", allComplete);
+        result.put("canHandover", allComplete && !"COMPLETED".equalsIgnoreCase(project.getStatus()));
+        result.put("handoverDate", project.getHandoverDate());
+        result.put("handoverNotes", project.getHandoverNotes());
+        result.put("stages", HANDOVER_STAGES);
+        return result;
+    }
+
+    /** Hand the project over to the customer once every stage task is 100% — marks it COMPLETED. */
+    @Transactional
+    public Project handoverProject(Long projectId, String notes) {
+        Project project = getProjectById(projectId);
+        ensureInstallationTask(project);
+        List<Task> tasks = taskRepository.findByProjectId(projectId).stream()
+                .filter(t -> t.getStage() != null && !Boolean.TRUE.equals(t.getIsDeleted()))
+                .toList();
+        boolean allComplete = !tasks.isEmpty()
+                && tasks.stream().allMatch(t -> (t.getProgress() == null ? 0 : t.getProgress()) >= 100);
+        if (!allComplete) {
+            throw new IllegalStateException("All handover tasks must reach 100% before handover.");
+        }
+        project.setHandoverDate(java.time.LocalDate.now());
+        if (notes != null && !notes.isBlank()) project.setHandoverNotes(notes);
+        project.setStatus("COMPLETED");
+        project.setProgress(100);
+        if (project.getActualCompletionDate() == null) project.setActualCompletionDate(java.time.LocalDate.now());
+        return projectRepository.save(project);
+    }
+
     /** Readiness report for the completion gate (drives the UI checklist). */
     public Map<String, Object> getCompletionReadiness(Long projectId) {
         getProjectById(projectId);
@@ -591,6 +687,34 @@ public class ProjectService {
         return items;
     }
 
+    /**
+     * Every work item of a project as a compact, cycle-safe projection — the source for the
+     * "Update Work" batch sheet (pick many items across rooms, apply progress once).
+     */
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getAllItemsForProject(Long projectId) {
+        List<Map<String, Object>> out = new java.util.ArrayList<>();
+        for (ProjectRoomItem it : roomItemRepository.findByRoomPhaseProjectId(projectId)) {
+            ProjectRoom room = it.getRoom();
+            ProjectPhase phase = room != null ? room.getPhase() : null;
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", it.getId());
+            m.put("itemName", it.getItemName());
+            m.put("itemType", it.getItemType());
+            m.put("progress", it.getProgress() == null ? 0 : it.getProgress());
+            m.put("status", it.getStatus());
+            m.put("locked", Boolean.TRUE.equals(it.getLocked()));
+            m.put("delayed", it.isDelayed());
+            m.put("roomId", room != null ? room.getId() : null);
+            m.put("roomName", room != null ? room.getRoomName() : null);
+            m.put("floorName", room != null ? room.getFloorName() : null);
+            m.put("phaseId", phase != null ? phase.getId() : null);
+            m.put("phaseName", phase != null ? phase.getName() : null);
+            out.add(m);
+        }
+        return out;
+    }
+
     public ProjectRoomItem getItemById(Long itemId) {
         return roomItemRepository.findById(itemId).orElseThrow(() -> new RuntimeException("Project room item not found"));
     }
@@ -686,6 +810,31 @@ public class ProjectService {
 
         boolean wasAssigned = itemAssigned(item);
         return applyItemChange(item, user, oldProgress, oldStatus, wasAssigned, remarks);
+    }
+
+    /**
+     * Record a whole day's work in one shot: apply the same progress/status to several work items
+     * (across any rooms/phases) so the crew never has to open each one. Locked/complete or missing
+     * items are skipped, not errored, and each surviving change runs the normal rollup + audit log —
+     * so the project bar moves once for the batch.
+     */
+    @Transactional
+    public Map<String, Object> bulkUpdateItemProgress(List<Long> itemIds, Integer progress, String status,
+                                                      String remarks, String photos, User user) {
+        int updated = 0, skipped = 0;
+        if (itemIds != null) {
+            for (Long id : itemIds) {
+                if (id == null) { skipped++; continue; }
+                ProjectRoomItem item = roomItemRepository.findById(id).orElse(null);
+                if (item == null || Boolean.TRUE.equals(item.getLocked())) { skipped++; continue; }
+                updateItemProgress(id, progress, status, remarks, photos, user);
+                updated++;
+            }
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("updated", updated);
+        result.put("skipped", skipped);
+        return result;
     }
 
     /** Manager/Admin reopen of a completed item: clears the lock and drops it back to IN_PROGRESS. */

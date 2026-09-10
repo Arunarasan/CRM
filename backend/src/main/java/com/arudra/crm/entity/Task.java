@@ -57,6 +57,14 @@ public class Task extends BaseEntity {
     @Column(nullable = false, length = 50)
     private String status; // PENDING, IN_PROGRESS, COMPLETED
 
+    /** Completion percent (0-100) for the project handover flow. */
+    @Column(nullable = false)
+    private Integer progress = 0;
+
+    /** Free stage label for the handover flow: Material / Stitching / Making / Works / Installation / custom. */
+    @Column(length = 50)
+    private String stage;
+
     @Column(columnDefinition = "TEXT")
     private String description;
 

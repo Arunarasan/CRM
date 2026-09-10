@@ -67,6 +67,7 @@ public class WorkforceRequest {
         private String salaryType;
         private String shift;
         private Boolean attendanceRequired;
+        private String attendanceMethod; // GEO | OFFICE_DEVICE | ANY
         private String leavePolicy;
         private Boolean payrollEnabled;
         private String pfNumber;

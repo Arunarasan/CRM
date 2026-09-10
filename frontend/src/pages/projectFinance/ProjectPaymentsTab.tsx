@@ -2,10 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import {
   Plus, Trash2, FileText, Wallet, Receipt, Loader2, IndianRupee, AlertCircle,
-  CheckCircle2, RotateCcw, Printer,
+  CheckCircle2, RotateCcw, Printer, Ban, Clock, User as UserIcon,
 } from "lucide-react";
 import { financeApi } from "@/api/financeApi";
-import type { Invoice, InvoiceType } from "@/types/finance";
+import type { Invoice, InvoiceType, CustomerPayment } from "@/types/finance";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -16,6 +16,7 @@ import { toast } from "@/components/ui/toast";
 import { printInvoice } from "./printInvoice";
 import { fetchCompanyProfile } from "@/lib/companyProfile";
 import CompletionBillingTracker from "./CompletionBillingTracker";
+import ProjectProfitPanel from "./ProjectProfitPanel";
 
 const inr = (n?: number | null) =>
   "₹" + Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
@@ -54,6 +55,7 @@ export default function ProjectPaymentsTab({ project, onChanged }: { project: an
   const [denied, setDenied] = useState(false);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [tick, setTick] = useState(0); // bumps so the billing tracker re-fetches after invoice changes
+  const [view, setView] = useState<"invoices" | "payments">("invoices");
 
   const load = () => {
     if (!projectId) return;
@@ -129,7 +131,18 @@ export default function ProjectPaymentsTab({ project, onChanged }: { project: an
       {/* Combined completion + billing tracker (work % + payments, auto-billing milestones) */}
       <CompletionBillingTracker project={project} refreshSignal={tick} onChanged={reloadAll} />
 
-      {loading ? (
+      {/* Profit & margin — cash basis vs accrual, plus quick-add other expenses */}
+      <ProjectProfitPanel project={project} refreshSignal={tick} />
+
+      {/* Invoices vs Payments — two clearly separated views */}
+      <div className="inline-flex rounded-xl border bg-white p-1 shadow-sm">
+        <ViewTab active={view === "invoices"} onClick={() => setView("invoices")} icon={<FileText className="h-4 w-4" />} label="Invoices" hint="What you bill" />
+        <ViewTab active={view === "payments"} onClick={() => setView("payments")} icon={<IndianRupee className="h-4 w-4" />} label="Payments" hint="Money received" />
+      </div>
+
+      {view === "payments" ? (
+        <PaymentsSection projectId={projectId} customerId={customerId} canWrite={canWrite} canCollect={canCollect} onChanged={reloadAll} />
+      ) : loading ? (
         <div className="flex justify-center py-10 text-slate-400"><Loader2 className="h-6 w-6 animate-spin" /></div>
       ) : denied ? (
         <div className="rounded-xl border border-slate-100 bg-white p-6 text-slate-500">Billing data is restricted for your role.</div>
@@ -232,6 +245,197 @@ function ActionBtn({ children, onClick, tone, title }: { children: React.ReactNo
       className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium transition-colors ${cls}`}>
       {children}
     </button>
+  );
+}
+
+function ViewTab({ active, onClick, icon, label, hint }: {
+  active: boolean; onClick: () => void; icon: React.ReactNode; label: string; hint: string;
+}) {
+  return (
+    <button type="button" onClick={onClick}
+      className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
+        active ? "bg-emerald-500 text-white shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>
+      {icon} {label}
+      <span className={`hidden sm:inline text-[10px] font-normal ${active ? "text-white/70" : "text-slate-400"}`}>· {hint}</span>
+    </button>
+  );
+}
+
+const PAY_STATUS: Record<string, { text: string; cls: string; icon: React.ReactNode }> = {
+  CONFIRMED: { text: "Confirmed", cls: "bg-emerald-100 text-emerald-700", icon: <CheckCircle2 className="h-3.5 w-3.5" /> },
+  PENDING_APPROVAL: { text: "Pending approval", cls: "bg-amber-100 text-amber-700", icon: <Clock className="h-3.5 w-3.5" /> },
+  REJECTED: { text: "Rejected", cls: "bg-rose-100 text-rose-600", icon: <Ban className="h-3.5 w-3.5" /> },
+};
+
+/**
+ * Money actually received on this project — separate from invoices. Lists every customer payment
+ * (including cash collected on site by field staff, which arrives PENDING_APPROVAL from their daily
+ * report), with approve/reject for pending ones and a "Record Payment" for office-collected money.
+ */
+function PaymentsSection({ projectId, customerId, canWrite, canCollect, onChanged }: {
+  projectId: number; customerId?: number; canWrite: boolean; canCollect: boolean; onChanged: () => void;
+}) {
+  const [rows, setRows] = useState<CustomerPayment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<number | null>(null);
+  const [recordOpen, setRecordOpen] = useState(false);
+
+  const load = () => {
+    setLoading(true);
+    financeApi.getPayments({ projectId, size: 100 })
+      .then((r) => setRows(r.content || []))
+      .catch(() => setRows([]))
+      .finally(() => setLoading(false));
+  };
+  useEffect(load, [projectId]);
+
+  const confirmedTotal = rows.filter((p) => p.status === "CONFIRMED").reduce((s, p) => s + (p.amount || 0), 0);
+  const pendingTotal = rows.filter((p) => p.status === "PENDING_APPROVAL").reduce((s, p) => s + (p.amount || 0), 0);
+
+  const approve = (id: number) => {
+    setBusyId(id);
+    financeApi.approvePayment(id).then(() => { load(); onChanged(); toast.success("Payment approved"); })
+      .catch((e) => toast.error(e?.response?.data?.message || "Approve failed")).finally(() => setBusyId(null));
+  };
+  const reject = (id: number) => {
+    if (!confirm("Reject this payment?")) return;
+    setBusyId(id);
+    financeApi.rejectPayment(id).then(() => { load(); onChanged(); toast.success("Payment rejected"); })
+      .catch((e) => toast.error(e?.response?.data?.message || "Reject failed")).finally(() => setBusyId(null));
+  };
+
+  return (
+    <section className="rounded-2xl border border-slate-100 bg-white p-6 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+      <div className="mb-4 flex items-center justify-between">
+        <div>
+          <h3 className="flex items-center gap-2 text-lg font-bold text-slate-800"><IndianRupee className="h-5 w-5 text-emerald-600" /> Payments Received</h3>
+          <p className="text-xs text-slate-400 mt-0.5">
+            {inr(confirmedTotal)} confirmed{pendingTotal > 0 ? ` · ${inr(pendingTotal)} awaiting approval` : ""}
+          </p>
+        </div>
+        {canCollect && customerId && (
+          <Button size="sm" onClick={() => setRecordOpen(true)}><Plus className="h-4 w-4" /> Record Payment</Button>
+        )}
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-10 text-slate-400"><Loader2 className="h-6 w-6 animate-spin" /></div>
+      ) : rows.length === 0 ? (
+        <p className="py-6 text-center text-sm text-slate-400">No payments recorded yet. Field staff can also log cash collected in their daily report.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b text-left text-xs uppercase tracking-wider text-slate-400">
+                <th className="py-2 pr-4">Payment #</th><th className="py-2 pr-4">Date</th><th className="py-2 pr-4">Method</th>
+                <th className="py-2 pr-4">Collected by</th><th className="py-2 pr-4 text-right">Amount</th>
+                <th className="py-2 pr-4">Status</th><th className="py-2 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((p) => {
+                const st = PAY_STATUS[p.status] || PAY_STATUS.CONFIRMED;
+                const busy = busyId === p.id;
+                return (
+                  <tr key={p.id} className="border-b last:border-0">
+                    <td className="py-2 pr-4 font-medium text-slate-700">{p.paymentNumber}</td>
+                    <td className="py-2 pr-4 text-slate-500">{p.paymentDate ? format(new Date(p.paymentDate), "dd MMM yyyy") : "-"}</td>
+                    <td className="py-2 pr-4 text-slate-500">{(p.paymentMethod || "").replace(/_/g, " ")}</td>
+                    <td className="py-2 pr-4 text-slate-500">
+                      <span className="inline-flex items-center gap-1">{p.collectedBy?.name ? <><UserIcon className="h-3 w-3" /> {p.collectedBy.name}</> : "—"}</span>
+                    </td>
+                    <td className="py-2 pr-4 text-right font-semibold text-slate-800">{inr(p.amount)}</td>
+                    <td className="py-2 pr-4"><span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${st.cls}`}>{st.icon} {st.text}</span></td>
+                    <td className="py-2">
+                      <div className="flex items-center justify-end gap-1.5">
+                        {busy && <Loader2 className="h-4 w-4 animate-spin text-slate-400" />}
+                        {canWrite && p.status === "PENDING_APPROVAL" && !busy && (
+                          <>
+                            <ActionBtn onClick={() => approve(p.id)} tone="green" title="Approve"><CheckCircle2 className="h-3.5 w-3.5" /> Approve</ActionBtn>
+                            <ActionBtn onClick={() => reject(p.id)} tone="red" title="Reject"><Ban className="h-3.5 w-3.5" /> Reject</ActionBtn>
+                          </>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {recordOpen && customerId && (
+        <RecordPaymentDialog projectId={projectId} customerId={customerId}
+          onClose={() => setRecordOpen(false)} onSaved={() => { setRecordOpen(false); load(); onChanged(); }} />
+      )}
+    </section>
+  );
+}
+
+/** Record an office-collected payment directly (CONFIRMED). */
+function RecordPaymentDialog({ projectId, customerId, onClose, onSaved }: {
+  projectId: number; customerId: number; onClose: () => void; onSaved: () => void;
+}) {
+  const [amount, setAmount] = useState<string>("");
+  const [method, setMethod] = useState("CASH");
+  const [date, setDate] = useState(today());
+  const [reference, setReference] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const save = async () => {
+    const amt = Number(amount);
+    if (!amt || amt <= 0) { setError("Enter an amount."); return; }
+    setSaving(true); setError(null);
+    try {
+      await financeApi.recordPayment({
+        customer: { id: customerId }, project: { id: projectId },
+        amount: amt, paymentMethod: method, paymentDate: date,
+        referenceNumber: reference || undefined, paymentType: "PARTIAL", status: "CONFIRMED",
+      });
+      toast.success("Payment recorded");
+      onSaved();
+    } catch (e: any) {
+      setError(e?.response?.data?.message || "Failed to record payment.");
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2"><IndianRupee className="h-5 w-5 text-emerald-600" /> Record Payment</DialogTitle>
+          <DialogDescription>Money received for this project. It's confirmed immediately.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <label className="space-y-1 text-sm">
+              <span className="font-medium">Amount</span>
+              <div className="relative">
+                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">₹</span>
+                <Input type="number" min={0} value={amount} onChange={(e) => setAmount(e.target.value)} className="pl-7 text-lg font-semibold" placeholder="0" autoFocus />
+              </div>
+            </label>
+            <label className="space-y-1 text-sm">
+              <span className="font-medium">Method</span>
+              <select value={method} onChange={(e) => setMethod(e.target.value)} className="w-full rounded-md border border-input bg-background px-2 py-2 text-sm">
+                {METHODS.map((m) => <option key={m} value={m}>{m.replace("_", " ")}</option>)}
+              </select>
+            </label>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="space-y-1 text-sm"><span className="font-medium">Date</span><Input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label>
+            <label className="space-y-1 text-sm"><span className="font-medium">Reference</span><Input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="Txn / ref" /></label>
+          </div>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button onClick={save} disabled={saving}>{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Record</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

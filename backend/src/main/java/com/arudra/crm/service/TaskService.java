@@ -116,6 +116,27 @@ public class TaskService {
         return savedTask;
     }
 
+    /** Set a task's completion percent (handover flow) and derive its status. */
+    public Task updateTaskProgress(Long id, Integer progress, String stage) {
+        Task task = getTaskById(id);
+        if (progress != null) {
+            int p = Math.max(0, Math.min(100, progress));
+            task.setProgress(p);
+            if (p >= 100) {
+                task.setStatus("COMPLETED");
+                if (task.getCompletedDate() == null) task.setCompletedDate(java.time.LocalDate.now());
+            } else if (p > 0) {
+                task.setStatus("IN_PROGRESS");
+                task.setCompletedDate(null);
+            } else {
+                task.setStatus("PENDING");
+                task.setCompletedDate(null);
+            }
+        }
+        if (stage != null && !stage.isBlank()) task.setStage(stage);
+        return taskRepository.save(task);
+    }
+
     public Task updateTask(Long id, Task taskDetails) {
         Task task = getTaskById(id);
         String previousStatus = task.getStatus();
