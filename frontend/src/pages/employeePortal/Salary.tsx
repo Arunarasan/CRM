@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { ChevronRight, Gift, Plus, X, HandCoins, Landmark } from 'lucide-react';
+import { ChevronRight, Gift, Plus, X, HandCoins, Landmark, Download } from 'lucide-react';
 import { employeePortalApi } from '@/api/employeePortalApi';
 import { Payslip, MyBonuses, MonthlyEarning, PayrollRequestEntry, MyLoan, MyAdvance, PayrollRequestType } from '@/types/employeePortal';
 import { PortalHeader, StatusPill, EmptyState, inr } from './_shared';
+import { printPayslip } from './printPayslip';
 
 const MONTHS = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -23,7 +24,7 @@ const BONUS_LABEL: Record<string, string> = {
   MANUAL: 'Manual', INCENTIVE: 'Incentive', OTHER: 'Bonus',
 };
 
-function PayslipDetail({ slip, onBack }: { slip: Payslip; onBack: () => void }) {
+function PayslipDetail({ slip, onBack, employeeName, employeeCode }: { slip: Payslip; onBack: () => void; employeeName?: string; employeeCode?: string }) {
   const hourly = slip.payType === 'HOURLY';
   const earnings: [string, number][] = hourly
     ? [
@@ -50,6 +51,10 @@ function PayslipDetail({ slip, onBack }: { slip: Payslip; onBack: () => void }) 
           <ChevronRight className="h-5 w-5 rotate-180" />
         </button>
         <h1 className="flex-1 text-base font-semibold">Payslip · {MONTHS[slip.month]} {slip.year}</h1>
+        <button onClick={() => printPayslip(slip, { employeeName, employeeCode })}
+          className="flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1.5 text-xs font-semibold text-primary-foreground active:scale-[0.98]">
+          <Download className="h-4 w-4" /> PDF
+        </button>
         <StatusPill status={slip.status} />
       </div>
 
@@ -280,10 +285,12 @@ export default function Salary() {
   const [loans, setLoans] = useState<MyLoan[]>([]);
   const [advances, setAdvances] = useState<MyAdvance[]>([]);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [me, setMe] = useState<{ name: string; code: string } | null>(null);
 
   const loadRequests = () => employeePortalApi.payrollRequests().then(setRequests).catch(() => setRequests([]));
 
   useEffect(() => {
+    employeePortalApi.me().then((p) => setMe({ name: `${p.firstName ?? ''} ${p.lastName ?? ''}`.trim(), code: p.employeeCode })).catch(() => {});
     employeePortalApi.payslips().then(setSlips).catch(() => setSlips([]));
     employeePortalApi.bonuses().then(setBonuses).catch(() => setBonuses(null));
     employeePortalApi.monthlyEarnings().then(setMonths).catch(() => setMonths([]));
@@ -293,13 +300,12 @@ export default function Salary() {
   }, []);
 
   // Open the official payslip behind a month row (loaded already, else fetched by id).
+  // Always fetch by id so the full payslip (incl. admin-added line items) is loaded for view + download.
   const openOfficial = (id: number) => {
-    const found = slips.find((s) => s.id === id);
-    if (found) { setSelected(found); return; }
     employeePortalApi.payslip(id).then(setSelected).catch(() => {});
   };
 
-  if (selected) return <PayslipDetail slip={selected} onBack={() => setSelected(null)} />;
+  if (selected) return <PayslipDetail slip={selected} onBack={() => setSelected(null)} employeeName={me?.name} employeeCode={me?.code} />;
 
   return (
     <div className="flex flex-col">
