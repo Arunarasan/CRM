@@ -277,7 +277,6 @@ function PickerBlock({ label, empty, value, onChange, options }: {
 }
 
 export default function Salary() {
-  const [slips, setSlips] = useState<Payslip[]>([]);
   const [selected, setSelected] = useState<Payslip | null>(null);
   const [bonuses, setBonuses] = useState<MyBonuses | null>(null);
   const [months, setMonths] = useState<MonthlyEarning[]>([]);
@@ -291,7 +290,6 @@ export default function Salary() {
 
   useEffect(() => {
     employeePortalApi.me().then((p) => setMe({ name: `${p.firstName ?? ''} ${p.lastName ?? ''}`.trim(), code: p.employeeCode })).catch(() => {});
-    employeePortalApi.payslips().then(setSlips).catch(() => setSlips([]));
     employeePortalApi.bonuses().then(setBonuses).catch(() => setBonuses(null));
     employeePortalApi.monthlyEarnings().then(setMonths).catch(() => setMonths([]));
     employeePortalApi.myLoans().then(setLoans).catch(() => setLoans([]));
