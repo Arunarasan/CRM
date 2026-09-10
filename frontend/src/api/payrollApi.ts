@@ -4,6 +4,20 @@ import {
   EmployeeDeduction, WageSettings, PayrollLine, PayrollSummary, PayrollRequest,
 } from '../types/payroll';
 
+export interface PayslipLineItem {
+  id: number;
+  category: 'EARNING' | 'DEDUCTION';
+  label: string;
+  amount: number;
+  source: string;
+}
+export interface PayslipEditView {
+  record: SalaryRecord | null;
+  lineItems: PayslipLineItem[];
+  earningPresets: string[];
+  deductionPresets: string[];
+}
+
 // Employee payroll — /api/hr endpoints. These return raw bodies (HrController is not wrapped in
 // ApiResponse), so we read res.data directly.
 
@@ -56,6 +70,16 @@ export const payrollApi = {
     api.get<PayrollSummary>(`/hr/payroll/summary?month=${month}&year=${year}`).then((r) => r.data),
   payslip: (salaryRecordId: number) =>
     api.get<{ record: SalaryRecord; recoveries: any[] }>(`/hr/payslip/${salaryRecordId}`).then((r) => r.data),
+
+  // Editable payslip line items (extra incentives / allowances / deductions)
+  editablePayslip: (employeeId: number, month: number, year: number) =>
+    api.get<PayslipEditView>(`/hr/payslips?employeeId=${employeeId}&month=${month}&year=${year}`).then((r) => r.data),
+  addPayslipLineItem: (recordId: number, body: { category: string; label: string; amount: number }) =>
+    api.post<PayslipEditView>(`/hr/payslips/${recordId}/line-items`, body).then((r) => r.data),
+  updatePayslipLineItem: (itemId: number, body: { label?: string; amount?: number }) =>
+    api.put<PayslipEditView>(`/hr/payslips/line-items/${itemId}`, body).then((r) => r.data),
+  deletePayslipLineItem: (itemId: number) =>
+    api.delete<PayslipEditView>(`/hr/payslips/line-items/${itemId}`).then((r) => r.data),
   markPaid: (salaryRecordId: number) =>
     api.post<SalaryRecord>(`/hr/payroll/${salaryRecordId}/pay`).then((r) => r.data),
 

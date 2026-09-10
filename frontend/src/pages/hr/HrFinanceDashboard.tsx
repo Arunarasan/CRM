@@ -5,6 +5,7 @@ import type { FinanceDashboard, EmployeeDeduction, WageSettings, PayrollLine, Pa
 import { inr } from "@/pages/workforce/WorkforceFinanceTab";
 import { useAuth } from "@/hooks/useAuth";
 import QuickPayDialog from "./QuickPayDialog";
+import PayslipEditor from "./PayslipEditor";
 import api from "@/lib/api";
 import { toast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
@@ -14,7 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Bell, PlayCircle, Clock, Gift, Plus, Check, BadgeIndianRupee, Search,
-  Settings2, MinusCircle, FileText, Wallet, CircleHelp, ExternalLink, Zap, ArrowLeftRight,
+  Settings2, MinusCircle, FileText, Wallet, CircleHelp, ExternalLink, Zap, ArrowLeftRight, Pencil,
 } from "lucide-react";
 
 const BONUS_TYPES = [
@@ -70,6 +71,7 @@ export default function HrFinanceDashboard() {
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
   const [running, setRunning] = useState(false);
+  const [editSlip, setEditSlip] = useState<{ employeeId: number; name?: string } | null>(null);
 
   const [hourly, setHourly] = useState<any | null>(null);
   const [lines, setLines] = useState<PayrollLine[]>([]);
@@ -379,7 +381,7 @@ export default function HrFinanceDashboard() {
                     <td className="p-3 text-right text-rose-600">{l.deductions != null && num(l.deductions) > 0 ? `− ${inr(l.deductions)}` : "—"}</td>
                     <td className="p-3 text-right font-bold text-emerald-600">{inr(l.payable)}</td>
                     <td className="p-3 text-center"><StatusBadge status={l.status} /></td>
-                    <td className="p-3 text-right whitespace-nowrap"><RowAction line={l} onApprove={approveRec} onPay={payRec} canProcess={canProcess} /></td>
+                    <td className="p-3 text-right whitespace-nowrap"><RowAction line={l} onApprove={approveRec} onPay={payRec} canProcess={canProcess} onEdit={(ln) => setEditSlip({ employeeId: ln.personId!, name: ln.name })} /></td>
                   </tr>
                 ))}
                 {filteredEmp.length === 0 && (
@@ -396,7 +398,8 @@ export default function HrFinanceDashboard() {
           <div className="md:hidden space-y-2">
             {filteredEmp.map((l, i) => (
               <EmpCard key={`empc-${l.personId}-${i}`} l={l} canProcess={canProcess}
-                onToggle={() => toggleBasis(l.personId, l.payModel)} onApprove={approveRec} onPay={payRec} />
+                onToggle={() => toggleBasis(l.personId, l.payModel)} onApprove={approveRec} onPay={payRec}
+                onEdit={(ln) => setEditSlip({ employeeId: ln.personId!, name: ln.name })} />
             ))}
             {filteredEmp.length === 0 && <p className="text-center text-sm text-slate-400 py-8">No employees match.</p>}
           </div>
@@ -793,6 +796,17 @@ export default function HrFinanceDashboard() {
           onDone={() => { loadUnified(); load(); loadBonuses(); loadDeductions(); loadPayReqs(); }}
         />
       )}
+
+      {editSlip && (
+        <PayslipEditor
+          employeeId={editSlip.employeeId}
+          name={editSlip.name}
+          month={month}
+          year={year}
+          onClose={() => setEditSlip(null)}
+          onChanged={() => loadUnified()}
+        />
+      )}
     </div>
   );
 }
@@ -881,7 +895,7 @@ function PersonCell({ line }: { line: PayrollLine }) {
 }
 
 /** Per-row action — inline Approve/Pay for employees; a deep-link for contractors (never inline pay). */
-function RowAction({ line, onApprove, onPay, canProcess }: { line: PayrollLine; onApprove: (id: number) => void; onPay: (id: number) => void; canProcess: boolean }) {
+function RowAction({ line, onApprove, onPay, canProcess, onEdit }: { line: PayrollLine; onApprove: (id: number) => void; onPay: (id: number) => void; canProcess: boolean; onEdit?: (line: PayrollLine) => void }) {
   if (line.resourceType === "CONTRACTOR") {
     const to = line.actionHint === "LEDGER" ? "/contractors/ledger" : `/contractors/directory/${line.personId}`;
     const label = line.actionHint === "LEDGER" ? "Ledger" : "Open bill";
@@ -896,13 +910,15 @@ function RowAction({ line, onApprove, onPay, canProcess }: { line: PayrollLine; 
     <div className="inline-flex items-center gap-1.5">
       {canProcess && line.status === "PENDING" && id && <Button size="sm" variant="outline" onClick={() => onApprove(id)}><Check className="w-3.5 h-3.5 mr-1" /> Approve</Button>}
       {canProcess && line.status === "APPROVED" && id && <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={() => onPay(id)}><BadgeIndianRupee className="w-3.5 h-3.5 mr-1" /> Pay</Button>}
+      {canProcess && onEdit && id && line.status !== "PAID" && line.personId &&
+        <Button size="sm" variant="outline" title="Edit payslip (incentives, allowances, deductions)" onClick={() => onEdit(line)}><Pencil className="w-3.5 h-3.5" /></Button>}
       {id && <Button size="sm" variant="ghost" title="Open payslip" onClick={() => window.open(`/hr/payslip/${id}`, "_blank")}><FileText className="w-4 h-4" /></Button>}
     </div>
   );
 }
 
 /** Mobile card for an employee salary line. */
-function EmpCard({ l, canProcess, onToggle, onApprove, onPay }: { l: PayrollLine; canProcess: boolean; onToggle: () => void; onApprove: (id: number) => void; onPay: (id: number) => void }) {
+function EmpCard({ l, canProcess, onToggle, onApprove, onPay, onEdit }: { l: PayrollLine; canProcess: boolean; onToggle: () => void; onApprove: (id: number) => void; onPay: (id: number) => void; onEdit?: (line: PayrollLine) => void }) {
   return (
     <div className="rounded-xl border bg-white p-3 shadow-sm">
       <div className="flex items-center justify-between gap-2">
@@ -918,7 +934,7 @@ function EmpCard({ l, canProcess, onToggle, onApprove, onPay }: { l: PayrollLine
         <div><div className="text-slate-400">Deductions</div><div className="font-semibold text-rose-600">{num(l.deductions) > 0 ? inr(l.deductions) : "—"}</div></div>
         <div><div className="text-slate-400">Net</div><div className="font-bold text-emerald-600">{inr(l.payable)}</div></div>
       </div>
-      <div className="mt-2 flex justify-end"><RowAction line={l} onApprove={onApprove} onPay={onPay} canProcess={canProcess} /></div>
+      <div className="mt-2 flex justify-end"><RowAction line={l} onApprove={onApprove} onPay={onPay} canProcess={canProcess} onEdit={onEdit} /></div>
     </div>
   );
 }

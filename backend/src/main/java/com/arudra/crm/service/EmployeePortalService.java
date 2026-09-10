@@ -30,6 +30,7 @@ public class EmployeePortalService {
     @Autowired private AttendanceRepository attendanceRepository;
     @Autowired private LeaveRequestRepository leaveRequestRepository;
     @Autowired private SalaryRecordRepository salaryRecordRepository;
+    @Autowired private com.arudra.crm.repository.PayslipLineItemRepository payslipLineItemRepository;
     @Autowired private SalaryStructureRepository salaryStructureRepository;
     @Autowired private EmployeeDocumentRepository documentRepository;
     @Autowired private NotificationRepository notificationRepository;
@@ -297,6 +298,7 @@ public class EmployeePortalService {
         if (record.getEmployee() == null || !record.getEmployee().getId().equals(employee.getId())) {
             throw new IllegalStateException("This payslip does not belong to you.");
         }
+        record.setLineItems(payslipLineItemRepository.findBySalaryRecordIdAndIsDeletedFalseOrderByIdAsc(record.getId()));
         return record;
     }
 

@@ -76,6 +76,9 @@ function PayslipDetail({ slip, onBack }: { slip: Payslip; onBack: () => void }) 
         {earnings.map(([l, v]) => (
           <div key={l} className="flex justify-between px-4 py-2.5 text-sm"><span className="text-muted-foreground">{l}</span><span className="font-medium">{inr(v)}</span></div>
         ))}
+        {(slip.lineItems ?? []).filter((it) => it.category === 'EARNING').map((it) => (
+          <div key={it.id} className="flex justify-between px-4 py-2.5 text-sm"><span className="text-muted-foreground">{it.label}</span><span className="font-medium">{inr(it.amount)}</span></div>
+        ))}
         <div className="flex justify-between bg-muted/40 px-4 py-2.5 text-sm font-semibold"><span>Gross</span><span>{inr(slip.grossEarnings)}</span></div>
       </div>
 
@@ -83,6 +86,9 @@ function PayslipDetail({ slip, onBack }: { slip: Payslip; onBack: () => void }) 
       <div className="mx-3 mb-6 divide-y overflow-hidden rounded-xl border bg-card shadow-sm">
         {deductions.map(([l, v]) => (
           <div key={l} className="flex justify-between px-4 py-2.5 text-sm"><span className="text-muted-foreground">{l}</span><span className="font-medium">{inr(v)}</span></div>
+        ))}
+        {(slip.lineItems ?? []).filter((it) => it.category === 'DEDUCTION').map((it) => (
+          <div key={it.id} className="flex justify-between px-4 py-2.5 text-sm"><span className="text-muted-foreground">{it.label}</span><span className="font-medium">{inr(it.amount)}</span></div>
         ))}
         <div className="flex justify-between bg-muted/40 px-4 py-2.5 text-sm font-semibold"><span>Total</span><span>{inr(slip.totalDeductions)}</span></div>
       </div>

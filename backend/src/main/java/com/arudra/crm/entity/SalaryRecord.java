@@ -146,4 +146,9 @@ public class SalaryRecord extends BaseEntity {
 
     @Column(name = "approved_at")
     private java.time.LocalDateTime approvedAt;
+
+    /** Editable named line items (extra incentives/allowances/deductions), populated on demand for the
+     *  payslip detail views. Not persisted here — see {@link PayslipLineItem}. */
+    @Transient
+    private java.util.List<PayslipLineItem> lineItems;
 }

@@ -207,6 +207,7 @@ export interface Payslip {
   projectBonus?: number | null;
   manualBonus?: number | null;
   manualDeduction?: number | null;
+  lineItems?: { id: number; category: string; label: string; amount: number }[] | null;
 }
 
 export interface SalarySummary {

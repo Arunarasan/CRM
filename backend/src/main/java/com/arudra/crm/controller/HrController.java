@@ -40,6 +40,9 @@ public class HrController {
     private PayrollService payrollService;
 
     @Autowired
+    private com.arudra.crm.service.PayslipEditService payslipEditService;
+
+    @Autowired
     private com.arudra.crm.service.WorkforceAlertService workforceAlertService;
 
     @Autowired
@@ -107,6 +110,38 @@ public class HrController {
     @PreAuthorize(HR_WRITE)
     public ResponseEntity<Attendance> markAttendance(@RequestBody Attendance attendance) {
         return ResponseEntity.ok(hrService.markAttendance(attendance));
+    }
+
+    // --- Editable payslip (named line items on top of the auto-computed payslip) ---
+    @GetMapping("/payslips")
+    @PreAuthorize(PAYROLL_READ)
+    public ResponseEntity<Map<String, Object>> getEditablePayslip(
+            @RequestParam Long employeeId, @RequestParam int month, @RequestParam int year) {
+        return ResponseEntity.ok(payslipEditService.get(employeeId, month, year));
+    }
+
+    public static class LineItemBody {
+        public String category; // EARNING | DEDUCTION
+        public String label;
+        public BigDecimal amount;
+    }
+
+    @PostMapping("/payslips/{recordId}/line-items")
+    @PreAuthorize(PAYROLL_PROCESS)
+    public ResponseEntity<Map<String, Object>> addPayslipLineItem(@PathVariable Long recordId, @RequestBody LineItemBody b) {
+        return ResponseEntity.ok(payslipEditService.addItem(recordId, b.category, b.label, b.amount));
+    }
+
+    @PutMapping("/payslips/line-items/{itemId}")
+    @PreAuthorize(PAYROLL_PROCESS)
+    public ResponseEntity<Map<String, Object>> updatePayslipLineItem(@PathVariable Long itemId, @RequestBody LineItemBody b) {
+        return ResponseEntity.ok(payslipEditService.updateItem(itemId, b.label, b.amount));
+    }
+
+    @DeleteMapping("/payslips/line-items/{itemId}")
+    @PreAuthorize(PAYROLL_PROCESS)
+    public ResponseEntity<Map<String, Object>> deletePayslipLineItem(@PathVariable Long itemId) {
+        return ResponseEntity.ok(payslipEditService.deleteItem(itemId));
     }
 
     // --- Leaves ---
