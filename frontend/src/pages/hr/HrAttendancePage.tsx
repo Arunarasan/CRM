@@ -11,6 +11,7 @@ import { getBestPosition } from '@/lib/geo';
 import LocationMapPicker from '@/components/LocationMapPicker';
 import { toast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
+import SearchableSelect from '@/components/ui/searchable-select';
 
 /**
  * The attendance-verification admin body, mounted both as the Workforce → Attendance page and as
@@ -20,10 +21,91 @@ export function AttendanceAdmin() {
   return (
     <div className="space-y-6">
       <CorrectionApprovals />
+      <DirectCorrection />
       <MethodRequests />
       <PendingApprovals />
       <OfficeLocations />
     </div>
+  );
+}
+
+/* --------------------------- Admin direct time correction --------------------------- */
+
+function DirectCorrection() {
+  const [emps, setEmps] = useState<{ value: string; label: string; hint?: string }[]>([]);
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({ employeeId: '', date: '', checkIn: '', checkOut: '' });
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!open || emps.length) return;
+    attendanceApi.listEmployees()
+      .then((list) => setEmps(list.map((e) => ({
+        value: String(e.id), label: `${e.firstName ?? ''} ${e.lastName ?? ''}`.trim() || `#${e.id}`, hint: e.employeeCode,
+      }))))
+      .catch(() => setEmps([]));
+  }, [open, emps.length]);
+
+  const apply = async () => {
+    if (!form.employeeId) return toast.error('Pick an employee.');
+    if (!form.date) return toast.error('Pick a date.');
+    if (!form.checkIn && !form.checkOut) return toast.error('Enter a clock-in and/or clock-out.');
+    setSaving(true);
+    try {
+      await attendanceApi.applyCorrection({
+        employeeId: Number(form.employeeId), date: form.date,
+        checkIn: form.checkIn || undefined, checkOut: form.checkOut || undefined,
+      });
+      toast.success('Applied — attendance & hours updated');
+      setForm({ employeeId: '', date: '', checkIn: '', checkOut: '' });
+      setOpen(false);
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Could not apply');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <section className="rounded-2xl border bg-card shadow-sm">
+      <header className="flex items-center justify-between border-b px-5 py-4">
+        <div className="flex items-center gap-2">
+          <Clock3 className="h-5 w-5 text-primary" />
+          <h2 className="text-base font-semibold">Correct / add attendance directly</h2>
+        </div>
+        {!open && <Button size="sm" variant="outline" onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> New</Button>}
+      </header>
+      {open && (
+        <div className="p-5">
+          <p className="mb-3 text-xs text-muted-foreground">
+            Set a day's clock-in/out for any employee (fixes a wrong time, adds a missed clock-out, or a whole missed day). Hours & pay recompute.
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <span className="mb-1 block text-xs font-medium text-muted-foreground">Employee</span>
+              <SearchableSelect value={form.employeeId} onChange={(v) => setForm((f) => ({ ...f, employeeId: v }))}
+                options={emps} placeholder="Select employee…" />
+            </div>
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-muted-foreground">Date</span>
+              <input type="date" className={INPUT} value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-muted-foreground">Clock-in</span>
+              <input type="time" className={INPUT} value={form.checkIn} onChange={(e) => setForm((f) => ({ ...f, checkIn: e.target.value }))} />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-muted-foreground">Clock-out</span>
+              <input type="time" className={INPUT} value={form.checkOut} onChange={(e) => setForm((f) => ({ ...f, checkOut: e.target.value }))} />
+            </label>
+          </div>
+          <div className="mt-4 flex justify-end gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button size="sm" onClick={apply} disabled={saving}>{saving && <Loader2 className="h-4 w-4 animate-spin" />} Apply</Button>
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
 

@@ -54,6 +54,8 @@ export default function Attendance() {
 
       <div className="p-3 pb-0"><ClockWidget onChange={reload} /></div>
 
+      <div className="pt-3"><CorrectionRequests /></div>
+
       <div className="flex items-center justify-between px-4 py-3">
         <button onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1))} className="flex h-8 w-8 items-center justify-center rounded-full active:bg-accent"><ChevronLeft className="h-5 w-5" /></button>
         <span className="text-sm font-semibold">{monthLabel}</span>
@@ -105,8 +107,6 @@ export default function Attendance() {
           ))
         )}
       </div>
-
-      <CorrectionRequests />
     </div>
   );
 }

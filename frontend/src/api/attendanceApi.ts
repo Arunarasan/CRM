@@ -74,4 +74,9 @@ export const attendanceApi = {
   rejectCorrection: (id: number, remarks?: string) => api.post(`${BASE}/corrections/${id}/reject`, { remarks }).then((r) => r.data),
   applyCorrection: (body: { employeeId: number; date: string; checkIn?: string; checkOut?: string }) =>
     api.post(`${BASE}/corrections/apply`, body).then((r) => r.data),
+
+  // Employee master list for the admin direct-correction picker (paginated endpoint, grab a big page).
+  listEmployees: () =>
+    api.get<{ content: { id: number; firstName: string; lastName: string; employeeCode: string }[] }>(
+      `/hr/employees?page=0&size=500`).then((r) => r.data.content ?? []),
 };
