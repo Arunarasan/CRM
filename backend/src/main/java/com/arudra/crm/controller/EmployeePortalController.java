@@ -9,6 +9,9 @@ import com.arudra.crm.service.EmployeeTimeService;
 import com.arudra.crm.service.ProfileChangeRequestService;
 import com.arudra.crm.service.PurchaseService;
 import com.arudra.crm.service.WebAuthnService;
+import com.arudra.crm.service.AttendanceCorrectionService;
+
+import java.time.LocalTime;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -38,17 +41,26 @@ public class EmployeePortalController {
     private final PurchaseService purchaseService;
     private final ProfileChangeRequestService profileChangeRequestService;
     private final WebAuthnService webAuthnService;
+    private final AttendanceCorrectionService correctionService;
 
     public EmployeePortalController(EmployeePortalService portalService, EmployeeTimeService timeService,
                                     CurrentUserService currentUserService, PurchaseService purchaseService,
                                     ProfileChangeRequestService profileChangeRequestService,
-                                    WebAuthnService webAuthnService) {
+                                    WebAuthnService webAuthnService, AttendanceCorrectionService correctionService) {
         this.portalService = portalService;
         this.timeService = timeService;
         this.currentUserService = currentUserService;
         this.purchaseService = purchaseService;
         this.profileChangeRequestService = profileChangeRequestService;
         this.webAuthnService = webAuthnService;
+        this.correctionService = correctionService;
+    }
+
+    /** Lenient parse of "HH:mm" or "HH:mm:ss" clock strings; null/blank -> null. */
+    static LocalTime parseTime(String t) {
+        if (t == null || t.isBlank()) return null;
+        String s = t.trim();
+        return LocalTime.parse(s.length() == 5 ? s + ":00" : s);
     }
 
     private User me() {
@@ -231,6 +243,28 @@ public class EmployeePortalController {
         User u = me();
         timeService.cancelMethodRequest(u);
         return ResponseEntity.ok(ApiResponse.success(timeService.getStatus(u)));
+    }
+
+    // --- attendance time-correction requests (regularization) --------------
+    public static class CorrectionBody {
+        public String date;      // ISO yyyy-MM-dd
+        public String checkIn;   // HH:mm(:ss), optional
+        public String checkOut;  // HH:mm(:ss), optional
+        public String reason;
+    }
+
+    @PostMapping("/attendance/corrections")
+    @PreAuthorize(PORTAL)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> requestCorrection(@RequestBody CorrectionBody b) {
+        LocalDate date = b.date == null || b.date.isBlank() ? null : LocalDate.parse(b.date.trim());
+        correctionService.request(me(), date, parseTime(b.checkIn), parseTime(b.checkOut), b.reason);
+        return ResponseEntity.ok(ApiResponse.success(Map.of("submitted", true)));
+    }
+
+    @GetMapping("/attendance/corrections")
+    @PreAuthorize(PORTAL)
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> myCorrections() {
+        return ResponseEntity.ok(ApiResponse.success(correctionService.myRequests(me())));
     }
 
     // --- WebAuthn (device biometric) for attendance ------------------------

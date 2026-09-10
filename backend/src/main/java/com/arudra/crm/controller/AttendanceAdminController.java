@@ -27,6 +27,7 @@ public class AttendanceAdminController {
             "hasAuthority('ROLE_ADMIN') or hasAuthority('WORKFORCE_WRITE')";
 
     @Autowired private AttendanceAdminService adminService;
+    @Autowired private com.arudra.crm.service.AttendanceCorrectionService correctionService;
     @Autowired private CurrentUserService currentUserService;
 
     // --- office geofences --------------------------------------------------
@@ -89,6 +90,39 @@ public class AttendanceAdminController {
     @PreAuthorize(HR_WRITE)
     public ResponseEntity<Void> rejectMethodRequest(@PathVariable Long employeeId) {
         adminService.resolveMethodRequest(employeeId, false);
+        return ResponseEntity.noContent().build();
+    }
+
+    // --- attendance time-correction requests -------------------------------
+
+    @GetMapping("/corrections")
+    @PreAuthorize(HR_READ)
+    public ResponseEntity<List<Map<String, Object>>> corrections() {
+        return ResponseEntity.ok(correctionService.listPending());
+    }
+
+    @PostMapping("/corrections/{id}/approve")
+    @PreAuthorize(HR_WRITE)
+    public ResponseEntity<Map<String, Object>> approveCorrection(@PathVariable Long id) {
+        return ResponseEntity.ok(correctionService.approve(id, actor()));
+    }
+
+    @PostMapping("/corrections/{id}/reject")
+    @PreAuthorize(HR_WRITE)
+    public ResponseEntity<Map<String, Object>> rejectCorrection(@PathVariable Long id, @RequestBody(required = false) Map<String, String> body) {
+        String remarks = body == null ? null : body.get("remarks");
+        return ResponseEntity.ok(correctionService.reject(id, actor(), remarks));
+    }
+
+    /** Admin applies a correction directly (edit a day's times or add a missed day) — no request. */
+    @PostMapping("/corrections/apply")
+    @PreAuthorize(HR_WRITE)
+    public ResponseEntity<Void> applyCorrection(@RequestBody Map<String, String> body) {
+        Long employeeId = Long.valueOf(body.get("employeeId"));
+        java.time.LocalDate date = java.time.LocalDate.parse(body.get("date").trim());
+        correctionService.adminApplyDay(employeeId, date,
+                EmployeePortalController.parseTime(body.get("checkIn")),
+                EmployeePortalController.parseTime(body.get("checkOut")));
         return ResponseEntity.noContent().build();
     }
 

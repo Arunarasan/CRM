@@ -43,7 +43,10 @@ public class AttendanceAdminService {
         loc.setName(body.getName());
         loc.setLatitude(body.getLatitude());
         loc.setLongitude(body.getLongitude());
-        loc.setRadiusMeters(body.getRadiusMeters() == null ? 150 : body.getRadiusMeters());
+        // Clamp the radius to a sane geofence range. A tiny radius is unusable; an absurdly large one
+        // (e.g. 50000 m) would accept clock-ins from kilometres away, defeating the fence entirely.
+        int radius = body.getRadiusMeters() == null ? 150 : body.getRadiusMeters();
+        loc.setRadiusMeters(Math.max(20, Math.min(2000, radius)));
         loc.setAddress(body.getAddress());
         loc.setActive(body.getActive() == null ? Boolean.TRUE : body.getActive());
         return locationRepository.save(loc);

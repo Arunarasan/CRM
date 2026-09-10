@@ -7,7 +7,7 @@ import {
   DailyReportEntry, DailyReportCreateBody, PersonalReminderEntry, ReminderCreateBody,
   MyBonuses, MonthlyEarning, PayrollRequestEntry, PayrollRequestCreateBody, MyLoan, MyAdvance,
   IncomingReceiptPo, ReceiptWarehouse, GoodsReceiptSubmission, MyReceipt,
-  ProfileChangeRequest, ProfileChangeBody, DocumentSubmitBody,
+  ProfileChangeRequest, ProfileChangeBody, DocumentSubmitBody, AttendanceCorrection,
 } from '../types/employeePortal';
 
 // Thin typed wrapper around /api/employee-portal — the employee self-service surface.
@@ -48,6 +48,12 @@ export const employeePortalApi = {
   // Self-service switch to biometric attendance (admin-approved)
   requestBiometricAttendance: () => api.post<TimeStatus>(`${BASE}/attendance/request-biometric`).then((r) => r.data),
   cancelMethodRequest: () => api.post<TimeStatus>(`${BASE}/attendance/cancel-method-request`).then((r) => r.data),
+
+  // Attendance time-correction (regularization) requests
+  requestCorrection: (body: { date: string; checkIn?: string; checkOut?: string; reason?: string }) =>
+    api.post(`${BASE}/attendance/corrections`, body).then((r) => r.data),
+  myCorrections: () =>
+    api.get<AttendanceCorrection[]>(`${BASE}/attendance/corrections`).then((r) => r.data),
 
   // WebAuthn (device biometric) for attendance
   webauthnRegisterOptions: () => api.post<any>(`${BASE}/webauthn/register/options`).then((r) => r.data),

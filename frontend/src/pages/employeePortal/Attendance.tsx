@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Clock3, Loader2, Plus } from 'lucide-react';
 import { employeePortalApi } from '@/api/employeePortalApi';
-import { AttendanceEntry } from '@/types/employeePortal';
+import { AttendanceEntry, AttendanceCorrection } from '@/types/employeePortal';
 import { PortalHeader, StatusPill } from './_shared';
 import ClockWidget from './ClockWidget';
 
@@ -105,6 +105,119 @@ export default function Attendance() {
           ))
         )}
       </div>
+
+      <CorrectionRequests />
+    </div>
+  );
+}
+
+/**
+ * Ask an admin to fix a day's clock times — a late/early clock-in, a missed clock-out, or a whole day
+ * worked without punching. Approved corrections update the record and the paid hours.
+ */
+function CorrectionRequests() {
+  const [open, setOpen] = useState(false);
+  const [rows, setRows] = useState<AttendanceCorrection[]>([]);
+  const [form, setForm] = useState({ date: '', checkIn: '', checkOut: '', reason: '' });
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  const [err, setErr] = useState('');
+
+  const load = () => employeePortalApi.myCorrections().then(setRows).catch(() => setRows([]));
+  useEffect(() => { load(); }, []);
+
+  const submit = async () => {
+    setMsg(''); setErr('');
+    if (!form.date) { setErr('Pick the date to correct.'); return; }
+    if (!form.checkIn && !form.checkOut) { setErr('Enter a corrected clock-in and/or clock-out time.'); return; }
+    setBusy(true);
+    try {
+      await employeePortalApi.requestCorrection({
+        date: form.date,
+        checkIn: form.checkIn || undefined,
+        checkOut: form.checkOut || undefined,
+        reason: form.reason || undefined,
+      });
+      setMsg('Request sent for admin approval.');
+      setForm({ date: '', checkIn: '', checkOut: '', reason: '' });
+      setOpen(false);
+      load();
+    } catch (e: any) {
+      setErr(e?.response?.data?.message || e?.message || 'Could not send the request.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const tone: Record<string, string> = {
+    PENDING: 'text-amber-600', APPROVED: 'text-emerald-600', REJECTED: 'text-red-600',
+  };
+  const input = 'mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm';
+
+  return (
+    <div className="mx-3 mb-8">
+      <div className="flex items-center justify-between px-1 pb-1">
+        <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase text-muted-foreground">
+          <Clock3 className="h-3.5 w-3.5" /> Time corrections
+        </h3>
+        {!open && (
+          <button onClick={() => setOpen(true)} className="flex items-center gap-1 text-xs font-semibold text-primary">
+            <Plus className="h-3.5 w-3.5" /> Request
+          </button>
+        )}
+      </div>
+
+      {open && (
+        <div className="mb-3 flex flex-col gap-2 rounded-xl border bg-card p-4 shadow-sm">
+          <p className="text-[11px] text-muted-foreground">
+            Came in but clocked in late, forgot to clock out, or worked a day without punching? Ask an admin to fix it.
+          </p>
+          <label className="block text-xs font-medium text-muted-foreground">Date
+            <input type="date" value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} className={input} />
+          </label>
+          <div className="grid grid-cols-2 gap-2">
+            <label className="block text-xs font-medium text-muted-foreground">Clock-in
+              <input type="time" value={form.checkIn} onChange={(e) => setForm((f) => ({ ...f, checkIn: e.target.value }))} className={input} />
+            </label>
+            <label className="block text-xs font-medium text-muted-foreground">Clock-out
+              <input type="time" value={form.checkOut} onChange={(e) => setForm((f) => ({ ...f, checkOut: e.target.value }))} className={input} />
+            </label>
+          </div>
+          <label className="block text-xs font-medium text-muted-foreground">Reason
+            <input value={form.reason} onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))} placeholder="e.g. forgot to clock out" className={input} />
+          </label>
+          {err && <p className="text-xs text-destructive">{err}</p>}
+          <div className="mt-1 flex gap-2">
+            <button onClick={() => { setOpen(false); setErr(''); }} className="flex-1 rounded-lg border py-2 text-sm font-semibold">Cancel</button>
+            <button onClick={submit} disabled={busy} className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-primary py-2 text-sm font-semibold text-primary-foreground disabled:opacity-60">
+              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Send request
+            </button>
+          </div>
+        </div>
+      )}
+
+      {msg && <p className="mb-2 px-1 text-xs text-emerald-600">{msg}</p>}
+
+      {rows.length > 0 && (
+        <div className="divide-y overflow-hidden rounded-xl border bg-card shadow-sm">
+          {rows.map((r) => (
+            <div key={r.id} className="flex items-center justify-between px-4 py-2.5">
+              <div className="min-w-0">
+                <p className="text-sm font-medium">{r.date}</p>
+                <p className="text-xs text-muted-foreground">
+                  {r.requestedCheckIn ? `In ${r.requestedCheckIn.slice(0, 5)}` : ''}
+                  {r.requestedCheckOut ? `${r.requestedCheckIn ? ' · ' : ''}Out ${r.requestedCheckOut.slice(0, 5)}` : ''}
+                  {r.reason ? ` — ${r.reason}` : ''}
+                </p>
+                {r.status === 'REJECTED' && r.reviewRemarks && (
+                  <p className="text-[11px] text-red-600">Reason: {r.reviewRemarks}</p>
+                )}
+              </div>
+              <span className={`shrink-0 text-xs font-semibold ${tone[r.status] ?? 'text-muted-foreground'}`}>{r.status}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

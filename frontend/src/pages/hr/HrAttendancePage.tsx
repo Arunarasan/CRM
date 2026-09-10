@@ -5,8 +5,8 @@
  *    recorded but held for HR to approve or reject (soft enforcement).
  */
 import { useEffect, useState } from 'react';
-import { MapPin, Plus, Trash2, Crosshair, Loader2, ShieldAlert, Check, X, ExternalLink, Fingerprint } from 'lucide-react';
-import { attendanceApi, AttendanceLocation, PendingAttendance, MethodRequest } from '@/api/attendanceApi';
+import { MapPin, Plus, Trash2, Crosshair, Loader2, ShieldAlert, Check, X, ExternalLink, Fingerprint, Clock3 } from 'lucide-react';
+import { attendanceApi, AttendanceLocation, PendingAttendance, MethodRequest, CorrectionRequest } from '@/api/attendanceApi';
 import { getBestPosition } from '@/lib/geo';
 import LocationMapPicker from '@/components/LocationMapPicker';
 import { toast } from '@/components/ui/toast';
@@ -19,10 +19,91 @@ import { Button } from '@/components/ui/button';
 export function AttendanceAdmin() {
   return (
     <div className="space-y-6">
+      <CorrectionApprovals />
       <MethodRequests />
       <PendingApprovals />
       <OfficeLocations />
     </div>
+  );
+}
+
+/* --------------------------- Time-correction requests --------------------------- */
+
+function CorrectionApprovals() {
+  const [rows, setRows] = useState<CorrectionRequest[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState<number | null>(null);
+
+  const load = () => {
+    setLoading(true);
+    attendanceApi.listCorrections().then(setRows).catch(() => setRows([])).finally(() => setLoading(false));
+  };
+  useEffect(load, []);
+
+  const resolve = async (row: CorrectionRequest, approve: boolean) => {
+    if (!approve) {
+      const remarks = window.prompt('Reason for rejecting (optional):') ?? undefined;
+      setBusy(row.id);
+      try { await attendanceApi.rejectCorrection(row.id, remarks); toast.success('Rejected'); setRows((p) => p.filter((r) => r.id !== row.id)); }
+      catch (e: any) { toast.error(e?.message || 'Action failed'); } finally { setBusy(null); }
+      return;
+    }
+    setBusy(row.id);
+    try {
+      await attendanceApi.approveCorrection(row.id);
+      toast.success('Approved — hours updated');
+      setRows((p) => p.filter((r) => r.id !== row.id));
+    } catch (e: any) {
+      toast.error(e?.message || 'Action failed');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const hm = (t: string | null) => (t ? t.slice(0, 5) : '—');
+
+  if (!loading && rows.length === 0) return null;
+
+  return (
+    <section className="rounded-2xl border bg-card shadow-sm">
+      <header className="flex items-center gap-2 border-b px-5 py-4">
+        <Clock3 className="h-5 w-5 text-primary" />
+        <h2 className="text-base font-semibold">Time-correction requests</h2>
+        {rows.length > 0 && <span className="ml-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">{rows.length}</span>}
+      </header>
+      {loading ? (
+        <p className="px-5 py-8 text-center text-sm text-muted-foreground"><Loader2 className="mr-2 inline h-4 w-4 animate-spin" />Loading…</p>
+      ) : (
+        <ul className="divide-y">
+          {rows.map((r) => (
+            <li key={r.id} className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-x-2">
+                  <span className="font-medium">{r.employeeName}</span>
+                  {r.employeeCode && <span className="text-xs text-muted-foreground">({r.employeeCode})</span>}
+                  <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">{r.type}</span>
+                </div>
+                <p className="mt-1 text-sm">
+                  <b>{r.date}</b> — set{r.requestedCheckIn ? ` in ${hm(r.requestedCheckIn)}` : ''}{r.requestedCheckOut ? ` out ${hm(r.requestedCheckOut)}` : ''}
+                  {(r.originalCheckIn || r.originalCheckOut) && (
+                    <span className="text-muted-foreground"> (was {hm(r.originalCheckIn)}–{hm(r.originalCheckOut)})</span>
+                  )}
+                </p>
+                {r.reason && <p className="text-xs text-muted-foreground">{r.reason}</p>}
+              </div>
+              <div className="flex shrink-0 gap-2">
+                <Button variant="forest" size="sm" disabled={busy === r.id} onClick={() => resolve(r, true)}>
+                  {busy === r.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} Approve
+                </Button>
+                <Button variant="outline" size="sm" disabled={busy === r.id} onClick={() => resolve(r, false)}>
+                  <X className="h-4 w-4" /> Reject
+                </Button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 
@@ -268,8 +349,9 @@ function OfficeLocations() {
               <input className={INPUT} value={draft.name} onChange={(e) => set('name', e.target.value)} placeholder="Head Office" />
             </Field>
             <Field label="Radius (metres)">
-              <input className={INPUT} type="number" min={20} value={draft.radiusMeters}
-                     onChange={(e) => set('radiusMeters', Number(e.target.value))} />
+              <input className={INPUT} type="number" min={20} max={2000} value={draft.radiusMeters}
+                     onChange={(e) => set('radiusMeters', Math.max(20, Math.min(2000, Number(e.target.value) || 0)))} />
+              <span className="mt-1 block text-[11px] text-muted-foreground">20–2000 m. Typical office: 100–200 m.</span>
             </Field>
             <Field label="Latitude">
               <input className={INPUT} type="number" step="0.000001" value={draft.latitude || ''}

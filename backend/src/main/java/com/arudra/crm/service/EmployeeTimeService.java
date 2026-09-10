@@ -154,6 +154,14 @@ public class EmployeeTimeService {
         s.setBreakStart(null);
     }
 
+    /** Recompute + persist a day's aggregate from its (possibly just-edited) sessions. Used by the
+     *  attendance-correction flow after rewriting session times so worked-hours/earnings stay in sync. */
+    @Transactional
+    public Attendance recomputeAggregate(Attendance att) {
+        syncAggregate(att, att.getEmployee());
+        return attendanceRepository.save(att);
+    }
+
     /** Refreshes the day aggregate row from its sessions: first check-in, last check-out, totals. */
     private void syncAggregate(Attendance att, Employee employee) {
         List<AttendanceSession> sessions = sessionsOf(att);

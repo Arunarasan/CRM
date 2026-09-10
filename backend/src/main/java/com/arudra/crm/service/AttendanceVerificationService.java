@@ -41,6 +41,9 @@ public class AttendanceVerificationService {
     /** A flat grace band added on top of the radius + GPS accuracy, to absorb rounding and small drift
      *  so someone standing at the office isn't flagged over a few metres. */
     @Value("${app.attendance.geo-grace-meters:30}") private int geoGraceMeters;
+    /** Beyond this reported accuracy, a fix is IP/Wi‑Fi-grade (not GPS) and cannot confirm whether the
+     *  person is inside the fence — it's treated as "location unverifiable", never as inside/outside. */
+    @Value("${app.attendance.usable-accuracy-meters:200}") private int usableAccuracyMeters;
 
     /** Nearest active fence to a point, with distance and whether the point is inside its radius. */
     private record GeoMatch(AttendanceLocation location, int distanceMeters, boolean inside) {}
@@ -61,6 +64,13 @@ public class AttendanceVerificationService {
         GeoMatch geo = (hasCoords && !fences.isEmpty())
                 ? nearest(session.getCheckInLat(), session.getCheckInLng(), fences, tolerance) : null;
         stampGeo(session, geo); // record distance/nearest fence for the audit trail regardless of method
+
+        // A fix whose accuracy is worse than a usable bound is IP/Wi‑Fi-grade, not GPS: its position
+        // (and any distance we compute from it) is meaningless, so it can neither confirm nor deny the
+        // fence. Treat it as "unverifiable" rather than trusting it in either direction.
+        Integer acc = session.getAccuracyMeters();
+        boolean coarse = acc != null && acc > usableAccuracyMeters;
+        boolean geoInside = geo != null && !coarse && geo.inside();
 
         if (geo != null) {
             log.info("Attendance geo-check: employee={} method={} punch=({},{}) accuracy={}m nearest='{}' center=({},{}) "
@@ -86,13 +96,15 @@ public class AttendanceVerificationService {
                 if (biometricVerified) {
                     verified = true;
                     verificationMethod = "BIOMETRIC";
-                } else if (geo != null && geo.inside()) {
+                } else if (geoInside) {
                     verified = true;
                     verificationMethod = "GEO";
                 } else {
                     verified = false;
                     verificationMethod = geo != null ? "GEO" : "NONE";
-                    reason = geo != null ? geoReason(geo, session.getAccuracyMeters()) : "Not on an approved device and no location captured.";
+                    reason = coarse ? coarseReason(acc)
+                            : geo != null ? geoReason(geo, acc)
+                            : "Not on an approved device and no location captured.";
                 }
             }
             default -> { // GEO
@@ -103,10 +115,14 @@ public class AttendanceVerificationService {
                     verified = false;
                     verificationMethod = "GEO";
                     reason = "Location not captured — enable location access and clock in again.";
-                } else {
-                    verified = geo.inside();
+                } else if (coarse) {
+                    verified = false; // ±acc too large to trust — don't claim a distance from it
                     verificationMethod = "GEO";
-                    if (!verified) reason = geoReason(geo, session.getAccuracyMeters());
+                    reason = coarseReason(acc);
+                } else {
+                    verified = geoInside;
+                    verificationMethod = "GEO";
+                    if (!verified) reason = geoReason(geo, acc);
                 }
             }
         }
@@ -157,6 +173,13 @@ public class AttendanceVerificationService {
         String gps = accuracyMeters != null ? "; GPS ±" + accuracyMeters + " m" : "";
         return "Outside office geofence — " + geo.distanceMeters() + " m from "
                 + geo.location().getName() + " (" + geo.location().getRadiusMeters() + " m allowed" + gps + ").";
+    }
+
+    /** Reason when the fix is too imprecise to trust (IP/Wi‑Fi location, not GPS). */
+    private static String coarseReason(Integer accuracyMeters) {
+        String acc = accuracyMeters != null ? " (±" + accuracyMeters + " m)" : "";
+        return "Couldn't verify your location" + acc + " — that's a network location, not GPS. "
+                + "Turn on precise location and clock in from a phone, outdoors.";
     }
 
     private void notifyFlagged(Employee employee, String reason) {

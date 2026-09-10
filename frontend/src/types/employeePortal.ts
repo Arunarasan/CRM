@@ -41,6 +41,19 @@ export interface TimeSession {
   approvalStatus?: string | null; // PENDING | APPROVED | REJECTED
 }
 
+export interface AttendanceCorrection {
+  id: number;
+  date: string;
+  type: string; // FIX_IN | FIX_OUT | ADD_DAY
+  requestedCheckIn: string | null;
+  requestedCheckOut: string | null;
+  originalCheckIn: string | null;
+  originalCheckOut: string | null;
+  reason: string | null;
+  status: string; // PENDING | APPROVED | REJECTED
+  reviewRemarks: string | null;
+}
+
 export interface TimeStatus {
   clockedIn: boolean;
   onBreak: boolean;

@@ -40,6 +40,21 @@ export interface MethodRequest {
   requestedAt: string | null;
 }
 
+export interface CorrectionRequest {
+  id: number;
+  employeeId: number | null;
+  employeeName: string;
+  employeeCode: string | null;
+  date: string | null;
+  type: string;
+  requestedCheckIn: string | null;
+  requestedCheckOut: string | null;
+  originalCheckIn: string | null;
+  originalCheckOut: string | null;
+  reason: string | null;
+  status: string | null;
+}
+
 const BASE = '/hr/attendance';
 
 export const attendanceApi = {
@@ -53,4 +68,10 @@ export const attendanceApi = {
   listMethodRequests: () => api.get<MethodRequest[]>(`${BASE}/method-requests`).then((r) => r.data),
   approveMethodRequest: (employeeId: number) => api.post(`${BASE}/method-requests/${employeeId}/approve`).then((r) => r.data),
   rejectMethodRequest: (employeeId: number) => api.post(`${BASE}/method-requests/${employeeId}/reject`).then((r) => r.data),
+
+  listCorrections: () => api.get<CorrectionRequest[]>(`${BASE}/corrections`).then((r) => r.data),
+  approveCorrection: (id: number) => api.post(`${BASE}/corrections/${id}/approve`).then((r) => r.data),
+  rejectCorrection: (id: number, remarks?: string) => api.post(`${BASE}/corrections/${id}/reject`, { remarks }).then((r) => r.data),
+  applyCorrection: (body: { employeeId: number; date: string; checkIn?: string; checkOut?: string }) =>
+    api.post(`${BASE}/corrections/apply`, body).then((r) => r.data),
 };
