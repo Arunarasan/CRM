@@ -189,6 +189,7 @@ function OfficeLocations() {
   const [draft, setDraft] = useState<AttendanceLocation | null>(null);
   const [locating, setLocating] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [locAccuracy, setLocAccuracy] = useState<number | null>(null); // accuracy of the last "use my location" fix
 
   const load = () => {
     setLoading(true);
@@ -198,13 +199,21 @@ function OfficeLocations() {
 
   const useMyLocation = async () => {
     if (!('geolocation' in navigator)) return toast.error('Geolocation not available on this device.');
-    setLocating(true);
+    setLocating(true); setLocAccuracy(null);
     // Sample GPS to converge on a precise centre — a coarse first fix makes a badly-placed fence.
-    const fix = await getBestPosition({ targetAccuracyM: 20, maxWaitMs: 10_000 });
+    const fix = await getBestPosition({ targetAccuracyM: 20, maxWaitMs: 12_000 });
     setLocating(false);
     if (!fix) return toast.error('Could not get your location.');
+    const acc = Math.round(fix.accuracy);
+    setLocAccuracy(acc);
     setDraft((d) => ({ ...(d ?? EMPTY), latitude: +fix.lat.toFixed(6), longitude: +fix.lng.toFixed(6) }));
-    toast.success(`Filled in your coordinates (±${Math.round(fix.accuracy)} m). Stand at the office centre for best results.`);
+    // A large accuracy radius = a coarse IP/Wi‑Fi fix (typical on desktops), not real GPS. Warn and
+    // steer the admin to place the pin by hand instead of trusting a city-level point.
+    if (acc > 75) {
+      toast.error(`Only got a rough location (±${acc} m) — likely Wi‑Fi/IP, not GPS. Drag the map pin onto your building, or set it from a phone outdoors.`);
+    } else {
+      toast.success(`Filled in your coordinates (±${acc} m).`);
+    }
   };
 
   const save = async () => {
@@ -277,6 +286,12 @@ function OfficeLocations() {
 
           {/* Interactive map — the accurate way to place/verify the office centre. */}
           <div className="mt-3">
+            {locAccuracy != null && locAccuracy > 75 && (
+              <p className="mb-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                Your device only gave a rough location (±{locAccuracy} m) — this is Wi‑Fi/IP, not GPS (common on desktops).
+                <b> Drag the pin onto your exact building below</b>, or set the office from a phone standing outside. Don't save a rough point.
+              </p>
+            )}
             <LocationMapPicker
               lat={draft.latitude}
               lng={draft.longitude}

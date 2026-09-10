@@ -41,6 +41,8 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
       PORT: 8080
+      # Application timezone (IST default) so attendance/clock times are recorded and shown correctly.
+      TZ: ${TZ:-Asia/Kolkata}
       # Database connection
       DB_URL: ${SPRING_DATASOURCE_URL:-${DB_URL:-jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-arudra_crm}?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true}}
       DB_USERNAME: ${SPRING_DATASOURCE_USERNAME:-${DB_USERNAME:-${MYSQL_USER:-crm_user}}}

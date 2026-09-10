@@ -32,8 +32,13 @@ EXPOSE 8080 10000
 # Production-tuned JVM flags with heap headroom and OOM safety
 ENV JAVA_OPTS="-Xms512m -Xmx1536m -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError"
 
+# Application timezone. The base image is UTC; attendance/clock times use LocalTime/LocalDate/
+# LocalDateTime .now(), which follow the JVM default zone — so an unset TZ makes every clock-in/out
+# display hours off for India. Default to IST; override via the TZ env for another region.
+ENV TZ=Asia/Kolkata
+
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
   CMD curl -f http://localhost:${PORT:-8080}/actuator/health || exit 1
 
-ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -Dserver.port=${PORT:-8080} -Dserver.address=0.0.0.0 -jar app.jar"]
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -Duser.timezone=${TZ:-Asia/Kolkata} -Dserver.port=${PORT:-8080} -Dserver.address=0.0.0.0 -jar app.jar"]
 
