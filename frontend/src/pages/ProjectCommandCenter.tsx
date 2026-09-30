@@ -176,7 +176,6 @@ export default function ProjectCommandCenter() {
   const [roomsByPhase, setRoomsByPhase] = useState<Record<number, ProjectRoom[]>>({});
   const [itemsByRoom, setItemsByRoom] = useState<Record<number, ProjectRoomItem[]>>({});
   const [allItemsBrief, setAllItemsBrief] = useState<import("@/api/projectApi").ProjectItemBrief[]>([]);
-  const [newPhase, setNewPhase] = useState({ name: '', sequence: 1, budget: 0 });
   // Modal editors (mirrors the measurement Rooms tab: add/edit via dialogs, detail in a dialog)
   const [phaseDialog, setPhaseDialog] = useState<{ open: boolean; phase: ProjectPhase | null }>({ open: false, phase: null });
   const [roomDialog, setRoomDialog] = useState<{ open: boolean; phaseId: number | null; room: ProjectRoom | null }>({ open: false, phaseId: null, room: null });
@@ -235,7 +234,6 @@ export default function ProjectCommandCenter() {
   const [changeRequests, setChangeRequests] = useState<ProjectChangeRequest[]>([]);
 
   // Form states for dialogs still owned by this shell (Add Stage + the FAB's Report Issue quick action)
-  const [newStage, setNewStage] = useState({ name: '', dueDate: '' });
   const [newIssue, setNewIssue] = useState({ title: '', description: '', priority: 'MEDIUM' });
 
   // Quick Actions states
@@ -387,16 +385,6 @@ export default function ProjectCommandCenter() {
     projectApi.getItems(roomId).then(items => setItemsByRoom(prev => ({ ...prev, [roomId]: items })));
   const loadAllItemsBrief = () =>
     projectApi.getAllItems(projectId).then(setAllItemsBrief).catch(() => {});
-
-  const handleAddPhase = () => {
-    projectApi.addPhase(projectId, newPhase)
-      .then(phase => {
-        setPhases(prev => [...prev, phase]);
-        setNewPhase({ name: '', sequence: 1, budget: 0 });
-        toast.success("Phase added");
-      })
-      .catch(() => toast.error("Failed to add phase"));
-  };
 
   const handleDeletePhase = (phaseId: number) => {
     if (!window.confirm("Delete this phase and all its rooms & work items? This cannot be undone.")) return;
@@ -686,15 +674,6 @@ export default function ProjectCommandCenter() {
       .catch((err) => toast.error(err?.response?.data?.message || err?.message || "Failed to request purchase"));
   };
 
-  const handleAddStage = () => {
-    api.post(`/projects/${id}/stages`, newStage)
-      .then(() => {
-        fetchCore();
-        setNewStage({ name: '', dueDate: '' });
-      })
-      .catch(_err => toast.error("Failed to add stage"));
-  };
-
   const handleCompleteProject = async () => {
     if (!confirm("Mark this project as COMPLETED?")) return;
     try {
@@ -798,64 +777,6 @@ export default function ProjectCommandCenter() {
       .sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime())
       .slice(0, 6);
   })();
-
-  // Gantt Chart Logic
-  const getGanttTimeline = () => {
-    if (!project.startDate || !project.endDate || !stages.length) return null;
-    const projectStart = new Date(project.startDate);
-    const projectEnd = new Date(project.endDate);
-    const totalDays = differenceInDays(projectEnd, projectStart) || 1;
-
-    // Real sequential timeline: stages ordered by due date, each bar spans from the previous
-    // milestone (or the project start) to its own due date — derived from actual data, not a
-    // fixed placeholder width.
-    const sortedStages = [...stages]
-      .filter((s: any) => s.dueDate)
-      .sort((a: any, b: any) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
-
-    return (
-      <div className="mt-8 space-y-4">
-        <div className="flex text-xs font-semibold text-slate-400 mb-2 border-b pb-2">
-          <div className="w-48 shrink-0">Stage</div>
-          <div className="flex-1 flex justify-between relative">
-            <span>{format(projectStart, 'MMM d')}</span>
-            <span>{format(projectEnd, 'MMM d')}</span>
-          </div>
-        </div>
-        
-        {sortedStages.map((stage: any, idx: number) => {
-          const mEnd = new Date(stage.dueDate);
-          // Segment starts where the previous milestone ended (or at the project start for the first).
-          const prevDue = idx > 0 ? new Date(sortedStages[idx - 1].dueDate) : projectStart;
-          const mStart = prevDue < projectStart ? projectStart : prevDue;
-
-          let leftPercent = (differenceInDays(mStart, projectStart) / totalDays) * 100;
-          let widthPercent = (differenceInDays(mEnd, mStart) / totalDays) * 100;
-          
-          // Constrain
-          leftPercent = Math.max(0, Math.min(100, leftPercent));
-          widthPercent = Math.max(1, Math.min(100 - leftPercent, widthPercent));
-
-          return (
-            <div key={stage.id} className="flex items-center text-sm group">
-              <div className="w-48 shrink-0 font-medium text-slate-700 truncate pr-4" title={stage.name}>{stage.name}</div>
-              <div className="flex-1 relative h-8 bg-slate-100 rounded-md overflow-hidden flex items-center">
-                <div 
-                  className={`absolute h-6 rounded-md shadow-sm transition-all flex items-center px-2 text-xs font-bold text-white whitespace-nowrap overflow-hidden
-                    ${stage.status === 'COMPLETED' ? 'bg-green-500' : stage.status === 'IN_PROGRESS' ? 'bg-emerald-500' : 'bg-slate-400'}`}
-                  style={{ left: `${leftPercent}%`, width: `${widthPercent}%` }}
-                >
-                  <span className="opacity-0 group-hover:opacity-100 transition-opacity">
-                    Due: {format(mEnd, 'MMM d')}
-                  </span>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    );
-  };
 
   return (
     <div className="flex flex-col h-full bg-slate-50/50 relative overflow-hidden">

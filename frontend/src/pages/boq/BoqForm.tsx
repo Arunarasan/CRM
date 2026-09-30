@@ -129,7 +129,7 @@ export default function BoqForm() {
     setError("");
     try {
       const payload = buildPayload(form);
-      const saved = isEdit ? await boqApi.update(Number(id), payload) : await boqApi.create(payload);
+      const saved = isEdit ? await boqApi.update(Number(id), payload as Partial<Boq>) : await boqApi.create(payload as Partial<Boq>);
       navigate(`/boq/${saved.id}`);
     } catch (err: any) {
       console.error("Error saving BOQ:", err);
