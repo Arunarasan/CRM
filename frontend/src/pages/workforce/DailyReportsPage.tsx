@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ClipboardList, Filter, Users, CalendarClock, AlertCircle } from "lucide-react";
 import { dailyReportApi, type AdminDailyReport, type DailyReportFilters } from "@/api/dailyReportApi";
@@ -76,12 +77,12 @@ export default function DailyReportsPage() {
         </label>
         <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
           <span>From</span>
-          <input type="date" value={filters.from ?? ""} onChange={(e) => set({ from: e.target.value || undefined })}
+          <BaseInput type="date" value={filters.from ?? ""} onChange={(e) => set({ from: e.target.value || undefined })}
                  className="h-9 rounded-md border bg-white px-2 text-sm" />
         </label>
         <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
           <span>To</span>
-          <input type="date" value={filters.to ?? ""} onChange={(e) => set({ to: e.target.value || undefined })}
+          <BaseInput type="date" value={filters.to ?? ""} onChange={(e) => set({ to: e.target.value || undefined })}
                  className="h-9 rounded-md border bg-white px-2 text-sm" />
         </label>
         <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">

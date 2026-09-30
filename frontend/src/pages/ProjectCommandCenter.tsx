@@ -34,7 +34,7 @@ import { Tabs, TabsContent } from "@/components/ui/tabs";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
+import { Input, BaseInput } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import ProjectContractorsTab from "@/pages/contractors/ProjectContractorsTab";
@@ -1032,10 +1032,10 @@ export default function ProjectCommandCenter() {
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5">
                     <EditRow label={<><FileText className="w-3.5 h-3.5 text-slate-300"/> Project Type</>} editing={editingOverview} view={project.projectType || '—'}>
-                      <input className={cellInput} value={pform.projectType} onChange={e => setPform({ ...pform, projectType: e.target.value })} placeholder="Residential, Commercial…" />
+                      <BaseInput className={cellInput} value={pform.projectType} onChange={e => setPform({ ...pform, projectType: e.target.value })} placeholder="Residential, Commercial…" />
                     </EditRow>
                     <EditRow label={<><Building2 className="w-3.5 h-3.5 text-slate-300"/> Property Type</>} editing={editingOverview} view={project.projectCategory || '—'}>
-                      <input className={cellInput} value={pform.projectCategory} onChange={e => setPform({ ...pform, projectCategory: e.target.value })} placeholder="Apartment, Villa…" />
+                      <BaseInput className={cellInput} value={pform.projectCategory} onChange={e => setPform({ ...pform, projectCategory: e.target.value })} placeholder="Apartment, Villa…" />
                     </EditRow>
                     <EditRow label={<><Flag className="w-3.5 h-3.5 text-slate-300"/> Priority</>} editing={editingOverview}
                       view={project.priority ? <span className="px-2 py-0.5 rounded-md bg-amber-100 text-amber-700 text-[11px] font-bold uppercase">{project.priority}</span> : '—'}>
@@ -1045,15 +1045,15 @@ export default function ProjectCommandCenter() {
                     </EditRow>
                     <EditRow label={<><User className="w-3.5 h-3.5 text-slate-300"/> Project Manager</>} editing={editingOverview} view={project.projectManager?.name || '—'} />
                     <EditRow label={<><Calendar className="w-3.5 h-3.5 text-slate-300"/> Start Date</>} editing={editingOverview} view={shortDate(project.startDate)}>
-                      <input type="date" className={cellInput} value={pform.startDate} onChange={e => setPform({ ...pform, startDate: e.target.value })} />
+                      <BaseInput type="date" className={cellInput} value={pform.startDate} onChange={e => setPform({ ...pform, startDate: e.target.value })} />
                     </EditRow>
                     <EditRow label={<><Flag className="w-3.5 h-3.5 text-slate-300"/> Target Completion</>} editing={editingOverview} view={shortDate(project.endDate)}>
-                      <input type="date" className={cellInput} value={pform.endDate} onChange={e => setPform({ ...pform, endDate: e.target.value })} />
+                      <BaseInput type="date" className={cellInput} value={pform.endDate} onChange={e => setPform({ ...pform, endDate: e.target.value })} />
                     </EditRow>
                     <EditRow label={<><Clock className="w-3.5 h-3.5 text-slate-300"/> Days Remaining</>} editing={editingOverview}
                       view={<span className={`px-2 py-0.5 rounded-md text-[11px] font-bold ${daysRemaining !== null && daysRemaining < 0 ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}`}>{daysRemainingText}</span>} />
                     <EditRow label={<><IndianRupee className="w-3.5 h-3.5 text-slate-300"/> Project Value</>} editing={editingOverview} view={project.estimatedCost ? inr(project.estimatedCost) : (project.budget ? inr(project.budget) : '—')}>
-                      <input type="number" min={0} className={cellInput} value={pform.estimatedCost} onChange={e => setPform({ ...pform, estimatedCost: e.target.value })} placeholder="Estimated value" />
+                      <BaseInput type="number" min={0} className={cellInput} value={pform.estimatedCost} onChange={e => setPform({ ...pform, estimatedCost: e.target.value })} placeholder="Estimated value" />
                     </EditRow>
                   </div>
 
@@ -2318,7 +2318,7 @@ export default function ProjectCommandCenter() {
                   <Label>Progress</Label>
                   <span className="text-lg font-bold text-slate-800">{itemForm.progress}%</span>
                 </div>
-                <input type="range" min={0} max={100} step={5} value={itemForm.progress} disabled={editingItem.locked}
+                <BaseInput type="range" min={0} max={100} step={5} value={itemForm.progress} disabled={editingItem.locked}
                   onChange={e => setItemForm(f => ({ ...f, progress: Number(e.target.value) }))}
                   className="w-full accent-emerald-600 disabled:opacity-50" />
                 <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
@@ -2364,7 +2364,7 @@ export default function ProjectCommandCenter() {
                     <>
                       <label className="w-16 h-16 border-2 border-dashed rounded-lg flex items-center justify-center cursor-pointer hover:border-emerald-400 text-slate-400" title="Choose from device">
                         <FileImage className="w-5 h-5" />
-                        <input type="file" accept="image/*" className="hidden"
+                        <BaseInput type="file" accept="image/*" className="hidden"
                           onChange={e => { const f = e.target.files?.[0]; if (f) handleItemPhotoUpload(f); e.target.value = ''; }} />
                       </label>
                       <CameraCaptureButton onCapture={handleItemPhotoUpload} label=""

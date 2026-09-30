@@ -1,5 +1,5 @@
 import { Star } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { Input, BaseInput } from "@/components/ui/input";
 
 // Small form primitives shared by the lead dialogs (native selects, styled like
 // the rest of the app since there is no shadcn Select component in this project).
@@ -101,7 +101,7 @@ export function CheckboxField({
 }: { label: string; checked?: boolean; onChange: (checked: boolean) => void }) {
   return (
     <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
-      <input
+      <BaseInput
         type="checkbox"
         className="h-4 w-4 rounded border-input accent-primary"
         checked={!!checked}

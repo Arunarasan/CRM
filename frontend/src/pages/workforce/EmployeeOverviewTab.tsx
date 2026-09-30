@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useState } from "react";
 import { Pencil, Check, X } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -58,7 +59,7 @@ function TextInput({
   inputMode?: "text" | "numeric" | "decimal" | "tel" | "email";
 }) {
   return (
-    <input
+    <BaseInput
       className={cellInput} type={type} placeholder={placeholder} inputMode={inputMode}
       value={value ?? ""} onChange={(e) => onChange(e.target.value)}
     />
@@ -407,7 +408,7 @@ function EmploymentCard({ detail, meta, canEdit, save }: CardProps & { meta: Wor
         </Cell>
         <Cell label="Attendance" editing={e} view={emp.attendanceRequired ? "Required" : "Not required"}>
           <label className="flex items-center gap-2 h-9 text-sm">
-            <input type="checkbox" className="h-4 w-4"
+            <BaseInput type="checkbox" className="h-4 w-4"
                    checked={edit.draft.attendanceRequired}
                    onChange={(ev) => edit.set("attendanceRequired")(ev.target.checked)} />
             Required

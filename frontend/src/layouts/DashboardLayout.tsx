@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useState, useEffect } from "react";
 import { Outlet, Link, NavLink, useLocation } from "react-router-dom";
 import {
@@ -276,7 +277,7 @@ export default function DashboardLayout() {
             {/* Global search — presentational entry point (per-module search lives on each page) */}
             <label className="hidden md:flex items-center gap-2 w-full max-w-md h-10 px-3.5 rounded-xl bg-muted/60 border border-border focus-within:border-ring focus-within:bg-card transition-colors">
               <Search className="w-4 h-4 text-gold shrink-0" />
-              <input
+              <BaseInput
                 type="text"
                 placeholder={t('nav.searchPlaceholder')}
                 className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"

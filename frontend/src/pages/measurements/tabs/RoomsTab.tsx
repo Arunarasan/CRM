@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Combine, DoorOpen, Home, Image as ImageIcon, Inbox, Pencil, Plus, Ruler, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -921,7 +922,7 @@ function ItemFirstView({
             <div className="sm:hidden space-y-2.5">
               {canWrite && (
                 <label className="flex items-center gap-2 text-xs text-muted-foreground px-1">
-                  <input type="checkbox" className="h-4 w-4" checked={allSelected} onChange={toggleSelectAll} aria-label="Select all items" />
+                  <BaseInput type="checkbox" className="h-4 w-4" checked={allSelected} onChange={toggleSelectAll} aria-label="Select all items" />
                   Select all
                 </label>
               )}
@@ -932,7 +933,7 @@ function ItemFirstView({
                     className={`rounded-xl border p-3 space-y-2.5 ${selected ? "border-primary bg-primary/5" : "bg-card"}`}>
                     <div className="flex items-start gap-2.5">
                       {canWrite && (
-                        <input type="checkbox" className="h-5 w-5 mt-0.5 shrink-0" checked={selected}
+                        <BaseInput type="checkbox" className="h-5 w-5 mt-0.5 shrink-0" checked={selected}
                           onChange={() => toggleSelect(item.id)} aria-label="Select item" />
                       )}
                       <button type="button" className="flex-1 min-w-0 text-left"
@@ -979,7 +980,7 @@ function ItemFirstView({
                   <tr>
                     {canWrite && (
                       <th className="px-3 py-2 w-8">
-                        <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} aria-label="Select all items" />
+                        <BaseInput type="checkbox" checked={allSelected} onChange={toggleSelectAll} aria-label="Select all items" />
                       </th>
                     )}
                     <th className="text-left px-3 py-2 w-44">Room</th>
@@ -998,7 +999,7 @@ function ItemFirstView({
                       className={`hover:bg-muted/30 ${item.id != null && selectedIds.has(item.id) ? "bg-primary/5" : ""}`}>
                       {canWrite && (
                         <td className="px-3 py-2">
-                          <input type="checkbox" checked={item.id != null && selectedIds.has(item.id)}
+                          <BaseInput type="checkbox" checked={item.id != null && selectedIds.has(item.id)}
                             onClick={(e) => e.stopPropagation()} onChange={() => toggleSelect(item.id)} aria-label="Select item" />
                         </td>
                       )}

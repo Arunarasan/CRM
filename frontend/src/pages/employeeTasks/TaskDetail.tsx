@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
@@ -674,7 +675,7 @@ export default function TaskDetail() {
             ) : (
               <>
                 <div className="flex gap-2">
-                  <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add a note…"
+                  <BaseInput value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add a note…"
                     className="flex-1 rounded-xl border border-[#DDE2DE] bg-white px-3 py-2 text-[13px] outline-none focus:border-[#0A573B]" />
                   <button onClick={() => addNote()} className="rounded-xl bg-[#0A573B] px-4 text-[13px] font-semibold text-white active:scale-95">Post</button>
                 </div>

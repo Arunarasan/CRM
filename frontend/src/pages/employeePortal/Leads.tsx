@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Plus, X, Phone, MapPin, Star, Search, Sparkles, CheckCircle2, TrendingUp,
@@ -193,7 +194,7 @@ export default function Leads() {
           <div className="flex items-center gap-2">
             <div className="flex flex-1 items-center gap-2 rounded-xl border bg-card px-3 py-2 shadow-sm">
               <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
-              <input value={search} onFocus={() => setShowSearch(true)} onChange={(e) => setSearch(e.target.value)}
+              <BaseInput value={search} onFocus={() => setShowSearch(true)} onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search name, number, city…" className="w-full bg-transparent text-sm outline-none" />
               {(search || showSearch) && (
                 <button onClick={() => { setSearch(''); setShowSearch(false); }} aria-label="Clear"><X className="h-4 w-4 text-muted-foreground" /></button>
@@ -312,18 +313,18 @@ export default function Leads() {
 
             <div className="flex flex-col gap-3">
               <Field label="Customer name *">
-                <input value={form.name} onChange={(e) => set('name', e.target.value)} className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" placeholder="Full name" />
+                <BaseInput value={form.name} onChange={(e) => set('name', e.target.value)} className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" placeholder="Full name" />
               </Field>
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Mobile">
-                  <input value={form.mobileNumber} onChange={(e) => set('mobileNumber', e.target.value)} inputMode="tel" className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" placeholder="10-digit" />
+                  <BaseInput value={form.mobileNumber} onChange={(e) => set('mobileNumber', e.target.value)} inputMode="tel" className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" placeholder="10-digit" />
                 </Field>
                 <Field label="City">
-                  <input value={form.city} onChange={(e) => set('city', e.target.value)} className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" />
+                  <BaseInput value={form.city} onChange={(e) => set('city', e.target.value)} className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" />
                 </Field>
               </div>
               <Field label="Email">
-                <input value={form.email} onChange={(e) => set('email', e.target.value)} inputMode="email" className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" />
+                <BaseInput value={form.email} onChange={(e) => set('email', e.target.value)} inputMode="email" className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" />
               </Field>
               <Field label="Address / Location">
                 <textarea value={form.address} onChange={(e) => set('address', e.target.value)} rows={2} className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" />
@@ -382,10 +383,10 @@ export default function Leads() {
               </Field>
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Estimated budget">
-                  <input value={form.estimatedBudget as string} onChange={(e) => set('estimatedBudget', e.target.value)} inputMode="numeric" className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" placeholder="₹" />
+                  <BaseInput value={form.estimatedBudget as string} onChange={(e) => set('estimatedBudget', e.target.value)} inputMode="numeric" className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" placeholder="₹" />
                 </Field>
                 <Field label="Preferred visit">
-                  <input type="date" value={form.preferredVisitDate} onChange={(e) => set('preferredVisitDate', e.target.value)} className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" />
+                  <BaseInput type="date" value={form.preferredVisitDate} onChange={(e) => set('preferredVisitDate', e.target.value)} className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" />
                 </Field>
               </div>
               <Field label="Notes">

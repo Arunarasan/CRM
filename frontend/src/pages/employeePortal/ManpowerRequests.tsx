@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useCallback, useEffect, useState } from 'react';
 import { Plus, X, Users } from 'lucide-react';
 import { employeePortalApi } from '@/api/employeePortalApi';
@@ -99,16 +100,16 @@ export default function ManpowerRequests() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-medium text-muted-foreground">Current workers</label>
-                  <input type="number" min={0} value={form.currentWorkers as string} onChange={(e) => set('currentWorkers', e.target.value)} className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" />
+                  <BaseInput type="number" min={0} value={form.currentWorkers as string} onChange={(e) => set('currentWorkers', e.target.value)} className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-muted-foreground">Required *</label>
-                  <input type="number" min={1} value={form.requiredWorkers as string} onChange={(e) => set('requiredWorkers', e.target.value)} className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" />
+                  <BaseInput type="number" min={1} value={form.requiredWorkers as string} onChange={(e) => set('requiredWorkers', e.target.value)} className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" />
                 </div>
               </div>
               <div>
                 <label className="text-xs font-medium text-muted-foreground">Skill required</label>
-                <input value={form.skillRequired} onChange={(e) => set('skillRequired', e.target.value)} className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" placeholder="e.g. Carpenter, Painter" />
+                <BaseInput value={form.skillRequired} onChange={(e) => set('skillRequired', e.target.value)} className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" placeholder="e.g. Carpenter, Painter" />
               </div>
               <div>
                 <label className="text-xs font-medium text-muted-foreground">Priority</label>
@@ -120,7 +121,7 @@ export default function ManpowerRequests() {
               </div>
               <div>
                 <label className="text-xs font-medium text-muted-foreground">Needed by</label>
-                <input type="date" value={form.requiredDate} onChange={(e) => set('requiredDate', e.target.value)} className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" />
+                <BaseInput type="date" value={form.requiredDate} onChange={(e) => set('requiredDate', e.target.value)} className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" />
               </div>
               <div>
                 <label className="text-xs font-medium text-muted-foreground">Reason</label>

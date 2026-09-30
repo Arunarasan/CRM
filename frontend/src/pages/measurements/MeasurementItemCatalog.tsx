@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useCallback, useEffect, useState } from 'react';
 import { ArrowLeft, Plus, Trash2, Pencil, X, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -65,12 +66,12 @@ export default function MeasurementItemCatalog() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <div>
               <label className="text-xs font-medium">Name</label>
-              <input value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="e.g. Wall Painting"
+              <BaseInput value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="e.g. Wall Painting"
                 className="w-full rounded-md border px-3 py-2 text-sm" />
             </div>
             <div>
               <label className="text-xs font-medium">Category / type</label>
-              <input value={form.itemType ?? ''} onChange={(e) => set('itemType', e.target.value)} placeholder="e.g. Wall"
+              <BaseInput value={form.itemType ?? ''} onChange={(e) => set('itemType', e.target.value)} placeholder="e.g. Wall"
                 className="w-full rounded-md border px-3 py-2 text-sm" />
             </div>
             <div>
@@ -81,7 +82,7 @@ export default function MeasurementItemCatalog() {
             </div>
             <div>
               <label className="text-xs font-medium">Default material</label>
-              <input value={form.defaultMaterial ?? ''} onChange={(e) => set('defaultMaterial', e.target.value)} placeholder="optional"
+              <BaseInput value={form.defaultMaterial ?? ''} onChange={(e) => set('defaultMaterial', e.target.value)} placeholder="optional"
                 className="w-full rounded-md border px-3 py-2 text-sm" />
             </div>
           </div>

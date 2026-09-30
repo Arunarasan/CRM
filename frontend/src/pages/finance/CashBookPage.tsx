@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useCallback, useEffect, useMemo, useState } from "react";
 import api from "@/lib/api";
 import { financeApi } from "@/api/financeApi";
@@ -148,11 +149,11 @@ export default function CashBookPage() {
       {/* Toolbar */}
       <div className="flex flex-wrap items-end gap-2">
         <label className="text-xs font-semibold text-slate-600">
-          From<input type="date" className="mt-1 block border rounded-lg px-2 py-1.5 text-sm"
+          From<BaseInput type="date" className="mt-1 block border rounded-lg px-2 py-1.5 text-sm"
             value={from} onChange={(e) => setFrom(e.target.value)} />
         </label>
         <label className="text-xs font-semibold text-slate-600">
-          To<input type="date" className="mt-1 block border rounded-lg px-2 py-1.5 text-sm"
+          To<BaseInput type="date" className="mt-1 block border rounded-lg px-2 py-1.5 text-sm"
             value={to} onChange={(e) => setTo(e.target.value)} />
         </label>
         <select className="border rounded-lg px-2 py-2 text-sm" value={direction} onChange={(e) => setDirection(e.target.value)}>
@@ -164,7 +165,7 @@ export default function CashBookPage() {
           <SearchableSelect value={source} onChange={setSource} options={sourceOptions}
             placeholder="All sources" clearLabel="All Sources" />
         </div>
-        <input className="border rounded-lg px-3 py-2 text-sm flex-1 min-w-[160px]" placeholder="Search party / reference…"
+        <BaseInput className="border rounded-lg px-3 py-2 text-sm flex-1 min-w-[160px]" placeholder="Search party / reference…"
           value={search} onChange={(e) => setSearch(e.target.value)} />
         <div className="flex gap-2 ml-auto">
           <Button variant="outline" className="border-emerald-300 text-emerald-700 hover:bg-emerald-50"
@@ -248,7 +249,7 @@ export default function CashBookPage() {
             <div className="grid grid-cols-2 gap-3">
               <label className="text-sm block">
                 <span className="font-semibold text-slate-700">Category</span>
-                <input list="cashbook-cats" className="mt-1 w-full border rounded-lg px-3 py-2"
+                <BaseInput list="cashbook-cats" className="mt-1 w-full border rounded-lg px-3 py-2"
                   value={fCategory} onChange={(e) => setFCategory(e.target.value)} placeholder="Select or type…" />
                 <datalist id="cashbook-cats">
                   {catOptions.map((c) => <option key={c} value={c}>{stageLabel(c)}</option>)}
@@ -256,17 +257,17 @@ export default function CashBookPage() {
               </label>
               <label className="text-sm block">
                 <span className="font-semibold text-slate-700">Amount</span>
-                <input type="number" min={1} className="mt-1 w-full border rounded-lg px-3 py-2"
+                <BaseInput type="number" min={1} className="mt-1 w-full border rounded-lg px-3 py-2"
                   value={fAmount} onChange={(e) => setFAmount(e.target.value)} />
               </label>
               <label className="text-sm block">
                 <span className="font-semibold text-slate-700">Date</span>
-                <input type="date" className="mt-1 w-full border rounded-lg px-3 py-2"
+                <BaseInput type="date" className="mt-1 w-full border rounded-lg px-3 py-2"
                   value={fDate} onChange={(e) => setFDate(e.target.value)} />
               </label>
               <label className="text-sm block">
                 <span className="font-semibold text-slate-700">{formDir === "INCOME" ? "Received from" : "Paid to"}</span>
-                <input className="mt-1 w-full border rounded-lg px-3 py-2"
+                <BaseInput className="mt-1 w-full border rounded-lg px-3 py-2"
                   value={fParty} onChange={(e) => setFParty(e.target.value)} placeholder="Party name" />
               </label>
               <label className="text-sm block">
@@ -277,7 +278,7 @@ export default function CashBookPage() {
               </label>
               <label className="text-sm block">
                 <span className="font-semibold text-slate-700">Reference #</span>
-                <input className="mt-1 w-full border rounded-lg px-3 py-2"
+                <BaseInput className="mt-1 w-full border rounded-lg px-3 py-2"
                   value={fReference} onChange={(e) => setFReference(e.target.value)} placeholder="Txn / cheque no." />
               </label>
             </div>

@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -30,7 +31,7 @@ function EditRow({ label, value, onChange, placeholder, type = 'text' }: { label
   return (
     <label className="block px-4 py-2.5">
       <span className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</span>
-      <input type={type} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
+      <BaseInput type={type} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
         className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" />
     </label>
   );
@@ -130,7 +131,7 @@ export default function MyProfile() {
             </span>
           )}
         </button>
-        <input ref={photoInput} type="file" accept="image/*" capture="user" className="hidden" onChange={onPhoto} />
+        <BaseInput ref={photoInput} type="file" accept="image/*" capture="user" className="hidden" onChange={onPhoto} />
         <h2 className="text-lg font-bold">{p ? `${p.firstName} ${p.lastName}` : '…'}</h2>
         <p className="text-sm text-muted-foreground">{p?.designation || t('portal.more.employee')}</p>
         <span className="rounded-full bg-primary/10 px-3 py-0.5 text-xs font-semibold text-primary">{p?.employeeCode}</span>

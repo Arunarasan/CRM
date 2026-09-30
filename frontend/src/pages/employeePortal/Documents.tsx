@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useEffect, useState } from 'react';
 import { FileText, Download, Plus, Loader2, Clock, XCircle } from 'lucide-react';
 import { employeePortalApi } from '@/api/employeePortalApi';
@@ -60,7 +61,7 @@ export default function Documents() {
             <p className="text-[11px] text-muted-foreground">{t('portal.documents.addHint')}</p>
             <label className="block">
               <span className="text-xs font-medium text-muted-foreground">{t('portal.documents.documentName')}</span>
-              <input value={form.documentName} onChange={(e) => setForm((f) => ({ ...f, documentName: e.target.value }))}
+              <BaseInput value={form.documentName} onChange={(e) => setForm((f) => ({ ...f, documentName: e.target.value }))}
                 placeholder={t('portal.documents.namePlaceholder')} className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" />
             </label>
             <label className="block">

@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useState } from "react";
 import { FileImage, FileText } from "lucide-react";
 import api from "@/lib/api";
@@ -86,7 +87,7 @@ export default function DocumentsTab({ projectId, documents, onChanged }: Props)
           <Button asChild disabled={docUploading}>
             <label className="cursor-pointer">
               {docUploading ? "Uploading…" : "Upload File"}
-              <input
+              <BaseInput
                 type="file"
                 className="hidden"
                 accept="image/*,video/*,audio/*,application/pdf,.doc,.docx,.xls,.xlsx,.dwg,.dxf"

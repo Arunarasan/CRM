@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { Plus, Trash2, GripVertical } from 'lucide-react';
 
 /**
@@ -32,7 +33,7 @@ export function Field({ label, required, hint, children }: {
 const inputCls = 'w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring';
 
 export function TextInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
-  return <input {...props} className={`${inputCls} ${props.className ?? ''}`} />;
+  return <BaseInput {...props} className={`${inputCls} ${props.className ?? ''}`} />;
 }
 
 export function TextArea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {

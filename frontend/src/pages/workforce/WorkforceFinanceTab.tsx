@@ -6,7 +6,7 @@ import { contractorApi } from "@/api/contractorApi";
 import type { WorkforceFinance, SalaryStructure, PayrollRequest } from "@/types/payroll";
 import { toast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Input, BaseInput } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -261,8 +261,8 @@ function StructureDialog({ employeeId, initial, onClose, onSaved }: { employeeId
           <Num label="Professional tax" v={f.professionalTax} on={(v) => set("professionalTax", v)} />
           <Num label="OT hourly rate" v={f.overtimeHourlyRate} on={(v) => set("overtimeHourlyRate", v)} />
           <div className="flex items-end gap-4">
-            <label className="flex items-center gap-1 text-sm"><input type="checkbox" checked={f.pfEnabled} onChange={(e) => set("pfEnabled", e.target.checked)} />PF</label>
-            <label className="flex items-center gap-1 text-sm"><input type="checkbox" checked={f.esiEnabled} onChange={(e) => set("esiEnabled", e.target.checked)} />ESI</label>
+            <label className="flex items-center gap-1 text-sm"><BaseInput type="checkbox" checked={f.pfEnabled} onChange={(e) => set("pfEnabled", e.target.checked)} />PF</label>
+            <label className="flex items-center gap-1 text-sm"><BaseInput type="checkbox" checked={f.esiEnabled} onChange={(e) => set("esiEnabled", e.target.checked)} />ESI</label>
           </div>
         </div>
         <DialogFooter>

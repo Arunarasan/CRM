@@ -12,7 +12,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import CameraCaptureButton from "@/components/CameraCaptureButton";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Input, BaseInput } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -443,7 +443,7 @@ function LinkBoqItemsButton({ wp, onDone }: { wp: WorkPackageDetail["workPackage
             {items.length === 0 && <div className="p-6 text-center text-sm text-muted-foreground">No approved BOQ items.</div>}
             {items.map((i) => (
               <label key={i.id} className="flex items-center gap-3 p-3 hover:bg-slate-50 cursor-pointer">
-                <input type="checkbox" checked={selected.includes(i.id)}
+                <BaseInput type="checkbox" checked={selected.includes(i.id)}
                        onChange={(e) => setSelected((s) => e.target.checked ? [...s, i.id] : s.filter((x) => x !== i.id))} />
                 <div className="flex-1 min-w-0">
                   <div className="font-semibold text-sm text-slate-800 truncate">{i.itemName}</div>
@@ -1012,7 +1012,7 @@ function SafetyButton({ wpId, contractorId, onDone }: { wpId: number; contractor
               </Field>
             </div>
             <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={ppe} onChange={(e) => setPpe(e.target.checked)} />
+              <BaseInput type="checkbox" checked={ppe} onChange={(e) => setPpe(e.target.checked)} />
               PPE compliant
             </label>
             <Field label="Description"><Input onChange={(e) => set("description", e.target.value)} /></Field>

@@ -4,7 +4,7 @@ import { contractorApi } from "@/api/contractorApi";
 import { inr } from "@/pages/workforce/WorkforceFinanceTab";
 import { toast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Input, BaseInput } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Search, Users, X, Zap } from "lucide-react";
@@ -186,7 +186,7 @@ export default function QuickPayDialog({
           <div className="space-y-2 pt-1">
             <div className="flex items-center gap-2 px-3 h-10 rounded-md border bg-slate-50">
               <Search className="w-4 h-4 text-slate-400" />
-              <input
+              <BaseInput
                 autoFocus value={q} onChange={(e) => setQ(e.target.value)}
                 placeholder="Search employee or contractor by name…"
                 className="flex-1 bg-transparent text-sm outline-none"

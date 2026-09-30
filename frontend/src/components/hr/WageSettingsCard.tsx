@@ -3,7 +3,7 @@ import { payrollApi } from "@/api/payrollApi";
 import type { WageSettings } from "@/types/payroll";
 import { toast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Input, BaseInput } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Settings2 } from "lucide-react";
@@ -133,7 +133,7 @@ export default function WageSettingsCard({
               <Field label="IFSC"><Input value={form.ifsc} onChange={(e) => setForm({ ...form, ifsc: e.target.value })} /></Field>
             </div>
             <label className="flex items-center gap-2 text-sm text-slate-700">
-              <input type="checkbox" checked={!!form.bonusEligible} onChange={(e) => setForm({ ...form, bonusEligible: e.target.checked })} /> Eligible for bonuses
+              <BaseInput type="checkbox" checked={!!form.bonusEligible} onChange={(e) => setForm({ ...form, bonusEligible: e.target.checked })} /> Eligible for bonuses
             </label>
             <Button className="w-full" onClick={save} disabled={saving}>{saving ? "Saving…" : "Save Wage Settings"}</Button>
           </div>

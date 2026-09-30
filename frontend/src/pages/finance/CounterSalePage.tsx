@@ -6,7 +6,7 @@ import { inventoryApi } from "@/api/inventoryApi";
 import { apiError } from "@/lib/apiError";
 import { toast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Input, BaseInput } from "@/components/ui/input";
 import SearchableSelect from "@/components/ui/searchable-select";
 import { currency } from "./helpers";
 import { Plus, Minus, Search, Trash2, Wrench } from "lucide-react";
@@ -218,7 +218,7 @@ export default function CounterSalePage() {
                   <div className="flex items-center justify-center">
                     <div className="inline-flex items-center rounded-md border">
                       <button className="px-2 py-1.5 text-slate-500 hover:bg-slate-50" onClick={() => patchLine(l.key, { qty: Math.max(1, l.qty - 1) })}><Minus className="w-3.5 h-3.5" /></button>
-                      <input value={l.qty} onChange={(e) => patchLine(l.key, { qty: Math.max(1, Number(e.target.value) || 1) })} className="w-10 text-center text-sm outline-none" />
+                      <BaseInput value={l.qty} onChange={(e) => patchLine(l.key, { qty: Math.max(1, Number(e.target.value) || 1) })} className="w-10 text-center text-sm outline-none" />
                       <button className="px-2 py-1.5 text-slate-500 hover:bg-slate-50" onClick={() => patchLine(l.key, { qty: l.qty + 1 })}><Plus className="w-3.5 h-3.5" /></button>
                     </div>
                   </div>
@@ -238,7 +238,7 @@ export default function CounterSalePage() {
           {/* installation add-on */}
           <div className="bg-white border rounded-xl">
             <label className="flex items-center gap-2.5 px-3 py-3 cursor-pointer">
-              <input type="checkbox" checked={installOn} onChange={(e) => setInstallOn(e.target.checked)} className="w-4 h-4" />
+              <BaseInput type="checkbox" checked={installOn} onChange={(e) => setInstallOn(e.target.checked)} className="w-4 h-4" />
               <Wrench className="w-4 h-4 text-slate-500" />
               <span className="text-sm font-medium text-slate-700">Add installation</span>
               <span className="text-xs text-slate-400">creates a task for an employee</span>
@@ -317,7 +317,7 @@ export default function CounterSalePage() {
                     <button onClick={() => setDiscountType("PERCENTAGE")} className={`px-1.5 ${discountType === "PERCENTAGE" ? "bg-slate-700 text-white" : "text-slate-500"}`}>%</button>
                   </div>
                 </div>
-                <input type="number" min={0} value={discountValue} onChange={(e) => setDiscountValue(e.target.value)}
+                <BaseInput type="number" min={0} value={discountValue} onChange={(e) => setDiscountValue(e.target.value)}
                   className="w-24 h-8 rounded-md border px-2 text-right text-sm" />
               </div>
               {totals.discount > 0 && <Row label="Discount applied" value={`− ${currency(totals.discount)}`} valueClass="text-red-600" />}
@@ -330,7 +330,7 @@ export default function CounterSalePage() {
 
             {/* stock */}
             <label className="flex items-center gap-2 text-xs text-slate-600 border-t pt-3">
-              <input type="checkbox" checked={deductStock} onChange={(e) => setDeductStock(e.target.checked)} className="w-3.5 h-3.5" />
+              <BaseInput type="checkbox" checked={deductStock} onChange={(e) => setDeductStock(e.target.checked)} className="w-3.5 h-3.5" />
               Reduce stock
               {deductStock && (
                 <select value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)} className="ml-auto h-8 rounded-md border px-2 text-xs max-w-[150px]">
@@ -343,7 +343,7 @@ export default function CounterSalePage() {
             {/* payment */}
             <div className="border-t pt-3">
               <label className="flex items-center gap-2 text-sm text-slate-700 mb-2">
-                <input type="checkbox" checked={collectNow} onChange={(e) => setCollectNow(e.target.checked)} className="w-4 h-4" />
+                <BaseInput type="checkbox" checked={collectNow} onChange={(e) => setCollectNow(e.target.checked)} className="w-4 h-4" />
                 Collect payment now
               </label>
               {collectNow && (
@@ -403,7 +403,7 @@ function ProductAdd({ onPick, onCustom }: { onPick: (p: ProductLite) => void; on
       <div ref={boxRef} className="relative flex-1">
         <div className="flex items-center bg-white border rounded-lg px-3 h-11 focus-within:ring-2 focus-within:ring-primary/30">
           <Search className="w-4 h-4 text-slate-400 mr-2 shrink-0" />
-          <input
+          <BaseInput
             className="flex-1 outline-none text-sm bg-transparent"
             placeholder="Scan or search product by name, code, barcode…"
             value={search}

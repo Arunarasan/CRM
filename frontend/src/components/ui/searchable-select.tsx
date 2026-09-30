@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronsUpDown, Check, X, Search } from "lucide-react";
 
@@ -78,7 +79,7 @@ export default function SearchableSelect({
         <div className="absolute z-30 mt-1 w-full rounded-md border bg-popover shadow-md">
           <div className="flex items-center gap-2 border-b px-3 py-2">
             <Search className="h-4 w-4 text-muted-foreground shrink-0" />
-            <input
+            <BaseInput
               ref={inputRef}
               value={query}
               onChange={(e) => setQuery(e.target.value)}

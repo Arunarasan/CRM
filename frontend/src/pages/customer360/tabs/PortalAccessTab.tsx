@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useEffect, useState } from "react";
 import { KeyRound, ShieldCheck, ShieldOff, Copy, Loader2, UserPlus, Trash2, Check, Power, PauseCircle, PlayCircle } from "lucide-react";
 import { customer360Api, type PortalAccess, type PortalGrantResult } from "@/lib/customer360Api";
@@ -164,7 +165,7 @@ export default function PortalAccessTab({ customerId }: { customerId: string }) 
           email placed guest orders, those carry into the portal automatically.
         </p>
         <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-          <input
+          <BaseInput
             type="email" value={email} onChange={(e) => setEmail(e.target.value)}
             placeholder="login email"
             className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm"

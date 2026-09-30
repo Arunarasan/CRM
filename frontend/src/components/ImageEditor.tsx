@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   RotateCcw, RotateCw, FlipHorizontal, FlipVertical, Crop as CropIcon, Loader2,
@@ -342,7 +343,7 @@ export default function ImageEditor({
                 <span className="font-medium">
                   Quality {format === "image/png" ? "—" : `${Math.round(quality * 100)}%`}
                 </span>
-                <input type="range" min={0.3} max={1} step={0.05} value={quality}
+                <BaseInput type="range" min={0.3} max={1} step={0.05} value={quality}
                   disabled={format === "image/png"}
                   onChange={(e) => setQuality(Number(e.target.value))}
                   className="w-full accent-primary disabled:opacity-40" />

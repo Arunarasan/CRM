@@ -9,7 +9,7 @@ import PayslipEditor from "./PayslipEditor";
 import api from "@/lib/api";
 import { toast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Input, BaseInput } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -333,7 +333,7 @@ export default function HrFinanceDashboard() {
           <div className="flex flex-col sm:flex-row sm:items-center gap-2">
             <div className="flex items-center gap-2 px-3 h-10 rounded-md border bg-white sm:max-w-xs w-full">
               <Search className="w-4 h-4 text-slate-400" />
-              <input value={empSearch} onChange={(e) => setEmpSearch(e.target.value)}
+              <BaseInput value={empSearch} onChange={(e) => setEmpSearch(e.target.value)}
                 placeholder="Search employee by name or code…" className="flex-1 bg-transparent text-sm outline-none" />
             </div>
             <div className="flex flex-wrap gap-1.5">
@@ -416,7 +416,7 @@ export default function HrFinanceDashboard() {
 
           <div className="flex items-center gap-2 px-3 h-10 rounded-md border bg-white sm:max-w-xs w-full">
             <Search className="w-4 h-4 text-slate-400" />
-            <input value={conSearch} onChange={(e) => setConSearch(e.target.value)}
+            <BaseInput value={conSearch} onChange={(e) => setConSearch(e.target.value)}
               placeholder="Search contractor by name or code…" className="flex-1 bg-transparent text-sm outline-none" />
           </div>
 
@@ -777,7 +777,7 @@ export default function HrFinanceDashboard() {
                   <Field label="IFSC"><Input value={wage.ifsc} onChange={(e) => setWage({ ...wage, ifsc: e.target.value })} /></Field>
                 </div>
                 <label className="flex items-center gap-2 text-sm text-slate-700">
-                  <input type="checkbox" checked={!!wage.bonusEligible} onChange={(e) => setWage({ ...wage, bonusEligible: e.target.checked })} /> Eligible for bonuses
+                  <BaseInput type="checkbox" checked={!!wage.bonusEligible} onChange={(e) => setWage({ ...wage, bonusEligible: e.target.checked })} /> Eligible for bonuses
                 </label>
                 <Button className="w-full" onClick={submitWage}>Save Wage Settings</Button>
               </>

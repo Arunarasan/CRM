@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, X, Trash2, Search, Boxes } from 'lucide-react';
 import { employeePortalApi } from '@/api/employeePortalApi';
@@ -137,7 +138,7 @@ export default function MaterialRequests() {
                 <label className="text-xs font-medium text-muted-foreground">Materials</label>
                 <div className="mt-1 flex items-center gap-2 rounded-lg border bg-background px-3 py-2">
                   <Search className="h-4 w-4 text-muted-foreground" />
-                  <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search material…" className="flex-1 bg-transparent text-sm outline-none" />
+                  <BaseInput value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search material…" className="flex-1 bg-transparent text-sm outline-none" />
                 </div>
                 {query && options.length > 0 && (
                   <div className="mt-1 max-h-40 divide-y overflow-y-auto rounded-lg border bg-card shadow-sm">
@@ -157,7 +158,7 @@ export default function MaterialRequests() {
                   {lines.map((l) => (
                     <div key={l.productId} className="flex items-center gap-2 px-3 py-2">
                       <span className="min-w-0 flex-1 truncate text-sm">{l.name}</span>
-                      <input
+                      <BaseInput
                         type="number" min={1} value={l.quantity}
                         onChange={(e) => setLines((ls) => ls.map((x) => x.productId === l.productId ? { ...x, quantity: Number(e.target.value) } : x))}
                         className="w-16 rounded-md border bg-background px-2 py-1 text-sm"
@@ -180,7 +181,7 @@ export default function MaterialRequests() {
 
               <div>
                 <label className="text-xs font-medium text-muted-foreground">Expected date</label>
-                <input type="date" value={expectedDate} onChange={(e) => setExpectedDate(e.target.value)} className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" />
+                <BaseInput type="date" value={expectedDate} onChange={(e) => setExpectedDate(e.target.value)} className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" />
               </div>
 
               <div>

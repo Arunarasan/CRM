@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, Clock3, Loader2, Plus } from 'lucide-react';
 import { employeePortalApi } from '@/api/employeePortalApi';
@@ -173,18 +174,18 @@ function CorrectionRequests() {
             Came in but clocked in late, forgot to clock out, or worked a day without punching? Ask an admin to fix it.
           </p>
           <label className="block text-xs font-medium text-muted-foreground">Date
-            <input type="date" value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} className={input} />
+            <BaseInput type="date" value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} className={input} />
           </label>
           <div className="grid grid-cols-2 gap-2">
             <label className="block text-xs font-medium text-muted-foreground">Clock-in
-              <input type="time" value={form.checkIn} onChange={(e) => setForm((f) => ({ ...f, checkIn: e.target.value }))} className={input} />
+              <BaseInput type="time" value={form.checkIn} onChange={(e) => setForm((f) => ({ ...f, checkIn: e.target.value }))} className={input} />
             </label>
             <label className="block text-xs font-medium text-muted-foreground">Clock-out
-              <input type="time" value={form.checkOut} onChange={(e) => setForm((f) => ({ ...f, checkOut: e.target.value }))} className={input} />
+              <BaseInput type="time" value={form.checkOut} onChange={(e) => setForm((f) => ({ ...f, checkOut: e.target.value }))} className={input} />
             </label>
           </div>
           <label className="block text-xs font-medium text-muted-foreground">Reason
-            <input value={form.reason} onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))} placeholder="e.g. forgot to clock out" className={input} />
+            <BaseInput value={form.reason} onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))} placeholder="e.g. forgot to clock out" className={input} />
           </label>
           {err && <p className="text-xs text-destructive">{err}</p>}
           <div className="mt-1 flex gap-2">

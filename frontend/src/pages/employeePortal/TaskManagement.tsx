@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, X, Check, Trash2, Bell } from 'lucide-react';
 import { employeePortalApi } from '@/api/employeePortalApi';
@@ -110,7 +111,7 @@ export default function TaskManagement() {
             <div className="flex flex-col gap-3">
               <div>
                 <label className="text-xs font-medium text-muted-foreground">Title *</label>
-                <input value={form.title} onChange={(e) => set('title', e.target.value)} className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" placeholder="e.g. Purchase paint, Meet client" />
+                <BaseInput value={form.title} onChange={(e) => set('title', e.target.value)} className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" placeholder="e.g. Purchase paint, Meet client" />
               </div>
               <div>
                 <label className="text-xs font-medium text-muted-foreground">Notes</label>
@@ -119,7 +120,7 @@ export default function TaskManagement() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-medium text-muted-foreground">Due date</label>
-                  <input type="date" value={form.dueDate} onChange={(e) => set('dueDate', e.target.value)} className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" />
+                  <BaseInput type="date" value={form.dueDate} onChange={(e) => set('dueDate', e.target.value)} className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-muted-foreground">Priority</label>

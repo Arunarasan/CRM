@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useEffect, useRef, useState } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 import {
@@ -127,7 +128,7 @@ export default function EmployeeReviewsTab({ employeeId }: { employeeId: number 
           </div>
 
           <div className="mt-4 flex items-center gap-2">
-            <input
+            <BaseInput
               readOnly
               value={link}
               onFocus={(e) => e.currentTarget.select()}

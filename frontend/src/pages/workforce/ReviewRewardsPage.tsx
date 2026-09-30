@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useEffect, useMemo, useState } from "react";
 import {
   Star, BadgeCheck, RefreshCw, HandCoins, CheckCircle2, XCircle, Search, Award, AlertTriangle,
@@ -248,7 +249,7 @@ export default function ReviewRewardsPage() {
         ))}
         <div className="relative ml-auto">
           <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-slate-400" />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name / phone…"
+          <BaseInput value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name / phone…"
             className="rounded-lg border border-slate-200 pl-8 pr-3 py-2 text-sm" />
         </div>
       </div>

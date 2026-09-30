@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useEffect, useState } from 'react';
 import { ArrowRight, Star, Image as ImageIcon, Plus, Trash2 } from 'lucide-react';
 import ResourceManager from './ResourceManager';
@@ -22,7 +23,7 @@ function ColorListEditor({ value, onChange }: { value: ColorVariant[]; onChange:
     <div className="space-y-2">
       {list.map((c, i) => (
         <div key={i} className="flex items-start gap-1.5 rounded-md border border-dashed p-2">
-          <input
+          <BaseInput
             type="color"
             value={c.hex || '#000000'}
             onChange={(e) => set(i, { hex: e.target.value })}

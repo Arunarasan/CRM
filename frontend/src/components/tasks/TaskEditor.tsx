@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useEffect, useState } from "react";
 import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -128,7 +129,7 @@ export default function TaskEditor({
         <form onSubmit={submit} className="space-y-4">
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Title</label>
-            <input
+            <BaseInput
               value={form.title}
               onChange={(e) => set("title")(e.target.value)}
               placeholder="Defaults to the task type"
@@ -153,12 +154,12 @@ export default function TaskEditor({
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Due date</label>
-              <input type="date" value={form.reminderDate} onChange={(e) => set("reminderDate")(e.target.value)} className={selectClass} />
+              <BaseInput type="date" value={form.reminderDate} onChange={(e) => set("reminderDate")(e.target.value)} className={selectClass} />
             </div>
             {showTime && (
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Due time</label>
-                <input type="time" value={form.reminderTime} onChange={(e) => set("reminderTime")(e.target.value)} className={selectClass} />
+                <BaseInput type="time" value={form.reminderTime} onChange={(e) => set("reminderTime")(e.target.value)} className={selectClass} />
               </div>
             )}
           </div>

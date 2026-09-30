@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Input, BaseInput } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -241,7 +241,7 @@ export default function Users() {
               <div className="grid grid-cols-2 gap-1.5 max-h-52 overflow-y-auto border rounded-md p-2">
                 {roles.map((r) => (
                   <label key={r} className="flex items-center gap-2 text-sm cursor-pointer">
-                    <input
+                    <BaseInput
                       type="checkbox"
                       checked={form.roles.includes(r)}
                       onChange={() => toggleRole(r)}

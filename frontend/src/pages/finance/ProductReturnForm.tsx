@@ -7,7 +7,7 @@ import { useGoBack } from "@/hooks/useGoBack";
 import { apiError } from "@/lib/apiError";
 import { toast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Input, BaseInput } from "@/components/ui/input";
 import type { Invoice, ReturnableInvoice } from "@/types/finance";
 import { currency } from "./helpers";
 import { ArrowLeft, Search, Undo2, PackageCheck, AlertTriangle, X } from "lucide-react";
@@ -137,7 +137,7 @@ export default function ProductReturnForm() {
               <div className="relative">
                 <div className="flex items-center bg-white border rounded-lg px-3 h-11">
                   <Search className="w-4 h-4 text-slate-400 mr-2" />
-                  <input className="flex-1 outline-none text-sm" placeholder="Search bill by invoice # or customer…"
+                  <BaseInput className="flex-1 outline-none text-sm" placeholder="Search bill by invoice # or customer…"
                     value={search} onFocus={() => setShowResults(true)}
                     onChange={(e) => { setSearch(e.target.value); setShowResults(true); }} />
                 </div>
@@ -205,7 +205,7 @@ export default function ProductReturnForm() {
                         <span>Qty</span>
                         <div className="mt-1 inline-flex items-center rounded-md border bg-white">
                           <button className="px-2 py-1.5 text-slate-500 hover:bg-slate-50 disabled:opacity-40" disabled={disabled} onClick={() => patch(l.invoiceItemId, { qty: Math.max(0, st.qty - 1) })}>−</button>
-                          <input type="number" min={0} max={l.returnableQty} disabled={disabled} value={st.qty}
+                          <BaseInput type="number" min={0} max={l.returnableQty} disabled={disabled} value={st.qty}
                             onChange={(e) => patch(l.invoiceItemId, { qty: Math.max(0, Math.min(Number(e.target.value) || 0, l.returnableQty)) })}
                             className="w-12 text-center text-sm outline-none disabled:opacity-40" />
                           <button className="px-2 py-1.5 text-slate-500 hover:bg-slate-50 disabled:opacity-40" disabled={disabled || st.qty >= l.returnableQty} onClick={() => patch(l.invoiceItemId, { qty: Math.min(l.returnableQty, st.qty + 1) })}>+</button>
@@ -255,7 +255,7 @@ export default function ProductReturnForm() {
               </div>
               <div className="border-t pt-3">
                 <label className="flex items-center gap-2 text-sm text-slate-700">
-                  <input type="checkbox" checked={updateInventory} onChange={(e) => setUpdateInventory(e.target.checked)} className="w-4 h-4" /> Update inventory
+                  <BaseInput type="checkbox" checked={updateInventory} onChange={(e) => setUpdateInventory(e.target.checked)} className="w-4 h-4" /> Update inventory
                 </label>
                 {updateInventory && (
                   <select value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)} className="mt-2 h-9 w-full rounded-md border px-2 text-xs">

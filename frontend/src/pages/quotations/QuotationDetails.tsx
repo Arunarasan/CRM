@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useLocation, Link } from "react-router-dom";
 import {
@@ -337,7 +338,7 @@ export default function QuotationDetails() {
             </p>
             <div>
               <label className="text-xs font-medium text-muted-foreground">Advance received (₹) — optional</label>
-              <input inputMode="numeric" value={convertCfg?.advanceAmount ?? ""}
+              <BaseInput inputMode="numeric" value={convertCfg?.advanceAmount ?? ""}
                 onChange={(e) => setConvertCfg((c) => c && { ...c, advanceAmount: e.target.value })}
                 placeholder="0" className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm" />
             </div>

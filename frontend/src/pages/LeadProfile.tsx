@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useCallback, useEffect, useState } from "react";
 import { useParams, Link, useSearchParams } from "react-router-dom";
 import {
@@ -510,7 +511,7 @@ function MarkLostDialog({
             options={["Budget too high", "Chose competitor", "Project postponed", "Not reachable", "Requirement dropped", "Location not serviceable", "Other"]} />
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Competitor (if any)</label>
-            <input className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+            <BaseInput className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
               value={competitor} onChange={(e) => setCompetitor(e.target.value)} />
           </div>
           <TextAreaField label="Customer Feedback" value={feedback} onChange={setFeedback} />

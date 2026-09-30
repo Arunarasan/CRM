@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { Fragment, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, Pencil, Save, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -128,7 +129,7 @@ export default function QuotationTree({ items, canApprove, editable, checked, on
                                           {canApprove && (
                                             <td className="py-1.5 pr-2 w-8">
                                               {it.status === "PENDING" && (
-                                                <input
+                                                <BaseInput
                                                   type="checkbox" className="h-4 w-4"
                                                   checked={it.id !== undefined && checked.has(it.id)}
                                                   onChange={() => onToggle(it.id)}
@@ -205,7 +206,7 @@ function NumInput({ label, value, onChange }: { label: string; value?: number; o
   return (
     <label className="block">
       <span className="block text-[11px] text-muted-foreground mb-0.5">{label}</span>
-      <input
+      <BaseInput
         type="number" className="w-full rounded-md border px-2 py-1 text-sm bg-background"
         value={value ?? ""} onChange={(e) => onChange(e.target.value === "" ? undefined : Number(e.target.value))}
       />
@@ -217,7 +218,7 @@ function TextInput({ label, value, onChange }: { label: string; value?: string; 
   return (
     <label className="block">
       <span className="block text-[11px] text-muted-foreground mb-0.5">{label}</span>
-      <input
+      <BaseInput
         type="text" className="w-full rounded-md border px-2 py-1 text-sm bg-background"
         value={value ?? ""} onChange={(e) => onChange(e.target.value)}
       />

@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useRef, useState } from "react";
 import { Camera } from "lucide-react";
 import ImageEditor from "@/components/ImageEditor";
@@ -54,7 +55,7 @@ export default function CameraCaptureButton({
       >
         <Camera className="h-4 w-4" /> {label}
       </button>
-      <input ref={ref} type="file" accept="image/*" capture="environment" className="hidden" onChange={pick} />
+      <BaseInput ref={ref} type="file" accept="image/*" capture="environment" className="hidden" onChange={pick} />
       {pending && canEdit && (
         <ImageEditor
           file={pending}

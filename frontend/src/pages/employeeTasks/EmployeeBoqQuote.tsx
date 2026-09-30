@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Plus, FileSpreadsheet, CheckCircle2, Check, Loader2, Rocket } from 'lucide-react';
@@ -152,12 +153,12 @@ export default function EmployeeBoqQuote() {
             <div className={`${CARD} p-3.5`}>
               <p className="mb-2 text-xs font-bold uppercase tracking-wide text-[#7A817C]">Add a line</p>
               <div className="grid grid-cols-2 gap-2">
-                <input value={newItem.roomName} onChange={(e) => setNewItem({ ...newItem, roomName: e.target.value })} placeholder="Room" className={fieldCls} />
-                <input value={newItem.itemName} onChange={(e) => setNewItem({ ...newItem, itemName: e.target.value })} placeholder="Item name" className={fieldCls} />
+                <BaseInput value={newItem.roomName} onChange={(e) => setNewItem({ ...newItem, roomName: e.target.value })} placeholder="Room" className={fieldCls} />
+                <BaseInput value={newItem.itemName} onChange={(e) => setNewItem({ ...newItem, itemName: e.target.value })} placeholder="Item name" className={fieldCls} />
               </div>
               <div className="mt-2 flex gap-2">
-                <input inputMode="decimal" value={newItem.quantity} onChange={(e) => setNewItem({ ...newItem, quantity: e.target.value })} placeholder="Qty" className={`${fieldCls} w-20`} />
-                <input value={newItem.unit} onChange={(e) => setNewItem({ ...newItem, unit: e.target.value })} placeholder="Unit" className={`${fieldCls} w-24`} />
+                <BaseInput inputMode="decimal" value={newItem.quantity} onChange={(e) => setNewItem({ ...newItem, quantity: e.target.value })} placeholder="Qty" className={`${fieldCls} w-20`} />
+                <BaseInput value={newItem.unit} onChange={(e) => setNewItem({ ...newItem, unit: e.target.value })} placeholder="Unit" className={`${fieldCls} w-24`} />
                 <button type="button" onClick={addItem} disabled={busy || !newItem.itemName.trim()} className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-[#E7F2EC] text-sm font-semibold text-[#0A573B] active:scale-[0.99] disabled:opacity-50"><Plus className="h-4 w-4" /> Add</button>
               </div>
             </div>

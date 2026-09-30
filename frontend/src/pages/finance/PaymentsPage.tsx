@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import api from "@/lib/api";
@@ -91,7 +92,7 @@ export default function PaymentsPage() {
           <div className="flex flex-wrap gap-2">
             <div className="flex items-center bg-white border rounded-lg px-3 py-2 flex-1 min-w-[200px]">
               <Search className="w-4 h-4 text-slate-400 mr-2" />
-              <input className="outline-none text-sm w-full" placeholder="Search payment #, txn id or customer…"
+              <BaseInput className="outline-none text-sm w-full" placeholder="Search payment #, txn id or customer…"
                      value={search} onChange={(e) => { setSearch(e.target.value); setPage(0); }} />
             </div>
             <select className="border rounded-lg px-3 py-2 text-sm bg-white" value={method}
@@ -240,7 +241,7 @@ export default function PaymentsPage() {
             <div className="grid grid-cols-2 gap-3">
               <label className="text-sm block">
                 <span className="font-semibold text-slate-700">Amount</span>
-                <input type="number" min={1} className="mt-1 w-full border rounded-lg px-3 py-2" value={pAmount} onChange={(e) => setPAmount(e.target.value)} />
+                <BaseInput type="number" min={1} className="mt-1 w-full border rounded-lg px-3 py-2" value={pAmount} onChange={(e) => setPAmount(e.target.value)} />
               </label>
               <label className="text-sm block">
                 <span className="font-semibold text-slate-700">Method</span>
@@ -251,16 +252,16 @@ export default function PaymentsPage() {
             </div>
             <label className="text-sm block">
               <span className="font-semibold text-slate-700">Transaction / Reference #</span>
-              <input className="mt-1 w-full border rounded-lg px-3 py-2" value={pRef} onChange={(e) => setPRef(e.target.value)} />
+              <BaseInput className="mt-1 w-full border rounded-lg px-3 py-2" value={pRef} onChange={(e) => setPRef(e.target.value)} />
             </label>
             <label className="text-sm block">
               <span className="font-semibold text-slate-700">Remarks</span>
-              <input className="mt-1 w-full border rounded-lg px-3 py-2" value={pRemarks} onChange={(e) => setPRemarks(e.target.value)} />
+              <BaseInput className="mt-1 w-full border rounded-lg px-3 py-2" value={pRemarks} onChange={(e) => setPRemarks(e.target.value)} />
             </label>
             <label className="text-sm block">
               <span className="font-semibold text-slate-700">Payment Proof (photo / receipt)</span>
               <div className="mt-1 flex items-center gap-2">
-                <input type="file" accept="image/*,.pdf" className="w-full text-sm" disabled={uploading}
+                <BaseInput type="file" accept="image/*,.pdf" className="w-full text-sm" disabled={uploading}
                        onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadProof(f); e.target.value = ""; }} />
                 <CameraCaptureButton onCapture={uploadProof} disabled={uploading} label="Camera"
                   className="inline-flex shrink-0 items-center gap-1 rounded-md border border-input bg-background px-2 py-1 text-xs font-medium hover:bg-accent disabled:opacity-60" />
@@ -301,7 +302,7 @@ export default function PaymentsPage() {
             </label>
             <label className="text-sm block">
               <span className="font-semibold text-slate-700">Amount</span>
-              <input type="number" min={1} className="mt-1 w-full border rounded-lg px-3 py-2" value={rAmount} onChange={(e) => setRAmount(e.target.value)} />
+              <BaseInput type="number" min={1} className="mt-1 w-full border rounded-lg px-3 py-2" value={rAmount} onChange={(e) => setRAmount(e.target.value)} />
             </label>
             <label className="text-sm block">
               <span className="font-semibold text-slate-700">Reason</span>

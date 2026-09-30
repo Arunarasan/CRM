@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Plus, X, Camera, Video, Trash2, CalendarDays } from 'lucide-react';
 import { employeePortalApi } from '@/api/employeePortalApi';
@@ -123,11 +124,11 @@ export default function DailyReports() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-medium text-muted-foreground">Date</label>
-                  <input type="date" value={form.reportDate} onChange={(e) => set('reportDate', e.target.value)} className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" />
+                  <BaseInput type="date" value={form.reportDate} onChange={(e) => set('reportDate', e.target.value)} className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-muted-foreground">Hours worked</label>
-                  <input type="number" min={0} step="0.5" value={form.hoursWorked as string} onChange={(e) => set('hoursWorked', e.target.value)} className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" />
+                  <BaseInput type="number" min={0} step="0.5" value={form.hoursWorked as string} onChange={(e) => set('hoursWorked', e.target.value)} className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" />
                 </div>
               </div>
               <div>
@@ -164,8 +165,8 @@ export default function DailyReports() {
                     <Video className="h-4 w-4" /> Video
                   </button>
                 </div>
-                <input ref={photoInput} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => onFile(e, 'PHOTO')} />
-                <input ref={videoInput} type="file" accept="video/*" capture className="hidden" onChange={(e) => onFile(e, 'VIDEO')} />
+                <BaseInput ref={photoInput} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => onFile(e, 'PHOTO')} />
+                <BaseInput ref={videoInput} type="file" accept="video/*" capture className="hidden" onChange={(e) => onFile(e, 'VIDEO')} />
                 {uploading && <p className="mt-1 text-xs text-muted-foreground">Uploading…</p>}
                 {media.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-2">
@@ -187,7 +188,7 @@ export default function DailyReports() {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="text-xs font-medium text-muted-foreground">Amount ₹</label>
-                      <input type="number" min={0} step="1" value={form.cashCollected as string}
+                      <BaseInput type="number" min={0} step="1" value={form.cashCollected as string}
                         onChange={(e) => set('cashCollected', e.target.value)}
                         className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" placeholder="0" />
                     </div>
@@ -199,7 +200,7 @@ export default function DailyReports() {
                       </select>
                     </div>
                   </div>
-                  <input value={form.cashReference ?? ''} onChange={(e) => set('cashReference', e.target.value)}
+                  <BaseInput value={form.cashReference ?? ''} onChange={(e) => set('cashReference', e.target.value)}
                     className="mt-2 w-full rounded-lg border bg-background px-3 py-2 text-sm" placeholder="Reference / txn no. (optional)" />
                   <p className="mt-1.5 text-[11px] text-emerald-700/80">Sent to the office for approval and added to the project's payments.</p>
                 </div>

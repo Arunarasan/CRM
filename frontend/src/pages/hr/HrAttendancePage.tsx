@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 /**
  * Attendance verification admin.
  *  - Office locations: the geofences a GEO clock-in is measured against (name, lat/lng, radius).
@@ -88,15 +89,15 @@ function DirectCorrection() {
             </div>
             <label className="block">
               <span className="mb-1 block text-xs font-medium text-muted-foreground">Date</span>
-              <input type="date" className={INPUT} value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} />
+              <BaseInput type="date" className={INPUT} value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} />
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-medium text-muted-foreground">Clock-in</span>
-              <input type="time" className={INPUT} value={form.checkIn} onChange={(e) => setForm((f) => ({ ...f, checkIn: e.target.value }))} />
+              <BaseInput type="time" className={INPUT} value={form.checkIn} onChange={(e) => setForm((f) => ({ ...f, checkIn: e.target.value }))} />
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-medium text-muted-foreground">Clock-out</span>
-              <input type="time" className={INPUT} value={form.checkOut} onChange={(e) => setForm((f) => ({ ...f, checkOut: e.target.value }))} />
+              <BaseInput type="time" className={INPUT} value={form.checkOut} onChange={(e) => setForm((f) => ({ ...f, checkOut: e.target.value }))} />
             </label>
           </div>
           <div className="mt-4 flex justify-end gap-2">
@@ -428,23 +429,23 @@ function OfficeLocations() {
         <div className="mx-5 mt-3 rounded-xl border bg-muted/30 p-4">
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Name">
-              <input className={INPUT} value={draft.name} onChange={(e) => set('name', e.target.value)} placeholder="Head Office" />
+              <BaseInput className={INPUT} value={draft.name} onChange={(e) => set('name', e.target.value)} placeholder="Head Office" />
             </Field>
             <Field label="Radius (metres)">
-              <input className={INPUT} type="number" min={20} max={2000} value={draft.radiusMeters}
+              <BaseInput className={INPUT} type="number" min={20} max={2000} value={draft.radiusMeters}
                      onChange={(e) => set('radiusMeters', Math.max(20, Math.min(2000, Number(e.target.value) || 0)))} />
               <span className="mt-1 block text-[11px] text-muted-foreground">20–2000 m. Typical office: 100–200 m.</span>
             </Field>
             <Field label="Latitude">
-              <input className={INPUT} type="number" step="0.000001" value={draft.latitude || ''}
+              <BaseInput className={INPUT} type="number" step="0.000001" value={draft.latitude || ''}
                      onChange={(e) => set('latitude', Number(e.target.value))} placeholder="12.971600" />
             </Field>
             <Field label="Longitude">
-              <input className={INPUT} type="number" step="0.000001" value={draft.longitude || ''}
+              <BaseInput className={INPUT} type="number" step="0.000001" value={draft.longitude || ''}
                      onChange={(e) => set('longitude', Number(e.target.value))} placeholder="77.594600" />
             </Field>
             <Field label="Address (optional)" full>
-              <input className={INPUT} value={draft.address ?? ''} onChange={(e) => set('address', e.target.value)} />
+              <BaseInput className={INPUT} value={draft.address ?? ''} onChange={(e) => set('address', e.target.value)} />
             </Field>
           </div>
 
@@ -465,7 +466,7 @@ function OfficeLocations() {
           </div>
 
           <label className="mt-3 flex items-center gap-2 text-sm">
-            <input type="checkbox" className="h-4 w-4" checked={draft.active} onChange={(e) => set('active', e.target.checked)} />
+            <BaseInput type="checkbox" className="h-4 w-4" checked={draft.active} onChange={(e) => set('active', e.target.checked)} />
             Active
           </label>
           <div className="mt-4 flex flex-wrap gap-2">

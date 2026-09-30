@@ -8,7 +8,7 @@ import { projectApi, HandoverBoard, HandoverTask } from "@/api/projectApi";
 import { smartAssignmentApi } from "@/api/smartAssignmentApi";
 import ResourceSelect, { ResourceSelection } from "@/components/workforce/ResourceSelect";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Input, BaseInput } from "@/components/ui/input";
 import { toast } from "@/components/ui/toast";
 
 const STATUS_TONE: Record<string, string> = {
@@ -181,7 +181,7 @@ export default function HandoverTab({ project, onChanged }: { project: any; onCh
 
                     {/* Completion level */}
                     <div className="mt-3 flex items-center gap-3">
-                      <input type="range" min={0} max={100} step={5} value={draft} disabled={handedOver}
+                      <BaseInput type="range" min={0} max={100} step={5} value={draft} disabled={handedOver}
                         onChange={(e) => setDrafts((d) => ({ ...d, [t.id]: Number(e.target.value) }))}
                         onPointerUp={(e) => commitProgress(t.id, Number((e.target as HTMLInputElement).value))}
                         onKeyUp={(e) => commitProgress(t.id, Number((e.target as HTMLInputElement).value))}

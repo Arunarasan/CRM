@@ -5,7 +5,7 @@ import { ArrowLeft, Calendar, Clock, CheckCircle2, User, FileText, Image as Imag
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Input } from "@/components/ui/input";
+import { Input, BaseInput } from "@/components/ui/input";
 import SignatureCanvas from "react-signature-canvas";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { siteVisitApi, type SiteRoomMeasurement } from "@/lib/siteVisitApi";
@@ -441,7 +441,7 @@ export default function SiteVisitProfile() {
               <CardContent className="space-y-2">
                 {checklist.map(item => (
                   <label key={item.id} className="flex items-center gap-3 p-2 border rounded-lg cursor-pointer hover:bg-muted/40">
-                    <input type="checkbox" className="h-4 w-4 rounded border-input accent-primary" checked={!!item.isCompleted} onChange={() => toggleChecklistItem(item)} />
+                    <BaseInput type="checkbox" className="h-4 w-4 rounded border-input accent-primary" checked={!!item.isCompleted} onChange={() => toggleChecklistItem(item)} />
                     <span className={item.isCompleted ? "line-through text-muted-foreground" : ""}>{item.item}</span>
                   </label>
                 ))}
@@ -600,7 +600,7 @@ export default function SiteVisitProfile() {
                         <div className="flex items-center gap-3">
                           <label className="text-xs text-primary cursor-pointer hover:underline">
                             + Upload
-                            <input type="file" className="hidden" onChange={(e) => handleFileUpload(e, category)} />
+                            <BaseInput type="file" className="hidden" onChange={(e) => handleFileUpload(e, category)} />
                           </label>
                           <CameraCaptureButton onCapture={(f) => uploadMediaFile(f, category)} label="Camera"
                             className="inline-flex items-center gap-1 text-xs text-primary hover:underline" />
@@ -650,7 +650,7 @@ export default function SiteVisitProfile() {
                 <CardHeader><CardTitle className="text-lg flex items-center"><CalendarClock className="mr-2 h-4 w-4" /> Follow-up Visit</CardTitle></CardHeader>
                 <CardContent className="space-y-4">
                   <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
-                    <input type="checkbox" className="h-4 w-4 rounded border-input accent-primary"
+                    <BaseInput type="checkbox" className="h-4 w-4 rounded border-input accent-primary"
                       checked={!!visit.nextVisitRequired}
                       onChange={(e) => setVisit({ ...visit, nextVisitRequired: e.target.checked })} />
                     Next visit required

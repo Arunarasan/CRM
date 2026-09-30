@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useEffect, useState } from 'react';
 import { employeePortalApi } from '@/api/employeePortalApi';
 import { uploadFile } from '@/lib/uploadFile';
@@ -222,7 +223,7 @@ function ReceiveSheet({
                 <div className="grid grid-cols-2 gap-2">
                   <label className="text-xs">
                     <span className="text-muted-foreground">Received</span>
-                    <input
+                    <BaseInput
                       type="number" min={0} max={l.outstanding}
                       value={drafts[l.productId]?.received ?? 0}
                       onChange={(e) => setLine(l.productId, { received: Number(e.target.value) })}
@@ -231,7 +232,7 @@ function ReceiveSheet({
                   </label>
                   <label className="text-xs">
                     <span className="text-muted-foreground">Damaged</span>
-                    <input
+                    <BaseInput
                       type="number" min={0}
                       value={drafts[l.productId]?.damaged ?? 0}
                       onChange={(e) => setLine(l.productId, { damaged: Number(e.target.value) })}
@@ -277,19 +278,19 @@ function ReceiveSheet({
           <div className="grid grid-cols-2 gap-2">
             <label className="text-sm">
               <span className="font-medium">Invoice #</span>
-              <input value={supplierInvoice} onChange={(e) => setSupplierInvoice(e.target.value)}
+              <BaseInput value={supplierInvoice} onChange={(e) => setSupplierInvoice(e.target.value)}
                      className="mt-1 h-10 w-full rounded-md border px-3 text-sm" />
             </label>
             <label className="text-sm">
               <span className="font-medium">Vehicle #</span>
-              <input value={vehicle} onChange={(e) => setVehicle(e.target.value)}
+              <BaseInput value={vehicle} onChange={(e) => setVehicle(e.target.value)}
                      className="mt-1 h-10 w-full rounded-md border px-3 text-sm" />
             </label>
           </div>
 
           <label className="text-sm">
             <span className="font-medium">Notes</span>
-            <input value={notes} onChange={(e) => setNotes(e.target.value)}
+            <BaseInput value={notes} onChange={(e) => setNotes(e.target.value)}
                    className="mt-1 h-10 w-full rounded-md border px-3 text-sm" />
           </label>
 
@@ -302,7 +303,7 @@ function ReceiveSheet({
               ))}
               <label className="flex h-16 w-16 cursor-pointer items-center justify-center rounded-lg border border-dashed text-muted-foreground active:bg-accent">
                 {uploading ? <Loader2 className="h-5 w-5 animate-spin" /> : <ImagePlus className="h-5 w-5" />}
-                <input type="file" accept="image/*" capture="environment" multiple hidden
+                <BaseInput type="file" accept="image/*" capture="environment" multiple hidden
                        onChange={(e) => onPickPhotos(e.target.files)} />
               </label>
             </div>

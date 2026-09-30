@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -50,7 +51,7 @@ export default function ConvertProjectSheet({ leadId, open, onOpenChange, onDone
           </p>
           <div>
             <Label>Advance received (optional)</Label>
-            <input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)}
+            <BaseInput inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)}
               placeholder="₹ amount" className="mt-1 w-full rounded-md border px-3 py-2 text-sm" />
           </div>
           {amount.trim() && (

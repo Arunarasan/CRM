@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useRef, useState } from 'react';
 import { Camera, Video, Mic, Square, X } from 'lucide-react';
 import { employeeTaskApi } from '@/api/employeeTaskApi';
@@ -84,8 +85,8 @@ export default function MediaCapture({ media, onChange }: { media: ProgressMedia
           {recording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4 text-[#9B6B32]" />} {recording ? 'Stop' : 'Voice'}
         </button>
       </div>
-      <input ref={photoInput} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => onFileSelected(e, 'PHOTO')} />
-      <input ref={videoInput} type="file" accept="video/*" capture className="hidden" onChange={(e) => onFileSelected(e, 'VIDEO')} />
+      <BaseInput ref={photoInput} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => onFileSelected(e, 'PHOTO')} />
+      <BaseInput ref={videoInput} type="file" accept="video/*" capture className="hidden" onChange={(e) => onFileSelected(e, 'VIDEO')} />
       {pendingPhoto && (
         <ImageEditor
           file={pendingPhoto}

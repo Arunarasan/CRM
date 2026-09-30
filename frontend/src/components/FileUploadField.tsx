@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useRef, useState } from "react";
 import { Upload, Link2, X, Loader2, CheckCircle2, Camera, Pencil } from "lucide-react";
 import { uploadFile, resolveFileUrl, type UploadedFile } from "@/lib/uploadFile";
@@ -160,7 +161,7 @@ export default function FileUploadField({
 
           {allowUrl && (
             showUrl ? (
-              <input
+              <BaseInput
                 type="url"
                 autoFocus
                 placeholder="https://... (external link)"
@@ -182,9 +183,9 @@ export default function FileUploadField({
       )}
 
       {error && <p className="text-xs text-destructive">{error}</p>}
-      <input ref={inputRef} type="file" accept={accept} className="hidden" onChange={pick} />
+      <BaseInput ref={inputRef} type="file" accept={accept} className="hidden" onChange={pick} />
       {imagesAllowed && (
-        <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={pick} />
+        <BaseInput ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={pick} />
       )}
 
       {pending && canEdit && (

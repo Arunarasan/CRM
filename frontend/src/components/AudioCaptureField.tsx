@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useEffect, useRef, useState } from "react";
 import { Mic, Square, Upload, X, Loader2, Play } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
@@ -150,7 +151,7 @@ export default function AudioCaptureField({
 
       {error && <p className="text-xs text-destructive">{error}</p>}
 
-      <input ref={fileRef} type="file" accept="audio/*" className="hidden" onChange={pick} />
+      <BaseInput ref={fileRef} type="file" accept="audio/*" className="hidden" onChange={pick} />
     </div>
   );
 }

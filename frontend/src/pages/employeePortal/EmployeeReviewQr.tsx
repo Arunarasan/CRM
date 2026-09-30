@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useEffect, useRef, useState } from 'react';
 import { QRCodeCanvas } from 'qrcode.react';
 import { QrCode, Copy, Download, Share2, Star, ExternalLink } from 'lucide-react';
@@ -70,7 +71,7 @@ export default function EmployeeReviewQr() {
         </div>
 
         <div className="mt-5 flex items-center gap-2">
-          <input
+          <BaseInput
             readOnly
             value={link}
             onFocus={(e) => e.currentTarget.select()}

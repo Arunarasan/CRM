@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useEffect, useState } from 'react';
 import { Loader2, Save, KeyRound, Moon, Sun, Globe, BellRing, Clock, CheckCircle2, XCircle, Check, Fingerprint, Trash2, Plus } from 'lucide-react';
 import { employeePortalApi } from '@/api/employeePortalApi';
@@ -22,7 +23,7 @@ function Field({ label, value, onChange, placeholder }: { label: string; value: 
   return (
     <label className="block">
       <span className="text-xs font-medium text-muted-foreground">{label}</span>
-      <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
+      <BaseInput value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
         className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" />
     </label>
   );
@@ -317,15 +318,15 @@ export default function Settings() {
       <div className="mx-3 flex flex-col gap-3 rounded-xl border bg-card p-4 shadow-sm">
         <label className="block">
           <span className="text-xs font-medium text-muted-foreground">{t('portal.currentPassword')}</span>
-          <input type="password" value={pw.currentPassword} onChange={(e) => setPw((s) => ({ ...s, currentPassword: e.target.value }))} className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" />
+          <BaseInput type="password" value={pw.currentPassword} onChange={(e) => setPw((s) => ({ ...s, currentPassword: e.target.value }))} className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" />
         </label>
         <label className="block">
           <span className="text-xs font-medium text-muted-foreground">{t('portal.newPassword')}</span>
-          <input type="password" value={pw.newPassword} onChange={(e) => setPw((s) => ({ ...s, newPassword: e.target.value }))} className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" />
+          <BaseInput type="password" value={pw.newPassword} onChange={(e) => setPw((s) => ({ ...s, newPassword: e.target.value }))} className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" />
         </label>
         <label className="block">
           <span className="text-xs font-medium text-muted-foreground">{t('portal.confirmPassword')}</span>
-          <input type="password" value={pw.confirm} onChange={(e) => setPw((s) => ({ ...s, confirm: e.target.value }))} className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" />
+          <BaseInput type="password" value={pw.confirm} onChange={(e) => setPw((s) => ({ ...s, confirm: e.target.value }))} className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" />
         </label>
         {pwErr && <p className="text-xs text-destructive">{pwErr}</p>}
         {pwMsg && <p className="text-xs text-emerald-600">{pwMsg}</p>}

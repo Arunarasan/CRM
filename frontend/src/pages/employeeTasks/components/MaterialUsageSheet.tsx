@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useEffect, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -66,7 +67,7 @@ export default function MaterialUsageSheet({ taskId, open, onOpenChange, onSaved
           </div>
           <div>
             <Label>Quantity used</Label>
-            <input type="number" min={0} step="0.01" value={quantity}
+            <BaseInput type="number" min={0} step="0.01" value={quantity}
               onChange={(e) => setQuantity(e.target.value === '' ? '' : Number(e.target.value))}
               className="mt-1.5 w-full rounded-xl border border-[#DDE2DE] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#0A573B]" />
           </div>

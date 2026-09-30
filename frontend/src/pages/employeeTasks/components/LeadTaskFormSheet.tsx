@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -137,7 +138,7 @@ export default function LeadTaskFormSheet({ taskId, formType, open, onOpenChange
       return <textarea value={values[f.key] ?? ''} onChange={(e) => set(f.key, e.target.value)} rows={3}
         className={common} placeholder={f.placeholder} />;
     }
-    return <input type={f.type} value={values[f.key] ?? ''} onChange={(e) => set(f.key, e.target.value)}
+    return <BaseInput type={f.type} value={values[f.key] ?? ''} onChange={(e) => set(f.key, e.target.value)}
       className={common} placeholder={f.placeholder} />;
   };
 
@@ -156,7 +157,7 @@ export default function LeadTaskFormSheet({ taskId, formType, open, onOpenChange
           {schema.photos && (
             <div>
               <Label>Photos</Label>
-              <input type="file" accept="image/*" multiple capture="environment"
+              <BaseInput type="file" accept="image/*" multiple capture="environment"
                 onChange={(e) => onFiles(e.target.files)} className="w-full text-xs" />
               {uploading && <p className="mt-1 text-xs text-muted-foreground">Uploading…</p>}
               {media.length > 0 && (

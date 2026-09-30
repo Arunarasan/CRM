@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useRef, useState } from "react";
 import { Camera, ImagePlus, X, Loader2 } from "lucide-react";
 import ImageEditor from "@/components/ImageEditor";
@@ -100,8 +101,8 @@ export default function MultiImageCaptureField({
 
       {error && <p className="text-xs text-destructive">{error}</p>}
 
-      <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={pick} />
-      <input ref={galleryRef} type="file" accept="image/*" className="hidden" onChange={pick} />
+      <BaseInput ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={pick} />
+      <BaseInput ref={galleryRef} type="file" accept="image/*" className="hidden" onChange={pick} />
 
       {pending && isAdmin && (
         <ImageEditor

@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useEffect, useMemo, useState } from 'react';
 import { Loader2, Save, Building2, Phone, Share2, MapPin, ShieldCheck, Star, Globe, Settings as SettingsIcon } from 'lucide-react';
 import { settingsApi, SiteSetting } from '@/api/websiteAdminApi';
@@ -118,7 +119,7 @@ export default function SettingsAdmin() {
                       className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                     />
                   ) : (
-                    <input
+                    <BaseInput
                       type={['tel', 'email', 'url', 'number'].includes(s.inputType ?? '') ? s.inputType : 'text'}
                       value={values[s.key] ?? ''}
                       onChange={(e) => setValues((v) => ({ ...v, [s.key]: e.target.value }))}

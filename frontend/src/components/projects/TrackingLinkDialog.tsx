@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useEffect, useState } from "react";
 import { Link2, Copy, RefreshCw, Star, Eye, EyeOff, ExternalLink, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -114,7 +115,7 @@ export default function TrackingLinkDialog({ projectId }: { projectId: number })
             {/* Link + copy */}
             <div>
               <div className="flex items-center gap-2">
-                <input
+                <BaseInput
                   readOnly
                   value={link}
                   onFocus={(e) => e.currentTarget.select()}

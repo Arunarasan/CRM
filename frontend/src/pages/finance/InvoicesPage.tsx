@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { financeApi } from "@/api/financeApi";
@@ -32,7 +33,7 @@ export default function InvoicesPage() {
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex items-center bg-white border rounded-lg px-3 py-2 flex-1 min-w-[200px]">
           <Search className="w-4 h-4 text-slate-400 mr-2" />
-          <input
+          <BaseInput
             className="outline-none text-sm w-full"
             placeholder="Search invoice # or customer…"
             value={search}
@@ -47,9 +48,9 @@ export default function InvoicesPage() {
                 onChange={(e) => { setInvoiceType(e.target.value); setPage(0); }}>
           {TYPES.map((t) => <option key={t} value={t}>{t || "All Types"}</option>)}
         </select>
-        <input type="date" className="border rounded-lg px-3 py-2 text-sm bg-white" value={from}
+        <BaseInput type="date" className="border rounded-lg px-3 py-2 text-sm bg-white" value={from}
                onChange={(e) => { setFrom(e.target.value); setPage(0); }} />
-        <input type="date" className="border rounded-lg px-3 py-2 text-sm bg-white" value={to}
+        <BaseInput type="date" className="border rounded-lg px-3 py-2 text-sm bg-white" value={to}
                onChange={(e) => { setTo(e.target.value); setPage(0); }} />
         <Button onClick={() => navigate("/billing/invoices/new")}>
           <Plus className="w-4 h-4 mr-1" /> New Invoice

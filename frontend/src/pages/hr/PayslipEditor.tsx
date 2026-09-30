@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useEffect, useMemo, useState } from 'react';
 import { Loader2, Plus, Trash2, X } from 'lucide-react';
 import { payrollApi, PayslipEditView, PayslipLineItem } from '@/api/payrollApi';
@@ -109,10 +110,10 @@ export default function PayslipEditor({
                   ))}
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <input list="payslip-presets" value={draft.label} onChange={(e) => setDraft((d) => ({ ...d, label: e.target.value }))}
+                  <BaseInput list="payslip-presets" value={draft.label} onChange={(e) => setDraft((d) => ({ ...d, label: e.target.value }))}
                     placeholder="Label (e.g. Customer feedback incentive)" className="h-9 min-w-[200px] flex-1 rounded-md border px-3 text-sm" />
                   <datalist id="payslip-presets">{presets.map((p) => <option key={p} value={p} />)}</datalist>
-                  <input type="number" min={0} value={draft.amount} onChange={(e) => setDraft((d) => ({ ...d, amount: e.target.value }))}
+                  <BaseInput type="number" min={0} value={draft.amount} onChange={(e) => setDraft((d) => ({ ...d, amount: e.target.value }))}
                     placeholder="Amount" className="h-9 w-28 rounded-md border px-3 text-sm" />
                   <Button size="sm" onClick={addItem} disabled={busy}><Plus className="h-4 w-4" /> Add</Button>
                 </div>
@@ -160,7 +161,7 @@ function ItemGroup({ title, items, negative, onEdit, onDelete, disabled }: {
           <div key={it.id} className="flex items-center gap-2 rounded-md border px-2 py-1.5 text-sm">
             <span className="min-w-0 flex-1 truncate">{it.label}</span>
             <span className={negative ? 'text-red-600' : ''}>{negative ? '−' : ''}₹</span>
-            <input type="number" min={0} defaultValue={it.amount} disabled={disabled}
+            <BaseInput type="number" min={0} defaultValue={it.amount} disabled={disabled}
               onBlur={(e) => { if (Number(e.target.value) !== it.amount) onEdit(it, e.target.value); }}
               className="h-8 w-24 rounded border px-2 text-right text-sm tabular-nums disabled:opacity-60" />
             <button onClick={() => onDelete(it)} disabled={disabled} className="rounded p-1 text-muted-foreground hover:text-destructive disabled:opacity-40" title="Remove">

@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useEffect, useMemo, useState } from 'react';
 import { Loader2, Save, RotateCcw, Eye, EyeOff, FileText } from 'lucide-react';
 import { websiteAdminApi, ContentBlock } from '@/api/websiteAdminApi';
@@ -79,7 +80,7 @@ function SectionCard({ block, onSaved }: { block: ContentBlock; onSaved: (b: Con
       <div className="space-y-4 p-5">
         <label className="block">
           <span className="mb-1 block text-xs font-medium text-slate-600">Heading</span>
-          <input
+          <BaseInput
             value={draft.title ?? ''}
             onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))}
             placeholder="Main heading for this section"
@@ -88,7 +89,7 @@ function SectionCard({ block, onSaved }: { block: ContentBlock; onSaved: (b: Con
         </label>
         <label className="block">
           <span className="mb-1 block text-xs font-medium text-slate-600">Subheading</span>
-          <input
+          <BaseInput
             value={draft.subtitle ?? ''}
             onChange={(e) => setDraft((d) => ({ ...d, subtitle: e.target.value }))}
             placeholder="Short line shown near the heading"

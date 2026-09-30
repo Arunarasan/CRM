@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useEffect, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -254,7 +255,7 @@ export default function RequirementFormSheet({ taskId, leadId, open, onOpenChang
           </Section>
 
           <Section id="media" icon={<Camera className="h-4 w-4" />} title="Photos & Notes" count={media.length + (v.notes?.trim() ? 1 : 0)} openSecs={openSecs} toggle={toggleSec}>
-            <input type="file" accept="image/*" multiple capture="environment" onChange={(e) => onFiles(e.target.files)} className="w-full text-xs" />
+            <BaseInput type="file" accept="image/*" multiple capture="environment" onChange={(e) => onFiles(e.target.files)} className="w-full text-xs" />
             {uploading && <p className="mt-1 text-xs text-muted-foreground">Uploading…</p>}
             {media.length > 0 && (
               <div className="mt-2 flex gap-2 overflow-x-auto">
@@ -309,7 +310,7 @@ function Text({ label, value, onChange, type = 'text', placeholder }: { label: s
   return (
     <div>
       <label className="text-xs font-medium text-muted-foreground">{label}</label>
-      <input type={type} value={value ?? ''} onChange={(e) => onChange(e.target.value)} className={inputCls} placeholder={placeholder}
+      <BaseInput type={type} value={value ?? ''} onChange={(e) => onChange(e.target.value)} className={inputCls} placeholder={placeholder}
         inputMode={type === 'number' ? 'numeric' : type === 'tel' ? 'tel' : undefined} />
     </div>
   );

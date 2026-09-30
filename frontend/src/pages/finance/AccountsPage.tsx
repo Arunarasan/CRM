@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useSearchParams } from "react-router-dom";
 import api from "@/lib/api";
@@ -114,7 +115,7 @@ function CustomersView({ params, setParams }: {
         <div className={`space-y-3 ${customerId ? "hidden lg:block" : ""}`}>
           <div className="flex items-center bg-white border rounded-lg px-3 py-2">
             <Search className="w-4 h-4 text-slate-400 mr-2" />
-            <input className="outline-none text-sm w-full" placeholder="Search customers with dues…"
+            <BaseInput className="outline-none text-sm w-full" placeholder="Search customers with dues…"
               value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
           <div className="bg-white border rounded-xl p-2">
@@ -177,9 +178,9 @@ function CustomersView({ params, setParams }: {
                 <div className="p-4 border-b bg-slate-50 flex flex-wrap items-center gap-3 justify-between">
                   <h3 className="font-bold text-slate-800 text-sm">Ledger — {ledger.customerName}</h3>
                   <div className="flex items-center gap-2">
-                    <input type="date" className="border rounded-lg px-2 py-1.5 text-sm bg-white" value={from} onChange={(e) => setFrom(e.target.value)} />
+                    <BaseInput type="date" className="border rounded-lg px-2 py-1.5 text-sm bg-white" value={from} onChange={(e) => setFrom(e.target.value)} />
                     <span className="text-xs text-muted-foreground">to</span>
-                    <input type="date" className="border rounded-lg px-2 py-1.5 text-sm bg-white" value={to} onChange={(e) => setTo(e.target.value)} />
+                    <BaseInput type="date" className="border rounded-lg px-2 py-1.5 text-sm bg-white" value={to} onChange={(e) => setTo(e.target.value)} />
                     <Button variant="outline" size="sm" onClick={() => window.print()}>
                       <Printer className="w-4 h-4 mr-1" /> Print
                     </Button>
@@ -295,7 +296,7 @@ function ProjectsView() {
         <div className={`space-y-3 ${selected ? "hidden lg:block" : ""}`}>
           <div className="flex items-center bg-white border rounded-lg px-3 py-2">
             <Search className="w-4 h-4 text-slate-400 mr-2" />
-            <input className="outline-none text-sm w-full" placeholder="Search projects…"
+            <BaseInput className="outline-none text-sm w-full" placeholder="Search projects…"
               value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
           <div className="space-y-3 max-h-[62vh] overflow-y-auto pr-1">

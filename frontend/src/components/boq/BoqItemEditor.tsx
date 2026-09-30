@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useState } from 'react';
 import { ChevronDown, Trash2, Plus, Package, HardHat } from 'lucide-react';
 import { boqApi } from '@/api/boqApi';
@@ -61,7 +62,7 @@ export default function BoqItemEditor({ boqId, item, editable, onChanged }: {
           {editable && (
             <div className="flex items-center gap-2 text-xs">
               <span className="text-muted-foreground">Quantity</span>
-              <input inputMode="decimal" defaultValue={item.quantity ?? ''} onBlur={(e) => editQty(e.target.value)}
+              <BaseInput inputMode="decimal" defaultValue={item.quantity ?? ''} onBlur={(e) => editQty(e.target.value)}
                 className="w-16 rounded-md border bg-background px-2 py-1 text-center" />
               <span className="text-muted-foreground">{item.unit}</span>
               <button type="button" onClick={() => run(() => boqApi.deleteItem(boqId, item.id!))} className="ml-auto flex items-center gap-1 text-destructive"><Trash2 className="h-3.5 w-3.5" /> Remove item</button>
@@ -81,7 +82,7 @@ export default function BoqItemEditor({ boqId, item, editable, onChanged }: {
             ))}
             {editable && (
               <div className="mt-1 space-y-1.5 rounded-md border border-dashed p-2">
-                <input value={mat.materialName} onChange={(e) => setMat({ ...mat, materialName: e.target.value })} placeholder="Material name (e.g. BWP Ply 18mm)" className="w-full rounded-md border bg-background px-2 py-1.5 text-xs" />
+                <BaseInput value={mat.materialName} onChange={(e) => setMat({ ...mat, materialName: e.target.value })} placeholder="Material name (e.g. BWP Ply 18mm)" className="w-full rounded-md border bg-background px-2 py-1.5 text-xs" />
                 <div className="grid grid-cols-4 gap-1.5">
                   <Num label="Qty" v={mat.quantity} on={(x) => setMat({ ...mat, quantity: x })} />
                   <div>
@@ -110,8 +111,8 @@ export default function BoqItemEditor({ boqId, item, editable, onChanged }: {
             {editable && (
               <div className="mt-1 space-y-1.5 rounded-md border border-dashed p-2">
                 <div className="grid grid-cols-2 gap-1.5">
-                  <input value={lab.workType} onChange={(e) => setLab({ ...lab, workType: e.target.value })} placeholder="Work (Carpentry…)" className="rounded-md border bg-background px-2 py-1.5 text-xs" />
-                  <input value={lab.contractorName} onChange={(e) => setLab({ ...lab, contractorName: e.target.value })} placeholder="Contractor (optional)" className="rounded-md border bg-background px-2 py-1.5 text-xs" />
+                  <BaseInput value={lab.workType} onChange={(e) => setLab({ ...lab, workType: e.target.value })} placeholder="Work (Carpentry…)" className="rounded-md border bg-background px-2 py-1.5 text-xs" />
+                  <BaseInput value={lab.contractorName} onChange={(e) => setLab({ ...lab, contractorName: e.target.value })} placeholder="Contractor (optional)" className="rounded-md border bg-background px-2 py-1.5 text-xs" />
                 </div>
                 <div className="grid grid-cols-3 gap-1.5">
                   <Num label="Qty" v={lab.quantity} on={(x) => setLab({ ...lab, quantity: x })} />
@@ -131,7 +132,7 @@ function Num({ label, v, on }: { label: string; v: string; on: (v: string) => vo
   return (
     <div>
       <span className="block text-center text-[9px] text-muted-foreground">{label}</span>
-      <input inputMode="decimal" value={v} onChange={(e) => on(e.target.value)} className="w-full rounded-md border bg-background px-1 py-1 text-center text-xs" />
+      <BaseInput inputMode="decimal" value={v} onChange={(e) => on(e.target.value)} className="w-full rounded-md border bg-background px-1 py-1 text-center text-xs" />
     </div>
   );
 }

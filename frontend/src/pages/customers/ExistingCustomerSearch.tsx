@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useEffect, useRef, useState } from "react";
 import { Search, Loader2, X } from "lucide-react";
 import api from "@/lib/api";
@@ -53,7 +54,7 @@ export default function ExistingCustomerSearch({
     <div className="relative" ref={boxRef}>
       <div className="flex items-center gap-2 rounded-md border border-input bg-background px-3">
         <Search className="h-4 w-4 text-muted-foreground shrink-0" />
-        <input
+        <BaseInput
           className="flex-1 h-10 bg-transparent text-sm outline-none"
           placeholder={placeholder || "Search existing customers by name, phone or email..."}
           value={q}

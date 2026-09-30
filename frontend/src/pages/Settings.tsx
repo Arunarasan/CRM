@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useEffect, useState, ReactNode } from 'react';
 import {
   Building2, SlidersHorizontal, BellRing, UsersRound, ShieldCheck,
@@ -45,7 +46,7 @@ function TextField({ label, value, onChange, type = 'text', placeholder }: {
   return (
     <label className="block">
       <span className="mb-1 block text-xs font-medium text-muted-foreground">{label}</span>
-      <input
+      <BaseInput
         type={type}
         value={value}
         placeholder={placeholder}
@@ -60,7 +61,7 @@ function NumberField({ label, value, onChange }: { label: string; value: number 
   return (
     <label className="block">
       <span className="mb-1 block text-xs font-medium text-muted-foreground">{label}</span>
-      <input
+      <BaseInput
         type="number"
         value={value ?? ''}
         onChange={(e) => onChange(Number(e.target.value))}

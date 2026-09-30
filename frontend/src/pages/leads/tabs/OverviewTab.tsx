@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useState, useEffect } from "react";
 import {
   Pencil, Check, X, Star, User, Users, MapPin, Home, ListChecks, Share2, XCircle,
@@ -79,7 +80,7 @@ function TextInput({
   inputMode?: "text" | "numeric" | "decimal" | "tel" | "email";
 }) {
   return (
-    <input
+    <BaseInput
       className={cellInput}
       type={type}
       placeholder={placeholder}

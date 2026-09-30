@@ -3,7 +3,7 @@ import { CheckCircle2, Loader2, Search, Filter } from "lucide-react";
 import { projectApi, ProjectItemBrief } from "@/api/projectApi";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Input, BaseInput } from "@/components/ui/input";
 import { toast } from "@/components/ui/toast";
 
 /**
@@ -122,13 +122,13 @@ export default function BulkWorkUpdateDialog({
           ) : (
             <>
               <label className="sticky top-0 z-10 flex items-center gap-2 border-b bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                <input type="checkbox" checked={allShownSelected} onChange={toggleAllShown} className="h-4 w-4 accent-emerald-600" />
+                <BaseInput type="checkbox" checked={allShownSelected} onChange={toggleAllShown} className="h-4 w-4 accent-emerald-600" />
                 Select all shown ({filtered.length})
               </label>
               {filtered.map((i) => (
                 <label key={i.id}
                   className={`flex cursor-pointer items-center gap-3 border-b px-3 py-2.5 text-sm last:border-0 hover:bg-slate-50 ${selected.has(i.id) ? "bg-emerald-50/50" : ""}`}>
-                  <input type="checkbox" checked={selected.has(i.id)} onChange={() => toggle(i.id)} className="h-4 w-4 accent-emerald-600" />
+                  <BaseInput type="checkbox" checked={selected.has(i.id)} onChange={() => toggle(i.id)} className="h-4 w-4 accent-emerald-600" />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <span className="truncate font-medium text-slate-700">{i.itemName}</span>

@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useEffect, useState } from 'react';
 import { ChevronRight, Gift, Plus, X, HandCoins, Landmark, Download } from 'lucide-react';
 import { employeePortalApi } from '@/api/employeePortalApi';
@@ -179,14 +180,14 @@ function RequestSheet({ loans, advances, onClose, onSaved }: { loans: MyLoan[]; 
 
           <div>
             <label className="text-xs font-medium text-muted-foreground">{amountLabel}</label>
-            <input type="number" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value)}
+            <BaseInput type="number" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value)}
               className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" placeholder="e.g. 2000" />
           </div>
 
           {type === 'ADVANCE' && (
             <div>
               <label className="text-xs font-medium text-muted-foreground">Preferred monthly recovery (optional)</label>
-              <input type="number" inputMode="numeric" value={monthlyRecovery} onChange={(e) => setMonthlyRecovery(e.target.value)}
+              <BaseInput type="number" inputMode="numeric" value={monthlyRecovery} onChange={(e) => setMonthlyRecovery(e.target.value)}
                 className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" placeholder="how much to cut per month" />
             </div>
           )}
@@ -234,7 +235,7 @@ function RequestSheet({ loans, advances, onClose, onSaved }: { loans: MyLoan[]; 
               </div>
               <div>
                 <label className="text-xs font-medium text-muted-foreground">Year</label>
-                <input type="number" inputMode="numeric" value={year} onChange={(e) => setYear(Number(e.target.value))}
+                <BaseInput type="number" inputMode="numeric" value={year} onChange={(e) => setYear(Number(e.target.value))}
                   className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" />
               </div>
             </div>

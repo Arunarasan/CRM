@@ -8,7 +8,7 @@ import {
   serviceWarrantyApi, ServiceWarrantyOverview, ServiceWork, WarrantyCover,
 } from "@/api/serviceWarrantyApi";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Input, BaseInput } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -531,7 +531,7 @@ function RaiseInvoiceDialog({ work, suggestedAmount, onClose, onDone }: {
             </div>
           </div>
           <label className="flex items-center gap-2 text-sm text-slate-600">
-            <input type="checkbox" checked={form.collectNow} onChange={(e) => setForm((f) => ({ ...f, collectNow: e.target.checked }))} className="rounded border-slate-300" />
+            <BaseInput type="checkbox" checked={form.collectNow} onChange={(e) => setForm((f) => ({ ...f, collectNow: e.target.checked }))} className="rounded border-slate-300" />
             Collect payment now (mark invoice paid)
           </label>
           <p className="flex items-start gap-1.5 text-[11px] text-slate-400">

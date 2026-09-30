@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Plus, Trash2, ChevronDown, MapPin, Ruler, X, Home } from 'lucide-react';
@@ -167,7 +168,7 @@ export default function EmployeeVisitMeasure() {
           </div>
         ) : (
           <Field label="New visit date">
-            <input type="date" value={visit.visitDate} onChange={(e) => setV('visitDate', e.target.value)} className={inp} autoFocus />
+            <BaseInput type="date" value={visit.visitDate} onChange={(e) => setV('visitDate', e.target.value)} className={inp} autoFocus />
           </Field>
         )}
         <Field label="Site condition">
@@ -177,7 +178,7 @@ export default function EmployeeVisitMeasure() {
         </Field>
         <Field label="Observations"><textarea value={visit.observations} onChange={(e) => setV('observations', e.target.value)} rows={3} className={inp} placeholder="Site condition, what the customer showed, notes for the office…" /></Field>
         <Field label="Photos">
-          <input type="file" accept="image/*" multiple capture="environment" onChange={(e) => onFiles(e.target.files)} className="w-full text-xs" />
+          <BaseInput type="file" accept="image/*" multiple capture="environment" onChange={(e) => onFiles(e.target.files)} className="w-full text-xs" />
           {uploading && <p className="mt-1 text-xs text-muted-foreground">Uploading…</p>}
           {photos.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-2">
@@ -203,8 +204,8 @@ export default function EmployeeVisitMeasure() {
           <div key={ri} className="rounded-xl border bg-card">
             <div className="flex items-center gap-2 px-3 py-2.5">
               <Home className="h-4 w-4 shrink-0 text-primary" />
-              <input value={r.name} onChange={(e) => patchRoom(ri, { name: e.target.value })} placeholder={`Room ${ri + 1} name`} className="min-w-0 flex-1 rounded-md border bg-background px-2 py-1.5 text-sm" />
-              <input value={r.floor} onChange={(e) => patchRoom(ri, { floor: e.target.value })} placeholder="Floor" className="w-16 rounded-md border bg-background px-2 py-1.5 text-sm" />
+              <BaseInput value={r.name} onChange={(e) => patchRoom(ri, { name: e.target.value })} placeholder={`Room ${ri + 1} name`} className="min-w-0 flex-1 rounded-md border bg-background px-2 py-1.5 text-sm" />
+              <BaseInput value={r.floor} onChange={(e) => patchRoom(ri, { floor: e.target.value })} placeholder="Floor" className="w-16 rounded-md border bg-background px-2 py-1.5 text-sm" />
               <button type="button" onClick={() => patchRoom(ri, { open: !r.open })} className="p-1"><ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${r.open ? 'rotate-180' : ''}`} /></button>
               {rooms.length > 1 && <button type="button" onClick={() => removeRoom(ri)} className="p-1 text-destructive"><Trash2 className="h-4 w-4" /></button>}
             </div>
@@ -214,7 +215,7 @@ export default function EmployeeVisitMeasure() {
                   {r.items.map((it, ii) => (
                     <div key={ii} className="rounded-lg border bg-background/60 p-2">
                       <div className="flex items-center gap-2">
-                        <input list="vm-item-types" value={it.itemType} onChange={(e) => patchItem(ri, ii, { itemType: e.target.value })} placeholder="Item (Wall, Wardrobe…)" className="min-w-0 flex-1 rounded-md border bg-background px-2 py-1.5 text-sm" />
+                        <BaseInput list="vm-item-types" value={it.itemType} onChange={(e) => patchItem(ri, ii, { itemType: e.target.value })} placeholder="Item (Wall, Wardrobe…)" className="min-w-0 flex-1 rounded-md border bg-background px-2 py-1.5 text-sm" />
                         <select value={it.unit} onChange={(e) => patchItem(ri, ii, { unit: e.target.value })} className="w-24 rounded-md border bg-background px-1.5 py-1.5 text-sm">
                           {UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
                         </select>
@@ -245,7 +246,7 @@ export default function EmployeeVisitMeasure() {
           <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5">
             <p className="mb-1.5 text-[11px] font-medium text-amber-800">Save what you measured today and come back — the BOQ stays on hold until the final visit.</p>
             <div className="flex items-center gap-2">
-              <input type="date" value={nextVisitDate} onChange={(e) => setNextVisitDate(e.target.value)}
+              <BaseInput type="date" value={nextVisitDate} onChange={(e) => setNextVisitDate(e.target.value)}
                 className="flex-1 rounded-md border bg-background px-2 py-1.5 text-sm" />
               <button onClick={() => submit(false)} disabled={saving || uploading || !nextVisitDate}
                 className="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">
@@ -282,7 +283,7 @@ function NumIn({ label, value, onChange }: { label: string; value: string; onCha
   return (
     <div>
       <span className="block text-center text-[10px] text-muted-foreground">{label}</span>
-      <input inputMode="decimal" value={value} onChange={(e) => onChange(e.target.value)} className="w-full rounded-md border bg-background px-1.5 py-1.5 text-center text-sm" />
+      <BaseInput inputMode="decimal" value={value} onChange={(e) => onChange(e.target.value)} className="w-full rounded-md border bg-background px-1.5 py-1.5 text-center text-sm" />
     </div>
   );
 }

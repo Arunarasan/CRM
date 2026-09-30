@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -41,12 +42,12 @@ export default function ProgressSheet({ taskId, open, onOpenChange, onSaved }: {
               <Label>Progress</Label>
               <span className="text-[15px] font-bold text-[#0A573B]">{progressPercent}%</span>
             </div>
-            <input type="range" min={0} max={100} step={5} value={progressPercent}
+            <BaseInput type="range" min={0} max={100} step={5} value={progressPercent}
               onChange={(e) => setProgressPercent(Number(e.target.value))} className="w-full accent-[#0A573B]" />
           </div>
           <div>
             <Label>Time spent (minutes)</Label>
-            <input type="number" min={0} value={timeSpentMinutes}
+            <BaseInput type="number" min={0} value={timeSpentMinutes}
               onChange={(e) => setTimeSpentMinutes(e.target.value === '' ? '' : Number(e.target.value))}
               className="mt-1.5 w-full rounded-xl border border-[#DDE2DE] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#0A573B]" />
           </div>

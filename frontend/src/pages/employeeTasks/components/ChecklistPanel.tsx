@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useState } from 'react';
 import { Check, Plus } from 'lucide-react';
 import { employeeTaskApi } from '@/api/employeeTaskApi';
@@ -50,7 +51,7 @@ export default function ChecklistPanel({ taskId, checklist, onChanged, locked, t
       </ul>
       {!locked && (
         <div className="mt-3 flex gap-2">
-          <input
+          <BaseInput
             value={newItem}
             onChange={(e) => setNewItem(e.target.value)}
             placeholder="Add a step…"

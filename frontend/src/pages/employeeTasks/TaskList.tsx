@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Search, X, Flame, CalendarDays, Clock, AlertTriangle, CheckCircle2, Hand, PartyPopper, FolderKanban } from 'lucide-react';
@@ -139,7 +140,7 @@ export default function TaskList() {
       {showSearch && (
         <div className="flex items-center gap-2 rounded-xl border border-[#DDE2DE] bg-white px-3 py-2.5 shadow-sm">
           <Search className="h-4 w-4 text-[#7A817C]" />
-          <input
+          <BaseInput
             autoFocus
             defaultValue={search}
             onChange={(e) => setSearch(e.target.value)}

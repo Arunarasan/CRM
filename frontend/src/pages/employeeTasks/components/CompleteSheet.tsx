@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -79,7 +80,7 @@ export default function CompleteSheet({ taskId, open, onOpenChange, onDone, exec
               <div className="mt-1.5 flex gap-2">
                 <div className="relative flex-1">
                   <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[#8A8F86]">₹</span>
-                  <input type="number" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value)}
+                  <BaseInput type="number" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value)}
                     className="w-full rounded-xl border border-[#DDE2DE] bg-white py-2.5 pl-7 pr-3 text-sm outline-none focus:border-[#0A573B]" placeholder="0" />
                 </div>
                 <select value={method} onChange={(e) => setMethod(e.target.value)}

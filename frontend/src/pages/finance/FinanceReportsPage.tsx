@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useCallback, useEffect, useState } from "react";
 import { financeApi } from "@/api/financeApi";
 import type { MonthBucket } from "@/types/finance";
@@ -83,9 +84,9 @@ export default function FinanceReportsPage() {
             </button>
           ))}
         </div>
-        <input type="date" className="border rounded-lg px-3 py-2 text-sm bg-white" value={from} onChange={(e) => setFrom(e.target.value)} />
+        <BaseInput type="date" className="border rounded-lg px-3 py-2 text-sm bg-white" value={from} onChange={(e) => setFrom(e.target.value)} />
         <span className="text-sm text-muted-foreground">to</span>
-        <input type="date" className="border rounded-lg px-3 py-2 text-sm bg-white" value={to} onChange={(e) => setTo(e.target.value)} />
+        <BaseInput type="date" className="border rounded-lg px-3 py-2 text-sm bg-white" value={to} onChange={(e) => setTo(e.target.value)} />
         <Button variant="outline" size="sm" onClick={() => window.print()}>Print</Button>
       </div>
 

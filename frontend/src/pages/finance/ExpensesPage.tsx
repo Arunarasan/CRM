@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useCallback, useEffect, useState } from "react";
 import api from "@/lib/api";
 import { financeApi } from "@/api/financeApi";
@@ -180,15 +181,15 @@ function ProjectExpenses() {
               </label>
               <label className="text-sm block">
                 <span className="font-semibold text-slate-700">Amount</span>
-                <input type="number" min={1} className="mt-1 w-full border rounded-lg px-3 py-2" value={eAmount} onChange={(e) => setEAmount(e.target.value)} />
+                <BaseInput type="number" min={1} className="mt-1 w-full border rounded-lg px-3 py-2" value={eAmount} onChange={(e) => setEAmount(e.target.value)} />
               </label>
               <label className="text-sm block">
                 <span className="font-semibold text-slate-700">Date</span>
-                <input type="date" className="mt-1 w-full border rounded-lg px-3 py-2" value={eDate} onChange={(e) => setEDate(e.target.value)} />
+                <BaseInput type="date" className="mt-1 w-full border rounded-lg px-3 py-2" value={eDate} onChange={(e) => setEDate(e.target.value)} />
               </label>
               <label className="text-sm block">
                 <span className="font-semibold text-slate-700">Vendor</span>
-                <input className="mt-1 w-full border rounded-lg px-3 py-2" value={eVendor} onChange={(e) => setEVendor(e.target.value)} />
+                <BaseInput className="mt-1 w-full border rounded-lg px-3 py-2" value={eVendor} onChange={(e) => setEVendor(e.target.value)} />
               </label>
             </div>
             <label className="text-sm block">
@@ -398,14 +399,14 @@ function CompanyExpenses() {
       {/* Filters + ad-hoc add */}
       <div className="flex flex-wrap items-end gap-2">
         <label className="text-xs font-semibold text-slate-600">
-          From<input type="date" className="mt-1 block border rounded-lg px-2 py-1.5 text-sm" value={from} onChange={(e) => { setFrom(e.target.value); setPage(0); }} />
+          From<BaseInput type="date" className="mt-1 block border rounded-lg px-2 py-1.5 text-sm" value={from} onChange={(e) => { setFrom(e.target.value); setPage(0); }} />
         </label>
         <label className="text-xs font-semibold text-slate-600">
-          To<input type="date" className="mt-1 block border rounded-lg px-2 py-1.5 text-sm" value={to} onChange={(e) => { setTo(e.target.value); setPage(0); }} />
+          To<BaseInput type="date" className="mt-1 block border rounded-lg px-2 py-1.5 text-sm" value={to} onChange={(e) => { setTo(e.target.value); setPage(0); }} />
         </label>
         <div className="flex items-center bg-white border rounded-lg px-3 py-2 flex-1 min-w-[160px]">
           <Search className="w-4 h-4 text-slate-400 mr-2" />
-          <input className="outline-none text-sm w-full" placeholder="Search paid-to / note…"
+          <BaseInput className="outline-none text-sm w-full" placeholder="Search paid-to / note…"
             value={search} onChange={(e) => { setSearch(e.target.value); setPage(0); }} />
         </div>
         <Button className="ml-auto bg-rose-600 hover:bg-rose-700" onClick={openAdhoc}>
@@ -497,7 +498,7 @@ function CompanyExpenses() {
             <div className="grid grid-cols-2 gap-3">
               <label className="text-sm block col-span-2">
                 <span className="font-semibold text-slate-700">Category</span>
-                <input list="company-exp-cats" className="mt-1 w-full border rounded-lg px-3 py-2"
+                <BaseInput list="company-exp-cats" className="mt-1 w-full border rounded-lg px-3 py-2"
                   value={xCategory} onChange={(e) => setXCategory(e.target.value)} placeholder="Select or type…" />
                 <datalist id="company-exp-cats">
                   {(cats.length ? cats : ["HOSPITALITY", "ELECTRICITY", "RENT", "MISC"]).map((c) => (
@@ -507,15 +508,15 @@ function CompanyExpenses() {
               </label>
               <label className="text-sm block">
                 <span className="font-semibold text-slate-700">Amount</span>
-                <input type="number" min={1} className="mt-1 w-full border rounded-lg px-3 py-2" value={xAmount} onChange={(e) => setXAmount(e.target.value)} />
+                <BaseInput type="number" min={1} className="mt-1 w-full border rounded-lg px-3 py-2" value={xAmount} onChange={(e) => setXAmount(e.target.value)} />
               </label>
               <label className="text-sm block">
                 <span className="font-semibold text-slate-700">Date</span>
-                <input type="date" className="mt-1 w-full border rounded-lg px-3 py-2" value={xDate} onChange={(e) => setXDate(e.target.value)} />
+                <BaseInput type="date" className="mt-1 w-full border rounded-lg px-3 py-2" value={xDate} onChange={(e) => setXDate(e.target.value)} />
               </label>
               <label className="text-sm block">
                 <span className="font-semibold text-slate-700">Paid To</span>
-                <input className="mt-1 w-full border rounded-lg px-3 py-2" value={xParty} onChange={(e) => setXParty(e.target.value)} placeholder="Shop / person" />
+                <BaseInput className="mt-1 w-full border rounded-lg px-3 py-2" value={xParty} onChange={(e) => setXParty(e.target.value)} placeholder="Shop / person" />
               </label>
               <label className="text-sm block">
                 <span className="font-semibold text-slate-700">Method</span>
@@ -525,7 +526,7 @@ function CompanyExpenses() {
               </label>
               <label className="text-sm block col-span-2">
                 <span className="font-semibold text-slate-700">Reference # <span className="font-normal text-muted-foreground">(optional)</span></span>
-                <input className="mt-1 w-full border rounded-lg px-3 py-2" value={xReference} onChange={(e) => setXReference(e.target.value)} placeholder="Bill / txn no." />
+                <BaseInput className="mt-1 w-full border rounded-lg px-3 py-2" value={xReference} onChange={(e) => setXReference(e.target.value)} placeholder="Bill / txn no." />
               </label>
             </div>
             <label className="text-sm block">
@@ -551,20 +552,20 @@ function CompanyExpenses() {
             <h3 className="font-bold text-slate-900">{hId ? "Edit Recurring Expense" : "Add Recurring Expense"}</h3>
             <label className="text-sm block">
               <span className="font-semibold text-slate-700">Name</span>
-              <input className="mt-1 w-full border rounded-lg px-3 py-2" value={hName} onChange={(e) => setHName(e.target.value)} placeholder="e.g. Office Rent, Shop Electricity" />
+              <BaseInput className="mt-1 w-full border rounded-lg px-3 py-2" value={hName} onChange={(e) => setHName(e.target.value)} placeholder="e.g. Office Rent, Shop Electricity" />
             </label>
             <div className="grid grid-cols-2 gap-3">
               <label className="text-sm block">
                 <span className="font-semibold text-slate-700">Category</span>
-                <input list="company-exp-cats" className="mt-1 w-full border rounded-lg px-3 py-2" value={hCategory} onChange={(e) => setHCategory(e.target.value)} />
+                <BaseInput list="company-exp-cats" className="mt-1 w-full border rounded-lg px-3 py-2" value={hCategory} onChange={(e) => setHCategory(e.target.value)} />
               </label>
               <label className="text-sm block">
                 <span className="font-semibold text-slate-700">Usual Amount <span className="font-normal text-muted-foreground">(optional)</span></span>
-                <input type="number" min={0} className="mt-1 w-full border rounded-lg px-3 py-2" value={hAmount} onChange={(e) => setHAmount(e.target.value)} placeholder="blank if variable" />
+                <BaseInput type="number" min={0} className="mt-1 w-full border rounded-lg px-3 py-2" value={hAmount} onChange={(e) => setHAmount(e.target.value)} placeholder="blank if variable" />
               </label>
               <label className="text-sm block">
                 <span className="font-semibold text-slate-700">Paid To</span>
-                <input className="mt-1 w-full border rounded-lg px-3 py-2" value={hParty} onChange={(e) => setHParty(e.target.value)} placeholder="Landlord / provider" />
+                <BaseInput className="mt-1 w-full border rounded-lg px-3 py-2" value={hParty} onChange={(e) => setHParty(e.target.value)} placeholder="Landlord / provider" />
               </label>
               <label className="text-sm block">
                 <span className="font-semibold text-slate-700">Usual Method</span>
@@ -574,10 +575,10 @@ function CompanyExpenses() {
               </label>
               <label className="text-sm block">
                 <span className="font-semibold text-slate-700">Due Day <span className="font-normal text-muted-foreground">(1–31)</span></span>
-                <input type="number" min={1} max={31} className="mt-1 w-full border rounded-lg px-3 py-2" value={hDay} onChange={(e) => setHDay(e.target.value)} placeholder="e.g. 5" />
+                <BaseInput type="number" min={1} max={31} className="mt-1 w-full border rounded-lg px-3 py-2" value={hDay} onChange={(e) => setHDay(e.target.value)} placeholder="e.g. 5" />
               </label>
               <label className="text-sm flex items-center gap-2 mt-6">
-                <input type="checkbox" className="w-4 h-4" checked={hActive} onChange={(e) => setHActive(e.target.checked)} />
+                <BaseInput type="checkbox" className="w-4 h-4" checked={hActive} onChange={(e) => setHActive(e.target.checked)} />
                 <span className="font-semibold text-slate-700">Active</span>
               </label>
             </div>

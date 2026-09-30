@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-pangea/dnd";
 import { ChevronDown, ChevronRight, Layers, DoorOpen, Package, HardHat, Plus, Trash2, EyeOff, Eye, Ruler, GripVertical } from "lucide-react";
@@ -180,7 +181,7 @@ export default function BoqTree({
           {itemOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
           <Package className="h-3.5 w-3.5 text-muted-foreground" />
           {isSelectable && item.id !== undefined && (
-            <input type="checkbox" className="h-4 w-4" checked={selectedIds?.has(item.id) ?? false}
+            <BaseInput type="checkbox" className="h-4 w-4" checked={selectedIds?.has(item.id) ?? false}
               onClick={(e) => e.stopPropagation()}
               onChange={(e) => onToggleSelect?.([item.id!], e.target.checked)} />
           )}
@@ -302,7 +303,7 @@ export default function BoqTree({
       {floorOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
       <Layers className="h-4 w-4 text-primary" />
       {isSelectable && (
-        <input type="checkbox" className="h-4 w-4" checked={allSelected(floorItems)}
+        <BaseInput type="checkbox" className="h-4 w-4" checked={allSelected(floorItems)}
           ref={(el) => { if (el) el.indeterminate = !allSelected(floorItems) && someSelected(floorItems); }}
           onClick={(e) => e.stopPropagation()} onChange={(e) => onToggleSelect?.(idsFor(floorItems), e.target.checked)} />
       )}
@@ -317,7 +318,7 @@ export default function BoqTree({
       {roomOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
       <DoorOpen className="h-3.5 w-3.5 text-muted-foreground" />
       {isSelectable && (
-        <input type="checkbox" className="h-4 w-4" checked={allSelected(roomItems)}
+        <BaseInput type="checkbox" className="h-4 w-4" checked={allSelected(roomItems)}
           ref={(el) => { if (el) el.indeterminate = !allSelected(roomItems) && someSelected(roomItems); }}
           onClick={(e) => e.stopPropagation()} onChange={(e) => onToggleSelect?.(idsFor(roomItems), e.target.checked)} />
       )}

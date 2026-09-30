@@ -1,3 +1,4 @@
+import { BaseInput } from '@/components/ui/input';
 import { useEffect, useRef, useState } from 'react';
 import { workforceApi } from '@/api/workforceApi';
 import { WorkforceResourceView, ResourceType, RESOURCE_TYPE_LABELS, RESOURCE_TYPE_STYLES } from '@/types/workforce';
@@ -89,7 +90,7 @@ export default function ResourceSelect({ value, onChange, placeholder = 'Assign 
           <div className="p-2 border-b space-y-2">
             <div className="flex items-center gap-2 px-2 py-1.5 bg-slate-50 rounded-md">
               <Search className="w-4 h-4 text-slate-400" />
-              <input autoFocus value={search} onChange={e => setSearch(e.target.value)}
+              <BaseInput autoFocus value={search} onChange={e => setSearch(e.target.value)}
                 placeholder="Search name or contact…"
                 className="flex-1 bg-transparent text-sm outline-none" />
             </div>
