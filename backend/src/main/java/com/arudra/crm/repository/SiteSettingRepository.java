@@ -12,4 +12,5 @@ public interface SiteSettingRepository extends JpaRepository<SiteSetting, Long> 
     List<SiteSetting> findByIsDeletedFalseOrderByDisplayOrderAscIdAsc();
     Optional<SiteSetting> findBySettingKeyAndIsDeletedFalse(String settingKey);
     long countByIsDeletedFalse();
+    boolean existsBySettingKey(String settingKey);
 }

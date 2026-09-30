@@ -679,7 +679,10 @@ public class DataSeeder {
     public CommandLineRunner seedWebsiteSettingsContent(SiteSettingRepository settingRepo,
                                                         ContentBlockRepository contentRepo) {
         return args -> {
-            if (settingRepo.countByIsDeletedFalse() == 0) {
+            // Seeded per key (not "only when the table is empty"): migrations such as V77/V93/V94 insert
+            // their own rows first on a fresh DB, which used to make this whole block skip and leave the
+            // business details (phone, address…) missing from Website › Settings. Existing values are kept.
+            {
                 int i = 1;
                 // group, key, label, value, inputType
                 i = seedSetting(settingRepo, "Brand", "brand.name", "Brand name", "JB Decor", "text", i);
@@ -694,7 +697,14 @@ public class DataSeeder {
                 i = seedSetting(settingRepo, "Social", "social.facebook", "Facebook URL", "https://facebook.com", "url", i);
                 i = seedSetting(settingRepo, "Social", "social.pinterest", "Pinterest URL", "https://pinterest.com", "url", i);
                 i = seedSetting(settingRepo, "Social", "social.linkedin", "LinkedIn URL", "https://linkedin.com", "url", i);
-                seedSetting(settingRepo, "Portal", "portal.enabled", "Customer portal enabled", "true", "text", i);
+                i = seedSetting(settingRepo, "Portal", "portal.enabled", "Customer portal enabled", "true", "text", i);
+                // Structured location — powers Google local-search signals (LocalBusiness schema) on the website.
+                i = seedSetting(settingRepo, "Location", "contact.city", "City", "", "text", i);
+                i = seedSetting(settingRepo, "Location", "contact.region", "State", "", "text", i);
+                i = seedSetting(settingRepo, "Location", "contact.postalCode", "PIN code", "", "text", i);
+                i = seedSetting(settingRepo, "Location", "contact.country", "Country code", "IN", "text", i);
+                i = seedSetting(settingRepo, "Location", "contact.geoLat", "Map latitude", "", "text", i);
+                seedSetting(settingRepo, "Location", "contact.geoLng", "Map longitude", "", "text", i);
             }
 
             if (contentRepo.countByIsDeletedFalse() == 0) {
@@ -718,6 +728,7 @@ public class DataSeeder {
 
     private int seedSetting(SiteSettingRepository repo, String group, String key, String label,
                             String value, String inputType, int order) {
+        if (repo.existsBySettingKey(key)) return order + 1;
         com.arudra.crm.entity.SiteSetting s = new com.arudra.crm.entity.SiteSetting();
         s.setGroupName(group);
         s.setSettingKey(key);

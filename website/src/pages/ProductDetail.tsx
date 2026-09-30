@@ -16,7 +16,7 @@ import { categories as categoriesSeed } from '@/data/categories'
 import { usePublicData } from '@/hooks/usePublicData'
 import { publicApi, type ApiProductDetail } from '@/api/publicApi'
 import { cn } from '@/lib/utils'
-import { whatsappLink } from '@/config/site'
+import { useSite } from '@/hooks/useSiteSettings'
 import { useSeo, breadcrumbJsonLd } from '@/hooks/useSeo'
 import type { ColorVariant } from '@/types'
 
@@ -41,6 +41,7 @@ export default function ProductDetail() {
   const [activeImg, setActiveImg] = useState(0)
   const [activeColor, setActiveColor] = useState(0)
   const [quoteOpen, setQuoteOpen] = useState(false)
+  const site = useSite()
 
   // Live catalog (falls back to seed) — used for related products + the category name.
   const products = usePublicData(productsSeed, publicApi.products)
@@ -156,7 +157,7 @@ export default function ProductDetail() {
 
   const productUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/products/${view.categorySlug}/${slug}`
   const enquiryMessage =
-    `Hi JB Decor, I'd like a quote for:\n` +
+    `Hi ${site.name}, I'd like a quote for:\n` +
     `• Product: ${view.name}\n` +
     (categoryName ? `• Category: ${categoryName}\n` : '') +
     (view.colors.length ? `• Colour: ${view.colors[activeColor]?.name}\n` : '') +
@@ -249,7 +250,7 @@ export default function ProductDetail() {
 
             {/* Enquiry actions */}
             <div className="mt-8 grid gap-3 sm:grid-cols-2">
-              <Button to={whatsappLink(enquiryMessage)} external variant="primary" size="lg" className="w-full">
+              <Button to={`https://wa.me/${site.whatsappNumber}?text=${encodeURIComponent(enquiryMessage)}`} external variant="primary" size="lg" className="w-full">
                 <MessageCircle className="h-4 w-4" /> Enquire on WhatsApp
               </Button>
               <Button onClick={() => setQuoteOpen(true)} variant="forest" size="lg" className="w-full">

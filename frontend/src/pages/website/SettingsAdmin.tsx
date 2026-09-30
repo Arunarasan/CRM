@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Loader2, Save, Building2, Phone, Share2, Settings as SettingsIcon } from 'lucide-react';
+import { Loader2, Save, Building2, Phone, Share2, MapPin, ShieldCheck, Star, Globe, Settings as SettingsIcon } from 'lucide-react';
 import { settingsApi, SiteSetting } from '@/api/websiteAdminApi';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/toast';
@@ -7,8 +7,20 @@ import { toast } from '@/components/ui/toast';
 const GROUP_META: Record<string, { icon: typeof Building2; description: string }> = {
   Brand: { icon: Building2, description: 'Your business name and tagline, shown across the site.' },
   Contact: { icon: Phone, description: 'How customers reach you — shown in the footer and contact page.' },
+  Location: { icon: MapPin, description: 'City, state, PIN and map pin — helps customers find you on Google.' },
   Social: { icon: Share2, description: 'Links to your social profiles, shown in the footer.' },
+  Warranty: { icon: ShieldCheck, description: 'Default service and product warranty applied to completed projects.' },
+  General: { icon: Star, description: 'Google review link and the reward paid per verified review.' },
+  Portal: { icon: Globe, description: 'Turn the customer portal on or off (true / false).' },
 };
+const HINTS: Record<string, string> = {
+  'contact.whatsapp': 'Digits only, with country code — e.g. 919876543210.',
+  'contact.phone': 'Shown as-is and used for the “Call” buttons.',
+  'contact.country': 'Two-letter code, e.g. IN.',
+  'contact.geoLat': 'From Google Maps: right-click your shop → copy the first number.',
+  'contact.geoLng': 'From Google Maps: the second number.',
+};
+const GROUP_ORDER = ['Brand', 'Contact', 'Location', 'Social', 'Warranty', 'General', 'Portal'];
 
 /**
  * Site settings editor — brand, contact and social values that used to be hardcoded in the website.
@@ -38,7 +50,8 @@ export default function SettingsAdmin() {
   const groups = useMemo(() => {
     const g: Record<string, SiteSetting[]> = {};
     settings.forEach((s) => { (g[s.group || 'General'] ||= []).push(s); });
-    return g;
+    const rank = (k: string) => (GROUP_ORDER.indexOf(k) + 1 || 99);
+    return Object.entries(g).sort(([a], [b]) => rank(a) - rank(b));
   }, [settings]);
 
   const dirty = useMemo(
@@ -79,7 +92,7 @@ export default function SettingsAdmin() {
       <p className="text-sm text-muted-foreground">
         Your business details, shown across the public website. Changes go live on the site’s next load.
       </p>
-      {Object.entries(groups).map(([group, rows]) => {
+      {groups.map(([group, rows]) => {
         const meta = GROUP_META[group] ?? { icon: SettingsIcon, description: '' };
         const Icon = meta.icon;
         return (
@@ -106,12 +119,13 @@ export default function SettingsAdmin() {
                     />
                   ) : (
                     <input
-                      type={s.inputType === 'tel' || s.inputType === 'email' || s.inputType === 'url' ? s.inputType : 'text'}
+                      type={['tel', 'email', 'url', 'number'].includes(s.inputType ?? '') ? s.inputType : 'text'}
                       value={values[s.key] ?? ''}
                       onChange={(e) => setValues((v) => ({ ...v, [s.key]: e.target.value }))}
                       className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                     />
                   )}
+                  {HINTS[s.key] && <span className="mt-1 block text-[11px] text-muted-foreground">{HINTS[s.key]}</span>}
                 </label>
               ))}
             </div>

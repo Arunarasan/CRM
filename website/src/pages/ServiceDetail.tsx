@@ -7,13 +7,17 @@ import { Button } from '@/components/ui/Button'
 import { SmartImage } from '@/components/ui/SmartImage'
 import { CTABand } from '@/components/shared/CTABand'
 import Placeholder from '@/pages/Placeholder'
-import { getService } from '@/data/services'
+import { services as servicesSeed } from '@/data/services'
+import { usePublicData } from '@/hooks/usePublicData'
+import { publicApi } from '@/api/publicApi'
 import { getServiceDetail } from '@/data/serviceDetails'
 import { useSeo, breadcrumbJsonLd } from '@/hooks/useSeo'
 
 export default function ServiceDetail() {
   const { slug = '' } = useParams()
-  const service = getService(slug)
+  // Live CMS services (edited in CRM › Website › Services) over the compiled-in seed.
+  const services = usePublicData(servicesSeed, publicApi.services)
+  const service = services.find((s) => s.slug === slug)
   useSeo(
     service
       ? {
