@@ -47,6 +47,14 @@ public class WebsiteEnquiry extends BaseEntity {
     @Column(name = "product_slug", length = 200)
     private String productSlug;
 
+    /** Category the enquired product belongs to (product-quote enquiries). */
+    @Column(length = 120)
+    private String category;
+
+    /** Selected colour / finish variant (product-quote enquiries). */
+    @Column(length = 80)
+    private String colour;
+
     @Column(name = "property_type", length = 80)
     private String propertyType;
 

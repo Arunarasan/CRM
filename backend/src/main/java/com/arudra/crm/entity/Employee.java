@@ -54,6 +54,14 @@ public class Employee extends BaseEntity {
     @Column(name = "profile_photo_url", length = 500)
     private String profilePhotoUrl;
 
+    /**
+     * Unguessable token behind the employee's personal review QR code. The QR encodes the public
+     * website URL {@code /r/{reviewToken}}; a customer scans it, leaves a rating + message (captured
+     * against this employee), then is redirected to the company's Google review page.
+     */
+    @Column(name = "review_token", length = 64, unique = true)
+    private String reviewToken;
+
     // --- Payroll / statutory / banking (employee-only) ------------------------
     @Column(name = "salary_type", length = 30)
     private String salaryType; // MONTHLY, DAILY, HOURLY

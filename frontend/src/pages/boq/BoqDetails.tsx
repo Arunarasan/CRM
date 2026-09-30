@@ -375,7 +375,12 @@ export default function BoqDetails() {
           <Link to={`/boq/${boqId}/reports`}>
             <Button variant="outline"><BarChart3 className="mr-2 h-4 w-4" /> Reports</Button>
           </Link>
-          {canWrite && (
+          {canWrite && status === "APPROVED" && (
+            <Button className="bg-amber-600 hover:bg-amber-700 text-white" disabled={actionBusy} onClick={handleRevision}>
+              <GitBranch className="mr-2 h-4 w-4" /> Create Revision to Edit
+            </Button>
+          )}
+          {canWrite && status !== "APPROVED" && (
             <Button variant="outline" disabled={actionBusy} onClick={handleRevision}>
               <GitBranch className="mr-2 h-4 w-4" /> New Revision
             </Button>
@@ -407,8 +412,8 @@ export default function BoqDetails() {
                 {canWrite && !canEdit && (
                   <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 flex items-center justify-between gap-3">
                     <span>This BOQ is approved and locked. Create a new revision to add or change items, materials or labour.</span>
-                    <Button size="sm" variant="outline" className="shrink-0" disabled={actionBusy} onClick={handleRevision}>
-                      <GitBranch className="mr-1.5 h-4 w-4" /> New Revision
+                    <Button size="sm" className="shrink-0 bg-amber-600 hover:bg-amber-700 text-white" disabled={actionBusy} onClick={handleRevision}>
+                      <GitBranch className="mr-1.5 h-4 w-4" /> Create Revision to Edit
                     </Button>
                   </div>
                 )}

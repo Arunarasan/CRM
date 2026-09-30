@@ -122,12 +122,11 @@ public class WorkflowTriggerService {
     }
 
     /**
-     * A project was created from an approved quotation. Completes the lead workflow and materializes
-     * the project's structure (phases/rooms/work-items/materials) from the approved BOQ.
-     * <p>Projects deliberately get NO automatic tasks — only leads carry workflow automation. So we do
-     * NOT start the PROJECT workflow (which would generate the "main tasks"), and the BOQ reconciliation
-     * runs with task generation OFF. A PM can still generate execution tasks on demand via
-     * "Generate from BOQ". All best-effort so conversion itself never fails.
+     * A project was created from an approved quotation. Completes the lead workflow, materializes the
+     * project's structure (phases/rooms/work-items/materials) from the approved BOQ, and creates the
+     * single shared <b>Project Execution</b> task the whole team collaborates on.
+     * <p>Per-BOQ-item / per-lifecycle tasks are no longer generated — the BOQ work-items become the
+     * execution task's checklist instead (seeded here). All best-effort so conversion itself never fails.
      */
     @Transactional
     public void onProjectCreated(Project project, boolean generateProjectStructure) {
@@ -138,12 +137,16 @@ public class WorkflowTriggerService {
                 // workflow on the first call and is a no-op thereafter.
                 advanceLeadPhaseOnEvent(project.getLead().getId(), "LEAD_QUOTATION");
             }
-            // Build phases/rooms/work-items/materials from the linked BOQ, but WITHOUT tasks.
+            // Build phases/rooms/work-items/materials from the linked BOQ, but WITHOUT per-item tasks.
             // Skipped for floor-split conversions, where each project owns only a slice of the BOQ
             // and per-project generation is done deliberately by a manager instead.
             if (generateProjectStructure && project.getBoq() != null) {
                 projectService.reconcileProjectWithBoq(project.getId(), null, false);
             }
+            // Start the PROJECT workflow → materializes the one AVAILABLE "Project Execution" task
+            // (PROJECT_MAIN now holds a single TEAM template), then seed its checklist from the BOQ.
+            workflowService.startProjectWorkflow(project.getId())
+                    .ifPresent(instance -> projectService.seedExecutionChecklist(project.getId()));
         } catch (Exception e) {
             log.error("Workflow setup failed for project {} created from quotation", project.getId(), e);
         }

@@ -183,6 +183,21 @@ public class EmployeeTaskController {
         return ResponseEntity.ok(ApiResponse.success(employeeTaskService.complete(id, me(), remarks)));
     }
 
+    /** Record how much the customer paid, collected on the project execution task (pending admin verification). */
+    @PostMapping("/{id}/collect-payment")
+    @PreAuthorize(EXECUTE)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> collectPayment(@PathVariable Long id,
+            @RequestBody(required = false) Map<String, Object> body) {
+        BigDecimal amount = null;
+        Object raw = body == null ? null : body.get("amount");
+        if (raw != null && !String.valueOf(raw).isBlank()) {
+            try { amount = new BigDecimal(String.valueOf(raw).replace(",", "")); } catch (NumberFormatException ignored) { }
+        }
+        String method = body != null && body.get("method") != null ? String.valueOf(body.get("method")) : null;
+        String note = body != null && body.get("note") != null ? String.valueOf(body.get("note")) : null;
+        return ResponseEntity.ok(ApiResponse.success(employeeTaskService.collectPayment(id, me(), amount, method, note)));
+    }
+
     /**
      * Submit a lead-workflow task's structured data form (Contact/Requirement/Qualify/Site-Visit…).
      * Captures the submission, applies it to the lead, then completes the task.

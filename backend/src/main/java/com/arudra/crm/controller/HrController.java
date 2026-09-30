@@ -51,6 +51,15 @@ public class HrController {
     @Autowired
     private CurrentUserService currentUserService;
 
+    @Autowired
+    private com.arudra.crm.service.EmployeeReviewService employeeReviewService;
+
+    @Autowired
+    private com.arudra.crm.service.GoogleBusinessReviewService googleBusinessReviewService;
+
+    @Autowired
+    private com.arudra.crm.service.GoogleReviewCountService googleReviewCountService;
+
     // --- Departments ---
     @GetMapping("/departments")
     public ResponseEntity<List<Department>> getDepartments() {
@@ -216,6 +225,92 @@ public class HrController {
                                                                     @RequestBody(required = false) Map<String, String> body) {
         String remarks = body == null ? null : body.get("remarks");
         return ResponseEntity.ok(profileChangeRequestService.reject(id, currentUserService.getCurrentUser(), remarks));
+    }
+
+    // --- Employee review QR (personal review link + captured customer reviews) ---
+    /** The employee's review QR token + review summary (generates a token on first read). */
+    @GetMapping("/employees/{id}/review-qr")
+    @PreAuthorize(HR_READ)
+    public ResponseEntity<Map<String, Object>> reviewQr(@PathVariable Long id) {
+        return ResponseEntity.ok(employeeReviewService.qrInfo(id));
+    }
+
+    /** Regenerate the employee's review token (the old QR/link stops working). */
+    @PostMapping("/employees/{id}/review-qr/regenerate")
+    @PreAuthorize(HR_WRITE)
+    public ResponseEntity<Map<String, Object>> regenerateReviewQr(@PathVariable Long id) {
+        return ResponseEntity.ok(employeeReviewService.regenerateToken(id));
+    }
+
+    /** Customer reviews captured for this employee (incl. hidden) + summary. */
+    @GetMapping("/employees/{id}/reviews")
+    @PreAuthorize(HR_READ)
+    public ResponseEntity<Map<String, Object>> employeeReviews(@PathVariable Long id) {
+        return ResponseEntity.ok(employeeReviewService.listForEmployee(id));
+    }
+
+    @PatchMapping("/reviews/{reviewId}/status")
+    @PreAuthorize(HR_WRITE)
+    public ResponseEntity<Void> setReviewStatus(@PathVariable Long reviewId, @RequestBody Map<String, String> body) {
+        employeeReviewService.setStatus(reviewId, body.get("status"));
+        return ResponseEntity.ok().build();
+    }
+
+    @DeleteMapping("/reviews/{reviewId}")
+    @PreAuthorize(HR_WRITE)
+    public ResponseEntity<Void> deleteReview(@PathVariable Long reviewId) {
+        employeeReviewService.delete(reviewId);
+        return ResponseEntity.ok().build();
+    }
+
+    // --- Google-review rewards: verify a scan became a real Google review, then pay a reward ---
+    /** Board of every QR review sent to Google + a per-employee reward tally. */
+    @GetMapping("/review-rewards")
+    @PreAuthorize(HR_READ)
+    public ResponseEntity<Map<String, Object>> reviewRewards() {
+        return ResponseEntity.ok(employeeReviewService.rewardsBoard());
+    }
+
+    @PostMapping("/reviews/{reviewId}/verify")
+    @PreAuthorize(HR_WRITE)
+    public ResponseEntity<Map<String, Object>> verifyReview(@PathVariable Long reviewId,
+                                                            @RequestBody(required = false) Map<String, String> body) {
+        String googleReviewId = body == null ? null : body.get("googleReviewId");
+        return ResponseEntity.ok(employeeReviewService.verify(reviewId, googleReviewId));
+    }
+
+    @PostMapping("/reviews/{reviewId}/unverify")
+    @PreAuthorize(HR_WRITE)
+    public ResponseEntity<Map<String, Object>> unverifyReview(@PathVariable Long reviewId) {
+        return ResponseEntity.ok(employeeReviewService.unverify(reviewId));
+    }
+
+    /** Pay the reward for a verified review — raises an incentive bonus (payslip). */
+    @PostMapping("/reviews/{reviewId}/pay-reward")
+    @PreAuthorize(PAYROLL_PROCESS)
+    public ResponseEntity<Map<String, Object>> payReviewReward(@PathVariable Long reviewId) {
+        return ResponseEntity.ok(employeeReviewService.payReward(reviewId, currentUserService.getCurrentUser()));
+    }
+
+    /** Auto-match captured reviews against real Google reviews (Business Profile API, if configured). */
+    @PostMapping("/review-rewards/sync-google")
+    @PreAuthorize(HR_WRITE)
+    public ResponseEntity<Map<String, Object>> syncGoogleReviews() {
+        return ResponseEntity.ok(googleBusinessReviewService.suggestMatches());
+    }
+
+    /** Count-based sync: pull Google's total review count and auto-verify the oldest pending on a rise. */
+    @PostMapping("/review-rewards/sync-count")
+    @PreAuthorize(HR_WRITE)
+    public ResponseEntity<Map<String, Object>> syncReviewCount() {
+        return ResponseEntity.ok(googleReviewCountService.reconcile());
+    }
+
+    /** Count-sync status for the rewards board (no external call). */
+    @GetMapping("/review-rewards/count-status")
+    @PreAuthorize(HR_READ)
+    public ResponseEntity<Map<String, Object>> reviewCountStatus() {
+        return ResponseEntity.ok(googleReviewCountService.status());
     }
 
     // --- Payroll ---

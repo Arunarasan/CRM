@@ -42,11 +42,13 @@ public class EmployeePortalController {
     private final ProfileChangeRequestService profileChangeRequestService;
     private final WebAuthnService webAuthnService;
     private final AttendanceCorrectionService correctionService;
+    private final com.arudra.crm.service.EmployeeReviewService employeeReviewService;
 
     public EmployeePortalController(EmployeePortalService portalService, EmployeeTimeService timeService,
                                     CurrentUserService currentUserService, PurchaseService purchaseService,
                                     ProfileChangeRequestService profileChangeRequestService,
-                                    WebAuthnService webAuthnService, AttendanceCorrectionService correctionService) {
+                                    WebAuthnService webAuthnService, AttendanceCorrectionService correctionService,
+                                    com.arudra.crm.service.EmployeeReviewService employeeReviewService) {
         this.portalService = portalService;
         this.timeService = timeService;
         this.currentUserService = currentUserService;
@@ -54,6 +56,7 @@ public class EmployeePortalController {
         this.profileChangeRequestService = profileChangeRequestService;
         this.webAuthnService = webAuthnService;
         this.correctionService = correctionService;
+        this.employeeReviewService = employeeReviewService;
     }
 
     /** Lenient parse of "HH:mm" or "HH:mm:ss" clock strings; null/blank -> null. */
@@ -81,6 +84,14 @@ public class EmployeePortalController {
     @PreAuthorize(PORTAL)
     public ResponseEntity<ApiResponse<Map<String, Object>>> dashboard() {
         return ResponseEntity.ok(ApiResponse.success(portalService.getDashboard(me())));
+    }
+
+    /** The signed-in employee's own review QR link + review summary, to show/download in the portal. */
+    @GetMapping("/review-qr")
+    @PreAuthorize(PORTAL)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> myReviewQr() {
+        Employee me = portalService.requireEmployee(me());
+        return ResponseEntity.ok(ApiResponse.success(employeeReviewService.qrInfo(me)));
     }
 
     // =====================================================================

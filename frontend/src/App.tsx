@@ -96,6 +96,7 @@ const WorkforceProfilePage = lazy(() => import("./pages/workforce/WorkforceProfi
 const WorkforceReportsPage = lazy(() => import("./pages/workforce/WorkforceReportsPage"));
 const DailyReportsPage = lazy(() => import("./pages/workforce/DailyReportsPage"));
 const ProfileApprovalsPage = lazy(() => import("./pages/workforce/ProfileApprovalsPage"));
+const ReviewRewardsPage = lazy(() => import("./pages/workforce/ReviewRewardsPage"));
 const HrFinanceDashboard = lazy(() => import("./pages/hr/HrFinanceDashboard"));
 const CashflowPage = lazy(() => import("./pages/hr/CashflowPage"));
 const HrPerformancePage = lazy(() => import("./pages/hr/HrPerformancePage"));
@@ -122,10 +123,10 @@ const EmployeeProfilePortal = lazy(() => import("./pages/employeePortal/MyProfil
 const EmployeeAttendance = lazy(() => import("./pages/employeePortal/Attendance"));
 const EmployeeLeave = lazy(() => import("./pages/employeePortal/Leave"));
 const EmployeeSalary = lazy(() => import("./pages/employeePortal/Salary"));
-const EmployeeProjects = lazy(() => import("./pages/employeePortal/Projects"));
 const EmployeeDocuments = lazy(() => import("./pages/employeePortal/Documents"));
 const EmployeeTimesheet = lazy(() => import("./pages/employeePortal/Timesheet"));
 const EmployeeSettings = lazy(() => import("./pages/employeePortal/Settings"));
+const EmployeeReviewQr = lazy(() => import("./pages/employeePortal/EmployeeReviewQr"));
 const EmployeeRequests = lazy(() => import("./pages/employeePortal/Requests"));
 const EmployeeMaterialRequests = lazy(() => import("./pages/employeePortal/MaterialRequests"));
 const EmployeeLeads = lazy(() => import("./pages/employeePortal/Leads"));
@@ -289,6 +290,7 @@ function App() {
               <Route path="leave" element={<HrLeavePage />} />
               <Route path="departments" element={<HrDepartmentsPage />} />
               <Route path="performance" element={<HrPerformancePage />} />
+              <Route path="review-rewards" element={<ReviewRewardsPage />} />
               <Route path="approvals" element={<ProfileApprovalsPage />} />
               <Route path="reports" element={<WorkforceReportsPage />} />
             </Route>
@@ -317,7 +319,8 @@ function App() {
             <Route path="attendance" element={<EmployeeAttendance />} />
             <Route path="leave" element={<EmployeeLeave />} />
             <Route path="salary" element={<EmployeeSalary />} />
-            <Route path="projects" element={<EmployeeProjects />} />
+            {/* Project work moved into Tasks → Projects filter; keep the old link working. */}
+            <Route path="projects" element={<Navigate to="/employee/tasks?tab=PROJECTS" replace />} />
             <Route path="requests" element={<EmployeeRequests />} />
             <Route path="requests/material" element={<EmployeeMaterialRequests />} />
             <Route path="requests/manpower" element={<EmployeeManpowerRequests />} />
@@ -326,6 +329,7 @@ function App() {
             <Route path="daily-reports" element={<EmployeeDailyReports />} />
             <Route path="task-management" element={<EmployeeTaskManagement />} />
             <Route path="documents" element={<EmployeeDocuments />} />
+            <Route path="review-qr" element={<EmployeeReviewQr />} />
             <Route path="timesheet" element={<EmployeeTimesheet />} />
             <Route path="settings" element={<EmployeeSettings />} />
           </Route>

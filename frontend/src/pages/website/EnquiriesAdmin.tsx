@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Inbox, RefreshCw, User, Phone, Mail, MapPin, Rocket, ExternalLink, Tag, IndianRupee } from 'lucide-react';
+import { Inbox, RefreshCw, User, Phone, Mail, MapPin, Rocket, ExternalLink, Tag, IndianRupee, Trash2, Package, FolderTree, Palette } from 'lucide-react';
 import {
   enquiriesApi, EnquirySummary, EnquiryDetail, ENQUIRY_STATUSES, ENQUIRY_CHANNEL_LABELS,
 } from '@/api/websiteAdminApi';
@@ -87,6 +87,19 @@ export default function EnquiriesAdmin() {
       toast.success('Converted to a lead.');
       if (updated.leadId) navigate(`/leads/${updated.leadId}`);
     } catch { toast.error('Could not convert to lead.'); }
+    finally { setSaving(false); }
+  };
+
+  const remove = async () => {
+    if (!detail) return;
+    if (!window.confirm(`Delete this enquiry from ${detail.name}? This removes it from the inbox and the task board.`)) return;
+    setSaving(true);
+    try {
+      await enquiriesApi.remove(detail.id);
+      setRows((prev) => prev.filter((r) => r.id !== detail.id));
+      setSelectedId(null);
+      toast.success('Enquiry deleted.');
+    } catch { toast.error('Could not delete enquiry.'); }
     finally { setSaving(false); }
   };
 
@@ -177,9 +190,17 @@ export default function EnquiriesAdmin() {
             </div>
 
             {/* interest */}
-            {(detail.interest || detail.propertyType || detail.area || detail.budget) && (
+            {(detail.interest || detail.category || detail.colour || detail.propertyType || detail.area || detail.budget) && (
               <div className="grid grid-cols-2 gap-3 border-b p-4 text-sm">
-                {detail.interest && <Field icon={Tag} label="Interested in" value={detail.interest} />}
+                {detail.interest && (
+                  <Field
+                    icon={detail.channel === 'PRODUCT_QUOTE' ? Package : Tag}
+                    label={detail.channel === 'PRODUCT_QUOTE' ? 'Product' : 'Interested in'}
+                    value={detail.interest}
+                  />
+                )}
+                {detail.category && <Field icon={FolderTree} label="Category" value={detail.category} />}
+                {detail.colour && <Field icon={Palette} label="Colour / finish" value={detail.colour} />}
                 {detail.propertyType && <Field icon={User} label="Property" value={detail.propertyType} />}
                 {detail.area && <Field icon={MapPin} label="Area" value={detail.area} />}
                 {detail.budget && <Field icon={IndianRupee} label="Budget" value={detail.budget} />}
@@ -223,6 +244,19 @@ export default function EnquiriesAdmin() {
               <p className="text-center text-[11px] text-muted-foreground">
                 Converting creates a CRM lead and starts the sales journey.
               </p>
+
+              <div className="border-t pt-3">
+                <button
+                  onClick={remove}
+                  disabled={saving}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-rose-200 px-3 py-2 text-sm font-medium text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+                >
+                  <Trash2 className="h-4 w-4" /> Delete enquiry
+                </button>
+                <p className="mt-1.5 text-center text-[11px] text-muted-foreground">
+                  Removes test / sample submissions from the inbox and task board.
+                </p>
+              </div>
             </div>
           </div>
         )}

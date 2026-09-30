@@ -35,6 +35,11 @@ export interface TaskCard {
   canPick?: boolean; // set on pool cards — false when the viewer is at capacity
   dataEntry?: boolean; // quick data-entry lead task — exempt from the capacity cap
   holdExpiresAt?: string | null; // ISO time this held data-entry task auto-releases (countdown)
+  customer?: string | null; // customer/lead name behind the task
+  location?: string | null; // compact site location (address/city)
+  assignmentType?: 'SINGLE_EMPLOYEE' | 'MULTIPLE_EMPLOYEES' | 'TEAM' | null;
+  category?: string | null; // origin lane code: LEAD | PROJECT | FIELD_WORK | INSTALLATION | ENQUIRY | OTHER
+  categoryLabel?: string | null; // human label for the lane
 }
 
 /** Active-task capacity for the current employee. */
@@ -96,6 +101,7 @@ export interface Checklist {
 export interface CommentSummary {
   id: number;
   content: string;
+  audioUrl?: string | null;
   authorName: string | null;
   role: string | null;
   createdAt: string;
@@ -240,6 +246,32 @@ export interface LeadMediaItem {
   kind: 'IMAGE' | 'AUDIO' | 'VIDEO' | 'FILE';
 }
 
+/** Rich read-only context shown on the shared "Project Execution" task. */
+export interface ProjectExecutionInfo {
+  projectCode?: string | null;
+  projectName?: string | null;
+  status?: string | null;
+  progress?: number | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  customer?: { name?: string | null; phone?: string | null; email?: string | null; city?: string | null } | null;
+  rooms?: Array<{
+    room?: string | null; floor?: string | null; roomType?: string | null;
+    items?: Array<{ name?: string | null; description?: string | null; quantity?: number | string | null; unit?: string | null }>;
+  }>;
+  materials?: Array<{ product?: string | null; quantity?: number | string | null; unit?: string | null }>;
+  measurements?: Array<{
+    room?: string | null; roomType?: string | null; floor?: string | null;
+    length?: number | null; width?: number | null; height?: number | null; floorArea?: number | null;
+  }>;
+  payments?: Array<{
+    amount?: number | string | null; status?: string | null; date?: string | null;
+    method?: string | null; collectedBy?: string | null;
+  }>;
+  collectedPending?: number | string | null;
+  collectedConfirmed?: number | string | null;
+}
+
 export interface TaskDetail extends TaskCard {
   description: string | null;
   assignmentType: 'SINGLE_EMPLOYEE' | 'MULTIPLE_EMPLOYEES' | 'TEAM' | null;
@@ -247,6 +279,8 @@ export interface TaskDetail extends TaskCard {
   formType?: LeadFormType | null;
   leadId?: number | null;
   lead?: LeadInfo | null;
+  projectExecution?: boolean;
+  projectInfo?: ProjectExecutionInfo | null;
   moduleDriven?: boolean;
   moduleLink?: string | null;
   moduleLabel?: string | null;

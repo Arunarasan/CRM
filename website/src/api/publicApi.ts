@@ -33,6 +33,8 @@ export const publicApi = {
     api.post('/public/leads', payload).then((r) => r.data),
   submitConsultation: (payload: Record<string, unknown>) =>
     api.post('/public/consultations', payload).then((r) => r.data),
+  submitProductQuote: (payload: Record<string, unknown>) =>
+    api.post('/public/enquiries/product-quote', payload).then((r) => r.data),
 
   // Shop checkout → CRM order
   checkout: (payload: CheckoutPayload) =>
@@ -50,6 +52,19 @@ export const publicApi = {
     api.post(`/public/track/${token}/requests`, payload).then((r) => r.data),
   trackSubmitReview: (token: string, payload: Record<string, unknown>) =>
     api.post(`/public/track/${token}/reviews`, payload).then((r) => r.data),
+
+  // Public, no-login employee review (personal QR link → capture + Google redirect)
+  employeeReviewInfo: (token: string) =>
+    api.get<EmployeeReviewInfo>(`/public/employee-review/${token}`).then((r) => r.data),
+  submitEmployeeReview: (token: string, payload: Record<string, unknown>) =>
+    api.post<{ googleReviewUrl: string | null }>(`/public/employee-review/${token}`, payload).then((r) => r.data),
+}
+
+export interface EmployeeReviewInfo {
+  employeeName: string
+  designation?: string
+  photoUrl?: string
+  googleReviewUrl: string | null
 }
 
 export interface TrackingStep {

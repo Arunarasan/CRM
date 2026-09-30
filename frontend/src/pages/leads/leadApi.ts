@@ -1,5 +1,5 @@
 import api from "@/lib/api";
-import type { BoardColumn, DashboardMetrics, Lead, LeadCreator, LeadFilters, UserSummary } from "./constants";
+import type { BoardColumn, DashboardMetrics, Lead, LeadCreator, LeadFilters, LeadPeriodStats, UserSummary } from "./constants";
 
 // Thin typed wrapper around /api/leads endpoints so pages/tabs share one surface.
 
@@ -25,6 +25,14 @@ export const leadApi = {
   },
 
   dashboard: () => api.get<DashboardMetrics>("/leads/dashboard"),
+  // Time-boxed stats: leads entered/converted/lost + conversion rate for a period (ISO dates; omit for all-time).
+  stats: (from?: string, to?: string) => {
+    const q = new URLSearchParams();
+    if (from) q.set("from", from);
+    if (to) q.set("to", to);
+    const qs = q.toString();
+    return api.get<LeadPeriodStats>(`/leads/stats${qs ? `?${qs}` : ""}`);
+  },
   board: (assignedEmployeeId?: string) =>
     api.get<BoardColumn[]>(`/leads/board${assignedEmployeeId ? `?assignedEmployeeId=${assignedEmployeeId}` : ""}`),
   reports: () => api.get("/leads/reports"),

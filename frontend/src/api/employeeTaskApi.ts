@@ -60,6 +60,9 @@ export const employeeTaskApi = {
   pause: (id: number, remarks?: string) => api.post(`${BASE}/${id}/pause`, { remarks }).then((r) => r.data),
   resume: (id: number) => api.post(`${BASE}/${id}/resume`).then((r) => r.data),
   complete: (id: number, remarks?: string) => api.post(`${BASE}/${id}/complete`, { remarks }).then((r) => r.data),
+  // Record how much the customer paid on a project execution task → PENDING_APPROVAL payment (admin verifies).
+  collectPayment: (id: number, payload: { amount: number | string; method?: string; note?: string }) =>
+    api.post(`${BASE}/${id}/collect-payment`, payload).then((r) => r.data),
   // Lead-workflow structured form: captures data, writes it onto the lead, then completes the task.
   submitLeadForm: (id: number, payload: LeadFormPayload) =>
     api.post(`${BASE}/${id}/lead-form`, payload).then((r) => r.data),

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Search, X, Flame, CalendarDays, Clock, AlertTriangle, CheckCircle2, Hand, PartyPopper } from 'lucide-react';
+import { Search, X, Flame, CalendarDays, Clock, AlertTriangle, CheckCircle2, Hand, PartyPopper, FolderKanban } from 'lucide-react';
 import { employeeTaskApi } from '@/api/employeeTaskApi';
 import { TaskCard as TaskCardType, Capacity } from '@/types/employeeTask';
 import { runOrQueue } from '@/hooks/useOfflineQueue';
@@ -11,7 +11,9 @@ import { daysUntil, priorityMeta } from './taskUtils';
 // Filters are chips (not routes); the default "To Do" view groups active work by urgency so the
 // most important task is always first. The shared "Available" pool and "Completed" history are
 // reachable from the same chip row. All task logic (pick / start / pause / complete) is unchanged.
-type Filter = 'TODO' | 'OVERDUE' | 'TODAY' | 'UPCOMING' | 'AVAILABLE' | 'COMPLETED';
+type Filter = 'TODO' | 'PROJECTS' | 'OVERDUE' | 'TODAY' | 'UPCOMING' | 'AVAILABLE' | 'COMPLETED';
+
+const isProject = (t: TaskCardType) => t.category === 'PROJECT';
 
 const isActive = (t: TaskCardType) => t.status !== 'COMPLETED' && t.status !== 'CANCELLED';
 
@@ -63,9 +65,14 @@ export default function TaskList() {
   const today = active.filter((t) => bucket(t) === 'today');
   const upcoming = active.filter((t) => bucket(t) === 'upcoming');
   const completed = mine.filter((t) => t.status === 'COMPLETED');
+  // Project tasks only — mine (active) plus the unassigned pool ones you can pick up.
+  const myProjectTasks = active.filter(isProject);
+  const poolProjectTasks = pool.filter(isProject);
+  const projectCount = myProjectTasks.length + poolProjectTasks.length;
 
   const chips: { key: Filter; label: string; count: number }[] = [
     { key: 'TODO', label: 'To Do', count: active.length },
+    { key: 'PROJECTS', label: 'Projects', count: projectCount },
     { key: 'OVERDUE', label: 'Overdue', count: overdue.length },
     { key: 'TODAY', label: 'Today', count: today.length + now.length },
     { key: 'UPCOMING', label: 'Upcoming', count: upcoming.length },
@@ -174,6 +181,16 @@ export default function TaskList() {
               <Group icon={Flame} tone="text-[#EA6A2D]" title="Do Now" list={now} />
               <Group icon={CalendarDays} tone="text-[#0A573B]" title="Today" list={today} />
               <Group icon={Clock} tone="text-[#7A817C]" title="Upcoming" list={upcoming} />
+            </div>
+          )
+      )}
+      {filter === 'PROJECTS' && (
+        projectCount === 0
+          ? empty('No project tasks assigned or available right now.')
+          : (
+            <div className="flex flex-col gap-5">
+              <Group icon={FolderKanban} tone="text-[#2563A8]" title="My Project Work" list={myProjectTasks} />
+              <Group icon={Hand} tone="text-[#9B6B32]" title="Available Project Work" list={poolProjectTasks} pick />
             </div>
           )
       )}

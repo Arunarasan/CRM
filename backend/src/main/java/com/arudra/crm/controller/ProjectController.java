@@ -75,6 +75,15 @@ public class ProjectController {
         return ResponseEntity.ok(projectService.updateProject(id, project));
     }
 
+    /** Assign Team: set the project's Project Manager + Assistant Manager pair (by user id). */
+    @PutMapping("/{id}/team")
+    @PreAuthorize(WRITE)
+    public ResponseEntity<Project> assignTeam(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+        Long pmId = body.get("projectManagerId") == null ? null : Long.valueOf(body.get("projectManagerId").toString());
+        Long amId = body.get("assistantManagerId") == null ? null : Long.valueOf(body.get("assistantManagerId").toString());
+        return ResponseEntity.ok(projectService.assignTeam(id, pmId, amId));
+    }
+
     @DeleteMapping("/{id}")
     @PreAuthorize(DELETE)
     public ResponseEntity<Void> deleteProject(@PathVariable Long id) {

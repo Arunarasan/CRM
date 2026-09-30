@@ -138,7 +138,8 @@ export interface EnquirySummary {
 
 export interface EnquiryDetail extends EnquirySummary {
   sourceLabel?: string; phone?: string; email?: string; city?: string;
-  productSlug?: string; propertyType?: string; area?: string; budget?: string;
+  productSlug?: string; category?: string; colour?: string;
+  propertyType?: string; area?: string; budget?: string;
   preferredDate?: string; message?: string; leadId?: number | null; taskId?: number | null;
 }
 
@@ -154,6 +155,7 @@ export const enquiriesApi = {
   updateStatus: (id: number, status: string) =>
     api.patch<EnquiryDetail>(`/website/enquiries/${id}/status`, { status }).then((r) => r.data),
   convert: (id: number) => api.post<EnquiryDetail>(`/website/enquiries/${id}/convert`).then((r) => r.data),
+  remove: (id: number) => api.delete(`/website/enquiries/${id}`).then((r) => r.data),
 };
 
 // ---- Site settings (brand / contact / social) ----

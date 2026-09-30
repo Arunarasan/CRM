@@ -10,7 +10,7 @@ This document contains step-by-step instructions for deploying and maintaining t
                                 [ Internet Users ]
                                         │
                                         ▼
-                            [ Hostinger VPS (187.127.171.110) ]
+                            [ Hostinger VPS (187.127.185.77) ]
                                 (Ports 80 & 8080)
                                         │
                 ┌───────────────────────┴───────────────────────┐
@@ -39,7 +39,7 @@ In your GitHub repository:
 
 | Secret Name | Expected Value | Description |
 | :--- | :--- | :--- |
-| `VPS_HOST` | `187.127.171.110` | Your Hostinger VPS IP address |
+| `VPS_HOST` | `187.127.185.77` | Your Hostinger VPS IP address |
 | `VPS_USERNAME` | `arudra` | Non-root deployment user on the VPS |
 | `VPS_PORT` | `22` | SSH port |
 | `VPS_APP_DIR` | `/opt/crm` | Application root directory on the VPS |
@@ -54,7 +54,7 @@ In your GitHub repository:
 
 Connect to your VPS via SSH:
 ```bash
-ssh -i ~/.ssh/id_ed25519 arudra@187.127.171.110
+ssh -i ~/.ssh/id_ed25519 arudra@187.127.185.77
 ```
 
 ### Step 3.1: Verify Permissions & Docker Access
@@ -98,7 +98,7 @@ MYSQL_ROOT_PASSWORD=YOUR_STRONG_ROOT_PASSWORD
 SPRING_PROFILES_ACTIVE=prod
 JWT_SECRET=YOUR_RANDOM_64_CHAR_HEX_OR_BASE64_JWT_SECRET
 JWT_EXPIRATION=86400000
-CORS_ALLOWED_ORIGINS=http://187.127.171.110,http://localhost:80,https://crm.yourdomain.com
+CORS_ALLOWED_ORIGINS=http://187.127.185.77,http://localhost:80,https://crm.yourdomain.com
 
 # 3. Cloudflare R2 Object Storage
 STORAGE_TYPE=s3
@@ -144,7 +144,7 @@ git push origin main
    - Compiles Java 17 backend and verifies tests (`mvn clean test-compile`).
    - Installs Node 20 dependencies and builds React frontend (`npm ci && npm run build`).
 2. **Deploy Job**:
-   - Connects securely to `arudra@187.127.171.110` via SSH using `VPS_SSH_KEY`.
+   - Connects securely to `arudra@187.127.185.77` via SSH using `VPS_SSH_KEY`.
    - Pulls latest `main` commit without touching `/opt/crm/.env`.
    - Builds Docker images and runs `docker compose up -d --remove-orphans`.
    - Displays container status and recent application logs.
@@ -192,7 +192,7 @@ If a deployed commit has issues and you need to roll back to a previous working 
 
 ```bash
 # SSH into VPS
-ssh arudra@187.127.171.110
+ssh arudra@187.127.185.77
 cd /opt/crm
 
 # Check commit history
@@ -216,7 +216,7 @@ docker compose ps
 When you are ready to link a custom domain (e.g. `https://crm.yourdomain.com`):
 
 ### Option A: Cloudflare Proxy (Easiest)
-1. Point your domain's DNS `A` record to `187.127.171.110` with the Cloudflare orange cloud enabled.
+1. Point your domain's DNS `A` record to `187.127.185.77` with the Cloudflare orange cloud enabled.
 2. In Cloudflare SSL/TLS settings, set encryption mode to **Full (strict)** or **Flexible**.
 3. All traffic on port 80/443 will be automatically encrypted by Cloudflare.
 

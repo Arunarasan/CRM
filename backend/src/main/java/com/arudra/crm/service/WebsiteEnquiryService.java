@@ -75,6 +75,8 @@ public class WebsiteEnquiryService {
         if (notBlank(req.email())) e.setEmail(req.email().trim());
         if (notBlank(req.productName())) e.setInterest(req.productName().trim());
         if (notBlank(req.productSlug())) e.setProductSlug(req.productSlug().trim());
+        if (notBlank(req.category())) e.setCategory(req.category().trim());
+        if (notBlank(req.colour())) e.setColour(req.colour().trim());
         if (notBlank(req.message())) e.setMessage(req.message().trim());
         return persistWithTask(e);
     }
@@ -128,6 +130,28 @@ public class WebsiteEnquiryService {
         return Detail.of(repo.save(e));
     }
 
+    /**
+     * Remove an enquiry (soft delete) — used to clear out test/sample submissions. The linked
+     * ENQUIRY task is soft-deleted too so it drops off the task board. A converted enquiry keeps
+     * its lead (the lead lives on its own); only the inbox row and its task are removed.
+     */
+    @Transactional
+    public void delete(Long id) {
+        WebsiteEnquiry e = find(id);
+        if (e.getTaskId() != null) {
+            taskRepository.findById(e.getTaskId())
+                    .filter(t -> !Boolean.TRUE.equals(t.getIsDeleted()))
+                    .ifPresent(t -> {
+                        t.setIsDeleted(true);
+                        t.setDeletedAt(java.time.LocalDateTime.now());
+                        taskRepository.save(t);
+                    });
+        }
+        e.setIsDeleted(true);
+        e.setDeletedAt(java.time.LocalDateTime.now());
+        repo.save(e);
+    }
+
     /** Convert a qualified enquiry into a CRM lead (idempotent — returns the existing lead if already done). */
     @Transactional
     public Detail convertToLead(Long id) {
@@ -168,6 +192,8 @@ public class WebsiteEnquiryService {
         if (notBlank(e.getEmail())) sb.append("\nEmail: ").append(e.getEmail());
         if (notBlank(e.getCity())) sb.append("\nCity: ").append(e.getCity());
         if (notBlank(e.getInterest())) sb.append("\nInterested in: ").append(e.getInterest());
+        if (notBlank(e.getCategory())) sb.append("\nCategory: ").append(e.getCategory());
+        if (notBlank(e.getColour())) sb.append("\nColour / finish: ").append(e.getColour());
         if (notBlank(e.getMessage())) sb.append("\n\n").append(e.getMessage());
         return sb.toString();
     }

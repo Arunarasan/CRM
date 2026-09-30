@@ -1,11 +1,13 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useParams } from 'react-router-dom'
-import { MessageCircle, Truck, ShieldCheck, Ruler, Check } from 'lucide-react'
+import { MessageCircle, Truck, ShieldCheck, Ruler, Check, X, CheckCircle2 } from 'lucide-react'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { Section, SectionHeading } from '@/components/ui/Section'
 import { SmartImage } from '@/components/ui/SmartImage'
 import { Rating } from '@/components/ui/Rating'
 import { Button } from '@/components/ui/Button'
+import { Input, Textarea } from '@/components/ui/Form'
+import { toast } from '@/store/toast'
 import { ProductCard } from '@/components/cards/ProductCard'
 import Placeholder from '@/pages/Placeholder'
 import { getProduct, products as productsSeed } from '@/data/products'
@@ -38,6 +40,7 @@ export default function ProductDetail() {
   const [apiProduct, setApiProduct] = useState<ApiProductDetail | null | undefined>(undefined)
   const [activeImg, setActiveImg] = useState(0)
   const [activeColor, setActiveColor] = useState(0)
+  const [quoteOpen, setQuoteOpen] = useState(false)
 
   // Live catalog (falls back to seed) — used for related products + the category name.
   const products = usePublicData(productsSeed, publicApi.products)
@@ -151,10 +154,13 @@ export default function ProductDetail() {
     : view.gallery
   const heroSrc = gallery[Math.min(activeImg, gallery.length - 1)]
 
+  const productUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/products/${view.categorySlug}/${slug}`
   const enquiryMessage =
-    `Hi JB Decor, I'm interested in the ${view.name}` +
-    (view.colors.length ? ` (${view.colors[activeColor]?.name} finish)` : '') +
-    `. Could you share more details and a quote?`
+    `Hi JB Decor, I'd like a quote for:\n` +
+    `• Product: ${view.name}\n` +
+    (categoryName ? `• Category: ${categoryName}\n` : '') +
+    (view.colors.length ? `• Colour: ${view.colors[activeColor]?.name}\n` : '') +
+    `\n${productUrl}\n\nPlease share details and pricing.`
 
   return (
     <>
@@ -246,7 +252,7 @@ export default function ProductDetail() {
               <Button to={whatsappLink(enquiryMessage)} external variant="primary" size="lg" className="w-full">
                 <MessageCircle className="h-4 w-4" /> Enquire on WhatsApp
               </Button>
-              <Button to="/consultation" variant="forest" size="lg" className="w-full">
+              <Button onClick={() => setQuoteOpen(true)} variant="forest" size="lg" className="w-full">
                 Request a Quote
               </Button>
             </div>
@@ -294,6 +300,105 @@ export default function ProductDetail() {
           </div>
         </Section>
       )}
+
+      <QuoteDialog
+        open={quoteOpen}
+        onClose={() => setQuoteOpen(false)}
+        productName={view.name}
+        productSlug={slug}
+        category={categoryName}
+        colour={view.colors.length ? view.colors[activeColor]?.name : undefined}
+      />
     </>
+  )
+}
+
+/** Product-quote form. Submits the client's details plus the product/category/colour context to the
+ *  CRM Website → Enquiries inbox via /api/public/enquiries/product-quote. */
+function QuoteDialog({
+  open, onClose, productName, productSlug, category, colour,
+}: {
+  open: boolean
+  onClose: () => void
+  productName: string
+  productSlug: string
+  category?: string
+  colour?: string
+}) {
+  const [sending, setSending] = useState(false)
+  const [sent, setSent] = useState(false)
+
+  if (!open) return null
+
+  const close = () => { setSent(false); onClose() }
+
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    const f = new FormData(e.currentTarget)
+    setSending(true)
+    try {
+      await publicApi.submitProductQuote({
+        name: f.get('name'), phone: f.get('phone'), email: f.get('email'),
+        message: f.get('message'),
+        productName, productSlug, category, colour,
+      })
+      setSent(true)
+    } catch {
+      toast('Something went wrong. Please try again or reach us on WhatsApp.', 'error')
+    } finally {
+      setSending(false)
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-forest/40 p-0 backdrop-blur-sm sm:items-center sm:p-4"
+      onClick={close}
+    >
+      <div
+        className="relative w-full max-w-lg border border-forest/10 bg-white shadow-card sm:rounded"
+        onClick={(ev) => ev.stopPropagation()}
+      >
+        <button
+          onClick={close}
+          aria-label="Close"
+          className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full text-forest/50 hover:bg-forest/5 hover:text-forest"
+        >
+          <X className="h-4 w-4" />
+        </button>
+
+        {sent ? (
+          <div className="flex flex-col items-center justify-center px-6 py-12 text-center">
+            <CheckCircle2 className="h-12 w-12 text-gold" />
+            <h2 className="mt-4 font-serif text-2xl font-semibold text-forest">Quote request sent!</h2>
+            <p className="mt-2 max-w-sm text-sm text-forest/60">
+              Thank you — our team will get back to you shortly with a quote for the {productName}.
+            </p>
+            <Button className="mt-6" variant="outlineForest" onClick={close}>Done</Button>
+          </div>
+        ) : (
+          <div className="p-6 sm:p-7">
+            <h2 className="pr-8 font-serif text-2xl font-semibold text-forest">Request a Quote</h2>
+            <p className="mt-1.5 text-sm text-forest/65">
+              For <span className="font-medium text-forest">{productName}</span>
+              {colour ? <> · <span className="text-forest/75">{colour}</span></> : null}
+              {category ? <span className="text-forest/45"> · {category}</span> : null}
+            </p>
+
+            <form onSubmit={handleSubmit} className="mt-5 grid gap-4">
+              <Input label="Name" name="name" required placeholder="Your full name" />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Input label="Phone" name="phone" type="tel" required placeholder="+91 90000 00000" />
+                <Input label="Email" name="email" type="email" placeholder="you@email.com" />
+              </div>
+              <Textarea label="Message" name="message" placeholder="Quantity, room, finishes, timeline…" />
+              <Button size="lg" className="w-full" disabled={sending}>
+                {sending ? 'Sending…' : 'Send Quote Request'}
+              </Button>
+            </form>
+          </div>
+        )}
+      </div>
+    </div>
   )
 }

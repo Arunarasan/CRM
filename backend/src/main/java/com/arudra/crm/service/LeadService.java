@@ -197,6 +197,26 @@ public class LeadService {
         return BigDecimal.valueOf(part * 100.0 / total).setScale(1, RoundingMode.HALF_UP) + "%";
     }
 
+    /**
+     * Time-boxed lead stats: for leads entered (created) within [from, to], how many of that cohort
+     * converted or were lost, and the conversion rate. Powers the Leads page's time-frame partitions
+     * (Today / This Week / This Month / This Year / All Time / custom range).
+     */
+    public Map<String, Object> getPeriodStats(LocalDateTime from, LocalDateTime to) {
+        long entered = leadRepository.countByIsDeletedFalseAndCreatedAtBetween(from, to);
+        long converted = leadRepository.countByIsDeletedFalseAndCreatedAtBetweenAndIsConvertedTrue(from, to);
+        long lost = leadRepository.countByIsDeletedFalseAndCreatedAtBetweenAndStatusIgnoreCase(from, to, "Lost");
+        Map<String, Object> m = new java.util.LinkedHashMap<>();
+        m.put("entered", entered);
+        m.put("converted", converted);
+        m.put("lost", lost);
+        m.put("inProgress", Math.max(0, entered - converted - lost));
+        m.put("conversionRate", formatRate(converted, entered));
+        m.put("conversionRatePercent", entered == 0 ? 0.0
+                : BigDecimal.valueOf(converted * 100.0 / entered).setScale(1, RoundingMode.HALF_UP).doubleValue());
+        return m;
+    }
+
     // =====================================================================
     // Create / update
     // =====================================================================

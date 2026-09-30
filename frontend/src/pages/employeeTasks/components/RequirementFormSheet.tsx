@@ -18,6 +18,8 @@ const CONSTRUCTION_STAGES = ['New Construction', 'Ready to Move', 'Under Renovat
 const CATEGORIES = ['Full Interior', 'Modular Kitchen', 'Wardrobe', 'False Ceiling', 'Painting', 'Flooring', 'Renovation', 'Commercial', 'Other'];
 const PAYMENT_PREFS = ['Full Advance', 'Milestone Based', 'On Completion', 'EMI / Finance'];
 const LEAD_TYPES = ['Individual', 'Business', 'Builder', 'Architect', 'Dealer', 'Other'];
+const LEAD_SOURCES = ['Walk-in', 'Phone Call', 'WhatsApp', 'Website', 'Facebook', 'Instagram', 'Google', 'Referral', 'Existing Customer', 'Exhibition', 'Email', 'Other'];
+const RATINGS = ['1', '2', '3', '4', '5'];
 const PRIORITIES = ['Low', 'Medium', 'High', 'Urgent'];
 const TEMPERATURES = ['Hot', 'Warm', 'Cold'];
 
@@ -31,12 +33,12 @@ const SCOPE: { key: string; label: string }[] = [
 
 // Which lead fields each section owns (used for prefill + the "filled" indicator).
 const SECTION_FIELDS: Record<string, string[]> = {
-  summary: ['name', 'companyName', 'contactPerson', 'gstNumber', 'leadType', 'priority', 'leadTemperature'],
+  summary: ['name', 'companyName', 'contactPerson', 'gstNumber', 'leadType', 'leadSource', 'rating', 'priority', 'leadTemperature'],
   contact: ['mobileNumber', 'alternateMobile', 'whatsappNumber', 'email'],
   address: ['address', 'city', 'district', 'state', 'pincode', 'landmark', 'googleMapLocation'],
   property: ['propertyType', 'propertyName', 'currentConstructionStage', 'floorCount', 'areaSqft', 'expectedWorkArea', 'siteAddress'],
-  requirement: ['requirementCategory', 'projectDescription', 'customerRequirements', 'roomsRequired', 'specialRequests',
-    'preferredDesignStyle', 'preferredMaterial', 'preferredColorTheme'],
+  requirement: ['requirementCategory', 'requirementProduct', 'projectDescription', 'customerRequirements', 'roomsRequired', 'specialRequests',
+    'preferredDesignStyle', 'preferredMaterial', 'preferredColorTheme', 'remarks'],
   budget: ['estimatedBudget', 'minimumBudget', 'maximumBudget', 'expectedProjectValue', 'paymentPreference',
     'expectedStartDate', 'expectedEndDate', 'preferredCompletionDate', 'estimatedDuration'],
   nextstep: ['siteVisitDate', 'followUpDate', 'followUpNotes'],
@@ -168,6 +170,8 @@ export default function RequirementFormSheet({ taskId, leadId, open, onOpenChang
               <Text label="Contact person" value={v.contactPerson} onChange={(x) => set('contactPerson', x)} />
               <Text label="GST number" value={v.gstNumber} onChange={(x) => set('gstNumber', x)} />
               <Select label="Lead type" value={v.leadType} onChange={(x) => set('leadType', x)} options={LEAD_TYPES} />
+              <Select label="Lead source" value={v.leadSource} onChange={(x) => set('leadSource', x)} options={LEAD_SOURCES} />
+              <Select label="Quality rating" value={v.rating} onChange={(x) => set('rating', x)} options={RATINGS} />
               <Select label="Priority" value={v.priority} onChange={(x) => set('priority', x)} options={PRIORITIES} />
               <Select label="Interest level" value={v.leadTemperature} onChange={(x) => set('leadTemperature', x)} options={TEMPERATURES} />
             </div>
@@ -219,6 +223,7 @@ export default function RequirementFormSheet({ taskId, leadId, open, onOpenChang
 
           <Section id="requirement" icon={<FileText className="h-4 w-4" />} title="Requirement" count={filledCount('requirement')} openSecs={openSecs} toggle={toggleSec}>
             <Select label="Category" value={v.requirementCategory} onChange={(x) => set('requirementCategory', x)} options={CATEGORIES} />
+            <Text label="Products asked" value={v.requirementProduct} onChange={(x) => set('requirementProduct', x)} placeholder="e.g. Sofa, Wardrobe, TV Unit (comma separated)" />
             <Area label="Requirement description" value={v.projectDescription} onChange={(x) => set('projectDescription', x)} placeholder="Describe the full scope the customer wants…" />
             <Area label="Detailed requirements / customer notes" value={v.customerRequirements} onChange={(x) => set('customerRequirements', x)} rows={2} />
             <Area label="Rooms required" value={v.roomsRequired} onChange={(x) => set('roomsRequired', x)} placeholder="e.g. 3 Bedrooms, Living, Kitchen" rows={2} />
@@ -262,6 +267,7 @@ export default function RequirementFormSheet({ taskId, leadId, open, onOpenChang
                 ))}
               </div>
             )}
+            <Area label="Remarks (saved on the lead)" value={v.remarks} onChange={(x) => set('remarks', x)} rows={2} placeholder="Any general remark about this lead…" />
             <Area label="Notes" value={v.notes} onChange={(x) => set('notes', x)} rows={2} />
           </Section>
         </div>

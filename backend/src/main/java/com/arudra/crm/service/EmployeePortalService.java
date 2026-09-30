@@ -791,6 +791,14 @@ public class EmployeePortalService {
         m.put("estimatedBudget", l.getEstimatedBudget());
         m.put("siteVisitDate", l.getSiteVisitDate());
         m.put("createdAt", l.getCreatedAt());
+        // Extras for the My Leads redesign: conversion stats, richer cards, and the detail view.
+        m.put("isConverted", Boolean.TRUE.equals(l.getIsConverted()));
+        m.put("rating", l.getRating());
+        m.put("leadTemperature", l.getLeadTemperature());
+        m.put("nextFollowUpDate", l.getNextFollowUpDate());
+        m.put("address", l.getAddress());
+        m.put("requirement", l.getCustomerRequirements());
+        m.put("notes", l.getRemarks());
         return m;
     }
 

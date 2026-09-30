@@ -85,6 +85,12 @@ public class EmployeeTaskService {
     @Autowired
     @org.springframework.context.annotation.Lazy
     private QuotationService quotationService;
+    @Autowired
+    @org.springframework.context.annotation.Lazy
+    private ProjectService projectService;
+    @Autowired
+    @org.springframework.context.annotation.Lazy
+    private FinanceService financeService;
 
     private static final List<String> ACTIVE_ASSIGNMENT_STATUSES =
             List.of("ASSIGNED", "ACCEPTED", "IN_PROGRESS", "PAUSED", "WAITING_MATERIAL", "REWORK", "COMPLETED");
@@ -622,6 +628,17 @@ public class EmployeeTaskService {
             leadRepository.findById(task.getLeadId())
                     .ifPresent(lead -> detail.put("lead", toLeadInfo(lead)));
         }
+        // The one shared "Project Execution" task: strip to progress + checklist + log + messages, and
+        // carry the full project picture (customer, lead, BOQ items/sizes/locations, materials,
+        // measurements) so the whole team has the context on the task itself.
+        boolean projectExecution = ProjectService.EXECUTION_TEMPLATE_CODE.equals(templateCode);
+        detail.put("projectExecution", projectExecution);
+        if (projectExecution && task.getProject() != null) {
+            if (!detail.containsKey("lead") && task.getProject().getLead() != null) {
+                detail.put("lead", toLeadInfo(task.getProject().getLead()));
+            }
+            detail.put("projectInfo", projectService.getExecutionContext(task.getProject().getId()));
+        }
         detail.put("customer", task.getProject() != null && task.getProject().getCustomer() != null
                 ? task.getProject().getCustomer().getName() : null);
         // Site navigation: a human-readable address for display, plus a ready-to-open maps URL that
@@ -946,6 +963,12 @@ public class EmployeeTaskService {
             throw new IllegalStateException("This task is completed automatically when its work is finalized "
                     + "in its dedicated module — it can't be marked done here.");
         }
+        // The shared project execution task can only be closed once all its work items are ticked off.
+        if (guard.getTaskTemplate() != null
+                && ProjectService.EXECUTION_TEMPLATE_CODE.equals(guard.getTaskTemplate().getCode())
+                && !checklistItemsAllDone(taskId)) {
+            throw new IllegalStateException("Tick off every work item in the checklist before completing the project execution.");
+        }
         TaskAssignment a = getAssignment(taskId, employee.getId());
         a.setStatus("COMPLETED");
         a.setCompletedAt(LocalDateTime.now());
@@ -972,7 +995,10 @@ public class EmployeeTaskService {
         }
         notificationService.dispatchToAdmins(title, message, "TASK", "/tasks", employee.getId());
 
-        return recomputeAndSave(task); // → WAITING_APPROVAL once all participants are done
+        Task result = recomputeAndSave(task); // → WAITING_APPROVAL once all participants are done
+        // Execution task now fully submitted → park the project at 99% until an admin signs off.
+        if ("WAITING_APPROVAL".equals(result.getStatus())) markProjectPendingApproval(result);
+        return result;
     }
 
     /**
@@ -999,6 +1025,8 @@ public class EmployeeTaskService {
             }
         }
         Task saved = taskRepository.save(task);
+        // The one shared execution task closing → the project is 100% complete.
+        completeProjectForExecutionTask(saved);
 
         String message = "\"" + task.getTaskName() + "\" is complete";
         for (Long mgr : managersForTask(task)) {
@@ -1089,6 +1117,8 @@ public class EmployeeTaskService {
         task.setStatus("COMPLETED");
         task.setCompletedDate(LocalDate.now());
         taskRepository.save(task);
+        // Admin sign-off on the shared execution task marks the project 100% complete.
+        completeProjectForExecutionTask(task);
         for (TaskAssignment a : assignmentRepository.findByTaskId(taskId)) {
             if (!"CANCELLED".equals(a.getStatus()) && !"REJECTED".equals(a.getStatus())) {
                 a.setStatus("COMPLETED");
@@ -1158,7 +1188,96 @@ public class EmployeeTaskService {
         }
 
         TaskProgressUpdate saved = progressUpdateRepository.save(update);
+        // On the shared project execution task the slider IS the project's overall % — push it through
+        // (replacing the item→room→phase rollup) so the project card and billing automation react.
+        syncProjectExecutionProgress(task, progressPercent);
         return toProgressSummary(saved);
+    }
+
+    /** True when the task is the project's single shared "Project Execution" task. */
+    private boolean isExecutionTask(Task task) {
+        return task != null && task.getTaskTemplate() != null
+                && ProjectService.EXECUTION_TEMPLATE_CODE.equals(task.getTaskTemplate().getCode());
+    }
+
+    /**
+     * For the single "Project Execution" task, mirror its manual % onto the project — capped at 99%,
+     * because the project reaches 100% only when an admin approves the task's completion.
+     */
+    private void syncProjectExecutionProgress(Task task, Integer pct) {
+        if (pct == null || task.getProject() == null || !isExecutionTask(task)) return;
+        Project p = task.getProject();
+        p.setProgress(Math.max(0, Math.min(99, pct)));
+        projectRepository.save(p);
+        eventPublisher.publishEvent(new com.arudra.crm.event.ProjectProgressChangedEvent(p.getId()));
+    }
+
+    /** Submitting the execution task for approval parks the project at 99% (pending admin sign-off). */
+    private void markProjectPendingApproval(Task task) {
+        if (task.getProject() == null || !isExecutionTask(task)) return;
+        Project p = task.getProject();
+        p.setProgress(99);
+        projectRepository.save(p);
+        eventPublisher.publishEvent(new com.arudra.crm.event.ProjectProgressChangedEvent(p.getId()));
+    }
+
+    /** Admin approval of the execution task marks the project 100% complete. */
+    private void completeProjectForExecutionTask(Task task) {
+        if (task.getProject() == null || !isExecutionTask(task)) return;
+        Project p = task.getProject();
+        p.setProgress(100);
+        if (!"CANCELLED".equalsIgnoreCase(p.getStatus()) && !"CLOSED".equalsIgnoreCase(p.getStatus())) {
+            p.setStatus("COMPLETED");
+        }
+        projectRepository.save(p);
+        eventPublisher.publishEvent(new com.arudra.crm.event.ProjectProgressChangedEvent(p.getId()));
+    }
+
+    /**
+     * Record an amount the customer paid, collected against the project's execution task. Persisted as a
+     * PENDING_APPROVAL customer payment — it shows on the task as "entered, awaiting verification" and is
+     * confirmed (and posted to the ledger) only when an admin approves it from Finance.
+     */
+    @Transactional
+    public Map<String, Object> collectPayment(Long taskId, User employee, java.math.BigDecimal amount,
+                                              String method, String note) {
+        assertTaskEditableBy(taskId, employee);
+        Task task = getTask(taskId);
+        if (task.getProject() == null || task.getProject().getCustomer() == null) {
+            throw new IllegalStateException("This task isn't linked to a customer to collect a payment against.");
+        }
+        if (amount == null || amount.signum() <= 0) {
+            throw new IllegalStateException("Enter a valid amount that was collected.");
+        }
+        CustomerPayment payment = new CustomerPayment();
+        payment.setCustomer(task.getProject().getCustomer());
+        payment.setProject(task.getProject());
+        payment.setAmount(amount);
+        payment.setPaymentType("PARTIAL");
+        payment.setStatus("PENDING_APPROVAL");
+        payment.setPaymentDate(LocalDate.now());
+        payment.setPaymentMethod(method != null && !method.isBlank() ? method : "CASH");
+        payment.setCollectedBy(employee);
+        payment.setRemarks("Collected on the project execution task by " + employee.getName()
+                + (note != null && !note.isBlank() ? " — " + note : ""));
+        CustomerPayment saved = financeService.recordPayment(payment, employee);
+        Map<String, Object> m = new HashMap<>();
+        m.put("id", saved.getId());
+        m.put("amount", saved.getAmount());
+        m.put("status", saved.getStatus());
+        m.put("paymentDate", saved.getPaymentDate());
+        m.put("method", saved.getPaymentMethod());
+        return m;
+    }
+
+    /** True when every checklist item on the task is ticked (an item-less task counts as done). */
+    private boolean checklistItemsAllDone(Long taskId) {
+        for (TaskChecklist cl : checklistRepository.findByTaskId(taskId)) {
+            for (TaskChecklistItem it : checklistItemRepository.findByChecklistId(cl.getId())) {
+                if (!Boolean.TRUE.equals(it.getIsCompleted())) return false;
+            }
+        }
+        return true;
     }
 
     public Map<String, Object> toggleChecklistItem(Long checklistItemId, User employee) {
@@ -1414,6 +1533,24 @@ public class EmployeeTaskService {
         card.put("dueState", dueState(t, LocalDate.now())); // ON_TRACK | DUE_SOON | OVERDUE (derived, non-destructive)
         card.put("progressPercent", latestProgressPercent(t.getId()));
 
+        // Who & where — so a pool card tells the employee the customer and site before they pick it up.
+        String customer = null;
+        if (t.getProject() != null && t.getProject().getCustomer() != null) {
+            customer = t.getProject().getCustomer().getName();
+        } else if (t.getLeadId() != null) {
+            customer = leadRepository.findById(t.getLeadId()).map(com.arudra.crm.entity.Lead::getName).orElse(null);
+        }
+        card.put("customer", customer);
+        String location = t.getProject() != null ? siteAddressText(t.getProject())
+                : (t.getLeadId() != null ? leadRepository.findById(t.getLeadId())
+                        .map(l -> isNotBlank(l.getCity()) ? l.getCity() : l.getAddress()).orElse(null) : null);
+        card.put("location", location);
+        // Assignment mode (SINGLE_EMPLOYEE / MULTIPLE_EMPLOYEES / TEAM) and the origin category lane.
+        card.put("assignmentType", t.getAssignmentType());
+        String[] cat = taskCategoryFor(t);
+        card.put("category", cat[0]);
+        card.put("categoryLabel", cat[1]);
+
         List<TaskAssignment> assignments = assignmentRepository.findByTaskId(t.getId());
         card.put("assignedEmployees", assignments.stream()
                 .filter(a -> !"CANCELLED".equals(a.getStatus()))
@@ -1433,6 +1570,17 @@ public class EmployeeTaskService {
                     .ifPresent(mine -> card.put("myAssignmentStatus", mine.getStatus()));
         }
         return card;
+    }
+
+    /** Origin lane for a task, mirroring the desktop board (SmartAssignmentService.taskCategory). */
+    private String[] taskCategoryFor(Task t) {
+        String source = t.getSource() == null ? "" : t.getSource().toUpperCase();
+        if (t.getInvoiceId() != null) return new String[]{"INSTALLATION", "Installation"};
+        if ("ENQUIRY".equals(source) || "SERVICE_REQUEST".equals(source)) return new String[]{"ENQUIRY", "Enquiry"};
+        if (t.getLeadId() != null) return new String[]{"LEAD", "Lead"};
+        if (t.getGeneratedFromBoqItemId() != null) return new String[]{"FIELD_WORK", "Field Work"};
+        if (t.getProject() != null) return new String[]{"PROJECT", "Project"};
+        return new String[]{"OTHER", "Other"};
     }
 
     private String resolveItemName(Task t) {
@@ -1475,6 +1623,7 @@ public class EmployeeTaskService {
         Map<String, Object> m = new HashMap<>();
         m.put("id", c.getId());
         m.put("content", c.getContent());
+        m.put("audioUrl", c.getAudioUrl());
         m.put("authorName", c.getAuthor() != null ? c.getAuthor().getName() : null);
         m.put("role", c.getRole());
         m.put("createdAt", c.getCreatedAt());

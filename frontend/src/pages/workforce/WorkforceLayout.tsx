@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { Users, BarChart3, HandCoins, CalendarClock, Palmtree, Building, Gauge, TrendingUp, ShieldCheck, ClipboardList } from "lucide-react";
+import { Users, BarChart3, HandCoins, CalendarClock, Palmtree, Building, Gauge, TrendingUp, ShieldCheck, ClipboardList, Award } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 
 /**
@@ -24,6 +24,7 @@ const HR_TABS: Tab[] = [
   { to: "/workforce/leave", label: "Leave", icon: Palmtree },
   { to: "/workforce/departments", label: "Departments", icon: Building },
   { to: "/workforce/performance", label: "Performance", icon: Gauge },
+  { to: "/workforce/review-rewards", label: "Review Rewards", icon: Award },
   { to: "/workforce/approvals", label: "Approvals", icon: ShieldCheck },
 ];
 

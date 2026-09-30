@@ -4,9 +4,13 @@ import api from "@/lib/api";
 import { uploadFile, resolveFileUrl } from "@/lib/uploadFile";
 import { projectApi, AvailableQuotation } from "@/api/projectApi";
 import { employeeTaskApi } from "@/api/employeeTaskApi";
+import { smartAssignmentApi } from "@/api/smartAssignmentApi";
+import { EmployeeRecommendation } from "@/types/assignment";
 import { boqApi } from "@/api/boqApi";
 import { changeRequestApi } from "@/api/changeRequestApi";
 import { inventoryApi } from "@/api/inventoryApi";
+import { financeApi } from "@/api/financeApi";
+import { ProjectProfitability } from "@/types/finance";
 import { ProjectPhase, ProjectRoom, ProjectRoomItem, ProjectMaterialRequirement, ProjectProgressDashboard, ProjectItemProgressLog, GenerateFromBoqResult, WORK_ITEM_STATUSES } from "@/types/project";
 import { ProjectChangeRequest } from "@/types/changeRequest";
 import ProjectPaymentsTab from "@/pages/projectFinance/ProjectPaymentsTab";
@@ -21,7 +25,7 @@ import {
   ChevronDown, ChevronRight, ShoppingCart, ClipboardCheck,
   Phone, Mail, Play, History, RotateCcw, Lock,
   MoreHorizontal, MapPin, MessageCircle, Wallet, Users,
-  Pencil, Check, X,
+  Pencil, Check, X, Trash2,
   Copy, Calendar, Clock, Flag, Building2, FileText, IndianRupee,
   BarChart3, StickyNote, FileBarChart, Home, Settings, ClipboardList,
 } from "lucide-react";
@@ -84,6 +88,56 @@ function EditRow({ label, editing, view, children, danger }: {
 }
 const progressBarColor = (pct: number) => pct >= 100 ? 'bg-emerald-500' : pct >= 50 ? 'bg-emerald-500' : pct > 0 ? 'bg-amber-500' : 'bg-slate-300';
 
+// Premium stat-strip tones, matching the Overview stats cards (bg / border / icon-chip).
+const STAT_TONES: Record<string, [string, string, string]> = {
+  emerald: ['bg-emerald-50/70', 'border-emerald-100', 'bg-emerald-100 text-emerald-600'],
+  sky: ['bg-sky-50/70', 'border-sky-100', 'bg-sky-100 text-sky-600'],
+  violet: ['bg-violet-50/70', 'border-violet-100', 'bg-violet-100 text-violet-600'],
+  orange: ['bg-orange-50/70', 'border-orange-100', 'bg-orange-100 text-orange-600'],
+  rose: ['bg-rose-50/70', 'border-rose-100', 'bg-rose-100 text-rose-600'],
+  amber: ['bg-amber-50/70', 'border-amber-100', 'bg-amber-100 text-amber-600'],
+};
+// Compact donut progress ring used on the Phases & Rooms dashboard band.
+function ProgressRing({ pct, label, sub, color }: { pct: number; label: string; sub: string; color: string }) {
+  const r = 30, circ = 2 * Math.PI * r;
+  const clamped = Math.max(0, Math.min(100, Math.round(pct)));
+  return (
+    <div className="rounded-xl border border-slate-100 bg-slate-50/40 px-2 py-3 flex flex-col items-center text-center">
+      <div className="relative h-16 w-16">
+        <svg viewBox="0 0 72 72" className="h-16 w-16 -rotate-90">
+          <circle cx="36" cy="36" r={r} fill="none" stroke="#eef2f7" strokeWidth="7" />
+          <circle cx="36" cy="36" r={r} fill="none" stroke={color} strokeWidth="7" strokeLinecap="round"
+            strokeDasharray={circ} strokeDashoffset={circ * (1 - clamped / 100)} className="transition-all duration-500" />
+        </svg>
+        <div className="absolute inset-0 flex items-center justify-center text-sm font-black text-slate-800">{clamped}%</div>
+      </div>
+      <div className="mt-1.5 text-xs font-semibold text-slate-700 leading-tight">{label}</div>
+      <div className="text-[10px] text-slate-400">{sub}</div>
+    </div>
+  );
+}
+
+type StatItem = { label: string; value: React.ReactNode; sub?: string; icon: React.ComponentType<{ className?: string }>; tone: keyof typeof STAT_TONES };
+/** A row of Overview-style stat cards used to head each Execution section. */
+function StatStrip({ items, className = 'grid grid-cols-2 md:grid-cols-4 gap-2.5' }: { items: StatItem[]; className?: string }) {
+  return (
+    <div className={className}>
+      {items.map((s) => {
+        const [bg, ring, chip] = STAT_TONES[s.tone];
+        const Icon = s.icon;
+        return (
+          <div key={s.label} className={`${bg} ${ring} border rounded-xl px-3 py-2 flex flex-col`}>
+            <span className={`flex h-7 w-7 items-center justify-center rounded-lg ${chip}`}><Icon className="w-3.5 h-3.5" /></span>
+            <span className="text-[11px] font-semibold text-slate-500 mt-1.5 truncate">{s.label}</span>
+            <span className="text-xl font-black text-slate-800 leading-tight">{s.value}</span>
+            {s.sub && <span className="text-[10px] font-medium text-slate-400 truncate">{s.sub}</span>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // The 12 operational sections grouped into 5 task-shaped areas, so the tab bar reads as
 // "where in the project am I working" instead of a wall of equal chips. Each section keeps its
 // own content block untouched — this is purely how they're navigated.
@@ -117,14 +171,22 @@ export default function ProjectCommandCenter() {
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<any>(null);
 
-  // Phases & Rooms
+  // Phases & Rooms — measurement-style card grid + modal editors.
   const [phases, setPhases] = useState<ProjectPhase[]>([]);
-  const [expandedPhase, setExpandedPhase] = useState<number | null>(null);
   const [roomsByPhase, setRoomsByPhase] = useState<Record<number, ProjectRoom[]>>({});
-  const [expandedRoom, setExpandedRoom] = useState<number | null>(null);
   const [itemsByRoom, setItemsByRoom] = useState<Record<number, ProjectRoomItem[]>>({});
+  const [allItemsBrief, setAllItemsBrief] = useState<import("@/api/projectApi").ProjectItemBrief[]>([]);
   const [newPhase, setNewPhase] = useState({ name: '', sequence: 1, budget: 0 });
+  // Modal editors (mirrors the measurement Rooms tab: add/edit via dialogs, detail in a dialog)
+  const [phaseDialog, setPhaseDialog] = useState<{ open: boolean; phase: ProjectPhase | null }>({ open: false, phase: null });
+  const [roomDialog, setRoomDialog] = useState<{ open: boolean; phaseId: number | null; room: ProjectRoom | null }>({ open: false, phaseId: null, room: null });
+  const [detailRoom, setDetailRoom] = useState<{ room: ProjectRoom; phaseId: number } | null>(null);
+  // Room-wise (card grid) vs Item-wise (flat work-item list) — mirrors the measurement Rooms tab toggle.
+  const [phaseView, setPhaseView] = useState<'rooms' | 'items'>(
+    () => (localStorage.getItem('projectPhaseView') as 'rooms' | 'items') || 'rooms');
+  useEffect(() => { try { localStorage.setItem('projectPhaseView', phaseView); } catch { /* ignore */ } }, [phaseView]);
   const [masterBoq, setMasterBoq] = useState<any>(null);
+  const [profitability, setProfitability] = useState<ProjectProfitability | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false); // "Update Work" batch sheet
   const [scrolled, setScrolled] = useState(false); // collapses the big header into a compact sticky bar
 
@@ -183,6 +245,16 @@ export default function ProjectCommandCenter() {
   const [newAssignState, setNewAssignState] = useState<{ taskId: string; resource: ResourceSelection | null }>({ taskId: '', resource: null });
   const [newPurchaseState, setNewPurchaseState] = useState({ itemDesc: '', quantity: 1 });
 
+  // Assign Team — smart-recommend the best 2 people for the project; user picks the pair
+  // and they're assigned as workforce resources on a project task (smart-assignment engine).
+  const [teamDialog, setTeamDialog] = useState(false);
+  const [teamPicks, setTeamPicks] = useState<EmployeeRecommendation[]>([]);
+  const [teamSel, setTeamSel] = useState<Record<string, boolean>>({});
+  const [teamTopKeys, setTeamTopKeys] = useState<Set<string>>(new Set());
+  const [teamShowOthers, setTeamShowOthers] = useState(false);
+  const [teamLoading, setTeamLoading] = useState(false);
+  const [teamSaving, setTeamSaving] = useState(false);
+
   useEffect(() => {
     fetchProjectData();
   }, [id]);
@@ -215,7 +287,12 @@ export default function ProjectCommandCenter() {
     fetchCore();
     fetchStats();
     projectApi.getProgressDashboard(projectId).then(setProgressDashboard).catch(err => console.error("Failed to fetch progress dashboard", err));
-    projectApi.getPhases(projectId).then(setPhases).catch(err => console.error("Failed to fetch phases", err));
+    projectApi.getPhases(projectId).then(list => {
+      setPhases(list);
+      // Card-grid design — every phase shows its room cards, so load all rooms up front.
+      list.map(p => p.id!).filter(Boolean).forEach(pid => loadRooms(pid).catch(() => {}));
+    }).catch(err => console.error("Failed to fetch phases", err));
+    loadAllItemsBrief();
     projectApi.getMaterials(projectId).then(setMaterials).catch(err => console.error("Failed to fetch materials", err));
     api.get(`/inventory/products`).then(res => setProducts(res.data.content || [])).catch(() => {});
     inventoryApi.getWarehouses().then(setWarehouses).catch(() => {});
@@ -224,6 +301,8 @@ export default function ProjectCommandCenter() {
     projectApi.getTaskMaterialUsage(projectId).then(setMaterialUsage).catch(() => {});
     changeRequestApi.getByProject(projectId).then(setChangeRequests).catch(err => console.error("Failed to fetch change requests", err));
     api.get(`/tasks/project/${projectId}`).then(res => setFieldTasks(res.data)).catch(err => console.error("Failed to fetch field tasks", err));
+    // Re-syncs project expenses server-side, so "Amount Spent" reflects live purchases/payments.
+    financeApi.getProjectProfitability(projectId).then(setProfitability).catch(() => {});
   };
 
   const handleQuickCreateTask = () => {
@@ -240,6 +319,57 @@ export default function ProjectCommandCenter() {
        .then(() => { setQuickActionOpen(false); setQuickActionView('menu'); setNewAssignState({ taskId: '', resource: null }); fetchProjectData(); })
        .catch(err => toast.error(err?.response?.data?.message || 'Failed to assign resource'));
   };
+
+  // --- Assign Team: recommend the best 2 people, pick the pair, assign to a project task ----
+  const teamKey = (p: { resourceType: string; resourceId: number }) => `${p.resourceType}:${p.resourceId}`;
+  const loadTeamPicks = (taskId?: string) => {
+    setTeamLoading(true);
+    smartAssignmentApi.recommend({
+      projectId: Number(projectId),
+      taskId: taskId ? Number(taskId) : null,
+      requiredCount: 2,
+    })
+      .then((res) => {
+        const all = res.recommendations?.length ? res.recommendations : (res.topPicks || []);
+        const top = (res.topPicks?.length ? res.topPicks : all).slice(0, 2);
+        const topKeys = new Set(top.map(teamKey));
+        // Top 2 first (pre-selected), then the rest of the eligible people to swap in.
+        const ordered = [...top, ...all.filter((p) => !topKeys.has(teamKey(p)))];
+        setTeamPicks(ordered);
+        setTeamTopKeys(topKeys);
+        setTeamSel(Object.fromEntries(top.map((p) => [teamKey(p), true])));
+        setTeamShowOthers(false);
+      })
+      .catch((err) => { setTeamPicks([]); setTeamTopKeys(new Set()); toast.error(err?.response?.data?.message || 'Failed to load recommendations'); })
+      .finally(() => setTeamLoading(false));
+  };
+  const openAssignTeam = () => {
+    setTeamDialog(true);
+    setTeamPicks([]);
+    setTeamSel({});
+    loadTeamPicks();
+  };
+  // The picked pair becomes the project's leadership: highest suitability → Project Manager,
+  // second → Assistant Manager. Saved onto the project's roles (not a task assignment).
+  const handleAssignTeam = () => {
+    const chosen = teamPicks
+      .filter((p) => teamSel[teamKey(p)])
+      .sort((a, b) => b.suitabilityScore - a.suitabilityScore);
+    if (!chosen.length) { toast.error('Pick at least one person'); return; }
+    const pm = chosen[0];
+    const am = chosen[1]; // optional — a single pick just sets the Project Manager
+    if (!pm.userId) { toast.error(`${pm.name} has no linked user account and can't be set as Project Manager`); return; }
+    if (am && !am.userId) { toast.error(`${am.name} has no linked user account and can't be set as Assistant Manager`); return; }
+    setTeamSaving(true);
+    api.put(`/projects/${projectId}/team`, {
+      projectManagerId: pm.userId,
+      assistantManagerId: am ? am.userId : null,
+    })
+      .then(() => { toast.success('Team assigned'); setTeamDialog(false); fetchCore(); })
+      .catch((err) => toast.error(err?.response?.data?.message || 'Failed to assign team'))
+      .finally(() => setTeamSaving(false));
+  };
+
   const handleQuickIssue = () => {
      api.post(`/projects/${projectId}/issues`, newIssue)
        .then(() => { setQuickActionOpen(false); setQuickActionView('menu'); fetchCore(); fetchStats(); })
@@ -251,35 +381,61 @@ export default function ProjectCommandCenter() {
        .catch(err => console.error(err));
   };
 
-  const toggleExpandPhase = (phaseId: number) => {
-    if (expandedPhase === phaseId) {
-      setExpandedPhase(null);
-      return;
-    }
-    setExpandedPhase(phaseId);
-    if (!roomsByPhase[phaseId]) {
-      projectApi.getRooms(phaseId).then(rooms => setRoomsByPhase(prev => ({ ...prev, [phaseId]: rooms })));
-    }
-  };
-
-  const toggleExpandRoom = (roomId: number) => {
-    if (expandedRoom === roomId) {
-      setExpandedRoom(null);
-      return;
-    }
-    setExpandedRoom(roomId);
-    if (!itemsByRoom[roomId]) {
-      projectApi.getItems(roomId).then(items => setItemsByRoom(prev => ({ ...prev, [roomId]: items })));
-    }
-  };
+  const loadRooms = (phaseId: number) =>
+    projectApi.getRooms(phaseId).then(rooms => setRoomsByPhase(prev => ({ ...prev, [phaseId]: rooms })));
+  const loadItems = (roomId: number) =>
+    projectApi.getItems(roomId).then(items => setItemsByRoom(prev => ({ ...prev, [roomId]: items })));
+  const loadAllItemsBrief = () =>
+    projectApi.getAllItems(projectId).then(setAllItemsBrief).catch(() => {});
 
   const handleAddPhase = () => {
     projectApi.addPhase(projectId, newPhase)
       .then(phase => {
         setPhases(prev => [...prev, phase]);
         setNewPhase({ name: '', sequence: 1, budget: 0 });
+        toast.success("Phase added");
       })
       .catch(() => toast.error("Failed to add phase"));
+  };
+
+  const handleDeletePhase = (phaseId: number) => {
+    if (!window.confirm("Delete this phase and all its rooms & work items? This cannot be undone.")) return;
+    projectApi.deletePhase(phaseId)
+      .then(() => { setPhases(prev => prev.filter(p => p.id !== phaseId)); loadAllItemsBrief(); toast.success("Phase deleted"); })
+      .catch(() => toast.error("Failed to delete phase"));
+  };
+
+  const handleDeleteRoom = (room: ProjectRoom, phaseId: number) => {
+    if (!window.confirm(`Delete room "${room.roomName}" and its work items?`)) return;
+    projectApi.deleteRoom(room.id!)
+      .then(() => { loadRooms(phaseId); loadAllItemsBrief(); toast.success("Room deleted"); })
+      .catch(() => toast.error("Failed to delete room"));
+  };
+
+  // A phase/room/item change rolls up to the whole project — refresh the affected branch + counts.
+  const refreshPhaseTree = (phaseId?: number) => {
+    projectApi.getPhases(projectId).then(setPhases).catch(() => {});
+    if (phaseId) loadRooms(phaseId);
+    loadAllItemsBrief();
+    projectApi.getProgressDashboard(projectId).then(setProgressDashboard).catch(() => {});
+  };
+
+  // Item-wise view uses lightweight briefs; fetch the full item before opening the editor so its
+  // photos/remarks are preserved on save (the editor overwrites photos from what it loaded).
+  const openItemBrief = (b: import("@/api/projectApi").ProjectItemBrief) => {
+    if (!b.id || !b.roomId) return;
+    projectApi.getItems(b.roomId).then(items => {
+      setItemsByRoom(prev => ({ ...prev, [b.roomId!]: items }));
+      const full = items.find(i => i.id === b.id);
+      if (full) openItemEditor(full);
+    }).catch(() => toast.error("Failed to open work item"));
+  };
+  const deleteItemBrief = (b: import("@/api/projectApi").ProjectItemBrief) => {
+    if (b.locked) { toast.error("This item is locked (from the BOQ) and cannot be deleted."); return; }
+    if (!window.confirm(`Delete work item "${b.itemName}"?`)) return;
+    projectApi.deleteItem(b.id)
+      .then(() => { refreshPhaseTree(b.phaseId); toast.success("Work item deleted"); })
+      .catch(() => toast.error("Failed to delete work item"));
   };
 
   // ---- Work-item progress editing + rollup refresh --------------------------
@@ -574,8 +730,13 @@ export default function ProjectCommandCenter() {
   if (!data || !data.project) return <div className="p-8 text-red-500">Project not found</div>;
 
   const { project, stages, dailyLogs, qualityChecks, issues, risks, documents } = data;
-  const profitOrLoss = (project.budget || 0) - (project.spentAmount || 0);
-  const utilizationPct = project.budget ? Math.round(((project.spentAmount || 0) / project.budget) * 100) : 0;
+  // Estimate budget is taken from the approved BOQ's grand total (falls back to the linked BOQ
+  // revision, then the manual budget/estimate). Amount spent comes from live project expenses.
+  const approvedBoqId: number | null = masterBoq?.id ?? data?.boq?.id ?? null;
+  const boqEstimate = Number(masterBoq?.grandTotal ?? data?.boq?.grandTotal ?? project.budget ?? project.estimatedCost ?? 0);
+  const spentAmount = Number(profitability?.totalExpenses ?? project.spentAmount ?? 0);
+  const profitOrLoss = boqEstimate - spentAmount;
+  const utilizationPct = boqEstimate ? Math.round((spentAmount / boqEstimate) * 100) : 0;
 
   const inr = (n?: number | null) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
   const shortDate = (iso?: string) => iso ? format(new Date(iso), 'dd MMM yyyy') : '—';
@@ -929,11 +1090,14 @@ export default function ProjectCommandCenter() {
             
             {/* OVERVIEW TAB */}
             <TabsContent value="overview" className="space-y-3 mt-0 h-full outline-none">
-              {/* Band A — key facts · financial+progress · customer/actions, packed in one row */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
+              {/* Overview band — facts/progress + team/activity stacked in the main column, beside a sidebar */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-start">
+
+                {/* Column 1 — Overview + Project Team (independent stack, no cross-column gaps) */}
+                <div className="lg:col-span-5 space-y-3">
 
                 {/* Project Overview — key facts (inline editable) */}
-                <div className="lg:col-span-5 bg-white rounded-2xl border border-slate-100 p-3 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+                <div className="bg-white rounded-2xl border border-slate-100 p-3 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
                   <div className="mb-2 flex items-center justify-between">
                     <h3 className="text-sm font-bold text-slate-700 flex items-center"><ClipboardCheck className="w-4 h-4 mr-2 text-emerald-600"/> Project Overview</h3>
                     {!editingOverview ? (
@@ -993,8 +1157,33 @@ export default function ProjectCommandCenter() {
                   )}
                 </div>
 
+                {/* Notes & Comments */}
+                <div className="bg-white rounded-2xl border border-slate-100 p-3 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-sm font-bold text-slate-700 flex items-center"><StickyNote className="w-4 h-4 mr-2 text-emerald-600"/> Notes &amp; Comments</h3>
+                    <button type="button" onClick={() => toast.success('Notes & comments are coming soon.')} className="text-[11px] font-semibold text-emerald-600 hover:text-emerald-700">Add Note</button>
+                  </div>
+                  <div className="py-5 text-center">
+                    <span className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-300"><MessageCircle className="w-5 h-5" /></span>
+                    <div className="text-sm font-semibold text-slate-500 mt-2">No notes yet</div>
+                    <div className="text-xs text-slate-400 mt-0.5">Add notes, updates or comments about this project.</div>
+                  </div>
+                </div>
+
+                {/* Quote banner — left column */}
+                <div className="relative overflow-hidden rounded-2xl border border-emerald-100/70 bg-gradient-to-r from-emerald-50/70 via-white to-amber-50/50 px-4 py-3">
+                  <div className="flex items-center gap-3">
+                    <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-100 text-emerald-600 shrink-0"><Building2 className="w-4 h-4" /></span>
+                    <p className="font-serif italic text-sm text-emerald-900/70">“Well Planned Projects Turn Houses into Homes.”</p>
+                  </div>
+                </div>
+
+                </div>
+
+                {/* Column 2 — Progress + Recent Activity + Notes */}
+                <div className="lg:col-span-4 space-y-3">
                 {/* Project Progress — donut + legend + planning tip */}
-                <div className="lg:col-span-4 bg-white rounded-2xl border border-slate-100 p-3 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+                <div className="bg-white rounded-2xl border border-slate-100 p-3 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
                   <h3 className="text-sm font-bold text-slate-700 mb-2 flex items-center"><Activity className="w-4 h-4 mr-2 text-emerald-600"/> Project Progress</h3>
                   <div className="flex items-center gap-4">
                     <div className="relative h-24 w-24 shrink-0">
@@ -1026,101 +1215,8 @@ export default function ProjectCommandCenter() {
                   )}
                 </div>
 
-                {/* Right column — Financial Summary + Quick Actions */}
-                <div className="lg:col-span-3 space-y-3">
-                  {/* Financial Summary */}
-                  <div className="bg-white rounded-2xl border border-slate-100 p-3 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-sm font-bold text-slate-700 flex items-center"><Wallet className="w-4 h-4 mr-2 text-emerald-600"/> Financial Summary</h3>
-                      <button type="button" onClick={() => setActiveTab('payments')} className="text-[11px] font-semibold text-emerald-600 hover:text-emerald-700">View Details</button>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="rounded-xl bg-emerald-50/70 border border-emerald-100 p-3">
-                        <Wallet className="w-4 h-4 text-emerald-600 mb-1.5" />
-                        {editingOverview
-                          ? <input type="number" min={0} className={cellInput + " font-bold"} value={pform.budget} onChange={e => setPform({ ...pform, budget: e.target.value })} placeholder="Budget" />
-                          : <div className="text-lg font-black text-slate-800 leading-tight truncate">{inr(project.budget)}</div>}
-                        <div className="text-[10px] font-medium text-slate-400 mt-0.5">Total Budget</div>
-                      </div>
-                      <div className="rounded-xl bg-violet-50/70 border border-violet-100 p-3">
-                        <BarChart3 className="w-4 h-4 text-violet-600 mb-1.5" />
-                        <div className="text-lg font-black text-slate-800 leading-tight truncate">{inr(project.spentAmount)}</div>
-                        <div className="text-[10px] font-medium text-slate-400 mt-0.5">Amount Spent</div>
-                      </div>
-                    </div>
-                    <div className="mt-3">
-                      <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-                        <div className={`h-2 rounded-full transition-all ${profitOrLoss < 0 ? 'bg-rose-500' : 'bg-emerald-500'}`} style={{ width: `${Math.min(100, utilizationPct)}%` }} />
-                      </div>
-                      <div className="mt-1 text-right text-[11px] font-semibold text-slate-500">{utilizationPct}% Utilization</div>
-                    </div>
-                    {!project.budget && (
-                      <div className="mt-2 flex items-start gap-1.5 rounded-lg bg-slate-50 p-2 text-[11px] text-slate-400"><IndianRupee className="w-3.5 h-3.5 shrink-0 mt-0.5"/> Add budget details to track project expenses and profitability.</div>
-                    )}
-                  </div>
-
-                  {/* Quick Actions */}
-                  <div className="bg-white rounded-2xl border border-slate-100 p-3 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
-                    <h3 className="text-sm font-bold text-slate-700 mb-2.5 flex items-center"><Sparkles className="w-4 h-4 mr-2 text-slate-400"/> Quick Actions</h3>
-                    <div className="grid grid-cols-4 gap-1.5">
-                      {([
-                        { label: 'Add Task', icon: CheckSquare, color: 'text-emerald-500', onClick: () => { setQuickActionView('create_task'); setQuickActionOpen(true); } },
-                        { label: 'Issue', icon: AlertTriangle, color: 'text-amber-500', onClick: () => { setQuickActionView('report_issue'); setQuickActionOpen(true); } },
-                        { label: 'Assign', icon: Users, color: 'text-amber-500', onClick: () => { setQuickActionView('assign_employee'); setQuickActionOpen(true); } },
-                        { label: 'Site Visit', icon: MapPin, color: 'text-violet-500', onClick: () => setActiveTab('execution') },
-                        { label: 'Call', icon: Phone, color: 'text-slate-500', href: project.customer?.phone ? `tel:${project.customer.phone}` : undefined },
-                        { label: 'WhatsApp', icon: MessageCircle, color: 'text-emerald-500', href: project.customer?.phone ? `https://wa.me/${String(project.customer.phone).replace(/\D/g, '')}` : undefined },
-                        { label: 'Purchase', icon: ShoppingCart, color: 'text-violet-500', onClick: () => { setQuickActionView('purchase_request'); setQuickActionOpen(true); } },
-                        { label: 'More', icon: MoreHorizontal, color: 'text-slate-500', onClick: () => { setQuickActionView('menu'); setQuickActionOpen(true); } },
-                      ] as const).map((a) => {
-                        const cls = "flex flex-col items-center gap-1 rounded-lg border border-slate-100 bg-slate-50 hover:bg-slate-100 px-1 py-2 text-[10px] font-semibold text-slate-600 text-center transition-colors";
-                        return ('href' in a)
-                          ? <a key={a.label} href={(a as any).href} target={a.label === 'WhatsApp' ? '_blank' : undefined} rel="noreferrer" className={cls}><a.icon className={`w-4 h-4 ${a.color}`} /><span className="truncate w-full">{a.label}</span></a>
-                          : <button key={a.label} type="button" onClick={(a as any).onClick} className={cls}><a.icon className={`w-4 h-4 ${a.color}`} /><span className="truncate w-full">{a.label}</span></button>;
-                      })}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Band B — team · activity · notes */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
-
-                {/* Project Team */}
-                <div className="lg:col-span-5 bg-white rounded-2xl border border-slate-100 p-3 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-sm font-bold text-slate-700 flex items-center"><Users className="w-4 h-4 mr-2 text-emerald-600"/> Project Team</h3>
-                    <Link to={`/tasks?projectId=${projectId}`} className="text-[11px] font-semibold text-emerald-600 hover:text-emerald-700">Assign Team</Link>
-                  </div>
-                  {(() => {
-                    const team = ([['Project Manager', project.projectManager], ['Sales', project.salesExecutive], ['Designer', project.designer], ['Site Engineer', project.siteEngineer]] as [string, any][]).filter(([, u]) => u);
-                    return team.length > 0 ? (
-                      <div className="space-y-2">
-                        {team.map(([role, u]) => (
-                          <div key={role} className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50/60 px-3 py-2">
-                            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 text-sm font-bold shrink-0">{(u.name || '?').charAt(0).toUpperCase()}</span>
-                            <div className="min-w-0">
-                              <div className="text-sm font-semibold text-slate-700 truncate">{u.name}</div>
-                              <div className="text-[11px] text-slate-400">{role}</div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="py-6 text-center">
-                        <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 text-slate-300"><Users className="w-7 h-7" /></span>
-                        <div className="text-sm font-semibold text-slate-600 mt-3">No team members assigned yet</div>
-                        <div className="text-xs text-slate-400 mt-0.5">Assign team members to collaborate on this project.</div>
-                        <Button asChild size="sm" className="mt-3 bg-emerald-500 hover:bg-emerald-600 rounded-xl">
-                          <Link to={`/tasks?projectId=${projectId}`}><Plus className="w-4 h-4 mr-1.5"/> Assign Team</Link>
-                        </Button>
-                      </div>
-                    );
-                  })()}
-                </div>
-
                 {/* Recent Activity — timeline, scroll-capped */}
-                <div className="lg:col-span-4 bg-white rounded-2xl border border-slate-100 p-3 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+                <div className="bg-white rounded-2xl border border-slate-100 p-3 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="text-sm font-bold text-slate-700 flex items-center"><History className="w-4 h-4 mr-2 text-emerald-600"/> Recent Activity</h3>
                     <button type="button" onClick={() => setActiveTab('execution')} className="text-[11px] font-semibold text-emerald-600 hover:text-emerald-700">View All</button>
@@ -1148,120 +1244,159 @@ export default function ProjectCommandCenter() {
                   )}
                 </div>
 
-                {/* Notes & Comments */}
-                <div className="lg:col-span-3 bg-white rounded-2xl border border-slate-100 p-3 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-sm font-bold text-slate-700 flex items-center"><StickyNote className="w-4 h-4 mr-2 text-emerald-600"/> Notes &amp; Comments</h3>
-                    <button type="button" onClick={() => toast.success('Notes & comments are coming soon.')} className="text-[11px] font-semibold text-emerald-600 hover:text-emerald-700">Add Note</button>
+                {/* Project Team */}
+                <div className="bg-white rounded-2xl border border-slate-100 p-3 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-bold text-slate-700 flex items-center"><Users className="w-4 h-4 mr-2 text-emerald-600"/> Project Team</h3>
+                    <button type="button" onClick={openAssignTeam} className="text-[11px] font-semibold text-emerald-600 hover:text-emerald-700">Assign Team</button>
                   </div>
-                  <div className="py-5 text-center">
-                    <span className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-300"><MessageCircle className="w-5 h-5" /></span>
-                    <div className="text-sm font-semibold text-slate-500 mt-2">No notes yet</div>
-                    <div className="text-xs text-slate-400 mt-0.5">Add notes, updates or comments about this project.</div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Gantt / Stages */}
-              <div className="bg-white rounded-2xl border border-slate-100 p-3 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
-                <div className="flex items-center justify-between border-b pb-2.5 mb-1">
-                  <h3 className="text-sm font-bold text-slate-700 flex items-center"><TrendingUp className="w-4 h-4 mr-2 text-emerald-600"/> Project Stages &amp; Gantt</h3>
-                  <Dialog>
-                    <DialogTrigger asChild>
-                      <Button size="sm" variant="outline"><Plus className="w-4 h-4 mr-2"/> Add Stage</Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                      <DialogHeader><DialogTitle>Add Stage</DialogTitle></DialogHeader>
-                      <div className="space-y-4 pt-4">
-                        <div className="space-y-2">
-                          <Label>Stage Name</Label>
-                          <Input value={newStage.name} onChange={e => setNewStage({...newStage, name: e.target.value})} />
-                        </div>
-                        <div className="space-y-2">
-                           <Label>Due Date</Label>
-                           <Input type="date" value={newStage.dueDate} onChange={e => setNewStage({...newStage, dueDate: e.target.value})} />
-                        </div>
-                        <Button className="w-full" onClick={handleAddStage}>Save Stage</Button>
+                  {(() => {
+                    const team = ([['Project Manager', project.projectManager], ['Assistant Manager', project.assistantManager], ['Sales', project.salesExecutive], ['Designer', project.designer], ['Site Engineer', project.siteEngineer]] as [string, any][]).filter(([, u]) => u);
+                    return team.length > 0 ? (
+                      <div className="space-y-2">
+                        {team.map(([role, u]) => (
+                          <div key={role} className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50/60 px-3 py-2">
+                            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 text-sm font-bold shrink-0">{(u.name || '?').charAt(0).toUpperCase()}</span>
+                            <div className="min-w-0">
+                              <div className="text-sm font-semibold text-slate-700 truncate">{u.name}</div>
+                              <div className="text-[11px] text-slate-400">{role}</div>
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    </DialogContent>
-                  </Dialog>
+                    ) : (
+                      <div className="py-3 text-center">
+                        <span className="mx-auto flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-300"><Users className="w-4 h-4" /></span>
+                        <div className="text-xs font-semibold text-slate-600 mt-1.5">No team members assigned yet</div>
+                        <Button onClick={openAssignTeam} size="sm" className="mt-2 h-7 bg-emerald-500 hover:bg-emerald-600 rounded-lg text-xs">
+                          <Plus className="w-3.5 h-3.5 mr-1"/> Assign Team
+                        </Button>
+                      </div>
+                    );
+                  })()}
+                </div>
                 </div>
 
-                {stages.length > 0 ? getGanttTimeline() : (
-                  <div className="py-6 text-center text-sm text-slate-500">
-                    No stages added yet. Add stages to generate the Gantt chart.
+                {/* Column 3 — Financial Summary + Quick Actions */}
+                <div className="lg:col-span-3 space-y-3">
+                  {/* Financial Summary */}
+                  <div className="bg-white rounded-2xl border border-slate-100 p-3 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-sm font-bold text-slate-700 flex items-center"><Wallet className="w-4 h-4 mr-2 text-emerald-600"/> Financial Summary</h3>
+                      <button type="button" onClick={() => setActiveTab('payments')} className="text-[11px] font-semibold text-emerald-600 hover:text-emerald-700">View Details</button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => approvedBoqId ? navigate(`/boq/${approvedBoqId}`) : setActiveTab('phases')}
+                        title={approvedBoqId ? "Open the BOQ" : "No BOQ linked yet"}
+                        className="text-left rounded-xl bg-emerald-50/70 border border-emerald-100 p-3 transition-colors hover:bg-emerald-100/70 hover:border-emerald-200"
+                      >
+                        <div className="flex items-center justify-between">
+                          <Wallet className="w-4 h-4 text-emerald-600 mb-1.5" />
+                          <ChevronRight className="w-3.5 h-3.5 text-emerald-400" />
+                        </div>
+                        <div className="text-lg font-black text-slate-800 leading-tight truncate">{inr(boqEstimate)}</div>
+                        <div className="text-[10px] font-medium text-slate-400 mt-0.5">Estimate Budget · from BOQ</div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('payments')}
+                        title="View payments & expenses"
+                        className="text-left rounded-xl bg-violet-50/70 border border-violet-100 p-3 transition-colors hover:bg-violet-100/70 hover:border-violet-200"
+                      >
+                        <div className="flex items-center justify-between">
+                          <BarChart3 className="w-4 h-4 text-violet-600 mb-1.5" />
+                          <ChevronRight className="w-3.5 h-3.5 text-violet-400" />
+                        </div>
+                        <div className="text-lg font-black text-slate-800 leading-tight truncate">{inr(spentAmount)}</div>
+                        <div className="text-[10px] font-medium text-slate-400 mt-0.5">Amount Spent</div>
+                      </button>
+                    </div>
+                    <div className="mt-3">
+                      <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                        <div className={`h-2 rounded-full transition-all ${profitOrLoss < 0 ? 'bg-rose-500' : 'bg-emerald-500'}`} style={{ width: `${Math.min(100, utilizationPct)}%` }} />
+                      </div>
+                      <div className="mt-1 text-right text-[11px] font-semibold text-slate-500">{utilizationPct}% Utilization</div>
+                    </div>
+                    {!boqEstimate && (
+                      <div className="mt-2 flex items-start gap-1.5 rounded-lg bg-slate-50 p-2 text-[11px] text-slate-400"><IndianRupee className="w-3.5 h-3.5 shrink-0 mt-0.5"/> Create or link a BOQ to set the estimate budget and track profitability.</div>
+                    )}
                   </div>
-                )}
-              </div>
 
-              {/* Brand banner */}
-              <div className="relative overflow-hidden rounded-2xl border border-emerald-100/70 bg-gradient-to-r from-emerald-50/70 via-white to-amber-50/50 px-5 py-3 flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-100 text-emerald-600"><Building2 className="w-4 h-4" /></span>
-                  <p className="font-serif italic text-sm sm:text-base text-emerald-900/70">“Well Planned Projects Turn Houses into Homes.”</p>
-                </div>
-                <div className="text-right">
-                  <div className="text-sm font-black tracking-tight text-emerald-800">JB DECOR</div>
-                  <div className="text-[11px] text-slate-400">Crafted for Better Living</div>
+                  {/* Quick Actions */}
+                  <div className="bg-white rounded-2xl border border-slate-100 p-3 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+                    <h3 className="text-sm font-bold text-slate-700 mb-2.5 flex items-center"><Sparkles className="w-4 h-4 mr-2 text-slate-400"/> Quick Actions</h3>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {([
+                        { label: 'Add Task', icon: CheckSquare, color: 'text-emerald-500', onClick: () => { setQuickActionView('create_task'); setQuickActionOpen(true); } },
+                        { label: 'Issue', icon: AlertTriangle, color: 'text-amber-500', onClick: () => { setQuickActionView('report_issue'); setQuickActionOpen(true); } },
+                        { label: 'Assign', icon: Users, color: 'text-amber-500', onClick: () => { setQuickActionView('assign_employee'); setQuickActionOpen(true); } },
+                        { label: 'Site Visit', icon: MapPin, color: 'text-violet-500', onClick: () => setActiveTab('execution') },
+                        { label: 'Call', icon: Phone, color: 'text-slate-500', href: project.customer?.phone ? `tel:${project.customer.phone}` : undefined },
+                        { label: 'WhatsApp', icon: MessageCircle, color: 'text-emerald-500', href: project.customer?.phone ? `https://wa.me/${String(project.customer.phone).replace(/\D/g, '')}` : undefined },
+                        { label: 'Purchase', icon: ShoppingCart, color: 'text-violet-500', onClick: () => { setQuickActionView('purchase_request'); setQuickActionOpen(true); } },
+                        { label: 'More', icon: MoreHorizontal, color: 'text-slate-500', onClick: () => { setQuickActionView('menu'); setQuickActionOpen(true); } },
+                      ] as const).map((a) => {
+                        const cls = "flex flex-col items-center gap-1 rounded-lg border border-slate-100 bg-slate-50 hover:bg-slate-100 px-1 py-2 text-[10px] font-semibold text-slate-600 text-center transition-colors";
+                        return ('href' in a)
+                          ? <a key={a.label} href={(a as any).href} target={a.label === 'WhatsApp' ? '_blank' : undefined} rel="noreferrer" className={cls}><a.icon className={`w-4 h-4 ${a.color}`} /><span className="truncate w-full">{a.label}</span></a>
+                          : <button key={a.label} type="button" onClick={(a as any).onClick} className={cls}><a.icon className={`w-4 h-4 ${a.color}`} /><span className="truncate w-full">{a.label}</span></button>;
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Brand mark — right column */}
+                  <div className="rounded-2xl border border-emerald-100/70 bg-gradient-to-r from-emerald-50/70 via-white to-amber-50/50 px-4 py-3 text-right">
+                    <div className="text-sm font-black tracking-tight text-emerald-800">JB DECOR</div>
+                    <div className="text-[11px] text-slate-400">Crafted for Better Living</div>
+                  </div>
                 </div>
               </div>
             </TabsContent>
 
             {/* PHASES & ROOMS TAB */}
             <TabsContent value="phases" className="space-y-6 mt-0 h-full outline-none">
-              {progressDashboard && (
-                <div className="space-y-4">
-                  <div className="bg-white border border-slate-100 rounded-2xl shadow-[0_1px_2px_rgba(0,0,0,0.03)] p-5">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-semibold text-slate-600 flex items-center"><TrendingUp className="w-4 h-4 mr-2 text-emerald-600"/> Overall Project Progress</span>
-                      <span className="text-2xl font-bold text-slate-800">{progressDashboard.overallProgress}%</span>
+              {progressDashboard && (() => {
+                const d = progressDashboard;
+                const ratio = (a: number, b: number) => (b > 0 ? (a / b) * 100 : 0);
+                const rings = [
+                  { pct: ratio(d.completedTasks, d.totalTasks), label: 'Tasks', sub: `${d.completedTasks}/${d.totalTasks}`, color: '#3b82f6' },
+                  { pct: ratio(d.completedRooms, d.totalRooms), label: 'Rooms', sub: `${d.completedRooms}/${d.totalRooms}`, color: '#10b981' },
+                  { pct: ratio(d.completedPhases, d.totalPhases), label: 'Phases', sub: `${d.completedPhases}/${d.totalPhases}`, color: '#8b5cf6' },
+                ];
+                return (
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
+                  {/* Overall progress — premium compact card */}
+                  <div className="lg:col-span-4 bg-white border border-slate-100 rounded-2xl shadow-[0_1px_2px_rgba(0,0,0,0.03)] p-4 flex flex-col">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold uppercase tracking-wide text-slate-500 flex items-center"><TrendingUp className="w-3.5 h-3.5 mr-1.5 text-emerald-600"/> Overall Progress</span>
+                      <span className="text-2xl font-black text-slate-800 leading-none">{d.overallProgress}%</span>
                     </div>
-                    <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
-                      <div className={`h-full ${progressBarColor(progressDashboard.overallProgress)} rounded-full transition-all`} style={{ width: `${progressDashboard.overallProgress}%` }} />
+                    <div className="mt-3 h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                      <div className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-emerald-600 transition-all duration-500" style={{ width: `${d.overallProgress}%` }} />
+                    </div>
+                    <div className="mt-auto pt-4 grid grid-cols-3 gap-2 text-center">
+                      {[['Done', d.completedTasks, 'text-emerald-600'], ['Active', d.inProgressTasks, 'text-sky-600'], ['Pending', d.pendingTasks, 'text-slate-500']].map(([l, v, c]) => (
+                        <div key={l as string} className="rounded-lg bg-slate-50/70 py-1.5">
+                          <div className={`text-base font-black ${c}`}>{v as number}</div>
+                          <div className="text-[10px] font-medium text-slate-400">{l as string}</div>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-                    {([
-                      ['Completed Tasks', progressDashboard.completedTasks, 'text-emerald-600'],
-                      ['In Progress', progressDashboard.inProgressTasks, 'text-emerald-600'],
-                      ['Pending Tasks', progressDashboard.pendingTasks, 'text-slate-600'],
-                      ['Delayed Tasks', progressDashboard.delayedTasks, 'text-red-600'],
-                      ['Inspection Pending', progressDashboard.inspectionPending, 'text-amber-600'],
-                      ['Completed Rooms', `${progressDashboard.completedRooms}/${progressDashboard.totalRooms}`, 'text-emerald-600'],
-                      ['Completed Floors', `${progressDashboard.completedFloors}/${progressDashboard.totalFloors}`, 'text-emerald-600'],
-                      ['Completed Phases', `${progressDashboard.completedPhases}/${progressDashboard.totalPhases}`, 'text-emerald-600'],
-                      ['Delayed Rooms', progressDashboard.delayedRooms, 'text-red-600'],
-                      ['Delayed Phases', progressDashboard.delayedPhases, 'text-red-600'],
-                    ] as [string, number | string, string][]).map(([label, value, color]) => (
-                      <div key={label} className="bg-white border border-slate-100 rounded-xl shadow-[0_1px_2px_rgba(0,0,0,0.03)] p-3">
-                        <div className={`text-2xl font-bold ${color}`}>{value}</div>
-                        <div className="text-[11px] font-medium text-slate-400 mt-0.5">{label}</div>
-                      </div>
-                    ))}
-                  </div>
-                  {progressDashboard.floors.length > 0 && (
-                    <div className="bg-white border border-slate-100 rounded-2xl shadow-[0_1px_2px_rgba(0,0,0,0.03)] p-4">
-                      <div className="text-sm font-semibold text-slate-600 mb-3">Floor Progress</div>
-                      <div className="space-y-2.5">
-                        {progressDashboard.floors.map((f, idx) => (
-                          <div key={idx} className="flex items-center gap-3 text-sm">
-                            <div className="w-40 shrink-0 truncate">
-                              <span className="font-medium text-slate-700">{f.floorName}</span>
-                              <span className="text-xs text-slate-400 ml-1">· {f.phaseName}</span>
-                            </div>
-                            <div className="h-2 flex-1 bg-slate-100 rounded-full overflow-hidden">
-                              <div className={`h-full ${progressBarColor(f.progress)} rounded-full`} style={{ width: `${f.progress}%` }} />
-                            </div>
-                            <span className="w-10 text-right text-xs font-semibold text-slate-500">{f.progress}%</span>
-                            {f.completed && <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />}
-                            {f.delayed && <span className="text-[10px] font-bold px-1.5 py-0.5 bg-red-100 text-red-600 rounded shrink-0">DELAYED</span>}
-                          </div>
-                        ))}
-                      </div>
+
+                  {/* 4 completion rings — premium compact card */}
+                  <div className="lg:col-span-8 bg-white border border-slate-100 rounded-2xl shadow-[0_1px_2px_rgba(0,0,0,0.03)] p-4">
+                    <div className="text-xs font-bold uppercase tracking-wide text-slate-500 mb-3">Completion Breakdown</div>
+                    <div className="grid grid-cols-3 gap-2.5">
+                      {rings.map(r => <ProgressRing key={r.label} {...r} />)}
                     </div>
-                  )}
+                  </div>
+
                 </div>
-              )}
+                );
+              })()}
 
               {data?.boq && (
                 <div className="bg-white border border-slate-100 rounded-2xl shadow-[0_1px_2px_rgba(0,0,0,0.03)] p-4 grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
@@ -1289,7 +1424,16 @@ export default function ProjectCommandCenter() {
 
               <div className="flex items-center justify-between">
                 <h2 className="text-2xl font-bold text-slate-800 flex items-center"><Layers className="w-5 h-5 mr-2 text-emerald-600"/> Phases & Rooms</h2>
-                <div className="flex gap-3">
+                <div className="flex gap-3 flex-wrap items-center">
+                  {/* Room-wise (card grid) vs Item-wise (flat work-item list) toggle */}
+                  <div className="inline-flex rounded-lg border bg-muted/40 p-0.5 text-xs">
+                    {([['rooms', 'Room-wise'], ['items', 'Item-wise']] as const).map(([v, label]) => (
+                      <button key={v} type="button" onClick={() => setPhaseView(v)}
+                        className={`px-3 py-1.5 rounded-md font-medium transition-colors ${phaseView === v ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
                   <Button variant="outline" onClick={() => setBulkOpen(true)}>
                     <CheckSquare className="w-4 h-4 mr-2 text-emerald-600"/> Update Work
                   </Button>
@@ -1310,20 +1454,7 @@ export default function ProjectCommandCenter() {
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
-                  <Dialog>
-                    <DialogTrigger asChild>
-                      <Button><Plus className="w-4 h-4 mr-2"/> Add Phase</Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                      <DialogHeader><DialogTitle>Add Phase</DialogTitle></DialogHeader>
-                      <div className="space-y-4 pt-4">
-                        <div className="space-y-2"><Label>Phase Name</Label><Input value={newPhase.name} onChange={e => setNewPhase({ ...newPhase, name: e.target.value })} placeholder="e.g. Ground Floor" /></div>
-                        <div className="space-y-2"><Label>Sequence</Label><Input type="number" value={newPhase.sequence} onChange={e => setNewPhase({ ...newPhase, sequence: Number(e.target.value) })} /></div>
-                        <div className="space-y-2"><Label>Budget</Label><Input type="number" value={newPhase.budget} onChange={e => setNewPhase({ ...newPhase, budget: Number(e.target.value) })} /></div>
-                        <Button className="w-full" onClick={handleAddPhase}>Save Phase</Button>
-                      </div>
-                    </DialogContent>
-                  </Dialog>
+                  <Button onClick={() => setPhaseDialog({ open: true, phase: null })}><Plus className="w-4 h-4 mr-2"/> Add Phase</Button>
                 </div>
               </div>
 
@@ -1332,11 +1463,7 @@ export default function ProjectCommandCenter() {
                 projectId={projectId}
                 open={bulkOpen}
                 onOpenChange={setBulkOpen}
-                onApplied={() => {
-                  fetchProjectData();
-                  if (expandedRoom) projectApi.getItems(expandedRoom)
-                    .then(items => setItemsByRoom(prev => ({ ...prev, [expandedRoom]: items }))).catch(() => {});
-                }}
+                onApplied={() => refreshPhaseTree(detailRoom?.phaseId)}
               />
 
               {/* Build-from-approved-quotation picker — replaces the old blind "Generate from BOQ". */}
@@ -1387,72 +1514,138 @@ export default function ProjectCommandCenter() {
                 </DialogContent>
               </Dialog>
 
-              <div className="space-y-3">
-                {phases.map(phase => (
-                  <div key={phase.id} className="bg-white border border-slate-100 rounded-2xl shadow-[0_1px_2px_rgba(0,0,0,0.03)] overflow-hidden">
-                    <button className="w-full flex items-center justify-between p-4 hover:bg-slate-50" onClick={() => toggleExpandPhase(phase.id!)}>
-                      <div className="flex items-center gap-3">
-                        {expandedPhase === phase.id ? <ChevronDown className="w-4 h-4 text-slate-400"/> : <ChevronRight className="w-4 h-4 text-slate-400"/>}
-                        <span className="font-bold text-slate-800">{phase.name}</span>
-                        <span className="text-xs font-bold px-2 py-0.5 bg-slate-100 text-slate-600 rounded uppercase">{phase.status}</span>
+              {/* Room-wise — a table per phase (Room · Work Item · Type · Progress · Status · Actions). */}
+              {phaseView === 'rooms' ? (
+              <div className="space-y-4">
+                {phases.map(phase => {
+                  const rooms = roomsByPhase[phase.id!] || [];
+                  return (
+                  <div key={phase.id} className="bg-white rounded-2xl border border-slate-100 shadow-[0_1px_2px_rgba(0,0,0,0.03)] overflow-hidden">
+                    {/* Phase header bar */}
+                    <div className="flex items-center gap-2 flex-wrap px-4 py-3 border-b border-slate-100 bg-slate-50/60">
+                      <span className="font-bold text-slate-800">{phase.name}</span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 bg-slate-100 text-slate-600 rounded uppercase">{phase.status}</span>
+                      <span className="text-xs text-slate-400">· {rooms.length} room{rooms.length === 1 ? '' : 's'} · Budget {inr(phase.budget)} · {phase.completionPercentage || 0}%</span>
+                      <div className="flex-1" />
+                      <div className="flex items-center gap-0.5 shrink-0">
+                        <Button size="sm" variant="outline" className="h-8" onClick={() => setRoomDialog({ open: true, phaseId: phase.id!, room: null })}><Plus className="w-3.5 h-3.5 mr-1"/> Room</Button>
+                        <button type="button" title="Edit phase" onClick={() => setPhaseDialog({ open: true, phase })} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100"><Pencil className="w-4 h-4"/></button>
+                        <button type="button" title="Delete phase" onClick={() => handleDeletePhase(phase.id!)} className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50"><Trash2 className="w-4 h-4"/></button>
                       </div>
-                      <div className="flex items-center gap-6 text-sm text-slate-500">
-                        <span>Budget: {inr(phase.budget)}</span>
-                        <span>{phase.completionPercentage || 0}% complete</span>
+                    </div>
+
+                    {rooms.length === 0 ? (
+                      <div className="py-6 text-center text-sm text-slate-400">
+                        No rooms in this phase yet.
+                        <button type="button" onClick={() => setRoomDialog({ open: true, phaseId: phase.id!, room: null })} className="ml-1 font-medium text-emerald-600 hover:underline">Add a room</button>
                       </div>
-                    </button>
-                    {expandedPhase === phase.id && (
-                      <div className="border-t bg-slate-50/50 p-4 space-y-2">
-                        {(roomsByPhase[phase.id!] || []).map(room => (
-                          <div key={room.id} className="bg-white border rounded-xl overflow-hidden">
-                            <button className="w-full flex items-center justify-between p-3 hover:bg-slate-50" onClick={() => toggleExpandRoom(room.id!)}>
-                              <div className="flex items-center gap-2">
-                                {expandedRoom === room.id ? <ChevronDown className="w-3.5 h-3.5 text-slate-400"/> : <ChevronRight className="w-3.5 h-3.5 text-slate-400"/>}
-                                <span className="font-medium text-slate-700 text-sm">{room.roomName}</span>
-                                {room.floorName && <span className="text-xs text-slate-400">({room.floorName})</span>}
-                              </div>
-                              <span className="text-xs text-slate-500">{room.completionPercentage || 0}%</span>
-                            </button>
-                            {expandedRoom === room.id && (
-                              <div className="border-t p-3 space-y-1.5">
-                                {(itemsByRoom[room.id!] || []).map(item => {
-                                  const pct = item.progress ?? 0;
-                                  return (
-                                  <button key={item.id} onClick={() => openItemEditor(item)}
-                                    className="w-full flex items-center gap-3 text-sm py-2 px-2 rounded hover:bg-slate-50 text-left">
-                                    <div className="flex-1 min-w-0">
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm min-w-[760px]">
+                          <thead className="bg-slate-50 text-xs text-slate-500">
+                            <tr>
+                              <th className="text-left font-medium px-4 py-2 w-40">Room</th>
+                              <th className="text-left font-medium px-3 py-2">Work Item</th>
+                              <th className="text-left font-medium px-3 py-2 w-32">Type</th>
+                              <th className="text-left font-medium px-3 py-2 w-48">Progress</th>
+                              <th className="text-left font-medium px-3 py-2 w-32">Status</th>
+                              <th className="text-right font-medium px-4 py-2 w-24">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {rooms.map(room => {
+                              const items = allItemsBrief.filter(i => i.roomId === room.id);
+                              const roomMenu = (
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <button type="button" className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100"><MoreHorizontal className="w-4 h-4"/></button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end" className="w-44">
+                                    <DropdownMenuItem onSelect={() => setDetailRoom({ room, phaseId: phase.id! })}><Plus className="w-4 h-4 mr-2 text-emerald-600"/> Add / view items</DropdownMenuItem>
+                                    <DropdownMenuItem onSelect={() => setRoomDialog({ open: true, phaseId: phase.id!, room })}><Pencil className="w-4 h-4 mr-2"/> Edit room</DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem className="text-red-600" onSelect={() => handleDeleteRoom(room, phase.id!)}><Trash2 className="w-4 h-4 mr-2"/> Delete room</DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              );
+                              if (items.length === 0) {
+                                return (
+                                  <tr key={room.id} className="hover:bg-slate-50/60">
+                                    <td className="px-4 py-2.5 align-top">
+                                      <div className="font-medium text-slate-700">{room.roomName}</div>
+                                      {room.floorName && <div className="text-[11px] text-slate-400">{room.floorName}</div>}
+                                    </td>
+                                    <td className="px-3 py-2.5 text-slate-400 italic" colSpan={4}>
+                                      No work items —
+                                      <button type="button" onClick={() => setDetailRoom({ room, phaseId: phase.id! })} className="ml-1 not-italic font-medium text-emerald-600 hover:underline">add one</button>
+                                    </td>
+                                    <td className="px-4 py-2.5 text-right">{roomMenu}</td>
+                                  </tr>
+                                );
+                              }
+                              return items.map((item, idx) => {
+                                const pct = item.progress ?? 0;
+                                return (
+                                  <tr key={item.id} className="hover:bg-slate-50/60">
+                                    <td className="px-4 py-2.5 align-top">
+                                      {idx === 0 ? (
+                                        <>
+                                          <div className="font-medium text-slate-700">{room.roomName}</div>
+                                          {room.floorName && <div className="text-[11px] text-slate-400">{room.floorName}</div>}
+                                        </>
+                                      ) : <span className="text-slate-300">↳</span>}
+                                    </td>
+                                    <td className="px-3 py-2.5">
+                                      <span className="inline-flex items-center gap-1.5 font-medium text-slate-700">
+                                        {item.itemName}
+                                        {item.locked && <Lock className="w-3 h-3 text-slate-400" />}
+                                        {item.delayed && <span className="text-[10px] font-bold px-1.5 py-0.5 bg-red-100 text-red-600 rounded">DELAYED</span>}
+                                      </span>
+                                    </td>
+                                    <td className="px-3 py-2.5">
+                                      <span className="text-[10px] font-bold px-2 py-0.5 bg-slate-100 text-slate-600 rounded uppercase">{item.itemType}</span>
+                                    </td>
+                                    <td className="px-3 py-2.5">
                                       <div className="flex items-center gap-2">
-                                        <span className="font-medium text-slate-700 truncate">{item.itemName}</span>
-                                        {item.locked && <Lock className="w-3 h-3 text-slate-400 shrink-0" />}
-                                        <span className="text-[10px] text-slate-400 uppercase shrink-0">{item.itemType}</span>
-                                        {item.assignedResource && (
-                                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 shrink-0 truncate max-w-[120px]">
-                                            {item.assignedResource.name}
-                                          </span>
-                                        )}
-                                      </div>
-                                      <div className="flex items-center gap-2 mt-1">
                                         <div className="h-1.5 flex-1 bg-slate-100 rounded-full overflow-hidden">
                                           <div className={`h-full ${progressBarColor(pct)} rounded-full transition-all`} style={{ width: `${pct}%` }} />
                                         </div>
                                         <span className="text-[11px] font-semibold text-slate-500 w-9 text-right">{pct}%</span>
                                       </div>
-                                    </div>
-                                    {item.delayed && <span className="text-[10px] font-bold px-1.5 py-0.5 bg-red-100 text-red-600 rounded shrink-0">DELAYED</span>}
-                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase shrink-0 ${itemStatusStyle(item.status)}`}>{(item.status || '').replace(/_/g, ' ')}</span>
-                                  </button>
-                                  );
-                                })}
-                                {(itemsByRoom[room.id!] || []).length === 0 && <p className="text-xs text-slate-400 py-2">No items yet.</p>}
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                        {(roomsByPhase[phase.id!] || []).length === 0 && <p className="text-sm text-slate-400 py-2">No rooms yet.</p>}
+                                    </td>
+                                    <td className="px-3 py-2.5">
+                                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${itemStatusStyle(item.status)}`}>{(item.status || '').replace(/_/g, ' ')}</span>
+                                    </td>
+                                    <td className="px-4 py-2.5">
+                                      <div className="flex items-center justify-end gap-0.5">
+                                        <button type="button" title="Update work item" onClick={() => openItemBrief(item)} className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50"><Pencil className="w-4 h-4"/></button>
+                                        <DropdownMenu>
+                                          <DropdownMenuTrigger asChild>
+                                            <button type="button" className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100"><MoreHorizontal className="w-4 h-4"/></button>
+                                          </DropdownMenuTrigger>
+                                          <DropdownMenuContent align="end" className="w-44">
+                                            <DropdownMenuItem onSelect={() => openItemBrief(item)}><Pencil className="w-4 h-4 mr-2"/> Update progress</DropdownMenuItem>
+                                            <DropdownMenuItem onSelect={() => setDetailRoom({ room, phaseId: phase.id! })}><Plus className="w-4 h-4 mr-2 text-emerald-600"/> Add item to room</DropdownMenuItem>
+                                            <DropdownMenuItem onSelect={() => setRoomDialog({ open: true, phaseId: phase.id!, room })}><Pencil className="w-4 h-4 mr-2"/> Edit room</DropdownMenuItem>
+                                            {!item.locked && <>
+                                              <DropdownMenuSeparator />
+                                              <DropdownMenuItem className="text-red-600" onSelect={() => deleteItemBrief(item)}><Trash2 className="w-4 h-4 mr-2"/> Delete item</DropdownMenuItem>
+                                            </>}
+                                          </DropdownMenuContent>
+                                        </DropdownMenu>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              });
+                            })}
+                          </tbody>
+                        </table>
                       </div>
                     )}
                   </div>
-                ))}
+                  );
+                })}
                 {phases.length === 0 && (
                   <div className="py-16 text-center border-2 border-dashed rounded-2xl bg-slate-50/50">
                     <Layers className="h-10 w-10 text-slate-300 mx-auto mb-3" />
@@ -1460,6 +1653,129 @@ export default function ProjectCommandCenter() {
                   </div>
                 )}
               </div>
+              ) : (
+                /* Item-wise — every work item across all phases/rooms in one flat list */
+                <div className="space-y-3">
+                  {allItemsBrief.length === 0 ? (
+                    <div className="py-16 text-center border-2 border-dashed rounded-2xl bg-slate-50/50">
+                      <Layers className="h-10 w-10 text-slate-300 mx-auto mb-3" />
+                      <p className="text-slate-500 font-medium">No work items yet. Switch to Room-wise to add rooms and items.</p>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Mobile cards */}
+                      <div className="sm:hidden space-y-2.5">
+                        {allItemsBrief.map(item => {
+                          const pct = item.progress ?? 0;
+                          return (
+                            <div key={item.id} className="rounded-xl border bg-card p-3">
+                              <div className="flex items-start gap-2">
+                                <button type="button" className="flex-1 min-w-0 text-left" onClick={() => openItemBrief(item)}>
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-semibold text-sm text-slate-800 truncate">{item.itemName}</span>
+                                    {item.locked && <Lock className="w-3 h-3 text-slate-400 shrink-0" />}
+                                    <span className="text-[10px] text-slate-400 uppercase shrink-0">{item.itemType}</span>
+                                  </div>
+                                  <div className="text-xs text-muted-foreground mt-0.5 truncate">{item.phaseName} · {item.roomName || 'Unassigned'}</div>
+                                  <div className="flex items-center gap-2 mt-1.5">
+                                    <div className="h-1.5 flex-1 bg-slate-100 rounded-full overflow-hidden">
+                                      <div className={`h-full ${progressBarColor(pct)} rounded-full`} style={{ width: `${pct}%` }} />
+                                    </div>
+                                    <span className="text-[11px] font-semibold text-slate-500 w-9 text-right">{pct}%</span>
+                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase shrink-0 ${itemStatusStyle(item.status)}`}>{(item.status || '').replace(/_/g, ' ')}</span>
+                                  </div>
+                                </button>
+                                {!item.locked && (
+                                  <button type="button" title="Delete item" onClick={() => deleteItemBrief(item)} className="p-1.5 -m-0.5 rounded-lg text-slate-300 hover:text-red-600 hover:bg-red-50 shrink-0"><Trash2 className="w-4 h-4"/></button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Desktop table */}
+                      <div className="hidden sm:block border rounded-xl overflow-x-auto bg-white">
+                        <table className="w-full text-sm min-w-[720px]">
+                          <thead className="bg-slate-50 text-xs text-slate-500">
+                            <tr>
+                              <th className="text-left px-3 py-2">Phase</th>
+                              <th className="text-left px-3 py-2">Room</th>
+                              <th className="text-left px-3 py-2">Work Item</th>
+                              <th className="text-left px-3 py-2">Type</th>
+                              <th className="text-left px-3 py-2 w-48">Progress</th>
+                              <th className="text-left px-3 py-2">Status</th>
+                              <th className="px-3 py-2" />
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y">
+                            {allItemsBrief.map(item => {
+                              const pct = item.progress ?? 0;
+                              return (
+                                <tr key={item.id} className="hover:bg-slate-50 cursor-pointer group" onClick={() => openItemBrief(item)}>
+                                  <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{item.phaseName || '—'}</td>
+                                  <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{item.roomName || 'Unassigned'}</td>
+                                  <td className="px-3 py-2 font-medium text-slate-700">
+                                    <span className="inline-flex items-center gap-1.5">{item.itemName}{item.locked && <Lock className="w-3 h-3 text-slate-400" />}{item.delayed && <span className="text-[10px] font-bold px-1.5 py-0.5 bg-red-100 text-red-600 rounded">DELAYED</span>}</span>
+                                  </td>
+                                  <td className="px-3 py-2 text-[11px] text-slate-400 uppercase whitespace-nowrap">{item.itemType}</td>
+                                  <td className="px-3 py-2">
+                                    <div className="flex items-center gap-2">
+                                      <div className="h-1.5 flex-1 bg-slate-100 rounded-full overflow-hidden">
+                                        <div className={`h-full ${progressBarColor(pct)} rounded-full`} style={{ width: `${pct}%` }} />
+                                      </div>
+                                      <span className="text-[11px] font-semibold text-slate-500 w-9 text-right">{pct}%</span>
+                                    </div>
+                                  </td>
+                                  <td className="px-3 py-2"><span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${itemStatusStyle(item.status)}`}>{(item.status || '').replace(/_/g, ' ')}</span></td>
+                                  <td className="px-3 py-2 text-right">
+                                    {!item.locked && (
+                                      <button type="button" title="Delete item" onClick={(e) => { e.stopPropagation(); deleteItemBrief(item); }} className="text-slate-300 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 className="w-4 h-4"/></button>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">Click any item to update progress, status, photos and remarks.</p>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* Phase add/edit modal */}
+              <PhaseFormDialog
+                open={phaseDialog.open}
+                phase={phaseDialog.phase}
+                projectId={projectId}
+                onOpenChange={(o) => setPhaseDialog(s => ({ ...s, open: o }))}
+                onSaved={() => { setPhaseDialog({ open: false, phase: null }); refreshPhaseTree(); }}
+              />
+              {/* Room add/edit modal */}
+              <RoomFormDialog
+                open={roomDialog.open}
+                phaseId={roomDialog.phaseId}
+                room={roomDialog.room}
+                onOpenChange={(o) => setRoomDialog(s => ({ ...s, open: o }))}
+                onSaved={() => { const pid = roomDialog.phaseId; setRoomDialog({ open: false, phaseId: null, room: null }); refreshPhaseTree(pid ?? undefined); }}
+              />
+              {/* Room detail modal — work items table with add/edit/delete */}
+              {detailRoom && (
+                <RoomDetailDialog
+                  room={detailRoom.room}
+                  phaseId={detailRoom.phaseId}
+                  items={itemsByRoom[detailRoom.room.id!] || []}
+                  loadItems={loadItems}
+                  onClose={() => setDetailRoom(null)}
+                  onEditItem={openItemEditor}
+                  onChanged={() => refreshPhaseTree(detailRoom.phaseId)}
+                  itemStatusStyle={itemStatusStyle}
+                  progressBarColor={progressBarColor}
+                  inr={inr}
+                />
+              )}
             </TabsContent>
 
             {/* PAYMENTS & INVOICES TAB */}
@@ -1768,7 +2084,19 @@ export default function ProjectCommandCenter() {
             </TabsContent>
 
             {/* DAILY LOGS & REPORTS — the site's execution logs + the employees' submitted daily reports, together */}
-            <TabsContent value="execution" className="space-y-8 mt-0 h-full outline-none">
+            <TabsContent value="execution" className="space-y-6 mt-0 h-full outline-none">
+              {(() => {
+                const logs = dailyLogs || [];
+                const withIssues = logs.filter((l: any) => l.issues && String(l.issues).trim()).length;
+                const avgManpower = logs.length ? Math.round(logs.reduce((s: number, l: any) => s + (Number(l.manpower) || 0), 0) / logs.length) : 0;
+                const latest = logs.length ? [...logs].map((l: any) => l.logDate).sort().slice(-1)[0] : null;
+                return <StatStrip items={[
+                  { label: 'Daily Logs', value: logs.length, sub: 'entries recorded', icon: ClipboardList, tone: 'emerald' },
+                  { label: 'Avg Manpower', value: avgManpower, sub: 'per logged day', icon: Users, tone: 'sky' },
+                  { label: 'Latest Log', value: latest ? format(new Date(latest), 'dd MMM') : '—', sub: latest ? 'last entry' : 'no logs yet', icon: Calendar, tone: 'violet' },
+                  { label: 'Logs with Issues', value: withIssues, sub: withIssues ? 'need attention' : 'all clear', icon: AlertTriangle, tone: 'orange' },
+                ]} />;
+              })()}
               <DailyLogsTab projectId={projectId} dailyLogs={dailyLogs} onChanged={fetchCore} />
               <div className="border-t border-slate-100 pt-8">
                 <EntityDailyReports projectId={projectId} />
@@ -1777,6 +2105,18 @@ export default function ProjectCommandCenter() {
 
             {/* FIELD PROGRESS TAB — read-only view into the mobile Employee Task module (manager: live progress + employee timeline) */}
             <TabsContent value="fieldProgress" className="space-y-6 mt-0 h-full outline-none">
+              {(() => {
+                const t = fieldTasks || [];
+                const done = t.filter((x: any) => x.status === 'COMPLETED').length;
+                const inprog = t.filter((x: any) => x.status === 'IN_PROGRESS').length;
+                const waiting = t.filter((x: any) => x.status === 'WAITING_APPROVAL').length;
+                return <StatStrip items={[
+                  { label: 'Total Tasks', value: t.length, sub: 'on this project', icon: CheckSquare, tone: 'emerald' },
+                  { label: 'Completed', value: done, sub: t.length ? `${Math.round((done / t.length) * 100)}% done` : '—', icon: CheckCircle2, tone: 'sky' },
+                  { label: 'In Progress', value: inprog, sub: 'active now', icon: Play, tone: 'amber' },
+                  { label: 'Awaiting Approval', value: waiting, sub: waiting ? 'review needed' : 'none pending', icon: Clock, tone: 'violet' },
+                ]} />;
+              })()}
               <FieldProgressTab projectId={projectId} fieldTasks={fieldTasks} onChanged={() => api.get(`/tasks/project/${projectId}`).then(res => setFieldTasks(res.data)).catch(() => {})} />
             </TabsContent>
 
@@ -1791,7 +2131,19 @@ export default function ProjectCommandCenter() {
             </TabsContent>
 
             {/* QUALITY & ISSUES — inspections plus issues/risks, together */}
-            <TabsContent value="quality" className="space-y-8 mt-0 h-full outline-none">
+            <TabsContent value="quality" className="space-y-6 mt-0 h-full outline-none">
+              {(() => {
+                const q = qualityChecks || [];
+                const passed = q.filter((c: any) => c.status === 'APPROVED').length;
+                const failed = q.filter((c: any) => c.status === 'REJECTED' || c.status === 'REWORK_REQUIRED').length;
+                return <StatStrip className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5" items={[
+                  { label: 'Inspections', value: q.length, sub: 'recorded', icon: ClipboardCheck, tone: 'emerald' },
+                  { label: 'Passed', value: passed, sub: q.length ? `${Math.round((passed / q.length) * 100)}% pass` : '—', icon: CheckCircle2, tone: 'sky' },
+                  { label: 'Failed / Rework', value: failed, sub: failed ? 'needs rework' : 'none', icon: AlertTriangle, tone: 'rose' },
+                  { label: 'Open Issues', value: (issues || []).length, sub: (issues || []).length ? 'need attention' : 'all clear', icon: AlertTriangle, tone: 'orange' },
+                  { label: 'Risks', value: (risks || []).length, sub: 'tracked', icon: Flag, tone: 'amber' },
+                ]} />;
+              })()}
               <QualityTab projectId={projectId} qualityChecks={qualityChecks} onChanged={fetchCore} />
               <div className="border-t border-slate-100 pt-8">
                 <IssuesRisksTab projectId={projectId} issues={issues} risks={risks} onChanged={fetchCore} onStatsChanged={fetchStats} />
@@ -1912,6 +2264,90 @@ export default function ProjectCommandCenter() {
             </DialogContent>
          </Dialog>
       </div>
+
+      {/* Assign Team — best-2 smart recommendations; top pick → Project Manager, 2nd → Assistant Manager */}
+      <Dialog open={teamDialog} onOpenChange={setTeamDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Users className="w-4 h-4 text-emerald-600"/> Assign Team</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="rounded-lg bg-emerald-50/70 border border-emerald-100 px-3 py-2 text-[11px] text-emerald-800">
+              Pick the pair — the higher-scored person becomes <b>Project Manager</b>, the other becomes <b>Assistant Manager</b>.
+            </div>
+            <div>
+              {teamLoading ? (
+                <div className="py-8 text-center text-sm text-slate-400">Finding the best people…</div>
+              ) : teamPicks.length === 0 ? (
+                <div className="py-8 text-center text-sm text-slate-400">No eligible people found right now.</div>
+              ) : (() => {
+                const selCount = teamPicks.filter((p) => teamSel[teamKey(p)]).length;
+                const top = teamPicks.filter((p) => teamTopKeys.has(teamKey(p)));
+                const others = teamPicks.filter((p) => !teamTopKeys.has(teamKey(p)));
+                // Selected pair (by score): 1st → Project Manager, 2nd → Assistant Manager.
+                const chosen = teamPicks.filter((p) => teamSel[teamKey(p)]).sort((a, b) => b.suitabilityScore - a.suitabilityScore);
+                const roleFor: Record<string, string> = {};
+                if (chosen[0]) roleFor[teamKey(chosen[0])] = 'PM';
+                if (chosen[1]) roleFor[teamKey(chosen[1])] = 'Asst. Manager';
+                const Row = (p: EmployeeRecommendation) => {
+                  const k = teamKey(p);
+                  const on = !!teamSel[k];
+                  const role = roleFor[k];
+                  return (
+                    <button
+                      key={k}
+                      type="button"
+                      onClick={() => setTeamSel((s) => ({ ...s, [k]: !on }))}
+                      className={`w-full text-left flex items-center gap-3 rounded-xl border px-3 py-2.5 transition-colors ${on ? 'border-emerald-300 bg-emerald-50/70' : 'border-slate-200 bg-white hover:bg-slate-50'}`}
+                    >
+                      <span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 text-sm font-bold shrink-0">{(p.name || '?').charAt(0).toUpperCase()}</span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-sm font-semibold text-slate-700 truncate">{p.name}</span>
+                          {role && <span className={`shrink-0 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide ${role === 'PM' ? 'bg-emerald-600 text-white' : 'bg-amber-100 text-amber-700'}`}>{role}</span>}
+                        </div>
+                        <div className="text-[11px] text-slate-400 truncate">{p.designation || p.department || p.employeeCode || '—'}{p.reasons?.[0] ? ` · ${p.reasons[0]}` : ''}</div>
+                      </div>
+                      <span className="text-[11px] font-bold text-emerald-700 shrink-0" title="Suitability score">{Math.round(p.suitabilityScore)}</span>
+                      {on ? <Check className="w-4 h-4 text-emerald-600 shrink-0" /> : <span className="w-4 h-4 rounded-full border border-slate-300 shrink-0" />}
+                    </button>
+                  );
+                };
+                return (
+                  <>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-xs font-semibold text-slate-500">Best suited — pick the pair</span>
+                      {selCount > 0 && <span className="text-[11px] font-semibold text-emerald-600">{selCount} selected</span>}
+                    </div>
+                    <div className="space-y-2">{top.map(Row)}</div>
+                    {others.length > 0 && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setTeamShowOthers((v) => !v)}
+                          className="mt-2 flex w-full items-center justify-between rounded-lg px-1 py-1 text-[11px] font-semibold text-slate-500 hover:text-emerald-600"
+                        >
+                          <span>Choose someone else ({others.length})</span>
+                          {teamShowOthers ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                        </button>
+                        {teamShowOthers && (
+                          <div className="space-y-2 mt-1 max-h-56 overflow-y-auto pr-1">{others.map(Row)}</div>
+                        )}
+                      </>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+            <div className="flex gap-2 pt-1">
+              <Button variant="outline" onClick={() => setTeamDialog(false)} className="flex-1">Cancel</Button>
+              <Button onClick={handleAssignTeam} disabled={teamSaving || teamLoading || !teamPicks.length} className="flex-1 bg-emerald-500 hover:bg-emerald-600">
+                {teamSaving ? 'Assigning…' : 'Assign'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Work Item — progress editor + timeline */}
       <Dialog open={!!editingItem} onOpenChange={(open) => { if (!open) setEditingItem(null); }}>
@@ -2053,5 +2489,219 @@ export default function ProjectCommandCenter() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+// ============================================================================
+// Phases & Rooms modal editors — same card + dialog pattern as the measurement
+// Rooms tab (add/edit in a modal, work items in a detail dialog).
+// ============================================================================
+
+const PROJECT_ITEM_TYPES = ['WORK','WINDOW','DOOR','WARDROBE','KITCHEN','CURTAIN','PAINTING','FLOORING','ELECTRICAL','PLUMBING','FALSE_CEILING','FURNITURE','CUSTOM'];
+
+function PhaseFormDialog({ open, phase, projectId, onOpenChange, onSaved }: {
+  open: boolean; phase: ProjectPhase | null; projectId: number;
+  onOpenChange: (o: boolean) => void; onSaved: () => void;
+}) {
+  const [form, setForm] = useState<{ name: string; sequence: number; budget: number }>({ name: '', sequence: 1, budget: 0 });
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (open) setForm({ name: phase?.name || '', sequence: phase?.sequence ?? 1, budget: Number(phase?.budget || 0) });
+  }, [open, phase]);
+
+  const save = () => {
+    if (!form.name.trim()) { toast.error("Phase name is required"); return; }
+    setSaving(true);
+    // updatePhase is a full replace — merge onto the existing phase so nothing is wiped.
+    const req = phase?.id
+      ? projectApi.updatePhase(phase.id, { ...phase, name: form.name.trim(), sequence: form.sequence, budget: form.budget })
+      : projectApi.addPhase(projectId, { name: form.name.trim(), sequence: form.sequence, budget: form.budget });
+    req.then(() => { toast.success(phase ? "Phase updated" : "Phase added"); onSaved(); })
+      .catch(() => toast.error("Failed to save phase"))
+      .finally(() => setSaving(false));
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader><DialogTitle>{phase ? `Edit ${phase.name}` : "Add Phase"}</DialogTitle></DialogHeader>
+        <div className="space-y-4 pt-2">
+          <div className="space-y-2"><Label>Phase Name</Label><Input autoFocus value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="e.g. Ground Floor" /></div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2"><Label>Sequence</Label><Input type="number" value={form.sequence} onChange={e => setForm({ ...form, sequence: Number(e.target.value) })} /></div>
+            <div className="space-y-2"><Label>Budget</Label><Input type="number" value={form.budget} onChange={e => setForm({ ...form, budget: Number(e.target.value) })} /></div>
+          </div>
+          <div className="flex justify-end gap-2 pt-2 border-t">
+            <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button disabled={saving || !form.name.trim()} onClick={save}>{saving ? "Saving..." : phase ? "Save Changes" : "Add Phase"}</Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function RoomFormDialog({ open, phaseId, room, onOpenChange, onSaved }: {
+  open: boolean; phaseId: number | null; room: ProjectRoom | null;
+  onOpenChange: (o: boolean) => void; onSaved: () => void;
+}) {
+  const [form, setForm] = useState<{ roomName: string; floorName: string; roomType: string }>({ roomName: '', floorName: '', roomType: '' });
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (open) setForm({ roomName: room?.roomName || '', floorName: room?.floorName || '', roomType: room?.roomType || '' });
+  }, [open, room]);
+
+  const save = () => {
+    if (!form.roomName.trim()) { toast.error("Room name is required"); return; }
+    setSaving(true);
+    const payload = { roomName: form.roomName.trim(), floorName: form.floorName.trim() || undefined, roomType: form.roomType.trim() || undefined };
+    // updateRoom is a full replace — merge onto the existing room to preserve remarks.
+    const req = room?.id
+      ? projectApi.updateRoom(room.id, { ...room, ...payload })
+      : phaseId != null
+        ? projectApi.addRoom(phaseId, payload)
+        : Promise.reject(new Error("No phase"));
+    req.then(() => { toast.success(room ? "Room updated" : "Room added"); onSaved(); })
+      .catch(() => toast.error("Failed to save room"))
+      .finally(() => setSaving(false));
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader><DialogTitle>{room ? `Edit ${room.roomName}` : "Add Room"}</DialogTitle></DialogHeader>
+        <div className="space-y-4 pt-2">
+          <div className="space-y-2"><Label>Room Name</Label><Input autoFocus value={form.roomName} onChange={e => setForm({ ...form, roomName: e.target.value })} placeholder="e.g. Master Bedroom" /></div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2"><Label>Floor</Label><Input value={form.floorName} onChange={e => setForm({ ...form, floorName: e.target.value })} placeholder="e.g. Ground Floor" /></div>
+            <div className="space-y-2"><Label>Room Type</Label><Input value={form.roomType} onChange={e => setForm({ ...form, roomType: e.target.value })} placeholder="e.g. Bedroom" /></div>
+          </div>
+          <div className="flex justify-end gap-2 pt-2 border-t">
+            <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button disabled={saving || !form.roomName.trim()} onClick={save}>{saving ? "Saving..." : room ? "Save Changes" : "Add Room"}</Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function RoomDetailDialog({ room, items, loadItems, onClose, onEditItem, onChanged, itemStatusStyle, progressBarColor }: {
+  room: ProjectRoom; phaseId: number; items: ProjectRoomItem[];
+  loadItems: (roomId: number) => Promise<void>;
+  onClose: () => void; onEditItem: (item: ProjectRoomItem) => void; onChanged: () => void;
+  itemStatusStyle: (s?: string) => string; progressBarColor: (n: number) => string;
+  inr: (n?: number | null) => string;
+}) {
+  const [loading, setLoading] = useState(false);
+  const [form, setForm] = useState<{ itemName: string; itemType: string } | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setLoading(true);
+    loadItems(room.id!).finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [room.id]);
+
+  const addItem = () => {
+    if (!form?.itemName.trim()) { toast.error("Item name is required"); return; }
+    setSaving(true);
+    projectApi.addItem(room.id!, { itemName: form.itemName.trim(), itemType: form.itemType, status: 'PENDING', progress: 0 })
+      .then(() => { setForm(null); loadItems(room.id!); onChanged(); toast.success("Work item added"); })
+      .catch(() => toast.error("Failed to add work item"))
+      .finally(() => setSaving(false));
+  };
+
+  const removeItem = (item: ProjectRoomItem) => {
+    if (item.locked) { toast.error("This item is locked (from the BOQ) and cannot be deleted."); return; }
+    if (!window.confirm(`Delete work item "${item.itemName}"?`)) return;
+    projectApi.deleteItem(item.id!)
+      .then(() => { loadItems(room.id!); onChanged(); toast.success("Work item deleted"); })
+      .catch(() => toast.error("Failed to delete work item"));
+  };
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{room.roomName}</DialogTitle>
+        </DialogHeader>
+        <div className="text-xs text-muted-foreground -mt-2">
+          {[room.roomType, room.floorName].filter(Boolean).join(" · ") || "Room"} · {room.completionPercentage || 0}% complete
+        </div>
+
+        <div className="space-y-4 pt-2">
+          <div className="flex items-center justify-between">
+            <h4 className="text-sm font-semibold text-slate-700">Work Items ({items.length})</h4>
+            <Button size="sm" variant="outline" onClick={() => setForm({ itemName: '', itemType: 'WORK' })}>
+              <Plus className="h-3.5 w-3.5 mr-1"/> Add Item
+            </Button>
+          </div>
+
+          {loading ? (
+            <p className="text-sm text-muted-foreground py-4">Loading items…</p>
+          ) : items.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4">No work items in this room yet. Add the first one above.</p>
+          ) : (
+            <div className="border rounded-lg divide-y">
+              {items.map(item => {
+                const pct = item.progress ?? 0;
+                return (
+                  <div key={item.id} className="flex items-center gap-2 hover:bg-muted/30 group">
+                    <button type="button" onClick={() => onEditItem(item)} className="flex-1 min-w-0 flex items-center gap-3 text-sm py-2.5 px-3 text-left">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-slate-700 truncate">{item.itemName}</span>
+                          {item.locked && <Lock className="w-3 h-3 text-slate-400 shrink-0" />}
+                          <span className="text-[10px] text-slate-400 uppercase shrink-0">{item.itemType}</span>
+                          {item.assignedResource && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 shrink-0 truncate max-w-[120px]">{item.assignedResource.name}</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 mt-1">
+                          <div className="h-1.5 flex-1 bg-slate-100 rounded-full overflow-hidden">
+                            <div className={`h-full ${progressBarColor(pct)} rounded-full transition-all`} style={{ width: `${pct}%` }} />
+                          </div>
+                          <span className="text-[11px] font-semibold text-slate-500 w-9 text-right">{pct}%</span>
+                        </div>
+                      </div>
+                      {item.delayed && <span className="text-[10px] font-bold px-1.5 py-0.5 bg-red-100 text-red-600 rounded shrink-0">DELAYED</span>}
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase shrink-0 ${itemStatusStyle(item.status)}`}>{(item.status || '').replace(/_/g, ' ')}</span>
+                    </button>
+                    {!item.locked && (
+                      <button type="button" title="Delete item" onClick={() => removeItem(item)}
+                        className="p-2 mr-1 rounded-lg text-slate-300 hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"><Trash2 className="w-4 h-4"/></button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {form && (
+            <div className="p-3 border-2 border-emerald-400/40 rounded-lg bg-muted/30 space-y-3">
+              <p className="text-sm font-medium">New work item</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1.5"><Label>Item Name</Label><Input autoFocus value={form.itemName} onChange={e => setForm({ ...form, itemName: e.target.value })} placeholder="e.g. Wardrobe shutters" /></div>
+                <div className="space-y-1.5">
+                  <Label>Type</Label>
+                  <select value={form.itemType} onChange={e => setForm({ ...form, itemType: e.target.value })} className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm">
+                    {PROJECT_ITEM_TYPES.map(t => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button size="sm" variant="outline" onClick={() => setForm(null)}>Cancel</Button>
+                <Button size="sm" disabled={saving || !form.itemName.trim()} onClick={addItem}>{saving ? "Saving..." : "Add Item"}</Button>
+              </div>
+            </div>
+          )}
+
+          <p className="text-[11px] text-muted-foreground">Tip: click a work item to update its progress, status, photos and remarks.</p>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

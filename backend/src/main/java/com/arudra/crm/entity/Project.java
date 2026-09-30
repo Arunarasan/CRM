@@ -91,6 +91,11 @@ public class Project extends BaseEntity {
     @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "roles"})
     private User supervisor;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "assistant_manager_id")
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "roles"})
+    private User assistantManager;
+
     @Column(name = "project_type", length = 100)
     private String projectType; // Residential, Commercial, Office, etc.
 

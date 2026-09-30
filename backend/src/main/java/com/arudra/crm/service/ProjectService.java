@@ -21,6 +21,9 @@ public class ProjectService {
     private ProjectRepository projectRepository;
 
     @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
     private ProjectCompletionService projectCompletionService;
     
     @Autowired
@@ -74,6 +77,12 @@ public class ProjectService {
     /** Source of the room's type/structure — BoqItem only carries the room name. */
     @Autowired
     private MeasurementRoomRepository measurementRoomRepository;
+
+    @Autowired
+    private com.arudra.crm.repository.MeasurementRepository measurementRepository;
+
+    @Autowired
+    private com.arudra.crm.repository.CustomerPaymentRepository customerPaymentRepository;
 
     @Autowired
     private ProjectMaterialRequirementRepository materialRequirementRepository;
@@ -351,6 +360,23 @@ public class ProjectService {
         project.setCustomerNotes(projectDetails.getCustomerNotes());
         project.setProjectNotes(projectDetails.getProjectNotes());
         
+        return projectRepository.save(project);
+    }
+
+    /**
+     * Assign the project's two-person leadership pair. The top-suitability pick becomes the
+     * Project Manager and the second becomes the Assistant Manager. Either id may be null to clear
+     * that slot. This is the "Assign Team" action — it sets project roles, not task assignments.
+     */
+    @Transactional
+    public Project assignTeam(Long id, Long projectManagerId, Long assistantManagerId) {
+        Project project = getProjectById(id);
+        project.setProjectManager(projectManagerId == null ? null
+                : userRepository.findById(projectManagerId).orElseThrow(
+                        () -> new RuntimeException("User not found: " + projectManagerId)));
+        project.setAssistantManager(assistantManagerId == null ? null
+                : userRepository.findById(assistantManagerId).orElseThrow(
+                        () -> new RuntimeException("User not found: " + assistantManagerId)));
         return projectRepository.save(project);
     }
 
@@ -1795,7 +1821,158 @@ public class ProjectService {
      */
     @Transactional
     public Map<String, Object> reconcileProjectWithBoq(Long projectId, User user) {
-        return reconcileProjectWithBoq(projectId, user, true);
+        // The single "Project Execution" task replaces per-item tasks: rebuild the structure
+        // (rooms/items/materials) WITHOUT tasks, then refresh the execution checklist from the BOQ.
+        Map<String, Object> result = reconcileProjectWithBoq(projectId, user, false);
+        seedExecutionChecklist(projectId);
+        return result;
+    }
+
+    /** Template code of the one shared execution task each project gets. */
+    public static final String EXECUTION_TEMPLATE_CODE = "TT_PM_EXECUTION";
+    /** Name of the checklist on the execution task that mirrors the BOQ work-items. */
+    public static final String WORK_ITEMS_CHECKLIST = "Work Items";
+
+    /** The project's single, non-cancelled "Project Execution" task (or null before it's created). */
+    public Task findExecutionTask(Long projectId) {
+        return taskRepository.findByProjectId(projectId).stream()
+                .filter(t -> t.getTaskTemplate() != null
+                        && EXECUTION_TEMPLATE_CODE.equals(t.getTaskTemplate().getCode()))
+                .filter(t -> !"CANCELLED".equals(t.getStatus()))
+                .findFirst().orElse(null);
+    }
+
+    /**
+     * Seed the execution task's "Work Items" checklist from the project's BOQ items — one tickable
+     * line per item, showing its quantity and room/floor. Idempotent: does nothing if the checklist
+     * already exists, so it's safe to call on creation and on a manual "Generate from BOQ".
+     */
+    @Transactional
+    public void seedExecutionChecklist(Long projectId) {
+        Task exec = findExecutionTask(projectId);
+        if (exec == null) return;
+        Boq boq = exec.getProject() != null ? exec.getProject().getBoq() : null;
+        if (boq == null) return;
+        List<String> lines = new java.util.ArrayList<>();
+        for (BoqItem item : boqItemRepository.findByBoqId(boq.getId())) {
+            if (Boolean.FALSE.equals(item.getIsActive())) continue;
+            StringBuilder sb = new StringBuilder(item.getItemName() != null ? item.getItemName() : "Work item");
+            if (item.getQuantity() != null) {
+                sb.append(" — ").append(item.getQuantity().stripTrailingZeros().toPlainString());
+                if (item.getUnit() != null && !item.getUnit().isBlank()) sb.append(' ').append(item.getUnit());
+            }
+            String loc = java.util.stream.Stream.of(item.getRoomName(), item.getFloorName())
+                    .filter(s -> s != null && !s.isBlank())
+                    .collect(java.util.stream.Collectors.joining(", "));
+            if (!loc.isBlank()) sb.append(" (").append(loc).append(')');
+            lines.add(sb.toString());
+        }
+        if (!lines.isEmpty()) taskChecklistService.seedNamedChecklist(exec, WORK_ITEMS_CHECKLIST, lines);
+    }
+
+    /**
+     * Read-only context shown on the shared execution task so the team has everything in one place:
+     * project + customer, the BOQ rooms/items (sizes &amp; locations), the planned materials, and the
+     * site measurements (dimensions). Flat primitive maps only — no entity graph to serialize.
+     */
+    @Transactional(readOnly = true)
+    public Map<String, Object> getExecutionContext(Long projectId) {
+        Project project = projectRepository.findById(projectId).orElse(null);
+        if (project == null) return java.util.Map.of();
+        Map<String, Object> info = new java.util.LinkedHashMap<>();
+        info.put("projectCode", project.getProjectCode());
+        info.put("projectName", project.getProjectName());
+        info.put("status", project.getStatus());
+        info.put("progress", project.getProgress());
+        info.put("startDate", project.getStartDate());
+        info.put("endDate", project.getEndDate());
+
+        Customer c = project.getCustomer();
+        if (c != null) {
+            Map<String, Object> cm = new java.util.LinkedHashMap<>();
+            cm.put("name", c.getName());
+            cm.put("phone", c.getPhone());
+            cm.put("email", c.getEmail());
+            cm.put("city", c.getCity());
+            info.put("customer", cm);
+        }
+
+        // BOQ rooms → items (name, description, size = qty + unit, location = floor/room).
+        List<Map<String, Object>> rooms = new java.util.ArrayList<>();
+        for (ProjectRoom room : roomRepository.findByPhaseProjectId(projectId)) {
+            List<ProjectRoomItem> items = roomItemRepository.findByRoomIdOrderByIdAsc(room.getId());
+            if (items.isEmpty()) continue;
+            Map<String, Object> rm = new java.util.LinkedHashMap<>();
+            rm.put("room", room.getRoomName());
+            rm.put("floor", room.getFloorName());
+            rm.put("roomType", room.getRoomType());
+            List<Map<String, Object>> itemList = new java.util.ArrayList<>();
+            for (ProjectRoomItem it : items) {
+                Map<String, Object> im = new java.util.LinkedHashMap<>();
+                im.put("name", it.getItemName());
+                im.put("description", it.getDescription());
+                im.put("quantity", it.getQuantity());
+                im.put("unit", it.getUnit());
+                itemList.add(im);
+            }
+            rm.put("items", itemList);
+            rooms.add(rm);
+        }
+        info.put("rooms", rooms);
+
+        // Planned materials for the project.
+        List<Map<String, Object>> materials = new java.util.ArrayList<>();
+        for (ProjectMaterialRequirement r : materialRequirementRepository.findByProjectIdOrderByIdAsc(projectId)) {
+            Map<String, Object> mm = new java.util.LinkedHashMap<>();
+            mm.put("product", r.getProduct() != null ? r.getProduct().getName() : null);
+            mm.put("quantity", r.getRequiredQty());
+            mm.put("unit", r.getUnit());
+            materials.add(mm);
+        }
+        info.put("materials", materials);
+
+        // Site measurement dimensions from the linked lead.
+        List<Map<String, Object>> measRooms = new java.util.ArrayList<>();
+        Long leadId = project.getLead() != null ? project.getLead().getId() : null;
+        if (leadId != null) {
+            for (Measurement m : measurementRepository.findByLeadId(leadId)) {
+                for (MeasurementRoom mr : measurementRoomRepository.findByMeasurementId(m.getId())) {
+                    Map<String, Object> x = new java.util.LinkedHashMap<>();
+                    x.put("room", mr.getRoomName());
+                    x.put("roomType", mr.getRoomType());
+                    x.put("floor", mr.getFloorNumber());
+                    x.put("length", mr.getLength());
+                    x.put("width", mr.getWidth());
+                    x.put("height", mr.getHeight());
+                    x.put("floorArea", mr.getFloorArea());
+                    measRooms.add(x);
+                }
+            }
+        }
+        info.put("measurements", measRooms);
+
+        // Payments collected against the project — pending ones show as "entered, awaiting verification".
+        List<Map<String, Object>> payments = new java.util.ArrayList<>();
+        java.math.BigDecimal collectedPending = java.math.BigDecimal.ZERO;
+        java.math.BigDecimal collectedConfirmed = java.math.BigDecimal.ZERO;
+        for (CustomerPayment pay : customerPaymentRepository.findByProjectIdAndIsDeletedFalseOrderByPaymentDateDesc(projectId)) {
+            if ("REJECTED".equalsIgnoreCase(pay.getStatus())) continue;
+            Map<String, Object> pm = new java.util.LinkedHashMap<>();
+            pm.put("amount", pay.getAmount());
+            pm.put("status", pay.getStatus());
+            pm.put("date", pay.getPaymentDate());
+            pm.put("method", pay.getPaymentMethod());
+            pm.put("collectedBy", pay.getCollectedBy() != null ? pay.getCollectedBy().getName() : null);
+            payments.add(pm);
+            if (pay.getAmount() != null) {
+                if ("PENDING_APPROVAL".equalsIgnoreCase(pay.getStatus())) collectedPending = collectedPending.add(pay.getAmount());
+                else if ("CONFIRMED".equalsIgnoreCase(pay.getStatus())) collectedConfirmed = collectedConfirmed.add(pay.getAmount());
+            }
+        }
+        info.put("payments", payments);
+        info.put("collectedPending", collectedPending);
+        info.put("collectedConfirmed", collectedConfirmed);
+        return info;
     }
 
     /**

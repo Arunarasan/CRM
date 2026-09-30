@@ -5,7 +5,7 @@ import {
   Search, Plus, Filter, LayoutGrid, List, Clock, Users, Sparkles,
   ThermometerSun, CheckCircle, XCircle, PhoneCall, MapPin, CalendarDays,
   Target, Mail, Phone, CalendarPlus, MoreVertical, ChevronLeft, ChevronRight,
-  RotateCcw,
+  RotateCcw, TrendingUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,9 +19,46 @@ import { selectClass } from "./leads/fields";
 import {
   BOARD_DROP_STATUS, EMPTY_FILTERS, LEAD_SOURCES, LEAD_STAGES, LEAD_STATUSES, LEAD_TYPES,
   PRIORITIES, TEMPERATURES, TEMPERATURE_STYLES, avatarColor, followUpTone, formatDate,
-  formatINR, initials, relativeTime, stageStyle, statusStyle, type BoardColumn,
-  type DashboardMetrics, type Lead, type LeadFilters, type UserSummary,
+  formatINR, initials, relativeTime, type BoardColumn,
+  type DashboardMetrics, type Lead, type LeadFilters, type LeadPeriodStats, type UserSummary,
 } from "./leads/constants";
+
+// Time-frame partitions for the lead-entry / conversion stats. Each resolves to an ISO from/to range.
+type PeriodKey = "TODAY" | "WEEK" | "MONTH" | "YEAR" | "ALL";
+const PERIODS: { key: PeriodKey; label: string }[] = [
+  { key: "TODAY", label: "Today" },
+  { key: "WEEK", label: "This Week" },
+  { key: "MONTH", label: "This Month" },
+  { key: "YEAR", label: "This Year" },
+  { key: "ALL", label: "All Time" },
+];
+const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+function periodRange(key: PeriodKey): { from?: string; to?: string } {
+  const now = new Date();
+  const to = iso(now);
+  if (key === "ALL") return {};
+  if (key === "TODAY") return { from: to, to };
+  if (key === "WEEK") {
+    const day = now.getDay(); // 0=Sun..6=Sat → start on Monday
+    const monday = new Date(now); monday.setDate(now.getDate() - ((day + 6) % 7));
+    return { from: iso(monday), to };
+  }
+  if (key === "MONTH") return { from: iso(new Date(now.getFullYear(), now.getMonth(), 1)), to };
+  return { from: iso(new Date(now.getFullYear(), 0, 1)), to }; // YEAR
+}
+
+// Requirement categories a lead can tick, mapped to their boolean flag on the Lead.
+const REQUIREMENT_CATEGORIES: { key: keyof Lead; label: string }[] = [
+  { key: "reqKitchen", label: "Kitchen" },
+  { key: "reqWardrobe", label: "Wardrobe" },
+  { key: "reqTvUnit", label: "TV Unit" },
+  { key: "reqFalseCeiling", label: "False Ceiling" },
+  { key: "reqPainting", label: "Painting" },
+  { key: "reqFlooring", label: "Flooring" },
+  { key: "reqElectrical", label: "Electrical" },
+  { key: "reqPlumbing", label: "Plumbing" },
+  { key: "reqWoodFinish", label: "Wood Finish" },
+];
 
 type StatCard = {
   label: string;
@@ -95,6 +132,8 @@ export default function Leads() {
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState<LeadFilters>({ ...EMPTY_FILTERS });
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [period, setPeriod] = useState<PeriodKey>("MONTH");
+  const [periodStats, setPeriodStats] = useState<LeadPeriodStats | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 350);
@@ -129,6 +168,13 @@ export default function Leads() {
     fetchDashboard();
     leadApi.assignableUsers().then((res) => setUsers(res.data)).catch(console.error);
   }, [fetchDashboard]);
+
+  // Time-boxed entry / conversion stats for the selected partition.
+  useEffect(() => {
+    const { from, to } = periodRange(period);
+    setPeriodStats(null);
+    leadApi.stats(from, to).then((res) => setPeriodStats(res.data)).catch(console.error);
+  }, [period]);
 
   useEffect(() => {
     if (viewMode === "kanban") fetchBoard();
@@ -206,9 +252,21 @@ export default function Leads() {
   const tempPill = (t?: string) =>
     t ? <span className={`px-2 py-0.5 text-xs rounded-full font-semibold ${TEMPERATURE_STYLES[t] || "bg-muted text-muted-foreground"}`}>{t}</span> : <span className="text-xs text-muted-foreground">—</span>;
 
-  const stagePill = (l: Lead) => {
-    const label = l.stage || l.status;
-    return <span className={`px-2 py-0.5 text-xs rounded-full font-medium whitespace-nowrap ${stageStyle(l.stage) === "bg-muted text-muted-foreground" ? statusStyle(l.status) : stageStyle(l.stage)}`}>{label}</span>;
+  // Requirement categories the lead ticked, shown as compact pills.
+  const requirementPills = (l: Lead) => {
+    const reqs = REQUIREMENT_CATEGORIES.filter(({ key }) => l[key]);
+    if (reqs.length === 0) return <span className="text-xs text-muted-foreground">—</span>;
+    // With more than 2 requirements, lay them out in a 2-column grid so they wrap onto 2 lines.
+    const layout = reqs.length > 2 ? "grid grid-cols-2 max-w-[14rem]" : "flex flex-wrap";
+    return (
+      <div className={`gap-1 ${layout}`}>
+        {reqs.map(({ key, label }) => (
+          <span key={key} className="px-2 py-0.5 text-xs rounded-full font-medium whitespace-nowrap bg-emerald-100 text-emerald-700 text-center">
+            {label}
+          </span>
+        ))}
+      </div>
+    );
   };
 
   const columns: Column<Lead>[] = [
@@ -238,7 +296,7 @@ export default function Leads() {
         </div>
       ),
     },
-    { key: "stage", header: "Stage", cell: (l) => stagePill(l) },
+    { key: "requirements", header: "Requirements", cell: (l) => requirementPills(l) },
     {
       key: "source", header: "Source", cellClassName: "whitespace-nowrap", cell: (l) => (
         <div className="text-xs">
@@ -320,6 +378,48 @@ export default function Leads() {
           <Button onClick={() => setIsAddOpen(true)}>
             <Plus className="mr-2 h-4 w-4" /> Add Lead
           </Button>
+        </div>
+      </div>
+
+      {/* Time-frame partition — leads entered & conversion rate for the selected period */}
+      <div className="rounded-xl border bg-card p-3 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap gap-1.5">
+            {PERIODS.map((p) => (
+              <button
+                key={p.key}
+                type="button"
+                onClick={() => setPeriod(p.key)}
+                className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+                  period === p.key ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/70"
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+            {[
+              { icon: Sparkles, label: "Leads entered", value: periodStats?.entered, tone: "text-blue-600 bg-blue-100" },
+              { icon: CheckCircle, label: "Converted", value: periodStats?.converted, tone: "text-green-600 bg-green-100" },
+              { icon: XCircle, label: "Lost", value: periodStats?.lost, tone: "text-rose-600 bg-rose-100" },
+              { icon: TrendingUp, label: "Conversion rate", value: periodStats?.conversionRate, tone: "text-primary bg-primary/10" },
+            ].map((s) => (
+              <div key={s.label} className="flex items-center gap-2">
+                <span className={`flex h-8 w-8 items-center justify-center rounded-lg ${s.tone}`}>
+                  <s.icon size={15} />
+                </span>
+                <div className="leading-tight">
+                  {periodStats ? (
+                    <p className="text-lg font-bold">{s.value ?? 0}</p>
+                  ) : (
+                    <Skeleton className="h-6 w-10" />
+                  )}
+                  <p className="text-[11px] font-medium text-muted-foreground">{s.label}</p>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -494,7 +594,7 @@ export default function Leads() {
                       {tempPill(l.leadTemperature)}
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
-                      {stagePill(l)}
+                      {requirementPills(l)}
                       {l.leadSource && <span className="text-xs text-muted-foreground">{l.leadSource}</span>}
                       {l.leadOwner?.name && <span className="text-xs text-muted-foreground">· by {l.leadOwner.name}</span>}
                     </div>

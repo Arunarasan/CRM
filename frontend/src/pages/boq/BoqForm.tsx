@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, GitBranch, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import api from "@/lib/api";
@@ -21,6 +21,41 @@ const EMPTY_FORM: Partial<Boq> = {
 
 function num(v: any) { const n = Number(v); return Number.isFinite(n) ? n : 0; }
 
+const ref = (v: any) => (v && v.id != null ? { id: v.id } : null);
+
+/**
+ * Build the exact, lean body the server's updateBoq/createBoq consumes. The loaded BOQ carries a deep
+ * entity graph (full Customer/Lead/Project, every material's whole Product record, phases, audit +
+ * version fields). Sending all of that back is what produced "Request body is missing or malformed."
+ * on save — a large fragile payload the server ignores most of. We keep only the editable fields plus
+ * the item/material/labour lines (so nothing is wiped), reducing every relation to its {id}: the server
+ * re-resolves customer/project/measurement and each material's product by id, so no data is lost.
+ */
+function buildPayload(form: Partial<Boq>) {
+  return {
+    customer: ref(form.customer),
+    project: ref(form.project),
+    measurement: ref(form.measurement),
+    propertyName: form.propertyName ?? null,
+    quotationMode: form.quotationMode,
+    notes: form.notes ?? null,
+    discountType: form.discountType ?? "PERCENT",
+    discount: form.discount ?? 0,
+    taxPercent: form.taxPercent ?? 0,
+    items: (form.items || []).map((it: any) => ({
+      ...it,
+      phase: ref(it.phase),
+      materials: (it.materials || []).map((m: any) => ({
+        ...m,
+        product: ref(m.product),
+        stockWarning: undefined,
+        availableStock: undefined,
+      })),
+      labours: it.labours || [],
+    })),
+  };
+}
+
 export default function BoqForm() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
@@ -36,8 +71,27 @@ export default function BoqForm() {
   const [customers, setCustomers] = useState<PickerOption[]>([]);
   const [projects, setProjects] = useState<PickerOption[]>([]);
   const [saving, setSaving] = useState(false);
+  const [revising, setRevising] = useState(false);
   const [loading, setLoading] = useState(isEdit);
   const [error, setError] = useState("");
+
+  // An approved BOQ is locked — it can only be edited by branching off a new revision.
+  const isApproved = isEdit && form.status === "APPROVED";
+
+  const handleCreateRevision = async () => {
+    if (!id) return;
+    setRevising(true);
+    setError("");
+    try {
+      const rev = await boqApi.createRevision(Number(id));
+      navigate(`/boq/${rev.id}/edit`, { replace: true });
+    } catch (err: any) {
+      console.error("Error creating revision:", err);
+      setError(err?.response?.data?.message || err?.message || "Could not create a revision.");
+    } finally {
+      setRevising(false);
+    }
+  };
 
   useEffect(() => {
     api.get("/customers?size=200").then((res) => setCustomers(
@@ -74,7 +128,7 @@ export default function BoqForm() {
     setSaving(true);
     setError("");
     try {
-      const payload = { ...form };
+      const payload = buildPayload(form);
       const saved = isEdit ? await boqApi.update(Number(id), payload) : await boqApi.create(payload);
       navigate(`/boq/${saved.id}`);
     } catch (err: any) {
@@ -91,6 +145,36 @@ export default function BoqForm() {
   const clientPhone = client?.mobileNumber || client?.phone || client?.whatsappNumber;
 
   if (loading) return <div className="p-8 text-muted-foreground">Loading BOQ...</div>;
+
+  // Approved BOQs are locked. Rather than show a form whose Save will always be rejected, land the
+  // user on a clear call-to-action to branch off an editable revision.
+  if (isApproved) {
+    return (
+      <div className="p-4 sm:p-6 lg:p-8 max-w-2xl mx-auto animate-in fade-in">
+        <div className="rounded-2xl border border-amber-300 bg-amber-50 p-6 sm:p-8 text-center shadow-sm">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+            <Lock className="h-7 w-7" />
+          </div>
+          <h1 className="mt-4 text-xl font-bold tracking-tight text-amber-900">
+            {form.boqNumber} is approved and locked
+          </h1>
+          <p className="mx-auto mt-2 max-w-md text-sm text-amber-800">
+            An approved BOQ can't be edited in place — it may already feed a quotation or project.
+            Create a new revision to make changes; the approved version stays intact as history.
+          </p>
+          {error && <p className="mt-3 text-sm text-destructive">{error}</p>}
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+            <Button size="lg" className="bg-amber-600 hover:bg-amber-700 text-white" disabled={revising} onClick={handleCreateRevision}>
+              <GitBranch className="mr-2 h-5 w-5" /> {revising ? "Creating revision…" : "Create Revision to Edit"}
+            </Button>
+            <Button size="lg" variant="outline" onClick={() => navigate(`/boq/${id}`)}>
+              View BOQ
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto space-y-6 animate-in fade-in">

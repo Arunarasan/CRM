@@ -36,6 +36,8 @@ public class WebsiteEnquiryDto {
             String city,
             String interest,
             String productSlug,
+            String category,
+            String colour,
             String propertyType,
             String area,
             String budget,
@@ -50,6 +52,7 @@ public class WebsiteEnquiryDto {
             return new Detail(
                     e.getId(), e.getChannel(), e.getSourceLabel(), e.getName(), e.getPhone(),
                     e.getEmail(), e.getCity(), e.getInterest(), e.getProductSlug(),
+                    e.getCategory(), e.getColour(),
                     e.getPropertyType(), e.getArea(), e.getBudget(), e.getPreferredDate(),
                     e.getMessage(), e.getStatus(), e.getLeadId(), e.getTaskId(),
                     e.getCreatedAt() == null ? null : e.getCreatedAt().toString());
@@ -59,6 +62,7 @@ public class WebsiteEnquiryDto {
     /** Request body for public product-quote enquiries (adds product context to the loose form). */
     public record ProductQuoteRequest(
             String name, String phone, String email, String message,
-            String productSlug, String productName
+            String productSlug, String productName,
+            String category, String colour
     ) {}
 }

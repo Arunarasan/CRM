@@ -49,6 +49,10 @@ public class WebsiteAdminController {
     public ResponseEntity<ApiResponse<com.arudra.crm.dto.website.WebsiteEnquiryDto.Detail>> convertEnquiry(@PathVariable Long id) {
         return ok(enquiryService.convertToLead(id));
     }
+    @DeleteMapping("/enquiries/{id}") @PreAuthorize(WRITE)
+    public ResponseEntity<ApiResponse<Void>> deleteEnquiry(@PathVariable Long id) {
+        enquiryService.delete(id); return deleted();
+    }
 
     // ---- Categories ----
     @GetMapping("/categories") @PreAuthorize(READ)

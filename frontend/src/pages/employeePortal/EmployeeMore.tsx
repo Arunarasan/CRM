@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   UserCircle, CalendarDays, Plane, Wallet, FolderKanban, FileText, Bell, LogOut, ChevronRight,
-  Clock, Settings as SettingsIcon, ListTodo,
+  Clock, Settings as SettingsIcon, ListTodo, QrCode,
 } from 'lucide-react';
 import { employeePortalApi } from '@/api/employeePortalApi';
 import { EmployeeProfile } from '@/types/employeePortal';
@@ -15,8 +15,9 @@ const ITEMS = [
   { to: '/employee/task-management', labelKey: 'portal.more.taskManagement', icon: ListTodo, color: 'text-fuchsia-600' },
   { to: '/employee/leave', labelKey: 'portal.more.leave', icon: Plane, color: 'text-emerald-600' },
   { to: '/employee/salary', labelKey: 'portal.more.salary', icon: Wallet, color: 'text-amber-600' },
-  { to: '/employee/projects', labelKey: 'portal.more.myProjects', icon: FolderKanban, color: 'text-violet-600' },
+  { to: '/employee/tasks?tab=PROJECTS', labelKey: 'portal.more.myProjects', icon: FolderKanban, color: 'text-violet-600' },
   { to: '/employee/documents', labelKey: 'portal.more.documents', icon: FileText, color: 'text-rose-600' },
+  { to: '/employee/review-qr', labelKey: 'portal.more.reviewQr', icon: QrCode, color: 'text-yellow-600' },
   { to: '/employee/notifications', labelKey: 'portal.more.notifications', icon: Bell, color: 'text-orange-500' },
   { to: '/employee/settings', labelKey: 'portal.more.settings', icon: SettingsIcon, color: 'text-slate-600' },
 ];

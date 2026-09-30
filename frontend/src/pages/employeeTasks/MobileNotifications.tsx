@@ -43,7 +43,7 @@ export default function MobileNotifications() {
     if (url.startsWith('/employee/')) { navigate(url); return; }
 
     // Map known desktop routes to their portal equivalents.
-    if (url.startsWith('/projects')) { navigate('/employee/projects'); return; }
+    if (url.startsWith('/projects')) { navigate('/employee/tasks?tab=PROJECTS'); return; }
     if (url.startsWith('/leads')) { navigate('/employee/leads'); return; }
     if (url.includes('material-request')) { navigate('/employee/requests/material'); return; }
     // Unknown target: leave the user on the notifications list rather than a dead link.

@@ -217,6 +217,8 @@ public class LeadTaskFormService {
                 setIf(str(data.get("gstNumber")), lead::setGstNumber);
                 // Classification
                 setIf(str(data.get("leadType")), lead::setLeadType);
+                setIf(str(data.get("leadSource")), lead::setLeadSource);
+                setIf(intVal(data.get("rating")), lead::setRating);
                 setIf(str(data.get("priority")), lead::setPriority);
                 setIf(str(data.get("leadTemperature")), lead::setLeadTemperature);
                 // Address
@@ -239,8 +241,10 @@ public class LeadTaskFormService {
                 setIf(str(data.get("customerRequirements")), lead::setCustomerRequirements);
                 setIf(str(data.get("projectDescription")), lead::setProjectDescription);
                 setIf(str(data.get("requirementCategory")), lead::setRequirementCategory);
+                setIf(str(data.get("requirementProduct")), lead::setRequirementProduct);
                 setIf(str(data.get("roomsRequired")), lead::setRoomsRequired);
                 setIf(str(data.get("specialRequests")), lead::setSpecialRequests);
+                setIf(str(data.get("remarks")), lead::setRemarks);
                 // Scope-of-work checklist — authoritative, so set whenever the key is present.
                 setBool(data, "reqKitchen", lead::setReqKitchen);
                 setBool(data, "reqWardrobe", lead::setReqWardrobe);

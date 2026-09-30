@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { Home, ListChecks, Bell, WifiOff, Search, FolderKanban, Inbox, LayoutGrid } from 'lucide-react';
+import { Home, ListChecks, Bell, WifiOff, Search, Inbox, LayoutGrid } from 'lucide-react';
 import { useUnreadNotificationCount } from '@/hooks/useUnreadNotificationCount';
 import { useOfflineQueue } from '@/hooks/useOfflineQueue';
 import { employeePortalApi } from '@/api/employeePortalApi';
@@ -24,12 +24,12 @@ export default function MobileLayout() {
     employeePortalApi.me().then((p) => setPhoto(p.profilePhotoUrl ?? null)).catch(() => {});
   }, []);
 
-  // Bottom nav: Home · Tasks · Projects · Requests · More. The More tab opens the account hub
+  // Bottom nav: Home · Tasks · Requests · More. Project work now lives inside Tasks (a "Projects"
+  // filter), so it's no longer a separate destination. The More tab opens the account hub
   // (/employee/more), from which attendance, salary, documents, settings, etc. hang.
   const navItems = [
     { to: '/employee', labelKey: 'portal.nav.home', icon: Home, match: (p: string) => p === '/employee' },
     { to: '/employee/tasks', labelKey: 'portal.nav.tasks', icon: ListChecks, match: (p: string) => p.startsWith('/employee/tasks') },
-    { to: '/employee/projects', labelKey: 'portal.nav.projects', icon: FolderKanban, match: (p: string) => p.startsWith('/employee/projects') },
     { to: '/employee/requests', labelKey: 'portal.nav.requests', icon: Inbox, match: (p: string) => ['/employee/requests', '/employee/leave', '/employee/leads', '/employee/daily-reports'].some((r) => p.startsWith(r)) },
     { to: '/employee/more', labelKey: 'portal.nav.more', icon: LayoutGrid, match: (p: string) => ['/employee/more', '/employee/profile', '/employee/attendance', '/employee/salary', '/employee/documents', '/employee/timesheet', '/employee/settings'].some((r) => p.startsWith(r)) },
   ];
@@ -87,7 +87,7 @@ export default function MobileLayout() {
 
       {/* Premium forest bottom nav */}
       <nav
-        className="sticky bottom-0 z-20 grid shrink-0 grid-cols-5 gap-1 bg-[#002B1D] px-2 pt-2.5"
+        className="sticky bottom-0 z-20 grid shrink-0 grid-cols-4 gap-1 bg-[#002B1D] px-2 pt-2.5"
         style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 0.625rem)' }}
       >
         {navItems.map(({ to, labelKey, icon: Icon, match }) => {

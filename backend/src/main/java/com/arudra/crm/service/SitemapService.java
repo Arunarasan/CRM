@@ -46,7 +46,10 @@ public class SitemapService {
         List<String> urls = new ArrayList<>();
 
         for (String[] r : STATIC_ROUTES) {
-            urls.add(urlEntry(r[0], r[1], r[2], today));
+            // Attach the brand logo (image sitemap) to the homepage so Google Images can
+            // associate the JB Decor logo with the site; other routes carry no image.
+            String imageLoc = "/".equals(r[0]) ? base + "/jb-decor-logo.png" : null;
+            urls.add(urlEntry(r[0], r[1], r[2], today, imageLoc));
         }
 
         // Live catalog — categories, product detail pages, services, portfolio, materials.
@@ -73,17 +76,24 @@ public class SitemapService {
 
         StringBuilder sb = new StringBuilder();
         sb.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
-        sb.append("<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n");
+        sb.append("<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\"")
+          .append(" xmlns:image=\"http://www.google.com/schemas/sitemap-image/1.1\">\n");
         urls.forEach(sb::append);
         sb.append("</urlset>\n");
         return sb.toString();
     }
 
     private String urlEntry(String path, String changefreq, String priority, String lastmod) {
+        return urlEntry(path, changefreq, priority, lastmod, null);
+    }
+
+    private String urlEntry(String path, String changefreq, String priority, String lastmod, String imageLoc) {
         return "  <url><loc>" + xml(base + path) + "</loc>"
                 + "<lastmod>" + lastmod + "</lastmod>"
                 + "<changefreq>" + changefreq + "</changefreq>"
-                + "<priority>" + priority + "</priority></url>\n";
+                + "<priority>" + priority + "</priority>"
+                + (imageLoc != null ? "<image:image><image:loc>" + xml(imageLoc) + "</image:loc></image:image>" : "")
+                + "</url>\n";
     }
 
     private static boolean notBlank(String s) {

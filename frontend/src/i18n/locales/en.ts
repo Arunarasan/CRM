@@ -195,6 +195,7 @@ const en = {
       salary: 'Salary & Payslips',
       myProjects: 'My Projects',
       documents: 'Documents',
+      reviewQr: 'My Review QR',
       notifications: 'Notifications',
       settings: 'Settings',
       signOut: 'Sign Out',

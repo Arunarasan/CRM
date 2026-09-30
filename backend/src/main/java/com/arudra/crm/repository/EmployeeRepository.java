@@ -18,6 +18,9 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
     /** Links a signed-in {@link com.arudra.crm.entity.User} to its master employee record by shared email. */
     java.util.Optional<Employee> findByEmailIgnoreCaseAndIsDeletedFalse(String email);
 
+    /** Resolves an employee from the token behind their personal review QR code. */
+    java.util.Optional<Employee> findByReviewTokenAndIsDeletedFalse(String reviewToken);
+
     /** Employees who have a pending self-service attendance-method switch awaiting admin approval. */
     List<Employee> findByAttendanceMethodRequestedIsNotNullAndIsDeletedFalse();
 }

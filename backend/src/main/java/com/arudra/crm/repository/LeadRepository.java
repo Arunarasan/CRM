@@ -42,6 +42,11 @@ public interface LeadRepository extends JpaRepository<Lead, Long>, JpaSpecificat
 
     long countByIsDeletedFalseAndCreatedAtBetween(java.time.LocalDateTime start, java.time.LocalDateTime end);
 
+    // Period-scoped conversion stats: leads created in a window, and how many of that cohort converted / were lost.
+    long countByIsDeletedFalseAndCreatedAtBetweenAndIsConvertedTrue(java.time.LocalDateTime start, java.time.LocalDateTime end);
+
+    long countByIsDeletedFalseAndCreatedAtBetweenAndStatusIgnoreCase(java.time.LocalDateTime start, java.time.LocalDateTime end, String status);
+
     long countByIsDeletedFalseAndLeadTemperatureIgnoreCaseAndIsConvertedFalse(String temperature);
 
     long countByIsDeletedFalseAndIsConvertedTrue();

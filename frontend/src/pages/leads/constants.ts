@@ -359,6 +359,16 @@ export interface DashboardMetrics {
   conversionRate: string;
 }
 
+/** Time-boxed lead stats for the Leads page's time-frame partitions. */
+export interface LeadPeriodStats {
+  entered: number;
+  converted: number;
+  lost: number;
+  inProgress: number;
+  conversionRate: string;       // e.g. "42.5%"
+  conversionRatePercent: number; // e.g. 42.5
+}
+
 export interface LeadFilters {
   status: string;
   stage: string;

@@ -24,6 +24,9 @@ public class TaskComment extends BaseEntity {
     @Column(length = 50)
     private String role; // Role of the author at the time of commenting
 
+    @Column(name = "audio_url", length = 500)
+    private String audioUrl; // uploaded voice-note clip when the remark is (also) recorded
+
     @Column(name = "has_attachments")
     private Boolean hasAttachments = false;
 

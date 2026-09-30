@@ -23,7 +23,7 @@ export default function DailyLogsTab({ projectId, dailyLogs, onChanged }: { proj
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-slate-800">Daily Execution Logs</h2>
+        <h2 className="text-2xl font-bold text-slate-800 flex items-center"><PenTool className="w-5 h-5 mr-2 text-emerald-600"/> Daily Execution Logs</h2>
         <Dialog>
           <DialogTrigger asChild>
             <Button><PenTool className="w-4 h-4 mr-2"/> New Daily Log</Button>

@@ -9,6 +9,7 @@ import api from '@/lib/api';
 import { employeeTaskApi } from '@/api/employeeTaskApi';
 import { TaskDetail as TaskDetailType, LeadInfo } from '@/types/employeeTask';
 import { resolveFileUrl } from '@/lib/uploadFile';
+import AudioCaptureField, { CapturedAudio } from '@/components/AudioCaptureField';
 import { runOrQueue } from '@/hooks/useOfflineQueue';
 import ChecklistPanel from './components/ChecklistPanel';
 import CheckInBar from './components/CheckInBar';
@@ -17,7 +18,10 @@ import IssueReportSheet from './components/IssueReportSheet';
 import MaterialUsageSheet from './components/MaterialUsageSheet';
 import LeadTaskFormSheet from './components/LeadTaskFormSheet';
 import RequirementFormSheet from './components/RequirementFormSheet';
+import RequirementSummaryCard from './components/RequirementSummaryCard';
+import ProjectExecutionCard from './components/ProjectExecutionCard';
 import CompleteSheet from './components/CompleteSheet';
+import CollectPaymentSheet from './components/CollectPaymentSheet';
 import TimeTracker from './components/TimeTracker';
 import HoldTimer from './components/HoldTimer';
 import { humanizeDue, dueToneClass, priorityMeta, statusMeta } from './taskUtils';
@@ -318,7 +322,8 @@ export default function TaskDetail() {
   const navigate = useNavigate();
   const [task, setTask] = useState<TaskDetailType | null>(null);
   const [note, setNote] = useState('');
-  const [sheet, setSheet] = useState<'progress' | 'issue' | 'material' | 'complete' | null>(null);
+  const [voice, setVoice] = useState<CapturedAudio[]>([]);
+  const [sheet, setSheet] = useState<'progress' | 'issue' | 'material' | 'complete' | 'payment' | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [actionErr, setActionErr] = useState('');
@@ -355,11 +360,23 @@ export default function TaskDetail() {
     finally { setBusy(false); }
   };
 
-  const addNote = async () => {
-    if (!note.trim()) return;
-    await api.post(`/tasks/${taskId}/comments`, { content: note });
+  // A remark can be text, a voice note, or both. Voice notes post immediately when recorded/uploaded.
+  const addNote = async (audioUrl?: string) => {
+    if (!note.trim() && !audioUrl) return;
+    await api.post(`/tasks/${taskId}/comments`, {
+      content: note.trim() || (audioUrl ? '🎤 Voice note' : ''),
+      audioUrl: audioUrl || undefined,
+    });
     setNote('');
+    setVoice([]);
     load();
+  };
+
+  // AudioCaptureField appends the uploaded clip to its list — post it as a voice remark, then reset.
+  const onVoiceRemark = (next: CapturedAudio[]) => {
+    const clip = next[next.length - 1];
+    if (clip) addNote(clip.url);
+    else setVoice([]);
   };
 
   const extendHold = async () => {
@@ -377,6 +394,8 @@ export default function TaskDetail() {
 
   // Lead-workflow tasks capture structured data on completion (writes onto the lead page).
   const isLeadForm = !!task.formType;
+  // The one shared project execution task: progress + checklist + activity log + team messages only.
+  const isProjectExec = !!task.projectExecution;
   const canSubmitForm = isLeadForm && !locked
     && ['ASSIGNED', 'ACCEPTED', 'IN_PROGRESS', 'PAUSED'].includes(mine ?? '');
   // Module-driven tasks (Measurement/BOQ) are done in a dedicated module and close automatically —
@@ -458,6 +477,9 @@ export default function TaskDetail() {
             any task tied to a lead so the field employee has full context before collecting/confirming. */}
         {task.lead && <LeadDetailsCard lead={task.lead} />}
 
+        {/* Shared project execution task — the full project picture (customer, items, materials, sizes). */}
+        {isProjectExec && task.projectInfo && <ProjectExecutionCard info={task.projectInfo} />}
+
         {/* Data-entry hold countdown — turns into an "extend time" alert in the last 2 minutes. */}
         {task.holdExpiresAt && <HoldTimer expiresAt={task.holdExpiresAt} onExtend={extendHold} />}
 
@@ -521,6 +543,11 @@ export default function TaskDetail() {
           </div>
         )}
 
+        {/* Once a Collect Requirement task is submitted, show a read-only summary of what was captured. */}
+        {isLeadForm && task.formType === 'REQUIREMENT' && locked && (
+          <RequirementSummaryCard taskId={taskId} />
+        )}
+
         {/* Collaborative tasks: let an eligible employee who isn't already on the team join in. */}
         {!mine && !locked && (task.assignmentType === 'MULTIPLE_EMPLOYEES' || task.assignmentType === 'TEAM') && task.team.length > 0 && (
           <button
@@ -536,9 +563,11 @@ export default function TaskDetail() {
         {!isLeadForm && (<>
         {mine && <TimeTracker taskId={taskId} disabled={locked} />}
 
-        <CheckInBar taskId={taskId} checkins={task.checkins} onChanged={load} locked={locked} />
+        {/* Site check-in is for single field visits — not the long-running shared project task. */}
+        {!isProjectExec && <CheckInBar taskId={taskId} checkins={task.checkins} onChanged={load} locked={locked} />}
 
-        <ChecklistPanel taskId={taskId} checklist={task.checklist} onChanged={load} locked={locked} title="Work to Complete" />
+        <ChecklistPanel taskId={taskId} checklist={task.checklist} onChanged={load} locked={locked}
+          title={isProjectExec ? 'Work Items' : 'Work to Complete'} />
 
         {/* One-tap progress while the work is live. */}
         {showQuickProgress && (
@@ -628,20 +657,32 @@ export default function TaskDetail() {
           <Disclosure title="Remarks" count={task.comments.length} icon={<MessageSquare className="h-4 w-4" />}>
             <ul className="mb-2.5 flex flex-col gap-2">
               {task.comments.length === 0 && <li className="text-[13px] text-[#9A9E96]">No remarks yet.</li>}
-              {task.comments.map((c) => (
-                <li key={c.id} className="text-[13px] text-[#33392F]">
-                  <span className="font-medium">{c.authorName}:</span> {c.content}
-                </li>
-              ))}
+              {task.comments.map((c) => {
+                const isVoiceOnly = c.content === '🎤 Voice note';
+                return (
+                  <li key={c.id} className="text-[13px] text-[#33392F]">
+                    <span className="font-medium">{c.authorName}:</span>{!isVoiceOnly && ` ${c.content}`}
+                    {c.audioUrl && (
+                      <audio controls src={resolveFileUrl(c.audioUrl)} className="mt-1 h-8 w-full max-w-[240px]" />
+                    )}
+                  </li>
+                );
+              })}
             </ul>
             {locked ? (
               <p className="text-[12px] text-[#9A9E96]">Notes are closed — this task is locked.</p>
             ) : (
-              <div className="flex gap-2">
-                <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add a note…"
-                  className="flex-1 rounded-xl border border-[#DDE2DE] bg-white px-3 py-2 text-[13px] outline-none focus:border-[#0A573B]" />
-                <button onClick={addNote} className="rounded-xl bg-[#0A573B] px-4 text-[13px] font-semibold text-white active:scale-95">Post</button>
-              </div>
+              <>
+                <div className="flex gap-2">
+                  <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add a note…"
+                    className="flex-1 rounded-xl border border-[#DDE2DE] bg-white px-3 py-2 text-[13px] outline-none focus:border-[#0A573B]" />
+                  <button onClick={() => addNote()} className="rounded-xl bg-[#0A573B] px-4 text-[13px] font-semibold text-white active:scale-95">Post</button>
+                </div>
+                {/* Voice remark — record with the mic or upload a clip; posts on its own. */}
+                <div className="mt-2">
+                  <AudioCaptureField value={voice} onChange={onVoiceRemark} module="task-remark" label="Or add a voice note" />
+                </div>
+              </>
             )}
           </Disclosure>
         </div>
@@ -679,16 +720,27 @@ export default function TaskDetail() {
               </button>
             ) : null}
             {actionErr && <p className="mb-2 rounded-lg bg-[#FBE7E4] p-2.5 text-[12px] text-[#B94B45]">{actionErr}</p>}
-            <div className="grid grid-cols-3 gap-2">
+            <div className={`grid gap-2 ${isProjectExec ? 'grid-cols-2' : 'grid-cols-3'}`}>
               <button onClick={() => setSheet('progress')} className="flex flex-col items-center gap-1 rounded-xl border border-[#E4DECF] bg-white py-2.5 text-[11px] font-medium text-[#4B524E] active:scale-95">
                 <Camera className="h-[18px] w-[18px] text-[#0A573B]" /> Progress
               </button>
-              <button onClick={() => setSheet('issue')} className="flex flex-col items-center gap-1 rounded-xl border border-[#E4DECF] bg-white py-2.5 text-[11px] font-medium text-[#4B524E] active:scale-95">
-                <AlertTriangle className="h-[18px] w-[18px] text-[#B27A12]" /> Report issue
-              </button>
-              <button onClick={() => setSheet('material')} className="flex flex-col items-center gap-1 rounded-xl border border-[#E4DECF] bg-white py-2.5 text-[11px] font-medium text-[#4B524E] active:scale-95">
-                <Package className="h-[18px] w-[18px] text-[#9B6B32]" /> Material
-              </button>
+              {/* Shared project task: record what the customer paid (pending admin verification). */}
+              {isProjectExec && (
+                <button onClick={() => setSheet('payment')} className="flex flex-col items-center gap-1 rounded-xl border border-[#E4DECF] bg-white py-2.5 text-[11px] font-medium text-[#4B524E] active:scale-95">
+                  <Wallet className="h-[18px] w-[18px] text-[#9B6B32]" /> Payment
+                </button>
+              )}
+              {/* Issue / material logging is per-item field work — hidden on the shared project task. */}
+              {!isProjectExec && (
+                <button onClick={() => setSheet('issue')} className="flex flex-col items-center gap-1 rounded-xl border border-[#E4DECF] bg-white py-2.5 text-[11px] font-medium text-[#4B524E] active:scale-95">
+                  <AlertTriangle className="h-[18px] w-[18px] text-[#B27A12]" /> Report issue
+                </button>
+              )}
+              {!isProjectExec && (
+                <button onClick={() => setSheet('material')} className="flex flex-col items-center gap-1 rounded-xl border border-[#E4DECF] bg-white py-2.5 text-[11px] font-medium text-[#4B524E] active:scale-95">
+                  <Package className="h-[18px] w-[18px] text-[#9B6B32]" /> Material
+                </button>
+              )}
             </div>
           </>
         )}
@@ -698,8 +750,9 @@ export default function TaskDetail() {
       <ProgressSheet taskId={taskId} open={sheet === 'progress'} onOpenChange={(o) => setSheet(o ? 'progress' : null)} onSaved={load} />
       <IssueReportSheet taskId={taskId} open={sheet === 'issue'} onOpenChange={(o) => setSheet(o ? 'issue' : null)} onSaved={load} />
       <MaterialUsageSheet taskId={taskId} open={sheet === 'material'} onOpenChange={(o) => setSheet(o ? 'material' : null)} onSaved={load} />
-      <CompleteSheet taskId={taskId} open={sheet === 'complete'} onOpenChange={(o) => setSheet(o ? 'complete' : null)}
+      <CompleteSheet taskId={taskId} execution={isProjectExec} open={sheet === 'complete'} onOpenChange={(o) => setSheet(o ? 'complete' : null)}
         onDone={() => { load(); navigate('/employee/tasks'); }} />
+      <CollectPaymentSheet taskId={taskId} open={sheet === 'payment'} onOpenChange={(o) => setSheet(o ? 'payment' : null)} onSaved={load} />
       {isLeadForm && task.formType === 'REQUIREMENT' ? (
         <RequirementFormSheet
           taskId={taskId}

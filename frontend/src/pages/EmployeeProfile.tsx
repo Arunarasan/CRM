@@ -10,7 +10,7 @@ import { format } from "date-fns";
 import {
   ArrowLeft, Briefcase, FileText, CalendarClock, HandCoins, Award, Plus, Download, Pencil,
   Mail, Phone, Calendar, IdCard, CheckSquare, FolderKanban, ChevronRight, ChevronDown, ListChecks,
-  Target, ClipboardList,
+  Target, ClipboardList, Star,
 } from "lucide-react";
 import { dailyReportApi, type AdminDailyReport, type EmployeeLeadSummary } from "@/api/dailyReportApi";
 import DailyReportCard from "@/components/hr/DailyReportCard";
@@ -27,6 +27,7 @@ import PerformanceScoreCard from "./hr/PerformanceScoreCard";
 import WorkforceFinanceTab from "./workforce/WorkforceFinanceTab";
 import AddWorkforceDialog from "./workforce/AddWorkforceDialog";
 import EmployeeOverviewTab from "./workforce/EmployeeOverviewTab";
+import EmployeeReviewsTab from "./workforce/EmployeeReviewsTab";
 import WageSettingsCard from "@/components/hr/WageSettingsCard";
 import { inr } from "./workforce/WorkforceFinanceTab";
 
@@ -48,7 +49,7 @@ const tenure = (doj?: string | null) => {
   return [y ? `${y}y` : "", m ? `${m}m` : ""].filter(Boolean).join(" ") || "0m";
 };
 
-const VALID_TABS = ["overview", "attendance", "leads", "reports", "payroll", "documents", "performance"];
+const VALID_TABS = ["overview", "attendance", "leads", "reports", "payroll", "documents", "performance", "reviews"];
 
 export default function EmployeeProfile() {
   const { id } = useParams();
@@ -221,7 +222,7 @@ export default function EmployeeProfile() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full flex flex-col">
-          <TabsList className="grid w-full grid-cols-2 md:grid-cols-7 bg-white border shadow-sm p-1 h-auto md:h-12 rounded-xl mb-6 shrink-0">
+          <TabsList className="grid w-full grid-cols-2 md:grid-cols-8 bg-white border shadow-sm p-1 h-auto md:h-12 rounded-xl mb-6 shrink-0">
             <TabTrig value="overview" icon={<Briefcase className="w-4 h-4 mr-2" />}>Overview</TabTrig>
             <TabTrig value="attendance" icon={<CalendarClock className="w-4 h-4 mr-2" />}>Time &amp; Leave</TabTrig>
             <TabTrig value="leads" icon={<Target className="w-4 h-4 mr-2" />}>Leads</TabTrig>
@@ -229,6 +230,7 @@ export default function EmployeeProfile() {
             <TabTrig value="payroll" icon={<HandCoins className="w-4 h-4 mr-2" />}>Payroll</TabTrig>
             <TabTrig value="documents" icon={<FileText className="w-4 h-4 mr-2" />}>Documents</TabTrig>
             <TabTrig value="performance" icon={<Award className="w-4 h-4 mr-2" />}>Performance</TabTrig>
+            <TabTrig value="reviews" icon={<Star className="w-4 h-4 mr-2" />}>Reviews</TabTrig>
           </TabsList>
 
           {/* ---- Overview (inline-editable cards, lead-profile style) ---- */}
@@ -524,6 +526,11 @@ export default function EmployeeProfile() {
               ))}
               {performance.length === 0 && <div className="text-center py-12 text-slate-500 bg-white border rounded-2xl">No performance reviews found.</div>}
             </div>
+          </TabsContent>
+
+          {/* ---- Reviews (customer QR reviews + personal review QR) ---- */}
+          <TabsContent value="reviews">
+            <EmployeeReviewsTab employeeId={Number(id)} />
           </TabsContent>
         </Tabs>
       </div>

@@ -336,6 +336,13 @@ export interface LeadSummary {
   estimatedBudget: number | null;
   siteVisitDate: string | null;
   createdAt: string | null;
+  isConverted?: boolean;
+  rating?: number | null;
+  leadTemperature?: string | null;
+  nextFollowUpDate?: string | null;
+  address?: string | null;
+  requirement?: string | null;
+  notes?: string | null;
 }
 
 export interface LeadCreateBody {

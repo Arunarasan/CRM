@@ -89,6 +89,20 @@ public class TaskChecklistService {
         return false;
     }
 
+    /**
+     * Seeds a named checklist from explicit lines, only if the task has no checklist by that name yet
+     * (idempotent). Used for the project execution task's "Work Items" list, built from the BOQ.
+     */
+    @Transactional
+    public boolean seedNamedChecklist(Task task, String name, List<String> lines) {
+        if (task == null || task.getId() == null || lines == null || lines.isEmpty()) return false;
+        boolean exists = checklistRepository.findByTaskId(task.getId()).stream()
+                .anyMatch(c -> name.equalsIgnoreCase(c.getName()));
+        if (exists) return false;
+        applyItems(task, name, lines);
+        return true;
+    }
+
     /** Seeds the default checklist only if the task has none yet (idempotent). Returns true if created. */
     @Transactional
     public boolean ensureDefaultChecklist(Task task) {

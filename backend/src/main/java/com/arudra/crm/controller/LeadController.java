@@ -90,6 +90,20 @@ public class LeadController {
         return ResponseEntity.ok(leadService.getDashboard());
     }
 
+    /**
+     * Time-boxed lead stats (entered / converted / lost / conversion rate) for a period. {@code from}
+     * and {@code to} are ISO dates (inclusive of the day); omit both for all-time.
+     */
+    @GetMapping("/stats")
+    @PreAuthorize(READ)
+    public ResponseEntity<java.util.Map<String, Object>> getPeriodStats(
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate from,
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate to) {
+        java.time.LocalDateTime start = from != null ? from.atStartOfDay() : java.time.LocalDate.of(2000, 1, 1).atStartOfDay();
+        java.time.LocalDateTime end = to != null ? to.plusDays(1).atStartOfDay() : java.time.LocalDateTime.now().plusDays(1);
+        return ResponseEntity.ok(leadService.getPeriodStats(start, end));
+    }
+
     @GetMapping("/board")
     @PreAuthorize(READ)
     public ResponseEntity<List<LeadBoardColumnDTO>> getBoard(

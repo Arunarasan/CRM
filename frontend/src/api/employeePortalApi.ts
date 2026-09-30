@@ -18,6 +18,11 @@ const BASE = '/employee-portal';
 
 export const employeePortalApi = {
   me: () => api.get<EmployeeProfile>(`${BASE}/me`).then((r) => r.data),
+  // Personal review QR: my shareable review link + captured-review summary.
+  reviewQr: () => api.get<{
+    token: string; employeeName: string; designation?: string;
+    googleReviewUrl: string | null; reviewCount: number; averageRating: number;
+  }>(`${BASE}/review-qr`).then((r) => r.data),
   dashboard: () => api.get<EmployeeDashboard>(`${BASE}/dashboard`).then((r) => r.data),
   profile: () => api.get<EmployeeProfile>(`${BASE}/profile`).then((r) => r.data),
   // Profile self-edits now go through admin approval — this submits a PENDING change request.

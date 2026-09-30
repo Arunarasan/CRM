@@ -141,7 +141,7 @@ export default function MobileHome() {
             title={t('portal.home.myProjects')} icon={FolderKanban} tone="forest"
             value={dash?.assignedProjects ?? '–'}
             sub={t('portal.home.assignedToMe')}
-            onClick={() => navigate('/employee/projects')}
+            onClick={() => navigate('/employee/tasks?tab=PROJECTS')}
           />
           <Kpi
             title={t('portal.home.leaveBalance')} icon={Plane} tone="gold"
