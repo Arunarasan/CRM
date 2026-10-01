@@ -27,8 +27,8 @@ type CatalogProduct = { id: number; name: string; slug: string; categorySlug?: s
 type CatalogService = { id: number; title: string; slug: string };
 
 // The Add Lead sheet is a stack of numbered open/close steps (same design as the admin dialog).
-type StepKey = 'customer' | 'enquiry' | 'visit' | 'contact' | 'notes' | 'media';
-const STEP_ORDER: StepKey[] = ['customer', 'enquiry', 'visit', 'contact', 'notes', 'media'];
+type StepKey = 'customer' | 'enquiry' | 'visit' | 'notes' | 'media';
+const STEP_ORDER: StepKey[] = ['customer', 'enquiry', 'visit', 'notes', 'media'];
 const VISIT_CHIPS = [{ label: 'Today', days: 0 }, { label: 'Tomorrow', days: 1 }, { label: 'In 3 days', days: 3 }, { label: 'Next week', days: 7 }];
 const selectCls = 'w-full h-9 rounded-md border border-input bg-card px-2.5 text-sm';
 const joinParts = (...parts: (string | number | false | undefined | null)[]) => parts.filter(Boolean).join(' · ');
@@ -364,12 +364,21 @@ export default function Leads() {
 
             <div className="flex-1 space-y-2 overflow-y-auto px-3 py-3">
               {/* 1 — Customer */}
-              <Step {...stepProps('customer', joinParts(form.name, form.mobileNumber))} title="Customer" hint="Name and mobile">
+              <Step {...stepProps('customer', joinParts(form.name, form.mobileNumber, form.city))} title="Customer" hint="Name, mobile, city and address">
                 <F label="Customer name" required>
                   <Input autoFocus value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="Full name" />
                 </F>
-                <F label="Mobile">
-                  <Input value={form.mobileNumber} onChange={(e) => set('mobileNumber', e.target.value)} type="tel" inputMode="tel" placeholder="10-digit" />
+                <div className="grid grid-cols-2 gap-3">
+                  <F label="Mobile">
+                    <Input value={form.mobileNumber} onChange={(e) => set('mobileNumber', e.target.value)} type="tel" inputMode="tel" placeholder="10-digit" />
+                  </F>
+                  <F label="City"><Input value={form.city} onChange={(e) => set('city', e.target.value)} placeholder="City / town" /></F>
+                </div>
+                <F label="Address / location">
+                  <textarea value={form.address} onChange={(e) => set('address', e.target.value)} rows={2} className={areaCls} placeholder="Door no, street, area" />
+                </F>
+                <F label="Email">
+                  <Input value={form.email} onChange={(e) => set('email', e.target.value)} inputMode="email" placeholder="Optional" />
                 </F>
               </Step>
 
@@ -492,25 +501,14 @@ export default function Leads() {
                 </div>
               </Step>
 
-              {/* 4 — Contact & address */}
-              <Step {...stepProps('contact', joinParts(form.city, form.email))} title="Contact & address" hint="Optional — email, city, location">
-                <div className="grid grid-cols-2 gap-3">
-                  <F label="City"><Input value={form.city} onChange={(e) => set('city', e.target.value)} /></F>
-                  <F label="Email"><Input value={form.email} onChange={(e) => set('email', e.target.value)} inputMode="email" /></F>
-                </div>
-                <F label="Address / location">
-                  <textarea value={form.address} onChange={(e) => set('address', e.target.value)} rows={2} className={areaCls} />
-                </F>
-              </Step>
-
-              {/* 5 — Notes */}
+              {/* 4 — Notes */}
               <Step {...stepProps('notes', joinParts(form.notes))} title="Notes" hint="Optional — anything else to remember">
                 <F label="Notes">
                   <textarea value={form.notes} onChange={(e) => set('notes', e.target.value)} rows={2} className={areaCls} />
                 </F>
               </Step>
 
-              {/* 6 — Photos & voice notes */}
+              {/* 5 — Photos & voice notes */}
               <Step {...stepProps('media', mediaSummary)} title="Photos & voice notes" hint="Optional — site photos, recorded requirement">
                 <MultiImageCaptureField label="Add site / reference photos" module="LEAD" value={images} onChange={setImages} />
                 <AudioCaptureField label="Record or upload a voice note" module="LEAD" value={audioClips} onChange={setAudioClips} />

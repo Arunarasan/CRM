@@ -268,7 +268,7 @@ export default function LeadFormDialog({
     return join(label, form.requirementCategory, selectedProducts.join(", "));
   })();
   const summaries: Record<StepKey, string> = {
-    customer: join(form.name, form.mobileNumber),
+    customer: join(form.name, form.mobileNumber, form.city),
     enquiry: enquirySummary,
     source: join(
       form.leadSource,
@@ -276,7 +276,7 @@ export default function LeadFormDialog({
       form.estimatedBudget && `₹${Number(form.estimatedBudget).toLocaleString("en-IN")}`,
       form.rating && `${form.rating}★`,
     ),
-    contact: join(form.city, form.pincode, form.email, form.whatsappNumber && "WhatsApp"),
+    contact: join(form.pincode, form.email, form.whatsappNumber && "WhatsApp", form.companyName),
     media: join(images.length > 0 && `${images.length} photo${images.length > 1 ? "s" : ""}`,
       audioClips.length > 0 && `${audioClips.length} voice note${audioClips.length > 1 ? "s" : ""}`),
     property: join(form.propertyType, form.areaSqft && `${form.areaSqft} sq.ft`, form.roomsRequired),
@@ -310,7 +310,7 @@ export default function LeadFormDialog({
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
           <div className="flex-1 space-y-2 overflow-y-auto px-4 py-3">
             {/* 1 — Customer */}
-            <Step {...stepProps("customer")} title="Customer" hint="Name and phone number">
+            <Step {...stepProps("customer")} title="Customer" hint="Name, phone, city and address">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <F label="Customer name" required>
                   <Input autoFocus value={form.name ?? ""} onChange={text("name")} placeholder="Full name" />
@@ -318,6 +318,11 @@ export default function LeadFormDialog({
                 <F label="Phone number" required>
                   <Input type="tel" inputMode="tel" autoComplete="tel" value={form.mobileNumber ?? ""}
                     onChange={text("mobileNumber")} placeholder="10-digit mobile" />
+                </F>
+                <F label="City"><Input value={form.city ?? ""} onChange={text("city")} placeholder="City / town" /></F>
+                <F label="Area / landmark"><Input value={form.landmark ?? ""} onChange={text("landmark")} placeholder="Near…" /></F>
+                <F label="Address" className="sm:col-span-2">
+                  <textarea className={areaCls} rows={2} value={form.address ?? ""} onChange={text("address")} placeholder="Door no, street, area" />
                 </F>
               </div>
               {/* Duplicate guard: existing leads on the same number, so a duplicate isn't created. */}
@@ -561,13 +566,9 @@ export default function LeadFormDialog({
               </div>
             </Step>
 
-            {/* 4 — Contact & address */}
-            <Step {...stepProps("contact")} title="Contact & address" hint="Optional — email, WhatsApp, location">
-              <F label="Address">
-                <textarea className={areaCls} rows={2} value={form.address ?? ""} onChange={text("address")} placeholder="Door no, street, area" />
-              </F>
+            {/* 4 — More contact details */}
+            <Step {...stepProps("contact")} title="More contact details" hint="Optional — email, WhatsApp, pincode, company">
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                <F label="City"><Input value={form.city ?? ""} onChange={text("city")} /></F>
                 <F label="Pincode"><Input inputMode="numeric" value={form.pincode ?? ""} onChange={text("pincode")} /></F>
                 <F label="District"><Input value={form.district ?? ""} onChange={text("district")} /></F>
                 <F label="State"><Input value={form.state ?? ""} onChange={text("state")} /></F>
