@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { CheckCircle2, User, Phone, MapPin, Home, FileText, Wallet, CalendarClock } from 'lucide-react';
+import { formatTime } from '@/pages/leads/constants';
 import { employeeTaskApi } from '@/api/employeeTaskApi';
 
 /**
@@ -100,7 +101,7 @@ export default function RequirementSummaryCard({ taskId }: { taskId: number }) {
             {has(d.siteVisitDate)
               ? <Field label="Site visit scheduled" value={fmtDate(d.siteVisitDate)} />
               : <>
-                  <Field label="Follow-up scheduled" value={fmtDate(d.followUpDate)} />
+                  <Field label="Follow-up scheduled" value={[fmtDate(d.followUpDate), formatTime(d.followUpTime)].filter(Boolean).join(', ')} />
                   <Field label="Follow-up notes" value={d.followUpNotes} />
                 </>}
           </Group>

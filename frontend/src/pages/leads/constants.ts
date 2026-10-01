@@ -169,7 +169,7 @@ export function relativeTime(value?: string | null) {
 }
 
 /** Tone for a next-follow-up date: overdue (red), today (green), upcoming (muted). */
-export function followUpTone(value?: string | null): { label: string; className: string } {
+export function followUpTone(value?: string | null, time?: string | null): { label: string; className: string } {
   if (!value) return { label: "—", className: "text-muted-foreground" };
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return { label: "—", className: "text-muted-foreground" };
@@ -177,10 +177,11 @@ export function followUpTone(value?: string | null): { label: string; className:
   const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   const startOfDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
   const dayDiff = Math.round((startOfDate.getTime() - startOfToday.getTime()) / 86400000);
-  if (dayDiff < 0) return { label: formatDate(value), className: "text-red-600 font-medium" };
-  if (dayDiff === 0) return { label: "Today", className: "text-green-600 font-semibold" };
-  if (dayDiff === 1) return { label: "Tomorrow", className: "text-emerald-600 font-medium" };
-  return { label: formatDate(value), className: "text-foreground" };
+  const at = formatTime(time) ? `, ${formatTime(time)}` : "";
+  if (dayDiff < 0) return { label: formatDate(value) + at, className: "text-red-600 font-medium" };
+  if (dayDiff === 0) return { label: "Today" + at, className: "text-green-600 font-semibold" };
+  if (dayDiff === 1) return { label: "Tomorrow" + at, className: "text-emerald-600 font-medium" };
+  return { label: formatDate(value) + at, className: "text-foreground" };
 }
 
 export function formatINR(value?: number | null) {
@@ -191,6 +192,21 @@ export function formatINR(value?: number | null) {
 export function formatDate(value?: string | null) {
   if (!value) return "—";
   return new Date(value).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+/** "10:30" / "10:30:00" → "10:30 AM". */
+export function formatTime(value?: string | null) {
+  if (!value) return "";
+  const [h, m] = value.split(":").map(Number);
+  if (Number.isNaN(h)) return "";
+  return `${((h + 11) % 12) + 1}:${String(m || 0).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`;
+}
+
+/** Follow-up as "05 Oct 2026, 10:30 AM" (date only when no time was set). */
+export function formatFollowUp(date?: string | null, time?: string | null) {
+  if (!date) return "—";
+  const t = formatTime(time);
+  return t ? `${formatDate(date)}, ${t}` : formatDate(date);
 }
 
 export function formatDateTime(value?: string | null) {
@@ -334,6 +350,7 @@ export interface LeadCard {
   leadTemperature?: string;
   estimatedBudget?: number;
   nextFollowUpDate?: string;
+  nextFollowUpTime?: string;
   lastContactAt?: string;
   createdAt?: string;
   assignedToId?: number;

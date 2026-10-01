@@ -17,7 +17,7 @@ import { leadApi } from "./leads/leadApi";
 import { toast } from "@/components/ui/toast";
 import {
   LEAD_STATUSES, PRIORITY_STYLES, TEMPERATURE_STYLES,
-  formatDate, formatINR, statusStyle,
+  formatDate, formatFollowUp, formatINR, statusStyle,
   type Lead, type UserSummary, type LeadCreator,
 } from "./leads/constants";
 import { SelectField, TextAreaField, selectClass } from "./leads/fields";
@@ -317,7 +317,7 @@ export default function LeadProfile() {
         <StatTile
           icon={CalendarClock}
           label="Next Follow-up"
-          value={lead.nextFollowUpDate ? formatDate(lead.nextFollowUpDate) : "—"}
+          value={formatFollowUp(lead.nextFollowUpDate, lead.nextFollowUpTime)}
           hint={<span className={fuDays != null && fuDays < 0 ? "text-red-500 font-medium" : fuDays === 0 ? "text-emerald-600 font-medium" : ""}>{fuHint}</span>}
           tone="bg-amber-50 text-amber-500"
         />

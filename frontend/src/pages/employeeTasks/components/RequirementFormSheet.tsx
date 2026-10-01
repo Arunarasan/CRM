@@ -42,7 +42,7 @@ const SECTION_FIELDS: Record<string, string[]> = {
     'preferredDesignStyle', 'preferredMaterial', 'preferredColorTheme', 'remarks'],
   budget: ['estimatedBudget', 'minimumBudget', 'maximumBudget', 'expectedProjectValue', 'paymentPreference',
     'expectedStartDate', 'expectedEndDate', 'preferredCompletionDate', 'estimatedDuration'],
-  nextstep: ['siteVisitDate', 'followUpDate', 'followUpNotes'],
+  nextstep: ['siteVisitDate', 'followUpDate', 'followUpTime', 'followUpNotes'],
 };
 
 type Values = Record<string, string>;
@@ -101,7 +101,7 @@ export default function RequirementFormSheet({ taskId, leadId, open, onOpenChang
     } catch { setError('Upload failed. Try again.'); } finally { setUploading(false); }
   };
 
-  const SCHED_KEYS = ['siteVisitDate', 'followUpDate', 'followUpNotes'];
+  const SCHED_KEYS = ['siteVisitDate', 'followUpDate', 'followUpTime', 'followUpNotes'];
   const submit = async () => {
     setError('');
     // Next-step validation drives whether the workflow advances to the site visit or holds for follow-up.
@@ -121,6 +121,7 @@ export default function RequirementFormSheet({ taskId, leadId, open, onOpenChang
         data.siteVisitDate = v.siteVisitDate;
       } else {
         data.followUpDate = v.followUpDate;
+        if (v.followUpTime) data.followUpTime = v.followUpTime;
         if (v.followUpNotes?.trim()) data.followUpNotes = v.followUpNotes.trim();
       }
       await employeeTaskApi.submitLeadForm(taskId, { notes: v.notes || undefined, media: media.length ? media : undefined, data });
@@ -157,7 +158,10 @@ export default function RequirementFormSheet({ taskId, leadId, open, onOpenChang
               </>
             ) : (
               <>
-                <Text label="Follow-up date" type="date" value={v.followUpDate} onChange={(x) => set('followUpDate', x)} />
+                <div className="grid grid-cols-2 gap-3">
+                  <Text label="Follow-up date" type="date" value={v.followUpDate} onChange={(x) => set('followUpDate', x)} />
+                  <Text label="Time" type="time" value={v.followUpTime} onChange={(x) => set('followUpTime', x)} />
+                </div>
                 <Area label="What's pending / follow-up notes" value={v.followUpNotes} onChange={(x) => set('followUpNotes', x)} rows={2} placeholder="Why not ready yet, what to confirm next time…" />
                 <p className="text-[11px] text-muted-foreground">A fresh "Collect Requirement" task will be created for that date, with everything you've entered kept.</p>
               </>

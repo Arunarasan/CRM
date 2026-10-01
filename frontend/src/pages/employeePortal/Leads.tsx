@@ -2,7 +2,7 @@ import { BaseInput, Input } from '@/components/ui/input';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Plus, X, Phone, MapPin, Star, Search, Sparkles, CheckCircle2, TrendingUp,
-  ChevronRight, CalendarClock, Mail, FileText, Check,
+  ChevronRight, CalendarClock, Mail, FileText, Check, SlidersHorizontal,
 } from 'lucide-react';
 import api from '@/lib/api';
 import { employeePortalApi } from '@/api/employeePortalApi';
@@ -10,7 +10,7 @@ import { LeadSummary, LeadCreateBody } from '@/types/employeePortal';
 import { PortalHeader, StatusPill, EmptyState, inr } from './_shared';
 import MultiImageCaptureField, { type CapturedImage } from '@/components/MultiImageCaptureField';
 import AudioCaptureField, { type CapturedAudio } from '@/components/AudioCaptureField';
-import { ENQUIRY_TYPES } from '@/pages/leads/constants';
+import { ENQUIRY_TYPES, formatTime } from '@/pages/leads/constants';
 import { EnquiryTag, enquiryDetails, enquiryLabel, enquiryTypeOf, splitList } from '@/pages/leads/enquiry';
 import { Chip, F, Step, areaCls, inDays, stepControls } from '@/pages/leads/formSteps';
 
@@ -29,6 +29,13 @@ type CatalogService = { id: number; title: string; slug: string };
 // The Add Lead sheet is a stack of numbered open/close steps (same design as the admin dialog).
 type StepKey = 'customer' | 'enquiry' | 'visit' | 'notes' | 'media';
 const STEP_ORDER: StepKey[] = ['customer', 'enquiry', 'visit', 'notes', 'media'];
+// Enquiry filters for the lead list — same four as the admin Leads page, applied client-side.
+type EnquiryFilters = { enquiryType: string; category: string; product: string; service: string };
+const NO_ENQUIRY_FILTERS: EnquiryFilters = { enquiryType: '', category: '', product: '', service: '' };
+const filterSelect = 'h-9 w-full min-w-0 rounded-lg border bg-background px-2 text-xs';
+const listHas = (v: string | null | undefined, name: string) =>
+  splitList(v).some((x) => x.toLowerCase() === name.toLowerCase());
+
 const VISIT_CHIPS = [{ label: 'Today', days: 0 }, { label: 'Tomorrow', days: 1 }, { label: 'In 3 days', days: 3 }, { label: 'Next week', days: 7 }];
 const selectCls = 'w-full h-9 rounded-md border border-input bg-card px-2.5 text-sm';
 const joinParts = (...parts: (string | number | false | undefined | null)[]) => parts.filter(Boolean).join(' · ');
@@ -85,6 +92,8 @@ export default function Leads() {
   const [search, setSearch] = useState('');
   const [showSearch, setShowSearch] = useState(false);
   const [detail, setDetail] = useState<LeadSummary | null>(null);
+  const [enq, setEnq] = useState<EnquiryFilters>(NO_ENQUIRY_FILTERS);
+  const [showFilters, setShowFilters] = useState(false);
 
   const load = useCallback(() => {
     employeePortalApi.leads().then(setList).catch(() => {});
@@ -92,12 +101,13 @@ export default function Leads() {
   useEffect(() => { load(); }, [load]);
 
   // Requirement category + product come from the website catalog (same list the public site shows).
+  // Loaded up front because the list filters use it too.
   useEffect(() => {
-    if (!open || categories.length) return;
+    if (categories.length) return;
     api.get('/public/categories').then((res) => setCategories(res.data || [])).catch(() => {});
     api.get('/public/products').then((res) => setProducts(res.data || [])).catch(() => {});
     api.get('/public/services').then((res) => setServices(res.data || [])).catch(() => {});
-  }, [open, categories.length]);
+  }, [categories.length]);
 
   // Leads within the selected time frame drive both the stats and the list below.
   const periodLeads = useMemo(() => {
@@ -117,8 +127,22 @@ export default function Leads() {
     const q = search.trim().toLowerCase();
     return periodLeads
       .filter((l) => matchesStatus(l, statusFilter))
+      .filter((l) => !enq.enquiryType || enquiryTypeOf(l as any) === enq.enquiryType)
+      .filter((l) => !enq.category || (l.requirementCategory || '').toLowerCase() === enq.category.toLowerCase())
+      .filter((l) => !enq.product || listHas(l.requirementProduct, enq.product))
+      .filter((l) => !enq.service || listHas(l.requirementService, enq.service))
       .filter((l) => !q || [l.name, l.leadNumber, l.mobileNumber, l.city].some((v) => (v || '').toLowerCase().includes(q)));
-  }, [periodLeads, statusFilter, search]);
+  }, [periodLeads, statusFilter, search, enq]);
+
+  const enqCount = Object.values(enq).filter(Boolean).length;
+  const enqCategory = categories.find((c) => c.name === enq.category);
+  const enqProducts = products.filter((p) => !enqCategory || p.categorySlug === enqCategory.slug);
+  // Switching category drops a product that isn't in it, so the filters never contradict.
+  const setEnqCategory = (value: string) => setEnq((f) => {
+    const cat = categories.find((c) => c.name === value);
+    const keep = !cat || products.some((p) => p.name === f.product && p.categorySlug === cat.slug);
+    return { ...f, category: value, product: keep ? f.product : '' };
+  });
 
   const set = <K extends keyof LeadCreateBody>(k: K, v: LeadCreateBody[K]) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -244,7 +268,45 @@ export default function Leads() {
                 <button onClick={() => { setSearch(''); setShowSearch(false); }} aria-label="Clear"><X className="h-4 w-4 text-muted-foreground" /></button>
               )}
             </div>
+            <button type="button" onClick={() => setShowFilters((v) => !v)} aria-label="Filters"
+              className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border shadow-sm ${showFilters || enqCount ? 'bg-primary text-primary-foreground border-primary' : 'bg-card text-muted-foreground'}`}>
+              <SlidersHorizontal className="h-4 w-4" />
+              {enqCount > 0 && (
+                <span className="absolute -right-1 -top-1 rounded-full bg-amber-500 px-1.5 text-[10px] font-bold text-white">{enqCount}</span>
+              )}
+            </button>
           </div>
+          {showFilters && (
+            <div className="flex flex-col gap-2 rounded-xl border bg-card p-3 shadow-sm">
+              <div className="flex flex-wrap gap-1.5">
+                {[{ value: '', label: 'All' }, ...ENQUIRY_TYPES].map((t) => (
+                  <button key={t.value} type="button" onClick={() => setEnq((f) => ({ ...f, enquiryType: t.value }))}
+                    className={`rounded-full px-3 py-1 text-xs font-semibold ${enq.enquiryType === t.value ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <select className={filterSelect} value={enq.category} onChange={(e) => setEnqCategory(e.target.value)}>
+                  <option value="">All categories</option>
+                  {categories.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
+                </select>
+                <select className={filterSelect} value={enq.product} onChange={(e) => setEnq((f) => ({ ...f, product: e.target.value }))}>
+                  <option value="">All products</option>
+                  {enqProducts.map((p) => <option key={p.id} value={p.name}>{p.name}</option>)}
+                </select>
+                <select className={`${filterSelect} col-span-2`} value={enq.service} onChange={(e) => setEnq((f) => ({ ...f, service: e.target.value }))}>
+                  <option value="">All services</option>
+                  {services.map((sv) => <option key={sv.id} value={sv.title}>{sv.title}</option>)}
+                </select>
+              </div>
+              {enqCount > 0 && (
+                <button type="button" onClick={() => setEnq(NO_ENQUIRY_FILTERS)} className="self-end text-xs font-semibold text-primary">
+                  Clear filters
+                </button>
+              )}
+            </div>
+          )}
           <div className="-mx-3 flex gap-1.5 overflow-x-auto px-3 pb-0.5">
             {STATUS_CHIPS.map((s) => {
               const count = s === 'ALL' ? periodLeads.length : periodLeads.filter((l) => matchesStatus(l, s)).length;
@@ -298,7 +360,7 @@ export default function Leads() {
                       </div>
                       {products.length > 0 && <p className="mt-1 truncate text-[11.5px] text-muted-foreground">{products.join(' · ')}</p>}
                       {fmtDate(l.nextFollowUpDate) && (
-                        <p className="mt-1 flex items-center gap-1 text-[11px] font-medium text-amber-600"><CalendarClock className="h-3 w-3" /> Follow-up {fmtDate(l.nextFollowUpDate)}</p>
+                        <p className="mt-1 flex items-center gap-1 text-[11px] font-medium text-amber-600"><CalendarClock className="h-3 w-3" /> Follow-up {fmtDate(l.nextFollowUpDate)}{formatTime(l.nextFollowUpTime) && `, ${formatTime(l.nextFollowUpTime)}`}</p>
                       )}
                     </div>
                     <ChevronRight className="mt-2 h-4 w-4 shrink-0 text-muted-foreground/50" />
@@ -343,7 +405,7 @@ export default function Leads() {
               {detail.requirement && <DetailRow icon={FileText} label="Requirement" value={detail.requirement} />}
               {detail.estimatedBudget != null && <DetailRow icon={TrendingUp} label="Budget" value={inr(detail.estimatedBudget)} />}
               {fmtDate(detail.siteVisitDate) && <DetailRow icon={CalendarClock} label="Site visit" value={fmtDate(detail.siteVisitDate)!} />}
-              {fmtDate(detail.nextFollowUpDate) && <DetailRow icon={CalendarClock} label="Next follow-up" value={fmtDate(detail.nextFollowUpDate)!} />}
+              {fmtDate(detail.nextFollowUpDate) && <DetailRow icon={CalendarClock} label="Next follow-up" value={[fmtDate(detail.nextFollowUpDate), formatTime(detail.nextFollowUpTime)].filter(Boolean).join(', ')} />}
               {detail.notes && <DetailRow icon={FileText} label="Notes" value={detail.notes} />}
               {fmtDate(detail.createdAt) && <DetailRow icon={CalendarClock} label="Added" value={new Date(detail.createdAt!).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })} />}
             </div>

@@ -228,6 +228,7 @@ export interface LeadInfo {
   expectedStartDate?: string | null;
   expectedEndDate?: string | null;
   nextFollowUpDate?: string | null;
+  nextFollowUpTime?: string | null;
   followUpNotes?: string | null;
   siteVisitDate?: string | null;
   referralType?: string | null;

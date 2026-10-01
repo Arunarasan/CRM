@@ -25,6 +25,7 @@ import CompleteSheet from './components/CompleteSheet';
 import CollectPaymentSheet from './components/CollectPaymentSheet';
 import TimeTracker from './components/TimeTracker';
 import HoldTimer from './components/HoldTimer';
+import { formatTime } from '@/pages/leads/constants';
 import { humanizeDue, dueToneClass, priorityMeta, statusMeta } from './taskUtils';
 
 /** A quiet disclosure row — keeps history/team/notes tucked away until wanted. Designed to sit
@@ -296,7 +297,7 @@ function LeadDetailsCard({ lead }: { lead: LeadInfo }) {
               <div className="flex flex-col gap-2.5">
                 <LField label="Referral" value={[lead.referralType, lead.referrerName, lead.referrerContact].filter(has).join(' · ') || undefined} />
                 <LField label="Referral notes" value={lead.referralNotes} />
-                <LField label="Next follow-up" value={fmtDate(lead.nextFollowUpDate) || undefined} />
+                <LField label="Next follow-up" value={[fmtDate(lead.nextFollowUpDate), formatTime(lead.nextFollowUpTime)].filter(Boolean).join(', ') || undefined} />
                 <LField label="Follow-up notes" value={lead.followUpNotes} />
                 <LField label="Remarks" value={lead.remarks} />
               </div>

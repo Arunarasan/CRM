@@ -13,7 +13,7 @@ import api from "@/lib/api";
 import { leadApi } from "../leadApi";
 import {
   CONSTRUCTION_STATUSES, LEAD_SOURCES, LEAD_TYPES, REFERRAL_TYPES, TEMPERATURES,
-  formatDate, formatDateTime, formatINR, avatarColor, initials,
+  formatDate, formatDateTime, formatFollowUp, formatINR, avatarColor, initials,
   type Lead, type UserSummary,
 } from "../constants";
 import type { LeadJourney, JourneyStepId } from "../journey";
@@ -351,7 +351,7 @@ function SummaryCard({ lead, users, canEdit, onChanged }: CardProps & { users: U
           <TextInput type="date" value={edit.draft.expectedEndDate} onChange={edit.set("expectedEndDate")} />
         </Field>
         <Field icon={Repeat} label="Follow-ups Logged" view={lead.followUpCount ?? 0} />
-        <Field icon={CalendarClock} label="Next Follow-up" view={formatDate(lead.nextFollowUpDate)} />
+        <Field icon={CalendarClock} label="Next Follow-up" view={formatFollowUp(lead.nextFollowUpDate, lead.nextFollowUpTime)} />
         <Field icon={Clock} label="Created" view={formatDateTime(lead.createdAt)} />
         <Field icon={User} label="Created By" view={lead.createdBy} />
       </div>

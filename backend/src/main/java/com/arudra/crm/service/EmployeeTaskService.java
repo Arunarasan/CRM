@@ -748,6 +748,7 @@ public class EmployeeTaskService {
         m.put("expectedEndDate", l.getExpectedEndDate());
         // Follow-up context
         m.put("nextFollowUpDate", l.getNextFollowUpDate());
+        m.put("nextFollowUpTime", l.getNextFollowUpTime());
         m.put("followUpNotes", l.getFollowUpNotes());
         m.put("siteVisitDate", l.getSiteVisitDate());
         // How the lead came in

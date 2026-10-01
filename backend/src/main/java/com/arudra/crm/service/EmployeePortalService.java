@@ -793,6 +793,7 @@ public class EmployeePortalService {
         m.put("rating", l.getRating());
         m.put("leadTemperature", l.getLeadTemperature());
         m.put("nextFollowUpDate", l.getNextFollowUpDate());
+        m.put("nextFollowUpTime", l.getNextFollowUpTime());
         m.put("address", l.getAddress());
         m.put("requirement", l.getCustomerRequirements());
         m.put("notes", l.getRemarks());

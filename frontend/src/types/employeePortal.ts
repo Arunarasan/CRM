@@ -345,6 +345,7 @@ export interface LeadSummary {
   rating?: number | null;
   leadTemperature?: string | null;
   nextFollowUpDate?: string | null;
+  nextFollowUpTime?: string | null;
   address?: string | null;
   requirement?: string | null;
   notes?: string | null;

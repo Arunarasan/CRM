@@ -99,6 +99,7 @@ public class LeadTaskFormService {
                 f.setOutcome("Follow-up scheduled");
                 f.setStatus("Planned");
                 f.setNextFollowupDate(followUpDate);
+                f.setNextFollowupTime(time(data.get("followUpTime")));
                 f.setReminderEnabled(true);
                 leadService.addFollowup(lead.getId(), f, employee); // updates lead follow-up fields + timeline
 

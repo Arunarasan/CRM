@@ -24,6 +24,7 @@ public class LeadCardDTO {
     private String leadTemperature;
     private BigDecimal estimatedBudget;
     private LocalDate nextFollowUpDate;
+    private java.time.LocalTime nextFollowUpTime;
     private LocalDateTime lastContactAt;
     private LocalDateTime createdAt;
     private Long assignedToId;
@@ -46,6 +47,7 @@ public class LeadCardDTO {
         dto.setLeadTemperature(lead.getLeadTemperature());
         dto.setEstimatedBudget(lead.getEstimatedBudget());
         dto.setNextFollowUpDate(lead.getNextFollowUpDate());
+        dto.setNextFollowUpTime(lead.getNextFollowUpTime());
         dto.setLastContactAt(lead.getLastContactAt());
         dto.setCreatedAt(lead.getCreatedAt());
         dto.setIsConverted(lead.getIsConverted());

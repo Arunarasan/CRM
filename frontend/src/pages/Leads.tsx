@@ -19,8 +19,8 @@ import LeadFormDialog from "./leads/LeadFormDialog";
 import { selectClass } from "./leads/fields";
 import { EnquiryTag, enquiryDetails, enquiryTypeOf } from "./leads/enquiry";
 import {
-  BOARD_DROP_STATUS, EMPTY_FILTERS, ENQUIRY_TYPES, LEAD_SOURCES, LEAD_STAGES, LEAD_STATUSES, LEAD_TYPES,
-  PRIORITIES, TEMPERATURES, TEMPERATURE_STYLES, avatarColor, followUpTone, formatDate,
+  BOARD_DROP_STATUS, EMPTY_FILTERS, ENQUIRY_TYPES, formatFollowUp, LEAD_SOURCES, LEAD_STAGES, LEAD_STATUSES, LEAD_TYPES,
+  PRIORITIES, TEMPERATURES, TEMPERATURE_STYLES, avatarColor, followUpTone,
   formatINR, initials, relativeTime, type BoardColumn,
   type DashboardMetrics, type Lead, type LeadFilters, type LeadPeriodStats, type UserSummary,
 } from "./leads/constants";
@@ -113,7 +113,7 @@ function LeadInfo({ l }: { l: Lead }) {
         <div className="pt-1.5">
           <InfoRow label="Owner" value={l.assignedSalesExecutive?.name || "Unassigned"} />
           <InfoRow label="Est. budget" value={l.estimatedBudget ? formatINR(l.estimatedBudget) : undefined} accent="text-slate-900 font-bold" />
-          <InfoRow label="Next follow-up" value={l.nextFollowUpDate ? formatDate(l.nextFollowUpDate) : undefined} />
+          <InfoRow label="Next follow-up" value={l.nextFollowUpDate ? formatFollowUp(l.nextFollowUpDate, l.nextFollowUpTime) : undefined} />
           <InfoRow label="Last contact" value={l.lastContactAt ? relativeTime(l.lastContactAt) : undefined} />
         </div>
       </div>
@@ -588,7 +588,7 @@ export default function Leads() {
                                     )}
                                     <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
                                       <span className="flex items-center gap-1">
-                                        <Clock className="w-3 h-3" /> {card.nextFollowUpDate ? formatDate(card.nextFollowUpDate) : "No follow-up"}
+                                        <Clock className="w-3 h-3" /> {card.nextFollowUpDate ? formatFollowUp(card.nextFollowUpDate, card.nextFollowUpTime) : "No follow-up"}
                                       </span>
                                       <span className="font-semibold text-foreground">{formatINR(card.estimatedBudget)}</span>
                                     </div>
@@ -645,7 +645,7 @@ export default function Leads() {
                         {l.assignedSalesExecutive?.name || "Unassigned"}
                       </span>
                       <span className={followUpTone(l.nextFollowUpDate).className}>
-                        {followUpTone(l.nextFollowUpDate).label}
+                        {followUpTone(l.nextFollowUpDate, l.nextFollowUpTime).label}
                       </span>
                     </div>
                     <div className="flex items-center gap-3 pt-1 border-t text-sm" onClick={(e) => e.stopPropagation()}>

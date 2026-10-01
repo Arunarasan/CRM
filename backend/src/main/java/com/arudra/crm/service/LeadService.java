@@ -354,6 +354,7 @@ public class LeadService {
 
         // Follow-up (captured on the create form; keep it editable on update too)
         lead.setNextFollowUpDate(d.getNextFollowUpDate());
+        lead.setNextFollowUpTime(d.getNextFollowUpDate() != null ? d.getNextFollowUpTime() : null);
 
         Lead updatedLead = leadRepository.save(lead);
         logActivity(updatedLead, "UPDATED", "Lead details updated.", currentUser);

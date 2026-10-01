@@ -9,7 +9,7 @@ import ExistingCustomerSearch from "@/pages/customers/ExistingCustomerSearch";
 import { leadApi } from "./leadApi";
 import {
   CONSTRUCTION_STATUSES, ENQUIRY_TYPES, LEAD_SOURCES, LEAD_TYPES, PRIORITIES, REFERRAL_TYPES, TEMPERATURES,
-  formatDate, type Lead, type UserSummary,
+  formatFollowUp, type Lead, type UserSummary,
 } from "./constants";
 import { enquiryLabel, enquiryTypeOf, splitList } from "./enquiry";
 import { Chip, F, Step, areaCls, inDays } from "./formSteps";
@@ -33,6 +33,9 @@ const STEP_ORDER: StepKey[] = ["customer", "enquiry", "source", "contact", "medi
 
 const FOLLOW_UP_CHIPS = [
   { label: "Today", days: 0 }, { label: "Tomorrow", days: 1 }, { label: "In 3 days", days: 3 }, { label: "Next week", days: 7 },
+];
+const FOLLOW_UP_TIMES = [
+  { label: "10 AM", value: "10:00" }, { label: "12 PM", value: "12:00" }, { label: "3 PM", value: "15:00" }, { label: "6 PM", value: "18:00" },
 ];
 
 const selectCls = "w-full h-9 rounded-md border border-input bg-card px-2.5 text-sm";
@@ -63,7 +66,7 @@ export default function LeadFormDialog({
   useEffect(() => {
     if (open) {
       // Legacy leads have no enquiry tag yet — infer it so the right picker shows when editing.
-      setForm(lead ? { ...lead, enquiryType: enquiryTypeOf(lead) } : { ...EMPTY_FORM });
+      setForm(lead ? { ...lead, enquiryType: enquiryTypeOf(lead), nextFollowUpTime: lead.nextFollowUpTime?.slice(0, 5) } : { ...EMPTY_FORM });
       setImages([]);
       setAudioClips([]);
       setError("");
@@ -161,9 +164,10 @@ export default function LeadFormDialog({
       "areaSqft", "expectedWorkArea", "floorCount", "rating"].forEach((k) => {
       if (payload[k] === "" || payload[k] === null) delete payload[k];
     });
-    ["expectedStartDate", "expectedEndDate", "preferredCompletionDate", "nextFollowUpDate"].forEach((k) => {
+    ["expectedStartDate", "expectedEndDate", "preferredCompletionDate", "nextFollowUpDate", "nextFollowUpTime"].forEach((k) => {
       if (!payload[k]) delete payload[k];
     });
+    if (!payload.nextFollowUpDate) delete payload.nextFollowUpTime; // a time means nothing without a date
 
     // Enquiry tag: keep only the detail that belongs to the chosen type, so switching from
     // "Service" to "Product" doesn't leave stale services behind.
@@ -272,7 +276,7 @@ export default function LeadFormDialog({
     enquiry: enquirySummary,
     source: join(
       form.leadSource,
-      form.nextFollowUpDate && `Follow-up ${formatDate(form.nextFollowUpDate)}`,
+      form.nextFollowUpDate && `Follow-up ${formatFollowUp(form.nextFollowUpDate, form.nextFollowUpTime)}`,
       form.estimatedBudget && `₹${Number(form.estimatedBudget).toLocaleString("en-IN")}`,
       form.rating && `${form.rating}★`,
     ),
@@ -541,6 +545,18 @@ export default function LeadFormDialog({
                     <Input type="date" className="h-8 w-auto" value={form.nextFollowUpDate ?? ""} onChange={text("nextFollowUpDate")} />
                   )}
                 </div>
+                {form.nextFollowUpDate && (
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    <span className="text-xs text-muted-foreground">at</span>
+                    {FOLLOW_UP_TIMES.map((t) => (
+                      <Chip key={t.value} active={form.nextFollowUpTime === t.value}
+                        onClick={() => set("nextFollowUpTime")(form.nextFollowUpTime === t.value ? undefined : t.value)}>
+                        {t.label}
+                      </Chip>
+                    ))}
+                    <Input type="time" className="h-8 w-auto" value={form.nextFollowUpTime ?? ""} onChange={text("nextFollowUpTime")} />
+                  </div>
+                )}
               </F>
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
