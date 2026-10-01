@@ -129,6 +129,24 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Two writes raced on the same @Version-ed row. That's a retryable conflict, not a server
+     * fault — without this it surfaced as an opaque 500.
+     */
+    @ExceptionHandler(org.springframework.orm.ObjectOptimisticLockingFailureException.class)
+    public ResponseEntity<ApiError> handleOptimisticLock(
+            org.springframework.orm.ObjectOptimisticLockingFailureException ex, HttpServletRequest request) {
+
+        log.warn("Optimistic lock conflict on {}: {}", request.getRequestURI(), ex.getMessage());
+        ApiError apiError = new ApiError(
+                HttpStatus.CONFLICT.value(),
+                HttpStatus.CONFLICT.getReasonPhrase(),
+                "This record was changed by another update at the same time. Please reload and try again.",
+                request.getRequestURI()
+        );
+        return new ResponseEntity<>(apiError, HttpStatus.CONFLICT);
+    }
+
+    /**
      * A missing or malformed request body (empty POST, invalid JSON, wrong type) is a client error,
      * not a server fault. Without this it fell through to the generic handler and returned an opaque
      * 500 — e.g. POST /api/auth/login with no body. Map it to a clean 400.

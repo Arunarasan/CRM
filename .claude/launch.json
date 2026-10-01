@@ -23,6 +23,22 @@
       "autoPort": true
     },
     {
+      "name": "backend-payslip",
+      "runtimeExecutable": "mvn",
+      "runtimeArgs": ["-o", "spring-boot:run", "-Dspring-boot.run.arguments=--server.port=8085"],
+      "port": 8085,
+      "cwd": "backend",
+      "env": { "CORS_ALLOWED_ORIGINS": "http://localhost:4199" }
+    },
+    {
+      "name": "frontend-payslip",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--", "--port", "4199", "--strictPort"],
+      "port": 4199,
+      "cwd": "frontend",
+      "env": { "VITE_API_URL": "http://localhost:8085/api" }
+    },
+    {
       "name": "website",
       "runtimeExecutable": "npm",
       "runtimeArgs": [

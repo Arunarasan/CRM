@@ -442,7 +442,9 @@ function TeamCard({ lead, users, canEdit, onChanged }: CardProps & { users: User
     const base = seed();
     const changed = TEAM_ROLES.filter((r) => draft[r] && draft[r] !== base[r]);
     if (!changed.length) { toast.success("No team changes"); return; }
-    await Promise.all(changed.map((r) => leadApi.assign(lead.id, Number(draft[r]), r)));
+    // Sequential, not Promise.all: every assign rewrites the same version-locked lead row, so
+    // parallel calls collide on the optimistic lock and all but the first fail.
+    for (const r of changed) await leadApi.assign(lead.id, Number(draft[r]), r);
     toast.success("Team updated");
     onChanged();
   });
