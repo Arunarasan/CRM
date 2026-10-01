@@ -386,6 +386,7 @@ public class QuotationService {
                 reserveBoqItemMaterials(item.getBoqItemId());
             }
         }
+        recalculateTotals(quotation); // a previously rejected line may be back in scope
         rollUpApprovalStatus(quotation, user);
         Quotation saved = quotationRepository.save(quotation);
         logActivity(saved, "ITEMS_APPROVED", count + " item(s) approved by customer", user);
@@ -415,6 +416,64 @@ public class QuotationService {
         logActivity(quotation, "APPROVED", "All items decided — quotation marked approved and ready to convert", user);
     }
 
+    /**
+     * The customer decision in one step: the given lines are the agreed scope (APPROVED), every other
+     * line is dropped (REJECTED, its BOQ item back to PENDING), totals are recalculated for the agreed
+     * scope and the quotation becomes APPROVED, ready to convert. Can be repeated until the quotation
+     * is converted, if the customer changes the scope again. The draft advance invoice is raised after
+     * commit so it is computed from the agreed (not the full) total.
+     */
+    @Transactional
+    public Quotation customerApprove(Long id, List<Long> inScopeItemIds, User user) {
+        Quotation quotation = getQuotationById(id);
+        if ("CONVERTED".equals(quotation.getStatus())) {
+            throw new IllegalStateException("This quotation is already converted to a project — its scope can no longer change.");
+        }
+        if (inScopeItemIds == null || inScopeItemIds.isEmpty()) {
+            throw new IllegalStateException("Select at least one item the customer approved.");
+        }
+        int approved = 0, dropped = 0;
+        for (QuotationItem item : quotation.getItems()) {
+            boolean keep = inScopeItemIds.contains(item.getId());
+            if (keep) {
+                approved++;
+                if ("APPROVED".equals(item.getStatus())) continue;
+                item.setStatus("APPROVED");
+                if (item.getBoqItemId() != null) reserveBoqItemMaterials(item.getBoqItemId());
+            } else {
+                dropped++;
+                if ("REJECTED".equals(item.getStatus())) continue;
+                boolean wasApproved = "APPROVED".equals(item.getStatus());
+                item.setStatus("REJECTED");
+                if (item.getBoqItemId() != null) {
+                    if (wasApproved) releaseBoqItemMaterials(item.getBoqItemId());
+                    setBoqItemStatus(item.getBoqItemId(), "PENDING");
+                }
+            }
+        }
+        if (approved == 0) {
+            throw new IllegalStateException("None of the selected items belong to this quotation.");
+        }
+        recalculateTotals(quotation);
+        quotation.setStatus("APPROVED");
+        quotation.setInternalApprovalStatus("APPROVED");
+        quotation.setApprovedDate(LocalDateTime.now());
+        quotation.setApprovedBy(user);
+        Quotation saved = quotationRepository.save(quotation);
+        logActivity(saved, "CUSTOMER_APPROVED", "Customer approved " + approved + " item(s)"
+                + (dropped > 0 ? ", dropped " + dropped : "") + " — total " + saved.getGrandTotal(), user);
+        if (org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive()) {
+            org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                    new org.springframework.transaction.support.TransactionSynchronization() {
+                        @Override
+                        public void afterCommit() { autoGenerateAdvanceInvoice(saved); }
+                    });
+        } else {
+            autoGenerateAdvanceInvoice(saved);
+        }
+        return saved;
+    }
+
     @Transactional
     public Quotation rejectItems(Long id, List<Long> quotationItemIds, User user) {
         Quotation quotation = getQuotationById(id);
@@ -429,6 +488,7 @@ public class QuotationService {
                 setBoqItemStatus(item.getBoqItemId(), "PENDING");
             }
         }
+        recalculateTotals(quotation); // rejected lines leave the total
         rollUpApprovalStatus(quotation, user);
         Quotation saved = quotationRepository.save(quotation);
         logActivity(saved, "ITEMS_REJECTED", count + " item(s) rejected, returned to BOQ as pending", user);
@@ -1086,10 +1146,14 @@ public class QuotationService {
         BigDecimal itemAdditionalCharges = BigDecimal.ZERO;
         if (quotation.getItems() != null) {
             for (QuotationItem item : quotation.getItems()) {
+                // Lines the customer dropped (REJECTED) still get their own line total computed for
+                // display, but are left out of every quotation total — the total is what the customer
+                // agreed to, and invoices / payment schedules are raised from it.
+                boolean inScope = !"REJECTED".equals(item.getStatus());
                 // Material / labour split is informational (carried from the BOQ) — accumulate it for
                 // the Grand Summary regardless of whether the line has a priced rate yet.
-                if (item.getMaterialCost() != null) materialTotal = materialTotal.add(item.getMaterialCost());
-                if (item.getLabourCost() != null) labourTotal = labourTotal.add(item.getLabourCost());
+                if (inScope && item.getMaterialCost() != null) materialTotal = materialTotal.add(item.getMaterialCost());
+                if (inScope && item.getLabourCost() != null) labourTotal = labourTotal.add(item.getLabourCost());
                 if (item.getRate() != null && item.getQuantity() != null) {
                     BigDecimal itemTotal = item.getRate().multiply(item.getQuantity());
                     // discount on item
@@ -1100,7 +1164,7 @@ public class QuotationService {
                     // per-item additional charges (added to the taxable base for this line)
                     if (item.getAdditionalCharges() != null && item.getAdditionalCharges().compareTo(BigDecimal.ZERO) > 0) {
                         itemTotal = itemTotal.add(item.getAdditionalCharges());
-                        itemAdditionalCharges = itemAdditionalCharges.add(item.getAdditionalCharges());
+                        if (inScope) itemAdditionalCharges = itemAdditionalCharges.add(item.getAdditionalCharges());
                     }
                     // tax on item
                     if (item.getGstPercentage() != null && item.getGstPercentage().compareTo(BigDecimal.ZERO) > 0) {
@@ -1109,7 +1173,7 @@ public class QuotationService {
                         itemTotal = itemTotal.add(tax);
                     }
                     item.setTotalAmount(itemTotal);
-                    totalItems = totalItems.add(itemTotal);
+                    if (inScope) totalItems = totalItems.add(itemTotal);
                 }
             }
         }

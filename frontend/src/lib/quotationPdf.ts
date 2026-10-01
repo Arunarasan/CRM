@@ -1,19 +1,100 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { buildQuotationTree, type Quotation } from "@/types/quotation";
+import { buildQuotationTree, type Quotation, type QuotationItem } from "@/types/quotation";
 
 // jsPDF's built-in fonts don't carry the ₹ glyph, so use "Rs." in the PDF to avoid tofu boxes.
 const money = (v?: number) =>
   v === undefined || v === null ? "-" : `Rs. ${Number(v).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 
+const n = (v?: number | null) => Number(v ?? 0) || 0;
+
+export interface PdfSelection {
+  /** Item ids to include; undefined = every item. */
+  itemIds?: Set<number>;
+  /** Include quotation-level labour / additional charges that aren't tied to an item. */
+  includeExtras?: boolean;
+}
+
+export interface SelectionTotals {
+  items: QuotationItem[];
+  isPartial: boolean;
+  materialTotal: number;
+  labourTotal: number;
+  additionalCharges: number;
+  /** Quotation-level labour + charges not attached to any item (whole-quote extras). */
+  extras: number;
+  discount: number;
+  gst: number;
+  grandTotal: number;
+}
+
 /**
- * Builds and downloads a floor-grouped PDF of the quotation:
+ * Totals for a subset of a quotation's items. Selecting everything (with extras) returns the
+ * quotation's own figures exactly. For a subset, quotation-level discount and GST are applied at the
+ * same effective rate as on the full quotation (they're whole-quote figures, so they scale with it).
+ */
+export function selectionTotals(quotation: Quotation, sel: PdfSelection = {}): SelectionTotals {
+  const all = quotation.items || [];
+  // Lines the customer dropped (REJECTED) are outside the quotation totals on the server too.
+  const priced = all.filter((i) => i.status !== "REJECTED");
+  const items = sel.itemIds ? all.filter((i) => i.id != null && sel.itemIds!.has(i.id)) : priced;
+  const includeExtras = sel.includeExtras ?? true;
+
+  const allItemsTotal = priced.reduce((s, i) => s + n(i.totalAmount), 0);
+  const fullGrand = n(quotation.grandTotal);
+  const fullGst = n(quotation.gst);
+  const fullDiscount = n(quotation.discount);
+  const fullSubtotal = fullGrand - fullGst + fullDiscount; // items + quote-level labour/charges
+  const extras = Math.max(0, fullSubtotal - allItemsTotal);
+
+  const isPartial = items.length !== priced.length || items.some((i) => i.status === "REJECTED")
+    || (!includeExtras && extras > 0);
+  if (!isPartial) {
+    return {
+      items, isPartial, extras,
+      materialTotal: n(quotation.materialTotal), labourTotal: n(quotation.labourTotal),
+      additionalCharges: n(quotation.additionalChargesTotal),
+      discount: fullDiscount, gst: fullGst, grandTotal: fullGrand,
+    };
+  }
+
+  const discountRate = fullSubtotal > 0 ? fullDiscount / fullSubtotal : 0;
+  const afterFull = fullSubtotal - fullDiscount;
+  const gstRate = afterFull > 0 ? fullGst / afterFull : 0;
+
+  const subtotal = items.reduce((s, i) => s + n(i.totalAmount), 0) + (includeExtras ? extras : 0);
+  const discount = subtotal * discountRate;
+  const gst = (subtotal - discount) * gstRate;
+  const r2 = (v: number) => Math.round(v * 100) / 100;
+  return {
+    items, isPartial, extras,
+    materialTotal: r2(items.reduce((s, i) => s + n(i.materialCost), 0)),
+    labourTotal: r2(items.reduce((s, i) => s + n(i.labourCost), 0)),
+    additionalCharges: r2(items.reduce((s, i) => s + n(i.additionalCharges), 0) + (includeExtras ? extras : 0)),
+    discount: r2(discount), gst: r2(gst), grandTotal: r2(subtotal - discount + gst),
+  };
+}
+
+/** Downloads the PDF (optionally only the selected items). */
+export function downloadQuotationPdf(quotation: Quotation, sel: PdfSelection = {}) {
+  buildQuotationPdf(quotation, sel).save(`${quotation.quotationNumber || "quotation"}.pdf`);
+}
+
+/** Blob URL of the PDF for an in-page preview. The caller revokes it (URL.revokeObjectURL). */
+export function quotationPdfUrl(quotation: Quotation, sel: PdfSelection = {}): string {
+  const blob = buildQuotationPdf(quotation, sel).output("blob");
+  return URL.createObjectURL(blob);
+}
+
+/**
+ * Builds a floor-grouped PDF of the quotation:
  * FLOOR heading → per Room table (Item, Specification, Qty, Material, Labour, Total) → Room Total →
  * Floor Total, then Floor Summary + Grand Summary + Terms. Uses the same buildQuotationTree grouping
  * as the on-screen tree so the two always match.
  */
-export function downloadQuotationPdf(quotation: Quotation) {
-  const tree = buildQuotationTree(quotation.items || []);
+export function buildQuotationPdf(quotation: Quotation, sel: PdfSelection = {}): jsPDF {
+  const totals = selectionTotals(quotation, sel);
+  const tree = buildQuotationTree(totals.items);
   const doc = new jsPDF("p", "mm", "a4");
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
@@ -42,6 +123,13 @@ export function downloadQuotationPdf(quotation: Quotation) {
   if (quotation.expiryDate) { doc.text(`Valid until: ${quotation.expiryDate}`, rx, ry, { align: "right" }); }
   doc.setTextColor(0, 0, 0);
   y += 10;
+  if (totals.isPartial) {
+    doc.setFont("helvetica", "italic").setFontSize(8.5).setTextColor(100, 116, 139);
+    const scopeCount = (quotation.items || []).filter((i) => i.status !== "REJECTED").length;
+    doc.text(`Selected scope: ${totals.items.length} of ${scopeCount} items`, marginX, y);
+    doc.setTextColor(0, 0, 0);
+    y += 6;
+  }
 
   // --- Floors ---
   for (const floor of tree.floors) {
@@ -133,15 +221,15 @@ export function downloadQuotationPdf(quotation: Quotation) {
     doc.text(val, rx, y, { align: "right" });
     y += bold ? 7 : 5;
   };
-  line("Material Total", money(quotation.materialTotal));
-  line("Labour Total", money(quotation.labourTotal));
-  line("Additional Charges", money(quotation.additionalChargesTotal));
-  line("Discount", `- ${money(quotation.discount)}`);
-  line("GST", `+ ${money(quotation.gst)}`);
+  line("Material Total", money(totals.materialTotal));
+  line("Labour Total", money(totals.labourTotal));
+  line("Additional Charges", money(totals.additionalCharges));
+  line("Discount", `- ${money(totals.discount)}`);
+  line("GST", `+ ${money(totals.gst)}`);
   doc.setDrawColor(30, 41, 59).setLineWidth(0.4);
   doc.line(gLabelX, y - 1, rx, y - 1);
   y += 3;
-  line("Grand Total", money(quotation.grandTotal), true);
+  line("Grand Total", money(totals.grandTotal), true);
 
   // --- Terms ---
   if (quotation.termsAndConditions) {
@@ -160,5 +248,5 @@ export function downloadQuotationPdf(quotation: Quotation) {
     }
   }
 
-  doc.save(`${quotation.quotationNumber || "quotation"}.pdf`);
+  return doc;
 }

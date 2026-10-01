@@ -102,6 +102,13 @@ public class QuotationController {
         return ResponseEntity.ok(quotationService.approveItems(id, itemIds, currentUserService.getCurrentUser()));
     }
 
+    /** Customer final scope: listed items approved, all others dropped, quotation approved. */
+    @PostMapping("/{id}/customer-approval")
+    @PreAuthorize(APPROVE)
+    public ResponseEntity<Quotation> customerApprove(@PathVariable Long id, @RequestBody Map<String, Object> payload) {
+        return ResponseEntity.ok(quotationService.customerApprove(id, extractIds(payload), currentUserService.getCurrentUser()));
+    }
+
     @PostMapping("/{id}/reject-items")
     @PreAuthorize(APPROVE)
     public ResponseEntity<Quotation> rejectItems(@PathVariable Long id, @RequestBody Map<String, Object> payload) {

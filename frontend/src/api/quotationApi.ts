@@ -28,6 +28,10 @@ export const quotationApi = {
   updateApprovalStatus: (id: number, status: string) =>
     api.put<Quotation>(`${BASE}/${id}/approval?status=${encodeURIComponent(status)}`).then((r) => r.data),
 
+  /** Customer's final scope: these items approved, every other item dropped, quotation approved. */
+  customerApproval: (id: number, itemIds: number[]) =>
+    api.post<Quotation>(`${BASE}/${id}/customer-approval`, { itemIds }).then((r) => r.data),
+
   // Item-level approval (drives partial execution)
   approveItems: (id: number, itemIds: number[]) =>
     api.post<Quotation>(`${BASE}/${id}/approve-items`, { itemIds }).then((r) => r.data),
