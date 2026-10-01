@@ -1013,8 +1013,11 @@ public class QuotationService {
                         "Quotation items are generated from the BOQ and cannot be added manually — revise the BOQ and regenerate the quotation to change its scope.");
             }
             QuotationItem existing = existingById.get(incoming.getId());
+            boolean repriced = !sameAmount(existing.getRate(), incoming.getRate())
+                    || !sameAmount(existing.getDiscountPercentage(), incoming.getDiscountPercentage());
             existing.setRate(incoming.getRate());
             existing.setDiscountPercentage(incoming.getDiscountPercentage());
+            if (repriced) rescaleMaterialLabourSplit(existing);
             existing.setGstPercentage(incoming.getGstPercentage());
             existing.setRemarks(incoming.getRemarks());
             // Annotation fields are safe to edit under the scope-lock — they don't change what/how
@@ -1029,6 +1032,38 @@ public class QuotationService {
             existing.setEstimatedDays(incoming.getEstimatedDays());
             existing.setAssignedContractor(incoming.getAssignedContractor());
         }
+    }
+
+    private static boolean sameAmount(BigDecimal x, BigDecimal y) {
+        if (x == null || y == null) return x == y;
+        return x.compareTo(y) == 0;
+    }
+
+    /**
+     * The material / labour columns are the line price split into its two parts (carried from the BOQ
+     * selling amounts). When the line is repriced on the quotation, scale both parts to the new line
+     * amount (rate x qty less line discount, before charges and GST) keeping their ratio, so Material +
+     * Labour still adds up to the line on every print, PDF and summary. An unsplit line goes all to
+     * material.
+     */
+    private void rescaleMaterialLabourSplit(QuotationItem item) {
+        if (item.getRate() == null || item.getQuantity() == null) return;
+        BigDecimal base = item.getRate().multiply(item.getQuantity());
+        if (item.getDiscountPercentage() != null && item.getDiscountPercentage().signum() > 0) {
+            base = base.subtract(base.multiply(item.getDiscountPercentage()).divide(new BigDecimal(100), 6, java.math.RoundingMode.HALF_UP));
+        }
+        base = base.setScale(2, java.math.RoundingMode.HALF_UP);
+        BigDecimal m = item.getMaterialCost() != null ? item.getMaterialCost() : BigDecimal.ZERO;
+        BigDecimal l = item.getLabourCost() != null ? item.getLabourCost() : BigDecimal.ZERO;
+        BigDecimal old = m.add(l);
+        if (old.signum() <= 0) {
+            item.setMaterialCost(base);
+            item.setLabourCost(BigDecimal.ZERO);
+            return;
+        }
+        BigDecimal newMaterial = base.multiply(m).divide(old, 2, java.math.RoundingMode.HALF_UP);
+        item.setMaterialCost(newMaterial);
+        item.setLabourCost(base.subtract(newMaterial));
     }
 
     private void copyCollections(Quotation original, Quotation copy) {

@@ -16,6 +16,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { quotationApi } from "@/api/quotationApi";
 import { NumCell } from "@/pages/leads/quote/cells";
 import QuotationPdfDialog from "./QuotationPdfDialog";
+import { lineTotal, pricingPatch, quoteTotals, readPricing, type DiscountMode } from "./quotationPricing";
 import {
   QUOTATION_STATUS_LABELS, QUOTATION_STATUS_STYLES, buildQuotationTree,
   type Quotation, type QuotationItem,
@@ -31,20 +32,7 @@ import {
 
 const inr = (v?: number | null) =>
   "₹" + Number(v ?? 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
-const num = (v: unknown) => Number(v ?? 0) || 0;
 const errMsg = (e: any, fallback: string) => e?.response?.data?.message || fallback;
-
-type DiscountMode = "PERCENT" | "FLAT";
-
-/** Line total exactly as the server computes it (rate × qty, less line discount, + charges, + line GST). */
-function lineTotal(it: QuotationItem, rate = it.rate) {
-  if (rate == null || it.quantity == null) return num(it.totalAmount);
-  let t = num(rate) * num(it.quantity);
-  if (num(it.discountPercentage) > 0) t -= t * num(it.discountPercentage) / 100;
-  t += num(it.additionalCharges);
-  if (num(it.gstPercentage) > 0) t += t * num(it.gstPercentage) / 100;
-  return t;
-}
 
 export default function QuotationDetails() {
   const { id } = useParams<{ id: string }>();
@@ -74,14 +62,8 @@ export default function QuotationDetails() {
   const adopt = useCallback((q: Quotation) => {
     setQuotation(q);
     setScope(new Set((q.items || []).filter((i) => i.status !== "REJECTED").map((i) => i.id!).filter(Boolean)));
-    const discounts: any[] = (q as any).discounts || [];
-    if (discounts.length === 1 && num(discounts[0].percentage) > 0) {
-      setDiscountMode("PERCENT"); setDiscountValue(num(discounts[0].percentage));
-    } else {
-      setDiscountMode(num(q.discount) > 0 ? "FLAT" : "PERCENT"); setDiscountValue(num(q.discount));
-    }
-    const taxes: any[] = (q as any).taxes || [];
-    setGstPercent(taxes.filter((t) => !t.isInclusive).reduce((s, t) => s + num(t.percentage), 0));
+    const p = readPricing(q);
+    setDiscountMode(p.mode); setDiscountValue(p.value); setGstPercent(p.gst);
     setTerms(q.termsAndConditions || "");
     setRateDrafts({});
   }, []);
@@ -111,20 +93,11 @@ export default function QuotationDetails() {
   const tree = useMemo(() => buildQuotationTree(items), [items]);
 
   // ---- Live totals for the ticked scope (same formula as the server) ----
-  const totals = useMemo(() => {
-    const inScope = items.filter((i) => i.id != null && scope.has(i.id));
-    const itemsTotal = inScope.reduce((s, i) => s + lineTotal(i, rateDrafts[i.id!] !== undefined ? rateDrafts[i.id!] ?? 0 : i.rate), 0);
-    const labours = ((quotation as any)?.labours || []).reduce((s: number, l: any) => s + num(l.amount), 0);
-    const charges = ((quotation as any)?.additionalCharges || []).reduce((s: number, c: any) => s + num(c.amount), 0);
-    const subtotal = itemsTotal + labours + charges;
-    const discount = discountMode === "PERCENT" ? subtotal * discountValue / 100 : discountValue;
-    const gst = (subtotal - discount) * gstPercent / 100;
-    return {
-      count: inScope.length, subtotal, discount, gst, grand: subtotal - discount + gst,
-      material: inScope.reduce((s, i) => s + num(i.materialCost), 0),
-      labour: inScope.reduce((s, i) => s + num(i.labourCost), 0),
-    };
-  }, [items, scope, rateDrafts, quotation, discountMode, discountValue, gstPercent]);
+  const totals = useMemo(() => quoteTotals(quotation ?? {}, {
+    items: items.filter((i) => i.id != null && scope.has(i.id)),
+    rateDrafts,
+    pricing: { mode: discountMode, value: discountValue, gst: gstPercent },
+  }), [items, scope, rateDrafts, quotation, discountMode, discountValue, gstPercent]);
 
   const serverScope = useMemo(
     () => new Set(items.filter((i) => i.status !== "REJECTED").map((i) => i.id!)), [items]);
@@ -148,13 +121,7 @@ export default function QuotationDetails() {
     save({ items: items.map((i) => (i.id === item.id ? { ...i, rate: rate ?? 0 } : i)) }, "Price");
 
   const savePricing = (mode: DiscountMode, value: number, gst: number) =>
-    save({
-      discounts: value > 0 ? [{
-        discountType: "OVERALL", description: "Customer discount",
-        ...(mode === "PERCENT" ? { percentage: value } : { amount: value }),
-      }] : [],
-      taxes: gst > 0 ? [{ taxType: "GST", percentage: gst, isInclusive: false }] : [],
-    }, "Discount & GST");
+    save(pricingPatch({ mode, value, gst }), "Discount & GST");
 
   const confirmCustomerApproval = async () => {
     setBusy(true);

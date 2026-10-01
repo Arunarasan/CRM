@@ -15,6 +15,7 @@ import { ListSkeleton } from "../tabs/shared";
 import SiteVisitsTab from "../tabs/SiteVisitsTab";
 import RoomsTab from "@/pages/measurements/tabs/RoomsTab";
 import BoqSheet from "./BoqSheet";
+import QuotedPricePanel from "./QuotedPricePanel";
 import { NumCell } from "./cells";
 
 /**
@@ -72,6 +73,12 @@ export default function QuoteWorkspace({ leadId, onChanged }: { leadId: string; 
   );
   // Has the current pricing already been quoted? (Quotation carries its source BOQ.)
   const quotedThisBoq = !!boq && quotations.some((q) => q.boq?.id === boq.id || q.boqId === boq.id);
+  // The live quotation for the current pricing (newest one raised from it).
+  const activeQuote = useMemo(
+    () => (boq ? [...quotations].filter((q) => q.boq?.id === boq.id || q.boqId === boq.id)
+      .sort((a, b) => (b.id ?? 0) - (a.id ?? 0))[0] : undefined),
+    [quotations, boq],
+  );
 
   const step = !boq ? 0 : !quotedThisBoq ? 1 : 3;
 
@@ -261,12 +268,19 @@ export default function QuoteWorkspace({ leadId, onChanged }: { leadId: string; 
           <p className="text-sm text-muted-foreground">Totals and the quotation appear once pricing has started.</p>
         ) : (
           <div className="space-y-4">
-            <TotalsPanel boq={boq} editable={canPrice && !boqLocked} onSave={saveTotals} />
+            {activeQuote?.id ? (
+              // Quoted: price, discount and GST live on the quotation now — edit them there, and
+              // show how far the quote moved from the pricing sheet.
+              <QuotedPricePanel quotationId={activeQuote.id} pricingSheetTotal={boq.grandTotal}
+                leadId={leadId} onChanged={() => { load(); onChanged(); }} />
+            ) : (
+              <TotalsPanel boq={boq} editable={canPrice && !boqLocked} onSave={saveTotals} />
+            )}
 
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-primary/[0.03] p-3">
               <div className="text-sm">
                 {quotedThisBoq
-                  ? <span>Quotation already raised from this pricing. Change the pricing to raise a new one.</span>
+                  ? <span>Quotation raised — adjust its price, discount and GST above, or change the pricing sheet (new revision) to raise a fresh one.</span>
                   : <span>Ready? This locks the pricing and creates the customer quotation.</span>}
                 {isAdmin && (
                   <Link to={`/boq/${boq.id}`} state={{ from: `/leads/${leadId}` }} className="block text-xs text-muted-foreground hover:text-primary mt-0.5">

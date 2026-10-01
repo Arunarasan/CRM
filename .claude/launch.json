@@ -25,18 +25,33 @@
     {
       "name": "backend-payslip",
       "runtimeExecutable": "mvn",
-      "runtimeArgs": ["-o", "spring-boot:run", "-Dspring-boot.run.arguments=--server.port=8085"],
+      "runtimeArgs": [
+        "-o",
+        "spring-boot:run",
+        "-Dspring-boot.run.arguments=--server.port=8085"
+      ],
       "port": 8085,
       "cwd": "backend",
-      "env": { "CORS_ALLOWED_ORIGINS": "http://localhost:4199" }
+      "env": {
+        "CORS_ALLOWED_ORIGINS": "http://localhost:4199"
+      }
     },
     {
       "name": "frontend-payslip",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--", "--port", "4199", "--strictPort"],
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "4199",
+        "--strictPort"
+      ],
       "port": 4199,
       "cwd": "frontend",
-      "env": { "VITE_API_URL": "http://localhost:8085/api" }
+      "env": {
+        "VITE_API_URL": "http://localhost:8085/api"
+      }
     },
     {
       "name": "website",
@@ -48,6 +63,37 @@
       "port": 5273,
       "cwd": "website",
       "autoPort": true
+    },
+    {
+      "name": "backend-bundles",
+      "runtimeExecutable": "mvn",
+      "runtimeArgs": [
+        "-o",
+        "spring-boot:run",
+        "-Dspring-boot.run.arguments=--server.port=8087"
+      ],
+      "port": 8087,
+      "cwd": "backend",
+      "env": {
+        "CORS_ALLOWED_ORIGINS": "http://localhost:4198"
+      }
+    },
+    {
+      "name": "frontend-bundles",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "4198",
+        "--strictPort"
+      ],
+      "port": 4198,
+      "cwd": "frontend",
+      "env": {
+        "VITE_API_URL": "http://localhost:8087/api"
+      }
     }
   ]
 }
