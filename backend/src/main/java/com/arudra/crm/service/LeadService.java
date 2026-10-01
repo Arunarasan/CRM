@@ -85,7 +85,7 @@ public class LeadService {
             BigDecimal budgetMin, BigDecimal budgetMax,
             LocalDate dateFrom, LocalDate dateTo, Boolean followUpDue,
             String enquiryType, String category, List<String> categoryIn, List<String> categoryNotIn,
-            String product, String service,
+            String product, String service, Boolean hideLost,
             String sortBy, String sortDir, int page, int size) {
 
         String sortField = (sortBy != null && SORTABLE_FIELDS.contains(sortBy)) ? sortBy : "id";
@@ -109,6 +109,7 @@ public class LeadService {
                 .and(LeadSpecification.hasEnquiryType(enquiryType))
                 .and(LeadSpecification.hasCategory(category))
                 .and(LeadSpecification.categoryIn(categoryIn))
+                .and(LeadSpecification.hideLost(hideLost))
                 .and(LeadSpecification.categoryNotIn(categoryNotIn))
                 .and(LeadSpecification.listContains("requirementProduct", product))
                 .and(LeadSpecification.listContains("requirementService", service))

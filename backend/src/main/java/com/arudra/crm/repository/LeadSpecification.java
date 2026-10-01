@@ -149,6 +149,14 @@ public class LeadSpecification {
         };
     }
 
+    /** Lost leads live only behind the "Lost" filter, so the working list hides them on request. */
+    public static Specification<Lead> hideLost(Boolean hide) {
+        return (root, query, cb) -> {
+            if (!Boolean.TRUE.equals(hide)) return null;
+            return cb.or(cb.isNull(root.get("status")), cb.notEqual(root.get("status"), "Lost"));
+        };
+    }
+
     /** Category is one of the given names (case-insensitive). */
     public static Specification<Lead> categoryIn(List<String> names) {
         return (root, query, cb) -> {

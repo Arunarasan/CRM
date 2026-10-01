@@ -21,7 +21,7 @@ import { CATEGORY_GROUPS, EnquiryTag, categoryGroupOf, enquiryDetails, enquiryTy
 import {
   BOARD_DROP_STATUS, EMPTY_FILTERS, ENQUIRY_TYPES, formatFollowUp, LEAD_SOURCES, LEAD_STAGES, LEAD_STATUSES, LEAD_TYPES,
   PRIORITIES, TEMPERATURES, TEMPERATURE_STYLES, avatarColor, followUpTone,
-  formatINR, initials, relativeTime, type BoardColumn,
+  formatINR, initials, relativeTime, statusStyle, type BoardColumn,
   type DashboardMetrics, type Lead, type LeadFilters, type LeadPeriodStats, type UserSummary,
 } from "./leads/constants";
 
@@ -170,6 +170,8 @@ export default function Leads() {
     // the main groups' names, or no category at all).
     const { categoryGroup, ...rest } = filters;
     const apiFilters: Record<string, string> = { ...rest };
+    // Lost leads only appear when the Lost card / status filter is picked.
+    if (rest.status !== "Lost") apiFilters.hideLost = "true";
     if (categoryGroup) {
       const names = Array.from(new Set([
         ...categoryCounts.map((c) => c.category).filter((c): c is string => !!c),
@@ -362,16 +364,15 @@ export default function Leads() {
       ),
     },
     {
-      key: "activity", header: "Last Activity", cellClassName: "whitespace-nowrap", cell: (l) => (
-        <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <span className="h-1.5 w-1.5 rounded-full bg-green-500 shrink-0" />
-          {relativeTime(l.lastContactAt || l.lastFollowUp || l.updatedAt || l.createdAt)}
+      key: "status", header: "Status", cellClassName: "whitespace-nowrap", cell: (l) => (
+        <span className={`px-2 py-0.5 text-[11px] rounded-full font-semibold ${statusStyle(l.status)}`}>
+          {l.status || "—"}
         </span>
       ),
     },
     {
       key: "next", header: "Next Follow-up", cellClassName: "whitespace-nowrap text-sm", cell: (l) => {
-        const t = followUpTone(l.nextFollowUpDate);
+        const t = followUpTone(l.nextFollowUpDate, l.nextFollowUpTime);
         return <span className={t.className}>{t.label}</span>;
       },
     },
@@ -700,6 +701,9 @@ export default function Leads() {
                       <a href={`tel:${l.mobileNumber}`} className="flex items-center gap-1.5 text-muted-foreground hover:text-primary">
                         <Phone className="h-3.5 w-3.5" /> {l.mobileNumber}
                       </a>
+                      <span className={`ml-auto px-2 py-0.5 text-[11px] rounded-full font-semibold ${statusStyle(l.status)}`}>
+                        {l.status || "—"}
+                      </span>
                     </div>
                   </div>
                 )}
