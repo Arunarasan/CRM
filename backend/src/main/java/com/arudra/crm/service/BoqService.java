@@ -55,6 +55,10 @@ public class BoqService {
     @Autowired private NotificationService notificationService;
     @Autowired private QuotationService quotationService;
     @Autowired private InventoryService inventoryService;
+    // Lazy: the mirror pulls in MeasurementService, which is only needed on item edits.
+    @Autowired @org.springframework.context.annotation.Lazy private BoqMeasurementMirror measurementMirror;
+
+    private static final org.slf4j.Logger MIRROR_LOG = org.slf4j.LoggerFactory.getLogger(BoqService.class);
 
     /**
      * Re-resolves {id}-only JSON refs (Customer/Project/Measurement) to managed proxies before save.
@@ -269,19 +273,25 @@ public class BoqService {
         List<String> emptyRooms = new ArrayList<>();
 
         List<BoqItem> existing = boqItemRepository.findByBoqId(boqId);
-        Set<Long> knownItemIds = existing.stream()
-                .map(BoqItem::getMeasurementItemId).filter(Objects::nonNull).collect(Collectors.toSet());
-        Set<String> knownDerived = existing.stream()
-                .filter(i -> i.getMeasurementItemId() == null && i.getMeasurementRoomId() != null)
-                .map(i -> i.getMeasurementRoomId() + "|" + i.getItemName())
-                .collect(Collectors.toSet());
+        Map<Long, BoqItem> knownItems = new HashMap<>();
+        Map<String, BoqItem> knownDerived = new HashMap<>();
+        for (BoqItem i : existing) {
+            if (i.getMeasurementItemId() != null) knownItems.putIfAbsent(i.getMeasurementItemId(), i);
+            else if (i.getMeasurementRoomId() != null) knownDerived.putIfAbsent(i.getMeasurementRoomId() + "|" + i.getItemName(), i);
+        }
 
         List<BoqItem> added = new ArrayList<>();
+        int updatedCount = 0;
         for (BoqItem candidate : buildItemsFromMeasurement(measuredRooms, emptyRooms)) {
-            boolean alreadyPresent = candidate.getMeasurementItemId() != null
-                    ? knownItemIds.contains(candidate.getMeasurementItemId())
-                    : knownDerived.contains(candidate.getMeasurementRoomId() + "|" + candidate.getItemName());
-            if (alreadyPresent) {
+            BoqItem match = candidate.getMeasurementItemId() != null
+                    ? knownItems.get(candidate.getMeasurementItemId())
+                    : knownDerived.get(candidate.getMeasurementRoomId() + "|" + candidate.getItemName());
+            if (match != null) {
+                // Already priced — carry over changed sizes/quantities, never touch rates or lines.
+                if (refreshFromMeasurement(match, candidate)) {
+                    boqItemRepository.save(match);
+                    updatedCount++;
+                }
                 continue;
             }
             candidate.setBoq(boq);
@@ -296,10 +306,11 @@ public class BoqService {
         Boq savedBoq = boqRepository.save(boq);
         int phaseCount = createFloorPhases(savedBoq);
 
-        String summary = added.isEmpty()
+        String summary = added.isEmpty() && updatedCount == 0
                 ? "Already in sync with measurement " + boq.getMeasurement().getMeasurementNumber()
                 : "Synced from measurement " + boq.getMeasurement().getMeasurementNumber()
-                        + ": added " + added.size() + " item(s) across " + phaseCount + " floor phase(s)";
+                        + ": added " + added.size() + " item(s), updated " + updatedCount
+                        + " across " + phaseCount + " floor phase(s)";
         if (!emptyRooms.isEmpty()) {
             summary += ". No work recorded for: " + String.join(", ", emptyRooms);
         }
@@ -307,10 +318,43 @@ public class BoqService {
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("itemsAdded", added.size());
+        result.put("itemsUpdated", updatedCount);
         result.put("phases", phaseCount);
         result.put("roomsWithoutWork", emptyRooms);
         result.put("message", summary);
         return result;
+    }
+
+    /**
+     * Copies measured sizes from a freshly derived line onto the existing priced line. Quantity is only
+     * taken when it really changed on the measurement side — measurement counts are whole numbers, so a
+     * fractional BOQ qty that rounds to the measured count is the pricing sheet's own edit and is kept.
+     */
+    private boolean refreshFromMeasurement(BoqItem target, BoqItem source) {
+        boolean changed = false;
+        if (target.getMeasurementItemId() != null) {
+            if (!Objects.equals(target.getItemName(), source.getItemName()) && source.getItemName() != null) {
+                target.setItemName(source.getItemName()); changed = true;
+            }
+            if (differs(target.getLength(), source.getLength())) { target.setLength(source.getLength()); changed = true; }
+            if (differs(target.getWidth(), source.getWidth())) { target.setWidth(source.getWidth()); changed = true; }
+            if (differs(target.getHeight(), source.getHeight())) { target.setHeight(source.getHeight()); changed = true; }
+        }
+        BigDecimal tq = target.getQuantity(), sq = source.getQuantity();
+        // Area-derived lines (Floor Tiling, Wall Painting…) start with qty == area; once someone edits
+        // the qty by hand it no longer tracks the area and is left alone.
+        boolean qtyTracksArea = tq != null && target.getArea() != null && tq.compareTo(target.getArea()) == 0;
+        if (differs(target.getArea(), source.getArea())) { target.setArea(source.getArea()); changed = true; }
+        boolean qtyChanged = target.getMeasurementItemId() != null
+                ? sq != null && (tq == null || tq.setScale(0, RoundingMode.HALF_UP).compareTo(sq.setScale(0, RoundingMode.HALF_UP)) != 0)
+                : qtyTracksArea && differs(tq, sq);
+        if (qtyChanged) { target.setQuantity(sq); changed = true; }
+        return changed;
+    }
+
+    private static boolean differs(BigDecimal a, BigDecimal b) {
+        if (a == null || b == null) return a != b && b != null;
+        return a.compareTo(b) != 0;
     }
 
     /**
@@ -665,17 +709,18 @@ public class BoqService {
         if (item.getIsActive() == null) item.setIsActive(true);
         if (item.getMaterials() != null) item.getMaterials().forEach(m -> m.setItem(item));
         if (item.getLabours() != null) item.getLabours().forEach(l -> l.setItem(item));
-        boq.getItems().add(item);
+        // Persist the item itself first. Adding a transient item to the managed BOQ and saving the BOQ
+        // cascades a MERGE, which stores a *copy* and leaves `item` transient — the BoqChangeLog below
+        // then points at an unsaved instance and the whole request fails (same trap as addLabour).
+        BoqItem saved = boqItemRepository.saveAndFlush(item);
+        saved.setOriginItemId(saved.getId());
+        boq.getItems().add(saved);
         recalculateTotals(boq);
-        // save(boq) on an already-managed entity doesn't force an immediate flush, so the cascaded
-        // new item wouldn't have its IDENTITY-generated id yet — flush explicitly before referencing
-        // it from BoqChangeLog below, otherwise Hibernate treats it as a transient FK at commit time.
-        boqRepository.saveAndFlush(boq);
-        item.setOriginItemId(item.getId());
-        boqItemRepository.save(item);
-        logActivity(boq, "Item Added", item.getCategory() + " - " + item.getItemName() + " added", currentUser);
-        logChange(boq, item, null, "ADD_ITEM", "item", null, item.getItemName(), null, currentUser);
-        return item;
+        boqRepository.save(boq);
+        mirrorToMeasurement(boq, saved, currentUser);
+        logActivity(boq, "Item Added", saved.getCategory() + " - " + saved.getItemName() + " added", currentUser);
+        logChange(boq, saved, null, "ADD_ITEM", "item", null, saved.getItemName(), null, currentUser);
+        return saved;
     }
 
     @Transactional
@@ -710,8 +755,56 @@ public class BoqService {
         if (updated.getStatus() != null) item.setStatus(updated.getStatus());
         recalculateTotals(boq);
         boqRepository.save(boq);
+        mirrorToMeasurement(boq, item, currentUser);
         logActivity(boq, "Item Updated", item.getItemName() + " updated", currentUser);
         return item;
+    }
+
+    /**
+     * Pricing-sheet edits flow back into the source measurement so the two stay one list. Room-derived
+     * work lines (no measurement item of their own) are skipped. Runs only after the pricing edit has
+     * committed — a rolled-back edit must never leave a stray measurement item that a later sync would
+     * pull back in as a duplicate — and is best-effort: a measurement-side failure is logged, not surfaced.
+     */
+    private void mirrorToMeasurement(Boq boq, BoqItem item, User currentUser) {
+        if (boq.getMeasurement() == null || boq.getMeasurement().getId() == null) return;
+        if (item.getMeasurementItemId() == null && item.getMeasurementRoomId() != null) return; // derived line
+        Long measurementId = boq.getMeasurement().getId();
+        Long boqItemId = item.getId();
+        Long linkedItemId = item.getMeasurementItemId();
+        Long linkedRoomId = item.getMeasurementRoomId();
+        BoqMeasurementMirror.ItemData data = new BoqMeasurementMirror.ItemData(
+                item.getFloorName(), item.getRoomName(), item.getCategory(), item.getItemName(),
+                item.getLength(), item.getWidth(), item.getHeight(),
+                item.getQuantity(), item.getUnit(), item.getDescription());
+        afterCommit(() -> {
+            BoqMeasurementMirror.Link link = linkedItemId == null
+                    ? measurementMirror.added(measurementId, data, currentUser)
+                    : measurementMirror.updated(measurementId, linkedItemId, data, currentUser);
+            if (!Objects.equals(link.itemId(), linkedItemId) || !Objects.equals(link.roomId(), linkedRoomId)) {
+                measurementMirror.link(boqItemId, link);
+            }
+        }, "mirror BOQ item " + boqItemId + " to measurement " + measurementId);
+    }
+
+    /** Runs {@code work} once the current transaction commits (immediately when there is none). */
+    private void afterCommit(Runnable work, String what) {
+        Runnable guarded = () -> {
+            try {
+                work.run();
+            } catch (Exception e) {
+                MIRROR_LOG.warn("Could not {}", what, e);
+            }
+        };
+        if (org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive()) {
+            org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                    new org.springframework.transaction.support.TransactionSynchronization() {
+                        @Override
+                        public void afterCommit() { guarded.run(); }
+                    });
+        } else {
+            guarded.run();
+        }
     }
 
     /** One flattened entry from the drag-and-drop layout: the item and the floor/room it now sits in. */
@@ -753,6 +846,12 @@ public class BoqService {
         boq.getItems().remove(item);
         recalculateTotals(boq);
         boqRepository.save(boq);
+        if (boq.getMeasurement() != null && item.getMeasurementItemId() != null) {
+            Long measurementId = boq.getMeasurement().getId();
+            Long measurementItemId = item.getMeasurementItemId();
+            afterCommit(() -> measurementMirror.deleted(measurementId, measurementItemId, currentUser),
+                    "remove measurement item " + measurementItemId + " for BOQ " + boqId);
+        }
         logActivity(boq, "Item Deleted", item.getItemName() + " removed", currentUser);
         logChange(boq, null, null, "REMOVE_ITEM", "item", item.getItemName(), null, null, currentUser);
     }
@@ -1633,7 +1732,8 @@ public class BoqService {
                 }
             }
         } else {
-            included.addAll(boq.getItems());
+            // Items switched off ("excluded from quote") are already left out of the BOQ totals.
+            boq.getItems().stream().filter(i -> !Boolean.FALSE.equals(i.getIsActive())).forEach(included::add);
         }
 
         if (included.isEmpty()) {

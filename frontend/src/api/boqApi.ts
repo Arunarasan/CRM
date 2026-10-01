@@ -135,3 +135,14 @@ export const boqApi = {
   // Field-level change log (Modified By/Date/Reason/Previous/New Value) — the "Editable BOQ" audit trail.
   getChangeLog: (id: number) => api.get<BoqChangeLogEntry[]>(`${BASE}/${id}/change-log`).then((r) => r.data),
 };
+
+// Lead "Measurement & Quotation" workspace — hand-offs between measurement, BOQ and quotation removed.
+export const quoteWorkspaceApi = {
+  /** Opens the pricing sheet, creating the lead's measurement and BOQ when missing. */
+  startPricing: (leadId: number | string) =>
+    api.post<{ measurementId: number; boqId: number; measurementCreated: boolean; boqCreated: boolean }>(
+      `/quote-workspace/lead/${leadId}/start-pricing`).then((r) => r.data),
+  /** Finishes the measurement, approves the pricing and raises the full quotation in one step. */
+  generateQuotation: (boqId: number) =>
+    api.post<Quotation>(`/quote-workspace/boq/${boqId}/generate-quotation`).then((r) => r.data),
+};

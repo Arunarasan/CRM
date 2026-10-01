@@ -2,12 +2,12 @@ import { useCallback, useEffect, useState } from "react";
 import { leadApi } from "./leadApi";
 import type { Lead } from "./constants";
 
-// The lead → project journey, expressed as the five milestones the sales workflow already
-// tracks. We resolve the *current* step from tangible records (measurement, BOQ, quotation,
+// The lead → project journey, expressed as three milestones. Site visit, measurement, BOQ and
+// quotation are one combined "Measurement & Quotation" stage — they only exist to produce the quote. We resolve the *current* step from tangible records (measurement, BOQ, quotation,
 // project) rather than the free-text stage field, so the "what's next" prompt is always
 // truthful even if someone forgot to move the stage dropdown.
 
-export type JourneyStepId = "requirement" | "visit" | "boq" | "quotation" | "convert";
+export type JourneyStepId = "requirement" | "quote" | "convert";
 
 export interface JourneyStep {
   id: JourneyStepId;
@@ -105,33 +105,22 @@ export function resolveJourney(
       actionLabel: "Add Requirement Details",
     },
     {
-      id: "visit",
-      label: "Site Visit & Measurement",
-      done: measurementDone,
-      summary: measurementDone
-        ? "Measurement completed"
-        : hasMeasurement
-          ? "Measurement recorded — complete it to proceed"
-          : "Visit the site and record measurements",
-      actionLabel: hasMeasurement ? "Complete Measurement" : "Record Site Visit & Measurement",
-    },
-    {
-      id: "boq",
-      label: "BOQ Creation",
-      done: !!approvedBoq,
-      summary: approvedBoq
-        ? "BOQ approved"
-        : hasBoq
-          ? "BOQ drafted — get it approved to proceed"
-          : "Generate the bill of quantities",
-      actionLabel: hasBoq ? "Approve BOQ" : "Generate BOQ",
-    },
-    {
-      id: "quotation",
-      label: "Quotation",
+      id: "quote",
+      label: "Measurement & Quotation",
       done: hasQuotation,
-      summary: hasQuotation ? "Quotation raised" : "Raise the customer quotation",
-      actionLabel: "Create Quotation",
+      // One stage, but the summary still says exactly which sub-step is next.
+      summary: hasQuotation
+        ? "Quotation raised"
+        : approvedBoq
+          ? "Pricing approved — generate the quotation"
+          : hasBoq
+            ? "Price the work, then generate the quotation"
+            : measurementDone
+              ? "Measurement done — build the pricing"
+              : hasMeasurement
+                ? "Measurement in progress — finish it to start pricing"
+                : "Visit the site and record measurements",
+      actionLabel: hasQuotation ? "Open Quotation" : hasBoq ? "Continue Pricing" : hasMeasurement ? "Continue Measurement" : "Start Measurement",
     },
     {
       id: "convert",

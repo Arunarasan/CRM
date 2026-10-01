@@ -921,6 +921,31 @@ public class MeasurementService {
         return saved;
     }
 
+    /**
+     * Finishes a measurement in one step, skipping the submit/approve hand-offs. Used when the
+     * quotation is generated from the combined lead workspace: raising the quote is the sign-off.
+     * Still fires the workflow trigger so the lead's "Site Visit & Measurement" task closes.
+     */
+    @Transactional
+    public Measurement autoComplete(Long id, String reason, User currentUser) {
+        Measurement measurement = getMeasurementById(id);
+        if (MeasurementWorkflow.COMPLETED.equals(measurement.getStatus())) {
+            return measurement;
+        }
+        if (MeasurementWorkflow.CANCELLED.equals(measurement.getStatus())) {
+            throw new IllegalStateException("Measurement " + measurement.getMeasurementNumber() + " is cancelled.");
+        }
+        LocalDateTime now = LocalDateTime.now();
+        if (measurement.getSubmittedAt() == null) measurement.setSubmittedAt(now);
+        measurement.setStatus(MeasurementWorkflow.COMPLETED);
+        measurement.setCompletedAt(now);
+        recomputeMeasurementTotals(measurement);
+        Measurement saved = measurementRepository.save(measurement);
+        logActivity(saved, "Completed", reason, currentUser);
+        workflowTriggerService.onMeasurementCompleted(saved);
+        return saved;
+    }
+
     @Transactional
     public Measurement cancelMeasurement(Long id, String reason, User currentUser) {
         Measurement measurement = getMeasurementById(id);

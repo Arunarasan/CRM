@@ -1,20 +1,17 @@
-import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, ChevronRight, Pencil, Rocket } from "lucide-react";
+import { useEffect, useRef } from "react";
+import { Check, Pencil, Rocket } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { Lead, UserSummary } from "../constants";
 import { formatINR } from "../constants";
 import type { JourneyStepId, LeadJourney } from "../journey";
-import SiteVisitsTab from "./SiteVisitsTab";
-import MeasurementsTab from "./MeasurementsTab";
-import BoqTab from "./BoqTab";
-import QuotationsTab from "./QuotationsTab";
+import QuoteWorkspace from "../quote/QuoteWorkspace";
 import ProjectsTab from "./ProjectsTab";
 
 /**
- * One guided view of the whole pre-sales pipeline. Each milestone is a collapsible stage that
- * hosts the existing stage component — nothing about how a measurement / BOQ / quotation is
- * created changes, it's just presented as one linear path with the current step opened for you.
+ * One guided view of the whole pre-sales pipeline: Requirement → Measurement & Quotation → Convert.
+ * Every stage is always open (no collapsing) — site visit, measurement, BOQ pricing and the quotation
+ * all live in one combined workspace because they only exist to produce the quote.
  */
 export default function SalesJourneyTab({
   leadId,
@@ -29,73 +26,44 @@ export default function SalesJourneyTab({
   lead: Lead;
   users: UserSummary[];
   journey: LeadJourney;
-  /** Bumped by the parent to auto-open a stage (e.g. from the Next-Step banner). */
+  /** Bumped by the parent to scroll a stage into view (e.g. from the Next-Step banner). */
   focusStep?: { id: JourneyStepId; nonce: number } | null;
   onChanged: () => void;
   onEditRequirement: () => void;
   onConvert: () => void;
 }) {
-  const [expanded, setExpanded] = useState<Set<JourneyStepId>>(new Set());
   const rowRefs = useRef<Partial<Record<JourneyStepId, HTMLDivElement | null>>>({});
 
-  // Open the current step by default once the journey resolves.
-  useEffect(() => {
-    if (journey.currentStep) setExpanded((prev) => new Set(prev).add(journey.currentStep!.id));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [journey.currentStep?.id]);
-
-  // Respond to the banner: open and scroll the requested stage into view.
+  // Respond to the banner: scroll the requested stage into view.
   useEffect(() => {
     if (!focusStep) return;
-    setExpanded((prev) => new Set(prev).add(focusStep.id));
     const el = rowRefs.current[focusStep.id];
     if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [focusStep]);
 
-  const toggle = (id: JourneyStepId) =>
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
-
   return (
-    <div className="space-y-3">
-      {journey.steps.map((step, index) => {
-        const isOpen = expanded.has(step.id);
-        const isLast = index === journey.steps.length - 1;
-        return (
-          <div key={step.id} ref={(el) => { rowRefs.current[step.id] = el; }} className="relative">
-            {/* Connector line down to the next stage */}
-            {!isLast && <div className="absolute left-[19px] top-11 bottom-0 w-px bg-border" />}
-
-            <div className={`rounded-xl border shadow-sm ${step.status === "current" ? "border-primary/40 bg-primary/[0.03]" : "bg-card"}`}>
-              <button
-                type="button"
-                onClick={() => toggle(step.id)}
-                className="w-full flex items-center gap-3 p-3 text-left"
-              >
-                <StageBadge status={step.status} index={index} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-semibold text-sm">{step.label}</span>
-                    <StatusChip status={step.status} />
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-0.5">{step.summary}</p>
-                </div>
-                {isOpen ? <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
-                  : <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />}
-              </button>
-
-              {isOpen && (
-                <div className="px-3 pb-3 pl-[52px] space-y-4">
-                  {renderStage(step.id)}
-                </div>
-              )}
+    <div className="space-y-4">
+      {journey.steps.map((step, index) => (
+        <div
+          key={step.id}
+          ref={(el) => { rowRefs.current[step.id] = el; }}
+          className={`rounded-xl border shadow-sm scroll-mt-4 ${step.status === "current" ? "border-primary/40 bg-primary/[0.03]" : "bg-card"}`}
+        >
+          <div className="flex items-center gap-3 p-3">
+            <StageBadge status={step.status} index={index} />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-semibold text-sm">{step.label}</span>
+                <StatusChip status={step.status} />
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5">{step.summary}</p>
             </div>
           </div>
-        );
-      })}
+          <div className="px-3 pb-3 sm:pl-[52px] space-y-4">
+            {renderStage(step.id)}
+          </div>
+        </div>
+      ))}
     </div>
   );
 
@@ -103,17 +71,8 @@ export default function SalesJourneyTab({
     switch (id) {
       case "requirement":
         return <RequirementSummary lead={lead} onEdit={onEditRequirement} />;
-      case "visit":
-        return (
-          <>
-            <SiteVisitsTab leadId={leadId} onChanged={onChanged} />
-            <MeasurementsTab leadId={leadId} />
-          </>
-        );
-      case "boq":
-        return <BoqTab leadId={leadId} />;
-      case "quotation":
-        return <QuotationsTab leadId={leadId} />;
+      case "quote":
+        return <QuoteWorkspace leadId={leadId} onChanged={() => { onChanged(); }} />;
       case "convert":
         return (
           <>
