@@ -223,12 +223,15 @@ export default function QuoteWorkspace({ leadId, onChanged }: { leadId: string; 
 
       {/* ============ B. Price ============ */}
       <Section n={2} title="Price — items, material & labour" done={!!boq && boqLocked} icon={Sparkles}
-        right={boq && (
+        right={boq && (isAdmin ? (
+          // The full BOQ page (revisions, reports, partial quotes) is admin-only now.
           <Link to={`/boq/${boq.id}`} state={{ from: `/leads/${leadId}` }}
             className="text-xs text-muted-foreground hover:text-primary flex items-center gap-1">
             {boq.boqNumber} · Rev {boq.revisionNumber ?? 1} <ExternalLink className="h-3 w-3" />
           </Link>
-        )}>
+        ) : (
+          <span className="text-xs text-muted-foreground">{boq.boqNumber} · Rev {boq.revisionNumber ?? 1}</span>
+        ))}>
         {!boq ? (
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm text-muted-foreground">No pricing yet. Start it, then add rooms, items, material and labour.</p>
@@ -265,9 +268,11 @@ export default function QuoteWorkspace({ leadId, onChanged }: { leadId: string; 
                 {quotedThisBoq
                   ? <span>Quotation already raised from this pricing. Change the pricing to raise a new one.</span>
                   : <span>Ready? This locks the pricing and creates the customer quotation.</span>}
-                <Link to={`/boq/${boq.id}`} state={{ from: `/leads/${leadId}` }} className="block text-xs text-muted-foreground hover:text-primary mt-0.5">
-                  Need a partial or budget quotation? Open advanced options
-                </Link>
+                {isAdmin && (
+                  <Link to={`/boq/${boq.id}`} state={{ from: `/leads/${leadId}` }} className="block text-xs text-muted-foreground hover:text-primary mt-0.5">
+                    Need a partial or budget quotation? Open advanced options
+                  </Link>
+                )}
               </div>
               {!quotedThisBoq && canPrice && (
                 <Button className="bg-green-600 hover:bg-green-700 text-white" disabled={!!busy || (boq.items?.length ?? 0) === 0}

@@ -4,6 +4,7 @@ import com.arudra.crm.entity.Quotation;
 import com.arudra.crm.security.CurrentUserService;
 import com.arudra.crm.service.QuoteWorkspaceService;
 import org.springframework.dao.CannotAcquireLockException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -33,8 +34,10 @@ public class QuoteWorkspaceController {
     public ResponseEntity<Map<String, Object>> startPricing(@PathVariable Long leadId) {
         try {
             return ResponseEntity.ok(service.startPricing(leadId, currentUserService.getCurrentUser()));
-        } catch (CannotAcquireLockException e) {
-            // Idempotent (finds-or-creates), so a lock conflict with a concurrent job is safe to retry once.
+        } catch (CannotAcquireLockException | DataIntegrityViolationException e) {
+            // Idempotent (finds-or-creates): a lock conflict, or losing a race with a parallel call that
+            // created the measurement/BOQ first (unique-number clash), is safe to retry once — the retry
+            // finds what the other call created.
             return ResponseEntity.ok(service.startPricing(leadId, currentUserService.getCurrentUser()));
         }
     }

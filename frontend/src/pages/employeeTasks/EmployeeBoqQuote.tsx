@@ -3,8 +3,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Plus, FileSpreadsheet, CheckCircle2, Check, Loader2, Rocket } from 'lucide-react';
 import api from '@/lib/api';
-import { boqApi } from '@/api/boqApi';
-import { quotationApi, boqQuotationApi } from '@/api/quotationApi';
+import { boqApi, quoteWorkspaceApi } from '@/api/boqApi';
+import { quotationApi } from '@/api/quotationApi';
 import { leadApi } from '../leads/leadApi';
 import type { Boq, BoqItem } from '@/types/boq';
 import type { Quotation } from '@/types/quotation';
@@ -14,9 +14,12 @@ import ConvertProjectSheet from './components/ConvertProjectSheet';
 import { inr, CARD, PRIMARY_BTN, LeadContext, DocStatus, Totals, BottomBar } from './components/moduleUi';
 
 /**
- * Combined BOQ + Quotation page for the single TT_BOQ_QUOTE lead task. Two guided steps on one screen:
- *   Step 1 — generate the BOQ from the measurement, tweak quantities, Approve.
- *   Step 2 — generate the quotation from the approved BOQ, set terms, Send for approval.
+ * Combined BOQ + Quotation page for the single TT_BOQ_QUOTE lead task (mobile twin of the desktop
+ * "Measurement & Quotation" workspace). Two guided steps on one screen:
+ *   Step 1 — pricing opens straight away (measurement + BOQ created if missing); add/adjust items —
+ *            they are saved to the measurement too.
+ *   Step 2 — one tap finishes the measurement, locks the pricing and creates the quotation; set
+ *            terms, then send for office approval or create the project.
  * The office then approves + converts to a project (which completes this task). Replaces the two
  * separate BOQ / Quotation pages with one flow.
  */
@@ -51,14 +54,12 @@ export default function EmployeeBoqQuote() {
         setStep('quote');
         return;
       }
-      // Need a BOQ. Use the latest, else generate from the completed measurement.
+      // Need a BOQ. Use the latest, else open pricing (creates the measurement/BOQ — no "measurement
+      // must be completed" gate any more).
       let b = latestBoq?.id ? await boqApi.get(latestBoq.id) : null;
       if (!b) {
-        const measurements = (await leadApi.getMeasurements(leadId).then((r) => r.data).catch(() => [])) as any[];
-        const done = measurements.find((m) => m.status === 'Completed') || measurements[0];
-        if (!done?.id) { setError('No completed measurement found. Finish the site visit & measurement first.'); return; }
-        const created = await boqApi.createFromMeasurement(done.id);
-        b = created?.id ? await boqApi.get(created.id) : null;
+        const started = await quoteWorkspaceApi.startPricing(leadId);
+        b = await boqApi.get(started.boqId);
       }
       setBoq(b);
       setStep(b?.status === 'APPROVED' ? 'quote' : 'boq');
@@ -78,21 +79,21 @@ export default function EmployeeBoqQuote() {
     } finally { setBusy(false); }
   };
 
-  // Step 1 → approve BOQ, then generate the quotation and move to step 2.
+  // Step 1 → one server call: finish measurement, lock pricing, create the quotation; then step 2.
   const approveBoqAndContinue = async () => {
     if (!boq?.id) return; setBusy(true); setError('');
     try {
-      if (boq.status !== 'APPROVED') {
-        if (boq.status === 'DRAFT' || boq.status === 'REJECTED') await boqApi.submitForReview(boq.id);
-        await boqApi.approve(boq.id);
-      }
-      const q = await boqQuotationApi.generateFromBoq(boq.id, { mode: 'ALL' });
+      const q = await quoteWorkspaceApi.generateQuotation(boq.id);
       setQuote(q); setTerms(q.termsAndConditions || ''); setStep('quote');
-    } catch (e: any) { setError(e?.response?.data?.message || 'Could not approve the BOQ.'); }
+      setBoq(await boqApi.get(boq.id));
+    } catch (e: any) { setError(e?.response?.data?.message || 'Could not create the quotation.'); }
     finally { setBusy(false); }
   };
 
-  const sent = quote?.status === 'APPROVED' || quote?.status === 'CONVERTED' || quote?.internalApprovalStatus === 'PENDING';
+  // Every new quotation starts with internalApprovalStatus = PENDING, so that alone doesn't mean "sent" —
+  // sending records the sender (approvedBy) while keeping PENDING.
+  const sent = quote?.status === 'APPROVED' || quote?.status === 'CONVERTED'
+    || (quote?.internalApprovalStatus === 'PENDING' && !!(quote as any)?.approvedBy);
   const sendQuotation = async () => {
     if (!quote?.id) return; setBusy(true); setError('');
     try {
@@ -134,7 +135,7 @@ export default function EmployeeBoqQuote() {
         {/* ---------- Step 1: BOQ ---------- */}
         {step === 'boq' && boq && !loading && (
           <>
-            <p className="px-1 text-[12px] text-[#7A817C]">Auto-built from the measurement. Check quantities and add anything missing.</p>
+            <p className="px-1 text-[12px] text-[#7A817C]">Check quantities and add anything missing — items are saved to the measurement too.</p>
             <div className="flex flex-col gap-2.5">
               {Object.entries(rooms).map(([room, items]) => (
                 <div key={room} className={`${CARD} overflow-hidden`}>
@@ -209,7 +210,7 @@ export default function EmployeeBoqQuote() {
       <BottomBar>
         {step === 'boq' ? (
           <button onClick={approveBoqAndContinue} disabled={busy || loading || !boq} className={PRIMARY_BTN}>
-            <FileSpreadsheet className="h-4 w-4" /> {busy ? 'Working…' : 'Approve BOQ & Continue'}
+            <FileSpreadsheet className="h-4 w-4" /> {busy ? 'Working…' : 'Create Quotation'}
           </button>
         ) : sent ? (
           <button onClick={() => navigate('/employee/tasks')} className={PRIMARY_BTN}>

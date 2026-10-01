@@ -2,6 +2,7 @@ import { Suspense, lazy } from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import DashboardLayout from "./layouts/DashboardLayout";
 import { DesktopGuard, EmployeeGuard, RedirectToSignIn } from "./components/RouteGuard";
+import LegacyQuoteGuard from "./components/LegacyQuoteGuard";
 import ImageViewerProvider from "./components/ImageViewerProvider";
 import { Toaster } from "./components/ui/toast";
 
@@ -176,17 +177,17 @@ function App() {
             <Route path="site-visits" element={<SiteVisits />} />
             <Route path="site-visits/new" element={<SiteVisitCreate />} />
             <Route path="site-visits/:id" element={<SiteVisitProfile />} />
-            <Route path="measurements" element={<MeasurementList />} />
+            <Route path="measurements" element={<LegacyQuoteGuard><MeasurementList /></LegacyQuoteGuard>} />
             <Route path="measurements/new" element={<MeasurementForm />} />
             <Route path="measurements/catalog" element={<MeasurementItemCatalogPage />} />
             <Route path="measurements/:id" element={<MeasurementDetails />} />
-            <Route path="boq" element={<BoqList />} />
+            <Route path="boq" element={<LegacyQuoteGuard><BoqList /></LegacyQuoteGuard>} />
             {/* Standalone BOQ creation removed — BOQs are generated from a Measurement
                 (Measurement → Generate BOQ); the form remains for editing only. */}
-            <Route path="boq/new" element={<BoqEntry />} />
-            <Route path="boq/:id/edit" element={<BoqForm />} />
-            <Route path="boq/:id" element={<BoqDetails />} />
-            <Route path="boq/:id/reports" element={<BoqReports />} />
+            <Route path="boq/new" element={<LegacyQuoteGuard><BoqEntry /></LegacyQuoteGuard>} />
+            <Route path="boq/:id/edit" element={<LegacyQuoteGuard><BoqForm /></LegacyQuoteGuard>} />
+            <Route path="boq/:id" element={<LegacyQuoteGuard><BoqDetails /></LegacyQuoteGuard>} />
+            <Route path="boq/:id/reports" element={<LegacyQuoteGuard><BoqReports /></LegacyQuoteGuard>} />
             <Route path="quotations" element={<QuotationList />} />
             <Route path="quotations/new" element={<QuotationEntry />} />
             <Route path="quotations/:id" element={<QuotationDetails />} />

@@ -54,6 +54,7 @@ import { ResourceType } from "@/types/workforce";
 import { useGoBack } from "@/hooks/useGoBack";
 import { toast } from "@/components/ui/toast";
 import SearchableSelect from "@/components/ui/searchable-select";
+import QuoteWorkspace from "@/pages/leads/quote/QuoteWorkspace";
 
 const ITEM_STATUS_STYLES: Record<string, string> = {
   PENDING: 'bg-slate-100 text-slate-600',
@@ -148,7 +149,8 @@ const TAB_GROUPS: { id: string; label: string; icon: React.ComponentType<{ class
     ["fieldProgress", "Tasks"], ["quality", "Quality & Issues"],
   ] },
   { id: "commercial", label: "Commercial", icon: Wallet, sections: [
-    ["payments", "Payments & Invoices"], ["approvals", "Approvals"], ["changeRequests", "Change Requests"],
+    ["payments", "Payments & Invoices"], ["quote", "Measurement & Quotation"], ["approvals", "Approvals"],
+    ["changeRequests", "Change Requests"],
   ] },
   { id: "resources", label: "Resources", icon: Package, sections: [
     ["materials", "Materials"], ["contractors", "Contractors"], ["labour", "Labour"],
@@ -166,7 +168,11 @@ export default function ProjectCommandCenter() {
   const navigate = useNavigate();
   const goBack = useGoBack("/projects");
   const projectId = Number(id);
-  const [activeTab, setActiveTab] = useState("overview");
+  // ?tab=<section> deep-links straight to a section (e.g. ?tab=quote from an old BOQ link).
+  const [activeTab, setActiveTab] = useState(() => {
+    const t = new URLSearchParams(window.location.search).get("tab");
+    return t && TAB_GROUPS.some((g) => g.sections.some(([v]) => v === t)) ? t : "overview";
+  });
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<any>(null);
@@ -2002,6 +2008,18 @@ export default function ProjectCommandCenter() {
                   </div>
                 </DialogContent>
               </Dialog>
+            </TabsContent>
+
+            {/* MEASUREMENT & QUOTATION — the same combined workspace as the lead's Sales Journey */}
+            <TabsContent value="quote" className="space-y-4 mt-0 h-full outline-none">
+              {project.lead?.id ? (
+                <QuoteWorkspace leadId={String(project.lead.id)} onChanged={fetchCore} />
+              ) : (
+                <div className="rounded-xl border bg-card p-6 text-sm text-muted-foreground">
+                  This project wasn't created from a lead, so it has no measurement & quotation workspace.
+                  {data?.boq?.id && <> Its BOQ is <span className="font-medium text-foreground">{data.boq.boqNumber}</span>.</>}
+                </div>
+              )}
             </TabsContent>
 
             {/* APPROVALS TAB */}

@@ -137,11 +137,24 @@ export const boqApi = {
 };
 
 // Lead "Measurement & Quotation" workspace — hand-offs between measurement, BOQ and quotation removed.
+type StartPricingResult = { measurementId: number; boqId: number; measurementCreated: boolean; boqCreated: boolean };
+const startPricingInFlight = new Map<string, Promise<StartPricingResult>>();
+
 export const quoteWorkspaceApi = {
-  /** Opens the pricing sheet, creating the lead's measurement and BOQ when missing. */
-  startPricing: (leadId: number | string) =>
-    api.post<{ measurementId: number; boqId: number; measurementCreated: boolean; boqCreated: boolean }>(
-      `/quote-workspace/lead/${leadId}/start-pricing`).then((r) => r.data),
+  /**
+   * Opens the pricing sheet, creating the lead's measurement and BOQ when missing. Concurrent calls for
+   * the same lead (double tap, React StrictMode double effects) share one request instead of racing.
+   */
+  startPricing: (leadId: number | string) => {
+    const key = String(leadId);
+    const inFlight = startPricingInFlight.get(key);
+    if (inFlight) return inFlight;
+    const req = api.post<StartPricingResult>(`/quote-workspace/lead/${leadId}/start-pricing`)
+      .then((r) => r.data)
+      .finally(() => startPricingInFlight.delete(key));
+    startPricingInFlight.set(key, req);
+    return req;
+  },
   /** Finishes the measurement, approves the pricing and raises the full quotation in one step. */
   generateQuotation: (boqId: number) =>
     api.post<Quotation>(`/quote-workspace/boq/${boqId}/generate-quotation`).then((r) => r.data),
