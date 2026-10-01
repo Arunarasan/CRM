@@ -252,9 +252,15 @@ export default function Leads() {
   const tempPill = (t?: string) =>
     t ? <span className={`px-2 py-0.5 text-xs rounded-full font-semibold ${TEMPERATURE_STYLES[t] || "bg-muted text-muted-foreground"}`}>{t}</span> : <span className="text-xs text-muted-foreground">—</span>;
 
-  // Requirement categories the lead ticked, shown as compact pills.
+  // Requirement shown as compact pills: the catalog category (+ products) picked on the
+  // lead form, plus any legacy scope checkboxes the lead ticked.
   const requirementPills = (l: Lead) => {
-    const reqs = REQUIREMENT_CATEGORIES.filter(({ key }) => l[key]);
+    const products = (l.requirementProduct || "").split(",").map((s) => s.trim()).filter(Boolean);
+    const reqs = [
+      ...(l.requirementCategory ? [{ key: "requirementCategory", label: l.requirementCategory }] : []),
+      ...products.map((p) => ({ key: `product-${p}`, label: p })),
+      ...REQUIREMENT_CATEGORIES.filter(({ key }) => l[key]),
+    ];
     if (reqs.length === 0) return <span className="text-xs text-muted-foreground">—</span>;
     // With more than 2 requirements, lay them out in a 2-column grid so they wrap onto 2 lines.
     const layout = reqs.length > 2 ? "grid grid-cols-2 max-w-[14rem]" : "flex flex-wrap";
