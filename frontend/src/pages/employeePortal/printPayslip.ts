@@ -12,19 +12,21 @@ export function printPayslip(slip: Payslip, opts?: { employeeName?: string; empl
   const inr = (n?: number | null) => '₹' + Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const esc = (s: unknown) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
 
-  const hourly = slip.payType === 'HOURLY';
+  const monthlyHours = slip.standardHours != null; // MONTHLY generated from hours
+  const hourly = slip.payType === 'HOURLY' || monthlyHours;
   const items = slip.lineItems ?? [];
 
   const earnings: [string, number][] = [
     ...(hourly
-      ? [['Regular earnings', slip.regularEarnings ?? 0], ['Overtime pay', slip.overtimeAmount],
+      ? [[monthlyHours ? 'Salary for hours worked' : 'Regular earnings', slip.regularEarnings ?? 0], ['Overtime pay', slip.overtimeAmount],
          ['Project bonus', slip.projectBonus ?? 0], ['Manual bonus', slip.manualBonus ?? 0], ['Incentive', slip.incentive]] as [string, number][]
       : [['Basic', slip.basic], ['HRA', slip.hra], ['Overtime', slip.overtimeAmount], ['Bonus', slip.bonus], ['Incentive', slip.incentive]] as [string, number][]),
     ...items.filter((i) => i.category === 'EARNING').map((i) => [i.label, i.amount] as [string, number]),
   ];
   const deductions: [string, number][] = [
     ['PF', slip.pfAmount], ['ESI', slip.esiAmount], ['Professional tax', slip.professionalTax],
-    ['Leave (LOP)', slip.leaveDeduction], ['Advance recovery', slip.advanceRecovery], ['Loan recovery', slip.loanRecovery],
+    ['Leave (LOP)', slip.leaveDeduction], ['Manual deduction', slip.manualDeduction ?? 0],
+    ['Advance recovery', slip.advanceRecovery], ['Loan recovery', slip.loanRecovery],
     ...items.filter((i) => i.category === 'DEDUCTION').map((i) => [i.label, i.amount] as [string, number]),
   ];
 
@@ -35,7 +37,9 @@ export function printPayslip(slip: Payslip, opts?: { employeeName?: string; empl
   const meta = hourly
     ? `<div><span>Attendance days</span><span>${slip.attendanceDays ?? '—'}</span></div>
        <div><span>Worked hrs</span><span>${slip.workedHours ?? '—'}</span></div>
-       <div><span>Hourly rate</span><span>${slip.hourlyRate != null ? inr(slip.hourlyRate) : '—'}</span></div>`
+       ${monthlyHours
+         ? `<div><span>Monthly salary</span><span>${inr(slip.monthlySalary)} ÷ ${slip.standardHours} hrs</span></div>`
+         : `<div><span>Hourly rate</span><span>${slip.hourlyRate != null ? inr(slip.hourlyRate) : '—'}</span></div>`}`
     : `<div><span>Working days</span><span>${slip.workingDays ?? '—'}</span></div>
        <div><span>Paid days</span><span>${slip.paidDays ?? '—'}</span></div>
        <div><span>LOP days</span><span>${slip.lopDays ?? '—'}</span></div>`;

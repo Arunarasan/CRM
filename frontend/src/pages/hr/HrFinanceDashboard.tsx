@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { payrollApi } from "@/api/payrollApi";
-import type { FinanceDashboard, EmployeeDeduction, WageSettings, PayrollLine, PayrollSummary, PayrollRequest } from "@/types/payroll";
+import type { FinanceDashboard, EmployeeDeduction, PayrollLine, PayrollSummary, PayrollRequest } from "@/types/payroll";
 import { inr } from "@/pages/workforce/WorkforceFinanceTab";
 import { useAuth } from "@/hooks/useAuth";
 import QuickPayDialog from "./QuickPayDialog";
 import PayslipEditor from "./PayslipEditor";
+import GeneratePayslips from "./GeneratePayslips";
+import WageSettingsDialog from "@/components/hr/WageSettingsDialog";
 import api from "@/lib/api";
 import { toast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
@@ -14,8 +16,8 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  Bell, PlayCircle, Clock, Gift, Plus, Check, BadgeIndianRupee, Search,
-  Settings2, MinusCircle, FileText, Wallet, CircleHelp, ExternalLink, Zap, ArrowLeftRight, Pencil,
+  Bell, PlayCircle, Gift, Plus, Check, BadgeIndianRupee, Search,
+  Settings2, MinusCircle, FileText, Wallet, CircleHelp, ExternalLink, Zap, Pencil,
 } from "lucide-react";
 
 const BONUS_TYPES = [
@@ -70,10 +72,10 @@ export default function HrFinanceDashboard() {
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
-  const [running, setRunning] = useState(false);
+  const [tab, setTab] = useState("salary");
+  const [previewKey, setPreviewKey] = useState(0);
   const [editSlip, setEditSlip] = useState<{ employeeId: number; name?: string } | null>(null);
 
-  const [hourly, setHourly] = useState<any | null>(null);
   const [lines, setLines] = useState<PayrollLine[]>([]);
   const [psum, setPsum] = useState<PayrollSummary | null>(null);
   const [bonuses, setBonuses] = useState<any[]>([]);
@@ -92,13 +94,12 @@ export default function HrFinanceDashboard() {
   const [dedOpen, setDedOpen] = useState(false);
   const [ded, setDed] = useState({ employeeId: "", deductionType: "FINE", amount: "", reason: "" });
   const [wageOpen, setWageOpen] = useState(false);
-  const [wage, setWage] = useState<any>({ employeeId: "" });
+  const [wageEmpId, setWageEmpId] = useState<number | null>(null);
 
   const load = () => {
     setLoading(true);
     payrollApi.financeDashboard().then(setD).catch(console.error).finally(() => setLoading(false));
   };
-  const loadHourly = () => payrollApi.hourlyPayRegister(month, year).then(setHourly).catch(() => setHourly(null));
   const loadUnified = () => {
     payrollApi.unifiedRegister(month, year).then(setLines).catch(() => setLines([]));
     payrollApi.payrollSummary(month, year).then(setPsum).catch(() => setPsum(null));
@@ -112,7 +113,7 @@ export default function HrFinanceDashboard() {
     load(); loadBonuses(); loadDeductions(); loadPayReqs(); reloadEmployees();
     api.get(`/projects?size=500`).then(r => setProjects(r.data.content || [])).catch(() => {});
   }, []);
-  useEffect(() => { loadHourly(); loadUnified(); }, [month, year]);
+  useEffect(() => { loadUnified(); }, [month, year]);
 
   const empLines = useMemo(() => lines.filter((l) => l.resourceType === "EMPLOYEE"), [lines]);
   const conLines = useMemo(() => lines.filter((l) => l.resourceType === "CONTRACTOR"), [lines]);
@@ -149,20 +150,6 @@ export default function HrFinanceDashboard() {
 
   const pendingReqCount = useMemo(() => payReqs.filter((r) => r.status === "PENDING").length, [payReqs]);
 
-  const generateHourly = () => {
-    setRunning(true);
-    payrollApi.runHourlyPayrollBulk(month, year)
-      .then((r: any) => { toast.success(`Hourly payroll — ${r.generated} generated for hourly-basis staff, ${r.skipped} skipped (monthly-basis or already done).`); loadUnified(); load(); })
-      .catch((e) => toast.error(e?.response?.data?.message || "Failed to generate payroll"))
-      .finally(() => setRunning(false));
-  };
-  const runBulk = () => {
-    setRunning(true);
-    payrollApi.runPayrollBulk(month, year)
-      .then((r: any) => { toast.success(`Monthly payroll — ${r.generated} generated for monthly-basis staff, ${r.skipped} skipped (hourly-basis or already done).`); load(); loadUnified(); })
-      .catch((e) => toast.error(e?.response?.data?.message || "Failed to run monthly payroll"))
-      .finally(() => setRunning(false));
-  };
   const runAlerts = () => {
     payrollApi.runAlerts()
       .then((r: any) => toast.success(`Alerts sent — ${r.overduePayments} overdue, ${r.finalPaymentsPending} final pending, ${r.contractsClosedWithBalance} closed w/ balance.`))
@@ -170,14 +157,6 @@ export default function HrFinanceDashboard() {
   };
   const approveRec = (id: number) => payrollApi.approvePayroll(id).then(() => { toast.success("Payslip approved."); loadUnified(); }).catch((e) => toast.error(e?.response?.data?.message || "Failed"));
   const payRec = (id: number) => payrollApi.markPaid(id).then(() => { toast.success("Marked as paid."); loadUnified(); load(); }).catch((e) => toast.error(e?.response?.data?.message || "Failed"));
-  const toggleBasis = (employeeId: number | undefined, current?: string) => {
-    if (!employeeId) return;
-    const next = current === "HOURLY" ? "MONTHLY" : "HOURLY";
-    payrollApi.setPayBasis(employeeId, next)
-      .then(() => { toast.success(`Pay basis set to ${next === "HOURLY" ? "Hourly" : "Monthly"} — applies to the next payroll run.`); reloadEmployees(); loadUnified(); })
-      .catch((e) => toast.error(e?.response?.data?.message || "Failed to change pay basis"));
-  };
-
   const submitAward = () => {
     if (!award.employeeId) { toast.error("Select an employee to award the bonus to."); return; }
     if (!award.amount || Number(award.amount) <= 0) { toast.error("Enter a bonus amount greater than zero."); return; }
@@ -203,39 +182,7 @@ export default function HrFinanceDashboard() {
       .catch((e) => toast.error(e?.response?.data?.message || "Failed to add deduction"));
   };
 
-  const openWage = () => { setWage({ employeeId: "" }); setWageOpen(true); };
-  const onWageEmployee = (id: string) => {
-    const e = employees.find((x) => String(x.id) === id) || {};
-    setWage({
-      employeeId: id,
-      salaryType: e.salaryType || "HOURLY",
-      hourlyRate: e.hourlyRate ?? "", overtimeRate: e.overtimeRate ?? "", holidayRate: e.holidayRate ?? "",
-      weekendRate: e.weekendRate ?? "", nightRate: e.nightRate ?? "",
-      overtimeMultiplier: e.overtimeMultiplier ?? "1.5", standardDailyHours: e.standardDailyHours ?? "8",
-      maxDailyHours: e.maxDailyHours ?? "", bonusEligible: e.bonusEligible ?? true,
-      payrollCycle: e.payrollCycle ?? "MONTHLY", paymentMethod: e.paymentMethod ?? "",
-      bankAccount: e.bankAccount ?? "", ifsc: e.ifsc ?? "",
-    });
-  };
-  const submitWage = () => {
-    if (!wage.employeeId) { toast.error("Select an employee."); return; }
-    const numOrNull = (v: any) => (v === "" || v == null ? null : Number(v));
-    const body: WageSettings = {
-      salaryType: wage.salaryType || "HOURLY",
-      hourlyRate: numOrNull(wage.hourlyRate), overtimeRate: numOrNull(wage.overtimeRate),
-      holidayRate: numOrNull(wage.holidayRate), weekendRate: numOrNull(wage.weekendRate),
-      nightRate: numOrNull(wage.nightRate),
-      overtimeMultiplier: wage.overtimeMultiplier ? Number(wage.overtimeMultiplier) : undefined,
-      standardDailyHours: wage.standardDailyHours ? Number(wage.standardDailyHours) : undefined,
-      maxDailyHours: numOrNull(wage.maxDailyHours), bonusEligible: !!wage.bonusEligible,
-      payrollCycle: wage.payrollCycle || "MONTHLY", paymentMethod: wage.paymentMethod || null,
-      bankAccount: wage.bankAccount || undefined, ifsc: wage.ifsc || undefined,
-    };
-    payrollApi.saveWageSettings(Number(wage.employeeId), body)
-      .then(() => { setWageOpen(false); toast.success("Wage settings saved."); loadHourly(); reloadEmployees(); })
-      .catch((e) => toast.error(e?.response?.data?.message || "Failed to save wage settings"));
-  };
-
+  const openWage = (employeeId?: number | null) => { setWageEmpId(employeeId ?? null); setWageOpen(true); };
   if (loading || !d) return <div className="p-6 text-muted-foreground">Loading payroll…</div>;
 
   const inputCls = "w-full flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm";
@@ -272,18 +219,12 @@ export default function HrFinanceDashboard() {
 
             {canProcess ? (
               <div className="flex flex-col items-stretch md:items-end gap-2 w-full md:w-auto">
-                <div className="flex flex-wrap gap-2">
-                  <Button size="lg" onClick={generateHourly} disabled={running} className="shadow-sm flex-1 md:flex-none">
-                    <PlayCircle className={`w-5 h-5 mr-2 ${running ? "animate-pulse" : ""}`} />
-                    {running ? "Generating…" : "Run hourly pay"}
-                  </Button>
-                  <Button size="lg" variant="secondary" onClick={runBulk} disabled={running} className="shadow-sm flex-1 md:flex-none">
-                    <Wallet className="w-5 h-5 mr-2" /> Run monthly salary
-                  </Button>
-                </div>
+                <Button size="lg" onClick={() => setTab("generate")} className="shadow-sm w-full md:w-auto">
+                  <PlayCircle className="w-5 h-5 mr-2" /> Generate payslips
+                </Button>
                 <div className="flex flex-wrap gap-2">
                   <Button size="sm" onClick={() => setQuickOpen(true)} className="bg-emerald-600 hover:bg-emerald-700 flex-1 md:flex-none"><Zap className="w-4 h-4 mr-1.5" /> Quick Pay</Button>
-                  <Button variant="outline" size="sm" onClick={openWage} className="flex-1 md:flex-none"><Settings2 className="w-4 h-4 mr-1.5" /> Wage &amp; basis</Button>
+                  <Button variant="outline" size="sm" onClick={() => openWage()} className="flex-1 md:flex-none"><Settings2 className="w-4 h-4 mr-1.5" /> Wage &amp; basis</Button>
                   <Button variant="outline" size="sm" onClick={runAlerts} className="flex-1 md:flex-none"><Bell className="w-4 h-4 mr-1.5" /> Alerts</Button>
                 </div>
               </div>
@@ -294,7 +235,7 @@ export default function HrFinanceDashboard() {
           <p className="mt-3 hidden md:flex items-center gap-1.5 text-xs text-slate-400">
             <CircleHelp className="w-3.5 h-3.5" />
             {canProcess
-              ? `"Run hourly pay" builds payslips from hours × rate (+ bonuses & incentives); "Run monthly salary" uses each employee's salary structure. Each employee runs on the basis set in Wage & basis. Running again only fills anyone missed — nobody is paid twice.`
+              ? `Every payslip is built from attendance hours. "Generate payslips" shows each employee's hours priced Hourly and Monthly — pick one per person. Generating again only fills anyone missed — nobody is paid twice.`
               : `You can review payroll for ${monthName(month)} ${year}. Approving and paying require payroll-processing rights.`}
           </p>
         </div>
@@ -311,13 +252,13 @@ export default function HrFinanceDashboard() {
       </div>
 
       {/* ---- TABS — one focused section at a time ---- */}
-      <Tabs defaultValue="salary" className="w-full">
+      <Tabs value={tab} onValueChange={setTab} className="w-full">
         <TabsList className="w-full justify-start overflow-x-auto">
           <TabsTrigger value="salary">Salary <CountPill n={empLines.length} /></TabsTrigger>
           <TabsTrigger value="contractors">Contractors <CountPill n={conLines.length} /></TabsTrigger>
           <TabsTrigger value="adjustments">Bonuses &amp; Deductions</TabsTrigger>
           <TabsTrigger value="requests">Requests {pendingReqCount > 0 && <CountPill n={pendingReqCount} tone="amber" />}</TabsTrigger>
-          <TabsTrigger value="preview">Preview</TabsTrigger>
+          <TabsTrigger value="generate">Generate</TabsTrigger>
         </TabsList>
 
         {/* ===================== SALARY ===================== */}
@@ -346,12 +287,6 @@ export default function HrFinanceDashboard() {
             </div>
           </div>
 
-          {canProcess && (
-            <p className="flex items-center gap-1.5 text-xs text-slate-400">
-              <ArrowLeftRight className="w-3.5 h-3.5" /> Tap an employee’s <b className="mx-0.5">Type</b> to switch Hourly ↔ Monthly — applies from the next run.
-            </p>
-          )}
-
           {/* desktop table */}
           <div className="hidden md:block bg-white border rounded-2xl shadow-sm overflow-x-auto">
             <table className="w-full text-sm min-w-[820px]">
@@ -372,22 +307,20 @@ export default function HrFinanceDashboard() {
                   <tr key={`emp-${l.personId}-${i}`} className="border-t hover:bg-slate-50/70">
                     <td className="p-3"><PersonCell line={l} /></td>
                     <td className="p-3">
-                      {canProcess
-                        ? <BasisToggle model={l.payModel} onToggle={() => toggleBasis(l.personId, l.payModel)} />
-                        : <PayTypeTag model={l.payModel} />}
+                      <PayTypeTag model={l.payModel} />
                     </td>
                     <td className="p-3 text-slate-500 whitespace-nowrap">{l.basisLabel || "—"}</td>
                     <td className="p-3 text-right text-slate-700">{l.gross != null ? inr(l.gross) : "—"}</td>
                     <td className="p-3 text-right text-rose-600">{l.deductions != null && num(l.deductions) > 0 ? `− ${inr(l.deductions)}` : "—"}</td>
                     <td className="p-3 text-right font-bold text-emerald-600">{inr(l.payable)}</td>
                     <td className="p-3 text-center"><StatusBadge status={l.status} /></td>
-                    <td className="p-3 text-right whitespace-nowrap"><RowAction line={l} onApprove={approveRec} onPay={payRec} canProcess={canProcess} onEdit={(ln) => setEditSlip({ employeeId: ln.personId!, name: ln.name })} /></td>
+                    <td className="p-3 text-right whitespace-nowrap"><RowAction line={l} onApprove={approveRec} onPay={payRec} canProcess={canProcess} onEdit={(ln) => setEditSlip({ employeeId: ln.personId!, name: ln.name })} onWage={openWage} /></td>
                   </tr>
                 ))}
                 {filteredEmp.length === 0 && (
                   <tr><td colSpan={8} className="text-center text-slate-400 py-12">
                     <p className="font-medium text-slate-500">No employees match.</p>
-                    <p className="text-xs mt-1">Adjust the search/filter, or run payroll to build payslips from attendance.</p>
+                    <p className="text-xs mt-1">Adjust the search/filter, or open <b>Generate</b> to build payslips from attendance hours.</p>
                   </td></tr>
                 )}
               </tbody>
@@ -398,8 +331,8 @@ export default function HrFinanceDashboard() {
           <div className="md:hidden space-y-2">
             {filteredEmp.map((l, i) => (
               <EmpCard key={`empc-${l.personId}-${i}`} l={l} canProcess={canProcess}
-                onToggle={() => toggleBasis(l.personId, l.payModel)} onApprove={approveRec} onPay={payRec}
-                onEdit={(ln) => setEditSlip({ employeeId: ln.personId!, name: ln.name })} />
+                onApprove={approveRec} onPay={payRec}
+                onEdit={(ln) => setEditSlip({ employeeId: ln.personId!, name: ln.name })} onWage={openWage} />
             ))}
             {filteredEmp.length === 0 && <p className="text-center text-sm text-slate-400 py-8">No employees match.</p>}
           </div>
@@ -681,110 +614,27 @@ export default function HrFinanceDashboard() {
           </p>
         </TabsContent>
 
-        {/* ===================== PREVIEW ===================== */}
-        <TabsContent value="preview" className="mt-4">
-          <h3 className="flex items-center gap-2 font-bold text-slate-800 mb-3">
-            <Clock className="w-5 h-5 text-cyan-600" /> Preview from attendance
-            <span className="text-xs font-normal text-slate-400">(what a run would pay, before generating)</span>
-          </h3>
-          <div className="bg-white border rounded-2xl shadow-sm overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50 text-xs font-bold text-slate-500 uppercase">
-                <tr>
-                  <th className="text-left p-3">Employee</th>
-                  <th className="text-right p-3">Rate/hr</th>
-                  <th className="text-right p-3">Worked hrs</th>
-                  <th className="text-right p-3">OT hrs</th>
-                  <th className="text-right p-3">Days</th>
-                  <th className="text-right p-3">Earnings</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(hourly?.rows || []).map((r: any) => (
-                  <tr key={r.employeeId} className="border-t">
-                    <td className="p-3"><EmpLink id={r.employeeId} name={r.employeeName} code={r.employeeCode} /></td>
-                    <td className="p-3 text-right">{inr(r.hourlyRate)}</td>
-                    <td className="p-3 text-right">{num(r.workedHours).toFixed(1)}</td>
-                    <td className="p-3 text-right">{num(r.overtimeHours).toFixed(1)}</td>
-                    <td className="p-3 text-right text-slate-500">{r.daysPresent}</td>
-                    <td className="p-3 text-right font-bold text-emerald-600">{inr(r.earnings)}</td>
-                  </tr>
-                ))}
-                {(!hourly?.rows || hourly.rows.length === 0) && (
-                  <tr><td colSpan={6} className="text-center text-slate-400 py-10">No hourly-paid employees with recorded hours this month.</td></tr>
-                )}
-              </tbody>
-              {hourly?.rows?.length > 0 && (
-                <tfoot>
-                  <tr className="border-t bg-slate-50 font-bold">
-                    <td className="p-3" colSpan={5}>Total ({hourly.employeeCount} employees)</td>
-                    <td className="p-3 text-right text-emerald-700">{inr(hourly.totalEarnings)}</td>
-                  </tr>
-                </tfoot>
-              )}
-            </table>
-          </div>
+        {/* ===================== GENERATE ===================== */}
+        <TabsContent value="generate" className="mt-4">
+          <GeneratePayslips
+            key={`${month}-${year}-${previewKey}`}
+            month={month} year={year} canProcess={canProcess}
+            onGenerated={() => { loadUnified(); load(); loadBonuses(); loadDeductions(); loadPayReqs(); }}
+            onEditWage={canProcess ? openWage : undefined}
+          />
         </TabsContent>
       </Tabs>
 
-      {/* WAGE SETTINGS DIALOG */}
-      <Dialog open={wageOpen} onOpenChange={setWageOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader><DialogTitle>Wage &amp; Pay Basis</DialogTitle></DialogHeader>
-          <div className="space-y-4 pt-2 max-h-[70vh] overflow-y-auto">
-            <div className="space-y-2">
-              <Label>Employee</Label>
-              <select className={inputCls} value={wage.employeeId} onChange={(e) => onWageEmployee(e.target.value)}>
-                <option value="">Select employee…</option>
-                {employees.map((e: any) => <option key={e.id} value={e.id}>{empName(e)} {e.employeeCode ? `(${e.employeeCode})` : ""}</option>)}
-              </select>
-            </div>
-            {wage.employeeId && (
-              <>
-                <div className="space-y-2">
-                  <Label>Pay basis</Label>
-                  <select className={inputCls} value={wage.salaryType || "HOURLY"} onChange={(e) => setWage({ ...wage, salaryType: e.target.value })}>
-                    <option value="HOURLY">Hourly — paid by attendance hours × rate</option>
-                    <option value="MONTHLY">Monthly — paid by salary structure</option>
-                  </select>
-                  <p className="text-xs text-slate-400">
-                    {wage.salaryType === "MONTHLY"
-                      ? "This employee is generated by “Run monthly salary” using their salary structure. The hourly rates below are ignored."
-                      : "This employee is generated by “Run hourly pay” from the rates below."}
-                  </p>
-                </div>
-                <div className={`grid grid-cols-2 gap-3 ${wage.salaryType === "MONTHLY" ? "opacity-50" : ""}`}>
-                  <Field label="Hourly Rate (₹)"><Input type="number" value={wage.hourlyRate} onChange={(e) => setWage({ ...wage, hourlyRate: e.target.value })} /></Field>
-                  <Field label="Overtime Rate (₹/hr)"><Input type="number" value={wage.overtimeRate} onChange={(e) => setWage({ ...wage, overtimeRate: e.target.value })} placeholder="blank = rate × OT mult" /></Field>
-                  <Field label="Weekend Rate (₹/hr)"><Input type="number" value={wage.weekendRate} onChange={(e) => setWage({ ...wage, weekendRate: e.target.value })} placeholder="optional" /></Field>
-                  <Field label="Holiday Rate (₹/hr)"><Input type="number" value={wage.holidayRate} onChange={(e) => setWage({ ...wage, holidayRate: e.target.value })} placeholder="optional" /></Field>
-                  <Field label="Night Rate (₹/hr)"><Input type="number" value={wage.nightRate} onChange={(e) => setWage({ ...wage, nightRate: e.target.value })} placeholder="optional" /></Field>
-                  <Field label="OT Multiplier"><Input type="number" value={wage.overtimeMultiplier} onChange={(e) => setWage({ ...wage, overtimeMultiplier: e.target.value })} /></Field>
-                  <Field label="Standard Daily Hours"><Input type="number" value={wage.standardDailyHours} onChange={(e) => setWage({ ...wage, standardDailyHours: e.target.value })} /></Field>
-                  <Field label="Max Daily Hours"><Input type="number" value={wage.maxDailyHours} onChange={(e) => setWage({ ...wage, maxDailyHours: e.target.value })} placeholder="optional cap" /></Field>
-                  <Field label="Payroll Cycle">
-                    <select className={inputCls} value={wage.payrollCycle} onChange={(e) => setWage({ ...wage, payrollCycle: e.target.value })}>
-                      {["MONTHLY", "WEEKLY", "BIWEEKLY"].map((c) => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  </Field>
-                  <Field label="Payment Method">
-                    <select className={inputCls} value={wage.paymentMethod} onChange={(e) => setWage({ ...wage, paymentMethod: e.target.value })}>
-                      <option value="">—</option>
-                      {["BANK_TRANSFER", "CASH", "CHEQUE", "UPI"].map((c) => <option key={c} value={c}>{c.replace("_", " ")}</option>)}
-                    </select>
-                  </Field>
-                  <Field label="Bank Account"><Input value={wage.bankAccount} onChange={(e) => setWage({ ...wage, bankAccount: e.target.value })} /></Field>
-                  <Field label="IFSC"><Input value={wage.ifsc} onChange={(e) => setWage({ ...wage, ifsc: e.target.value })} /></Field>
-                </div>
-                <label className="flex items-center gap-2 text-sm text-slate-700">
-                  <BaseInput type="checkbox" checked={!!wage.bonusEligible} onChange={(e) => setWage({ ...wage, bonusEligible: e.target.checked })} /> Eligible for bonuses
-                </label>
-                <Button className="w-full" onClick={submitWage}>Save Wage Settings</Button>
-              </>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* WAGE & PAY BASIS */}
+      <WageSettingsDialog
+        open={wageOpen}
+        onClose={() => setWageOpen(false)}
+        employeeId={wageEmpId}
+        employees={employees}
+        month={month}
+        year={year}
+        onSaved={() => { reloadEmployees(); loadUnified(); setPreviewKey((k) => k + 1); }}
+      />
 
       {/* QUICK PAY — search anyone and pay inline */}
       {canProcess && (
@@ -840,24 +690,6 @@ function EmpLink({ id, name, code }: { id?: number; name?: string; code?: string
     : <div className="flex items-center gap-2.5">{body}</div>;
 }
 
-/** Inline pay-basis switch shown in the employee Type column — one tap flips Hourly ↔ Monthly. */
-function BasisToggle({ model, onToggle }: { model?: string; onToggle: () => void }) {
-  if (model === "CONTRACT") return <PayTypeTag model={model} />;
-  const hourly = model === "HOURLY";
-  return (
-    <button
-      type="button" onClick={onToggle}
-      title={`Switch to ${hourly ? "Monthly" : "Hourly"} basis`}
-      className={`group inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-bold uppercase transition-colors ${
-        hourly ? "bg-cyan-100 text-cyan-700 hover:bg-cyan-200" : "bg-violet-100 text-violet-700 hover:bg-violet-200"
-      }`}
-    >
-      {hourly ? "Hourly" : "Monthly"}
-      <ArrowLeftRight className="w-3 h-3 opacity-50 group-hover:opacity-100" />
-    </button>
-  );
-}
-
 function PayTypeTag({ model }: { model?: string }) {
   const tone: Record<string, string> = {
     HOURLY: "bg-cyan-100 text-cyan-700",
@@ -895,7 +727,7 @@ function PersonCell({ line }: { line: PayrollLine }) {
 }
 
 /** Per-row action — inline Approve/Pay for employees; a deep-link for contractors (never inline pay). */
-function RowAction({ line, onApprove, onPay, canProcess, onEdit }: { line: PayrollLine; onApprove: (id: number) => void; onPay: (id: number) => void; canProcess: boolean; onEdit?: (line: PayrollLine) => void }) {
+function RowAction({ line, onApprove, onPay, canProcess, onEdit, onWage }: { line: PayrollLine; onApprove: (id: number) => void; onPay: (id: number) => void; canProcess: boolean; onEdit?: (line: PayrollLine) => void; onWage?: (employeeId: number) => void }) {
   if (line.resourceType === "CONTRACTOR") {
     const to = line.actionHint === "LEDGER" ? "/contractors/ledger" : `/contractors/directory/${line.personId}`;
     const label = line.actionHint === "LEDGER" ? "Ledger" : "Open bill";
@@ -913,12 +745,14 @@ function RowAction({ line, onApprove, onPay, canProcess, onEdit }: { line: Payro
       {canProcess && onEdit && id && line.status !== "PAID" && line.personId &&
         <Button size="sm" variant="outline" title="Edit payslip (incentives, allowances, deductions)" onClick={() => onEdit(line)}><Pencil className="w-3.5 h-3.5" /></Button>}
       {id && <Button size="sm" variant="ghost" title="Open payslip" onClick={() => window.open(`/hr/payslip/${id}`, "_blank")}><FileText className="w-4 h-4" /></Button>}
+      {canProcess && onWage && line.personId &&
+        <Button size="sm" variant="ghost" title="Wage & pay basis" onClick={() => onWage(line.personId!)}><Settings2 className="w-4 h-4" /></Button>}
     </div>
   );
 }
 
 /** Mobile card for an employee salary line. */
-function EmpCard({ l, canProcess, onToggle, onApprove, onPay, onEdit }: { l: PayrollLine; canProcess: boolean; onToggle: () => void; onApprove: (id: number) => void; onPay: (id: number) => void; onEdit?: (line: PayrollLine) => void }) {
+function EmpCard({ l, canProcess, onApprove, onPay, onEdit, onWage }: { l: PayrollLine; canProcess: boolean; onApprove: (id: number) => void; onPay: (id: number) => void; onEdit?: (line: PayrollLine) => void; onWage?: (employeeId: number) => void }) {
   return (
     <div className="rounded-xl border bg-white p-3 shadow-sm">
       <div className="flex items-center justify-between gap-2">
@@ -926,7 +760,7 @@ function EmpCard({ l, canProcess, onToggle, onApprove, onPay, onEdit }: { l: Pay
         <StatusBadge status={l.status} />
       </div>
       <div className="mt-2 flex items-center justify-between gap-2">
-        {canProcess ? <BasisToggle model={l.payModel} onToggle={onToggle} /> : <PayTypeTag model={l.payModel} />}
+        <PayTypeTag model={l.payModel} />
         <span className="text-xs text-slate-500">{l.basisLabel || "—"}</span>
       </div>
       <div className="mt-2 grid grid-cols-3 gap-2 text-center text-xs">
@@ -934,7 +768,7 @@ function EmpCard({ l, canProcess, onToggle, onApprove, onPay, onEdit }: { l: Pay
         <div><div className="text-slate-400">Deductions</div><div className="font-semibold text-rose-600">{num(l.deductions) > 0 ? inr(l.deductions) : "—"}</div></div>
         <div><div className="text-slate-400">Net</div><div className="font-bold text-emerald-600">{inr(l.payable)}</div></div>
       </div>
-      <div className="mt-2 flex justify-end"><RowAction line={l} onApprove={onApprove} onPay={onPay} canProcess={canProcess} onEdit={onEdit} /></div>
+      <div className="mt-2 flex justify-end"><RowAction line={l} onApprove={onApprove} onPay={onPay} canProcess={canProcess} onEdit={onEdit} onWage={onWage} /></div>
     </div>
   );
 }
@@ -960,10 +794,6 @@ function ConCard({ l }: { l: PayrollLine }) {
 
 function StatusBadge({ status }: { status?: string }) {
   return <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${STATUS_TONE[status || ""] || "bg-slate-100 text-slate-600"}`}>{status || "—"}</span>;
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return <div className="space-y-1.5"><Label className="text-xs">{label}</Label>{children}</div>;
 }
 
 function Tile({ label, value, tone }: { label: string; value: string; tone?: "amber" | "rose" }) {

@@ -12,7 +12,7 @@ import { Search, Users, X, Zap } from "lucide-react";
 /**
  * Quick Pay — search any employee or contractor by name and record a payment inline, without
  * leaving the payroll page. Reuses the existing engines end to end (no control bypass):
- *   • Employee salary  → generate (hourly/monthly per basis) → approve → pay
+ *   • Employee salary  → generate from hours (their usual basis) → approve → pay
  *   • Employee advance → create → approve
  *   • Employee bonus / incentive / other → award → approve → pay
  *   • Contractor       → contractor payment (ADVANCE type, ledger-posted; no bill required)
@@ -35,12 +35,6 @@ type EmpPayType = (typeof EMP_PAY_TYPES)[number]["key"];
 
 const MONTHS = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const empName = (e: any) => [e?.firstName, e?.lastName].filter(Boolean).join(" ") || e?.name || "Employee";
-const isHourlyBasis = (e: any) => {
-  const t = (e?.salaryType || "").toUpperCase();
-  if (t) return t === "HOURLY";
-  return e?.hourlyRate != null && e?.hourlyRate !== "";
-};
-
 export default function QuickPayDialog({
   open, onClose, employees, canPayContractor, onDone,
 }: {
@@ -104,12 +98,10 @@ export default function QuickPayDialog({
   const fail = (e: any, fallback: string) => toast.error(e?.response?.data?.message || e?.message || fallback);
 
   // ---- employee actions -------------------------------------------------
-  const paySalary = async (empId: number, hourly: boolean) => {
+  const paySalary = async (empId: number) => {
     let recordId: number | undefined;
     try {
-      const rec: any = hourly
-        ? await payrollApi.runHourlyPayroll({ employeeId: empId, month, year })
-        : await payrollApi.runPayroll({ employeeId: empId, month, year });
+      const rec: any = await payrollApi.generatePayslip(empId, month, year);
       recordId = rec?.id;
     } catch (e: any) {
       // Likely already generated for this period — reuse the existing record.
@@ -129,7 +121,7 @@ export default function QuickPayDialog({
     setBusy(true);
     try {
       if (empType === "SALARY") {
-        await paySalary(empId, isHourlyBasis(person.raw));
+        await paySalary(empId);
         finish(`Salary paid to ${person.name} for ${MONTHS[month]} ${year}.`);
       } else if (empType === "ADVANCE") {
         if (!amtValid) { toast.error("Enter an amount greater than zero."); setBusy(false); return; }
@@ -251,7 +243,7 @@ export default function QuickPayDialog({
                       <div className="space-y-1.5"><Label>Year</Label><Input type="number" value={year} onChange={(e) => setYear(Number(e.target.value))} /></div>
                     </div>
                     <p className="text-xs text-slate-400">
-                      Generates the {isHourlyBasis(person.raw) ? "hourly" : "monthly"} payslip for this period (from their basis), then approves and pays it. If one already exists, it is approved and paid.
+                      Generates this period's payslip from attendance hours on their usual basis ({(person.raw?.salaryType || "HOURLY").toLowerCase()}), then approves and pays it. If one already exists, it is approved and paid. To pick Hourly vs Monthly, use the Generate tab.
                     </p>
                   </>
                 ) : (

@@ -115,6 +115,13 @@ public class SalaryRecord extends BaseEntity {
     @Column(name = "hourly_rate", precision = 10, scale = 2)
     private BigDecimal hourlyRate;
 
+    /** MONTHLY basis only (V101): the monthly salary and standard hours the hours were measured against. */
+    @Column(name = "monthly_salary", precision = 15, scale = 2)
+    private BigDecimal monthlySalary;
+
+    @Column(name = "standard_hours", precision = 8, scale = 2)
+    private BigDecimal standardHours;
+
     @Column(name = "overtime_rate", precision = 10, scale = 2)
     private BigDecimal overtimeRate;
 

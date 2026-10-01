@@ -384,22 +384,9 @@ public class HrController {
     }
 
     // =====================================================================
-    // Payroll (V19): salary structure, advances, loans, payroll run, register,
+    // Payroll (V19): advances, loans, payroll run, register,
     // payslip, finance dashboard, reports.
     // =====================================================================
-
-    @GetMapping("/salary-structure/{employeeId}")
-    @PreAuthorize(PAYROLL_READ)
-    public ResponseEntity<SalaryStructure> getStructure(@PathVariable Long employeeId) {
-        return ResponseEntity.ok(payrollService.getStructure(employeeId));
-    }
-
-    @PostMapping("/salary-structure/{employeeId}")
-    @PreAuthorize(PAYROLL_PROCESS)
-    public ResponseEntity<SalaryStructure> saveStructure(@PathVariable Long employeeId,
-                                                         @RequestBody SalaryStructure payload) {
-        return ResponseEntity.ok(payrollService.saveStructure(employeeId, payload));
-    }
 
     // --- Advances ---
     @GetMapping("/employees/{id}/advances")
@@ -440,40 +427,34 @@ public class HrController {
         return ResponseEntity.ok(payrollService.closeLoan(id));
     }
 
-    // --- Payroll run ---
-    @PostMapping("/payroll/run")
-    @PreAuthorize(PAYROLL_PROCESS)
-    public ResponseEntity<SalaryRecord> runPayroll(@RequestParam Long employeeId,
-                                                   @RequestParam int month,
-                                                   @RequestParam int year,
-                                                   @RequestParam(required = false) BigDecimal overtimeHours,
-                                                   @RequestParam(required = false) BigDecimal bonus,
-                                                   @RequestParam(required = false) BigDecimal incentive) {
-        return ResponseEntity.ok(payrollService.runPayroll(employeeId, month, year,
-                overtimeHours, bonus, incentive));
+    // --- Payroll run (hours-based: pick HOURLY or MONTHLY per employee at generate time) ---
+    /** Hours for the month priced both ways, per employee, for the generate screen. */
+    @GetMapping("/payroll/preview")
+    @PreAuthorize(PAYROLL_READ)
+    public ResponseEntity<List<Map<String, Object>>> payrollPreview(@RequestParam int month, @RequestParam int year) {
+        return ResponseEntity.ok(payrollService.payrollPreview(month, year));
     }
 
-    @PostMapping("/payroll/run-bulk")
+    /** Generate one employee's payslip; basis HOURLY | MONTHLY, omitted means their usual basis. */
+    @PostMapping("/payroll/generate")
     @PreAuthorize(PAYROLL_PROCESS)
-    public ResponseEntity<Map<String, Object>> runPayrollBulk(@RequestParam int month, @RequestParam int year) {
-        return ResponseEntity.ok(payrollService.runPayrollBulk(month, year));
+    public ResponseEntity<SalaryRecord> generatePayslip(@RequestParam Long employeeId,
+                                                        @RequestParam int month,
+                                                        @RequestParam int year,
+                                                        @RequestParam(required = false) String basis) {
+        return ResponseEntity.ok(payrollService.generatePayslip(employeeId, month, year, basis));
     }
 
-    // --- Hourly payroll run (spec: pay by hours + OT + approved bonuses − deductions) ---
-    @PostMapping("/payroll/run-hourly")
+    /** Bulk generate. Body: { "choices": { "<employeeId>": "HOURLY" | "MONTHLY" } }; empty means everyone on usual basis. */
+    @PostMapping("/payroll/generate-bulk")
     @PreAuthorize(PAYROLL_PROCESS)
-    public ResponseEntity<SalaryRecord> runHourlyPayroll(@RequestParam Long employeeId,
-                                                         @RequestParam int month,
-                                                         @RequestParam int year,
-                                                         @RequestParam(required = false) BigDecimal bonus,
-                                                         @RequestParam(required = false) BigDecimal incentive) {
-        return ResponseEntity.ok(payrollService.runHourlyPayroll(employeeId, month, year, bonus, incentive));
+    public ResponseEntity<Map<String, Object>> generatePayslips(@RequestParam int month, @RequestParam int year,
+                                                                @RequestBody(required = false) GenerateBody body) {
+        return ResponseEntity.ok(payrollService.generatePayslips(month, year, body == null ? null : body.choices));
     }
 
-    @PostMapping("/payroll/run-hourly-bulk")
-    @PreAuthorize(PAYROLL_PROCESS)
-    public ResponseEntity<Map<String, Object>> runHourlyPayrollBulk(@RequestParam int month, @RequestParam int year) {
-        return ResponseEntity.ok(payrollService.runHourlyPayrollBulk(month, year));
+    public static class GenerateBody {
+        public Map<Long, String> choices;
     }
 
     @PostMapping("/payroll/{id}/approve")
@@ -585,18 +566,19 @@ public class HrController {
         return ResponseEntity.ok(payrollService.setHourlyRate(id, hourlyRate, overtimeMultiplier));
     }
 
+    /** Live what-if for the Wage & basis dialog: real hours for the month priced with unsaved settings. */
+    @PostMapping("/employees/{id}/wage-preview")
+    @PreAuthorize(PAYROLL_READ)
+    public ResponseEntity<Map<String, Object>> wagePreview(@PathVariable Long id, @RequestParam int month,
+                                                           @RequestParam int year, @RequestBody(required = false) Employee draft) {
+        return ResponseEntity.ok(payrollService.wagePreview(id, month, year, draft));
+    }
+
     /** Full hourly wage settings (rates, multipliers, cycle, payment method, bank details). */
     @PutMapping("/employees/{id}/wage-settings")
     @PreAuthorize(PAYROLL_PROCESS)
     public ResponseEntity<Employee> saveWageSettings(@PathVariable Long id, @RequestBody Employee body) {
         return ResponseEntity.ok(payrollService.saveWageSettings(id, body));
-    }
-
-    /** Quick toggle of an employee's pay basis (HOURLY ↔ MONTHLY) — inline action on the payroll page. */
-    @PutMapping("/employees/{id}/pay-basis")
-    @PreAuthorize(PAYROLL_PROCESS)
-    public ResponseEntity<Employee> setPayBasis(@PathVariable Long id, @RequestParam String salaryType) {
-        return ResponseEntity.ok(payrollService.setPayBasis(id, salaryType));
     }
 
     /** Project Manager recommends a bonus for an employee (RECOMMENDED → HR approves). */

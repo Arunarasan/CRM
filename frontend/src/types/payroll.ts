@@ -1,20 +1,5 @@
-// Employee payroll types — mirror backend SalaryStructure / SalaryRecord / EmployeeAdvance /
-// EmployeeLoan and the /api/hr payroll endpoints.
-
-export interface SalaryStructure {
-  id?: number;
-  basic: number;
-  hra: number;
-  allowances: number;
-  specialAllowance: number;
-  pfEnabled: boolean;
-  pfPercentage: number;
-  esiEnabled: boolean;
-  professionalTax: number;
-  overtimeHourlyRate: number;
-  effectiveFrom?: string;
-  active?: boolean;
-}
+// Employee payroll types — mirror backend SalaryRecord / EmployeeAdvance / EmployeeLoan and the
+// /api/hr payroll endpoints.
 
 export interface SalaryRecord {
   id: number;
@@ -55,6 +40,10 @@ export interface SalaryRecord {
   projectBonus?: number;
   manualBonus?: number;
   manualDeduction?: number;
+  // MONTHLY generated from hours (V101): salary ÷ standardHours × hours worked
+  monthlySalary?: number | null;
+  standardHours?: number | null;
+  lineItems?: { id: number; category: string; label: string; amount: number }[] | null;
   approvedAt?: string;
 }
 
@@ -92,20 +81,16 @@ export interface PayrollRequest {
 
 // Full hourly wage settings (HR-managed).
 export interface WageSettings {
-  salaryType?: string;
+  salaryType?: string; // usual basis (HOURLY | MONTHLY) — pre-selected at generate time
+  baseSalary?: number | null; // monthly salary
   hourlyRate?: number | null;
   overtimeRate?: number | null;
-  holidayRate?: number | null;
   weekendRate?: number | null;
-  nightRate?: number | null;
   overtimeMultiplier?: number;
-  weekendMultiplier?: number;
-  holidayMultiplier?: number;
-  nightMultiplier?: number;
   standardDailyHours?: number;
+  workingDaysPerMonth?: number; // standard month = standardDailyHours × this
   maxDailyHours?: number | null;
   bonusEligible?: boolean;
-  payrollCycle?: string;
   paymentMethod?: string | null;
   bankAccount?: string;
   ifsc?: string;
@@ -201,7 +186,6 @@ export interface WorkforceFinance {
   fullName: string;
   // employee
   employeeId?: number;
-  structure?: SalaryStructure;
   payslips?: SalaryRecord[];
   advances?: EmployeeAdvance[];
   loans?: EmployeeLoan[];
@@ -225,4 +209,26 @@ export interface WorkforceFinance {
   paymentRequests?: any[];
   paymentHistory?: any[];
   projectWise?: { projectId: number; projectName: string; contractValue: number; paid: number; pending: number; status: string }[];
+}
+
+/** One employee's month on the generate screen: hours, priced both ways (GET /hr/payroll/preview). */
+export interface PayrollPreviewRow {
+  employeeId: number;
+  name: string;
+  employeeCode?: string;
+  designation?: string;
+  workedHours: number;
+  regularHours: number;
+  overtimeHours: number;
+  attendanceDays: number;
+  standardHours: number;
+  workingDaysPerMonth?: number;
+  defaultBasis: "HOURLY" | "MONTHLY" | null;
+  hourly: { available: boolean; rate?: number | null; overtimeRate?: number | null; rateSource?: string; regular?: number | null; overtime?: number | null; total?: number | null };
+  monthly: { available: boolean; salary?: number | null; perHour?: number | null; overtimeRate?: number | null; regular?: number | null; overtime?: number | null; total?: number | null };
+  // present once generated for the month
+  recordId?: number;
+  status?: string;
+  payType?: string;
+  netSalary?: number;
 }

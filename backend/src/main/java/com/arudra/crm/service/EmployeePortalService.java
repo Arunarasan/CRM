@@ -31,7 +31,6 @@ public class EmployeePortalService {
     @Autowired private LeaveRequestRepository leaveRequestRepository;
     @Autowired private SalaryRecordRepository salaryRecordRepository;
     @Autowired private com.arudra.crm.repository.PayslipLineItemRepository payslipLineItemRepository;
-    @Autowired private SalaryStructureRepository salaryStructureRepository;
     @Autowired private EmployeeDocumentRepository documentRepository;
     @Autowired private NotificationRepository notificationRepository;
     @Autowired private EmployeeTaskService employeeTaskService;
@@ -304,10 +303,7 @@ public class EmployeePortalService {
 
     public Map<String, Object> getSalarySummary(User currentUser) {
         Employee employee = requireEmployee(currentUser);
-        SalaryStructure structure = salaryStructureRepository
-                .findFirstByEmployeeIdAndActiveTrueOrderByIdDesc(employee.getId()).orElse(null);
         Map<String, Object> summary = new LinkedHashMap<>();
-        summary.put("structure", structure);
         summary.put("baseSalary", employee.getBaseSalary());
         summary.put("salaryType", employee.getSalaryType());
         summary.put("hourlyRate", employee.getHourlyRate());
@@ -374,12 +370,7 @@ public class EmployeePortalService {
                 || (!"MONTHLY".equalsIgnoreCase(emp.getSalaryType())
                     && emp.getHourlyRate() != null && emp.getHourlyRate().signum() > 0);
 
-        SalaryStructure structure = salaryStructureRepository
-                .findFirstByEmployeeIdAndActiveTrueOrderByIdDesc(emp.getId()).orElse(null);
-        java.math.BigDecimal monthlyGross = structure != null
-                ? nz(structure.getBasic()).add(nz(structure.getHra()))
-                    .add(nz(structure.getAllowances())).add(nz(structure.getSpecialAllowance()))
-                : nz(emp.getBaseSalary());
+        java.math.BigDecimal monthlyGross = nz(emp.getBaseSalary());
 
         // Official payslips already generated, indexed by year*100+month (keep the latest per month).
         Map<Integer, SalaryRecord> official = new java.util.HashMap<>();

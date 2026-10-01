@@ -207,11 +207,13 @@ export interface Payslip {
   projectBonus?: number | null;
   manualBonus?: number | null;
   manualDeduction?: number | null;
+  monthlySalary?: number | null;
+  standardHours?: number | null;
   lineItems?: { id: number; category: string; label: string; amount: number }[] | null;
 }
 
 export interface SalarySummary {
-  structure: Record<string, unknown> | null;
+  structure?: Record<string, unknown> | null;
   baseSalary: number | null;
   salaryType: string | null;
   payslips: Payslip[];

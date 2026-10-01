@@ -16,8 +16,9 @@ import java.time.YearMonth;
 import java.util.*;
 
 /**
- * Employee payroll engine: salary structure, monthly payroll run (attendance/leave-driven, with PF/ESI/PT
- * and advance/loan recovery), advances, loans, payslips, register, dashboard and reports.
+ * Employee payroll engine: hours-based payslip generation (HOURLY or MONTHLY priced from the same
+ * attendance hours, with bonus/deduction/advance/loan recovery), advances, loans, payslips, register,
+ * dashboard and reports.
  *
  * <p>Contractor money is deliberately NOT computed here — the finance dashboard's contractor half only
  * reads the existing contractor bill/payment repositories. Employees and contractors share the master
@@ -26,14 +27,11 @@ import java.util.*;
 @Service
 public class PayrollService {
 
-    private static final BigDecimal ESI_WAGE_CEILING = BigDecimal.valueOf(21000);
-    private static final BigDecimal ESI_RATE = BigDecimal.valueOf(0.75);
-    /** Standard paid working days/month used to convert a monthly salary into an equivalent hourly rate. */
+    /** Fallback paid working days/month when an employee has none set (see Employee.workingDaysPerMonth). */
     private static final int STANDARD_WORKING_DAYS = 26;
     private static final List<String> ACTIVE_ADVANCE_STATES = List.of("APPROVED", "RECOVERING");
 
     @Autowired private EmployeeRepository employeeRepository;
-    @Autowired private SalaryStructureRepository structureRepository;
     @Autowired private SalaryRecordRepository salaryRepository;
     @Autowired private NotificationService notificationService;
     @Autowired private com.arudra.crm.repository.UserRepository userRepository;
@@ -41,7 +39,6 @@ public class PayrollService {
     @Autowired private EmployeeLoanRepository loanRepository;
     @Autowired private PayrollRecoveryRepository recoveryRepository;
     @Autowired private AttendanceRepository attendanceRepository;
-    @Autowired private LeaveRequestRepository leaveRepository;
     @Autowired private ContractorBillRepository billRepository;
     @Autowired private ContractorPaymentRepository paymentRepository;
     @Autowired private ContractorWorkPackageRepository workPackageRepository;
@@ -50,29 +47,9 @@ public class PayrollService {
     @Autowired private EmployeeDeductionRepository deductionRepository;
     @Autowired private com.arudra.crm.repository.PayrollRequestRepository payrollRequestRepository;
     @Autowired private EmployeeTimeService timeService;
+    @Autowired private PayslipLineItemRepository lineItemRepository;
     @Autowired private com.arudra.crm.repository.TaskAssignmentRepository taskAssignmentRepository;
     @Autowired private com.arudra.crm.repository.TaskTimeLogRepository taskTimeLogRepository;
-
-    // ============================================================ salary structure
-    public SalaryStructure getStructure(Long employeeId) {
-        return structureRepository.findFirstByEmployeeIdAndActiveTrueOrderByIdDesc(employeeId).orElse(null);
-    }
-
-    @Transactional
-    public SalaryStructure saveStructure(Long employeeId, SalaryStructure payload) {
-        Employee employee = employeeRepository.findById(employeeId)
-                .orElseThrow(() -> new ResourceNotFoundException("Employee not found: " + employeeId));
-        // One active structure per employee — retire the previous one.
-        structureRepository.findFirstByEmployeeIdAndActiveTrueOrderByIdDesc(employeeId).ifPresent(old -> {
-            old.setActive(false);
-            structureRepository.save(old);
-        });
-        payload.setId(null);
-        payload.setEmployee(employee);
-        payload.setActive(true);
-        if (payload.getEffectiveFrom() == null) payload.setEffectiveFrom(LocalDate.now());
-        return structureRepository.save(payload);
-    }
 
     // ============================================================ advances & loans
     @Transactional
@@ -317,183 +294,223 @@ public class PayrollService {
         }
     }
 
-    // ============================================================ payroll run
-    /**
-     * Generate one month's payslip for an employee. Idempotent: re-running the same (employee, month, year)
-     * is rejected so recoveries are never double-applied. Pulls attendance/leave for LOP, applies PF/ESI/PT
-     * and advance/loan recovery, and records each recovery as an immutable {@link PayrollRecovery}.
+    // ============================================================ payroll run (hours-based)
+    /*
+     * Every payslip starts from the employee's attendance HOURS for the month. The same hours are then
+     * priced two ways and HR picks one per employee at generate time:
+     *   HOURLY  — regular hours × hourly rate (weekend/holiday/night rates honoured) + OT hours × OT rate.
+     *   MONTHLY — monthly salary ÷ standard hours × regular hours worked (capped at the full salary)
+     *             + OT hours × OT rate.
+     * Standard hours = standard daily hours × the employee's working days/month. An employee without an explicit
+     * hourly rate gets one derived from the monthly salary, so both options can always be compared.
+     * No PF/ESI/PT and no salary structure — extras go on the payslip as named line items.
      */
-    @Transactional
-    public SalaryRecord runPayroll(Long employeeId, int month, int year,
-                                   BigDecimal overtimeHours, BigDecimal bonus, BigDecimal incentive) {
-        Employee employee = employeeRepository.findById(employeeId)
-                .orElseThrow(() -> new ResourceNotFoundException("Employee not found: " + employeeId));
-        salaryRepository.findByEmployeeIdAndMonthAndYear(employeeId, month, year).ifPresent(existing -> {
-            throw new IllegalStateException("Payroll already generated for this employee for " + month + "/" + year);
-        });
 
-        SalaryStructure s = resolveStructure(employee);
-        BigDecimal basic = nz(s.getBasic());
-        BigDecimal hra = nz(s.getHra());
-        BigDecimal allowances = nz(s.getAllowances()).add(nz(s.getSpecialAllowance()));
+    /** Hours for the month, priced both ways. A null total means that basis can't be used (no rate / no salary). */
+    private static final class PayCalc {
+        BigDecimal workedHours, regularHours, overtimeHours;
+        int attendanceDays;
+        BigDecimal standardHours, monthlySalary;
+        // HOURLY
+        BigDecimal hourlyRate, hourlyOtRate, hourlyRegular, hourlyOt;
+        String rateSource; // EXPLICIT | DERIVED | NONE
+        // MONTHLY
+        BigDecimal monthlyPerHour, monthlyOtRate, monthlyRegular, monthlyOt;
 
-        // Attendance-driven LOP for the month.
-        YearMonth ym = YearMonth.of(year, month);
-        BigDecimal workingDays = BigDecimal.valueOf(ym.lengthOfMonth());
-        BigDecimal lopDays = computeLopDays(employeeId, ym);
-        BigDecimal paidDays = workingDays.subtract(lopDays).max(BigDecimal.ZERO);
-        BigDecimal fixedGross = basic.add(hra).add(allowances);
-        BigDecimal perDay = workingDays.signum() == 0 ? BigDecimal.ZERO
-                : fixedGross.divide(workingDays, 2, RoundingMode.HALF_UP);
-        BigDecimal leaveDeduction = perDay.multiply(lopDays).setScale(2, RoundingMode.HALF_UP);
-
-        BigDecimal ot = nz(overtimeHours).multiply(nz(s.getOvertimeHourlyRate())).setScale(2, RoundingMode.HALF_UP);
-        BigDecimal grossEarnings = fixedGross.add(ot).add(nz(bonus)).add(nz(incentive));
-
-        // Statutory deductions.
-        BigDecimal pf = Boolean.TRUE.equals(s.getPfEnabled()) ? pct(basic, s.getPfPercentage()) : BigDecimal.ZERO;
-        BigDecimal esi = Boolean.TRUE.equals(s.getEsiEnabled()) && grossEarnings.compareTo(ESI_WAGE_CEILING) <= 0
-                ? pct(grossEarnings, ESI_RATE) : BigDecimal.ZERO;
-        BigDecimal pt = nz(s.getProfessionalTax());
-
-        SalaryRecord rec = new SalaryRecord();
-        rec.setEmployee(employee);
-        rec.setMonth(month);
-        rec.setYear(year);
-        rec.setBasic(basic);
-        rec.setHra(hra);
-        rec.setAllowances(allowances);
-        rec.setOvertimeHours(nz(overtimeHours));
-        rec.setOvertimeAmount(ot);
-        rec.setBonus(nz(bonus));
-        rec.setIncentive(nz(incentive));
-        rec.setGrossEarnings(grossEarnings);
-        rec.setPfAmount(pf);
-        rec.setEsiAmount(esi);
-        rec.setProfessionalTax(pt);
-        rec.setLeaveDeduction(leaveDeduction);
-        rec.setWorkingDays(workingDays);
-        rec.setPaidDays(paidDays);
-        rec.setLopDays(lopDays);
-        rec.setStatus("PENDING");
-        rec.setGeneratedAt(LocalDateTime.now());
-        rec.setPayslipNumber(String.format("PS-%04d%02d-%d", year, month, employeeId));
-        // Provisional net (net_salary is NOT NULL) — finalised after recovery below.
-        rec.setNetSalary(grossEarnings);
-        // Persist now so recovery rows can reference it.
-        rec = salaryRepository.save(rec);
-
-        // Advance + loan recovery (writes immutable PayrollRecovery rows, decrements balances).
-        BigDecimal advanceRecovery = recoverAdvances(employeeId, rec);
-        BigDecimal loanRecovery = recoverLoans(employeeId, rec);
-
-        // Employee-raised, approved requests for this month (extra loan/advance repayment, other debit/credit).
-        BigDecimal[] req = applyPayrollRequests(employeeId, month, year, rec);
-        loanRecovery = loanRecovery.add(req[0]);
-        advanceRecovery = advanceRecovery.add(req[1]);
-        BigDecimal otherDeductions = req[2];
-        BigDecimal otherEarnings = req[3];
-        BigDecimal finalGross = grossEarnings.add(otherEarnings);
-
-        BigDecimal totalDeductions = pf.add(esi).add(pt).add(leaveDeduction)
-                .add(advanceRecovery).add(loanRecovery).add(otherDeductions);
-        rec.setAdvanceRecovery(advanceRecovery);
-        rec.setLoanRecovery(loanRecovery);
-        rec.setOtherEarnings(otherEarnings);
-        rec.setOtherDeductions(otherDeductions);
-        rec.setGrossEarnings(finalGross);
-        rec.setTotalDeductions(totalDeductions);
-        rec.setDeductions(totalDeductions); // legacy aggregate field kept in sync
-        rec.setNetSalary(finalGross.subtract(totalDeductions));
-        return salaryRepository.save(rec);
-    }
-
-    /**
-     * The single pay basis an employee belongs to, so the hourly and monthly bulk runs cover disjoint
-     * sets (no employee is generated by both). An explicit {@code salaryType} wins — only "HOURLY" is
-     * hourly, anything else (MONTHLY/DAILY) is monthly. When it's unset, we infer: an employee with an
-     * hourly rate on file is hourly, otherwise monthly. This keeps existing data working without forcing
-     * every employee's basis to be set first.
-     */
-    private static boolean isHourlyBasis(Employee e) {
-        String t = e.getSalaryType();
-        if (t != null && !t.isBlank()) return "HOURLY".equalsIgnoreCase(t);
-        return e.getHourlyRate() != null;
-    }
-
-    @Transactional
-    public Map<String, Object> runPayrollBulk(int month, int year) {
-        int done = 0, skipped = 0;
-        List<String> errors = new ArrayList<>();
-        for (Employee e : employeeRepository.findByPayrollEnabledTrueAndIsDeletedFalse()) {
-            // Monthly run: only monthly-basis employees. Hourly-basis employees are paid by the hourly run.
-            if (isHourlyBasis(e)) { skipped++; continue; }
-            if (salaryRepository.findByEmployeeIdAndMonthAndYear(e.getId(), month, year).isPresent()) {
-                skipped++;
-                continue;
-            }
-            try {
-                runPayroll(e.getId(), month, year, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
-                done++;
-            } catch (Exception ex) {
-                errors.add(e.getId() + ": " + ex.getMessage());
-            }
+        boolean canPay(String basis) {
+            return "HOURLY".equals(basis) ? hourlyRegular != null : monthlyRegular != null;
         }
-        Map<String, Object> out = new LinkedHashMap<>();
-        out.put("generated", done);
-        out.put("skipped", skipped);
-        out.put("errors", errors);
+    }
+
+    private PayCalc calculate(Employee e, YearMonth ym) {
+        PayCalc c = new PayCalc();
+        Map<String, Object> sum = timeService.hourlySummary(e, ym.atDay(1), ym.atEndOfMonth());
+        c.workedHours = (BigDecimal) sum.get("workedHours");
+        c.regularHours = (BigDecimal) sum.get("regularHours");
+        c.overtimeHours = (BigDecimal) sum.get("overtimeHours");
+        c.attendanceDays = (int) sum.get("attendanceDays");
+
+        BigDecimal stdDaily = e.getStandardDailyHours() != null && e.getStandardDailyHours().signum() > 0
+                ? e.getStandardDailyHours() : new BigDecimal("8");
+        BigDecimal otMult = e.getOvertimeMultiplier() != null && e.getOvertimeMultiplier().signum() > 0
+                ? e.getOvertimeMultiplier() : new BigDecimal("1.5");
+        BigDecimal explicitOt = e.getOvertimeRate() != null && e.getOvertimeRate().signum() > 0 ? e.getOvertimeRate() : null;
+        c.standardHours = stdDaily.multiply(BigDecimal.valueOf(workingDays(e))).setScale(2, RoundingMode.HALF_UP);
+        c.monthlySalary = nz(e.getBaseSalary());
+
+        // MONTHLY: salary spread over the standard hours; pay the hours actually worked, never above the salary.
+        if (c.monthlySalary.signum() > 0 && c.standardHours.signum() > 0) {
+            BigDecimal perHour = c.monthlySalary.divide(c.standardHours, 4, RoundingMode.HALF_UP);
+            c.monthlyPerHour = perHour.setScale(2, RoundingMode.HALF_UP);
+            c.monthlyOtRate = explicitOt != null ? explicitOt : perHour.multiply(otMult).setScale(2, RoundingMode.HALF_UP);
+            c.monthlyRegular = c.regularHours.compareTo(c.standardHours) >= 0 ? c.monthlySalary
+                    : c.regularHours.multiply(perHour).setScale(2, RoundingMode.HALF_UP);
+            c.monthlyOt = c.overtimeHours.multiply(c.monthlyOtRate).setScale(2, RoundingMode.HALF_UP);
+        }
+
+        // HOURLY: explicit rate (attendance already priced it, incl. weekend/holiday rates) or derived from salary.
+        if (e.getHourlyRate() != null && e.getHourlyRate().signum() > 0) {
+            c.rateSource = "EXPLICIT";
+            c.hourlyRate = e.getHourlyRate();
+            c.hourlyOtRate = EmployeeTimeService.overtimeRate(e);
+            c.hourlyRegular = (BigDecimal) sum.get("regularEarnings");
+            c.hourlyOt = (BigDecimal) sum.get("overtimeEarnings");
+        } else if (c.monthlyPerHour != null) {
+            c.rateSource = "DERIVED";
+            c.hourlyRate = c.monthlyPerHour;
+            c.hourlyOtRate = c.monthlyOtRate;
+            c.hourlyRegular = c.regularHours.multiply(c.hourlyRate).setScale(2, RoundingMode.HALF_UP);
+            c.hourlyOt = c.overtimeHours.multiply(c.hourlyOtRate).setScale(2, RoundingMode.HALF_UP);
+        } else {
+            c.rateSource = "NONE";
+        }
+        return c;
+    }
+
+    /** The employee's usual basis (last one used / set in wage settings), falling back to whichever is payable. */
+    private static String defaultBasis(Employee e, PayCalc c) {
+        String t = e.getSalaryType() == null ? "" : e.getSalaryType().trim().toUpperCase();
+        String pref = "HOURLY".equals(t) || "MONTHLY".equals(t) ? t
+                : (e.getHourlyRate() != null && e.getHourlyRate().signum() > 0 ? "HOURLY" : "MONTHLY");
+        if (c.canPay(pref)) return pref;
+        String other = "HOURLY".equals(pref) ? "MONTHLY" : "HOURLY";
+        return c.canPay(other) ? other : null;
+    }
+
+    /**
+     * Side-by-side preview for the generate screen: every payroll-enabled employee's hours for the month
+     * with what they'd earn on HOURLY vs MONTHLY, their usual basis, and any payslip already generated.
+     * Base pay only — approved bonuses, deductions and recoveries apply equally to both choices.
+     */
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> payrollPreview(int month, int year) {
+        YearMonth ym = YearMonth.of(year, month);
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (Employee e : employeeRepository.findByPayrollEnabledTrueAndIsDeletedFalse()) {
+            Map<String, Object> m = previewRow(e, calculate(e, ym));
+            salaryRepository.findByEmployeeIdAndMonthAndYear(e.getId(), month, year).ifPresent(r -> {
+                m.put("recordId", r.getId());
+                m.put("status", r.getStatus());
+                m.put("payType", r.getPayType());
+                m.put("netSalary", r.getNetSalary());
+            });
+            out.add(m);
+        }
         return out;
     }
 
-    // ============================================================ hourly payroll run
     /**
-     * Generate one period's HOURLY payslip for an employee — the spec's model: pay = regular hourly
-     * earnings + overtime + approved project/manual bonuses + incentives − manual deductions − advance
-     * and loan recovery. Regular/OT earnings come from persisted attendance (recomputed against the wage
-     * config). Idempotent per (employee, month, year). Approved bonuses/deductions are absorbed once and
-     * linked to this payslip. Starts DRAFT/PENDING → {@link #approvePayroll} → {@link #markPaid}.
+     * What-if for the Wage & basis dialog: this employee's real hours for the month, priced with the
+     * settings currently being edited (nothing is saved). Same shape as a {@link #payrollPreview} row.
+     */
+    @Transactional(readOnly = true)
+    public Map<String, Object> wagePreview(Long employeeId, int month, int year, Employee draft) {
+        Employee saved = employeeRepository.findById(employeeId)
+                .orElseThrow(() -> new ResourceNotFoundException("Employee not found: " + employeeId));
+        Employee e = new Employee(); // detached copy — never persisted
+        org.springframework.beans.BeanUtils.copyProperties(saved, e);
+        if (draft != null) applyWageSettings(e, draft);
+        return previewRow(e, calculate(e, YearMonth.of(year, month)));
+    }
+
+    private Map<String, Object> previewRow(Employee e, PayCalc c) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("employeeId", e.getId());
+        m.put("name", ((e.getFirstName() == null ? "" : e.getFirstName()) + " "
+                + (e.getLastName() == null ? "" : e.getLastName())).trim());
+        m.put("employeeCode", e.getEmployeeCode());
+        m.put("designation", e.getDesignation());
+        m.put("workedHours", c.workedHours);
+        m.put("regularHours", c.regularHours);
+        m.put("overtimeHours", c.overtimeHours);
+        m.put("attendanceDays", c.attendanceDays);
+        m.put("standardHours", c.standardHours);
+        m.put("defaultBasis", defaultBasis(e, c));
+
+        Map<String, Object> h = new LinkedHashMap<>();
+        h.put("available", c.hourlyRegular != null);
+        h.put("rate", c.hourlyRate);
+        h.put("overtimeRate", c.hourlyOtRate);
+        h.put("rateSource", c.rateSource);
+        h.put("regular", c.hourlyRegular);
+        h.put("overtime", c.hourlyOt);
+        h.put("total", c.hourlyRegular == null ? null : c.hourlyRegular.add(c.hourlyOt));
+        m.put("hourly", h);
+
+        Map<String, Object> mo = new LinkedHashMap<>();
+        mo.put("available", c.monthlyRegular != null);
+        mo.put("salary", c.monthlySalary);
+        mo.put("perHour", c.monthlyPerHour);
+        mo.put("overtimeRate", c.monthlyOtRate);
+        mo.put("regular", c.monthlyRegular);
+        mo.put("overtime", c.monthlyOt);
+        mo.put("total", c.monthlyRegular == null ? null : c.monthlyRegular.add(c.monthlyOt));
+        m.put("monthly", mo);
+        m.put("workingDaysPerMonth", workingDays(e));
+        return m;
+    }
+
+    private static int workingDays(Employee e) {
+        return e.getWorkingDaysPerMonth() != null && e.getWorkingDaysPerMonth() > 0
+                ? e.getWorkingDaysPerMonth() : STANDARD_WORKING_DAYS;
+    }
+
+    /**
+     * Generate one month's payslip for an employee on the chosen basis (HOURLY | MONTHLY; null ⇒ their
+     * usual basis). Idempotent per (employee, month, year) so recoveries are never applied twice. Absorbs
+     * approved bonuses, manual deductions, advance/loan recovery and approved employee requests once,
+     * linking each to this payslip. The chosen basis is remembered as the employee's usual basis.
+     * Starts PENDING → {@link #approvePayroll} → {@link #markPaid}.
      */
     @Transactional
-    public SalaryRecord runHourlyPayroll(Long employeeId, int month, int year,
-                                         BigDecimal extraBonus, BigDecimal extraIncentive) {
+    public SalaryRecord generatePayslip(Long employeeId, int month, int year, String basis) {
         Employee employee = employeeRepository.findById(employeeId)
                 .orElseThrow(() -> new ResourceNotFoundException("Employee not found: " + employeeId));
-        if (employee.getHourlyRate() == null) {
-            throw new IllegalArgumentException("Employee has no hourly rate configured — set an hourly rate first.");
-        }
         salaryRepository.findByEmployeeIdAndMonthAndYear(employeeId, month, year).ifPresent(existing -> {
             throw new IllegalStateException("Payroll already generated for this employee for " + month + "/" + year);
         });
 
         YearMonth ym = YearMonth.of(year, month);
-        Map<String, Object> sum = timeService.hourlySummary(employee, ym.atDay(1), ym.atEndOfMonth());
-        BigDecimal workedHours = (BigDecimal) sum.get("workedHours");
-        BigDecimal regularHours = (BigDecimal) sum.get("regularHours");
-        BigDecimal overtimeHours = (BigDecimal) sum.get("overtimeHours");
-        BigDecimal regularEarnings = (BigDecimal) sum.get("regularEarnings");
-        BigDecimal overtimeEarnings = (BigDecimal) sum.get("overtimeEarnings");
-        int attendanceDays = (int) sum.get("attendanceDays");
+        PayCalc c = calculate(employee, ym);
+        String b = basis == null || basis.isBlank() ? defaultBasis(employee, c) : basis.trim().toUpperCase();
+        if (b == null) {
+            throw new IllegalArgumentException("Set a monthly salary or an hourly rate for this employee first.");
+        }
+        if (!"HOURLY".equals(b) && !"MONTHLY".equals(b)) {
+            throw new IllegalArgumentException("Pay basis must be HOURLY or MONTHLY.");
+        }
+        if (!c.canPay(b)) {
+            throw new IllegalArgumentException("HOURLY".equals(b)
+                    ? "Set an hourly rate (or a monthly salary) for this employee first."
+                    : "Set a monthly salary for this employee first.");
+        }
+        boolean hourly = "HOURLY".equals(b);
+        BigDecimal regularEarnings = hourly ? c.hourlyRegular : c.monthlyRegular;
+        BigDecimal overtimeEarnings = hourly ? c.hourlyOt : c.monthlyOt;
 
         // Persist the shell first (net_salary is NOT NULL, and bonus/deduction/recovery rows FK it).
         SalaryRecord rec = new SalaryRecord();
         rec.setEmployee(employee);
         rec.setMonth(month);
         rec.setYear(year);
-        rec.setPayType("HOURLY");
-        rec.setBasic(BigDecimal.ZERO);        // hourly pay has no fixed basic
+        rec.setPayType(b);
+        rec.setBasic(BigDecimal.ZERO);        // all pay is in regularEarnings — no fixed components
         rec.setHra(BigDecimal.ZERO);
         rec.setAllowances(BigDecimal.ZERO);
-        rec.setHourlyRate(employee.getHourlyRate());
-        rec.setOvertimeRate(EmployeeTimeService.overtimeRate(employee));
-        rec.setWorkedHours(workedHours);
-        rec.setRegularHours(regularHours);
-        rec.setOvertimeHours(overtimeHours);
+        rec.setHourlyRate(hourly ? c.hourlyRate : c.monthlyPerHour);
+        rec.setOvertimeRate(hourly ? c.hourlyOtRate : c.monthlyOtRate);
+        if (!hourly) {
+            rec.setMonthlySalary(c.monthlySalary);
+            rec.setStandardHours(c.standardHours);
+        }
+        rec.setWorkedHours(c.workedHours);
+        rec.setRegularHours(c.regularHours);
+        rec.setOvertimeHours(c.overtimeHours);
         rec.setRegularEarnings(regularEarnings);
         rec.setOvertimeAmount(overtimeEarnings);
-        rec.setAttendanceDays(attendanceDays);
+        rec.setAttendanceDays(c.attendanceDays);
         rec.setWorkingDays(BigDecimal.valueOf(ym.lengthOfMonth()));
-        rec.setPaidDays(BigDecimal.valueOf(attendanceDays));
+        rec.setPaidDays(BigDecimal.valueOf(c.attendanceDays));
         rec.setStatus("PENDING");
         rec.setGeneratedAt(LocalDateTime.now());
         rec.setPayslipNumber(String.format("PS-%04d%02d-%d", year, month, employeeId));
@@ -501,22 +518,21 @@ public class PayrollService {
         rec = salaryRepository.save(rec);
 
         // Approved, unpaid bonuses (project / manual / incentive) — absorb once, link to this payslip.
-        BigDecimal projectBonus = BigDecimal.ZERO, manualBonus = BigDecimal.ZERO, incentive = nz(extraIncentive);
+        BigDecimal projectBonus = BigDecimal.ZERO, manualBonus = BigDecimal.ZERO, incentive = BigDecimal.ZERO;
         if (Boolean.TRUE.equals(employee.getBonusEligible())) {
-            for (EmployeeBonus b : bonusRepository
+            for (EmployeeBonus bo : bonusRepository
                     .findByEmployeeIdAndStatusAndPaidSalaryRecordIdIsNullAndIsDeletedFalse(employeeId, "APPROVED")) {
-                BigDecimal amt = nz(b.getAmount());
-                if ("INCENTIVE".equalsIgnoreCase(b.getBonusType())) incentive = incentive.add(amt);
-                else if (b.getProject() != null || "PROJECT_COMPLETION".equalsIgnoreCase(b.getBonusType()))
+                BigDecimal amt = nz(bo.getAmount());
+                if ("INCENTIVE".equalsIgnoreCase(bo.getBonusType())) incentive = incentive.add(amt);
+                else if (bo.getProject() != null || "PROJECT_COMPLETION".equalsIgnoreCase(bo.getBonusType()))
                     projectBonus = projectBonus.add(amt);
                 else manualBonus = manualBonus.add(amt);
-                b.setStatus("PAID");
-                b.setPaidAt(LocalDateTime.now());
-                b.setPaidSalaryRecordId(rec.getId());
-                bonusRepository.save(b);
+                bo.setStatus("PAID");
+                bo.setPaidAt(LocalDateTime.now());
+                bo.setPaidSalaryRecordId(rec.getId());
+                bonusRepository.save(bo);
             }
         }
-        manualBonus = manualBonus.add(nz(extraBonus));
 
         // Approved, unapplied manual deductions (respect a target period if the deduction set one).
         BigDecimal manualDeduction = BigDecimal.ZERO;
@@ -557,25 +573,41 @@ public class PayrollService {
         rec.setTotalDeductions(totalDeductions);
         rec.setDeductions(totalDeductions);
         rec.setNetSalary(gross.subtract(totalDeductions));
-        return salaryRepository.save(rec);
+        rec = salaryRepository.save(rec);
+
+        // Remember the choice so next month's preview defaults to it.
+        if (!b.equalsIgnoreCase(employee.getSalaryType())) {
+            employee.setSalaryType(b);
+            employeeRepository.save(employee);
+        }
+        return rec;
     }
 
-    /** Run hourly payroll for every hourly-paid, payroll-enabled employee for the period. Idempotent. */
+    /**
+     * Generate payslips for many employees in one go. {@code choices} maps employeeId → basis; an empty
+     * map means every payroll-enabled employee on their usual basis. Anyone already generated, or with
+     * neither a salary nor a rate, is skipped — running again only fills in whoever was missed.
+     */
     @Transactional
-    public Map<String, Object> runHourlyPayrollBulk(int month, int year) {
+    public Map<String, Object> generatePayslips(int month, int year, Map<Long, String> choices) {
+        YearMonth ym = YearMonth.of(year, month);
         int done = 0, skipped = 0;
         List<String> errors = new ArrayList<>();
         for (Employee e : employeeRepository.findByPayrollEnabledTrueAndIsDeletedFalse()) {
-            // Hourly run: only hourly-basis employees. Monthly-basis employees are paid by the monthly run.
-            if (!isHourlyBasis(e)) { skipped++; continue; }
-            // An hourly-basis employee still needs a rate on file to compute earnings.
-            if (e.getHourlyRate() == null) { skipped++; continue; }
+            if (choices != null && !choices.isEmpty() && !choices.containsKey(e.getId())) continue;
             if (salaryRepository.findByEmployeeIdAndMonthAndYear(e.getId(), month, year).isPresent()) {
                 skipped++;
                 continue;
             }
+            PayCalc c = calculate(e, ym);
+            String b = choices == null ? null : choices.get(e.getId());
+            b = b == null || b.isBlank() ? defaultBasis(e, c) : b.trim().toUpperCase();
+            if (b == null || !c.canPay(b)) {
+                skipped++;
+                continue;
+            }
             try {
-                runHourlyPayroll(e.getId(), month, year, BigDecimal.ZERO, BigDecimal.ZERO);
+                generatePayslip(e.getId(), month, year, b);
                 done++;
             } catch (Exception ex) {
                 errors.add(e.getId() + ": " + ex.getMessage());
@@ -626,6 +658,7 @@ public class PayrollService {
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("record", rec);
         out.put("recoveries", recoveryRepository.findBySalaryRecordId(salaryRecordId));
+        rec.setLineItems(lineItemRepository.findBySalaryRecordIdAndIsDeletedFalseOrderByIdAsc(salaryRecordId));
         out.put("workStats", employeeWorkStats(rec.getEmployee() != null ? rec.getEmployee().getId() : null));
         return out;
     }
@@ -682,13 +715,10 @@ public class PayrollService {
         BigDecimal effRate = nz(e.getHourlyRate());
         String rateSource = effRate.signum() > 0 ? "EXPLICIT" : "NONE";
         if (effRate.signum() <= 0) {
-            BigDecimal monthlyGross = BigDecimal.ZERO;
-            SalaryStructure s = structureRepository.findFirstByEmployeeIdAndActiveTrueOrderByIdDesc(employeeId).orElse(null);
-            if (s != null) monthlyGross = nz(s.getBasic()).add(nz(s.getHra())).add(nz(s.getAllowances())).add(nz(s.getSpecialAllowance()));
-            if (monthlyGross.signum() <= 0) monthlyGross = nz(e.getBaseSalary());
+            BigDecimal monthlyGross = nz(e.getBaseSalary());
             BigDecimal stdDaily = e.getStandardDailyHours() != null && e.getStandardDailyHours().signum() > 0
                     ? e.getStandardDailyHours() : new BigDecimal("8");
-            BigDecimal denom = stdDaily.multiply(BigDecimal.valueOf(STANDARD_WORKING_DAYS));
+            BigDecimal denom = stdDaily.multiply(BigDecimal.valueOf(workingDays(e)));
             if (monthlyGross.signum() > 0 && denom.signum() > 0) {
                 effRate = monthlyGross.divide(denom, 2, RoundingMode.HALF_UP);
                 rateSource = "DERIVED";
@@ -990,7 +1020,9 @@ public class PayrollService {
         l.setCode(e != null ? e.getEmployeeCode() : null);
         boolean hourly = "HOURLY".equalsIgnoreCase(r.getPayType());
         l.setPayModel(hourly ? "HOURLY" : "MONTHLY");
-        l.setBasisLabel(hourly
+        // Hours-based payslips (both bases) show hours; legacy fixed-salary payslips show days.
+        boolean hoursBased = hourly || nz(r.getWorkedHours()).signum() > 0 || r.getStandardHours() != null;
+        l.setBasisLabel(hoursBased
                 ? r.getAttendanceDays() + "d · " + compact(r.getWorkedHours()) + "h"
                         + (nz(r.getOvertimeHours()).signum() > 0 ? " · " + compact(r.getOvertimeHours()) + " OT" : "")
                 : compact(r.getPaidDays() != null ? r.getPaidDays() : r.getWorkingDays()) + " days");
@@ -1284,41 +1316,38 @@ public class PayrollService {
     public Employee saveWageSettings(Long employeeId, Employee payload) {
         Employee e = employeeRepository.findById(employeeId)
                 .orElseThrow(() -> new ResourceNotFoundException("Employee not found: " + employeeId));
-        e.setSalaryType(payload.getSalaryType() != null ? payload.getSalaryType() : "HOURLY");
-        e.setHourlyRate(payload.getHourlyRate());
-        e.setOvertimeRate(payload.getOvertimeRate());
-        e.setHolidayRate(payload.getHolidayRate());
-        e.setWeekendRate(payload.getWeekendRate());
-        e.setNightRate(payload.getNightRate());
-        if (payload.getOvertimeMultiplier() != null) e.setOvertimeMultiplier(payload.getOvertimeMultiplier());
-        if (payload.getWeekendMultiplier() != null) e.setWeekendMultiplier(payload.getWeekendMultiplier());
-        if (payload.getHolidayMultiplier() != null) e.setHolidayMultiplier(payload.getHolidayMultiplier());
-        if (payload.getNightMultiplier() != null) e.setNightMultiplier(payload.getNightMultiplier());
-        if (payload.getStandardDailyHours() != null) e.setStandardDailyHours(payload.getStandardDailyHours());
-        e.setMaxDailyHours(payload.getMaxDailyHours());
-        if (payload.getBonusEligible() != null) e.setBonusEligible(payload.getBonusEligible());
-        if (payload.getPayrollCycle() != null) e.setPayrollCycle(payload.getPayrollCycle());
-        e.setPaymentMethod(payload.getPaymentMethod());
-        if (payload.getBankAccount() != null) e.setBankAccount(payload.getBankAccount());
-        if (payload.getIfsc() != null) e.setIfsc(payload.getIfsc());
+        if (payload.getBaseSalary() != null && payload.getBaseSalary().signum() < 0)
+            throw new IllegalArgumentException("Monthly salary can't be negative.");
+        if (payload.getHourlyRate() != null && payload.getHourlyRate().signum() < 0)
+            throw new IllegalArgumentException("Hourly rate can't be negative.");
+        if (payload.getStandardDailyHours() != null
+                && (payload.getStandardDailyHours().signum() <= 0 || payload.getStandardDailyHours().compareTo(BigDecimal.valueOf(24)) > 0))
+            throw new IllegalArgumentException("Standard daily hours must be between 0 and 24.");
+        if (payload.getWorkingDaysPerMonth() != null
+                && (payload.getWorkingDaysPerMonth() < 1 || payload.getWorkingDaysPerMonth() > 31))
+            throw new IllegalArgumentException("Working days per month must be between 1 and 31.");
+        applyWageSettings(e, payload);
         return employeeRepository.save(e);
     }
 
     /**
-     * Flip an employee's pay basis (HOURLY ↔ MONTHLY) in one call, touching nothing else — used by the
-     * inline basis toggle on the payroll page. Only affects future payroll runs; an already-generated
-     * payslip for the current month is unchanged.
+     * Copy the wage fields the dialog edits onto an employee (managed for save, detached for preview).
+     * Holiday/night rates and payroll cycle are no longer edited (they never affected pay) and are left as-is.
      */
-    @Transactional
-    public Employee setPayBasis(Long employeeId, String salaryType) {
-        Employee e = employeeRepository.findById(employeeId)
-                .orElseThrow(() -> new ResourceNotFoundException("Employee not found: " + employeeId));
-        String t = salaryType == null ? "" : salaryType.trim().toUpperCase();
-        if (!"HOURLY".equals(t) && !"MONTHLY".equals(t)) {
-            throw new IllegalArgumentException("Pay basis must be HOURLY or MONTHLY.");
-        }
-        e.setSalaryType(t);
-        return employeeRepository.save(e);
+    private static void applyWageSettings(Employee e, Employee payload) {
+        e.setSalaryType(payload.getSalaryType() != null ? payload.getSalaryType() : "HOURLY");
+        if (payload.getBaseSalary() != null) e.setBaseSalary(payload.getBaseSalary()); // monthly salary
+        e.setHourlyRate(payload.getHourlyRate());
+        e.setOvertimeRate(payload.getOvertimeRate());
+        e.setWeekendRate(payload.getWeekendRate());
+        if (payload.getOvertimeMultiplier() != null) e.setOvertimeMultiplier(payload.getOvertimeMultiplier());
+        if (payload.getStandardDailyHours() != null) e.setStandardDailyHours(payload.getStandardDailyHours());
+        if (payload.getWorkingDaysPerMonth() != null) e.setWorkingDaysPerMonth(payload.getWorkingDaysPerMonth());
+        e.setMaxDailyHours(payload.getMaxDailyHours());
+        if (payload.getBonusEligible() != null) e.setBonusEligible(payload.getBonusEligible());
+        e.setPaymentMethod(payload.getPaymentMethod());
+        if (payload.getBankAccount() != null) e.setBankAccount(payload.getBankAccount());
+        if (payload.getIfsc() != null) e.setIfsc(payload.getIfsc());
     }
 
     // ============================================================ manual deductions
@@ -1426,30 +1455,6 @@ public class PayrollService {
     }
 
     // ============================================================ helpers
-    private SalaryStructure resolveStructure(Employee employee) {
-        SalaryStructure s = structureRepository.findFirstByEmployeeIdAndActiveTrueOrderByIdDesc(employee.getId())
-                .orElse(null);
-        if (s != null) return s;
-        // Fall back to a minimal structure derived from the employee's base salary so payroll can still run.
-        SalaryStructure fallback = new SalaryStructure();
-        fallback.setBasic(nz(employee.getBaseSalary()));
-        fallback.setPfEnabled(false);
-        fallback.setEsiEnabled(false);
-        return fallback;
-    }
-
-    /** LOP = ABSENT days (+0.5 per HALF_DAY) recorded that month; no attendance rows ⇒ assume fully paid. */
-    private BigDecimal computeLopDays(Long employeeId, YearMonth ym) {
-        List<Attendance> rows = attendanceRepository.findByEmployeeIdAndDateBetween(
-                employeeId, ym.atDay(1), ym.atEndOfMonth());
-        BigDecimal lop = BigDecimal.ZERO;
-        for (Attendance a : rows) {
-            if ("ABSENT".equalsIgnoreCase(a.getStatus())) lop = lop.add(BigDecimal.ONE);
-            else if ("HALF_DAY".equalsIgnoreCase(a.getStatus())) lop = lop.add(BigDecimal.valueOf(0.5));
-        }
-        return lop;
-    }
-
     private BigDecimal recoverAdvances(Long employeeId, SalaryRecord rec) {
         BigDecimal total = BigDecimal.ZERO;
         List<EmployeeAdvance> advances = advanceRepository

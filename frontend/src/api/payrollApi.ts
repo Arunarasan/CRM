@@ -1,7 +1,7 @@
 import api from '../lib/api';
 import {
-  SalaryStructure, SalaryRecord, EmployeeAdvance, EmployeeLoan, FinanceDashboard,
-  EmployeeDeduction, WageSettings, PayrollLine, PayrollSummary, PayrollRequest,
+  SalaryRecord, EmployeeAdvance, EmployeeLoan, FinanceDashboard,
+  EmployeeDeduction, WageSettings, PayrollLine, PayrollSummary, PayrollRequest, PayrollPreviewRow,
 } from '../types/payroll';
 
 export interface PayslipLineItem {
@@ -22,11 +22,6 @@ export interface PayslipEditView {
 // ApiResponse), so we read res.data directly.
 
 export const payrollApi = {
-  getStructure: (employeeId: number) =>
-    api.get<SalaryStructure>(`/hr/salary-structure/${employeeId}`).then((r) => r.data),
-  saveStructure: (employeeId: number, body: SalaryStructure) =>
-    api.post<SalaryStructure>(`/hr/salary-structure/${employeeId}`, body).then((r) => r.data),
-
   advancesForEmployee: (employeeId: number) =>
     api.get<EmployeeAdvance[]>(`/hr/employees/${employeeId}/advances`).then((r) => r.data),
   createAdvance: (employeeId: number, body: EmployeeAdvance) =>
@@ -41,22 +36,14 @@ export const payrollApi = {
   closeLoan: (id: number) =>
     api.post<EmployeeLoan>(`/hr/loans/${id}/close`).then((r) => r.data),
 
-  runPayroll: (params: { employeeId: number; month: number; year: number; overtimeHours?: number; bonus?: number; incentive?: number }) => {
-    const q = new URLSearchParams();
-    Object.entries(params).forEach(([k, v]) => { if (v != null) q.set(k, String(v)); });
-    return api.post<SalaryRecord>(`/hr/payroll/run?${q.toString()}`).then((r) => r.data);
-  },
-  runPayrollBulk: (month: number, year: number) =>
-    api.post<Record<string, unknown>>(`/hr/payroll/run-bulk?month=${month}&year=${year}`).then((r) => r.data),
-
-  // Hourly payroll run — attendance + OT + approved bonuses − deductions.
-  runHourlyPayroll: (params: { employeeId: number; month: number; year: number; bonus?: number; incentive?: number }) => {
-    const q = new URLSearchParams();
-    Object.entries(params).forEach(([k, v]) => { if (v != null) q.set(k, String(v)); });
-    return api.post<SalaryRecord>(`/hr/payroll/run-hourly?${q.toString()}`).then((r) => r.data);
-  },
-  runHourlyPayrollBulk: (month: number, year: number) =>
-    api.post<Record<string, unknown>>(`/hr/payroll/run-hourly-bulk?month=${month}&year=${year}`).then((r) => r.data),
+  // Hours-based payslips: preview the month's hours priced HOURLY vs MONTHLY, then generate on the
+  // chosen basis (omitted ⇒ the employee's usual basis).
+  payrollPreview: (month: number, year: number) =>
+    api.get<PayrollPreviewRow[]>(`/hr/payroll/preview?month=${month}&year=${year}`).then((r) => r.data),
+  generatePayslip: (employeeId: number, month: number, year: number, basis?: 'HOURLY' | 'MONTHLY') =>
+    api.post<SalaryRecord>(`/hr/payroll/generate?employeeId=${employeeId}&month=${month}&year=${year}${basis ? `&basis=${basis}` : ''}`).then((r) => r.data),
+  generatePayslips: (month: number, year: number, choices: Record<number, 'HOURLY' | 'MONTHLY'>) =>
+    api.post<{ generated: number; skipped: number; errors: string[] }>(`/hr/payroll/generate-bulk?month=${month}&year=${year}`, { choices }).then((r) => r.data),
   approvePayroll: (salaryRecordId: number) =>
     api.post<SalaryRecord>(`/hr/payroll/${salaryRecordId}/approve`).then((r) => r.data),
 
@@ -116,10 +103,9 @@ export const payrollApi = {
   // Full hourly wage settings
   saveWageSettings: (employeeId: number, body: WageSettings) =>
     api.put<any>(`/hr/employees/${employeeId}/wage-settings`, body).then((r) => r.data),
-
-  // Quick basis toggle (HOURLY ↔ MONTHLY) — inline action on the payroll page
-  setPayBasis: (employeeId: number, salaryType: "HOURLY" | "MONTHLY") =>
-    api.put<any>(`/hr/employees/${employeeId}/pay-basis?salaryType=${salaryType}`).then((r) => r.data),
+  // Live what-if: the month's real hours priced with unsaved settings (nothing is saved)
+  wagePreview: (employeeId: number, month: number, year: number, body: WageSettings) =>
+    api.post<PayrollPreviewRow>(`/hr/employees/${employeeId}/wage-preview?month=${month}&year=${year}`, body).then((r) => r.data),
 
   // Hourly pay register — which employee earned how much this month
   hourlyPayRegister: (month: number, year: number) =>

@@ -25,11 +25,14 @@ export default function PayslipPrint() {
 
   const emp = rec.employee || {};
   const name = [emp.firstName, emp.lastName].filter(Boolean).join(" ") || "Employee";
-  const hourly = rec.payType === "HOURLY";
+  // Hours-based payslips: HOURLY, and MONTHLY generated from hours (carry standardHours). Older
+  // fixed-salary payslips keep the Basic/HRA/PF layout.
+  const monthlyHours = rec.standardHours != null;
+  const hourly = rec.payType === "HOURLY" || monthlyHours;
 
   const earnings: [string, number][] = hourly
     ? [
-        ["Regular earnings", rec.regularEarnings ?? 0], ["Overtime pay", rec.overtimeAmount],
+        [monthlyHours ? "Salary for hours worked" : "Regular earnings", rec.regularEarnings ?? 0], ["Overtime pay", rec.overtimeAmount],
         ["Project bonus", rec.projectBonus ?? 0], ["Manual bonus", rec.manualBonus ?? 0],
         ["Incentive", rec.incentive],
       ]
@@ -46,6 +49,10 @@ export default function PayslipPrint() {
         ["PF", rec.pfAmount], ["ESI", rec.esiAmount], ["Professional tax", rec.professionalTax],
         ["Leave (LOP)", rec.leaveDeduction], ["Advance recovery", rec.advanceRecovery], ["Loan recovery", rec.loanRecovery],
       ];
+
+  // Named items added with "Edit payslip" — already included in the totals.
+  const lineRows = (cat: string): [string, number][] =>
+    (rec.lineItems ?? []).filter((i: any) => i.category === cat).map((i: any) => [i.label, i.amount]);
 
   return (
     <div className="p-4 md:p-8 max-w-3xl mx-auto">
@@ -74,7 +81,9 @@ export default function PayslipPrint() {
             <KV label="Attendance days" value={rec.attendanceDays ?? "—"} />
             <KV label="Worked hrs" value={rec.workedHours ?? "—"} />
             <KV label="Overtime hrs" value={rec.overtimeHours ?? "—"} />
-            <KV label="Hourly rate" value={rec.hourlyRate != null ? inr(rec.hourlyRate) : "—"} />
+            {monthlyHours
+              ? <KV label={`Monthly salary ÷ ${rec.standardHours} std hrs`} value={`${inr(rec.monthlySalary)} → ${inr(rec.hourlyRate)}/hr`} />
+              : <KV label="Hourly rate" value={rec.hourlyRate != null ? inr(rec.hourlyRate) : "—"} />}
             <KV label="OT rate" value={rec.overtimeRate != null ? inr(rec.overtimeRate) : "—"} />
           </div>
         ) : (
@@ -86,8 +95,8 @@ export default function PayslipPrint() {
         )}
 
         <div className="grid grid-cols-2 gap-6">
-          <Column title="Earnings" rows={earnings} total={rec.grossEarnings} />
-          <Column title="Deductions" rows={deductions} total={rec.totalDeductions} />
+          <Column title="Earnings" rows={[...earnings, ...lineRows("EARNING")]} total={rec.grossEarnings} />
+          <Column title="Deductions" rows={[...deductions, ...lineRows("DEDUCTION")]} total={rec.totalDeductions} />
         </div>
 
         <div className="mt-6 flex items-center justify-between bg-slate-50 border rounded-xl p-4">

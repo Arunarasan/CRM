@@ -60,7 +60,6 @@ public class WorkforceService {
             Employee e = employeeRepository.findByWorkforceId(workforceId).orElse(null);
             if (e != null) {
                 out.put("employeeId", e.getId());
-                out.put("structure", payrollService.getStructure(e.getId()));
                 out.put("payslips", payrollService.historyForEmployee(e.getId()));
                 out.put("advances", payrollService.advancesForEmployee(e.getId()));
                 out.put("loans", payrollService.loansForEmployee(e.getId()));

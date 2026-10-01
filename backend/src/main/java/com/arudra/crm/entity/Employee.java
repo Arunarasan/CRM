@@ -125,6 +125,10 @@ public class Employee extends BaseEntity {
     @Column(name = "standard_daily_hours", nullable = false, precision = 5, scale = 2)
     private BigDecimal standardDailyHours = new BigDecimal("8.00");
 
+    /** Paid working days in a month (V102). Standard monthly hours = standardDailyHours × this. */
+    @Column(name = "working_days_per_month", nullable = false)
+    private Integer workingDaysPerMonth = 26;
+
     // --- Explicit hourly rate overrides (V25). NULL = derive from hourly_rate x the matching multiplier.
     /** Explicit overtime pay per hour (e.g. ₹350). NULL ⇒ hourlyRate × overtimeMultiplier. */
     @Column(name = "overtime_rate", precision = 10, scale = 2)

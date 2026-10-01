@@ -3,10 +3,10 @@ import { Link } from "react-router-dom";
 import { workforceApi } from "@/api/workforceApi";
 import { payrollApi } from "@/api/payrollApi";
 import { contractorApi } from "@/api/contractorApi";
-import type { WorkforceFinance, SalaryStructure, PayrollRequest } from "@/types/payroll";
+import type { WorkforceFinance, PayrollRequest, PayrollPreviewRow } from "@/types/payroll";
 import { toast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
-import { Input, BaseInput } from "@/components/ui/input";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -44,12 +44,10 @@ export default function WorkforceFinanceTab({ workforceId }: { workforceId: numb
 /* ----------------------------------------------------------------- Employee */
 function EmployeeFinance({ fin, reload }: { fin: WorkforceFinance; reload: () => void }) {
   const empId = fin.employeeId!;
-  const [structOpen, setStructOpen] = useState(false);
   const [advOpen, setAdvOpen] = useState(false);
   const [loanOpen, setLoanOpen] = useState(false);
   const [runOpen, setRunOpen] = useState(false);
   const [reqs, setReqs] = useState<PayrollRequest[]>([]);
-  const s = fin.structure;
 
   const loadReqs = useCallback(() => {
     payrollApi.payrollRequestsForEmployee(empId).then(setReqs).catch(() => setReqs([]));
@@ -68,21 +66,6 @@ function EmployeeFinance({ fin, reload }: { fin: WorkforceFinance; reload: () =>
 
   return (
     <div className="space-y-5">
-      <Card title="Salary structure" action={<Button variant="outline" size="sm" onClick={() => setStructOpen(true)}>Edit</Button>}>
-        {s ? (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-            <KV label="Basic" value={inr(s.basic)} />
-            <KV label="HRA" value={inr(s.hra)} />
-            <KV label="Allowances" value={inr(s.allowances)} />
-            <KV label="Special" value={inr(s.specialAllowance)} />
-            <KV label="PF" value={s.pfEnabled ? `${s.pfPercentage}%` : "—"} />
-            <KV label="ESI" value={s.esiEnabled ? "Yes" : "—"} />
-            <KV label="Prof. tax" value={inr(s.professionalTax)} />
-            <KV label="OT rate/hr" value={inr(s.overtimeHourlyRate)} />
-          </div>
-        ) : <p className="text-sm text-muted-foreground">No salary structure set. Add one to run payroll.</p>}
-      </Card>
-
       <Card title="Payslips" action={<Button size="sm" onClick={() => setRunOpen(true)}><Plus className="w-4 h-4 mr-1" />Generate</Button>}>
         <table className="w-full text-sm">
           <thead className="text-slate-500 text-left"><tr>
@@ -136,7 +119,6 @@ function EmployeeFinance({ fin, reload }: { fin: WorkforceFinance; reload: () =>
         </Card>
       )}
 
-      {structOpen && <StructureDialog employeeId={empId} initial={s} onClose={() => setStructOpen(false)} onSaved={() => { setStructOpen(false); reload(); }} />}
       {advOpen && <AdvanceDialog employeeId={empId} onClose={() => setAdvOpen(false)} onSaved={() => { setAdvOpen(false); reload(); }} />}
       {loanOpen && <LoanDialog employeeId={empId} onClose={() => setLoanOpen(false)} onSaved={() => { setLoanOpen(false); reload(); }} />}
       {runOpen && <RunPayrollDialog employeeId={empId} onClose={() => setRunOpen(false)} onSaved={() => { setRunOpen(false); reload(); }} />}
@@ -242,38 +224,6 @@ function ContractorFinance({ fin, projectWise }: { fin: WorkforceFinance; projec
 }
 
 /* ---------------------------------------------------------------- dialogs */
-function StructureDialog({ employeeId, initial, onClose, onSaved }: { employeeId: number; initial?: SalaryStructure; onClose: () => void; onSaved: () => void }) {
-  const [f, setF] = useState<SalaryStructure>(initial || {
-    basic: 0, hra: 0, allowances: 0, specialAllowance: 0, pfEnabled: true, pfPercentage: 12,
-    esiEnabled: false, professionalTax: 0, overtimeHourlyRate: 0,
-  });
-  const set = (k: keyof SalaryStructure, v: any) => setF((p) => ({ ...p, [k]: v }));
-  return (
-    <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader><DialogTitle>Salary structure</DialogTitle></DialogHeader>
-        <div className="grid grid-cols-2 gap-3">
-          <Num label="Basic" v={f.basic} on={(v) => set("basic", v)} />
-          <Num label="HRA" v={f.hra} on={(v) => set("hra", v)} />
-          <Num label="Allowances" v={f.allowances} on={(v) => set("allowances", v)} />
-          <Num label="Special allowance" v={f.specialAllowance} on={(v) => set("specialAllowance", v)} />
-          <Num label="PF %" v={f.pfPercentage} on={(v) => set("pfPercentage", v)} />
-          <Num label="Professional tax" v={f.professionalTax} on={(v) => set("professionalTax", v)} />
-          <Num label="OT hourly rate" v={f.overtimeHourlyRate} on={(v) => set("overtimeHourlyRate", v)} />
-          <div className="flex items-end gap-4">
-            <label className="flex items-center gap-1 text-sm"><BaseInput type="checkbox" checked={f.pfEnabled} onChange={(e) => set("pfEnabled", e.target.checked)} />PF</label>
-            <label className="flex items-center gap-1 text-sm"><BaseInput type="checkbox" checked={f.esiEnabled} onChange={(e) => set("esiEnabled", e.target.checked)} />ESI</label>
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={() => payrollApi.saveStructure(employeeId, f).then(onSaved)}>Save</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 function AdvanceDialog({ employeeId, onClose, onSaved }: { employeeId: number; onClose: () => void; onSaved: () => void }) {
   const [f, setF] = useState({ amount: 0, monthlyRecovery: 0, reason: "" });
   return (
@@ -314,14 +264,38 @@ function LoanDialog({ employeeId, onClose, onSaved }: { employeeId: number; onCl
   );
 }
 
+/** Generate one month's payslip from attendance hours — the employee's hours priced Hourly vs Monthly. */
 function RunPayrollDialog({ employeeId, onClose, onSaved }: { employeeId: number; onClose: () => void; onSaved: () => void }) {
   const now = new Date();
-  const [f, setF] = useState({ month: now.getMonth() + 1, year: now.getFullYear(), overtimeHours: 0, bonus: 0, incentive: 0 });
+  const [f, setF] = useState({ month: now.getMonth() + 1, year: now.getFullYear() });
+  const [row, setRow] = useState<PayrollPreviewRow | null>(null);
+  const [basis, setBasis] = useState<"HOURLY" | "MONTHLY" | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    setRow(null);
+    payrollApi.payrollPreview(f.month, f.year)
+      .then((rows) => { const r = rows.find((x) => x.employeeId === employeeId) || null; setRow(r); setBasis(r?.defaultBasis ?? null); })
+      .catch(() => setRow(null));
+  }, [employeeId, f.month, f.year]);
   const run = () => {
     setErr(null);
-    payrollApi.runPayroll({ employeeId, ...f }).then(onSaved)
+    payrollApi.generatePayslip(employeeId, f.month, f.year, basis ?? undefined).then(onSaved)
       .catch((e) => setErr(e?.response?.data?.message || e?.message || "Failed"));
+  };
+  const opt = (b: "HOURLY" | "MONTHLY") => {
+    const o = row ? (b === "HOURLY" ? row.hourly : row.monthly) : null;
+    const on = basis === b;
+    return (
+      <button type="button" disabled={!o?.available} onClick={() => setBasis(b)}
+        className={`rounded-lg border px-3 py-2 text-left disabled:opacity-40 ${on ? "border-primary bg-primary/5 ring-1 ring-primary" : "bg-white"}`}>
+        <div className="text-[10px] font-bold uppercase text-slate-500">{b === "HOURLY" ? "Hourly" : "Monthly"}</div>
+        <div className="text-base font-bold">{o?.available ? inr(o.total) : "—"}</div>
+        <div className="text-[11px] text-slate-500">
+          {!o?.available ? (b === "HOURLY" ? "No hourly rate" : "No monthly salary")
+            : b === "HOURLY" ? `${inr(row!.hourly.rate)}/h` : `${inr(row!.monthly.salary)}/mo`}
+        </div>
+      </button>
+    );
   };
   return (
     <Dialog open onOpenChange={onClose}>
@@ -330,14 +304,23 @@ function RunPayrollDialog({ employeeId, onClose, onSaved }: { employeeId: number
         <div className="grid grid-cols-2 gap-3">
           <Num label="Month" v={f.month} on={(v) => setF({ ...f, month: v })} />
           <Num label="Year" v={f.year} on={(v) => setF({ ...f, year: v })} />
-          <Num label="Overtime hours" v={f.overtimeHours} on={(v) => setF({ ...f, overtimeHours: v })} />
-          <Num label="Bonus" v={f.bonus} on={(v) => setF({ ...f, bonus: v })} />
-          <Num label="Incentive" v={f.incentive} on={(v) => setF({ ...f, incentive: v })} />
         </div>
+        {row ? (
+          <div className="space-y-2">
+            <p className="text-sm text-slate-600">
+              <b>{row.workedHours} h</b> worked of {row.standardHours} std · {row.attendanceDays} days
+              {Number(row.overtimeHours) > 0 ? ` · ${row.overtimeHours} h OT` : ""}
+            </p>
+            {row.recordId
+              ? <p className="text-sm text-amber-700">A payslip already exists for this month.</p>
+              : <div className="grid grid-cols-2 gap-2">{opt("HOURLY")}{opt("MONTHLY")}</div>}
+            <p className="text-xs text-slate-400">Approved bonuses, deductions and advance/loan recovery are added on generate. Extra items can be added after with “Edit payslip”.</p>
+          </div>
+        ) : <p className="text-sm text-slate-400">Loading hours…</p>}
         {err && <p className="text-sm text-rose-600">{err}</p>}
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={run}>Generate</Button>
+          <Button onClick={run} disabled={!basis || !!row?.recordId}>Generate</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

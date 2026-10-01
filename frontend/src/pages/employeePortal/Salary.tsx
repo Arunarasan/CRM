@@ -26,10 +26,11 @@ const BONUS_LABEL: Record<string, string> = {
 };
 
 function PayslipDetail({ slip, onBack, employeeName, employeeCode }: { slip: Payslip; onBack: () => void; employeeName?: string; employeeCode?: string }) {
-  const hourly = slip.payType === 'HOURLY';
+  const monthlyHours = slip.standardHours != null; // MONTHLY generated from hours
+  const hourly = slip.payType === 'HOURLY' || monthlyHours;
   const earnings: [string, number][] = hourly
     ? [
-        ['Regular earnings', slip.regularEarnings ?? 0], ['Overtime pay', slip.overtimeAmount],
+        [monthlyHours ? 'Salary for hours worked' : 'Regular earnings', slip.regularEarnings ?? 0], ['Overtime pay', slip.overtimeAmount],
         ['Project bonus', slip.projectBonus ?? 0], ['Manual bonus', slip.manualBonus ?? 0],
         ['Incentive', slip.incentive],
       ]
@@ -67,7 +68,7 @@ function PayslipDetail({ slip, onBack, employeeName, employeeCode }: { slip: Pay
 
       <div className="mx-3 grid grid-cols-3 gap-2 pb-3 text-center">
         {(hourly
-          ? [['Days', slip.attendanceDays], ['Hrs', slip.workedHours], ['OT hrs', slip.overtimeHours]]
+          ? [['Days', slip.attendanceDays], [monthlyHours ? `Hrs / ${slip.standardHours}` : 'Hrs', slip.workedHours], ['OT hrs', slip.overtimeHours]]
           : [['Working', slip.workingDays], ['Paid', slip.paidDays], ['LOP', slip.lopDays]]
         ).map(([l, v]) => (
           <div key={l as string} className="rounded-lg border bg-card p-2 shadow-sm">
