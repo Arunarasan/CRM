@@ -1,0 +1,21 @@
+{
+  "name": "JB Decor CRM",
+  "short_name": "JB CRM",
+  "start_url": "/crm/",
+  "display": "standalone",
+  "background_color": "#0B2B23",
+  "theme_color": "#0B2B23",
+  "icons": [
+    {
+      "src": "favicon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "favicon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
