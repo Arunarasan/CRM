@@ -24,18 +24,9 @@
   <url><loc>https://jbdecorcdm.com/products/office</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
 
   <!-- Services -->
-  <url><loc>https://jbdecorcdm.com/services/interior-design</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
-  <url><loc>https://jbdecorcdm.com/services/residential-interiors</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
-  <url><loc>https://jbdecorcdm.com/services/commercial-interiors</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
-  <url><loc>https://jbdecorcdm.com/services/office-interiors</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
-  <url><loc>https://jbdecorcdm.com/services/modular-kitchen</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
-  <url><loc>https://jbdecorcdm.com/services/wardrobe-design</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
-  <url><loc>https://jbdecorcdm.com/services/false-ceiling</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
-  <url><loc>https://jbdecorcdm.com/services/lighting-design</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
-  <url><loc>https://jbdecorcdm.com/services/custom-furniture</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
-  <url><loc>https://jbdecorcdm.com/services/turnkey-interiors</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
-  <url><loc>https://jbdecorcdm.com/services/installation</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
-  <url><loc>https://jbdecorcdm.com/services/renovation</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://jbdecorcdm.com/services/measurement-service</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://jbdecorcdm.com/services/tailoring-stitching</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://jbdecorcdm.com/services/installation-fitting</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
 
   <!-- Portfolio projects -->
   <url><loc>https://jbdecorcdm.com/portfolio/emerald-residence</loc><changefreq>yearly</changefreq><priority>0.5</priority></url>
