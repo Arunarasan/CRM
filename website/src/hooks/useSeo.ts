@@ -1,9 +1,8 @@
 import { useEffect } from 'react'
-import { site, siteUrl, logoUrl, absoluteUrl } from '@/config/site'
+import { site, siteUrl, logoUrl, absoluteUrl, seoDescription } from '@/config/site'
 
 const SITE = site.name
-const DEFAULT_DESCRIPTION =
-  'JB Decor crafts bespoke luxury interiors — residential, commercial, and turnkey design. Explore our portfolio, browse premium décor, and book a consultation.'
+const DEFAULT_DESCRIPTION = seoDescription
 
 function upsertMeta(attr: 'name' | 'property', key: string, content: string) {
   let el = document.head.querySelector<HTMLMetaElement>(`meta[${attr}="${key}"]`)

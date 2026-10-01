@@ -19,7 +19,7 @@ const philosophy = [
 ]
 
 export default function About() {
-  useSeo({ title: 'About Us', description: 'For over 16 years, JB Decor has designed and delivered interiors that balance elegance, function, and craftsmanship.' })
+  useSeo({ title: 'About Us', description: 'For over 16 years, JB Decor has supplied and fitted curtains, blinds, mosquito nets and home décor — measured, stitched and installed by our own team.' })
   const content = usePageContent('about')
   return (
     <>

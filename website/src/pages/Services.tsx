@@ -11,8 +11,8 @@ import { useSeo, itemListJsonLd } from '@/hooks/useSeo'
 export default function Services() {
   const services = usePublicData(servicesSeed, publicApi.services)
   useSeo({
-    title: 'Our Services',
-    description: 'Interior design, modular kitchens, wardrobes, lighting, false ceilings, and complete turnkey interiors by JB Decor.',
+    title: 'Measurement, Stitching & Installation',
+    description: 'On-site measurement, in-house curtain stitching and professional installation of curtains, blinds, mosquito nets and wall décor — plus false ceilings, modular kitchens and PVC cupboards by JB Decor.',
     jsonLd: itemListJsonLd('JB Decor Services',
       services.map((s) => ({ name: s.title, path: `/services/${s.slug}` }))),
   })

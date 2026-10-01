@@ -16,8 +16,8 @@ export default function Products() {
   const categories = usePublicData(categoriesSeed, publicApi.categories)
   const products = usePublicData(productsSeed, publicApi.products)
   useSeo({
-    title: 'Our Collections',
-    description: 'Browse JB Decor by category — furniture, lighting, décor, curtains and more. Explore each collection and enquire for made-to-order pieces.',
+    title: 'Curtains, Blinds & Home Décor Collections',
+    description: 'Browse JB Decor collections — customised curtains, PVC and printed blinds, mosquito nets, curtain rods and accessories, mats, carpets, wall décor and interior works. Enquire for colours and sizes.',
     jsonLd: itemListJsonLd('JB Decor Collections',
       categories.map((c) => ({ name: c.name, path: `/products/${c.slug}` }))),
   })

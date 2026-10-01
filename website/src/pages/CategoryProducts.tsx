@@ -24,9 +24,15 @@ export default function CategoryProducts() {
   const products = usePublicData(productsSeed, publicApi.products)
 
   const category = categories.find((c) => c.slug === categorySlug)
+  // Name a few real products in the snippet so the description matches long-tail searches.
+  const sampleNames = category
+    ? products.filter((p) => p.categorySlug === category.slug).slice(0, 4).map((p) => p.name).join(', ')
+    : ''
   useSeo({
-    title: category ? `${category.name} — Collection` : 'Collection',
-    description: category ? `Explore JB Decor's ${category.name.toLowerCase()} collection. Made-to-order pieces with a range of finishes and colours.` : undefined,
+    title: category ? `${category.name} — Colours, Sizes & Installation` : 'Collection',
+    description: category
+      ? `Explore ${category.name.toLowerCase()} from JB Decor${sampleNames ? ` — ${sampleNames}` : ''}. Customised to your size with on-site measurement and installation. Enquire on WhatsApp.`
+      : undefined,
   })
 
   const results = useMemo(() => {

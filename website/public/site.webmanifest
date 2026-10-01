@@ -1,6 +1,7 @@
 {
   "name": "JB Decor",
   "short_name": "JB Decor",
+  "description": "Customised curtains, blinds, mosquito nets, mats, wall décor and interior works — measured, stitched and installed by JB Decor.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0B2B23",

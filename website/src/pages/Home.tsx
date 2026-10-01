@@ -10,7 +10,7 @@ import { ConsultationCTA } from '@/components/home/ConsultationCTA'
 import { useSeo } from '@/hooks/useSeo'
 
 export default function Home() {
-  useSeo({ title: 'Premium Interior Design & Décor', description: 'JB Decor crafts bespoke luxury interiors — residential, commercial, and turnkey design. Explore our portfolio, shop premium décor, and book a consultation.' })
+  useSeo({ title: 'Curtains, Blinds, Mosquito Nets & Home Décor', description: 'JB Decor — customised curtains, blinds, mosquito nets, curtain rods, mats, wall décor and interior works. On-site measurement, in-house stitching and professional installation.' })
   return (
     <>
       <HeroSlider />

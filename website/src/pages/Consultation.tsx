@@ -18,7 +18,7 @@ const assurances = [
 ]
 
 export default function Consultation() {
-  useSeo({ title: 'Book a Free Consultation', description: 'Book a complimentary interior design consultation with JB Decor. Tell us about your space and get a dedicated designer, transparent quotes, and expert guidance.' })
+  useSeo({ title: 'Book a Free Consultation', description: 'Book a free consultation and site measurement with JB Decor for curtains, blinds, mosquito nets and interior works. Get expert advice and a transparent quote.' })
   const [sent, setSent] = useState(false)
   const [sending, setSending] = useState(false)
   const [params] = useSearchParams()

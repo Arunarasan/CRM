@@ -32,15 +32,15 @@ const LOGO = `${SITE_URL}/jb-decor-logo.png`
 const ROUTES = [
   {
     path: '/products',
-    title: 'Our Collections',
+    title: 'Curtains, Blinds & Home Décor Collections',
     description:
-      'Browse JB Decor by category — furniture, lighting, décor, curtains and more. Explore each collection and enquire for made-to-order pieces.',
+      'Browse JB Decor collections — customised curtains, PVC and printed blinds, mosquito nets, curtain rods and accessories, mats, carpets, wall décor and interior works. Enquire for colours and sizes.',
   },
   {
     path: '/services',
-    title: 'Our Services',
+    title: 'Measurement, Stitching & Installation',
     description:
-      'Interior design, modular kitchens, wardrobes, lighting, false ceilings, and complete turnkey interiors by JB Decor.',
+      'On-site measurement, in-house curtain stitching and professional installation of curtains, blinds, mosquito nets and wall décor — plus false ceilings, modular kitchens and PVC cupboards by JB Decor.',
   },
   {
     path: '/portfolio',
@@ -64,19 +64,19 @@ const ROUTES = [
     path: '/about',
     title: 'About Us',
     description:
-      'For over 16 years, JB Decor has designed and delivered interiors that balance elegance, function, and craftsmanship.',
+      'For over 16 years, JB Decor has supplied and fitted curtains, blinds, mosquito nets and home décor — measured, stitched and installed by our own team.',
   },
   {
     path: '/contact',
     title: 'Contact Us',
     description:
-      'Get in touch with JB Decor — tell us about your space and book a consultation with our design team.',
+      'Contact JB Decor for curtains, blinds, mosquito nets, wall décor and interior works — call, WhatsApp, or book a site measurement.',
   },
   {
     path: '/consultation',
     title: 'Book a Free Consultation',
     description:
-      'Book a complimentary interior design consultation with JB Decor. Tell us about your space and get a dedicated designer, transparent quotes, and expert guidance.',
+      'Book a free consultation and site measurement with JB Decor for curtains, blinds, mosquito nets and interior works. Get expert advice and a transparent quote.',
   },
 ]
 

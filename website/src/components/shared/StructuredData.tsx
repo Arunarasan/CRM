@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { useSite } from '@/hooks/useSiteSettings'
-import { siteUrl, logoUrl } from '@/config/site'
+import { siteUrl, logoUrl, seoDescription, seoProductLines } from '@/config/site'
 
 const MARK = 'data-site-jsonld'
 
@@ -23,7 +23,7 @@ export function StructuredData() {
         try { return new URL(u).pathname.replace(/\/+$/, '').length > 0 } catch { return false }
       })
 
-    const description = `${site.name} — ${site.tagline}. ${site.positioning}`
+    const description = seoDescription
     // Structured address — only include the parts that are actually set, so an unfilled
     // city/region/postal doesn't emit empty fields Google penalises.
     const address = {
@@ -44,10 +44,13 @@ export function StructuredData() {
     const blocks = [
       {
         '@context': 'https://schema.org',
-        '@type': 'LocalBusiness',
+        // HomeGoodsStore is a LocalBusiness subtype — a closer match than the generic type for a
+        // curtains/blinds/décor business, which helps local "near me" classification.
+        '@type': 'HomeGoodsStore',
         '@id': `${siteUrl}/#business`,
         name: site.name,
         description,
+        knowsAbout: seoProductLines,
         url: `${siteUrl}/`,
         logo: logoUrl,
         image: logoUrl,
@@ -60,7 +63,7 @@ export function StructuredData() {
           opens: '10:00',
           closes: '19:00',
         },
-        priceRange: '₹₹₹',
+        priceRange: '₹₹',
         ...(geo ? { geo } : {}),
         ...(sameAs.length ? { sameAs } : {}),
       },

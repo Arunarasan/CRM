@@ -11,7 +11,7 @@ import { toast } from '@/store/toast'
 import { useSeo } from '@/hooks/useSeo'
 
 export default function Contact() {
-  useSeo({ title: 'Contact Us', description: 'Get in touch with JB Decor — tell us about your space and book a consultation with our design team.' })
+  useSeo({ title: 'Contact Us', description: 'Contact JB Decor for curtains, blinds, mosquito nets, wall décor and interior works — call, WhatsApp, or book a site measurement.' })
   const site = useSite()
   const whatsappHref = useWhatsappLink('Hello JB Decor, I have an enquiry.')
   const content = usePageContent('contact')

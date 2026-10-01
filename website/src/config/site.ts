@@ -20,6 +20,20 @@ export function absoluteUrl(pathOrUrl: string): string {
   return siteUrl + (pathOrUrl.startsWith('/') ? pathOrUrl : `/${pathOrUrl}`)
 }
 
+/** Default meta/social description and the business summary used in structured data. Describes
+ *  what JB Decor actually sells (the real catalog), so search snippets match the products. */
+export const seoDescription =
+  'JB Decor — customised curtains, blinds, mosquito nets, curtain rods, mats, wall décor and interior works. On-site measurement, in-house stitching and professional installation.'
+
+/** Core product lines — emitted as LocalBusiness `knowsAbout` so search engines map the business
+ *  to these searches. Keep in step with the live catalog categories. */
+export const seoProductLines = [
+  'Curtains', 'Customised Curtains', 'Curtain Stitching', 'Blinds', 'PVC Blinds', 'Printed Blinds',
+  'Mosquito Nets', 'Pleated Mosquito Nets', 'Curtain Rods & Accessories', 'Mats & Flooring',
+  'Carpets', 'Artificial Grass', 'Wall Décor', 'Wallpaper', 'Home Décor', 'False Ceiling',
+  'Modular Kitchen', 'PVC Cupboards', 'Curtain & Blind Installation',
+]
+
 export const site = {
   name: 'JB Decor',
   tagline: 'Premium Interior Design & Décor',
