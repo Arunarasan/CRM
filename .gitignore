@@ -33,3 +33,6 @@ Thumbs.db
 # Logs
 **/logs/
 *.log
+
+# Raw JB Decor photo library (served from Cloudflare R2, not the repo)
+jb/
