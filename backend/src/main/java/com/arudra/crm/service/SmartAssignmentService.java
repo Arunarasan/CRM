@@ -41,6 +41,7 @@ public class SmartAssignmentService {
     @Autowired private TaskRepository taskRepository;
     @Autowired private ProjectRepository projectRepository;
     @Autowired private LeadRepository leadRepository;
+    @Autowired private com.arudra.crm.repository.BundleRepository bundleRepository;
     @Autowired private DepartmentRepository departmentRepository;
     @Autowired private AssignmentSettingsRepository settingsRepository;
     @Autowired private AssignmentHistoryRepository historyRepository;
@@ -611,6 +612,8 @@ public class SmartAssignmentService {
     public List<Map<String, Object>> taskBoard() {
         List<Map<String, Object>> rows = new ArrayList<>();
         for (Task t : taskRepository.findAll()) {
+            // A cancelled bill's bundle work is void — keep it out of the assignable queue.
+            if ("BUNDLE".equals(t.getSource()) && "CANCELLED".equals(t.getStatus())) continue;
             rows.add(buildTaskRow(t));
         }
         return rows;
@@ -680,6 +683,14 @@ public class SmartAssignmentService {
         row.put("bucket", bucket);
         row.put("category", cat[0]);
         row.put("categoryLabel", cat[1]);
+        // Stitching-lane tasks link to their bundle page (scan / move it there).
+        if ("STITCHING".equals(cat[0])) {
+            bundleRepository.findFirstByTaskIdAndIsDeletedFalse(t.getId()).ifPresent(b -> {
+                row.put("bundleId", b.getId());
+                row.put("bundleCode", b.getCode());
+                row.put("bundleStatus", b.getStatus());
+            });
+        }
         row.put("assignees", assignees);
         // Data-entry hold: flag + live auto-release instant so the board can show a countdown timer.
         row.put("dataEntry", employeeTaskService.isDataEntryLeadTask(t));
@@ -696,6 +707,7 @@ public class SmartAssignmentService {
      */
     private String[] taskCategory(Task t) {
         String source = t.getSource() == null ? "" : t.getSource().toUpperCase();
+        if ("BUNDLE".equals(source))                             return new String[]{"STITCHING", "Stitching"};
         if (t.getInvoiceId() != null)                            return new String[]{"INSTALLATION", "Installation"};
         if ("ENQUIRY".equals(source) || "SERVICE_REQUEST".equals(source)) return new String[]{"ENQUIRY", "Enquiry"};
         if (t.getLeadId() != null)                               return new String[]{"LEAD", "Lead"};

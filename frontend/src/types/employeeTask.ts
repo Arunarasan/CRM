@@ -38,7 +38,7 @@ export interface TaskCard {
   customer?: string | null; // customer/lead name behind the task
   location?: string | null; // compact site location (address/city)
   assignmentType?: 'SINGLE_EMPLOYEE' | 'MULTIPLE_EMPLOYEES' | 'TEAM' | null;
-  category?: string | null; // origin lane code: LEAD | PROJECT | FIELD_WORK | INSTALLATION | ENQUIRY | OTHER
+  category?: string | null; // origin lane code: LEAD | PROJECT | FIELD_WORK | STITCHING | INSTALLATION | ENQUIRY | OTHER
   categoryLabel?: string | null; // human label for the lane
 }
 

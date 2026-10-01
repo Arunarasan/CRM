@@ -88,10 +88,13 @@ export interface TaskBoardRow {
   assignees: TaskAssigneeView[];
   dataEntry?: boolean; // quick data-entry lead task — capacity-exempt, has a hold timer
   holdExpiresAt?: string | null; // ISO time this held data-entry task auto-releases (countdown)
+  bundleId?: number;      // STITCHING lane: the stickered bundle behind this task
+  bundleCode?: string;
+  bundleStatus?: string;
 }
 
 export type TaskCategory =
-  | 'LEAD' | 'PROJECT' | 'FIELD_WORK' | 'INSTALLATION' | 'ENQUIRY' | 'OTHER';
+  | 'LEAD' | 'PROJECT' | 'FIELD_WORK' | 'STITCHING' | 'INSTALLATION' | 'ENQUIRY' | 'OTHER';
 
 export interface RosterRow {
   employeeId: number;

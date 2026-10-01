@@ -35,6 +35,7 @@ public class WorkflowOverdueScheduler {
     @Autowired private TaskRepository taskRepository;
     @Autowired private TaskAssignmentRepository assignmentRepository;
     @Autowired private NotificationService notificationService;
+    @Autowired private com.arudra.crm.repository.BundleRepository bundleRepository;
 
     @Scheduled(cron = "0 15 8 * * *")
     public void escalateOverdueTasks() {
@@ -45,6 +46,10 @@ public class WorkflowOverdueScheduler {
         for (Task task : overdue) {
             long daysOver = ChronoUnit.DAYS.between(task.getDueDate(), today);
             String url = task.getProject() != null ? "/projects/" + task.getProject().getId() : "/tasks";
+            if ("BUNDLE".equals(task.getSource())) {
+                url = bundleRepository.findFirstByTaskIdAndIsDeletedFalse(task.getId())
+                        .map(b -> "/bundles/" + b.getId()).orElse("/bundles");
+            }
 
             List<TaskAssignment> owners = assignmentRepository.findByTaskId(task.getId()).stream()
                     .filter(a -> a.getEmployee() != null && ACTIVE_ASSIGNMENT_STATUSES.contains(a.getStatus()))

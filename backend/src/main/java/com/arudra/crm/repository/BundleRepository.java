@@ -21,6 +21,9 @@ public interface BundleRepository extends JpaRepository<Bundle, Long> {
 
     List<Bundle> findByInvoiceIdAndIsDeletedFalseOrderByBundleNoAsc(Long invoiceId);
 
+    /** The bundle behind a task-board task (tasks with source BUNDLE). */
+    Optional<Bundle> findFirstByTaskIdAndIsDeletedFalse(Long taskId);
+
     List<Bundle> findByIsDeletedFalseAndStatusNotIn(List<String> statuses);
 
     /**

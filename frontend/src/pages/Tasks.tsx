@@ -5,9 +5,10 @@ import { format } from "date-fns";
 import {
   Plus, Search, RefreshCw, Zap, Users, CheckCircle2, Inbox, ListChecks,
   AlertTriangle, TriangleAlert, Timer, Check, X, GitBranch, UserCheck, Circle,
-  FolderKanban, Target, ExternalLink,
+  FolderKanban, Target, ExternalLink, PackageCheck,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { BUNDLE_STATUS_LABELS } from "@/api/bundleApi";
 import {
   smartAssignmentApi, TaskBoardRow, TaskBucket, TaskCategory, RosterRow,
 } from "@/api/smartAssignmentApi";
@@ -93,6 +94,7 @@ const CATEGORIES: { id: TaskCategory; label: string; hint: string; badge: string
   { id: "LEAD",         label: "Lead",         hint: "Requirement · Site Visit · BOQ · Quotation", badge: "bg-violet-100 text-violet-700 border-violet-200" },
   { id: "PROJECT",      label: "Project",      hint: "Main project tasks & rework",                 badge: "bg-blue-100 text-blue-700 border-blue-200" },
   { id: "FIELD_WORK",   label: "Field Work",   hint: "On-site execution from the BOQ",              badge: "bg-emerald-100 text-emerald-700 border-emerald-200" },
+  { id: "STITCHING",    label: "Stitching",    hint: "Stickered stitching / making bundles",        badge: "bg-indigo-100 text-indigo-700 border-indigo-200" },
   { id: "INSTALLATION", label: "Installation", hint: "Walk-in / counter-sale installs",             badge: "bg-amber-100 text-amber-700 border-amber-200" },
   { id: "ENQUIRY",      label: "Enquiry",      hint: "Website enquiries & customer service requests", badge: "bg-rose-100 text-rose-700 border-rose-200" },
   { id: "OTHER",        label: "Other",        hint: "Ad-hoc / manually created",                   badge: "bg-slate-100 text-slate-600 border-slate-200" },
@@ -509,7 +511,14 @@ function TasksTab({ board, counts, filter, onFilterChange, onEdit, onChanged, na
                           <Target className="h-3 w-3 text-violet-500 shrink-0" /> {t.lead || `Lead #${t.leadId}`}
                         </button>
                       )}
-                      {!t.projectId && !t.project && !t.leadId && "—"}
+                      {t.bundleId && (
+                        <button className="flex items-center gap-1 text-left hover:underline" onClick={() => navigate(`/bundles/${t.bundleId}`)}>
+                          <PackageCheck className="h-3 w-3 text-indigo-500 shrink-0" />
+                          <span className="font-mono">{t.bundleCode}</span>
+                          {t.bundleStatus && <span className="text-[11px] text-slate-400">· {BUNDLE_STATUS_LABELS[t.bundleStatus] ?? t.bundleStatus}</span>}
+                        </button>
+                      )}
+                      {!t.projectId && !t.project && !t.leadId && !t.bundleId && "—"}
                     </div>
                   </td>
                   <td className="p-3">

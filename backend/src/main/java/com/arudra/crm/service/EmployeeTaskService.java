@@ -91,6 +91,10 @@ public class EmployeeTaskService {
     @Autowired
     @org.springframework.context.annotation.Lazy
     private FinanceService financeService;
+    @Autowired
+    private com.arudra.crm.repository.BundleRepository bundleRepository;
+    @Autowired
+    private com.arudra.crm.repository.BundleEventRepository bundleEventRepository;
 
     private static final List<String> ACTIVE_ASSIGNMENT_STATUSES =
             List.of("ASSIGNED", "ACCEPTED", "IN_PROGRESS", "PAUSED", "WAITING_MATERIAL", "REWORK", "COMPLETED");
@@ -863,7 +867,18 @@ public class EmployeeTaskService {
             if (!ResourceType.isValid(type) || rid == null || !workforceResourceService.exists(type, rid)) {
                 throw new RuntimeException("Unknown workforce resource: " + type + " #" + rid);
             }
-            if (assignmentRepository.findByTaskIdAndResourceTypeAndResourceId(taskId, type, rid).isPresent()) {
+            TaskAssignment existing = assignmentRepository.findByTaskIdAndResourceTypeAndResourceId(taskId, type, rid).orElse(null);
+            if (existing != null) {
+                if ("CANCELLED".equals(existing.getStatus()) || "REJECTED".equals(existing.getStatus())) {
+                    existing.setStatus("ASSIGNED"); // re-assigning someone who was taken off earlier
+                    existing.setAssignedBy(assignedBy);
+                    assignmentRepository.save(existing);
+                    if (ResourceType.EMPLOYEE.equals(type) && existing.getEmployee() != null) {
+                        task.setAssignedEmployee(existing.getEmployee());
+                        notificationService.dispatch("Task Assigned", "You were assigned: " + task.getTaskName(),
+                                "TASK", rid, "/employee/tasks/" + taskId);
+                    }
+                }
                 continue; // already assigned
             }
             TaskAssignment assignment = new TaskAssignment();
@@ -895,7 +910,37 @@ public class EmployeeTaskService {
             }
         }
         recomputeTaskStatus(task);
-        return taskRepository.save(task);
+        Task saved = taskRepository.save(task);
+        if (!resources.isEmpty()) {
+            AssignResourceRequest last = resources.get(resources.size() - 1);
+            syncBundleAssignee(saved, ResourceType.normalize(last.getResourceType()), last.getResourceId(), assignedBy);
+        }
+        return saved;
+    }
+
+    /**
+     * A bundle's board task (source BUNDLE) was (re)assigned from the task board: mirror the tailor
+     * onto the bundle so the bundle page, its filters and the sticker job card stay in step.
+     */
+    private void syncBundleAssignee(Task task, String type, Long rid, User by) {
+        if (!"BUNDLE".equals(task.getSource())) return;
+        bundleRepository.findFirstByTaskIdAndIsDeletedFalse(task.getId()).ifPresent(b -> {
+            if (java.util.Objects.equals(b.getResourceType(), type) && java.util.Objects.equals(b.getResourceId(), rid)) return;
+            b.setResourceType(type);
+            b.setResourceId(rid);
+            bundleRepository.save(b);
+            com.arudra.crm.entity.BundleEvent e = new com.arudra.crm.entity.BundleEvent();
+            e.setBundleId(b.getId());
+            e.setFromStatus(b.getStatus());
+            e.setToStatus(b.getStatus());
+            if (by != null) {
+                e.setUserId(by.getId());
+                e.setUserName(by.getName());
+            }
+            e.setNote(rid == null ? "Unassigned on the task board"
+                    : "Assigned to " + workforceResourceService.displayName(type, rid) + " on the task board");
+            bundleEventRepository.save(e);
+        });
     }
 
     /** Back-compat: remove an employee assignment by employee id. */
@@ -905,12 +950,22 @@ public class EmployeeTaskService {
 
     /** Unified: cancel a resource's assignment on a task. */
     public void removeResourceAssignment(Long taskId, String resourceType, Long resourceId) {
-        assignmentRepository.findByTaskIdAndResourceTypeAndResourceId(
-                taskId, ResourceType.normalize(resourceType), resourceId).ifPresent(a -> {
+        String type = ResourceType.normalize(resourceType);
+        assignmentRepository.findByTaskIdAndResourceTypeAndResourceId(taskId, type, resourceId).ifPresent(a -> {
             a.setStatus("CANCELLED");
             assignmentRepository.save(a);
         });
-        recomputeAndSave(getTask(taskId));
+        Task task = recomputeAndSave(getTask(taskId));
+        // Removed the bundle's tailor on the board: fall back to whoever is still on the task (or nobody).
+        if ("BUNDLE".equals(task.getSource())) {
+            bundleRepository.findFirstByTaskIdAndIsDeletedFalse(taskId).ifPresent(b -> {
+                if (!java.util.Objects.equals(b.getResourceType(), type) || !java.util.Objects.equals(b.getResourceId(), resourceId)) return;
+                TaskAssignment next = assignmentRepository.findByTaskId(taskId).stream()
+                        .filter(a -> !"CANCELLED".equals(a.getStatus()) && !"REJECTED".equals(a.getStatus()))
+                        .reduce((x, y) -> y).orElse(null);
+                syncBundleAssignee(task, next == null ? null : next.getResourceType(), next == null ? null : next.getResourceId(), null);
+            });
+        }
     }
 
     // ---------------------------------------------------------------- Lifecycle
@@ -1478,6 +1533,15 @@ public class EmployeeTaskService {
 
     /** Derives the manager-facing Task.status from the set of per-employee TaskAssignment statuses. */
     private void recomputeTaskStatus(Task task) {
+        recomputeFromAssignments(task);
+        // A bundle's task follows the bundle (scanned through its work steps), not its assignments.
+        if ("BUNDLE".equals(task.getSource()) && task.getId() != null) {
+            bundleRepository.findFirstByTaskIdAndIsDeletedFalse(task.getId())
+                    .ifPresent(b -> BundleService.applyBundleStatus(task, b.getStatus()));
+        }
+    }
+
+    private void recomputeFromAssignments(Task task) {
         List<TaskAssignment> assignments = assignmentRepository.findByTaskId(task.getId()).stream()
                 .filter(a -> !"CANCELLED".equals(a.getStatus()) && !"REJECTED".equals(a.getStatus()))
                 .collect(Collectors.toList());
@@ -1576,6 +1640,7 @@ public class EmployeeTaskService {
     /** Origin lane for a task, mirroring the desktop board (SmartAssignmentService.taskCategory). */
     private String[] taskCategoryFor(Task t) {
         String source = t.getSource() == null ? "" : t.getSource().toUpperCase();
+        if ("BUNDLE".equals(source)) return new String[]{"STITCHING", "Stitching"};
         if (t.getInvoiceId() != null) return new String[]{"INSTALLATION", "Installation"};
         if ("ENQUIRY".equals(source) || "SERVICE_REQUEST".equals(source)) return new String[]{"ENQUIRY", "Enquiry"};
         if (t.getLeadId() != null) return new String[]{"LEAD", "Lead"};

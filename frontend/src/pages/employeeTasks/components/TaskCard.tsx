@@ -9,6 +9,7 @@ import HoldTimer from './HoldTimer';
 const CATEGORY_BADGE: Record<string, string> = {
   LEAD: 'bg-[#EDE7FA] text-[#6B46C1]', PROJECT: 'bg-[#E4EEFB] text-[#2563A8]',
   FIELD_WORK: 'bg-[#E7F2EC] text-[#2C7050]', INSTALLATION: 'bg-[#FBEFE0] text-[#9B6B32]',
+  STITCHING: 'bg-[#E8E9FB] text-[#4B4FB0]',
   ENQUIRY: 'bg-[#FBE7EC] text-[#B03A5B]', OTHER: 'bg-[#EEF0ED] text-[#6B7169]',
 };
 

@@ -1,11 +1,15 @@
 package com.arudra.crm.service;
 
+import com.arudra.crm.dto.workforce.AssignResourceRequest;
 import com.arudra.crm.dto.BundleRequests;
 import com.arudra.crm.dto.BundleView;
 import com.arudra.crm.entity.*;
 import com.arudra.crm.exception.ResourceNotFoundException;
 import com.arudra.crm.repository.*;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -26,6 +30,11 @@ import java.util.stream.Collectors;
  *
  * <p>Floor staff can only step a bundle forward one step; admins/managers may jump or step back
  * (logged as an override). ON_HOLD parks a bundle with a reason and resumes where it left off.
+ *
+ * <p>Every bundle owns one task on the task board (source {@code BUNDLE}, "Stitching" lane): the
+ * bundle's tailor is the task's assignee and the bundle status drives the task status (see
+ * {@link #applyBundleStatus}). Assigning the task from the board flows back onto the bundle
+ * (EmployeeTaskService), and the daily task-overdue scheduler covers late bundles.
  */
 @Service
 public class BundleService {
@@ -50,6 +59,12 @@ public class BundleService {
     @Autowired private DocumentNumberService documentNumberService;
     @Autowired private WorkforceResourceService resourceService;
     @Autowired private NotificationService notificationService;
+    @Autowired private TaskService taskService;
+    @Autowired private TaskRepository taskRepository;
+    @Autowired private TaskAssignmentRepository assignmentRepository;
+    @Lazy @Autowired private EmployeeTaskService employeeTaskService;
+
+    private static final ObjectMapper JSON = new ObjectMapper();
 
     // =====================================================================
     // Create
@@ -146,9 +161,8 @@ public class BundleService {
             created.add(saved);
         }
 
-        if (hasResource && ResourceType.EMPLOYEE.equals(resourceType)) {
-            notifyAssignee(req.resourceId, created.get(0), total);
-        }
+        // One task-board task per bundle (assigning it also notifies the tailor).
+        for (Bundle b : created) ensureTask(b, user);
         return created.stream().map(b -> toView(b, true)).toList();
     }
 
@@ -259,6 +273,7 @@ public class BundleService {
             note = (note == null ? "" : note + " · ") + "Handed to " + b.getDeliveredTo();
         }
         logEvent(b, from, to, user, note, blankToNull(req.photoUrl));
+        syncTaskStatus(b);
 
         if ("READY".equals(to)) {
             notificationService.dispatchToAdmins("Bundle " + b.getCode() + " is ready",
@@ -282,6 +297,7 @@ public class BundleService {
         b.setStatus(ON_HOLD);
         bundleRepository.save(b);
         logEvent(b, from, ON_HOLD, user, r, null);
+        syncTaskStatus(b);
         return toView(b, true);
     }
 
@@ -295,6 +311,7 @@ public class BundleService {
         b.setHoldReason(null);
         bundleRepository.save(b);
         logEvent(b, ON_HOLD, back, user, "Hold released", null);
+        syncTaskStatus(b);
         return toView(b, true);
     }
 
@@ -307,6 +324,7 @@ public class BundleService {
             b.setResourceId(null);
             bundleRepository.save(b);
             logEvent(b, b.getStatus(), b.getStatus(), user, "Unassigned", null);
+            syncTaskAssignment(b, user);
             return toView(b, true);
         }
         String type = ResourceType.normalize(req.resourceType);
@@ -318,7 +336,7 @@ public class BundleService {
         bundleRepository.save(b);
         logEvent(b, b.getStatus(), b.getStatus(), user,
                 "Assigned to " + resourceService.displayName(type, req.resourceId), null);
-        if (ResourceType.EMPLOYEE.equals(type)) notifyAssignee(req.resourceId, b, 1);
+        syncTaskAssignment(b, user); // also notifies the tailor
         return toView(b, true);
     }
 
@@ -333,6 +351,14 @@ public class BundleService {
         if (req.rackLocation != null) b.setRackLocation(blankToNull(req.rackLocation));
         if (req.notes != null) b.setNotes(blankToNull(req.notes));
         bundleRepository.save(b);
+        if (req.dueDate != null || req.priority != null || req.workType != null) {
+            taskFor(b).ifPresent(t -> {
+                t.setDueDate(b.getDueDate());
+                t.setPriority(taskPriority(b.getPriority()));
+                t.setTaskName(taskName(b));
+                taskRepository.save(t);
+            });
+        }
 
         if (req.items != null) {
             Map<Long, BundleItem> mine = itemRepository.findByBundleIdAndIsDeletedFalseOrderByIdAsc(b.getId()).stream()
@@ -360,6 +386,7 @@ public class BundleService {
             b.setStatus(CANCELLED);
             bundleRepository.save(b);
             logEvent(b, from, CANCELLED, null, "Bill cancelled" + (reason == null || reason.isBlank() ? "" : ": " + reason), null);
+            syncTaskStatus(b);
         }
     }
 
@@ -387,14 +414,138 @@ public class BundleService {
         eventRepository.save(e);
     }
 
-    private void notifyAssignee(Long userId, Bundle b, int total) {
+    // ---------------------------------------------------------------- task-board link
+
+    /** Bundle status -> task status: waiting, being worked on, work done (packed onwards), parked, void. */
+    public static void applyBundleStatus(Task task, String bundleStatus) {
+        int idx = FLOW.indexOf(bundleStatus);
+        String status;
+        if (CANCELLED.equals(bundleStatus)) status = "CANCELLED";
+        else if (ON_HOLD.equals(bundleStatus)) status = "PAUSED";
+        else if (idx >= FLOW.indexOf("PACKED")) status = "COMPLETED";
+        else if (idx > 0) status = "IN_PROGRESS";
+        else status = "PENDING";
+        task.setStatus(status);
+        if (idx >= 0) task.setProgress(Math.min(100, Math.round(idx * 100f / FLOW.indexOf("PACKED"))));
+        if ("COMPLETED".equals(status)) {
+            if (task.getCompletedDate() == null) task.setCompletedDate(LocalDate.now());
+        } else {
+            task.setCompletedDate(null);
+        }
+    }
+
+    private Optional<Task> taskFor(Bundle b) {
+        return b.getTaskId() == null ? Optional.empty() : taskRepository.findById(b.getTaskId());
+    }
+
+    /** Creates the bundle's board task if missing, then aligns its assignee and status. */
+    private void ensureTask(Bundle b, User user) {
+        if (b.getTaskId() == null || taskRepository.findById(b.getTaskId()).isEmpty()) {
+            Task task = new Task();
+            task.setTaskName(taskName(b));
+            task.setSource("BUNDLE");
+            task.setStatus("PENDING");
+            task.setPriority(taskPriority(b.getPriority()));
+            task.setDueDate(b.getDueDate());
+            task.setStartDate(LocalDate.now());
+            task.setInvoiceId(b.getInvoiceId());
+            task.setCustomerId(b.getCustomerId());
+            task.setAssignmentType(b.getResourceId() != null ? "SINGLE_EMPLOYEE" : "TEAM");
+            task.setDescription(taskDescription(b));
+            Task saved = taskService.createTask(task);
+            b.setTaskId(saved.getId());
+            bundleRepository.save(b);
+        }
+        syncTaskAssignment(b, user);
+    }
+
+    /** Makes the task's active assignee match the bundle's tailor (cancelling anyone else). */
+    private void syncTaskAssignment(Bundle b, User user) {
+        Task task = taskFor(b).orElse(null);
+        if (task == null) {
+            if (!CLOSED.contains(b.getStatus())) ensureTask(b, user);
+            return;
+        }
+        for (TaskAssignment a : assignmentRepository.findByTaskId(task.getId())) {
+            boolean active = !"CANCELLED".equals(a.getStatus()) && !"REJECTED".equals(a.getStatus());
+            boolean same = Objects.equals(a.getResourceType(), b.getResourceType()) && Objects.equals(a.getResourceId(), b.getResourceId());
+            if (active && !same) employeeTaskService.removeResourceAssignment(task.getId(), a.getResourceType(), a.getResourceId());
+        }
+        if (b.getResourceId() != null) {
+            employeeTaskService.assignResources(task.getId(),
+                    List.of(new AssignResourceRequest(b.getResourceType(), b.getResourceId(), null)), user);
+        }
+        syncTaskStatus(b); // assignment recomputes status from assignments; restore the bundle's
+    }
+
+    private void syncTaskStatus(Bundle b) {
+        if (b.getTaskId() == null && !CLOSED.contains(b.getStatus())) {
+            ensureTask(b, null); // bundle from before the task-board link — give it its task now
+            return;
+        }
+        taskFor(b).ifPresent(t -> {
+            applyBundleStatus(t, b.getStatus());
+            taskRepository.save(t);
+        });
+    }
+
+    private String taskName(Bundle b) {
+        String work = switch (b.getWorkType() == null ? "" : b.getWorkType()) {
+            case "MAKING" -> "Making";
+            case "FITTING" -> "Fitting";
+            case "OTHER" -> "Work";
+            default -> "Stitching";
+        };
+        String name = work + " — " + b.getCode() + customerSuffix(b).replace(" — ", " · ");
+        return name.length() > 250 ? name.substring(0, 250) : name;
+    }
+
+    private static String taskPriority(String p) {
+        return "URGENT".equals(p) ? "HIGH" : (p == null ? "MEDIUM" : p);
+    }
+
+    /** Items + work specs, so the task alone tells the tailor what to make. */
+    private String taskDescription(Bundle b) {
+        StringBuilder sb = new StringBuilder("Bundle ").append(b.getCode());
+        if (b.getBundleTotal() != null && b.getBundleTotal() > 1) {
+            sb.append(" (").append(b.getBundleNo()).append(" of ").append(b.getBundleTotal()).append(')');
+        }
+        sb.append(" — scan the sticker to update its status.\n");
+        for (BundleItem i : itemRepository.findByBundleIdAndIsDeletedFalseOrderByIdAsc(b.getId())) {
+            sb.append("\n• ").append(i.getDescription()).append(" × ").append(i.getQuantity().stripTrailingZeros().toPlainString());
+            if (i.getUnit() != null) sb.append(' ').append(i.getUnit());
+            String spec = specSummary(i.getWorkSpec());
+            if (!spec.isEmpty()) sb.append(" — ").append(spec);
+            if (i.getNotes() != null) sb.append(" (").append(i.getNotes()).append(')');
+        }
+        if (b.getNotes() != null) sb.append("\n\nNotes: ").append(b.getNotes());
+        return sb.toString();
+    }
+
+    private static String specSummary(String json) {
+        if (json == null || json.isBlank()) return "";
         try {
-            String what = total > 1 ? total + " bundles (" + b.getGroupCode() + ")" : "bundle " + b.getCode();
-            notificationService.dispatch("New " + b.getWorkType().toLowerCase() + " job",
-                    "You've been assigned " + what + customerSuffix(b)
-                            + (b.getDueDate() != null ? " · due " + b.getDueDate() : ""),
-                    "BUNDLE_ASSIGNED", userId, "/bundles/" + b.getId());
-        } catch (Exception ignored) { /* a notification hiccup must never block the work */ }
+            JsonNode n = JSON.readTree(json);
+            List<String> parts = new ArrayList<>();
+            String type = n.path("type").asText("");
+            if (!type.isEmpty()) parts.add(type);
+            String w = n.path("width").asText(""), h = n.path("height").asText("");
+            if (!w.isEmpty() || !h.isEmpty()) parts.add((w.isEmpty() ? "?" : w) + " × " + (h.isEmpty() ? "?" : h) + " in");
+            String panels = n.path("panels").asText("");
+            if (!panels.isEmpty()) {
+                boolean window = type.isEmpty() || type.contains("Curtain") || type.contains("Blind");
+                parts.add(panels + (window ? " panels" : " pcs"));
+            }
+            String pleat = n.path("pleat").asText("");
+            if (!pleat.isEmpty() && !"None".equals(pleat)) parts.add(pleat);
+            String lining = n.path("lining").asText("");
+            if (!lining.isEmpty() && !"None".equals(lining)) parts.add(lining + " lining");
+            String notes = n.path("notes").asText("");
+            if (!notes.isEmpty()) parts.add(notes);
+            return String.join(" · ", parts);
+        } catch (Exception ex) {
+            return json;
+        }
     }
 
     private String customerSuffix(Bundle b) {
