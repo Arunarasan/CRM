@@ -75,13 +75,18 @@ public class LeadController {
             @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) LocalDate dateFrom,
             @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) LocalDate dateTo,
             @RequestParam(required = false) Boolean followUpDue,
+            @RequestParam(required = false) String enquiryType,
+            @RequestParam(required = false) String category,
+            @RequestParam(required = false) String product,
+            @RequestParam(required = false) String service,
             @RequestParam(required = false) String sortBy,
             @RequestParam(required = false, defaultValue = "desc") String sortDir,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
         return ResponseEntity.ok(leadService.getLeads(search, status, stage, source, leadType,
                 priority, temperature, city, assignedEmployeeId, isConverted,
-                budgetMin, budgetMax, dateFrom, dateTo, followUpDue, sortBy, sortDir, page, size));
+                budgetMin, budgetMax, dateFrom, dateTo, followUpDue,
+                enquiryType, category, product, service, sortBy, sortDir, page, size));
     }
 
     @GetMapping("/dashboard")

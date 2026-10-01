@@ -393,10 +393,14 @@ export interface LeadFilters {
   dateFrom: string;
   dateTo: string;
   followUpDue: string;
+  enquiryType: string; // PRODUCT | SERVICE | OTHER
+  category: string;    // requirementCategory
+  product: string;     // one entry of requirementProduct
+  service: string;     // one entry of requirementService
 }
 
 export const EMPTY_FILTERS: LeadFilters = {
   status: "", stage: "", source: "", leadType: "", priority: "", temperature: "",
   assignedEmployeeId: "", isConverted: "", budgetMin: "", budgetMax: "", dateFrom: "", dateTo: "",
-  followUpDue: "",
+  followUpDue: "", enquiryType: "", category: "", product: "", service: "",
 };

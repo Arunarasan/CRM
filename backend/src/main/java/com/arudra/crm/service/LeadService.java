@@ -84,6 +84,7 @@ public class LeadService {
             Long assignedEmployeeId, Boolean isConverted,
             BigDecimal budgetMin, BigDecimal budgetMax,
             LocalDate dateFrom, LocalDate dateTo, Boolean followUpDue,
+            String enquiryType, String category, String product, String service,
             String sortBy, String sortDir, int page, int size) {
 
         String sortField = (sortBy != null && SORTABLE_FIELDS.contains(sortBy)) ? sortBy : "id";
@@ -104,6 +105,10 @@ public class LeadService {
                 .and(LeadSpecification.budgetBetween(budgetMin, budgetMax))
                 .and(LeadSpecification.createdBetween(dateFrom, dateTo))
                 .and(LeadSpecification.followUpDue(followUpDue))
+                .and(LeadSpecification.hasEnquiryType(enquiryType))
+                .and(LeadSpecification.hasCategory(category))
+                .and(LeadSpecification.listContains("requirementProduct", product))
+                .and(LeadSpecification.listContains("requirementService", service))
                 .and(LeadSpecification.matchesSearch(search));
 
         return leadRepository.findAll(spec, pageRequest);

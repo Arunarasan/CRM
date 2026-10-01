@@ -120,6 +120,52 @@ public class LeadSpecification {
     }
 
     /**
+     * Enquiry tag (PRODUCT / SERVICE / OTHER). Mirrors the frontend's enquiryTypeOf(): an untagged
+     * legacy lead counts as SERVICE/OTHER when it carries that detail, else PRODUCT when it has a
+     * category or product.
+     */
+    public static Specification<Lead> hasEnquiryType(String type) {
+        return (root, query, cb) -> {
+            if (type == null || type.isEmpty()) return null;
+            Predicate tagged = cb.equal(root.get("enquiryType"), type);
+            Predicate untagged = cb.or(cb.isNull(root.get("enquiryType")), cb.equal(root.get("enquiryType"), ""));
+            Predicate hasService = blankNot(cb, root.get("requirementService"));
+            Predicate hasOther = blankNot(cb, root.get("requirementOther"));
+            Predicate inferred = switch (type) {
+                case "SERVICE" -> hasService;
+                case "OTHER" -> cb.and(cb.not(hasService), hasOther);
+                case "PRODUCT" -> cb.and(cb.not(hasService), cb.not(hasOther),
+                        cb.or(blankNot(cb, root.get("requirementCategory")), blankNot(cb, root.get("requirementProduct"))));
+                default -> cb.disjunction();
+            };
+            return cb.or(tagged, cb.and(untagged, inferred));
+        };
+    }
+
+    public static Specification<Lead> hasCategory(String category) {
+        return (root, query, cb) -> {
+            if (category == null || category.isEmpty()) return null;
+            return cb.equal(cb.lower(root.get("requirementCategory")), category.toLowerCase());
+        };
+    }
+
+    /** Exact match of one entry inside a comma-separated list column ("A, B, C"). */
+    public static Specification<Lead> listContains(String field, String value) {
+        return (root, query, cb) -> {
+            if (value == null || value.isBlank()) return null;
+            jakarta.persistence.criteria.Expression<String> normalized =
+                    cb.concat(cb.concat(",", cb.function("REPLACE", String.class,
+                            cb.lower(root.get(field)), cb.literal(", "), cb.literal(","))), ",");
+            return cb.like(normalized, "%," + value.trim().toLowerCase() + ",%");
+        };
+    }
+
+    private static Predicate blankNot(jakarta.persistence.criteria.CriteriaBuilder cb,
+                                      jakarta.persistence.criteria.Path<String> path) {
+        return cb.and(cb.isNotNull(path), cb.notEqual(path, ""));
+    }
+
+    /**
      * Free-text search across lead number, customer identity, all phone numbers,
      * email, company, city and project/site address.
      */

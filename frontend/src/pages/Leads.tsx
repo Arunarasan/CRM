@@ -13,16 +13,22 @@ import { Skeleton } from "@/components/ui/skeleton";
 import ResponsiveList, { type Column } from "@/components/ui/responsive-list";
 import FilterSheet from "@/components/ui/filter-sheet";
 import { useHoverInfo, InfoRow } from "@/components/ui/hover-info";
+import api from "@/lib/api";
 import { leadApi } from "./leads/leadApi";
 import LeadFormDialog from "./leads/LeadFormDialog";
 import { selectClass } from "./leads/fields";
 import { EnquiryTag, enquiryDetails, enquiryTypeOf } from "./leads/enquiry";
 import {
-  BOARD_DROP_STATUS, EMPTY_FILTERS, LEAD_SOURCES, LEAD_STAGES, LEAD_STATUSES, LEAD_TYPES,
+  BOARD_DROP_STATUS, EMPTY_FILTERS, ENQUIRY_TYPES, LEAD_SOURCES, LEAD_STAGES, LEAD_STATUSES, LEAD_TYPES,
   PRIORITIES, TEMPERATURES, TEMPERATURE_STYLES, avatarColor, followUpTone, formatDate,
   formatINR, initials, relativeTime, type BoardColumn,
   type DashboardMetrics, type Lead, type LeadFilters, type LeadPeriodStats, type UserSummary,
 } from "./leads/constants";
+
+// Website catalog rows used by the enquiry filters (same source as the lead form's pickers).
+type CatalogCategory = { id: number; name: string; slug: string };
+type CatalogProduct = { id: number; name: string; categorySlug?: string };
+type CatalogService = { id: number; title: string };
 
 // Time-frame partitions for the lead-entry / conversion stats. Each resolves to an ISO from/to range.
 type PeriodKey = "TODAY" | "WEEK" | "MONTH" | "YEAR" | "ALL";
@@ -135,6 +141,9 @@ export default function Leads() {
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [period, setPeriod] = useState<PeriodKey>("MONTH");
   const [periodStats, setPeriodStats] = useState<LeadPeriodStats | null>(null);
+  const [categories, setCategories] = useState<CatalogCategory[]>([]);
+  const [products, setProducts] = useState<CatalogProduct[]>([]);
+  const [services, setServices] = useState<CatalogService[]>([]);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 350);
@@ -168,6 +177,9 @@ export default function Leads() {
   useEffect(() => {
     fetchDashboard();
     leadApi.assignableUsers().then((res) => setUsers(res.data)).catch(console.error);
+    api.get("/public/categories").then((res) => setCategories(res.data || [])).catch(() => {});
+    api.get("/public/products").then((res) => setProducts(res.data || [])).catch(() => {});
+    api.get("/public/services").then((res) => setServices(res.data || [])).catch(() => {});
   }, [fetchDashboard]);
 
   // Time-boxed entry / conversion stats for the selected partition.
@@ -232,6 +244,15 @@ export default function Leads() {
 
   const setFilter = (key: keyof LeadFilters) => (value: string) =>
     setFilters((f) => ({ ...f, [key]: value }));
+
+  // Switching category drops a product that isn't in it, so the two filters never contradict.
+  const selectedCategory = categories.find((c) => c.name === filters.category);
+  const categoryProducts = products.filter((p) => !selectedCategory || p.categorySlug === selectedCategory.slug);
+  const setCategory = (value: string) => setFilters((f) => {
+    const cat = categories.find((c) => c.name === value);
+    const keep = !cat || products.some((p) => p.name === f.product && p.categorySlug === cat.slug);
+    return { ...f, category: value, product: keep ? f.product : "" };
+  });
 
   // A card is active when the filters match its patch across all segment keys.
   const isStatActive = (patch: Partial<LeadFilters>) =>
@@ -475,6 +496,14 @@ export default function Leads() {
         </div>
         {viewMode === "table" && (
           <div className="flex items-center gap-2 shrink-0 overflow-x-auto">
+            <select className={`${selectClass} w-auto min-w-[6.5rem] shrink-0`} value={filters.enquiryType} onChange={(e) => setFilter("enquiryType")(e.target.value)}>
+              <option value="">All Types</option>
+              {ENQUIRY_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+            </select>
+            <select className={`${selectClass} w-auto min-w-[6.5rem] max-w-[11rem] shrink-0`} value={filters.category} onChange={(e) => setCategory(e.target.value)}>
+              <option value="">All Categories</option>
+              {categories.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
+            </select>
             <select className={`${selectClass} w-auto min-w-[6.5rem] shrink-0`} value={filters.stage} onChange={(e) => setFilter("stage")(e.target.value)}>
               <option value="">All Stages</option>
               {LEAD_STAGES.map((o) => <option key={o} value={o}>{o}</option>)}
@@ -669,6 +698,39 @@ export default function Leads() {
         activeCount={activeFilterCount}
         onClear={() => setFilters({ ...EMPTY_FILTERS })}
       >
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium">Enquiry Type</label>
+          <div className="flex flex-wrap gap-1.5">
+            {[{ value: "", label: "All" }, ...ENQUIRY_TYPES].map((t) => (
+              <button key={t.value} type="button" onClick={() => setFilter("enquiryType")(t.value)}
+                className={`px-3 py-1.5 rounded-full border text-xs font-medium transition-colors ${
+                  filters.enquiryType === t.value ? "bg-primary text-primary-foreground border-primary" : "bg-card hover:bg-muted"}`}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium">Product Category</label>
+          <select className={selectClass} value={filters.category} onChange={(e) => setCategory(e.target.value)}>
+            <option value="">All</option>
+            {categories.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
+          </select>
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium">Product</label>
+          <select className={selectClass} value={filters.product} onChange={(e) => setFilter("product")(e.target.value)}>
+            <option value="">All</option>
+            {categoryProducts.map((p) => <option key={p.id} value={p.name}>{p.name}</option>)}
+          </select>
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium">Service</label>
+          <select className={selectClass} value={filters.service} onChange={(e) => setFilter("service")(e.target.value)}>
+            <option value="">All</option>
+            {services.map((sv) => <option key={sv.id} value={sv.title}>{sv.title}</option>)}
+          </select>
+        </div>
         {[
           { label: "Lead Source", key: "source" as const, options: LEAD_SOURCES },
           { label: "Lead Type", key: "leadType" as const, options: LEAD_TYPES },
