@@ -445,6 +445,10 @@ export default function Leads() {
                     </F>
                   </div>
                 )}
+                <F label="Requirement">
+                  <textarea value={form.requirement} onChange={(e) => set('requirement', e.target.value)} rows={2} className={areaCls}
+                    placeholder="What does the customer want? Size, colour, rooms, timing…" />
+                </F>
               </Step>
 
               {/* 3 — Visit, budget & rating */}
@@ -500,10 +504,7 @@ export default function Leads() {
               </Step>
 
               {/* 5 — Notes */}
-              <Step {...stepProps('notes', joinParts(form.requirement, form.notes))} title="Requirement & notes" hint="Optional — what the customer wants">
-                <F label="Requirement details">
-                  <textarea value={form.requirement} onChange={(e) => set('requirement', e.target.value)} rows={2} className={areaCls} placeholder="What does the customer want?" />
-                </F>
+              <Step {...stepProps('notes', joinParts(form.notes))} title="Notes" hint="Optional — anything else to remember">
                 <F label="Notes">
                   <textarea value={form.notes} onChange={(e) => set('notes', e.target.value)} rows={2} className={areaCls} />
                 </F>

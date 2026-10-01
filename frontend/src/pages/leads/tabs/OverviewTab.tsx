@@ -17,7 +17,6 @@ import {
   type Lead, type UserSummary,
 } from "../constants";
 import type { LeadJourney, JourneyStepId } from "../journey";
-import { CheckboxField } from "../fields";
 import ExistingCustomerSearch from "@/pages/customers/ExistingCustomerSearch";
 import { EnquiryTag, enquiryDetails, enquiryTypeOf } from "../enquiry";
 
@@ -768,11 +767,6 @@ function PropertyCard({ lead, canEdit, onChanged }: CardProps) {
 }
 
 // --- Scope of Work ----------------------------------------------------------
-const SCOPE_ITEMS: [keyof Lead, string][] = [
-  ["reqKitchen", "Modular Kitchen"], ["reqWardrobe", "Wardrobe"], ["reqTvUnit", "TV Unit"],
-  ["reqFalseCeiling", "False Ceiling"], ["reqPainting", "Painting"], ["reqFlooring", "Flooring"],
-  ["reqElectrical", "Electrical"], ["reqPlumbing", "Plumbing"], ["reqWoodFinish", "Wood Finish"],
-];
 type ScopeDraft = Pick<Lead,
   "reqKitchen" | "reqWardrobe" | "reqTvUnit" | "reqFalseCeiling" | "reqPainting" | "reqFlooring" |
   "reqElectrical" | "reqPlumbing" | "reqWoodFinish" |
@@ -805,7 +799,6 @@ function ScopeCard({ lead, canEdit, onChanged }: CardProps) {
     api.get("/public/products").then((r) => setCatalog(r.data || [])).catch(() => {});
   }, [e, categories.length]);
 
-  const anySelected = SCOPE_ITEMS.some(([key]) => lead[key]);
   const products = splitProducts(lead.requirementProduct);
   const draftProducts = splitProducts(edit.draft.requirementProduct);
   const selectedCat = categories.find((c) => c.name === edit.draft.requirementCategory);
@@ -888,31 +881,6 @@ function ScopeCard({ lead, canEdit, onChanged }: CardProps) {
             </div>
           </div>
         )}
-
-        <div>
-          <div className="text-xs text-muted-foreground mb-2">Work Required</div>
-          {e ? (
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-              {SCOPE_ITEMS.map(([key, label]) => (
-                <CheckboxField
-                  key={key as string}
-                  label={label}
-                  checked={edit.draft[key as keyof ScopeDraft] as boolean | undefined}
-                  onChange={edit.set(key as keyof ScopeDraft) as any}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {SCOPE_ITEMS.filter(([key]) => lead[key]).map(([, label]) => (
-                <span key={label} className="px-3 py-1 bg-emerald-50 text-emerald-700 text-sm rounded-full font-medium">
-                  ✓ {label}
-                </span>
-              ))}
-              {!anySelected && <span className="text-sm text-muted-foreground">No work items selected.</span>}
-            </div>
-          )}
-        </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-5 gap-y-4">
           <Field icon={DoorOpen} label="Rooms Required" editing={e} view={lead.roomsRequired}>

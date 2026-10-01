@@ -11,7 +11,6 @@ import {
   CONSTRUCTION_STATUSES, ENQUIRY_TYPES, LEAD_SOURCES, LEAD_TYPES, PRIORITIES, REFERRAL_TYPES, TEMPERATURES,
   formatDate, type Lead, type UserSummary,
 } from "./constants";
-import { CheckboxField } from "./fields";
 import { enquiryLabel, enquiryTypeOf, splitList } from "./enquiry";
 import { Chip, F, Step, areaCls, inDays } from "./formSteps";
 import MultiImageCaptureField, { type CapturedImage } from "@/components/MultiImageCaptureField";
@@ -31,12 +30,6 @@ type DupLead = { id: number; leadNumber: string; name: string; status: string; m
 // open for a new lead so the screen stays short — the rest are optional extras.
 type StepKey = "customer" | "enquiry" | "source" | "contact" | "media" | "property" | "plan";
 const STEP_ORDER: StepKey[] = ["customer", "enquiry", "source", "contact", "media", "property", "plan"];
-
-const SCOPE_ITEMS: [keyof Lead, string][] = [
-  ["reqKitchen", "Modular Kitchen"], ["reqWardrobe", "Wardrobe"], ["reqTvUnit", "TV Unit"],
-  ["reqFalseCeiling", "False Ceiling"], ["reqPainting", "Painting"], ["reqFlooring", "Flooring"],
-  ["reqElectrical", "Electrical"], ["reqPlumbing", "Plumbing"], ["reqWoodFinish", "Wood Finish"],
-];
 
 const FOLLOW_UP_CHIPS = [
   { label: "Today", days: 0 }, { label: "Tomorrow", days: 1 }, { label: "In 3 days", days: 3 }, { label: "Next week", days: 7 },
@@ -274,7 +267,6 @@ export default function LeadFormDialog({
     if (form.enquiryType === "OTHER") return join(label, form.requirementOther);
     return join(label, form.requirementCategory, selectedProducts.join(", "));
   })();
-  const scopeCount = SCOPE_ITEMS.filter(([k]) => form[k]).length;
   const summaries: Record<StepKey, string> = {
     customer: join(form.name, form.mobileNumber),
     enquiry: enquirySummary,
@@ -287,7 +279,7 @@ export default function LeadFormDialog({
     contact: join(form.city, form.pincode, form.email, form.whatsappNumber && "WhatsApp"),
     media: join(images.length > 0 && `${images.length} photo${images.length > 1 ? "s" : ""}`,
       audioClips.length > 0 && `${audioClips.length} voice note${audioClips.length > 1 ? "s" : ""}`),
-    property: join(form.propertyType, form.areaSqft && `${form.areaSqft} sq.ft`, scopeCount > 0 && `${scopeCount} work items`),
+    property: join(form.propertyType, form.areaSqft && `${form.areaSqft} sq.ft`, form.roomsRequired),
     plan: join(
       form.leadType,
       form.expectedProjectValue && `₹${Number(form.expectedProjectValue).toLocaleString("en-IN")}`,
@@ -429,6 +421,10 @@ export default function LeadFormDialog({
                   </F>
                 </div>
               )}
+              <F label="Requirement">
+                <textarea className={areaCls} rows={2} value={form.projectDescription ?? ""}
+                  onChange={text("projectDescription")} placeholder="What does the customer want? Size, colour, rooms, timing…" />
+              </F>
             </Step>
 
             {/* 3 — Source & follow-up */}
@@ -594,7 +590,7 @@ export default function LeadFormDialog({
             </Step>
 
             {/* 6 — Property & scope */}
-            <Step {...stepProps("property")} title="Property & scope" hint="Optional — property details and work required">
+            <Step {...stepProps("property")} title="Property details" hint="Optional — property type, area, rooms">
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                 <F label="Property type"><Input value={form.propertyType ?? ""} onChange={text("propertyType")} placeholder="Flat, House…" /></F>
                 <F label="Construction status">
@@ -608,13 +604,6 @@ export default function LeadFormDialog({
                 <F label="Preferred materials"><Input value={form.preferredMaterial ?? ""} onChange={text("preferredMaterial")} /></F>
                 <F label="Design style"><Input value={form.preferredDesignStyle ?? ""} onChange={text("preferredDesignStyle")} placeholder="Modern…" /></F>
               </div>
-              <F label="Work required">
-                <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
-                  {SCOPE_ITEMS.map(([key, label]) => (
-                    <CheckboxField key={key} label={label} checked={form[key] as boolean} onChange={set(key)} />
-                  ))}
-                </div>
-              </F>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <F label="Rooms required">
                   <textarea className={areaCls} rows={2} value={form.roomsRequired ?? ""} onChange={text("roomsRequired")} placeholder="3 Bedrooms, Living…" />
@@ -623,9 +612,6 @@ export default function LeadFormDialog({
                   <textarea className={areaCls} rows={2} value={form.specialRequests ?? ""} onChange={text("specialRequests")} />
                 </F>
               </div>
-              <F label="Requirement description">
-                <textarea className={areaCls} rows={2} value={form.projectDescription ?? ""} onChange={text("projectDescription")} />
-              </F>
             </Step>
 
             {/* 7 — Plan & team */}
