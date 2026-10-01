@@ -743,7 +743,17 @@ export default function ProjectCommandCenter() {
 
   const saveProjectFields = (patch: Record<string, any>, done: () => void) => {
     setSavingProject(true);
-    api.put(`/projects/${id}`, { ...project, ...patch })
+    // Send scalars only, plus id-refs for the four links updateProject copies. Echoing the full
+    // nested customer/lead/measurement graph back made the server reject the body (400).
+    const ref = (o: any) => (o?.id ? { id: o.id } : null);
+    const scalars = Object.fromEntries(
+      Object.entries(project).filter(([, v]) => v === null || typeof v !== 'object'));
+    api.put(`/projects/${id}`, {
+      ...scalars,
+      customer: ref(project.customer), lead: ref(project.lead),
+      siteVisit: ref(project.siteVisit), measurement: ref(project.measurement),
+      ...patch,
+    })
       .then(() => { fetchCore(); toast.success("Project updated"); done(); })
       .catch(err => toast.error(err?.response?.data?.message || "Failed to update project"))
       .finally(() => setSavingProject(false));
