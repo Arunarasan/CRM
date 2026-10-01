@@ -193,6 +193,14 @@ public class LeadController {
                 leadService.assignLead(id, userId, role, currentUserService.getCurrentUser()));
     }
 
+    /** Body: { "Sales Executive": 12, "Designer": 7, ... } — every changed role, saved atomically. */
+    @PutMapping("/{id}/team")
+    @PreAuthorize(ASSIGN)
+    public ResponseEntity<Map<String, Object>> assignTeam(@PathVariable Long id, @RequestBody Map<String, Long> roles) {
+        leadService.assignTeam(id, roles, currentUserService.getCurrentUser());
+        return ResponseEntity.ok(Map.of("success", true));
+    }
+
     @GetMapping("/{id}/assignments")
     @PreAuthorize(READ)
     public ResponseEntity<List<LeadAssignment>> getAssignments(@PathVariable Long id) {

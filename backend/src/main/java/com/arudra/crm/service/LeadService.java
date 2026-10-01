@@ -400,6 +400,23 @@ public class LeadService {
     @Transactional
     public Lead assignLead(Long leadId, Long userId, String role, User assignedBy) {
         Lead lead = getLeadById(leadId);
+        applyAssignment(lead, userId, role, assignedBy);
+        return lead;
+    }
+
+    /**
+     * Sets several team roles (role name → user id) in ONE transaction, so the Team card saves
+     * all its changes with a single request instead of one write per role on the same lead row.
+     */
+    @Transactional
+    public void assignTeam(Long leadId, Map<String, Long> roles, User assignedBy) {
+        Lead lead = getLeadById(leadId);
+        for (Map.Entry<String, Long> e : roles.entrySet()) {
+            if (e.getValue() != null) applyAssignment(lead, e.getValue(), e.getKey(), assignedBy);
+        }
+    }
+
+    private void applyAssignment(Lead lead, Long userId, String role, User assignedBy) {
         User userToAssign = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
 
@@ -429,7 +446,6 @@ public class LeadService {
         notificationService.dispatch("Lead assigned to you",
                 lead.getLeadNumber() + " (" + lead.getName() + ") was assigned to you as " + role + ".",
                 "LEAD", userToAssign.getId(), "/leads/" + lead.getId());
-        return lead;
     }
 
     @Transactional

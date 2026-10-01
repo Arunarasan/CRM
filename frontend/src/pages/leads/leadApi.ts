@@ -48,6 +48,7 @@ export const leadApi = {
     api.put(`/leads/${id}/status?status=${encodeURIComponent(status)}${remarks ? `&remarks=${encodeURIComponent(remarks)}` : ""}`),
   assign: (id: number, userId: number, role: string) =>
     api.post(`/leads/${id}/assignments`, { userId, role }),
+  assignTeam: (id: number, roles: Record<string, number>) => api.put(`/leads/${id}/team`, roles),
   getAssignments: (id: string | number) => api.get(`/leads/${id}/assignments`),
 
   updateReferral: (id: number, payload: {
