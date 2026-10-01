@@ -1,7 +1,7 @@
 import { ArrowRight, Image as ImageIcon } from 'lucide-react';
 import ResourceManager from './ResourceManager';
 import { Field, TextInput, TextArea, StringListEditor, PairListEditor, Group } from './ui';
-import { LucideByName } from './icons';
+import { LucideByName, IconPicker } from './icons';
 import FileUploadField from '@/components/FileUploadField';
 import { websiteAdminApi, Service, ProcessStep, FaqItem } from '@/api/websiteAdminApi';
 
@@ -64,7 +64,7 @@ export default function ServicesAdmin() {
 
             <Group label="Basics">
               <Field label="Title" required><TextInput value={d.title} placeholder="Modular Kitchens" onChange={(e) => patch({ title: e.target.value })} /></Field>
-              <Field label="Icon" hint="Lucide icon name, e.g. paint-roller, sofa, wrench"><TextInput value={d.icon} placeholder="paint-roller" onChange={(e) => patch({ icon: e.target.value })} /></Field>
+              <Field label="Icon" hint="Search and pick an icon"><IconPicker value={d.icon} onChange={(icon) => patch({ icon })} /></Field>
               <Field label="Short description" hint="One line shown on the card"><TextInput value={d.shortDescription} placeholder="Bespoke kitchens built for how you cook." onChange={(e) => patch({ shortDescription: e.target.value })} /></Field>
               <div className="grid grid-cols-2 gap-2">
                 <Field label="Slug" hint="Auto if blank"><TextInput value={d.slug} placeholder="modular-kitchens" onChange={(e) => patch({ slug: e.target.value })} /></Field>

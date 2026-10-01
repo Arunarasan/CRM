@@ -1,6 +1,6 @@
 import ResourceManager from './ResourceManager';
 import { Field, TextInput, Group } from './ui';
-import { LucideByName } from './icons';
+import { LucideByName, IconPicker } from './icons';
 import { websiteAdminApi, Category } from '@/api/websiteAdminApi';
 
 const EMPTY: Category = { name: '', slug: '', icon: '', displayOrder: 0, active: true };
@@ -45,11 +45,11 @@ export default function CategoriesAdmin() {
 
           <Group label="Details">
             <Field label="Name" required><TextInput value={d.name} placeholder="Furniture" onChange={(e) => patch({ name: e.target.value })} /></Field>
+            <Field label="Icon" hint="Search and pick an icon"><IconPicker value={d.icon} onChange={(icon) => patch({ icon })} /></Field>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <Field label="Icon" hint="Lucide name, e.g. sofa, lamp, gem"><TextInput value={d.icon} placeholder="sofa" onChange={(e) => patch({ icon: e.target.value })} /></Field>
+              <Field label="Slug" hint="Blank = auto from name"><TextInput value={d.slug} placeholder="furniture" onChange={(e) => patch({ slug: e.target.value })} /></Field>
               <Field label="Display order" hint="Lower shows first"><TextInput type="number" value={d.displayOrder ?? 0} onChange={(e) => patch({ displayOrder: Number(e.target.value) })} /></Field>
             </div>
-            <Field label="Slug" hint="Leave blank to auto-generate from the name"><TextInput value={d.slug} placeholder="furniture" onChange={(e) => patch({ slug: e.target.value })} /></Field>
           </Group>
         </div>
       )}
