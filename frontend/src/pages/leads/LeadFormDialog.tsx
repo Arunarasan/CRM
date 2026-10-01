@@ -177,7 +177,8 @@ export default function LeadFormDialog({
     if (payload.enquiryType === "PRODUCT") {
       payload.requirementService = null; payload.requirementOther = null;
     } else if (payload.enquiryType === "SERVICE") {
-      payload.requirementCategory = null; payload.requirementProduct = null; payload.requirementOther = null;
+      // A service is for a product, so the category + products stay alongside the services.
+      payload.requirementOther = null;
     } else if (payload.enquiryType === "OTHER") {
       payload.requirementCategory = null; payload.requirementProduct = null; payload.requirementService = null;
     }
@@ -269,7 +270,7 @@ export default function LeadFormDialog({
   const enquirySummary = (() => {
     const label = enquiryLabel(form.enquiryType);
     if (!label) return "";
-    if (form.enquiryType === "SERVICE") return join(label, selectedServices.join(", "));
+    if (form.enquiryType === "SERVICE") return join(label, selectedServices.join(", "), selectedProducts.length > 0 && `for ${selectedProducts.join(", ")}`);
     if (form.enquiryType === "OTHER") return join(label, form.requirementOther);
     return join(label, form.requirementCategory, selectedProducts.join(", "));
   })();
@@ -363,9 +364,29 @@ export default function LeadFormDialog({
                 ))}
               </div>
 
-              {form.enquiryType === "PRODUCT" && (
+              {form.enquiryType === "SERVICE" && (
+                <div className="rounded-md bg-muted/30 p-3">
+                  <F label="Which service? (pick one or more)">
+                    {services.length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {services.map((s) => (
+                          <Chip key={s.id} active={selectedServices.includes(s.title)} onClick={() => toggleService(s.title)}>
+                            {selectedServices.includes(s.title) && <Check className="mr-1 inline h-3 w-3" />}
+                            {s.title}
+                          </Chip>
+                        ))}
+                      </div>
+                    ) : (
+                      <Input value={form.requirementService ?? ""} onChange={text("requirementService")}
+                        placeholder="e.g. Curtain installation, Repair" />
+                    )}
+                  </F>
+                </div>
+              )}
+
+              {(form.enquiryType === "PRODUCT" || form.enquiryType === "SERVICE") && (
                 <div className="space-y-3 rounded-md bg-muted/30 p-3">
-                  <F label="Category">
+                  <F label={form.enquiryType === "SERVICE" ? "For which product? — category" : "Category"}>
                     <div className="flex flex-wrap gap-1.5">
                       {categories.map((c) => (
                         <Chip key={c.id} active={form.requirementCategory === c.name}
@@ -395,26 +416,6 @@ export default function LeadFormDialog({
                           </span>
                         ))}
                       </div>
-                    )}
-                  </F>
-                </div>
-              )}
-
-              {form.enquiryType === "SERVICE" && (
-                <div className="rounded-md bg-muted/30 p-3">
-                  <F label="Which service? (pick one or more)">
-                    {services.length > 0 ? (
-                      <div className="flex flex-wrap gap-1.5">
-                        {services.map((s) => (
-                          <Chip key={s.id} active={selectedServices.includes(s.title)} onClick={() => toggleService(s.title)}>
-                            {selectedServices.includes(s.title) && <Check className="mr-1 inline h-3 w-3" />}
-                            {s.title}
-                          </Chip>
-                        ))}
-                      </div>
-                    ) : (
-                      <Input value={form.requirementService ?? ""} onChange={text("requirementService")}
-                        placeholder="e.g. Curtain installation, Repair" />
                     )}
                   </F>
                 </div>

@@ -143,7 +143,7 @@ export default function Leads() {
   const visitIsChip = VISIT_CHIPS.some((c) => form.preferredVisitDate === inDays(c.days));
   const showDatePicker = customDate || (!!form.preferredVisitDate && !visitIsChip);
   const enquirySummary = !form.enquiryType ? '' : form.enquiryType === 'SERVICE'
-    ? joinParts(enquiryLabel(form.enquiryType), selectedServices.join(', '))
+    ? joinParts(enquiryLabel(form.enquiryType), selectedServices.join(', '), selectedProducts.length > 0 && `for ${selectedProducts.join(', ')}`)
     : form.enquiryType === 'OTHER'
       ? joinParts(enquiryLabel(form.enquiryType), form.requirementOther)
       : joinParts(enquiryLabel(form.enquiryType), form.requirementCategory, selectedProducts.join(', '));
@@ -168,7 +168,8 @@ export default function Leads() {
       ) as unknown as LeadCreateBody;
       // Keep only the detail that belongs to the chosen enquiry type.
       if (body.enquiryType === 'PRODUCT') { delete body.requirementService; delete body.requirementOther; }
-      if (body.enquiryType === 'SERVICE') { delete body.requirementCategory; delete body.requirementProduct; delete body.requirementOther; }
+      // A service is for a product, so the category + products stay alongside the services.
+      if (body.enquiryType === 'SERVICE') { delete body.requirementOther; }
       if (body.enquiryType === 'OTHER') { delete body.requirementCategory; delete body.requirementProduct; delete body.requirementService; }
       const documents = [
         ...images.map((img) => ({ fileName: img.fileName, fileUrl: img.url, documentType: 'Image', category: 'Site Photos' })),
@@ -383,7 +384,27 @@ export default function Leads() {
                   ))}
                 </div>
 
-                {form.enquiryType === 'PRODUCT' && (
+                {form.enquiryType === 'SERVICE' && (
+                  <div className="rounded-md bg-muted/30 p-3">
+                    <F label="Which service? (pick one or more)">
+                      {services.length > 0 ? (
+                        <div className="flex flex-wrap gap-1.5">
+                          {services.map((s) => (
+                            <Chip key={s.id} active={selectedServices.includes(s.title)} onClick={() => toggleService(s.title)}>
+                              {selectedServices.includes(s.title) && <Check className="mr-1 inline h-3 w-3" />}
+                              {s.title}
+                            </Chip>
+                          ))}
+                        </div>
+                      ) : (
+                        <Input value={form.requirementService || ''} onChange={(e) => set('requirementService', e.target.value)}
+                          placeholder="e.g. Curtain installation, Repair" />
+                      )}
+                    </F>
+                  </div>
+                )}
+
+                {(form.enquiryType === 'PRODUCT' || form.enquiryType === 'SERVICE') && (
                   <div className="space-y-3 rounded-md bg-muted/30 p-3">
                     <F label="Category">
                       <div className="flex flex-wrap gap-1.5">
@@ -413,26 +434,6 @@ export default function Leads() {
                         )}
                       </F>
                     )}
-                  </div>
-                )}
-
-                {form.enquiryType === 'SERVICE' && (
-                  <div className="rounded-md bg-muted/30 p-3">
-                    <F label="Which service? (pick one or more)">
-                      {services.length > 0 ? (
-                        <div className="flex flex-wrap gap-1.5">
-                          {services.map((s) => (
-                            <Chip key={s.id} active={selectedServices.includes(s.title)} onClick={() => toggleService(s.title)}>
-                              {selectedServices.includes(s.title) && <Check className="mr-1 inline h-3 w-3" />}
-                              {s.title}
-                            </Chip>
-                          ))}
-                        </div>
-                      ) : (
-                        <Input value={form.requirementService || ''} onChange={(e) => set('requirementService', e.target.value)}
-                          placeholder="e.g. Curtain installation, Repair" />
-                      )}
-                    </F>
                   </div>
                 )}
 
