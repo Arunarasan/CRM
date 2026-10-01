@@ -77,6 +77,8 @@ public class LeadController {
             @RequestParam(required = false) Boolean followUpDue,
             @RequestParam(required = false) String enquiryType,
             @RequestParam(required = false) String category,
+            @RequestParam(required = false) java.util.List<String> categoryIn,
+            @RequestParam(required = false) java.util.List<String> categoryNotIn,
             @RequestParam(required = false) String product,
             @RequestParam(required = false) String service,
             @RequestParam(required = false) String sortBy,
@@ -86,7 +88,14 @@ public class LeadController {
         return ResponseEntity.ok(leadService.getLeads(search, status, stage, source, leadType,
                 priority, temperature, city, assignedEmployeeId, isConverted,
                 budgetMin, budgetMax, dateFrom, dateTo, followUpDue,
-                enquiryType, category, product, service, sortBy, sortDir, page, size));
+                enquiryType, category, categoryIn, categoryNotIn, product, service, sortBy, sortDir, page, size));
+    }
+
+    /** [{category, count}] across all live leads; category is null for leads without one. */
+    @GetMapping("/category-counts")
+    @PreAuthorize(READ)
+    public ResponseEntity<java.util.List<java.util.Map<String, Object>>> getCategoryCounts() {
+        return ResponseEntity.ok(leadService.getCategoryCounts());
     }
 
     @GetMapping("/dashboard")

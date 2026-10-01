@@ -149,6 +149,23 @@ public class LeadSpecification {
         };
     }
 
+    /** Category is one of the given names (case-insensitive). */
+    public static Specification<Lead> categoryIn(List<String> names) {
+        return (root, query, cb) -> {
+            if (names == null || names.isEmpty()) return null;
+            return cb.lower(root.get("requirementCategory")).in(names.stream().map(String::toLowerCase).toList());
+        };
+    }
+
+    /** Category is blank or none of the given names — the "Others" bucket. */
+    public static Specification<Lead> categoryNotIn(List<String> names) {
+        return (root, query, cb) -> {
+            if (names == null || names.isEmpty()) return null;
+            return cb.or(cb.isNull(root.get("requirementCategory")),
+                    cb.not(cb.lower(root.get("requirementCategory")).in(names.stream().map(String::toLowerCase).toList())));
+        };
+    }
+
     /** Exact match of one entry inside a comma-separated list column ("A, B, C"). */
     public static Specification<Lead> listContains(String field, String value) {
         return (root, query, cb) -> {

@@ -17,7 +17,7 @@ import api from "@/lib/api";
 import { leadApi } from "./leads/leadApi";
 import LeadFormDialog from "./leads/LeadFormDialog";
 import { selectClass } from "./leads/fields";
-import { EnquiryTag, enquiryDetails, enquiryTypeOf } from "./leads/enquiry";
+import { CATEGORY_GROUPS, EnquiryTag, categoryGroupOf, enquiryDetails, enquiryTypeOf } from "./leads/enquiry";
 import {
   BOARD_DROP_STATUS, EMPTY_FILTERS, ENQUIRY_TYPES, formatFollowUp, LEAD_SOURCES, LEAD_STAGES, LEAD_STATUSES, LEAD_TYPES,
   PRIORITIES, TEMPERATURES, TEMPERATURE_STYLES, avatarColor, followUpTone,
@@ -144,6 +144,7 @@ export default function Leads() {
   const [categories, setCategories] = useState<CatalogCategory[]>([]);
   const [products, setProducts] = useState<CatalogProduct[]>([]);
   const [services, setServices] = useState<CatalogService[]>([]);
+  const [categoryCounts, setCategoryCounts] = useState<{ category: string | null; count: number }[]>([]);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 350);
@@ -152,6 +153,7 @@ export default function Leads() {
 
   const fetchDashboard = useCallback(() => {
     leadApi.dashboard().then((res) => setDashboard(res.data)).catch(console.error);
+    leadApi.categoryCounts().then((res) => setCategoryCounts(res.data || [])).catch(() => {});
   }, []);
 
   const fetchBoard = useCallback(() => {
@@ -164,7 +166,22 @@ export default function Leads() {
 
   const fetchList = useCallback(() => {
     setLoading(true);
-    leadApi.list({ search: debouncedSearch, page, size: rowsPerPage, filters })
+    // A category card is sent as the concrete category names that fall in it (Others = none of
+    // the main groups' names, or no category at all).
+    const { categoryGroup, ...rest } = filters;
+    const apiFilters: Record<string, string> = { ...rest };
+    if (categoryGroup) {
+      const names = Array.from(new Set([
+        ...categoryCounts.map((c) => c.category).filter((c): c is string => !!c),
+        ...categories.map((c) => c.name),
+      ]));
+      if (categoryGroup === "OTHERS") {
+        apiFilters.categoryNotIn = names.filter((n) => categoryGroupOf(n) !== "OTHERS").join(",");
+      } else {
+        apiFilters.categoryIn = names.filter((n) => categoryGroupOf(n) === categoryGroup).join(",") || "__none__";
+      }
+    }
+    leadApi.list({ search: debouncedSearch, page, size: rowsPerPage, filters: apiFilters as Partial<LeadFilters> })
       .then((res) => {
         setLeads(res.data.content);
         setTotalPages(res.data.totalPages);
@@ -172,7 +189,7 @@ export default function Leads() {
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [debouncedSearch, page, rowsPerPage, filters]);
+  }, [debouncedSearch, page, rowsPerPage, filters, categoryCounts, categories]);
 
   useEffect(() => {
     fetchDashboard();
@@ -241,6 +258,12 @@ export default function Leads() {
     { label: "Lost", value: dashboard?.lostLeads, icon: XCircle, className: "bg-rose-100 text-rose-600", ring: "ring-rose-500 border-rose-500", patch: { status: "Lost" } },
     { label: "Follow-ups", value: dashboard?.pendingFollowups, icon: CalendarDays, className: "bg-orange-100 text-orange-600", ring: "ring-orange-500 border-orange-500", patch: { followUpDue: "true" } },
   ], [dashboard]);
+
+  const groupCounts = useMemo(() => {
+    const out: Record<string, number> = {};
+    categoryCounts.forEach((c) => { const g = categoryGroupOf(c.category); out[g] = (out[g] || 0) + Number(c.count); });
+    return out;
+  }, [categoryCounts]);
 
   const setFilter = (key: keyof LeadFilters) => (value: string) =>
     setFilters((f) => ({ ...f, [key]: value }));
@@ -477,6 +500,31 @@ export default function Leads() {
                   <Skeleton className="h-5 w-6" />
                 )}
                 <p className="text-[11px] font-medium text-muted-foreground truncate leading-tight mt-0.5">{stat.label}</p>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Main product category cards — click to filter, click again to clear */}
+      <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+        {CATEGORY_GROUPS.map((g) => {
+          const active = filters.categoryGroup === g.key;
+          return (
+            <button
+              key={g.key}
+              type="button"
+              onClick={() => setFilter("categoryGroup")(active ? "" : g.key)}
+              title={`Show ${g.label} leads`}
+              aria-pressed={active}
+              className={`p-2 bg-card rounded-lg border text-left flex items-center gap-2 shadow-sm transition-all hover:border-foreground/20 hover:shadow ${active ? "ring-2 ring-primary" : ""}`}
+            >
+              <div className={`h-7 w-7 rounded-md flex items-center justify-center shrink-0 ${g.tone}`}>
+                <g.icon size={14} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-lg font-bold leading-none">{groupCounts[g.key] ?? 0}</p>
+                <p className="text-[11px] font-medium text-muted-foreground truncate leading-tight mt-0.5">{g.label}</p>
               </div>
             </button>
           );

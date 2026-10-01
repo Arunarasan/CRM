@@ -11,7 +11,7 @@ import { PortalHeader, StatusPill, EmptyState, inr } from './_shared';
 import MultiImageCaptureField, { type CapturedImage } from '@/components/MultiImageCaptureField';
 import AudioCaptureField, { type CapturedAudio } from '@/components/AudioCaptureField';
 import { ENQUIRY_TYPES, formatTime } from '@/pages/leads/constants';
-import { EnquiryTag, enquiryDetails, enquiryLabel, enquiryTypeOf, splitList } from '@/pages/leads/enquiry';
+import { CATEGORY_GROUPS, EnquiryTag, categoryGroupOf, enquiryDetails, enquiryLabel, enquiryTypeOf, splitList } from '@/pages/leads/enquiry';
 import { Chip, F, Step, areaCls, inDays, stepControls } from '@/pages/leads/formSteps';
 
 const EMPTY: LeadCreateBody = {
@@ -94,6 +94,7 @@ export default function Leads() {
   const [detail, setDetail] = useState<LeadSummary | null>(null);
   const [enq, setEnq] = useState<EnquiryFilters>(NO_ENQUIRY_FILTERS);
   const [showFilters, setShowFilters] = useState(false);
+  const [catGroup, setCatGroup] = useState('');
 
   const load = useCallback(() => {
     employeePortalApi.leads().then(setList).catch(() => {});
@@ -127,12 +128,19 @@ export default function Leads() {
     const q = search.trim().toLowerCase();
     return periodLeads
       .filter((l) => matchesStatus(l, statusFilter))
+      .filter((l) => !catGroup || categoryGroupOf(l.requirementCategory) === catGroup)
       .filter((l) => !enq.enquiryType || enquiryTypeOf(l as any) === enq.enquiryType)
       .filter((l) => !enq.category || (l.requirementCategory || '').toLowerCase() === enq.category.toLowerCase())
       .filter((l) => !enq.product || listHas(l.requirementProduct, enq.product))
       .filter((l) => !enq.service || listHas(l.requirementService, enq.service))
       .filter((l) => !q || [l.name, l.leadNumber, l.mobileNumber, l.city].some((v) => (v || '').toLowerCase().includes(q)));
-  }, [periodLeads, statusFilter, search, enq]);
+  }, [periodLeads, statusFilter, search, enq, catGroup]);
+
+  const groupCounts = useMemo(() => {
+    const out: Record<string, number> = {};
+    periodLeads.forEach((l) => { const g = categoryGroupOf(l.requirementCategory); out[g] = (out[g] || 0) + 1; });
+    return out;
+  }, [periodLeads]);
 
   const enqCount = Object.values(enq).filter(Boolean).length;
   const enqCategory = categories.find((c) => c.name === enq.category);
@@ -255,6 +263,23 @@ export default function Leads() {
               );
             })}
           </div>
+        </div>
+
+        {/* Main product category cards — tap to filter, tap again to clear */}
+        <div className="grid grid-cols-3 gap-2">
+          {CATEGORY_GROUPS.map((g) => {
+            const active = catGroup === g.key;
+            return (
+              <button key={g.key} type="button" onClick={() => setCatGroup(active ? '' : g.key)} aria-pressed={active}
+                className={`flex items-center gap-2 rounded-xl border bg-card p-2 text-left shadow-sm ${active ? 'ring-2 ring-primary' : ''}`}>
+                <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${g.tone}`}><g.icon className="h-3.5 w-3.5" /></span>
+                <span className="min-w-0">
+                  <span className="block text-base font-bold leading-none">{groupCounts[g.key] ?? 0}</span>
+                  <span className="block truncate text-[10px] font-medium text-muted-foreground">{g.label}</span>
+                </span>
+              </button>
+            );
+          })}
         </div>
 
         {/* Search + status filter chips */}

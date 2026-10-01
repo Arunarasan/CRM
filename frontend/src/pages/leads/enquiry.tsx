@@ -1,3 +1,4 @@
+import { Blinds, Footprints, Grid3x3, Shapes, Sofa, Theater, type LucideIcon } from "lucide-react";
 import { ENQUIRY_TYPES, type Lead } from "./constants";
 
 // Helpers for a lead's enquiry tag (Product / Service / Others) so every screen that shows
@@ -38,4 +39,22 @@ export function EnquiryTag({ type, className = "" }: { type?: string; className?
 /** The service / other detail of a lead as chip labels (empty for product enquiries). */
 export function enquiryDetails(lead: Partial<Lead>): string[] {
   return [...splitList(lead.requirementService), ...(lead.requirementOther ? [lead.requirementOther] : [])];
+}
+
+// Main product categories shown as quick-filter cards on the lead lists. A lead's category is
+// matched by keyword (first hit wins), so catalog names like "Netlon (Mosquito Nets)" and older
+// free-text ones like "Flooring" land in the right card; anything else falls into Others.
+export type CategoryGroupKey = "NETLON" | "CURTAINS" | "BLINDS" | "FLOOR_MATS" | "FURNISHING" | "OTHERS";
+export const CATEGORY_GROUPS: { key: CategoryGroupKey; label: string; icon: LucideIcon; tone: string; match?: RegExp }[] = [
+  { key: "NETLON", label: "Netlon", icon: Grid3x3, tone: "bg-sky-100 text-sky-700", match: /netlon|mosquito/i },
+  { key: "CURTAINS", label: "Curtains", icon: Theater, tone: "bg-rose-100 text-rose-700", match: /curtain/i },
+  { key: "BLINDS", label: "Blinds", icon: Blinds, tone: "bg-violet-100 text-violet-700", match: /blind/i },
+  { key: "FLOOR_MATS", label: "Floor Mats", icon: Footprints, tone: "bg-amber-100 text-amber-700", match: /mats?|floor|carpet/i },
+  { key: "FURNISHING", label: "Furnishing", icon: Sofa, tone: "bg-emerald-100 text-emerald-700", match: /furnish|home decor|sofa|bed cover|cushion/i },
+  { key: "OTHERS", label: "Others", icon: Shapes, tone: "bg-slate-200 text-slate-700" },
+];
+
+export function categoryGroupOf(category?: string | null): CategoryGroupKey {
+  if (!category) return "OTHERS";
+  return CATEGORY_GROUPS.find((g) => g.match?.test(category))?.key ?? "OTHERS";
 }

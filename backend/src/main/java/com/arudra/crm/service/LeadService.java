@@ -84,7 +84,8 @@ public class LeadService {
             Long assignedEmployeeId, Boolean isConverted,
             BigDecimal budgetMin, BigDecimal budgetMax,
             LocalDate dateFrom, LocalDate dateTo, Boolean followUpDue,
-            String enquiryType, String category, String product, String service,
+            String enquiryType, String category, List<String> categoryIn, List<String> categoryNotIn,
+            String product, String service,
             String sortBy, String sortDir, int page, int size) {
 
         String sortField = (sortBy != null && SORTABLE_FIELDS.contains(sortBy)) ? sortBy : "id";
@@ -107,11 +108,24 @@ public class LeadService {
                 .and(LeadSpecification.followUpDue(followUpDue))
                 .and(LeadSpecification.hasEnquiryType(enquiryType))
                 .and(LeadSpecification.hasCategory(category))
+                .and(LeadSpecification.categoryIn(categoryIn))
+                .and(LeadSpecification.categoryNotIn(categoryNotIn))
                 .and(LeadSpecification.listContains("requirementProduct", product))
                 .and(LeadSpecification.listContains("requirementService", service))
                 .and(LeadSpecification.matchesSearch(search));
 
         return leadRepository.findAll(spec, pageRequest);
+    }
+
+    public List<Map<String, Object>> getCategoryCounts() {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (Object[] row : leadRepository.countByRequirementCategory()) {
+            Map<String, Object> m = new HashMap<>();
+            m.put("category", row[0]);
+            m.put("count", row[1]);
+            out.add(m);
+        }
+        return out;
     }
 
     public Lead getLeadById(Long id) {

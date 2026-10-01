@@ -414,10 +414,11 @@ export interface LeadFilters {
   category: string;    // requirementCategory
   product: string;     // one entry of requirementProduct
   service: string;     // one entry of requirementService
+  categoryGroup: string; // CategoryGroupKey from leads/enquiry — expanded to categoryIn/NotIn for the API
 }
 
 export const EMPTY_FILTERS: LeadFilters = {
   status: "", stage: "", source: "", leadType: "", priority: "", temperature: "",
   assignedEmployeeId: "", isConverted: "", budgetMin: "", budgetMax: "", dateFrom: "", dateTo: "",
-  followUpDue: "", enquiryType: "", category: "", product: "", service: "",
+  followUpDue: "", enquiryType: "", category: "", product: "", service: "", categoryGroup: "",
 };
