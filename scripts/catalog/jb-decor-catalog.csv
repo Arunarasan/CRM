@@ -1,0 +1,66 @@
+SKU,Product Name,Category,Unit,Description,Image Count
+NET-DOOR,Mosquito Net - Door Type,Netlon (Mosquito Nets),sqft,Hinged mosquito-net door fitted to your existing door frame. Keeps insects out while letting air and light in.,10
+NET-MAINDOOR,Mosquito Net - Main Door Type,Netlon (Mosquito Nets),sqft,"Heavy-duty mosquito-net door for main entrances, with a sturdy frame built for daily use.",10
+NET-VELCRO,Mosquito Net - Velcro Type,Netlon (Mosquito Nets),sqft,Budget-friendly window mosquito net fixed with Velcro tape. Easy to remove and wash; no drilling needed.,10
+NET-PLEATED,Pleated Mosquito Net,Netlon (Mosquito Nets),sqft,Pleated (plisse) mosquito screen that folds neatly to the side. Ideal for wide doors and balconies.,5
+NET-SLIDING,Sliding Mosquito Net,Netlon (Mosquito Nets),sqft,"Aluminium-frame sliding mosquito net for sliding windows and doors. Smooth, long-lasting operation.",3
+NET-DOORNET,Door Net,Netlon (Mosquito Nets),sqft,"Custom-sized door mesh for kitchens, balconies and utility doors.",9
+NET-FOLDING,Folding Net,Netlon (Mosquito Nets),sqft,Foldable tent-style mosquito net for beds. Pops up in seconds and folds flat for storage and travel.,9
+NET-HANGING,Hanging Net,Netlon (Mosquito Nets),pcs,Ceiling-hung mosquito net canopy for single and double beds.,5
+CUR-READY,Readymade Curtains,Curtains,pcs,"Ready-to-hang curtains in popular sizes, colours and styles, including eyelet, pleated and swag designs.",10
+CUR-CUSTOM,Customized Curtains,Curtains,sqft,"Curtains designed, stitched and fitted to your exact window size and style.",10
+CUR-CLOTH,Curtain Cloth,Curtains,meter,"Wide range of curtain fabrics: blackout, sheer, printed, velvet and more, sold by the metre.",7
+CUR-STITCH,Curtain Stitching,Curtains,pcs,"Professional curtain stitching: eyelet, pleated, ripple-fold and more, using your fabric or ours.",2
+CUR-ROLL,Curtain Cloth Rolls,Curtains,roll,"Curtain fabric in full rolls for dealers, contractors and bulk projects.",0
+CUR-GOD,God Screen Curtains,Curtains,pcs,Printed devotional curtains for pooja rooms and temple doorways.,8
+CUR-HOSPITAL,Hospital Curtains,Curtains,sqft,"Hospital cubicle curtains with ceiling tracks for wards, ICUs and clinics. Easy to clean and replace.",10
+CUR-STAGE,Stage Curtains,Curtains,sqft,"Auditorium and stage curtains, including motorised options, for schools, halls and theatres.",3
+CUR-REMOTE,Remote Control Curtains,Curtains,sqft,Motorised curtains that open and close with a remote or smartphone.,0
+BL-ZEBRA,Zebra Blinds,Blinds,sqft,Dual-layer zebra (day-and-night) blinds that let you control light with alternating sheer and solid bands.,6
+BL-WOODEN,Wooden Blinds,Blinds,sqft,"Natural wooden slat blinds that add warmth and elegance to living rooms, bedrooms and offices.",10
+BL-PVC,PVC Blinds,Blinds,sqft,"Durable, water-resistant PVC blinds for balconies, kitchens and outdoor areas.",5
+BL-ROLLER,Roller Blinds,Blinds,sqft,"Simple, clean roller blinds in blackout and sunscreen fabrics.",0
+BL-ROMAN,Roman Blinds,Blinds,sqft,"Fabric Roman blinds that fold into soft, elegant pleats when raised.",5
+BL-VERTICAL,Vertical Blinds,Blinds,sqft,Vertical blinds for wide windows and sliding doors. Ideal for offices.,5
+BL-VENETIAN,Venetian Blinds,Blinds,sqft,Aluminium Venetian blinds with adjustable slats for precise light control.,5
+BL-PRINTED,Customized Printed Blinds,Blinds,sqft,"Blinds printed with your own photo, logo or design. Great for homes, shops and offices.",8
+BL-REMOTE,Remote Control Blinds,Blinds,sqft,Motorised blinds operated by remote or smartphone.,0
+ROD-SS,SS Curtain Rods & Pipes,Curtain Rods & Accessories,feet,Stainless-steel curtain rods and pipes in multiple diameters and finishes. Rust-free and long-lasting.,4
+ROD-HOLDER,Curtain Rod Holders,Curtain Rods & Accessories,pcs,"Wall and ceiling brackets for curtain rods in steel, brass and decorative designs.",9
+ROD-FINIAL,Curtain Rod Finials,Curtain Rods & Accessories,pair,"Decorative end caps for curtain rods: crystal, steel, floral and classic styles.",10
+ROD-TRACK,Curtain Tracks,Curtain Rods & Accessories,feet,"Aluminium curtain tracks, including ripple-fold (S-wave) systems, for smooth gliding curtains.",4
+ROD-HOOK,Curtain Hooks & Rings,Curtain Rods & Accessories,pack,"Curtain hooks, rings and runners for every rod and track type.",5
+ROD-SPRING,Curtain Springs,Curtain Rods & Accessories,pcs,"Spring wire curtain rods for small windows, cabinets and light curtains.",3
+ROD-ACC,Curtain & Blind Accessories,Curtain Rods & Accessories,pcs,"Eyelet rings and tape, blind spare parts, roller-blind kits, hook-and-loop tape and curtain canvas.",10
+MAT-VINYL,Vinyl Flooring,Mats & Flooring,sqft,Waterproof vinyl flooring rolls and planks. Easy to install and maintain.,8
+MAT-CARPET,Carpets,Mats & Flooring,sqft,"Wall-to-wall and area carpets for homes, offices and events.",6
+MAT-GRASS,Artificial Grass Mat,Mats & Flooring,sqft,"Lush artificial grass for balconies, terraces, play areas and events.",6
+MAT-FOOT,Foot Mats,Mats & Flooring,pcs,"Doormats and foot mats in coir, rubber and designer prints.",8
+MAT-MULTI,Multi-Purpose Mats,Mats & Flooring,pcs,"Versatile mats for dining, yoga, kitchens and floors.",10
+WALL-STICKER,Wall Sticker Rolls,Wall Decor,roll,Self-adhesive decorative wall sticker rolls for a quick makeover.,7
+WALL-PAPER,Wallpapers,Wall Decor,roll,"Designer wallpapers in textured, 3D, floral and modern patterns.",6
+WALL-FLUTED,Wall Fluted Panels,Wall Decor,sqft,"WPC/PVC fluted wall panels for feature walls, TV backdrops and headboards.",5
+WALL-UV,Wall UV Sheets,Wall Decor,sqft,"High-gloss UV marble sheets, a lightweight alternative to stone for walls.",4
+WALL-FOAM,Wall Foam Sheets,Wall Decor,sqft,"3D self-adhesive foam wall panels. Soft, insulating and easy to install.",4
+INT-KITCHEN,Modular Kitchen,Interior Works,sqft,"Custom modular kitchens in L, U, parallel and straight layouts with premium finishes and fittings.",10
+INT-WARDROBE,Wardrobes,Interior Works,sqft,"Sliding and hinged wardrobes built to fit your space, with lofts, drawers and mirror options.",10
+INT-PVC,PVC Cupboards,Interior Works,sqft,"Waterproof, termite-proof PVC cupboards for kitchens, bathrooms and utility areas.",10
+INT-UPVC,uPVC Cupboards,Interior Works,sqft,"Strong, low-maintenance uPVC cupboards and storage units.",5
+INT-ALU,Aluminium Works,Interior Works,sqft,"Aluminium partitions, windows, doors and cupboards.",8
+INT-CEILING,False Ceiling,Interior Works,sqft,Gypsum and PVC false ceilings with cove lighting and modern designs.,9
+INT-SHOP,Shop Interiors,Interior Works,sqft,"Shop fit-outs including racks, display units and counters for retail stores.",10
+INT-TV,TV Units,Interior Works,sqft,"Custom TV units and entertainment walls with storage, panelling and lighting.",10
+INT-SHELF,Wall Shelves,Interior Works,sqft,"Floating and decorative wall shelves for living rooms, bedrooms and pooja rooms.",10
+DEC-BEADS,Beads Curtains,Home Decor,pcs,"Decorative bead curtains for doorways, partitions and pooja rooms.",3
+DEC-CRYSTAL,Crystal Curtains,Home Decor,pcs,"Sparkling crystal string curtains for doorways, partitions and events.",3
+DEC-THREAD,Thread Curtains,Home Decor,pcs,"Light, flowing thread (string) curtains for doorways and room partitions.",1
+DEC-MANI,Mani Curtains,Home Decor,pcs,Traditional mani (bead-string) curtains for doorways and pooja rooms.,0
+DEC-LACE,Curtain Lace,Home Decor,meter,"Decorative tassel laces and borders to finish curtains, valances and cushions.",3
+DEC-TASSEL,Curtain Tassels & Tie-Backs,Home Decor,pair,Decorative tassel tie-backs to hold curtains open in style.,4
+DEC-BEDCOVER,Bed Covers,Home Decor,pcs,Printed bedsheets and bed covers in cotton and quilted fabrics.,2
+DEC-SOFACOVER,Sofa Covers,Home Decor,set,Stretchable and reversible sofa covers and panels that protect and refresh your sofa.,3
+DEC-TABLECOVER,Table Covers,Home Decor,pcs,"Dining table covers and runners in lace, printed and embroidered designs.",2
+DEC-FUNCTION,Function Table Covers & Skirting,Home Decor,pcs,"Table covers and pleated skirting for weddings, functions, events and banquet halls.",3
+SRV-MEASURE,Measurement Service,Services,visit,"Our team visits your site to take accurate measurements for curtains, blinds, nets and interiors.",3
+SRV-STITCH,Tailoring & Stitching,Services,pcs,"In-house tailoring and stitching for curtains, cushions and soft furnishings.",2
+SRV-INSTALL,Installation & Fitting,Services,visit,"Professional installation of curtains, rods, blinds, nets and wall decor.",4
