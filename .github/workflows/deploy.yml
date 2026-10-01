@@ -52,6 +52,11 @@ jobs:
     needs: [build-and-test]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
+    # One deploy on the VPS at a time: overlapping runs would race on git reset + docker compose.
+    # Never cancel a deploy mid-way; a newer push waits for the current one to finish.
+    concurrency:
+      group: vps-deploy
+      cancel-in-progress: false
 
     steps:
       - name: Deploy on Hostinger VPS
