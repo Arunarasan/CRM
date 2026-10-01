@@ -83,6 +83,8 @@ const FinanceDashboard = lazy(() => import("./pages/finance/FinanceDashboard"));
 const FinanceInvoicesPage = lazy(() => import("./pages/finance/InvoicesPage"));
 const FinanceInvoiceFormPage = lazy(() => import("./pages/finance/InvoiceFormPage"));
 const FinanceCounterSalePage = lazy(() => import("./pages/finance/CounterSalePage"));
+const BundlesPage = lazy(() => import("./pages/bundles/BundlesPage"));
+const BundleDetailPage = lazy(() => import("./pages/bundles/BundleDetailPage"));
 const FinanceInvoiceDetailPage = lazy(() => import("./pages/finance/InvoiceDetailPage"));
 const FinancePaymentsPage = lazy(() => import("./pages/finance/PaymentsPage"));
 const FinanceAccountsPage = lazy(() => import("./pages/finance/AccountsPage"));
@@ -193,6 +195,10 @@ function App() {
             <Route path="projects/:id" element={<ProjectCommandCenter />} />
             <Route path="projects/:id/tasks/:taskId" element={<TaskReportPage />} />
             <Route path="tasks" element={<Tasks />} />
+            {/* Bundle tracking — stickered stitching / making bundles; a sticker QR opens /bundles/code/:code. */}
+            <Route path="bundles" element={<BundlesPage />} />
+            <Route path="bundles/code/:code" element={<BundleDetailPage />} />
+            <Route path="bundles/:id" element={<BundleDetailPage />} />
             {/* Website / CMS — manage the public marketing site's catalog and content. */}
             <Route path="website" element={<WebsiteLayout />}>
               <Route index element={<HeroSlidesAdmin />} />

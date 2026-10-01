@@ -55,6 +55,7 @@ const en = {
     inventory: 'Inventory',
     purchasing: 'Purchasing',
     billing: 'Billing',
+    bundles: 'Bundles',
     finance: 'Finance',
     workforce: 'HR & Payroll',
     website: 'Website',

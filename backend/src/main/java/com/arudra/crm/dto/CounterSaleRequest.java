@@ -32,6 +32,7 @@ public class CounterSaleRequest {
 
     public List<Item> items;
     public Installation installation;
+    public Work work;
 
     // --- payment ---
     public boolean collectNow;
@@ -46,6 +47,11 @@ public class CounterSaleRequest {
         public BigDecimal unitPrice;
         public BigDecimal gstRate;
         public Long warehouseId;  // optional per-line source warehouse
+        // --- bundle work (stitching / making) for this line ---
+        public boolean needsWork;
+        public Integer bundleNo;  // which bundle (1-based) this line goes in; default 1
+        public String workSpec;   // JSON text: type / width / height / pleat / lining ...
+        public String workNotes;
     }
 
     public static class Installation {
@@ -54,6 +60,24 @@ public class CounterSaleRequest {
         public BigDecimal gstRate;    // defaults to 18 when installation is billed
         public Long employeeId;       // null => task goes to the pool (anyone can pick it up)
         public String scheduledDate;  // yyyy-MM-dd
+        public String notes;
+    }
+
+    /**
+     * Stitching / making work on some of the sold lines. Lines flagged {@code needsWork} are packed
+     * into {@code bundleCount} stickered bundles (see BundleService); an optional charge is billed.
+     */
+    public static class Work {
+        public boolean enabled;
+        public BigDecimal charge;
+        public BigDecimal gstRate;    // defaults to 5 when a work charge is billed
+        public String workType;       // STITCHING (default) / MAKING / FITTING / OTHER
+        public Integer bundleCount;   // number of stickers; default 1
+        public String dueDate;        // yyyy-MM-dd
+        public String priority;
+        public String resourceType;   // EMPLOYEE / CONTRACTOR (optional)
+        public Long resourceId;
+        public String handoverMode;   // PICKUP / DELIVERY
         public String notes;
     }
 }

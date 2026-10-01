@@ -53,6 +53,7 @@ const hi = {
     inventory: 'इन्वेंटरी',
     purchasing: 'खरीद',
     billing: 'बिलिंग',
+    bundles: 'बंडल',
     finance: 'वित्त',
     workforce: 'एचआर एवं पेरोल',
     website: 'वेबसाइट',

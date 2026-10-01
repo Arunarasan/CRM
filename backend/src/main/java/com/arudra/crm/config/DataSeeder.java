@@ -127,7 +127,8 @@ public class DataSeeder {
                     "WORKFORCE_READ", "WORKFORCE_WRITE",
                     "ASSIGNMENT_READ", "ASSIGNMENT_WRITE",
                     "PAYROLL_READ", "PAYROLL_WRITE", "PAYROLL_PROCESS",
-                    "WEBSITE_READ", "WEBSITE_WRITE");
+                    "WEBSITE_READ", "WEBSITE_WRITE",
+                    "BUNDLE_READ", "BUNDLE_WRITE", "BUNDLE_MOVE");
             for (String permissionName : permissionNames) {
                 if (permissionRepository.findByName(permissionName).isEmpty()) {
                     Permission permission = new Permission();
@@ -427,6 +428,16 @@ public class DataSeeder {
             // Website / CMS management — admin-only for now.
             assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_ADMIN",
                     "WEBSITE_READ", "WEBSITE_WRITE");
+
+            // Bundle tracking (stickered stitching/making bundles): counter staff create + assign;
+            // floor staff (tailors, packers) scan a bundle and step it forward.
+            for (String role : List.of("ROLE_ADMIN", "ROLE_MANAGER", "ROLE_SALES", "ROLE_ACCOUNTS", "ROLE_FINANCE_MANAGER")) {
+                assignPermissionsToRole(roleRepository, permissionRepository, role,
+                        "BUNDLE_READ", "BUNDLE_WRITE", "BUNDLE_MOVE");
+            }
+            for (String role : List.of("ROLE_EMPLOYEE", "ROLE_SUPERVISOR", "ROLE_STORE_KEEPER")) {
+                assignPermissionsToRole(roleRepository, permissionRepository, role, "BUNDLE_READ", "BUNDLE_MOVE");
+            }
 
             // 2. Seed the bootstrap admin.
             //

@@ -1,5 +1,6 @@
 package com.arudra.crm.service;
 
+import com.arudra.crm.dto.BundleRequests;
 import com.arudra.crm.dto.CounterSaleRequest;
 import com.arudra.crm.dto.InvoicePaymentSplit;
 import com.arudra.crm.dto.lead.UserSummaryDTO;
@@ -47,6 +48,7 @@ public class FinanceService {
     @Autowired private DocumentNumberService documentNumberService;
     @Autowired private InventoryService inventoryService;
     @Autowired private TaskService taskService;
+    @Autowired private BundleService bundleService;
 
     // =====================================================================
     // Numbering — allocated atomically (see DocumentNumberService); the old
@@ -165,6 +167,8 @@ public class FinanceService {
         invoice.setStatus("GENERATED"); // a counter sale is a real, issued sale — not a draft
 
         List<InvoiceItem> items = new ArrayList<>();
+        // The request line behind each product item (same order), so work bundles can find their bill line.
+        Map<InvoiceItem, CounterSaleRequest.Item> sourceLines = new IdentityHashMap<>();
         if (req.items != null) {
             for (CounterSaleRequest.Item li : req.items) {
                 if (li == null || li.description == null || li.description.isBlank()) continue;
@@ -178,6 +182,7 @@ public class FinanceService {
                 item.setProductId(li.productId);
                 item.setSourceWarehouseId(li.warehouseId); // per-line override; resolved below
                 items.add(item);
+                sourceLines.put(item, li);
             }
         }
 
@@ -192,6 +197,20 @@ public class FinanceService {
             line.setGstRate(inst.gstRate == null ? BigDecimal.valueOf(18) : inst.gstRate);
             items.add(line);
         }
+        CounterSaleRequest.Work work = req.work;
+        boolean hasWork = work != null && work.enabled;
+        if (hasWork && sourceLines.values().stream().noneMatch(li -> li.needsWork)) {
+            throw new IllegalArgumentException("Tick at least one item that needs stitching / work");
+        }
+        if (hasWork && work.charge != null && work.charge.signum() > 0) {
+            InvoiceItem line = new InvoiceItem();
+            line.setDescription(workChargeLabel(work.workType));
+            line.setUnit("Job");
+            line.setQuantity(1);
+            line.setUnitPrice(work.charge);
+            line.setGstRate(work.gstRate == null ? BigDecimal.valueOf(5) : work.gstRate);
+            items.add(line);
+        }
         if (items.isEmpty()) {
             throw new RuntimeException("A counter sale needs at least one product or charge line");
         }
@@ -201,6 +220,7 @@ public class FinanceService {
         computeTotals(invoice, items);
         Invoice saved = invoiceRepository.save(invoice);
 
+        List<InvoiceItem> savedItems = new ArrayList<>();
         for (InvoiceItem item : items) {
             item.setId(null);
             item.setInvoice(saved);
@@ -214,13 +234,21 @@ public class FinanceService {
                     item.setSourceWarehouseId(null);
                 }
             }
-            invoiceItemRepository.save(item);
+            // save() may merge and hand back a different instance — keep the persisted one (it has the id).
+            InvoiceItem persisted = invoiceItemRepository.save(item);
+            CounterSaleRequest.Item source = sourceLines.remove(item);
+            if (source != null) sourceLines.put(persisted, source);
+            savedItems.add(persisted);
         }
 
         postInvoiceToLedger(saved);
 
         if (hasInstallation) {
             createInstallationTask(saved, customer, inst);
+        }
+
+        if (hasWork) {
+            createWorkBundles(saved, savedItems, sourceLines, work, user);
         }
 
         if (req.collectNow) {
@@ -281,6 +309,52 @@ public class FinanceService {
         c.setCustomerSince(LocalDate.now());
         c.setCustomerCode("CUST-" + System.currentTimeMillis());
         return customerRepository.save(c);
+    }
+
+    private static String workChargeLabel(String workType) {
+        String t = workType == null ? "STITCHING" : workType.trim().toUpperCase();
+        return switch (t) {
+            case "MAKING" -> "Making Charges";
+            case "FITTING" -> "Fitting Charges";
+            case "OTHER" -> "Work Charges";
+            default -> "Stitching Charges";
+        };
+    }
+
+    /** Packs the counter-sale lines flagged {@code needsWork} into stickered bundles. */
+    private void createWorkBundles(Invoice invoice, List<InvoiceItem> items,
+                                   Map<InvoiceItem, CounterSaleRequest.Item> sourceLines,
+                                   CounterSaleRequest.Work work, User user) {
+        int count = work.bundleCount == null || work.bundleCount < 1 ? 1 : Math.min(work.bundleCount, 50);
+        List<BundleRequests.BundleSpec> bundles = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            BundleRequests.BundleSpec spec = new BundleRequests.BundleSpec();
+            spec.items = new ArrayList<>();
+            bundles.add(spec);
+        }
+        for (InvoiceItem item : items) {
+            CounterSaleRequest.Item li = sourceLines.get(item);
+            if (li == null || !li.needsWork) continue;
+            int no = li.bundleNo == null ? 1 : Math.max(1, Math.min(li.bundleNo, count));
+            BundleRequests.ItemSpec is = new BundleRequests.ItemSpec();
+            is.invoiceItemId = item.getId();
+            is.workSpec = li.workSpec;
+            is.notes = li.workNotes;
+            bundles.get(no - 1).items.add(is);
+        }
+        bundles.removeIf(b -> b.items.isEmpty()); // a bundle number nobody put anything in
+
+        BundleRequests.Create req = new BundleRequests.Create();
+        req.invoiceId = invoice.getId();
+        req.workType = work.workType;
+        req.dueDate = work.dueDate;
+        req.priority = work.priority;
+        req.resourceType = work.resourceType;
+        req.resourceId = work.resourceId;
+        req.handoverMode = work.handoverMode;
+        req.notes = work.notes;
+        req.bundles = bundles;
+        bundleService.create(req, user);
     }
 
     private void createInstallationTask(Invoice invoice, Customer customer, CounterSaleRequest.Installation inst) {
@@ -506,6 +580,7 @@ public class FinanceService {
         invoice.setCancelledReason(reason);
         invoice.setBalanceDue(BigDecimal.ZERO);
         Invoice saved = invoiceRepository.save(invoice);
+        bundleService.cancelForInvoice(saved.getId(), reason);
         // Put counter-sale stock back on cancellation (each product line remembers its warehouse).
         if ("COUNTER_SALE".equals(saved.getInvoiceType())) {
             for (InvoiceItem item : invoiceItemRepository.findByInvoiceId(saved.getId())) {

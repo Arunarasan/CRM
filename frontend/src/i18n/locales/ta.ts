@@ -53,6 +53,7 @@ const ta = {
     inventory: 'சரக்கு',
     purchasing: 'கொள்முதல்',
     billing: 'பில்லிங்',
+    bundles: 'பண்டல்கள்',
     finance: 'நிதி',
     workforce: 'மனிதவளம் & ஊதியம்',
     website: 'இணையதளம்',

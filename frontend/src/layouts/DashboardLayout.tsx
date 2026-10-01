@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { Outlet, Link, NavLink, useLocation } from "react-router-dom";
 import {
   Bell, LogOut, Menu, X, LayoutDashboard, Users, Target, FolderKanban, ChevronLeft,
-  ListChecks, Package, ShoppingCart, ReceiptText, Wallet, Contact, Globe,
+  ListChecks, Package, PackageCheck, ShoppingCart, ReceiptText, Wallet, Contact, Globe,
   Settings as SettingsIcon, ShieldCheck, Search, MessageSquare, ChevronDown, Sparkles, ArrowRight,
 } from "lucide-react";
 import {
@@ -33,6 +33,7 @@ const NAV_ITEMS: { to: string; labelKey: string; authority: string | null; admin
   { to: "/inventory", labelKey: "nav.inventory", authority: "INVENTORY_READ", icon: Package },
   { to: "/purchases", labelKey: "nav.purchasing", authority: "PURCHASE_READ", icon: ShoppingCart },
   { to: "/billing", labelKey: "nav.billing", authority: "FINANCE_READ", icon: ReceiptText },
+  { to: "/bundles", labelKey: "nav.bundles", authority: "BUNDLE_READ", icon: PackageCheck },
   { to: "/finance", labelKey: "nav.finance", authority: "FINANCE_READ", icon: Wallet },
   { to: "/workforce", labelKey: "nav.workforce", authority: "WORKFORCE_READ", icon: Contact },
   { to: "/website", labelKey: "nav.website", authority: "WEBSITE_READ", icon: Globe },

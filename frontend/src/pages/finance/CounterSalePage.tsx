@@ -9,7 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Input, BaseInput } from "@/components/ui/input";
 import SearchableSelect from "@/components/ui/searchable-select";
 import { currency } from "./helpers";
-import { Plus, Minus, Search, Trash2, Wrench } from "lucide-react";
+import BundleWorkEditor, { defaultWorkHeader, type WorkHeader, type WorkLine } from "@/components/bundles/BundleWorkEditor";
+import { specToJson } from "@/components/bundles/workSpec";
+import { Plus, Minus, Search, Trash2, Wrench, Scissors } from "lucide-react";
 
 interface CustomerLite { id: number; name: string; phone?: string }
 interface ProductLite { id: number; name?: string; sku?: string; materialCode?: string; unit?: string; hsnCode?: string; gstPercent?: number; price?: number; sellingPrice?: number }
@@ -59,6 +61,14 @@ export default function CounterSalePage() {
   const [installEmployeeId, setInstallEmployeeId] = useState("");
   const [installDate, setInstallDate] = useState("");
   const [installNotes, setInstallNotes] = useState("");
+
+  // stitching / making work → stickered bundles
+  const [workOn, setWorkOn] = useState(false);
+  const [workHeader, setWorkHeader] = useState<WorkHeader>(defaultWorkHeader);
+  const [workLines, setWorkLines] = useState<Record<number, WorkLine>>({});
+  const patchWorkHeader = (patch: Partial<WorkHeader>) => setWorkHeader((h) => ({ ...h, ...patch }));
+  const patchWorkLine = (key: number, patch: Partial<WorkLine>) =>
+    setWorkLines((m) => ({ ...m, [key]: { ...(m[key] ?? { on: false, bundleNo: 1, spec: {} }), ...patch } }));
 
   // payment
   const [collectNow, setCollectNow] = useState(true);
@@ -134,18 +144,20 @@ export default function CounterSalePage() {
   const totals = useMemo(() => {
     const productSub = lines.reduce((s, l) => s + l.qty * l.rate, 0);
     const install = installOn ? Number(installCharge) || 0 : 0;
-    const subTotal = productSub + install;
+    const work = workOn ? Number(workHeader.charge) || 0 : 0;
+    const subTotal = productSub + install + work;
     let discount = discountType === "PERCENTAGE" ? subTotal * (Number(discountValue) || 0) / 100 : (Number(discountValue) || 0);
     if (discount > subTotal) discount = subTotal;
     const taxable = subTotal - discount;
     const taxLines = [
       ...lines.map((l) => ({ base: l.qty * l.rate, rate: l.gst })),
       ...(install > 0 ? [{ base: install, rate: 18 }] : []),
+      ...(work > 0 ? [{ base: work, rate: 5 }] : []),
     ];
     const gst = taxLines.reduce((s, l) => (subTotal === 0 ? s : s + (taxable * (l.base / subTotal)) * (l.rate || 0) / 100), 0);
     const grand = Math.round(taxable + gst);
-    return { productSub, install, subTotal, discount, gst, grand };
-  }, [lines, installOn, installCharge, discountType, discountValue]);
+    return { productSub, install, work, subTotal, discount, gst, grand };
+  }, [lines, installOn, installCharge, workOn, workHeader.charge, discountType, discountValue]);
 
   const itemCount = lines.reduce((s, l) => s + (l.name.trim() ? l.qty : 0), 0);
   // A walk-in needs no name — a nameless sale bills the canonical "Walk-in Customer".
@@ -154,6 +166,8 @@ export default function CounterSalePage() {
   const save = async () => {
     const validItems = lines.filter((l) => l.name.trim() && l.qty > 0);
     if (validItems.length === 0 && !(installOn && Number(installCharge) > 0)) { toast.error("Add at least one item."); return; }
+    const workItems = workOn ? validItems.filter((l) => workLines[l.key]?.on) : [];
+    if (workOn && workItems.length === 0) { toast.error("Tick the items that need stitching / work."); return; }
     setSaving(true);
     try {
       // A walk-in phone that already exists reuses that customer (phone is unique) — never a duplicate.
@@ -164,10 +178,22 @@ export default function CounterSalePage() {
         customerPhone: reuseId ? null : (custPhone.trim() || null),
         gstType, discountType, discountValue: Number(discountValue) || 0,
         deductStock, warehouseId: deductStock && warehouseId ? Number(warehouseId) : null,
-        items: validItems.map((l) => ({
-          productId: l.productId, description: l.name.trim(), hsnCode: l.hsnCode || null,
-          unit: l.unit || null, quantity: l.qty, unitPrice: l.rate, gstRate: l.gst || 0,
-        })),
+        items: validItems.map((l) => {
+          const w = workOn ? workLines[l.key] : undefined;
+          return {
+            productId: l.productId, description: l.name.trim(), hsnCode: l.hsnCode || null,
+            unit: l.unit || null, quantity: l.qty, unitPrice: l.rate, gstRate: l.gst || 0,
+            needsWork: !!w?.on, bundleNo: w?.on ? Math.min(w.bundleNo, workHeader.bundleCount) : null,
+            workSpec: w?.on ? specToJson(w.spec) : null,
+          };
+        }),
+        work: workOn ? {
+          enabled: true, charge: Number(workHeader.charge) || 0, gstRate: 5,
+          workType: workHeader.workType, bundleCount: workHeader.bundleCount,
+          dueDate: workHeader.dueDate || null, priority: workHeader.priority,
+          resourceType: workHeader.resource?.resourceType ?? null, resourceId: workHeader.resource?.resourceId ?? null,
+          handoverMode: workHeader.handoverMode, notes: workHeader.notes || null,
+        } : { enabled: false },
         installation: installOn ? {
           enabled: true, charge: Number(installCharge) || 0, gstRate: 18,
           employeeId: installEmployeeId ? Number(installEmployeeId) : null,
@@ -176,8 +202,10 @@ export default function CounterSalePage() {
         collectNow, paymentMethod: collectNow ? paymentMethod : null,
       });
       toast.success(`${created.invoiceNumber} saved${collectNow ? " · paid" : ""}.`);
-      const printQ = printFormat === "none" ? "" : `?print=${printFormat}`;
-      navigate(`/billing/invoices/${created.id}${printQ}`);
+      const q = new URLSearchParams();
+      if (printFormat !== "none") q.set("print", printFormat);
+      if (workOn) q.set("stickers", "1"); // invoice page offers / opens the bundle stickers
+      navigate(`/billing/invoices/${created.id}${q.toString() ? `?${q}` : ""}`);
     } catch (e) {
       toast.error(apiError(e, "Could not complete the sale."));
       setSaving(false);
@@ -258,6 +286,24 @@ export default function CounterSalePage() {
               </div>
             )}
           </div>
+
+          {/* stitching / making work add-on → stickered bundles */}
+          <div className="bg-white border rounded-xl">
+            <label className="flex items-center gap-2.5 px-3 py-3 cursor-pointer">
+              <BaseInput type="checkbox" checked={workOn} onChange={(e) => setWorkOn(e.target.checked)} className="w-4 h-4" />
+              <Scissors className="w-4 h-4 text-slate-500" />
+              <span className="text-sm font-medium text-slate-700">Needs stitching / work</span>
+              <span className="text-xs text-slate-400">prints a sticker for each bundle</span>
+            </label>
+            {workOn && (
+              <div className="px-3 pb-3">
+                <BundleWorkEditor
+                  lines={lines.map((l) => ({ key: l.key, label: l.name, sub: `${l.qty} ${l.unit}` }))}
+                  header={workHeader} onHeader={patchWorkHeader}
+                  lineState={workLines} onLine={patchWorkLine} showCharge />
+              </div>
+            )}
+          </div>
         </div>
 
         {/* RIGHT — bill */}
@@ -309,6 +355,7 @@ export default function CounterSalePage() {
             <div className="space-y-1.5 text-sm border-t pt-3">
               <Row label={`Items (${itemCount})`} value={currency(totals.productSub)} />
               {installOn && totals.install > 0 && <Row label="Installation" value={currency(totals.install)} />}
+              {workOn && totals.work > 0 && <Row label="Stitching / work" value={currency(totals.work)} />}
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-1 text-slate-500">
                   <span>Discount</span>

@@ -18,6 +18,7 @@ import {
 import { printInvoice } from "../projectFinance/printInvoice";
 import { printReceipt } from "./printReceipt";
 import { fetchCompanyProfile, type CompanyProfile } from "@/lib/companyProfile";
+import InvoiceBundles from "@/components/bundles/InvoiceBundles";
 import { ArrowLeft, CheckCircle2, Send, XCircle, IndianRupee, RotateCcw, Printer, ChevronDown } from "lucide-react";
 
 export default function InvoiceDetailPage() {
@@ -66,6 +67,10 @@ export default function InvoiceDetailPage() {
     next.delete("print");
     setSearchParams(next, { replace: true });
   }, [searchParams, inv, items, company, doPrint, setSearchParams]);
+
+  const stripStickers = useCallback(() => {
+    setSearchParams((prev) => { const next = new URLSearchParams(prev); next.delete("stickers"); return next; }, { replace: true });
+  }, [setSearchParams]);
 
   const run = async (fn: () => Promise<Invoice>, successMsg?: string) => {
     setBusy(true);
@@ -214,6 +219,9 @@ export default function InvoiceDetailPage() {
           </div>
         </div>
       </div>
+
+      <InvoiceBundles invoiceId={inv.id} items={items} cancelled={inv.status === "CANCELLED"} company={company}
+        autoStickers={searchParams.get("stickers") === "1"} onAutoDone={stripStickers} />
 
       {/* Payments */}
       <div className="bg-white border rounded-2xl shadow-sm p-5">
