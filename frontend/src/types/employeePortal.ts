@@ -335,6 +335,9 @@ export interface LeadSummary {
   stage: string | null;
   requirementCategory: string | null;
   requirementProduct: string | null;
+  enquiryType?: string | null;
+  requirementService?: string | null;
+  requirementOther?: string | null;
   estimatedBudget: number | null;
   siteVisitDate: string | null;
   createdAt: string | null;
@@ -355,6 +358,9 @@ export interface LeadCreateBody {
   city?: string;
   requirementCategory?: string;
   requirementProduct?: string;
+  enquiryType?: string; // PRODUCT | SERVICE | OTHER
+  requirementService?: string; // website service titles, comma-separated
+  requirementOther?: string;
   requirement?: string;
   estimatedBudget?: number | string;
   rating?: number;

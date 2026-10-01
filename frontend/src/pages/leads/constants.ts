@@ -29,6 +29,13 @@ export const LEAD_STAGES = [
 export const TEMPERATURES = ["Hot", "Warm", "Cold"];
 export const PRIORITIES = ["Low", "Medium", "High", "Urgent"];
 
+// What a lead is enquiring about — drives which requirement picker the create form shows.
+export const ENQUIRY_TYPES = [
+  { value: "PRODUCT", label: "Product" },
+  { value: "SERVICE", label: "Service" },
+  { value: "OTHER", label: "Others" },
+] as const;
+
 // Who referred a lead when Lead Source = "Referral".
 export const REFERRAL_TYPES = ["Existing Customer", "Employee", "Other"];
 
@@ -238,6 +245,9 @@ export interface Lead {
   currentConstructionStage?: string;
   requirementCategory?: string;
   requirementProduct?: string;
+  enquiryType?: string; // "PRODUCT" | "SERVICE" | "OTHER"
+  requirementService?: string; // website service names, comma-separated
+  requirementOther?: string; // free-text enquiry when enquiryType = OTHER
   projectDescription?: string;
   customerRequirements?: string;
   preferredDesignStyle?: string;

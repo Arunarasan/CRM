@@ -19,6 +19,7 @@ import {
 import type { LeadJourney, JourneyStepId } from "../journey";
 import { CheckboxField } from "../fields";
 import ExistingCustomerSearch from "@/pages/customers/ExistingCustomerSearch";
+import { EnquiryTag, enquiryDetails, enquiryTypeOf } from "../enquiry";
 
 // The Overview tab renders the lead as a responsive two-column grid of icon-rich cards, so every
 // detail is visible on one page. Each card can be edited in place — clicking Edit turns its value
@@ -855,6 +856,22 @@ function ScopeCard({ lead, canEdit, onChanged }: CardProps) {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-x-5 gap-y-4">
+            {enquiryTypeOf(lead) && (
+              <div className="md:col-span-3">
+                <Field
+                  icon={Tag}
+                  label="Looking for"
+                  view={(
+                    <span className="flex flex-wrap items-center gap-1.5">
+                      <EnquiryTag type={enquiryTypeOf(lead)} />
+                      {enquiryDetails(lead).map((d) => (
+                        <span key={d} className="px-2.5 py-0.5 bg-violet-100 text-violet-700 text-xs rounded-full font-medium">{d}</span>
+                      ))}
+                    </span>
+                  )}
+                />
+              </div>
+            )}
             <Field icon={Tag} label="Requirement Category" view={lead.requirementCategory} />
             <div className="md:col-span-2">
               <Field

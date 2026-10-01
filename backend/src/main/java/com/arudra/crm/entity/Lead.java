@@ -135,6 +135,15 @@ public class Lead extends BaseEntity {
     @Column(name = "requirement_product", length = 1000)
     private String requirementProduct; // one or more catalog product names, comma-separated
 
+    @Column(name = "enquiry_type", length = 20)
+    private String enquiryType; // PRODUCT | SERVICE | OTHER — what the lead is asking about
+
+    @Column(name = "requirement_service", length = 1000)
+    private String requirementService; // one or more website service names, comma-separated
+
+    @Column(name = "requirement_other", length = 500)
+    private String requirementOther; // free-text enquiry when enquiryType = OTHER
+
     @Column(name = "project_description", columnDefinition = "TEXT")
     private String projectDescription;
 

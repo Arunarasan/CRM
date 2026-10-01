@@ -1,16 +1,19 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle, ChevronDown, X } from "lucide-react";
+import { AlertTriangle, Check, Star, X } from "lucide-react";
 import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/toast";
 import ExistingCustomerSearch from "@/pages/customers/ExistingCustomerSearch";
 import { leadApi } from "./leadApi";
 import {
-  CONSTRUCTION_STATUSES, LEAD_SOURCES, LEAD_TYPES, PRIORITIES, REFERRAL_TYPES, TEMPERATURES,
-  type Lead, type UserSummary,
+  CONSTRUCTION_STATUSES, ENQUIRY_TYPES, LEAD_SOURCES, LEAD_TYPES, PRIORITIES, REFERRAL_TYPES, TEMPERATURES,
+  formatDate, type Lead, type UserSummary,
 } from "./constants";
-import { CheckboxField, SectionTitle, SelectField, selectClass, StarRating, TextAreaField, TextField } from "./fields";
+import { CheckboxField } from "./fields";
+import { enquiryLabel, enquiryTypeOf, splitList } from "./enquiry";
+import { Chip, F, Step, areaCls, inDays } from "./formSteps";
 import MultiImageCaptureField, { type CapturedImage } from "@/components/MultiImageCaptureField";
 import AudioCaptureField, { type CapturedAudio } from "@/components/AudioCaptureField";
 
@@ -21,7 +24,27 @@ const EMPTY_FORM: Partial<Lead> = {
 // Catalog rows the requirement pickers read from the public website catalog endpoints.
 type CatalogCategory = { id: number; name: string; slug: string };
 type CatalogProduct = { id: number; name: string; slug: string; categorySlug?: string };
+type CatalogService = { id: number; title: string; slug: string };
 type DupLead = { id: number; leadNumber: string; name: string; status: string; mobileNumber: string };
+
+// The form is a stack of numbered steps; each opens/closes on its own. Only the first two are
+// open for a new lead so the screen stays short — the rest are optional extras.
+type StepKey = "customer" | "enquiry" | "source" | "contact" | "media" | "property" | "plan";
+const STEP_ORDER: StepKey[] = ["customer", "enquiry", "source", "contact", "media", "property", "plan"];
+
+const SCOPE_ITEMS: [keyof Lead, string][] = [
+  ["reqKitchen", "Modular Kitchen"], ["reqWardrobe", "Wardrobe"], ["reqTvUnit", "TV Unit"],
+  ["reqFalseCeiling", "False Ceiling"], ["reqPainting", "Painting"], ["reqFlooring", "Flooring"],
+  ["reqElectrical", "Electrical"], ["reqPlumbing", "Plumbing"], ["reqWoodFinish", "Wood Finish"],
+];
+
+const FOLLOW_UP_CHIPS = [
+  { label: "Today", days: 0 }, { label: "Tomorrow", days: 1 }, { label: "In 3 days", days: 3 }, { label: "Next week", days: 7 },
+];
+
+const selectCls = "w-full h-9 rounded-md border border-input bg-card px-2.5 text-sm";
+
+// ---------------------------------------------------------------------------
 
 export default function LeadFormDialog({
   open, onOpenChange, lead, users, onSaved,
@@ -39,28 +62,31 @@ export default function LeadFormDialog({
   const [error, setError] = useState("");
   const [categories, setCategories] = useState<CatalogCategory[]>([]);
   const [products, setProducts] = useState<CatalogProduct[]>([]);
+  const [services, setServices] = useState<CatalogService[]>([]);
   const [dupLeads, setDupLeads] = useState<DupLead[]>([]);
-  // Advanced sections (project, budget, assignment, images) stay collapsed for a new lead so
-  // the create form is short; an existing lead opens expanded so all its data is visible.
-  const [showMore, setShowMore] = useState(false);
+  const [openSteps, setOpenSteps] = useState<Set<StepKey>>(new Set(["customer", "enquiry"]));
+  const [customDate, setCustomDate] = useState(false);
 
   useEffect(() => {
     if (open) {
-      setForm(lead ? { ...lead } : { ...EMPTY_FORM });
+      // Legacy leads have no enquiry tag yet — infer it so the right picker shows when editing.
+      setForm(lead ? { ...lead, enquiryType: enquiryTypeOf(lead) } : { ...EMPTY_FORM });
       setImages([]);
       setAudioClips([]);
       setError("");
-      setShowMore(!!lead);
       setDupLeads([]);
+      setCustomDate(false);
+      setOpenSteps(new Set(["customer", "enquiry"]));
     }
   }, [open, lead]);
 
-  // Requirement pickers read the public website catalog (categories + products). Load once
-  // when the dialog first opens; failures leave the dropdowns empty but never block saving.
+  // Requirement pickers read the public website catalog (categories, products, services). Load
+  // once when the dialog first opens; failures leave the pickers empty but never block saving.
   useEffect(() => {
     if (!open || categories.length) return;
     api.get("/public/categories").then((res) => setCategories(res.data || [])).catch(() => {});
     api.get("/public/products").then((res) => setProducts(res.data || [])).catch(() => {});
+    api.get("/public/services").then((res) => setServices(res.data || [])).catch(() => {});
   }, [open, categories.length]);
 
   const selectedCategory = categories.find((c) => c.name === form.requirementCategory);
@@ -69,16 +95,41 @@ export default function LeadFormDialog({
     .map((p) => p.name);
 
   // A lead can carry several products; they are stored comma-separated in requirementProduct.
-  // The category above only filters which products the picker lists — chosen products persist
-  // even after the category is switched, so a lead can span categories.
-  const selectedProducts = (form.requirementProduct || "").split(",").map((s) => s.trim()).filter(Boolean);
+  // The category only filters which products the picker lists — chosen products persist even
+  // after the category is switched, so a lead can span categories.
+  const selectedProducts = splitList(form.requirementProduct);
   const applyProducts = (names: string[]) => setForm((f) => ({ ...f, requirementProduct: names.join(", ") }));
   const addProduct = (name: string) => {
     if (name && !selectedProducts.includes(name)) applyProducts([...selectedProducts, name]);
   };
   const removeProduct = (name: string) => applyProducts(selectedProducts.filter((p) => p !== name));
 
+  // Services work the same way — several can be picked, stored comma-separated.
+  const selectedServices = splitList(form.requirementService);
+  const toggleService = (name: string) => {
+    const next = selectedServices.includes(name)
+      ? selectedServices.filter((s) => s !== name)
+      : [...selectedServices, name];
+    setForm((f) => ({ ...f, requirementService: next.join(", ") }));
+  };
+
   const set = (key: keyof Lead) => (value: any) => setForm((f) => ({ ...f, [key]: value }));
+  const text = (key: keyof Lead) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
+    setForm((f) => ({ ...f, [key]: e.target.value }));
+
+  const isOpen = (k: StepKey) => openSteps.has(k);
+  const toggle = (k: StepKey) => setOpenSteps((s) => {
+    const next = new Set(s);
+    if (next.has(k)) next.delete(k); else next.add(k);
+    return next;
+  });
+  const goNext = (k: StepKey) => setOpenSteps((s) => {
+    const next = new Set(s);
+    next.delete(k);
+    const after = STEP_ORDER[STEP_ORDER.indexOf(k) + 1];
+    if (after) next.add(after);
+    return next;
+  });
 
   // Live duplicate guard: as a new lead's phone number is entered, look for existing leads on
   // the same number so the user can open that lead instead of creating a duplicate. Never blocks.
@@ -103,6 +154,12 @@ export default function LeadFormDialog({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    // Name + phone live in step 1, which may be collapsed — validate here and reopen it.
+    if (!form.name?.trim() || !form.mobileNumber?.trim()) {
+      setOpenSteps((s) => new Set(s).add("customer"));
+      setError("Customer name and phone number are required.");
+      return;
+    }
     setSaving(true);
     setError("");
     const payload: any = { ...form };
@@ -114,6 +171,17 @@ export default function LeadFormDialog({
     ["expectedStartDate", "expectedEndDate", "preferredCompletionDate", "nextFollowUpDate"].forEach((k) => {
       if (!payload[k]) delete payload[k];
     });
+
+    // Enquiry tag: keep only the detail that belongs to the chosen type, so switching from
+    // "Service" to "Product" doesn't leave stale services behind.
+    if (payload.enquiryType === "PRODUCT") {
+      payload.requirementService = null; payload.requirementOther = null;
+    } else if (payload.enquiryType === "SERVICE") {
+      payload.requirementCategory = null; payload.requirementProduct = null; payload.requirementOther = null;
+    } else if (payload.enquiryType === "OTHER") {
+      payload.requirementCategory = null; payload.requirementProduct = null; payload.requirementService = null;
+    }
+
     // assignment: send just the id references
     if (payload.assignedSalesExecutive?.id) payload.assignedSalesExecutive = { id: payload.assignedSalesExecutive.id };
     else delete payload.assignedSalesExecutive;
@@ -179,10 +247,9 @@ export default function LeadFormDialog({
   };
 
   const userPicker = (label: string, key: "assignedSalesExecutive" | "assignedDesigner" | "assignedEngineer") => (
-    <div className="space-y-1.5">
-      <label className="text-sm font-medium">{label}</label>
+    <F label={label}>
       <select
-        className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+        className={selectCls}
         value={(form[key] as UserSummary | undefined)?.id ?? ""}
         onChange={(e) =>
           setForm((f) => ({
@@ -192,272 +259,418 @@ export default function LeadFormDialog({
         }
       >
         <option value="">Unassigned</option>
-        {users.map((u) => (
-          <option key={u.id} value={u.id}>{u.name}</option>
-        ))}
+        {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
       </select>
-    </div>
+    </F>
   );
+
+  // --- Step summaries shown on a collapsed step header ---------------------
+  const join = (...parts: (string | number | false | undefined | null)[]) => parts.filter(Boolean).join(" · ");
+  const enquirySummary = (() => {
+    const label = enquiryLabel(form.enquiryType);
+    if (!label) return "";
+    if (form.enquiryType === "SERVICE") return join(label, selectedServices.join(", "));
+    if (form.enquiryType === "OTHER") return join(label, form.requirementOther);
+    return join(label, form.requirementCategory, selectedProducts.join(", "));
+  })();
+  const scopeCount = SCOPE_ITEMS.filter(([k]) => form[k]).length;
+  const summaries: Record<StepKey, string> = {
+    customer: join(form.name, form.mobileNumber),
+    enquiry: enquirySummary,
+    source: join(
+      form.leadSource,
+      form.nextFollowUpDate && `Follow-up ${formatDate(form.nextFollowUpDate)}`,
+      form.estimatedBudget && `₹${Number(form.estimatedBudget).toLocaleString("en-IN")}`,
+      form.rating && `${form.rating}★`,
+    ),
+    contact: join(form.city, form.pincode, form.email, form.whatsappNumber && "WhatsApp"),
+    media: join(images.length > 0 && `${images.length} photo${images.length > 1 ? "s" : ""}`,
+      audioClips.length > 0 && `${audioClips.length} voice note${audioClips.length > 1 ? "s" : ""}`),
+    property: join(form.propertyType, form.areaSqft && `${form.areaSqft} sq.ft`, scopeCount > 0 && `${scopeCount} work items`),
+    plan: join(
+      form.leadType,
+      form.expectedProjectValue && `₹${Number(form.expectedProjectValue).toLocaleString("en-IN")}`,
+      form.assignedSalesExecutive?.name,
+    ),
+  };
+
+  const stepProps = (k: StepKey) => ({
+    n: STEP_ORDER.indexOf(k) + 1,
+    open: isOpen(k),
+    onToggle: () => toggle(k),
+    summary: summaries[k],
+    onNext: STEP_ORDER.indexOf(k) < STEP_ORDER.length - 1 ? () => goNext(k) : undefined,
+  });
+
+  const followUpIsChip = FOLLOW_UP_CHIPS.some((c) => form.nextFollowUpDate === inDays(c.days));
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{lead ? `Edit Lead ${lead.leadNumber}` : "Create New Lead"}</DialogTitle>
+      <DialogContent className="flex max-h-[92vh] max-w-xl flex-col gap-0 p-0">
+        <DialogHeader className="border-b px-5 py-3.5 text-left">
+          <DialogTitle className="text-base">{lead ? `Edit Lead ${lead.leadNumber}` : "New Lead"}</DialogTitle>
+          <p className="text-xs text-muted-foreground">
+            Only name and phone are required — open any step to add more.
+          </p>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-5">
-          {/* Essentials — the only fields shown when creating a lead. */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <TextField label="Customer Name" required value={form.name} onChange={set("name")} placeholder="Full name / lead title" />
-            <TextField label="Phone Number" required type="tel" inputMode="tel" autoComplete="tel" value={form.mobileNumber} onChange={set("mobileNumber")} placeholder="10-digit mobile" />
-          </div>
 
-          {/* Duplicate guard: existing leads on the same number, so a duplicate isn't created. */}
-          {dupLeads.length > 0 && (
-            <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 text-sm text-amber-900">
-              <div className="flex items-center gap-1.5 font-medium">
-                <AlertTriangle className="h-4 w-4 shrink-0" />
-                This number is already on {dupLeads.length} lead{dupLeads.length > 1 ? "s" : ""}
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+          <div className="flex-1 space-y-2 overflow-y-auto px-4 py-3">
+            {/* 1 — Customer */}
+            <Step {...stepProps("customer")} title="Customer" hint="Name and phone number">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <F label="Customer name" required>
+                  <Input autoFocus value={form.name ?? ""} onChange={text("name")} placeholder="Full name" />
+                </F>
+                <F label="Phone number" required>
+                  <Input type="tel" inputMode="tel" autoComplete="tel" value={form.mobileNumber ?? ""}
+                    onChange={text("mobileNumber")} placeholder="10-digit mobile" />
+                </F>
               </div>
-              <div className="mt-1.5 space-y-1">
-                {dupLeads.map((l) => (
-                  <a
-                    key={l.id}
-                    href={`${import.meta.env.BASE_URL}leads/${l.id}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex items-center justify-between rounded-md bg-white/70 px-2 py-1 hover:bg-white transition-colors"
-                  >
-                    <span className="font-medium">{l.leadNumber} · {l.name}</span>
-                    <span className="text-xs text-amber-700">{l.status} ↗</span>
-                  </a>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <SelectField label="Lead Source" value={form.leadSource} onChange={set("leadSource")} options={LEAD_SOURCES} />
-            <SelectField
-              label="Requirement Category"
-              value={form.requirementCategory}
-              onChange={set("requirementCategory")}
-              options={categories.map((c) => c.name)}
-            />
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">Products</label>
-              {/* Add-and-reset picker: choosing an option appends it, then the select clears. */}
-              <select
-                className={selectClass}
-                value=""
-                onChange={(e) => addProduct(e.target.value)}
-              >
-                <option value="">Add a product...</option>
-                {productOptions.filter((p) => !selectedProducts.includes(p)).map((p) => (
-                  <option key={p} value={p}>{p}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {selectedProducts.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              {selectedProducts.map((p) => (
-                <span key={p} className="inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary px-2.5 py-1 text-xs font-medium">
-                  {p}
-                  <button type="button" onClick={() => removeProduct(p)} aria-label={`Remove ${p}`} className="hover:text-destructive">
-                    <X className="h-3 w-3" />
-                  </button>
-                </span>
-              ))}
-            </div>
-          )}
-
-          <TextAreaField label="Address" rows={2} value={form.address} onChange={set("address")} />
-
-          {/* Attachments — available right at creation so field/office staff can capture site
-              photos and record a voice note describing the requirement without expanding. */}
-          <div className="rounded-lg border bg-muted/20 p-3 space-y-4">
-            <SectionTitle>Photos &amp; Voice Notes</SectionTitle>
-            <MultiImageCaptureField
-              label="Capture or add photos (property, site, reference)"
-              module="LEAD"
-              value={images}
-              onChange={setImages}
-            />
-            <AudioCaptureField
-              label="Record or upload a voice note"
-              module="LEAD"
-              value={audioClips}
-              onChange={setAudioClips}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <TextField label="Next Follow-up Date" type="date" value={form.nextFollowUpDate} onChange={set("nextFollowUpDate")} />
-            <TextField label="Estimated Budget (₹)" type="number" inputMode="numeric" value={form.estimatedBudget} onChange={set("estimatedBudget")} />
-            <StarRating label="Rating" value={form.rating} onChange={set("rating")} />
-          </div>
-
-          {/* When the lead came in via a referral, capture who referred it (an existing customer,
-              a staff member, or an external person). */}
-          {form.leadSource === "Referral" && (
-            <div className="rounded-lg border bg-muted/30 p-3 space-y-3">
-              <SectionTitle>Referral Details</SectionTitle>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                <SelectField
-                  label="Referred By"
-                  value={form.referralType}
-                  onChange={(v) => setForm((f) => ({
-                    ...f, referralType: v,
-                    referredByCustomer: undefined, referredByEmployee: undefined,
-                    referrerName: "", referrerContact: "",
-                  }))}
-                  options={REFERRAL_TYPES}
-                />
-              </div>
-
-              {form.referralType === "Existing Customer" && (
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium">Referring Customer</label>
-                  {form.referredByCustomer?.id ? (
-                    <div className="flex items-center justify-between rounded-md border bg-background px-3 py-2 text-sm">
-                      <span className="font-medium">{form.referrerName || form.referredByCustomer.name}</span>
-                      <button
-                        type="button"
-                        className="text-xs text-primary hover:underline"
-                        onClick={() => setForm((f) => ({ ...f, referredByCustomer: undefined, referrerName: "", referrerContact: "" }))}
+              {/* Duplicate guard: existing leads on the same number, so a duplicate isn't created. */}
+              {dupLeads.length > 0 && (
+                <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                  <div className="flex items-center gap-1.5 font-medium">
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                    This number is already on {dupLeads.length} lead{dupLeads.length > 1 ? "s" : ""}
+                  </div>
+                  <div className="mt-1.5 space-y-1">
+                    {dupLeads.map((l) => (
+                      <a
+                        key={l.id}
+                        href={`${import.meta.env.BASE_URL}leads/${l.id}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center justify-between rounded bg-white/70 px-2 py-1 transition-colors hover:bg-white"
                       >
-                        Change
-                      </button>
+                        <span className="font-medium">{l.leadNumber} · {l.name}</span>
+                        <span className="text-amber-700">{l.status} ↗</span>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </Step>
+
+            {/* 2 — Enquiry: Product / Service / Others */}
+            <Step {...stepProps("enquiry")} title="Looking for" hint="Product, service or something else">
+              <div className="flex flex-wrap gap-1.5">
+                {ENQUIRY_TYPES.map((t) => (
+                  <Chip key={t.value} active={form.enquiryType === t.value}
+                    onClick={() => set("enquiryType")(form.enquiryType === t.value ? undefined : t.value)}>
+                    {t.label}
+                  </Chip>
+                ))}
+              </div>
+
+              {form.enquiryType === "PRODUCT" && (
+                <div className="space-y-3 rounded-md bg-muted/30 p-3">
+                  <F label="Category">
+                    <div className="flex flex-wrap gap-1.5">
+                      {categories.map((c) => (
+                        <Chip key={c.id} active={form.requirementCategory === c.name}
+                          onClick={() => set("requirementCategory")(form.requirementCategory === c.name ? undefined : c.name)}>
+                          {c.name}
+                        </Chip>
+                      ))}
+                      {categories.length === 0 && <span className="text-xs text-muted-foreground">Loading categories…</span>}
                     </div>
-                  ) : (
-                    <ExistingCustomerSearch
-                      placeholder="Search the customer who referred..."
-                      onPick={(id, c) => setForm((f) => ({
-                        ...f,
-                        referredByCustomer: { id, name: c?.name },
-                        referrerName: c?.name || "",
-                        referrerContact: c?.phone || "",
-                      }))}
-                    />
+                  </F>
+                  <F label="Products">
+                    {/* Add-and-reset picker: choosing an option appends it, then the select clears. */}
+                    <select className={selectCls} value="" onChange={(e) => addProduct(e.target.value)}>
+                      <option value="">Add a product…</option>
+                      {productOptions.filter((p) => !selectedProducts.includes(p)).map((p) => (
+                        <option key={p} value={p}>{p}</option>
+                      ))}
+                    </select>
+                    {selectedProducts.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {selectedProducts.map((p) => (
+                          <span key={p} className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary">
+                            {p}
+                            <button type="button" onClick={() => removeProduct(p)} aria-label={`Remove ${p}`} className="hover:text-destructive">
+                              <X className="h-3 w-3" />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </F>
+                </div>
+              )}
+
+              {form.enquiryType === "SERVICE" && (
+                <div className="rounded-md bg-muted/30 p-3">
+                  <F label="Which service? (pick one or more)">
+                    {services.length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {services.map((s) => (
+                          <Chip key={s.id} active={selectedServices.includes(s.title)} onClick={() => toggleService(s.title)}>
+                            {selectedServices.includes(s.title) && <Check className="mr-1 inline h-3 w-3" />}
+                            {s.title}
+                          </Chip>
+                        ))}
+                      </div>
+                    ) : (
+                      <Input value={form.requirementService ?? ""} onChange={text("requirementService")}
+                        placeholder="e.g. Curtain installation, Repair" />
+                    )}
+                  </F>
+                </div>
+              )}
+
+              {form.enquiryType === "OTHER" && (
+                <div className="rounded-md bg-muted/30 p-3">
+                  <F label="What are they looking for?">
+                    <textarea className={areaCls} rows={2} value={form.requirementOther ?? ""}
+                      onChange={text("requirementOther")} placeholder="Describe the enquiry" />
+                  </F>
+                </div>
+              )}
+            </Step>
+
+            {/* 3 — Source & follow-up */}
+            <Step {...stepProps("source")} title="Source & follow-up" hint="Where it came from, next call, budget">
+              <F label="Lead source">
+                <div className="flex flex-wrap gap-1.5">
+                  {LEAD_SOURCES.map((s) => (
+                    <Chip key={s} active={form.leadSource === s}
+                      onClick={() => set("leadSource")(form.leadSource === s ? undefined : s)}>
+                      {s}
+                    </Chip>
+                  ))}
+                </div>
+              </F>
+
+              {/* When the lead came in via a referral, capture who referred it. */}
+              {form.leadSource === "Referral" && (
+                <div className="space-y-3 rounded-md bg-muted/30 p-3">
+                  <F label="Referred by">
+                    <div className="flex flex-wrap gap-1.5">
+                      {REFERRAL_TYPES.map((r) => (
+                        <Chip key={r} active={form.referralType === r}
+                          onClick={() => setForm((f) => ({
+                            ...f, referralType: r,
+                            referredByCustomer: undefined, referredByEmployee: undefined,
+                            referrerName: "", referrerContact: "",
+                          }))}>
+                          {r}
+                        </Chip>
+                      ))}
+                    </div>
+                  </F>
+
+                  {form.referralType === "Existing Customer" && (
+                    <F label="Referring customer">
+                      {form.referredByCustomer?.id ? (
+                        <div className="flex items-center justify-between rounded-md border bg-card px-3 py-1.5 text-sm">
+                          <span className="font-medium">{form.referrerName || form.referredByCustomer.name}</span>
+                          <button
+                            type="button"
+                            className="text-xs text-primary hover:underline"
+                            onClick={() => setForm((f) => ({ ...f, referredByCustomer: undefined, referrerName: "", referrerContact: "" }))}
+                          >
+                            Change
+                          </button>
+                        </div>
+                      ) : (
+                        <ExistingCustomerSearch
+                          placeholder="Search the customer who referred..."
+                          onPick={(id, c) => setForm((f) => ({
+                            ...f,
+                            referredByCustomer: { id, name: c?.name },
+                            referrerName: c?.name || "",
+                            referrerContact: c?.phone || "",
+                          }))}
+                        />
+                      )}
+                    </F>
+                  )}
+
+                  {form.referralType === "Employee" && (
+                    <F label="Referring employee">
+                      <select
+                        className={selectCls}
+                        value={form.referredByEmployee?.id ?? ""}
+                        onChange={(e) => {
+                          const u = users.find((x) => x.id === Number(e.target.value));
+                          setForm((f) => ({ ...f, referredByEmployee: u, referrerName: u?.name || "" }));
+                        }}
+                      >
+                        <option value="">Select employee...</option>
+                        {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+                      </select>
+                    </F>
+                  )}
+
+                  {form.referralType === "Other" && (
+                    <div className="grid grid-cols-2 gap-3">
+                      <F label="Referrer name"><Input value={form.referrerName ?? ""} onChange={text("referrerName")} /></F>
+                      <F label="Referrer contact">
+                        <Input type="tel" inputMode="tel" value={form.referrerContact ?? ""} onChange={text("referrerContact")} />
+                      </F>
+                    </div>
+                  )}
+
+                  {form.referralType && (
+                    <F label="Referral notes">
+                      <textarea className={areaCls} rows={2} value={form.referralNotes ?? ""} onChange={text("referralNotes")} />
+                    </F>
                   )}
                 </div>
               )}
 
-              {form.referralType === "Employee" && (
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium">Referring Employee</label>
-                  <select
-                    className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    value={form.referredByEmployee?.id ?? ""}
-                    onChange={(e) => {
-                      const u = users.find((x) => x.id === Number(e.target.value));
-                      setForm((f) => ({ ...f, referredByEmployee: u, referrerName: u?.name || "" }));
-                    }}
-                  >
-                    <option value="">Select employee...</option>
-                    {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+              <F label="Next follow-up">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {FOLLOW_UP_CHIPS.map((c) => {
+                    const v = inDays(c.days);
+                    return (
+                      <Chip key={c.label} active={!customDate && form.nextFollowUpDate === v}
+                        onClick={() => { setCustomDate(false); set("nextFollowUpDate")(form.nextFollowUpDate === v ? undefined : v); }}>
+                        {c.label}
+                      </Chip>
+                    );
+                  })}
+                  <Chip active={customDate || (!!form.nextFollowUpDate && !followUpIsChip)} onClick={() => setCustomDate(true)}>
+                    Pick date
+                  </Chip>
+                  {(customDate || (!!form.nextFollowUpDate && !followUpIsChip)) && (
+                    <Input type="date" className="h-8 w-auto" value={form.nextFollowUpDate ?? ""} onChange={text("nextFollowUpDate")} />
+                  )}
+                </div>
+              </F>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <F label="Estimated budget (₹)">
+                  <Input type="number" inputMode="numeric" value={form.estimatedBudget ?? ""} onChange={text("estimatedBudget")} placeholder="Optional" />
+                </F>
+                <F label="Lead rating">
+                  <div className="flex h-9 items-center gap-0.5">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <button
+                        key={star}
+                        type="button"
+                        // Click the current top star again to clear the rating.
+                        onClick={() => set("rating")(star === form.rating ? undefined : star)}
+                        aria-label={`${star} star${star === 1 ? "" : "s"}`}
+                        className="p-0.5 text-muted-foreground/40 transition-transform hover:scale-110"
+                      >
+                        <Star className={`h-5 w-5 ${star <= (form.rating || 0) ? "fill-amber-400 text-amber-400" : ""}`} />
+                      </button>
+                    ))}
+                  </div>
+                </F>
+              </div>
+            </Step>
+
+            {/* 4 — Contact & address */}
+            <Step {...stepProps("contact")} title="Contact & address" hint="Optional — email, WhatsApp, location">
+              <F label="Address">
+                <textarea className={areaCls} rows={2} value={form.address ?? ""} onChange={text("address")} placeholder="Door no, street, area" />
+              </F>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                <F label="City"><Input value={form.city ?? ""} onChange={text("city")} /></F>
+                <F label="Pincode"><Input inputMode="numeric" value={form.pincode ?? ""} onChange={text("pincode")} /></F>
+                <F label="District"><Input value={form.district ?? ""} onChange={text("district")} /></F>
+                <F label="State"><Input value={form.state ?? ""} onChange={text("state")} /></F>
+                <F label="WhatsApp"><Input type="tel" inputMode="tel" value={form.whatsappNumber ?? ""} onChange={text("whatsappNumber")} /></F>
+                <F label="Alternate mobile"><Input type="tel" inputMode="tel" value={form.alternateMobile ?? ""} onChange={text("alternateMobile")} /></F>
+                <F label="Email" className="col-span-2 sm:col-span-1"><Input type="email" value={form.email ?? ""} onChange={text("email")} /></F>
+                <F label="Company"><Input value={form.companyName ?? ""} onChange={text("companyName")} /></F>
+                <F label="Contact person"><Input value={form.contactPerson ?? ""} onChange={text("contactPerson")} /></F>
+                <F label="GST number"><Input value={form.gstNumber ?? ""} onChange={text("gstNumber")} /></F>
+              </div>
+              <F label="Site address (if different)">
+                <textarea className={areaCls} rows={2} value={form.siteAddress ?? ""} onChange={text("siteAddress")} />
+              </F>
+            </Step>
+
+            {/* 5 — Photos & voice notes */}
+            <Step {...stepProps("media")} title="Photos & voice notes" hint="Optional — site photos, recorded requirement">
+              <MultiImageCaptureField label="Capture or add photos (property, site, reference)" module="LEAD" value={images} onChange={setImages} />
+              <AudioCaptureField label="Record or upload a voice note" module="LEAD" value={audioClips} onChange={setAudioClips} />
+            </Step>
+
+            {/* 6 — Property & scope */}
+            <Step {...stepProps("property")} title="Property & scope" hint="Optional — property details and work required">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                <F label="Property type"><Input value={form.propertyType ?? ""} onChange={text("propertyType")} placeholder="Flat, House…" /></F>
+                <F label="Construction status">
+                  <select className={selectCls} value={form.currentConstructionStage ?? ""} onChange={text("currentConstructionStage")}>
+                    <option value="">Select…</option>
+                    {CONSTRUCTION_STATUSES.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
+                </F>
+                <F label="Floors"><Input type="number" value={form.floorCount ?? ""} onChange={text("floorCount")} /></F>
+                <F label="Area (sq.ft)"><Input type="number" value={form.areaSqft ?? ""} onChange={text("areaSqft")} /></F>
+                <F label="Preferred materials"><Input value={form.preferredMaterial ?? ""} onChange={text("preferredMaterial")} /></F>
+                <F label="Design style"><Input value={form.preferredDesignStyle ?? ""} onChange={text("preferredDesignStyle")} placeholder="Modern…" /></F>
+              </div>
+              <F label="Work required">
+                <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+                  {SCOPE_ITEMS.map(([key, label]) => (
+                    <CheckboxField key={key} label={label} checked={form[key] as boolean} onChange={set(key)} />
+                  ))}
                 </div>
-              )}
+              </F>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <F label="Rooms required">
+                  <textarea className={areaCls} rows={2} value={form.roomsRequired ?? ""} onChange={text("roomsRequired")} placeholder="3 Bedrooms, Living…" />
+                </F>
+                <F label="Special requests">
+                  <textarea className={areaCls} rows={2} value={form.specialRequests ?? ""} onChange={text("specialRequests")} />
+                </F>
+              </div>
+              <F label="Requirement description">
+                <textarea className={areaCls} rows={2} value={form.projectDescription ?? ""} onChange={text("projectDescription")} />
+              </F>
+            </Step>
 
-              {form.referralType === "Other" && (
-                <div className="grid grid-cols-2 gap-4">
-                  <TextField label="Referrer Name" value={form.referrerName} onChange={set("referrerName")} />
-                  <TextField label="Referrer Contact" type="tel" inputMode="tel" value={form.referrerContact} onChange={set("referrerContact")} />
-                </div>
-              )}
-
-              <TextAreaField label="Referral Notes" rows={2} value={form.referralNotes} onChange={set("referralNotes")} />
-            </div>
-          )}
-
-          {!showMore ? (
-            <button
-              type="button"
-              onClick={() => setShowMore(true)}
-              className="flex items-center gap-1.5 text-sm text-primary hover:underline"
-            >
-              <ChevronDown className="h-4 w-4" /> Add contact, address, project &amp; budget details
-            </button>
-          ) : (
-          <>
-          <SectionTitle>Classification</SectionTitle>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            <SelectField label="Lead Type" value={form.leadType} onChange={set("leadType")} options={LEAD_TYPES} />
-            <SelectField label="Priority" value={form.priority} onChange={set("priority")} options={PRIORITIES} allowEmpty={false} />
-            <SelectField label="Lead Temperature" value={form.leadTemperature} onChange={set("leadTemperature")} options={TEMPERATURES} allowEmpty={false} />
+            {/* 7 — Plan & team */}
+            <Step {...stepProps("plan")} title="Priority, timeline & team" hint="Optional — classification, dates, assignment">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <F label="Priority">
+                  <div className="flex flex-wrap gap-1.5">
+                    {PRIORITIES.map((p) => <Chip key={p} active={form.priority === p} onClick={() => set("priority")(p)}>{p}</Chip>)}
+                  </div>
+                </F>
+                <F label="Temperature">
+                  <div className="flex flex-wrap gap-1.5">
+                    {TEMPERATURES.map((t) => <Chip key={t} active={form.leadTemperature === t} onClick={() => set("leadTemperature")(t)}>{t}</Chip>)}
+                  </div>
+                </F>
+              </div>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                <F label="Lead type">
+                  <select className={selectCls} value={form.leadType ?? ""} onChange={text("leadType")}>
+                    <option value="">Select…</option>
+                    {LEAD_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </F>
+                <F label="Project value (₹)">
+                  <Input type="number" value={form.expectedProjectValue ?? ""} onChange={text("expectedProjectValue")} />
+                </F>
+                <F label="Expected start"><Input type="date" value={form.expectedStartDate ?? ""} onChange={text("expectedStartDate")} /></F>
+                <F label="Expected completion"><Input type="date" value={form.expectedEndDate ?? ""} onChange={text("expectedEndDate")} /></F>
+                {userPicker("Sales executive", "assignedSalesExecutive")}
+                {userPicker("Designer", "assignedDesigner")}
+                {userPicker("Engineer", "assignedEngineer")}
+              </div>
+            </Step>
           </div>
 
-          <SectionTitle>Customer Information</SectionTitle>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            <TextField label="Company Name" value={form.companyName} onChange={set("companyName")} />
-            <TextField label="Contact Person" value={form.contactPerson} onChange={set("contactPerson")} />
-            <TextField label="Alternative Mobile" type="tel" inputMode="tel" value={form.alternateMobile} onChange={set("alternateMobile")} />
-            <TextField label="WhatsApp Number" type="tel" inputMode="tel" value={form.whatsappNumber} onChange={set("whatsappNumber")} />
-            <TextField label="Email" type="email" value={form.email} onChange={set("email")} />
-            <TextField label="GST Number" value={form.gstNumber} onChange={set("gstNumber")} />
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <TextField label="City" value={form.city} onChange={set("city")} />
-            <TextField label="District" value={form.district} onChange={set("district")} />
-            <TextField label="State" value={form.state} onChange={set("state")} />
-            <TextField label="Pincode" inputMode="numeric" value={form.pincode} onChange={set("pincode")} />
-            <div className="col-span-2 md:col-span-4">
-              <TextAreaField label="Project / Site Address" rows={2} value={form.siteAddress} onChange={set("siteAddress")} />
-            </div>
-          </div>
-
-          <SectionTitle>Property & Requirements</SectionTitle>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            <TextField label="Property Type" value={form.propertyType} onChange={set("propertyType")} placeholder="e.g. Flat, Independent House" />
-            <SelectField label="Construction Status" value={form.currentConstructionStage} onChange={set("currentConstructionStage")} options={CONSTRUCTION_STATUSES} />
-            <TextField label="Number of Floors" type="number" value={form.floorCount} onChange={set("floorCount")} />
-            <TextField label="Area (sq.ft)" type="number" value={form.areaSqft} onChange={set("areaSqft")} />
-            <TextField label="Preferred Materials" value={form.preferredMaterial} onChange={set("preferredMaterial")} />
-            <TextField label="Design Style" value={form.preferredDesignStyle} onChange={set("preferredDesignStyle")} placeholder="e.g. Modern, Contemporary" />
-          </div>
-          <TextAreaField label="Requirement Description" value={form.projectDescription} onChange={set("projectDescription")} />
-
-          <SectionTitle>Scope of Work</SectionTitle>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-            <CheckboxField label="Modular Kitchen" checked={form.reqKitchen} onChange={set("reqKitchen")} />
-            <CheckboxField label="Wardrobe" checked={form.reqWardrobe} onChange={set("reqWardrobe")} />
-            <CheckboxField label="TV Unit" checked={form.reqTvUnit} onChange={set("reqTvUnit")} />
-            <CheckboxField label="False Ceiling" checked={form.reqFalseCeiling} onChange={set("reqFalseCeiling")} />
-            <CheckboxField label="Painting" checked={form.reqPainting} onChange={set("reqPainting")} />
-            <CheckboxField label="Flooring" checked={form.reqFlooring} onChange={set("reqFlooring")} />
-            <CheckboxField label="Electrical" checked={form.reqElectrical} onChange={set("reqElectrical")} />
-            <CheckboxField label="Plumbing" checked={form.reqPlumbing} onChange={set("reqPlumbing")} />
-            <CheckboxField label="Wood Finish" checked={form.reqWoodFinish} onChange={set("reqWoodFinish")} />
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <TextAreaField label="Rooms Required" rows={2} value={form.roomsRequired} onChange={set("roomsRequired")} placeholder="e.g. 3 Bedrooms, Living Room, Kitchen" />
-            <TextAreaField label="Special Requests" rows={2} value={form.specialRequests} onChange={set("specialRequests")} />
-          </div>
-
-          <SectionTitle>Budget & Timeline</SectionTitle>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            <TextField label="Expected Project Value (₹)" type="number" value={form.expectedProjectValue} onChange={set("expectedProjectValue")} />
-            <TextField label="Expected Start Date" type="date" value={form.expectedStartDate} onChange={set("expectedStartDate")} />
-            <TextField label="Expected Completion" type="date" value={form.expectedEndDate} onChange={set("expectedEndDate")} />
-          </div>
-
-          <SectionTitle>Assignment</SectionTitle>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            {userPicker("Sales Executive", "assignedSalesExecutive")}
-            {userPicker("Designer", "assignedDesigner")}
-            {userPicker("Engineer", "assignedEngineer")}
-          </div>
-
-          </>
-          )}
-
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          <div className="flex justify-end gap-2 pt-4 border-t">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit" disabled={saving}>
+          {/* Sticky footer — Save is always reachable without scrolling. */}
+          <div className="flex items-center gap-2 border-t bg-card px-4 py-3">
+            {error ? (
+              <p className="flex-1 text-xs text-destructive">{error}</p>
+            ) : (
+              <p className="flex-1 truncate text-xs text-muted-foreground">
+                {summaries.customer || "Fill in the customer to continue"}
+              </p>
+            )}
+            <Button type="button" variant="outline" size="sm" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button type="submit" size="sm" disabled={saving}>
               {saving ? "Saving..." : lead ? "Save Changes" : "Create Lead"}
             </Button>
           </div>

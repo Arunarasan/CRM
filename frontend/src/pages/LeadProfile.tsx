@@ -32,6 +32,7 @@ import LeadTasksHub from "./leads/tabs/LeadTasksHub";
 import ActivityTab from "./leads/tabs/ActivityTab";
 import DocumentsTab from "./leads/tabs/DocumentsTab";
 import TimelineTab from "./leads/tabs/TimelineTab";
+import { EnquiryTag, enquiryDetails, enquiryTypeOf } from "./leads/enquiry";
 
 const TAB_TRIGGER_CLASS =
   "rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-0 pb-2 whitespace-nowrap";
@@ -254,8 +255,12 @@ export default function LeadProfile() {
                 </span>
               )}
             </div>
-            {(products.length > 0 || lead.requirementCategory) && (
+            {(products.length > 0 || lead.requirementCategory || enquiryTypeOf(lead)) && (
               <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                <EnquiryTag type={enquiryTypeOf(lead)} />
+                {enquiryDetails(lead).map((d) => (
+                  <span key={d} className="px-2 py-0.5 bg-violet-100 text-violet-700 text-xs rounded-full font-medium">{d}</span>
+                ))}
                 {lead.requirementCategory && (
                   <span className="text-xs text-muted-foreground">{lead.requirementCategory}:</span>
                 )}

@@ -1,8 +1,8 @@
-import { BaseInput } from '@/components/ui/input';
+import { BaseInput, Input } from '@/components/ui/input';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Plus, X, Phone, MapPin, Star, Search, Sparkles, CheckCircle2, TrendingUp,
-  ChevronRight, CalendarClock, Mail, FileText,
+  ChevronRight, CalendarClock, Mail, FileText, Check,
 } from 'lucide-react';
 import api from '@/lib/api';
 import { employeePortalApi } from '@/api/employeePortalApi';
@@ -10,6 +10,9 @@ import { LeadSummary, LeadCreateBody } from '@/types/employeePortal';
 import { PortalHeader, StatusPill, EmptyState, inr } from './_shared';
 import MultiImageCaptureField, { type CapturedImage } from '@/components/MultiImageCaptureField';
 import AudioCaptureField, { type CapturedAudio } from '@/components/AudioCaptureField';
+import { ENQUIRY_TYPES } from '@/pages/leads/constants';
+import { EnquiryTag, enquiryDetails, enquiryLabel, enquiryTypeOf, splitList } from '@/pages/leads/enquiry';
+import { Chip, F, Step, areaCls, inDays, stepControls } from '@/pages/leads/formSteps';
 
 const EMPTY: LeadCreateBody = {
   name: '', mobileNumber: '', email: '', address: '', city: '',
@@ -21,6 +24,14 @@ const FALLBACK_CATEGORIES = ['Full Home', 'Kitchen', 'Wardrobe', 'False Ceiling'
 
 type CatalogCategory = { id: number; name: string; slug: string };
 type CatalogProduct = { id: number; name: string; slug: string; categorySlug?: string };
+type CatalogService = { id: number; title: string; slug: string };
+
+// The Add Lead sheet is a stack of numbered open/close steps (same design as the admin dialog).
+type StepKey = 'customer' | 'enquiry' | 'visit' | 'contact' | 'notes' | 'media';
+const STEP_ORDER: StepKey[] = ['customer', 'enquiry', 'visit', 'contact', 'notes', 'media'];
+const VISIT_CHIPS = [{ label: 'Today', days: 0 }, { label: 'Tomorrow', days: 1 }, { label: 'In 3 days', days: 3 }, { label: 'Next week', days: 7 }];
+const selectCls = 'w-full h-9 rounded-md border border-input bg-card px-2.5 text-sm';
+const joinParts = (...parts: (string | number | false | undefined | null)[]) => parts.filter(Boolean).join(' · ');
 
 // ---- time-frame partitions for the entry / conversion stats ----
 type PeriodKey = 'TODAY' | 'WEEK' | 'MONTH' | 'ALL';
@@ -65,6 +76,9 @@ export default function Leads() {
   const [audioClips, setAudioClips] = useState<CapturedAudio[]>([]);
   const [categories, setCategories] = useState<CatalogCategory[]>([]);
   const [products, setProducts] = useState<CatalogProduct[]>([]);
+  const [services, setServices] = useState<CatalogService[]>([]);
+  const [openSteps, setOpenSteps] = useState<Set<StepKey>>(new Set(['customer', 'enquiry']));
+  const [customDate, setCustomDate] = useState(false);
   // redesign state
   const [period, setPeriod] = useState<PeriodKey>('MONTH');
   const [statusFilter, setStatusFilter] = useState<StatusKey>('ALL');
@@ -82,6 +96,7 @@ export default function Leads() {
     if (!open || categories.length) return;
     api.get('/public/categories').then((res) => setCategories(res.data || [])).catch(() => {});
     api.get('/public/products').then((res) => setProducts(res.data || [])).catch(() => {});
+    api.get('/public/services').then((res) => setServices(res.data || [])).catch(() => {});
   }, [open, categories.length]);
 
   // Leads within the selected time frame drive both the stats and the list below.
@@ -119,14 +134,42 @@ export default function Leads() {
   const addProduct = (name: string) => { if (name && !selectedProducts.includes(name)) applyProducts([...selectedProducts, name]); };
   const removeProduct = (name: string) => applyProducts(selectedProducts.filter((p) => p !== name));
 
+  // Services: several per lead, stored comma-separated in requirementService.
+  const selectedServices = splitList(form.requirementService);
+  const toggleService = (name: string) => set('requirementService', (selectedServices.includes(name)
+    ? selectedServices.filter((x) => x !== name) : [...selectedServices, name]).join(', '));
+
+  const stepProps = stepControls(STEP_ORDER, openSteps, setOpenSteps);
+  const visitIsChip = VISIT_CHIPS.some((c) => form.preferredVisitDate === inDays(c.days));
+  const showDatePicker = customDate || (!!form.preferredVisitDate && !visitIsChip);
+  const enquirySummary = !form.enquiryType ? '' : form.enquiryType === 'SERVICE'
+    ? joinParts(enquiryLabel(form.enquiryType), selectedServices.join(', '))
+    : form.enquiryType === 'OTHER'
+      ? joinParts(enquiryLabel(form.enquiryType), form.requirementOther)
+      : joinParts(enquiryLabel(form.enquiryType), form.requirementCategory, selectedProducts.join(', '));
+  const visitSummary = joinParts(
+    form.preferredVisitDate && `Visit ${new Date(form.preferredVisitDate).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`,
+    form.estimatedBudget && `₹${Number(form.estimatedBudget).toLocaleString('en-IN')}`,
+    form.rating && `${form.rating}★`);
+  const mediaSummary = joinParts(images.length > 0 && `${images.length} photo${images.length > 1 ? 's' : ''}`,
+    audioClips.length > 0 && `${audioClips.length} voice note${audioClips.length > 1 ? 's' : ''}`);
+
   const submit = async () => {
     setError('');
-    if (!form.name?.trim()) { setError('Customer name is required.'); return; }
+    if (!form.name?.trim()) {
+      setOpenSteps((st) => new Set(st).add('customer'));
+      setError('Customer name is required.');
+      return;
+    }
     setSaving(true);
     try {
       const body = Object.fromEntries(
         Object.entries(form).filter(([, v]) => v !== '' && v != null),
       ) as unknown as LeadCreateBody;
+      // Keep only the detail that belongs to the chosen enquiry type.
+      if (body.enquiryType === 'PRODUCT') { delete body.requirementService; delete body.requirementOther; }
+      if (body.enquiryType === 'SERVICE') { delete body.requirementCategory; delete body.requirementProduct; delete body.requirementOther; }
+      if (body.enquiryType === 'OTHER') { delete body.requirementCategory; delete body.requirementProduct; delete body.requirementService; }
       const documents = [
         ...images.map((img) => ({ fileName: img.fileName, fileUrl: img.url, documentType: 'Image', category: 'Site Photos' })),
         ...audioClips.map((clip) => ({ fileName: clip.fileName, fileUrl: clip.url, documentType: 'Audio', category: 'Voice Notes' })),
@@ -157,7 +200,7 @@ export default function Leads() {
       <PortalHeader
         title="My Leads"
         action={
-          <button onClick={() => { setForm(EMPTY); setImages([]); setAudioClips([]); setError(''); setOpen(true); }} className="flex h-9 items-center gap-1 rounded-full bg-primary px-3 text-xs font-semibold text-primary-foreground active:scale-95">
+          <button onClick={() => { setForm(EMPTY); setImages([]); setAudioClips([]); setError(''); setCustomDate(false); setOpenSteps(new Set(['customer', 'enquiry'])); setOpen(true); }} className="flex h-9 items-center gap-1 rounded-full bg-primary px-3 text-xs font-semibold text-primary-foreground active:scale-95">
             <Plus className="h-4 w-4" /> Add
           </button>
         }
@@ -247,6 +290,8 @@ export default function Leads() {
                       <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                         {l.mobileNumber && <span className="flex items-center gap-1"><Phone className="h-3 w-3" />{l.mobileNumber}</span>}
                         {l.city && <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{l.city}</span>}
+                        <EnquiryTag type={enquiryTypeOf(l as any)} className="text-[10px]" />
+                        {enquiryDetails(l as any).map((d) => <span key={d} className="rounded-full bg-violet-100 px-2 py-0.5 text-[10.5px] font-medium text-violet-700">{d}</span>)}
                         {l.requirementCategory && <span className="rounded-full bg-muted px-2 py-0.5 text-[10.5px] font-medium text-foreground/70">{l.requirementCategory}</span>}
                         {l.estimatedBudget != null && <span className="font-semibold text-foreground">{inr(l.estimatedBudget)}</span>}
                       </div>
@@ -289,6 +334,9 @@ export default function Leads() {
               {detail.mobileNumber && <DetailRow icon={Phone} label="Mobile" value={<a href={`tel:${detail.mobileNumber}`} className="text-primary">{detail.mobileNumber}</a>} />}
               {detail.email && <DetailRow icon={Mail} label="Email" value={detail.email} />}
               {(detail.address || detail.city) && <DetailRow icon={MapPin} label="Location" value={[detail.address, detail.city].filter(Boolean).join(', ')} />}
+              {enquiryTypeOf(detail as any) && (
+                <DetailRow icon={FileText} label="Looking for" value={joinParts(enquiryLabel(enquiryTypeOf(detail as any)), ...enquiryDetails(detail as any))} />
+              )}
               {detail.requirementCategory && <DetailRow icon={FileText} label="Category" value={detail.requirementCategory} />}
               {detail.requirementProduct && <DetailRow icon={FileText} label="Products" value={detail.requirementProduct} />}
               {detail.requirement && <DetailRow icon={FileText} label="Requirement" value={detail.requirement} />}
@@ -304,120 +352,180 @@ export default function Leads() {
 
       {open && (
         <div className="fixed inset-0 z-40 flex items-end bg-black/40" onClick={() => setOpen(false)}>
-          <div className="max-h-[92vh] w-full max-w-md mx-auto overflow-y-auto rounded-t-2xl bg-card p-4 pb-6" onClick={(e) => e.stopPropagation()}>
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-base font-semibold">Add Lead</h2>
+          <div className="flex max-h-[92vh] w-full max-w-md mx-auto flex-col rounded-t-2xl bg-card" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b px-4 py-3">
+              <div>
+                <h2 className="text-base font-semibold">Add Lead</h2>
+                <p className="text-[11px] text-muted-foreground">Only the name is required — open a step to add more.</p>
+              </div>
               <button onClick={() => setOpen(false)} className="flex h-8 w-8 items-center justify-center rounded-full active:bg-accent"><X className="h-5 w-5" /></button>
             </div>
-            {error && <p className="mb-2 rounded-md bg-destructive/15 p-2 text-xs text-destructive">{error}</p>}
 
-            <div className="flex flex-col gap-3">
-              <Field label="Customer name *">
-                <BaseInput value={form.name} onChange={(e) => set('name', e.target.value)} className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" placeholder="Full name" />
-              </Field>
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Mobile">
-                  <BaseInput value={form.mobileNumber} onChange={(e) => set('mobileNumber', e.target.value)} inputMode="tel" className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" placeholder="10-digit" />
-                </Field>
-                <Field label="City">
-                  <BaseInput value={form.city} onChange={(e) => set('city', e.target.value)} className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" />
-                </Field>
-              </div>
-              <Field label="Email">
-                <BaseInput value={form.email} onChange={(e) => set('email', e.target.value)} inputMode="email" className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" />
-              </Field>
-              <Field label="Address / Location">
-                <textarea value={form.address} onChange={(e) => set('address', e.target.value)} rows={2} className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" />
-              </Field>
-              <Field label="Requirement category">
-                <div className="mt-1 flex flex-wrap gap-2">
-                  {categoryNames.map((c) => (
-                    <button
-                      key={c}
-                      type="button"
-                      onClick={() => set('requirementCategory', c)}
-                      className={`rounded-full border px-3 py-1.5 text-xs font-medium ${form.requirementCategory === c ? 'border-primary bg-primary text-primary-foreground' : 'bg-card text-muted-foreground'}`}
-                    >{c}</button>
+            <div className="flex-1 space-y-2 overflow-y-auto px-3 py-3">
+              {/* 1 — Customer */}
+              <Step {...stepProps('customer', joinParts(form.name, form.mobileNumber))} title="Customer" hint="Name and mobile">
+                <F label="Customer name" required>
+                  <Input autoFocus value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="Full name" />
+                </F>
+                <F label="Mobile">
+                  <Input value={form.mobileNumber} onChange={(e) => set('mobileNumber', e.target.value)} type="tel" inputMode="tel" placeholder="10-digit" />
+                </F>
+              </Step>
+
+              {/* 2 — Looking for: Product / Service / Others */}
+              <Step {...stepProps('enquiry', enquirySummary)} title="Looking for" hint="Product, service or something else">
+                <div className="flex flex-wrap gap-1.5">
+                  {ENQUIRY_TYPES.map((t) => (
+                    <Chip key={t.value} active={form.enquiryType === t.value}
+                      onClick={() => set('enquiryType', form.enquiryType === t.value ? undefined : t.value)}>
+                      {t.label}
+                    </Chip>
                   ))}
                 </div>
-              </Field>
-              {productOptions.length > 0 && (
-                <Field label="Products">
-                  <select
-                    value=""
-                    onChange={(e) => addProduct(e.target.value)}
-                    className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm"
-                  >
-                    <option value="">Add a product…</option>
-                    {productOptions.filter((p) => !selectedProducts.includes(p)).map((p) => <option key={p} value={p}>{p}</option>)}
-                  </select>
-                  {selectedProducts.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {selectedProducts.map((p) => (
-                        <span key={p} className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
-                          {p}
-                          <button type="button" onClick={() => removeProduct(p)} aria-label={`Remove ${p}`}><X className="h-3 w-3" /></button>
-                        </span>
+
+                {form.enquiryType === 'PRODUCT' && (
+                  <div className="space-y-3 rounded-md bg-muted/30 p-3">
+                    <F label="Category">
+                      <div className="flex flex-wrap gap-1.5">
+                        {categoryNames.map((c) => (
+                          <Chip key={c} active={form.requirementCategory === c}
+                            onClick={() => set('requirementCategory', form.requirementCategory === c ? '' : c)}>
+                            {c}
+                          </Chip>
+                        ))}
+                      </div>
+                    </F>
+                    {productOptions.length > 0 && (
+                      <F label="Products">
+                        <select value="" onChange={(e) => addProduct(e.target.value)} className={selectCls}>
+                          <option value="">Add a product…</option>
+                          {productOptions.filter((p) => !selectedProducts.includes(p)).map((p) => <option key={p} value={p}>{p}</option>)}
+                        </select>
+                        {selectedProducts.length > 0 && (
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {selectedProducts.map((p) => (
+                              <span key={p} className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary">
+                                {p}
+                                <button type="button" onClick={() => removeProduct(p)} aria-label={`Remove ${p}`}><X className="h-3 w-3" /></button>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </F>
+                    )}
+                  </div>
+                )}
+
+                {form.enquiryType === 'SERVICE' && (
+                  <div className="rounded-md bg-muted/30 p-3">
+                    <F label="Which service? (pick one or more)">
+                      {services.length > 0 ? (
+                        <div className="flex flex-wrap gap-1.5">
+                          {services.map((s) => (
+                            <Chip key={s.id} active={selectedServices.includes(s.title)} onClick={() => toggleService(s.title)}>
+                              {selectedServices.includes(s.title) && <Check className="mr-1 inline h-3 w-3" />}
+                              {s.title}
+                            </Chip>
+                          ))}
+                        </div>
+                      ) : (
+                        <Input value={form.requirementService || ''} onChange={(e) => set('requirementService', e.target.value)}
+                          placeholder="e.g. Curtain installation, Repair" />
+                      )}
+                    </F>
+                  </div>
+                )}
+
+                {form.enquiryType === 'OTHER' && (
+                  <div className="rounded-md bg-muted/30 p-3">
+                    <F label="What are they looking for?">
+                      <textarea className={areaCls} rows={2} value={form.requirementOther || ''}
+                        onChange={(e) => set('requirementOther', e.target.value)} placeholder="Describe the enquiry" />
+                    </F>
+                  </div>
+                )}
+              </Step>
+
+              {/* 3 — Visit, budget & rating */}
+              <Step {...stepProps('visit', visitSummary)} title="Visit & budget" hint="Preferred visit date, budget, rating">
+                <F label="Preferred site visit">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {VISIT_CHIPS.map((c) => {
+                      const v = inDays(c.days);
+                      return (
+                        <Chip key={c.label} active={!customDate && form.preferredVisitDate === v}
+                          onClick={() => { setCustomDate(false); set('preferredVisitDate', form.preferredVisitDate === v ? '' : v); }}>
+                          {c.label}
+                        </Chip>
+                      );
+                    })}
+                    <Chip active={showDatePicker} onClick={() => setCustomDate(true)}>Pick date</Chip>
+                  </div>
+                  {showDatePicker && (
+                    <Input type="date" className="mt-2" value={form.preferredVisitDate} onChange={(e) => set('preferredVisitDate', e.target.value)} />
+                  )}
+                </F>
+                <div className="grid grid-cols-2 gap-3">
+                  <F label="Estimated budget">
+                    <Input value={form.estimatedBudget as string} onChange={(e) => set('estimatedBudget', e.target.value)} inputMode="numeric" placeholder="₹" />
+                  </F>
+                  <F label="Rating">
+                    <div className="flex h-9 items-center gap-0.5">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <button
+                          key={star}
+                          type="button"
+                          onClick={() => set('rating', star === form.rating ? undefined : star)}
+                          aria-label={`${star} star${star === 1 ? '' : 's'}`}
+                          className="p-0.5 text-muted-foreground/40 active:scale-90"
+                        >
+                          <Star className={`h-5 w-5 ${star <= (form.rating || 0) ? 'fill-amber-400 text-amber-400' : ''}`} />
+                        </button>
                       ))}
                     </div>
-                  )}
-                </Field>
-              )}
-              <Field label="Rating">
-                <div className="mt-1 flex items-center gap-1">
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <button
-                      key={star}
-                      type="button"
-                      onClick={() => set('rating', star === form.rating ? undefined : star)}
-                      aria-label={`${star} star${star === 1 ? '' : 's'}`}
-                      className="p-0.5 text-muted-foreground/40 active:scale-90"
-                    >
-                      <Star className={`h-6 w-6 ${star <= (form.rating || 0) ? 'fill-amber-400 text-amber-400' : ''}`} />
-                    </button>
-                  ))}
+                  </F>
                 </div>
-              </Field>
-              <Field label="Requirement details">
-                <textarea value={form.requirement} onChange={(e) => set('requirement', e.target.value)} rows={2} className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" placeholder="What does the customer want?" />
-              </Field>
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Estimated budget">
-                  <BaseInput value={form.estimatedBudget as string} onChange={(e) => set('estimatedBudget', e.target.value)} inputMode="numeric" className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" placeholder="₹" />
-                </Field>
-                <Field label="Preferred visit">
-                  <BaseInput type="date" value={form.preferredVisitDate} onChange={(e) => set('preferredVisitDate', e.target.value)} className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" />
-                </Field>
-              </div>
-              <Field label="Notes">
-                <textarea value={form.notes} onChange={(e) => set('notes', e.target.value)} rows={2} className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" />
-              </Field>
+              </Step>
 
-              <div className="rounded-lg border bg-muted/20 p-3">
-                <p className="mb-2 text-xs font-semibold text-muted-foreground">Photos &amp; voice notes</p>
-                <div className="flex flex-col gap-4">
-                  <MultiImageCaptureField label="Add site / reference photos" module="LEAD" value={images} onChange={setImages} />
-                  <AudioCaptureField label="Record or upload a voice note" module="LEAD" value={audioClips} onChange={setAudioClips} />
+              {/* 4 — Contact & address */}
+              <Step {...stepProps('contact', joinParts(form.city, form.email))} title="Contact & address" hint="Optional — email, city, location">
+                <div className="grid grid-cols-2 gap-3">
+                  <F label="City"><Input value={form.city} onChange={(e) => set('city', e.target.value)} /></F>
+                  <F label="Email"><Input value={form.email} onChange={(e) => set('email', e.target.value)} inputMode="email" /></F>
                 </div>
-              </div>
+                <F label="Address / location">
+                  <textarea value={form.address} onChange={(e) => set('address', e.target.value)} rows={2} className={areaCls} />
+                </F>
+              </Step>
 
-              <button onClick={submit} disabled={saving} className="mt-1 w-full rounded-lg bg-primary py-2.5 text-sm font-semibold text-primary-foreground active:scale-[0.99] disabled:opacity-60">
+              {/* 5 — Notes */}
+              <Step {...stepProps('notes', joinParts(form.requirement, form.notes))} title="Requirement & notes" hint="Optional — what the customer wants">
+                <F label="Requirement details">
+                  <textarea value={form.requirement} onChange={(e) => set('requirement', e.target.value)} rows={2} className={areaCls} placeholder="What does the customer want?" />
+                </F>
+                <F label="Notes">
+                  <textarea value={form.notes} onChange={(e) => set('notes', e.target.value)} rows={2} className={areaCls} />
+                </F>
+              </Step>
+
+              {/* 6 — Photos & voice notes */}
+              <Step {...stepProps('media', mediaSummary)} title="Photos & voice notes" hint="Optional — site photos, recorded requirement">
+                <MultiImageCaptureField label="Add site / reference photos" module="LEAD" value={images} onChange={setImages} />
+                <AudioCaptureField label="Record or upload a voice note" module="LEAD" value={audioClips} onChange={setAudioClips} />
+              </Step>
+            </div>
+
+            {/* Sticky footer — submit is always reachable. */}
+            <div className="border-t px-4 pb-5 pt-3">
+              {error && <p className="mb-2 rounded-md bg-destructive/15 p-2 text-xs text-destructive">{error}</p>}
+              <button onClick={submit} disabled={saving} className="w-full rounded-lg bg-primary py-2.5 text-sm font-semibold text-primary-foreground active:scale-[0.99] disabled:opacity-60">
                 {saving ? 'Submitting…' : 'Submit Lead'}
               </button>
-              <p className="text-center text-[11px] text-muted-foreground">Your manager will review and assign this lead.</p>
+              <p className="mt-1.5 text-center text-[11px] text-muted-foreground">Your manager will review and assign this lead.</p>
             </div>
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="text-xs font-medium text-muted-foreground">{label}</label>
-      {children}
     </div>
   );
 }

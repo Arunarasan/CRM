@@ -730,6 +730,9 @@ public class EmployeePortalService {
         lead.setCity(trimToNull((String) body.get("city")));
         lead.setRequirementCategory(trimToNull((String) body.get("requirementCategory")));
         lead.setRequirementProduct(trimToNull((String) body.get("requirementProduct")));
+        lead.setEnquiryType(trimToNull((String) body.get("enquiryType")));
+        lead.setRequirementService(trimToNull((String) body.get("requirementService")));
+        lead.setRequirementOther(trimToNull((String) body.get("requirementOther")));
         lead.setRating(asInteger(body.get("rating")));
         lead.setCustomerRequirements(trimToNull((String) body.get("requirement")));
         lead.setRemarks(trimToNull((String) body.get("notes")));
@@ -779,6 +782,9 @@ public class EmployeePortalService {
         m.put("stage", l.getStage());
         m.put("requirementCategory", l.getRequirementCategory());
         m.put("requirementProduct", l.getRequirementProduct());
+        m.put("enquiryType", l.getEnquiryType());
+        m.put("requirementService", l.getRequirementService());
+        m.put("requirementOther", l.getRequirementOther());
         m.put("estimatedBudget", l.getEstimatedBudget());
         m.put("siteVisitDate", l.getSiteVisitDate());
         m.put("createdAt", l.getCreatedAt());

@@ -314,6 +314,9 @@ public class LeadService {
         // Requirements
         lead.setRequirementCategory(d.getRequirementCategory());
         lead.setRequirementProduct(d.getRequirementProduct());
+        lead.setEnquiryType(d.getEnquiryType());
+        lead.setRequirementService(d.getRequirementService());
+        lead.setRequirementOther(d.getRequirementOther());
         lead.setProjectDescription(d.getProjectDescription());
         lead.setCustomerRequirements(d.getCustomerRequirements());
         lead.setPreferredDesignStyle(d.getPreferredDesignStyle());
