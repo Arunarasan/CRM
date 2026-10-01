@@ -6,11 +6,13 @@ export function Logo({ className }: { className?: string; onDark?: boolean }) {
   return (
     <Link to="/" className={cn('inline-flex items-center', className)} aria-label="JB Decor home">
       <img
-        src="/jb-decor-logo.png"
+        src="/jb-decor-logo-md.png"
+        srcSet="/jb-decor-logo-sm.png 453w, /jb-decor-logo-md.png 907w, /jb-decor-logo.png 3713w"
+        sizes="156px"
         alt="JB Decor"
         className="h-10 w-auto sm:h-11"
-        width={3681}
-        height={1016}
+        width={3713}
+        height={1048}
       />
     </Link>
   )

@@ -21,9 +21,14 @@ export default function Logo({
   size?: "sm" | "md" | "lg";
   className?: string;
 }) {
+  const base = import.meta.env.BASE_URL;
+  // Pre-downscaled (Lanczos) variants: the browser picks the one closest to the rendered
+  // size × DPR instead of shrinking the 3.7k master ~90×, which made the edges look jagged.
   return (
     <img
-      src={`${import.meta.env.BASE_URL}jb-decor-logo.png`}
+      src={`${base}jb-decor-logo-md.png`}
+      srcSet={`${base}jb-decor-logo-sm.png 453w, ${base}jb-decor-logo-md.png 907w, ${base}jb-decor-logo.png 3713w`}
+      sizes={size === "lg" ? "227px" : size === "md" ? "142px" : "99px"}
       alt="JB Decor"
       className={`${SIZE[size]} w-auto select-none object-contain ${className}`}
       draggable={false}
