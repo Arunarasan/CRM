@@ -152,7 +152,7 @@ export function buildQuotationPdf(quotation: Quotation, sel: PdfSelection = {}):
 
       const body = room.categories.flatMap((cat) =>
         cat.items.map((it) => [
-          it.itemName || "",
+          it.description ? `${it.itemName || ""}\n${it.description}` : it.itemName || "",
           it.specification || it.brand || "",
           `${it.quantity ?? ""} ${it.unit ?? ""}`.trim(),
           money(it.materialCost),

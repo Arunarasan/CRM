@@ -377,6 +377,7 @@ export function QuotationWorkbench({
                               <div className="min-w-0">
                                 <p className={`text-sm truncate ${on ? "" : "line-through"}`}>{it.itemName}</p>
                                 {(it.specification || it.brand) && <p className="text-[11px] text-muted-foreground truncate">{it.specification || it.brand}</p>}
+                                {it.description && <p className="text-[11px] text-muted-foreground whitespace-pre-line line-clamp-2">{it.description}</p>}
                               </div>
                               <div className="col-start-2 sm:col-start-auto flex sm:block items-center justify-between gap-2 text-sm sm:text-right text-muted-foreground">
                                 <span className="sm:hidden text-[11px] uppercase">Qty</span>{it.quantity ?? "—"} {it.unit ?? ""}

@@ -206,7 +206,10 @@ export function QuotationPrintView({ quotationId, onClose, onSaved }: {
                     {room.categories.flatMap((cat) =>
                       cat.items.map((it) => (
                         <tr key={it.id} className="border-b border-slate-100 align-top">
-                          <td className="py-1 pr-2">{it.itemName}</td>
+                          <td className="py-1 pr-2">
+                            {it.itemName}
+                            {it.description && <p className="mt-0.5 whitespace-pre-line text-[10px] text-slate-500">{it.description}</p>}
+                          </td>
                           <td className="py-1 px-2 text-slate-500">{it.specification || it.brand || "—"}</td>
                           <td className="py-1 px-2 text-right whitespace-nowrap">{it.quantity} {it.unit}</td>
                           {editing && (

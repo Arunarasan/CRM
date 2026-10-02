@@ -455,6 +455,12 @@ function ItemBlock({
         )}
       </div>
 
+      {/* ---- Description (goes onto the quotation, print and PDF) ---- */}
+      {(canEdit || item.description) && (
+        <DescriptionBox value={item.description} disabled={!canEdit}
+          onCommit={(v) => onUpdate({ description: v || undefined })} />
+      )}
+
       {/* ---- Material + labour ---- */}
       {showLines && (
         <div className="mt-3 rounded-lg bg-muted/30 p-2 space-y-1.5">
@@ -508,6 +514,30 @@ function ItemBlock({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+/** Free-text item description; grows with its text and saves on blur. */
+function DescriptionBox({ value, disabled, onCommit }: {
+  value?: string | null; disabled: boolean; onCommit: (v: string) => void;
+}) {
+  const [draft, setDraft] = useState(value ?? "");
+  useEffect(() => { setDraft(value ?? ""); }, [value]);
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (el) { el.style.height = "auto"; el.style.height = `${el.scrollHeight}px`; }
+  }, [draft]);
+  return (
+    <div className="mt-2">
+      <label className="block text-[11px] font-medium text-muted-foreground mb-0.5">Description</label>
+      <textarea ref={ref} rows={1} value={draft} disabled={disabled}
+        placeholder="Design, finish, colour, brand, work details… (shows on the quotation)"
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => draft.trim() !== (value ?? "").trim() && onCommit(draft.trim())}
+        onKeyDown={(e) => { if (e.key === "Escape") { setDraft(value ?? ""); e.currentTarget.blur(); } }}
+        className="w-full resize-none overflow-hidden rounded-md border border-border bg-background px-2 py-1.5 text-sm leading-snug outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:border-transparent disabled:bg-transparent disabled:px-0" />
     </div>
   );
 }
