@@ -1772,6 +1772,25 @@ public class BoqService {
         }
         quotation.setItems(qItems);
 
+        // The customer discount and GST agreed on the pricing sheet carry into the quotation, so its
+        // total matches what was shown. A flat ₹ discount only makes sense for the full scope.
+        BigDecimal boqDiscount = boq.getDiscount() != null ? boq.getDiscount() : BigDecimal.ZERO;
+        boolean flat = "FLAT".equals(boq.getDiscountType());
+        if (boqDiscount.signum() > 0 && (!flat || "FULL_HOUSE".equals(resolvedMode))) {
+            QuotationDiscount d = new QuotationDiscount();
+            d.setDiscountType("OVERALL");
+            d.setDescription("Customer discount");
+            if (flat) d.setAmount(boqDiscount); else d.setPercentage(boqDiscount);
+            quotation.setDiscounts(new ArrayList<>(List.of(d)));
+        }
+        if (boq.getTaxPercent() != null && boq.getTaxPercent().signum() > 0) {
+            QuotationTax t = new QuotationTax();
+            t.setTaxType("GST");
+            t.setPercentage(boq.getTaxPercent());
+            t.setIsInclusive(false);
+            quotation.setTaxes(new ArrayList<>(List.of(t)));
+        }
+
         Quotation saved = quotationService.createQuotation(quotation, currentUser);
 
         for (BoqItem item : included) {

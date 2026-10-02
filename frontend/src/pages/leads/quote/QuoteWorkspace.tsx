@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  Check, ChevronDown, ChevronRight, ExternalLink, FileText, Loader2, Lock, Pencil, Ruler, Wand2,
+  Check, ChevronDown, ChevronRight, ExternalLink, FileText, Loader2, Lock, Pencil, RotateCcw, Ruler, Wand2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -385,47 +385,103 @@ function ProgressStrip({ done }: { done: boolean[] }) {
   );
 }
 
-function TotalsPanel({ boq, editable, onSave }: {
-  boq: Boq;
-  editable: boolean;
-  onSave: (patch: { discountType?: "PERCENT" | "FLAT"; discount?: number | null; taxPercent?: number | null }) => void;
-}) {
+type TotalsPatch = {
+  discountType?: "PERCENT" | "FLAT"; discount?: number | null; taxPercent?: number | null;
+  materialTotalOverride?: number | null; labourTotalOverride?: number | null;
+};
+
+/**
+ * The price cards under the item sheet. Discount, GST and the final price are all editable here —
+ * typing a final price works the discount out for you — and all of it carries into the quotation
+ * when it's generated.
+ */
+function TotalsPanel({ boq, editable, onSave }: { boq: Boq; editable: boolean; onSave: (patch: TotalsPatch) => void }) {
   const flat = boq.discountType === "FLAT";
+  const subtotal = Number(boq.subtotal ?? 0);
+  const gstPct = Number(boq.taxPercent ?? 0);
+  const active = (boq.items || []).filter((i) => i.isActive !== false);
+  const itemsMaterial = active.reduce((s, i) => s + Number(i.materialTotal ?? 0), 0);
+  const itemsLabour = active.reduce((s, i) => s + Number(i.labourTotal ?? 0), 0);
+  const manual = boq.materialTotalOverride != null || boq.labourTotalOverride != null;
+  const f = editable ? "h-9 border-border bg-background" : "h-9";
+
+  /** Final price → flat discount that lands on it (final = (subtotal − discount) × (1 + GST%)). */
+  const setFinal = (target: number | null) => {
+    if (target == null) return;
+    const r2 = (n: number) => Math.round(n * 100) / 100;
+    // Same maths as the server (GST rounded to paise), so try the neighbouring paise and keep the
+    // discount that lands exactly on the typed price.
+    const grandFor = (d: number) => r2(subtotal - d + r2((subtotal - d) * gstPct / 100));
+    const guess = r2(subtotal - target / (1 + gstPct / 100));
+    const discount = [guess, r2(guess - 0.01), r2(guess + 0.01), r2(guess - 0.02), r2(guess + 0.02)]
+      .reduce((best, d) => (Math.abs(grandFor(d) - target) < Math.abs(grandFor(best) - target) ? d : best), guess);
+    if (discount < 0) {
+      toast.error(`That's above the item total (${inr(subtotal * (1 + gstPct / 100))}) — raise item amounts instead.`);
+      return;
+    }
+    onSave({ discountType: "FLAT", discount });
+  };
+
   return (
-    <div className="grid gap-3 sm:grid-cols-2">
-      <div className="rounded-lg border p-3 space-y-1.5 text-sm">
+    <div className="grid gap-3 md:grid-cols-2">
+      {/* Cost card */}
+      <div className="rounded-xl border p-4 space-y-2 text-sm">
+        <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Items total</h4>
         <Row label="Material" value={inr(boq.materialTotal)} />
         <Row label="Labour" value={inr(boq.labourTotal)} />
-        <Row label="Subtotal" value={inr(boq.subtotal)} strong />
+        <div className="flex items-center justify-between border-t pt-2">
+          <span className="font-medium">Subtotal</span>
+          <span className="text-lg font-bold tabular-nums">{inr(subtotal)}</span>
+        </div>
+        {manual && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 space-y-1.5">
+            <p>
+              A manual total is set, so this subtotal doesn't match the items
+              (items add up to <span className="font-semibold">{inr(itemsMaterial + itemsLabour)}</span>).
+            </p>
+            {editable && (
+              <Button size="sm" variant="outline" className="h-7 bg-background"
+                onClick={() => onSave({ materialTotalOverride: null, labourTotalOverride: null })}>
+                <RotateCcw className="h-3.5 w-3.5 mr-1" /> Use the item totals
+              </Button>
+            )}
+          </div>
+        )}
       </div>
-      <div className="rounded-lg border p-3 space-y-1.5 text-sm">
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-muted-foreground flex items-center gap-1">
-            Discount
-            {editable ? (
-              <select className="h-7 rounded border bg-background px-1 text-xs" value={flat ? "FLAT" : "PERCENT"}
-                onChange={(e) => onSave({ discountType: e.target.value as "PERCENT" | "FLAT" })}>
-                <option value="PERCENT">%</option>
-                <option value="FLAT">₹</option>
-              </select>
-            ) : <span className="text-xs">({flat ? "₹" : "%"})</span>}
-          </span>
-          <div className="flex items-center gap-2">
-            <div className="w-24"><NumCell value={boq.discount ?? 0} disabled={!editable} className="h-7 border-border" onCommit={(v) => onSave({ discount: v ?? 0 })} /></div>
-            <span className="w-24 text-right tabular-nums text-muted-foreground">−{inr(boq.discountAmount)}</span>
+
+      {/* Customer price card */}
+      <div className="rounded-xl border border-primary/30 bg-primary/[0.02] p-4 space-y-3 text-sm">
+        <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Customer price</h4>
+        <div className="grid grid-cols-[1fr_auto] items-center gap-x-3 gap-y-2">
+          <label className="text-muted-foreground">Discount</label>
+          <div className="flex items-center gap-1.5">
+            <div className="inline-flex rounded-md border bg-background p-0.5 text-xs">
+              {(["PERCENT", "FLAT"] as const).map((m) => (
+                <button key={m} type="button" disabled={!editable}
+                  onClick={() => (m === "FLAT") !== flat && onSave({ discountType: m, discount: 0 })}
+                  className={`px-2 py-1 rounded ${(m === "FLAT") === flat ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}>
+                  {m === "PERCENT" ? "%" : "₹"}
+                </button>
+              ))}
+            </div>
+            <div className="w-24"><NumCell value={boq.discount ?? 0} disabled={!editable} className={f} onCommit={(v) => onSave({ discount: v ?? 0 })} /></div>
           </div>
+          <span className="col-span-2 -mt-1 text-right text-xs text-muted-foreground tabular-nums">− {inr(boq.discountAmount)}</span>
+
+          <label className="text-muted-foreground">GST %</label>
+          <div className="w-24 justify-self-end"><NumCell value={boq.taxPercent ?? 0} disabled={!editable} className={f} onCommit={(v) => onSave({ taxPercent: v ?? 0 })} /></div>
+          <span className="col-span-2 -mt-1 text-right text-xs text-muted-foreground tabular-nums">+ {inr(boq.taxAmount)}</span>
         </div>
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-muted-foreground">GST %</span>
-          <div className="flex items-center gap-2">
-            <div className="w-24"><NumCell value={boq.taxPercent ?? 0} disabled={!editable} className="h-7 border-border" onCommit={(v) => onSave({ taxPercent: v ?? 0 })} /></div>
-            <span className="w-24 text-right tabular-nums text-muted-foreground">+{inr(boq.taxAmount)}</span>
-          </div>
+
+        <div className="border-t pt-3">
+          <label className="block text-xs font-medium text-muted-foreground mb-1">
+            Final price{editable && <span className="font-normal opacity-70"> · type a price — the discount is worked out</span>}
+          </label>
+          <NumCell value={boq.grandTotal} disabled={!editable}
+            className={`h-11 text-xl font-bold text-primary ${editable ? "border-primary/40 bg-background" : ""}`}
+            onCommit={setFinal} />
         </div>
-        <div className="flex items-center justify-between border-t pt-1.5">
-          <span className="font-semibold">Grand Total</span>
-          <span className="font-bold text-base tabular-nums text-primary">{inr(boq.grandTotal)}</span>
-        </div>
+        <p className="text-[11px] text-muted-foreground">Discount and GST carry into the quotation.</p>
       </div>
     </div>
   );

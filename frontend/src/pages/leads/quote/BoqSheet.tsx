@@ -134,6 +134,48 @@ export default function BoqSheet({
       return boqApi.updateLabour(boqId, itemId, labId, next);
     });
 
+  /**
+   * "Type the total": scale the item's material + labour rates so the item adds up to the target.
+   * An item with no priced lines gets one material line carrying the whole price.
+   */
+  const setItemAmount = (item: BoqItem, target: number) => {
+    const id = item.id as number;
+    const current = Number(item.amount ?? 0);
+    if (target < 0 || Math.abs(target - current) < 0.005) return;
+    const round2 = (n: number) => Math.round(n * 100) / 100;
+    const mats = (item.materials || []).filter((m) => Number(m.sellingRate ?? 0) > 0 && Number(m.quantity ?? 0) > 0);
+    const labs = (item.labours || []).filter((l) => Number(l.rate ?? 0) > 0 && Number(l.quantity ?? 0) > 0);
+    if (current > 0 && mats.length + labs.length > 0) {
+      // Scale every line, then put the rounding leftover on the last one so the item lands exactly
+      // on the typed amount (lines with no rate keep contributing their fixed amount).
+      const factor = target / current;
+      const lines = [
+        ...mats.map((m) => ({ kind: "m" as const, id: m.id as number, rate: Number(m.sellingRate),
+          units: Number(m.quantity) * (1 + Number(m.wastePercent ?? 0) / 100) })),
+        ...labs.map((l) => ({ kind: "l" as const, id: l.id as number, rate: Number(l.rate), units: Number(l.quantity) })),
+      ];
+      const scaledSum = lines.reduce((s, x) => s + x.units * x.rate, 0);
+      let remaining = target - (current - scaledSum);
+      lines.forEach((x, i) => {
+        const rate = i === lines.length - 1 ? round2(remaining / x.units) : round2(x.rate * factor);
+        remaining -= round2(x.units * rate);
+        if (x.kind === "m") updateMaterial(id, x.id, { sellingRate: rate });
+        else updateLabour(id, x.id, { rate });
+      });
+      return;
+    }
+    const first = (item.materials || []).find((m) => Number(m.quantity ?? 0) > 0);
+    if (first) {
+      const units = Number(first.quantity) * (1 + Number(first.wastePercent ?? 0) / 100);
+      updateMaterial(id, first.id as number, { sellingRate: round2(target / units) });
+      return;
+    }
+    const qty = Number(item.quantity ?? 0) > 0 ? Number(item.quantity) : 1;
+    save("set the amount", () => boqApi.addMaterial(boqId, id, {
+      materialName: item.itemName || "Item", quantity: qty, unit: item.unit, wastePercent: 0, sellingRate: round2(target / qty),
+    }));
+  };
+
   // ---------------- Derived view data ----------------
 
   const items = useMemo(() => [...(boq.items || [])].sort(compareItems), [boq.items]);
@@ -211,20 +253,6 @@ export default function BoqSheet({
         {groups.map((g) => <option key={g.floor} value={g.floor} />)}
       </datalist>
 
-      {/* Column header (desktop) */}
-      <div className="hidden md:grid grid-cols-[28px_minmax(0,1fr)_64px_64px_80px_84px_96px_96px_104px_32px] gap-1 px-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-        <span />
-        <span>Item</span>
-        <span className="text-right">L</span>
-        <span className="text-right">W</span>
-        <span className="text-right">Qty</span>
-        <span>Unit</span>
-        <span className="text-right">Material</span>
-        <span className="text-right">Labour</span>
-        <span className="text-right">Amount</span>
-        <span />
-      </div>
-
       {groups.length === 0 && (
         <p className="text-sm text-muted-foreground border rounded-lg p-4 text-center">
           No items yet. Add a room and its first item below.
@@ -238,9 +266,12 @@ export default function BoqSheet({
           ) : null}
           {g.rooms.map((r) => (
             <div key={r.room} className="rounded-lg border bg-card overflow-visible">
-              <div className="flex items-center justify-between gap-2 px-3 py-2 border-b bg-muted/40 rounded-t-lg">
-                <span className="font-medium text-sm">{r.room}</span>
-                <span className="text-sm font-semibold tabular-nums">{inr(roomTotal(r.items))}</span>
+              <div className="flex items-center justify-between gap-2 px-3 py-2.5 border-b bg-muted/40 rounded-t-lg">
+                <span className="font-semibold text-sm">
+                  {r.room}
+                  <span className="ml-2 text-xs font-normal text-muted-foreground">{r.items.length} item{r.items.length === 1 ? "" : "s"}</span>
+                </span>
+                <span className="text-sm font-bold tabular-nums">{inr(roomTotal(r.items))}</span>
               </div>
               <div className="divide-y">
                 {r.items.map((item) => (
@@ -253,6 +284,7 @@ export default function BoqSheet({
                     onToggleSelect={() => toggleSel(item.id as number)}
                     onUpdate={(patch) => updateItem(item.id as number, patch)}
                     onSize={(f, v) => updateSize(item, f, v)}
+                    onSetAmount={(v) => setItemAmount(item, v)}
                     onUpdateMaterial={(mid, patch) => updateMaterial(item.id as number, mid, patch)}
                     onUpdateLabour={(lid, patch) => updateLabour(item.id as number, lid, patch)}
                     rateFor={rateFor}
@@ -325,13 +357,16 @@ function SaveState({ pending, lastSaved }: { pending: number; lastSaved: number 
 }
 
 // ---------------------------------------------------------------------------
-// One item with its material + labour lines
+// One item as a card: name + size/qty + amount on top, its material and labour lines below, each
+// line reading like a sentence ("202 Sqft × ₹200 + 0% waste = ₹40,400"). Every editable value is a
+// visible field — nothing hides behind hover.
 // ---------------------------------------------------------------------------
 
-const ROW_GRID = "md:grid md:grid-cols-[28px_minmax(0,1fr)_64px_64px_80px_84px_96px_96px_104px_32px] md:gap-1 md:items-center";
+/** Visible input styling for editable cells (the bare spreadsheet cells only show a border on hover). */
+const FIELD = "border-border bg-background";
 
 function ItemBlock({
-  item, canEdit, showLines, selected, onToggleSelect, onUpdate, onSize,
+  item, canEdit, showLines, selected, onToggleSelect, onUpdate, onSize, onSetAmount,
   onUpdateMaterial, onUpdateLabour, onDeleteMaterial, onDeleteLabour, onAddMaterial, onAddLabour,
   onDelete, onToggleActive, onCopyFrom, rateFor,
 }: {
@@ -342,6 +377,7 @@ function ItemBlock({
   onToggleSelect: () => void;
   onUpdate: (patch: Partial<BoqItem>) => void;
   onSize: (field: "length" | "width", v: number | null) => void;
+  onSetAmount: (target: number) => void;
   onUpdateMaterial: (id: number, patch: Partial<BoqItemMaterial>) => void;
   onUpdateLabour: (id: number, patch: Partial<BoqItemLabour>) => void;
   onDeleteMaterial: (id: number) => void;
@@ -356,79 +392,76 @@ function ItemBlock({
   const inactive = item.isActive === false;
   const [adding, setAdding] = useState<null | "material" | "labour">(null);
   const lineCount = (item.materials?.length ?? 0) + (item.labours?.length ?? 0);
+  const f = canEdit ? FIELD : "";
 
   return (
-    <div className={`px-2 py-2 ${inactive ? "opacity-50" : ""} ${selected ? "bg-primary/[0.04]" : ""}`}>
-      {/* Item row */}
-      <div className={`grid grid-cols-[28px_1fr_32px] gap-1 items-center ${ROW_GRID}`}>
-        <input
-          type="checkbox"
-          aria-label={`Select ${item.itemName}`}
-          className="h-4 w-4 accent-primary justify-self-center"
-          checked={selected}
-          disabled={!canEdit}
-          onChange={onToggleSelect}
-        />
-        <div className="min-w-0">
-          <TextCell value={item.itemName} col="itemName" disabled={!canEdit} className="font-medium"
+    <div className={`p-3 ${inactive ? "opacity-50" : ""} ${selected ? "bg-primary/[0.04]" : ""}`}>
+      {/* ---- Item header ---- */}
+      <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
+        {canEdit && (
+          <input type="checkbox" aria-label={`Select ${item.itemName}`} className="mt-2.5 h-4 w-4 accent-primary"
+            checked={selected} onChange={onToggleSelect} />
+        )}
+        <div className="min-w-[12rem] flex-1">
+          <TextCell value={item.itemName} col="itemName" disabled={!canEdit} className={`font-semibold text-[15px] ${f}`}
             onCommit={(v) => v && onUpdate({ itemName: v })} />
-          <div className="flex items-center gap-1 px-2">
+          <div className="mt-1 flex flex-wrap items-center gap-1.5">
             <SelectCell value={item.category} options={BOQ_CATEGORIES} disabled={!canEdit}
-              className="h-6 w-auto text-[11px] text-muted-foreground px-1"
-              onCommit={(v) => onUpdate({ category: v })} />
-            {inactive && <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-muted text-muted-foreground">Excluded</span>}
+              className="h-6 w-auto rounded-full bg-muted px-2 text-[11px] text-muted-foreground" onCommit={(v) => onUpdate({ category: v })} />
+            {inactive && <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-muted text-muted-foreground">Excluded from quote</span>}
             {!showLines && lineCount > 0 && <span className="text-[11px] text-muted-foreground">{lineCount} line(s)</span>}
           </div>
         </div>
 
-        {/* Mobile: the numeric cells wrap under the name in a labelled grid. */}
-        <div className="col-span-3 grid grid-cols-4 gap-1 md:contents">
-          <Labelled label="L"><NumCell value={item.length} col="length" disabled={!canEdit} onCommit={(v) => onSize("length", v)} /></Labelled>
-          <Labelled label="W"><NumCell value={item.width} col="width" disabled={!canEdit} onCommit={(v) => onSize("width", v)} /></Labelled>
-          <Labelled label="Qty"><NumCell value={item.quantity} col="qty" disabled={!canEdit} onCommit={(v) => onUpdate({ quantity: v ?? undefined })} /></Labelled>
-          <Labelled label="Unit"><SelectCell value={item.unit} options={BOQ_UNITS} disabled={!canEdit} onCommit={(v) => onUpdate({ unit: v })} /></Labelled>
-          <Labelled label="Material" className="col-span-1"><Money v={item.materialTotal} muted /></Labelled>
-          <Labelled label="Labour"><Money v={item.labourTotal} muted /></Labelled>
-          <Labelled label="Amount" className="col-span-2 md:col-span-1"><Money v={item.amount} strong /></Labelled>
-        </div>
+        <Field label="Size (L × W)">
+          <div className="flex items-center gap-1">
+            <div className="w-16"><NumCell value={item.length} col="length" placeholder="L" disabled={!canEdit} className={f} onCommit={(v) => onSize("length", v)} /></div>
+            <span className="text-muted-foreground text-xs">×</span>
+            <div className="w-16"><NumCell value={item.width} col="width" placeholder="W" disabled={!canEdit} className={f} onCommit={(v) => onSize("width", v)} /></div>
+          </div>
+        </Field>
+        <Field label="Quantity">
+          <div className="flex items-center gap-1">
+            <div className="w-20"><NumCell value={item.quantity} col="qty" disabled={!canEdit} className={f} onCommit={(v) => onUpdate({ quantity: v ?? undefined })} /></div>
+            <div className="w-24"><SelectCell value={item.unit} options={BOQ_UNITS} disabled={!canEdit} className={f} onCommit={(v) => onUpdate({ unit: v })} /></div>
+          </div>
+        </Field>
+        <Field label="Amount" hint={canEdit ? "type a total — rates adjust" : undefined}>
+          <div className="w-32">
+            <NumCell value={item.amount} col="amount" disabled={!canEdit}
+              className={`font-bold text-base ${canEdit ? "border-primary/40 bg-primary/[0.04]" : ""}`}
+              onCommit={(v) => v != null && onSetAmount(v)} />
+          </div>
+        </Field>
 
-        <div className="row-start-1 col-start-3 md:row-auto md:col-auto justify-self-end">
-          {canEdit && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button type="button" className="h-7 w-7 rounded-md hover:bg-muted flex items-center justify-center" aria-label="Item actions">
-                  <MoreVertical className="h-4 w-4 text-muted-foreground" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => setAdding("material")}><Package className="h-4 w-4 mr-2" /> Add material</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setAdding("labour")}><Hammer className="h-4 w-4 mr-2" /> Add labour</DropdownMenuItem>
-                <DropdownMenuItem onClick={onCopyFrom}><Copy className="h-4 w-4 mr-2" /> Copy lines from another item…</DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={onToggleActive}>
-                  {inactive ? <><RotateCcw className="h-4 w-4 mr-2" /> Include in quote</> : <><Ban className="h-4 w-4 mr-2" /> Exclude from quote</>}
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={onDelete} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" /> Delete item</DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-        </div>
+        {canEdit && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button type="button" className="mt-5 h-8 w-8 rounded-md hover:bg-muted flex items-center justify-center" aria-label="Item actions">
+                <MoreVertical className="h-4 w-4 text-muted-foreground" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setAdding("material")}><Package className="h-4 w-4 mr-2" /> Add material</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setAdding("labour")}><Hammer className="h-4 w-4 mr-2" /> Add labour</DropdownMenuItem>
+              <DropdownMenuItem onClick={onCopyFrom}><Copy className="h-4 w-4 mr-2" /> Copy lines from another item…</DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={onToggleActive}>
+                {inactive ? <><RotateCcw className="h-4 w-4 mr-2" /> Include in quote</> : <><Ban className="h-4 w-4 mr-2" /> Exclude from quote</>}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onDelete} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" /> Delete item</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
 
-      {/* Material + labour lines */}
+      {/* ---- Material + labour ---- */}
       {showLines && (
-        <div className="mt-1 md:ml-[28px] space-y-0.5 border-l-2 border-muted pl-2">
-          {lineCount > 0 && (
-            <div className={`hidden sm:grid ${LINE_GRID} text-[10px] uppercase tracking-wide text-muted-foreground`}>
-              <span />
-              <span className="px-2">Material / labour</span>
-              <span className="text-right px-2">Qty</span>
-              <span className="text-right px-2">Waste %</span>
-              <span className="px-2">Unit</span>
-              <span className="text-right px-2">Rate</span>
-              <span className="text-right px-1">Amount</span>
-              <span />
-            </div>
+        <div className="mt-3 rounded-lg bg-muted/30 p-2 space-y-1.5">
+          {lineCount === 0 && !adding && (
+            <p className="px-1 text-xs text-muted-foreground">
+              No material or labour yet{canEdit ? " — add them below, or just type the Amount above." : "."}
+            </p>
           )}
           {item.materials?.map((m) => (
             <MaterialLine key={m.id} m={m} canEdit={canEdit}
@@ -442,8 +475,8 @@ function ItemBlock({
           ))}
 
           {adding === "material" && (
-            <div className="flex items-center gap-2 py-1">
-              <Package className="h-3.5 w-3.5 text-sky-600 shrink-0" />
+            <div className="flex items-center gap-2 rounded-md bg-background p-1.5">
+              <Package className="h-4 w-4 text-sky-600 shrink-0" />
               <ProductSearch
                 autoFocus
                 onCancel={() => setAdding(null)}
@@ -462,14 +495,14 @@ function ItemBlock({
           )}
 
           {canEdit && !adding && (
-            <div className="flex gap-1 pt-0.5">
+            <div className="flex flex-wrap gap-2 pt-0.5">
               <button type="button" onClick={() => setAdding("material")}
-                className="text-[11px] text-sky-700 hover:bg-sky-50 rounded px-1.5 py-0.5 flex items-center gap-1">
-                <Plus className="h-3 w-3" /> material
+                className="text-xs font-medium text-sky-700 border border-sky-200 bg-background hover:bg-sky-50 rounded-full px-3 py-1 flex items-center gap-1">
+                <Plus className="h-3.5 w-3.5" /> Add material
               </button>
               <button type="button" onClick={() => setAdding("labour")}
-                className="text-[11px] text-amber-700 hover:bg-amber-50 rounded px-1.5 py-0.5 flex items-center gap-1">
-                <Plus className="h-3 w-3" /> labour
+                className="text-xs font-medium text-amber-700 border border-amber-200 bg-background hover:bg-amber-50 rounded-full px-3 py-1 flex items-center gap-1">
+                <Plus className="h-3.5 w-3.5" /> Add labour
               </button>
             </div>
           )}
@@ -479,24 +512,21 @@ function ItemBlock({
   );
 }
 
-function Labelled({ label, children, className = "" }: { label: string; children: React.ReactNode; className?: string }) {
+function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
-    <div className={`min-w-0 ${className}`}>
-      <span className="md:hidden block text-[10px] uppercase text-muted-foreground px-2">{label}</span>
+    <div className="min-w-0">
+      <span className="block text-[11px] font-medium text-muted-foreground mb-0.5">
+        {label}{hint && <span className="font-normal opacity-70"> · {hint}</span>}
+      </span>
       {children}
     </div>
   );
 }
 
-function Money({ v, strong, muted }: { v?: number | null; strong?: boolean; muted?: boolean }) {
-  return (
-    <div className={`px-2 text-right tabular-nums text-sm ${strong ? "font-semibold" : ""} ${muted ? "text-muted-foreground" : ""}`}>
-      {inr(v)}
-    </div>
-  );
-}
-
-const LINE_GRID = "grid-cols-[16px_minmax(0,1fr)_72px_28px] sm:grid-cols-[16px_minmax(0,1fr)_64px_56px_72px_80px_88px_28px] gap-1";
+/** Small inline label between fields ("×", "waste", "="). */
+const Op = ({ children }: { children: React.ReactNode }) => (
+  <span className="text-xs text-muted-foreground shrink-0">{children}</span>
+);
 
 function MaterialLine({ m, canEdit, onUpdate, onDelete }: {
   m: BoqItemMaterial; canEdit: boolean;
@@ -510,27 +540,29 @@ function MaterialLine({ m, canEdit, onUpdate, onDelete }: {
   const rate = rateDraft !== undefined ? rateDraft : m.sellingRate;
   // Same formula as the server (qty × (1 + waste%) × rate), so the line total moves as you type.
   const live = (qty ?? 0) * (1 + (waste ?? 0) / 100) * (rate ?? 0);
+  const f = canEdit ? FIELD : "";
 
   return (
-    <div className={`grid ${LINE_GRID} items-center`}>
-      <Package className="h-3.5 w-3.5 text-sky-600" />
-      <div className="min-w-0">
-        <TextCell value={m.materialName} col="matName" disabled={!canEdit} className="h-7 text-[13px]"
-          onCommit={(v) => v && onUpdate({ materialName: v })} />
-        {m.stockWarning && <p className="text-[10px] text-amber-700 px-2">{m.stockWarning}</p>}
-      </div>
-      <div className="hidden sm:block"><NumCell value={m.quantity} col="matQty" placeholder="qty" disabled={!canEdit} className="h-7 text-[13px]" onDraft={setQtyDraft} onCommit={(v) => onUpdate({ quantity: v ?? 0 })} /></div>
-      <div className="hidden sm:block"><NumCell value={m.wastePercent} col="matWaste" placeholder="waste%" disabled={!canEdit} className="h-7 text-[13px]" onDraft={setWasteDraft} onCommit={(v) => onUpdate({ wastePercent: v ?? 0 })} /></div>
-      <div className="hidden sm:block"><SelectCell value={m.unit} options={BOQ_UNITS} disabled={!canEdit} className="h-7 text-[13px]" onCommit={(v) => onUpdate({ unit: v })} /></div>
-      <div className="hidden sm:block"><NumCell value={m.sellingRate} col="matRate" placeholder="rate" disabled={!canEdit} className="h-7 text-[13px]" onDraft={setRateDraft} onCommit={(v) => onUpdate({ sellingRate: v ?? 0 })} /></div>
-      <div className="text-right text-[13px] tabular-nums px-1">{inr(live)}</div>
-      <LineDelete canEdit={canEdit} onDelete={onDelete} />
-      {/* Phone: qty / waste / rate on their own row */}
-      <div className="col-span-4 grid grid-cols-3 gap-1 sm:hidden pl-4">
-        <Labelled label={`Qty${m.unit ? ` (${m.unit})` : ""}`}><NumCell value={m.quantity} placeholder="qty" disabled={!canEdit} className="h-7 text-[13px]" onDraft={setQtyDraft} onCommit={(v) => onUpdate({ quantity: v ?? 0 })} /></Labelled>
-        <Labelled label="Waste %"><NumCell value={m.wastePercent} placeholder="waste%" disabled={!canEdit} className="h-7 text-[13px]" onDraft={setWasteDraft} onCommit={(v) => onUpdate({ wastePercent: v ?? 0 })} /></Labelled>
-        <Labelled label="Rate ₹"><NumCell value={m.sellingRate} placeholder="rate" disabled={!canEdit} className="h-7 text-[13px]" onDraft={setRateDraft} onCommit={(v) => onUpdate({ sellingRate: v ?? 0 })} /></Labelled>
-      </div>
+    <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 rounded-md bg-background px-2 py-1.5">
+      <span className="flex items-center gap-1.5 min-w-[10rem] flex-1">
+        <Package className="h-4 w-4 text-sky-600 shrink-0" aria-label="Material" />
+        <span className="flex-1 min-w-0">
+          <TextCell value={m.materialName} col="matName" disabled={!canEdit} className={`h-8 ${f}`}
+            onCommit={(v) => v && onUpdate({ materialName: v })} />
+          {m.stockWarning && <span className="block text-[10px] text-amber-700 px-2">{m.stockWarning}</span>}
+        </span>
+      </span>
+      <span className="flex flex-wrap items-center gap-1.5 ml-auto">
+        <span className="w-20"><NumCell value={m.quantity} col="matQty" placeholder="qty" disabled={!canEdit} className={f} onDraft={setQtyDraft} onCommit={(v) => onUpdate({ quantity: v ?? 0 })} /></span>
+        <span className="w-24"><SelectCell value={m.unit} options={BOQ_UNITS} disabled={!canEdit} className={f} onCommit={(v) => onUpdate({ unit: v })} /></span>
+        <Op>× ₹</Op>
+        <span className="w-24"><NumCell value={m.sellingRate} col="matRate" placeholder="rate" disabled={!canEdit} className={f} onDraft={setRateDraft} onCommit={(v) => onUpdate({ sellingRate: v ?? 0 })} /></span>
+        <Op>+</Op>
+        <span className="w-14"><NumCell value={m.wastePercent} col="matWaste" placeholder="0" disabled={!canEdit} className={f} onDraft={setWasteDraft} onCommit={(v) => onUpdate({ wastePercent: v ?? 0 })} /></span>
+        <Op>% waste =</Op>
+        <span className="min-w-[5.5rem] text-right text-sm font-semibold tabular-nums">{inr(live)}</span>
+        <LineDelete canEdit={canEdit} onDelete={onDelete} />
+      </span>
     </div>
   );
 }
@@ -543,39 +575,44 @@ function LabourLine({ l, canEdit, onUpdate, onDelete, rateFor }: {
   const [qtyDraft, setQtyDraft] = useState<number | null | undefined>();
   const [rateDraft, setRateDraft] = useState<number | null | undefined>();
   const live = (qtyDraft !== undefined ? qtyDraft ?? 0 : l.quantity ?? 0) * (rateDraft !== undefined ? rateDraft ?? 0 : l.rate ?? 0);
+  const f = canEdit ? FIELD : "";
 
   return (
-    <div className={`grid ${LINE_GRID} items-center`}>
-      <Hammer className="h-3.5 w-3.5 text-amber-600" />
-      <TextCell value={l.workType} col="labType" list={LABOUR_TYPES_LIST} disabled={!canEdit} className="h-7 text-[13px]"
-        placeholder="Work type"
-        onCommit={(v) => {
-          // Picking a known work type on a line with no rate fills in the rate you last used.
-          const known = rateFor(v);
-          onUpdate(!l.rate && known != null ? { workType: v, rate: known } : { workType: v });
-        }} />
-      <div className="hidden sm:block"><NumCell value={l.quantity} col="labQty" placeholder="qty" disabled={!canEdit} className="h-7 text-[13px]" onDraft={setQtyDraft} onCommit={(v) => onUpdate({ quantity: v ?? 0 })} /></div>
-      <div className="hidden sm:block col-span-2">
-        <TextCell value={l.contractorName} col="labWho" placeholder="Contractor (optional)" disabled={!canEdit} className="h-7 text-[13px]"
-          onCommit={(v) => onUpdate({ contractorName: v || undefined })} />
-      </div>
-      <div className="hidden sm:block"><NumCell value={l.rate} col="labRate" placeholder="rate" disabled={!canEdit} className="h-7 text-[13px]" onDraft={setRateDraft} onCommit={(v) => onUpdate({ rate: v ?? 0 })} /></div>
-      <div className="text-right text-[13px] tabular-nums px-1">{inr(live)}</div>
-      <LineDelete canEdit={canEdit} onDelete={onDelete} />
-      <div className="col-span-4 grid grid-cols-2 gap-1 sm:hidden pl-4">
-        <Labelled label="Qty"><NumCell value={l.quantity} placeholder="qty" disabled={!canEdit} className="h-7 text-[13px]" onDraft={setQtyDraft} onCommit={(v) => onUpdate({ quantity: v ?? 0 })} /></Labelled>
-        <Labelled label="Rate ₹"><NumCell value={l.rate} placeholder="rate" disabled={!canEdit} className="h-7 text-[13px]" onDraft={setRateDraft} onCommit={(v) => onUpdate({ rate: v ?? 0 })} /></Labelled>
-      </div>
+    <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 rounded-md bg-background px-2 py-1.5">
+      <span className="flex items-center gap-1.5 min-w-[10rem] flex-1">
+        <Hammer className="h-4 w-4 text-amber-600 shrink-0" aria-label="Labour" />
+        <span className="flex-1 min-w-0">
+          <TextCell value={l.workType} col="labType" list={LABOUR_TYPES_LIST} disabled={!canEdit} className={`h-8 ${f}`}
+            placeholder="Work type"
+            onCommit={(v) => {
+              // Picking a known work type on a line with no rate fills in the rate you last used.
+              const known = rateFor(v);
+              onUpdate(!l.rate && known != null ? { workType: v, rate: known } : { workType: v });
+            }} />
+        </span>
+        <span className="w-36 hidden sm:block">
+          <TextCell value={l.contractorName} col="labWho" placeholder="Contractor (optional)" disabled={!canEdit} className={`h-8 text-xs ${f}`}
+            onCommit={(v) => onUpdate({ contractorName: v || undefined })} />
+        </span>
+      </span>
+      <span className="flex flex-wrap items-center gap-1.5 ml-auto">
+        <span className="w-20"><NumCell value={l.quantity} col="labQty" placeholder="qty" disabled={!canEdit} className={f} onDraft={setQtyDraft} onCommit={(v) => onUpdate({ quantity: v ?? 0 })} /></span>
+        <Op>× ₹</Op>
+        <span className="w-24"><NumCell value={l.rate} col="labRate" placeholder="rate" disabled={!canEdit} className={f} onDraft={setRateDraft} onCommit={(v) => onUpdate({ rate: v ?? 0 })} /></span>
+        <Op>=</Op>
+        <span className="min-w-[5.5rem] text-right text-sm font-semibold tabular-nums">{inr(live)}</span>
+        <LineDelete canEdit={canEdit} onDelete={onDelete} />
+      </span>
     </div>
   );
 }
 
 function LineDelete({ canEdit, onDelete }: { canEdit: boolean; onDelete: () => void }) {
-  if (!canEdit) return <span />;
+  if (!canEdit) return <span className="w-7" />;
   return (
     <button type="button" onClick={onDelete} aria-label="Remove line"
-      className="h-6 w-6 rounded hover:bg-destructive/10 flex items-center justify-center justify-self-end">
-      <Trash2 className="h-3 w-3 text-destructive" />
+      className="h-7 w-7 rounded hover:bg-destructive/10 flex items-center justify-center shrink-0">
+      <Trash2 className="h-3.5 w-3.5 text-destructive" />
     </button>
   );
 }
