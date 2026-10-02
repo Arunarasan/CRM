@@ -560,14 +560,11 @@ public class QuotationService {
     public List<Project> convertToProjectWithAdvance(Long id, String splitBy, User user,
                                                      java.math.BigDecimal advanceAmount, String advanceMethod) {
         List<Project> projects = convertToProject(id, splitBy, user);
-        if (advanceAmount != null && advanceAmount.signum() > 0 && !projects.isEmpty()) {
-            com.arudra.crm.entity.ProjectPayment p = new com.arudra.crm.entity.ProjectPayment();
-            p.setAmount(advanceAmount);
-            p.setPaymentDate(java.time.LocalDate.now());
-            p.setPaymentMethod(advanceMethod != null && !advanceMethod.isBlank() ? advanceMethod : "Cash");
-            p.setStatus("COMPLETED");
-            p.setRemarks("Advance received on project conversion");
-            projectService.addPayment(projects.get(0).getId(), p, user);
+        if (!projects.isEmpty()) {
+            // Recorded in the finance module (not the legacy project_payments table) so the advance shows
+            // on the project's Payments tab, the customer ledger and outstanding. Also links the quotation's
+            // advance invoice, raised at approval before the project existed, to the new project.
+            financeService.recordConversionAdvance(id, projects.get(0), advanceAmount, advanceMethod, user);
         }
         return projects;
     }

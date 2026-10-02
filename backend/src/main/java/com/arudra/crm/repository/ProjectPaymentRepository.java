@@ -9,4 +9,8 @@ import java.util.List;
 @Repository
 public interface ProjectPaymentRepository extends JpaRepository<ProjectPayment, Long> {
     List<ProjectPayment> findByProjectId(Long projectId);
+
+    List<ProjectPayment> findByMigratedPaymentIdIsNullAndStatus(String status);
+
+    boolean existsByMigratedPaymentId(Long migratedPaymentId);
 }

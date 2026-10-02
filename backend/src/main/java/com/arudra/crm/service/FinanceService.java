@@ -36,6 +36,7 @@ public class FinanceService {
     @Autowired private InvoiceRepository invoiceRepository;
     @Autowired private InvoiceItemRepository invoiceItemRepository;
     @Autowired private CustomerPaymentRepository paymentRepository;
+    @Autowired private ProjectPaymentRepository projectPaymentRepository;
     @Autowired private CreditDebitNoteRepository noteRepository;
     @Autowired private RefundRepository refundRepository;
     @Autowired private PaymentScheduleRepository scheduleRepository;
@@ -869,6 +870,112 @@ public class FinanceService {
             applyConfirmedPayment(saved);
         }
         return saved;
+    }
+
+    /**
+     * Project conversion: link the quotation's invoices (raised at approval, before the project
+     * existed) to the new project, then record the advance the customer paid as a confirmed customer
+     * payment so it shows on the project's Payments tab, ledger and outstanding. The advance settles
+     * the quotation's open ADVANCE invoice first (auto-issuing a draft); any excess is kept on account
+     * against the project.
+     */
+    @Transactional
+    public List<CustomerPayment> recordConversionAdvance(Long quotationId, Project project, BigDecimal amount,
+                                                         String method, User user) {
+        return recordProjectAdvance(quotationId, project, amount, method, LocalDate.now(),
+                "Advance received on project conversion", user);
+    }
+
+    /**
+     * One-time backfill: moves a payment that was saved to the legacy {@code project_payments} table
+     * (invisible to the Payments tab / ledger) into the finance module, with its original date. Skips —
+     * and links to — a finance payment that already records the same money (same project + amount),
+     * e.g. one an admin re-entered by hand. Returns the finance payment id now representing it.
+     */
+    @Transactional
+    public Long migrateLegacyProjectPayment(Long legacyId) {
+        ProjectPayment legacy = projectPaymentRepository.findById(legacyId)
+                .orElseThrow(() -> new RuntimeException("Legacy project payment not found: " + legacyId));
+        if (legacy.getMigratedPaymentId() != null) return legacy.getMigratedPaymentId();
+        Long financeId = moveLegacyProjectPayment(legacy);
+        legacy.setMigratedPaymentId(financeId != null ? financeId : 0L); // 0 = nothing to move (zero amount)
+        projectPaymentRepository.save(legacy);
+        return financeId;
+    }
+
+    private Long moveLegacyProjectPayment(ProjectPayment legacy) {
+        Project project = legacy.getProject();
+        for (CustomerPayment existing : paymentRepository.findByProjectIdAndIsDeletedFalseOrderByPaymentDateDesc(project.getId())) {
+            // a payment another legacy row already claimed is not this one's duplicate (two equal instalments)
+            if (!"REJECTED".equals(existing.getStatus()) && existing.getAmount() != null
+                    && existing.getAmount().compareTo(legacy.getAmount()) == 0
+                    && !projectPaymentRepository.existsByMigratedPaymentId(existing.getId())) {
+                return existing.getId();
+            }
+        }
+        Long quotationId = project.getQuotation() != null ? project.getQuotation().getId() : null;
+        String remarks = (legacy.getRemarks() == null || legacy.getRemarks().isBlank())
+                ? "Project payment" : legacy.getRemarks();
+        List<CustomerPayment> recorded = recordProjectAdvance(quotationId, project, legacy.getAmount(),
+                legacy.getPaymentMethod(), legacy.getPaymentDate(), remarks + " (migrated)", legacy.getReceivedBy());
+        return recorded.isEmpty() ? null : recorded.get(0).getId();
+    }
+
+    private List<CustomerPayment> recordProjectAdvance(Long quotationId, Project project, BigDecimal amount,
+                                                       String method, LocalDate date, String remarks, User user) {
+        Invoice advanceInvoice = null;
+        for (Invoice inv : quotationId == null ? List.<Invoice>of() : invoiceRepository.findByQuotationId(quotationId)) {
+            if (inv.getProject() == null) {
+                inv.setProject(project);
+                invoiceRepository.save(inv);
+            }
+            if ("ADVANCE".equals(inv.getInvoiceType()) && !"CANCELLED".equals(inv.getStatus())) {
+                advanceInvoice = inv;
+            }
+        }
+        List<CustomerPayment> recorded = new ArrayList<>();
+        if (amount == null || amount.signum() <= 0) return recorded;
+        if (project.getCustomer() == null) {
+            throw new RuntimeException("Project has no customer to record the advance against");
+        }
+        String tender = normalizePaymentMethod(method);
+        BigDecimal remaining = amount;
+
+        if (advanceInvoice != null) {
+            if ("DRAFT".equals(advanceInvoice.getStatus())) advanceInvoice = issueInvoice(advanceInvoice.getId());
+            BigDecimal balance = advanceInvoice.getBalanceDue() != null ? advanceInvoice.getBalanceDue()
+                    : advanceInvoice.getTotalAmount();
+            if (balance != null && balance.signum() > 0) {
+                BigDecimal applied = remaining.min(balance);
+                recorded.add(recordPayment(conversionPayment(project, advanceInvoice, applied, tender, date, remarks), user));
+                remaining = remaining.subtract(applied);
+            }
+        }
+        if (remaining.signum() > 0) {
+            recorded.add(recordPayment(conversionPayment(project, null, remaining, tender, date, remarks), user));
+        }
+        return recorded;
+    }
+
+    private CustomerPayment conversionPayment(Project project, Invoice invoice, BigDecimal amount, String method,
+                                              LocalDate date, String remarks) {
+        CustomerPayment p = new CustomerPayment();
+        p.setCustomer(project.getCustomer());
+        p.setProject(project);
+        p.setInvoice(invoice);
+        p.setAmount(amount);
+        p.setPaymentMethod(method);
+        p.setPaymentType("ADVANCE");
+        p.setStatus("CONFIRMED");
+        p.setPaymentDate(date != null ? date : LocalDate.now());
+        p.setRemarks(remarks);
+        return p;
+    }
+
+    /** Maps the friendly labels used on conversion screens ("Bank Transfer", "Card") to payment codes. */
+    private static String normalizePaymentMethod(String method) {
+        if (method == null || method.isBlank()) return "CASH";
+        return method.trim().toUpperCase().replace(' ', '_');
     }
 
     @Transactional

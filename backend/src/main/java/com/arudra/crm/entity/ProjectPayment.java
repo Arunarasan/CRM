@@ -37,4 +37,8 @@ public class ProjectPayment extends BaseEntity {
 
     @Column(columnDefinition = "TEXT")
     private String remarks;
+
+    /** Finance customer_payments row this legacy payment was moved to (V105 backfill); null = not yet moved. */
+    @Column(name = "migrated_payment_id")
+    private Long migratedPaymentId;
 }

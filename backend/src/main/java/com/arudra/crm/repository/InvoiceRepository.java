@@ -25,6 +25,8 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
 
     List<Invoice> findByQuotationIdAndInvoiceType(Long quotationId, String invoiceType);
 
+    List<Invoice> findByQuotationId(Long quotationId);
+
     List<Invoice> findByStatusInAndDueDateBefore(List<String> statuses, LocalDate date);
 
     List<Invoice> findByStatusInAndIsDeletedFalse(List<String> statuses);
