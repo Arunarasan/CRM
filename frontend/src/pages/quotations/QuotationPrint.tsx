@@ -26,8 +26,17 @@ function formatCurrency(value?: number) {
  */
 export default function QuotationPrint() {
   const { id } = useParams<{ id: string }>();
-  const quotationId = Number(id);
   const navigate = useNavigate();
+  return <QuotationPrintView quotationId={Number(id)} onClose={() => navigate(`/quotations/${id}`)} />;
+}
+
+/** The print sheet as an overlay — also opened in place from the lead's Sales Journey (no route change). */
+export function QuotationPrintView({ quotationId, onClose, onSaved }: {
+  quotationId: number;
+  onClose: () => void;
+  /** Called after an edit is saved, so the screen underneath can refresh. */
+  onSaved?: (q: Quotation) => void;
+}) {
   const { hasAuthority, isAdmin } = useAuth();
   const [quotation, setQuotation] = useState<Quotation | null>(null);
   const [loading, setLoading] = useState(true);
@@ -87,6 +96,7 @@ export default function QuotationPrint() {
         ...pricingPatch(pricing),
       } as Quotation);
       adopt(saved);
+      onSaved?.(saved);
       setEditing(false);
       toast.success("Quotation updated");
     } catch (e: any) {
@@ -132,7 +142,7 @@ export default function QuotationPrint() {
             </>
           ) : (
             <>
-              <Button size="sm" variant="outline" onClick={() => navigate(`/quotations/${quotationId}`)}>
+              <Button size="sm" variant="outline" onClick={onClose}>
                 <X className="mr-1.5 h-4 w-4" /> Close
               </Button>
               {canEdit && (

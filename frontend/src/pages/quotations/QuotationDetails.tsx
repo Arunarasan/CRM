@@ -2,7 +2,7 @@ import { BaseInput } from '@/components/ui/input';
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useLocation, Link } from "react-router-dom";
 import {
-  ArrowLeft, Building, Building2, Check, CheckCircle2, Copy, FileDown, FileOutput, GitBranch,
+  ArrowDownRight, ArrowLeft, ArrowUpRight, Building, Building2, Check, CheckCircle2, Copy, FileDown, FileOutput, GitBranch,
   Loader2, MoreHorizontal, Pencil, Printer, RefreshCw, Undo2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { quotationApi } from "@/api/quotationApi";
 import { NumCell } from "@/pages/leads/quote/cells";
 import QuotationPdfDialog from "./QuotationPdfDialog";
+import { QuotationPrintView } from "./QuotationPrint";
 import { lineTotal, pricingPatch, quoteTotals, readPricing, type DiscountMode } from "./quotationPricing";
 import {
   QUOTATION_STATUS_LABELS, QUOTATION_STATUS_STYLES, buildQuotationTree,
@@ -36,15 +37,56 @@ const errMsg = (e: any, fallback: string) => e?.response?.data?.message || fallb
 
 export default function QuotationDetails() {
   const { id } = useParams<{ id: string }>();
-  const quotationId = Number(id);
   const navigate = useNavigate();
   const location = useLocation();
+
+  const handleBack = (quotation: Quotation | null) => {
+    if (location.state?.from) navigate(location.state.from);
+    else if (quotation?.project?.id) navigate(`/projects/${quotation.project.id}`);
+    else if (quotation?.lead?.id) navigate(`/leads/${quotation.lead.id}?tab=journey`);
+    else if (quotation?.customer?.id) navigate(`/customers/${quotation.customer.id}`);
+    else if (window.history.length > 2) navigate(-1);
+    else navigate("/quotations");
+  };
+
+  return (
+    <div className="p-4 sm:p-6 lg:p-8 h-full bg-background overflow-y-auto animate-in fade-in">
+      <QuotationWorkbench quotationId={Number(id)} onBack={handleBack}
+        onOpenQuotation={(qid) => navigate(`/quotations/${qid}`)}
+        onConverted={() => navigate("/projects")} />
+    </div>
+  );
+}
+
+/**
+ * Everything you do with a quotation — price, customer scope, PDF/print, create project — as one
+ * component. The /quotations/:id page wraps it; the lead's Sales Journey embeds it in the Quote step
+ * so the whole quote-to-project flow happens without leaving the lead.
+ */
+export function QuotationWorkbench({
+  quotationId, embedded, onBack, onOpenQuotation, onChanged, onConverted, pricingSheetTotal,
+}: {
+  quotationId: number;
+  /** Rendered inside another page: compact header, no back button, BOQ link hidden. */
+  embedded?: boolean;
+  onBack?: (q: Quotation | null) => void;
+  /** Show another quotation (revision / duplicate / version) — navigate, or swap in place. */
+  onOpenQuotation: (id: number) => void;
+  /** Any saved change, so the host can refresh its own summary. */
+  onChanged?: () => void;
+  /** After Create Project; when omitted the workbench just reloads in place. */
+  onConverted?: () => void;
+  /** Grand total of the pricing sheet (BOQ) this quote came from — shows how far the quote moved. */
+  pricingSheetTotal?: number;
+}) {
+  const navigate = useNavigate();
   const { hasAuthority, isAdmin } = useAuth();
   const [quotation, setQuotation] = useState<Quotation | null>(null);
   const [revisions, setRevisions] = useState<Quotation[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [pdfOpen, setPdfOpen] = useState(false);
+  const [printOpen, setPrintOpen] = useState(false);
   const [approveOpen, setApproveOpen] = useState(false);
   const [editingScope, setEditingScope] = useState(false);
   const [scope, setScope] = useState<Set<number>>(new Set());
@@ -111,6 +153,7 @@ export default function QuotationDetails() {
     setBusy(true);
     try {
       adopt(await quotationApi.update(quotationId, { ...quotation, ...patch } as Quotation));
+      onChanged?.();
       toast.success(`${what} saved`);
     } catch (e) {
       toast.error(errMsg(e, `Could not save ${what.toLowerCase()}.`));
@@ -128,6 +171,7 @@ export default function QuotationDetails() {
     try {
       const q = await quotationApi.customerApproval(quotationId, [...scope]);
       adopt(q);
+      onChanged?.();
       setApproveOpen(false);
       setEditingScope(false);
       toast.success(`Customer approved ${scope.size} item(s) — ${inr(q.grandTotal)}`);
@@ -144,40 +188,37 @@ export default function QuotationDetails() {
       advanceAmount: convertCfg.advanceAmount || undefined,
       advancePaymentMethod: convertCfg.advanceMethod,
     })
-      .then(() => { setConvertCfg(null); navigate("/projects"); })
+      .then(async () => {
+        setConvertCfg(null);
+        toast.success("Project created");
+        if (onConverted) { onConverted(); return; }
+        await load();
+        onChanged?.();
+      })
       .catch((e) => toast.error(errMsg(e, "Conversion failed.")))
       .finally(() => setBusy(false));
   };
 
   const runNav = (fn: () => Promise<Quotation>, what: string) => {
     setBusy(true);
-    fn().then((q) => navigate(`/quotations/${q.id}`)).catch((e) => toast.error(errMsg(e, `${what} failed.`))).finally(() => setBusy(false));
+    fn().then((q) => { onChanged?.(); onOpenQuotation(q.id!); }).catch((e) => toast.error(errMsg(e, `${what} failed.`))).finally(() => setBusy(false));
   };
   const syncFromBoq = () => {
     setBusy(true);
-    quotationApi.syncFromBoq(quotationId).then((q) => { adopt(q); toast.success("Synced from BOQ"); })
+    quotationApi.syncFromBoq(quotationId).then((q) => { adopt(q); onChanged?.(); toast.success("Synced from BOQ"); })
       .catch((e) => toast.error(errMsg(e, "Sync failed."))).finally(() => setBusy(false));
-  };
-
-  const handleBack = () => {
-    if (location.state?.from) navigate(location.state.from);
-    else if (quotation?.project?.id) navigate(`/projects/${quotation.project.id}`);
-    else if (quotation?.lead?.id) navigate(`/leads/${quotation.lead.id}?tab=journey`);
-    else if (quotation?.customer?.id) navigate(`/customers/${quotation.customer.id}`);
-    else if (window.history.length > 2) navigate(-1);
-    else navigate("/quotations");
   };
 
   if (loading) {
     return (
-      <div className="p-8 space-y-4">
-        <Skeleton className="h-10 w-96" />
+      <div className="space-y-4">
+        <Skeleton className="h-10 w-full max-w-sm" />
         <Skeleton className="h-16 w-full" />
         <Skeleton className="h-64 w-full" />
       </div>
     );
   }
-  if (!quotation) return <div className="p-8 text-destructive">Failed to load quotation.</div>;
+  if (!quotation) return <div className="text-destructive">Failed to load quotation.</div>;
 
   const client = quotation.customer?.name || quotation.lead?.name;
   const step = converted ? 3 : approved ? 2 : 1;
@@ -185,14 +226,14 @@ export default function QuotationDetails() {
     setScope((prev) => { const n = new Set(prev); ids.forEach((x) => (on ? n.add(x) : n.delete(x))); return n; });
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 space-y-5 h-full bg-background flex flex-col overflow-y-auto animate-in fade-in">
+    <div className="space-y-5">
       {/* ---------- Header ---------- */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
-          <Button variant="outline" size="icon" onClick={handleBack} title="Back"><ArrowLeft className="h-4 w-4" /></Button>
+          {onBack && <Button variant="outline" size="icon" onClick={() => onBack(quotation)} title="Back"><ArrowLeft className="h-4 w-4" /></Button>}
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-xl lg:text-2xl font-bold tracking-tight truncate">{quotation.quotationNumber}</h1>
+              <h1 className={`${embedded ? "text-lg" : "text-xl lg:text-2xl"} font-bold tracking-tight truncate`}>{quotation.quotationNumber}</h1>
               {quotation.revisionNumber ? <span className="text-sm text-muted-foreground">v{quotation.revisionNumber}</span> : null}
               <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${QUOTATION_STATUS_STYLES[status] || "bg-muted text-muted-foreground"}`}>
                 {QUOTATION_STATUS_LABELS[status] || status}
@@ -205,6 +246,9 @@ export default function QuotationDetails() {
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" onClick={() => setPdfOpen(true)}>
             <FileDown className="mr-2 h-4 w-4" /> PDF · Preview
+          </Button>
+          <Button variant="outline" onClick={() => setPrintOpen(true)}>
+            <Printer className="mr-2 h-4 w-4" /> Print
           </Button>
           {!converted && !approved && canApprove && (
             <Button className="bg-green-600 hover:bg-green-700 text-white" disabled={busy || scope.size === 0} onClick={() => setApproveOpen(true)}>
@@ -234,7 +278,6 @@ export default function QuotationDetails() {
               <Button variant="outline" size="icon" aria-label="More actions"><MoreHorizontal className="h-4 w-4" /></Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => navigate(`/quotations/${quotationId}/print`)}><Printer className="h-4 w-4 mr-2" /> Print page</DropdownMenuItem>
               {approved && !editingScope && canApprove && (
                 <DropdownMenuItem onClick={() => setEditingScope(true)}><Pencil className="h-4 w-4 mr-2" /> Customer changed the scope</DropdownMenuItem>
               )}
@@ -243,13 +286,13 @@ export default function QuotationDetails() {
                   <Building className="h-4 w-4 mr-2" /> Create projects split by floor
                 </DropdownMenuItem>
               )}
-              {canWrite && <DropdownMenuSeparator />}
+              {canWrite && approved && !editingScope && <DropdownMenuSeparator />}
               {canWrite && quotation.boq?.id && !converted && (
                 <DropdownMenuItem onClick={syncFromBoq}><RefreshCw className="h-4 w-4 mr-2" /> Sync items from BOQ</DropdownMenuItem>
               )}
               {canWrite && <DropdownMenuItem onClick={() => runNav(() => quotationApi.createRevision(quotationId), "New revision")}><GitBranch className="h-4 w-4 mr-2" /> New revision</DropdownMenuItem>}
               {canWrite && <DropdownMenuItem onClick={() => runNav(() => quotationApi.duplicate(quotationId), "Duplicate")}><Copy className="h-4 w-4 mr-2" /> Duplicate</DropdownMenuItem>}
-              {isAdmin && quotation.boq?.id && (
+              {isAdmin && !embedded && quotation.boq?.id && (
                 <DropdownMenuItem onClick={() => navigate(`/boq/${quotation.boq!.id}`)}>Open linked BOQ ({quotation.boq.boqNumber})</DropdownMenuItem>
               )}
             </DropdownMenuContent>
@@ -399,6 +442,19 @@ export default function QuotationDetails() {
               <span className="font-semibold">Grand total</span>
               <span className="text-xl font-bold tabular-nums text-primary">{inr(totals.grand)}</span>
             </div>
+            {Number(pricingSheetTotal ?? 0) > 0 && Math.abs(Number(quotation.grandTotal ?? 0) - Number(pricingSheetTotal)) >= 0.5 && (() => {
+              const sheet = Number(pricingSheetTotal);
+              const diff = Number(quotation.grandTotal ?? 0) - sheet;
+              return (
+                <div className={`flex items-center justify-between rounded px-2 py-1 text-xs font-medium ${diff < 0 ? "bg-amber-50 text-amber-800" : "bg-green-50 text-green-800"}`}>
+                  <span className="flex items-center gap-1">
+                    {diff < 0 ? <ArrowDownRight className="h-3.5 w-3.5" /> : <ArrowUpRight className="h-3.5 w-3.5" />}
+                    vs pricing sheet {inr(sheet)}
+                  </span>
+                  <span className="tabular-nums">{diff > 0 ? "+" : "−"}{inr(Math.abs(diff))} ({((diff / sheet) * 100).toFixed(1)}%)</span>
+                </div>
+              );
+            })()}
             {scopeChanged && !converted && (
               <p className="text-[11px] text-amber-700">
                 Showing the ticked scope — {approved ? "save the new scope" : "mark customer approved"} to make it the quoted total.
@@ -432,11 +488,11 @@ export default function QuotationDetails() {
             <div className="border rounded-xl bg-card p-4 text-sm">
               <h3 className="font-semibold mb-1">Versions</h3>
               {revisions.map((r) => (
-                <Link key={r.id} to={`/quotations/${r.id}`}
-                  className={`flex justify-between p-1.5 rounded hover:bg-muted/40 ${r.id === quotationId ? "bg-muted/50 font-medium" : ""}`}>
+                <button key={r.id} type="button" onClick={() => r.id !== quotationId && onOpenQuotation(r.id!)}
+                  className={`w-full flex justify-between p-1.5 rounded text-left hover:bg-muted/40 ${r.id === quotationId ? "bg-muted/50 font-medium" : ""}`}>
                   <span>v{r.revisionNumber ?? 0} · {QUOTATION_STATUS_LABELS[r.status || ""] || r.status}</span>
                   <span className="tabular-nums">{inr(r.grandTotal)}</span>
-                </Link>
+                </button>
               ))}
             </div>
           )}
@@ -497,6 +553,10 @@ export default function QuotationDetails() {
       </Dialog>
 
       <QuotationPdfDialog quotation={quotation} open={pdfOpen} onOpenChange={setPdfOpen} defaultSelectedIds={[...scope]} />
+      {printOpen && (
+        <QuotationPrintView quotationId={quotationId} onClose={() => setPrintOpen(false)}
+          onSaved={(q) => { adopt(q); onChanged?.(); }} />
+      )}
     </div>
   );
 }

@@ -15,7 +15,7 @@ import { ListSkeleton } from "../tabs/shared";
 import SiteVisitsTab from "../tabs/SiteVisitsTab";
 import RoomsTab from "@/pages/measurements/tabs/RoomsTab";
 import BoqSheet from "./BoqSheet";
-import QuotedPricePanel from "./QuotedPricePanel";
+import { QuotationWorkbench } from "@/pages/quotations/QuotationDetails";
 import { NumCell } from "./cells";
 
 /**
@@ -41,6 +41,8 @@ export default function QuoteWorkspace({ leadId, onChanged }: { leadId: string; 
   const [busy, setBusy] = useState<string | null>(null);
   const [editMeasurement, setEditMeasurement] = useState(false);
   const [confirmQuote, setConfirmQuote] = useState(false);
+  /** Quotation opened in place below (a revision / older version); default = the live one. */
+  const [shownQuoteId, setShownQuoteId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     const [m, b, q] = await Promise.all([
@@ -81,6 +83,9 @@ export default function QuoteWorkspace({ leadId, onChanged }: { leadId: string; 
   );
 
   const step = !boq ? 0 : !quotedThisBoq ? 1 : 3;
+  const shownId = (shownQuoteId && quotations.some((q) => q.id === shownQuoteId) ? shownQuoteId : null)
+    ?? activeQuote?.id ?? latestQuote?.id ?? null;
+  const shownQuote = quotations.find((q) => q.id === shownId);
 
   // ---------------- Actions ----------------
 
@@ -153,6 +158,7 @@ export default function QuoteWorkspace({ leadId, onChanged }: { leadId: string; 
       const q: any = await quoteWorkspaceApi.generateQuotation(boq.id);
       toast.success(`Quotation ${q?.quotationNumber ?? ""} created`);
       setConfirmQuote(false);
+      setShownQuoteId(q?.id ?? null);
       await refreshAll();
     } catch (e) {
       toast.error(errMsg(e, "Could not generate the quotation."));
@@ -268,54 +274,55 @@ export default function QuoteWorkspace({ leadId, onChanged }: { leadId: string; 
           <p className="text-sm text-muted-foreground">Totals and the quotation appear once pricing has started.</p>
         ) : (
           <div className="space-y-4">
-            {activeQuote?.id ? (
-              // Quoted: price, discount and GST live on the quotation now — edit them there, and
-              // show how far the quote moved from the pricing sheet.
-              <QuotedPricePanel quotationId={activeQuote.id} pricingSheetTotal={boq.grandTotal}
-                leadId={leadId} onChanged={() => { load(); onChanged(); }} />
-            ) : (
-              <TotalsPanel boq={boq} editable={canPrice && !boqLocked} onSave={saveTotals} />
-            )}
+            {!activeQuote?.id && <TotalsPanel boq={boq} editable={canPrice && !boqLocked} onSave={saveTotals} />}
 
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-primary/[0.03] p-3">
-              <div className="text-sm">
-                {quotedThisBoq
-                  ? <span>Quotation raised — adjust its price, discount and GST above, or change the pricing sheet (new revision) to raise a fresh one.</span>
-                  : <span>Ready? This locks the pricing and creates the customer quotation.</span>}
-                {isAdmin && (
-                  <Link to={`/boq/${boq.id}`} state={{ from: `/leads/${leadId}` }} className="block text-xs text-muted-foreground hover:text-primary mt-0.5">
-                    Need a partial or budget quotation? Open advanced options
-                  </Link>
+            {!quotedThisBoq && (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-primary/[0.03] p-3">
+                <div className="text-sm">
+                  <span>Ready? This locks the pricing and creates the customer quotation.</span>
+                  {isAdmin && (
+                    <Link to={`/boq/${boq.id}`} state={{ from: `/leads/${leadId}` }} className="block text-xs text-muted-foreground hover:text-primary mt-0.5">
+                      Need a partial or budget quotation? Open advanced options
+                    </Link>
+                  )}
+                </div>
+                {canPrice && (
+                  <Button className="bg-green-600 hover:bg-green-700 text-white" disabled={!!busy || (boq.items?.length ?? 0) === 0}
+                    onClick={() => setConfirmQuote(true)}>
+                    <FileText className="h-4 w-4 mr-2" /> Generate Quotation
+                  </Button>
                 )}
               </div>
-              {!quotedThisBoq && canPrice && (
-                <Button className="bg-green-600 hover:bg-green-700 text-white" disabled={!!busy || (boq.items?.length ?? 0) === 0}
-                  onClick={() => setConfirmQuote(true)}>
-                  <FileText className="h-4 w-4 mr-2" /> Generate Quotation
-                </Button>
-              )}
-            </div>
+            )}
 
-            {quotations.length > 0 && (
-              <div className="space-y-2">
+            {/* Older quotations (earlier pricing revisions) — opened in place, not on another page. */}
+            {quotations.length > 1 && (
+              <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                <span className="text-muted-foreground mr-1">Quotations:</span>
                 {[...quotations].sort((a, b) => (b.id ?? 0) - (a.id ?? 0)).map((q) => (
-                  <div key={q.id} className={`border rounded-lg p-3 flex flex-wrap items-center justify-between gap-2 ${q.id === latestQuote?.id ? "bg-muted/30" : "opacity-75"}`}>
-                    <div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-medium text-sm">{q.quotationNumber}</span>
-                        {q.status && <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${statusStyle(q.status)}`}>{q.status}</span>}
-                        {q.id === latestQuote?.id && <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-primary/10 text-primary">Latest</span>}
-                      </div>
-                      <div className="text-xs text-muted-foreground mt-0.5">
-                        {formatDate(q.quotationDate)} · {inr(q.grandTotal ?? q.totalAmount)}
-                        {q.expiryDate ? ` · valid till ${formatDate(q.expiryDate)}` : ""}
-                      </div>
-                    </div>
-                    <Link to={`/quotations/${q.id}`} state={{ from: `/leads/${leadId}` }}>
-                      <Button size="sm" variant="outline">Open · Print · Send</Button>
-                    </Link>
-                  </div>
+                  <button key={q.id} type="button" onClick={() => setShownQuoteId(q.id)}
+                    className={`rounded-full border px-2.5 py-1 flex items-center gap-1.5 ${q.id === shownId ? "border-primary bg-primary/10 text-primary font-medium" : "hover:bg-muted/50"}`}>
+                    {q.quotationNumber}
+                    <span className="tabular-nums text-muted-foreground">{inr(q.grandTotal ?? q.totalAmount)}</span>
+                    {q.id === latestQuote?.id && <span className="text-[10px] uppercase">· latest</span>}
+                  </button>
                 ))}
+              </div>
+            )}
+
+            {shownId && (
+              <div className="rounded-lg border p-3 sm:p-4 bg-background">
+                {shownQuote && shownQuote.id !== activeQuote?.id && (
+                  <p className="mb-3 text-xs text-amber-700">
+                    {activeQuote
+                      ? `Showing an older quotation — the current pricing is quoted as ${activeQuote.quotationNumber}.`
+                      : "The pricing has changed since this quotation — generate a new quotation to quote it."}
+                  </p>
+                )}
+                <QuotationWorkbench key={shownId} quotationId={shownId} embedded
+                  pricingSheetTotal={shownQuote && (shownQuote.boq?.id ?? shownQuote.boqId) === boq.id ? boq.grandTotal : undefined}
+                  onOpenQuotation={(id) => { setShownQuoteId(id); load(); }}
+                  onChanged={() => { load(); onChanged(); }} />
               </div>
             )}
           </div>
