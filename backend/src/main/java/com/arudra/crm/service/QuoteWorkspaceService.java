@@ -5,6 +5,7 @@ import com.arudra.crm.exception.ResourceNotFoundException;
 import com.arudra.crm.repository.BoqRepository;
 import com.arudra.crm.repository.LeadRepository;
 import com.arudra.crm.repository.MeasurementRepository;
+import com.arudra.crm.repository.QuotationRepository;
 import com.arudra.crm.util.MeasurementWorkflow;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,6 +25,9 @@ import java.util.Map;
  *       BOQ if they don't exist yet — no "complete the measurement first" gate.</li>
  *   <li>{@link #generateQuotation}: one step that finishes the measurement, approves the pricing and
  *       raises the quotation. The quotation's own approval (customer/internal) is unchanged.</li>
+ *   <li>{@link #liveQuote} / {@link #customerApproval} / {@link #reopen}: the single combined Quote page.
+ *       The sheet stays editable while a quotation mirrors it; the customer approves from the sheet
+ *       (which then locks); a change after approval opens a new sheet and so a new quotation.</li>
  * </ul>
  */
 @Service
@@ -34,15 +38,79 @@ public class QuoteWorkspaceService {
     private final BoqRepository boqRepository;
     private final MeasurementService measurementService;
     private final BoqService boqService;
+    private final QuotationService quotationService;
+    private final QuotationRepository quotationRepository;
+    private final LiveQuoteSync liveQuoteSync;
 
     public QuoteWorkspaceService(LeadRepository leadRepository, MeasurementRepository measurementRepository,
                                  BoqRepository boqRepository, MeasurementService measurementService,
-                                 BoqService boqService) {
+                                 BoqService boqService, QuotationService quotationService,
+                                 QuotationRepository quotationRepository, LiveQuoteSync liveQuoteSync) {
         this.leadRepository = leadRepository;
         this.measurementRepository = measurementRepository;
         this.boqRepository = boqRepository;
         this.measurementService = measurementService;
         this.boqService = boqService;
+        this.quotationService = quotationService;
+        this.quotationRepository = quotationRepository;
+        this.liveQuoteSync = liveQuoteSync;
+    }
+
+    /**
+     * The sheet's quotation, created on first use (PDF / send / approve) and otherwise brought up to
+     * date with the sheet. The sheet is NOT approved or locked — it stays the place to keep editing.
+     */
+    @Transactional
+    public Quotation liveQuote(Long boqId, User currentUser) {
+        Boq boq = boqService.getBoqById(boqId);
+        if (boq.getItems() == null || boq.getItems().stream().noneMatch(i -> !Boolean.FALSE.equals(i.getIsActive()))) {
+            throw new IllegalStateException("Tick at least one item before making the quotation.");
+        }
+        Quotation live = liveQuoteSync.findLive(boqId);
+        if (live != null) return quotationService.syncLiveFromBoq(live.getId(), boqId);
+        if ("APPROVED".equals(boq.getStatus())) {
+            throw new IllegalStateException("This price sheet was approved by the customer — make a new quotation to change it.");
+        }
+        Measurement measurement = boq.getMeasurement();
+        if (measurement != null && !MeasurementWorkflow.COMPLETED.equals(measurement.getStatus())) {
+            measurementService.autoComplete(measurement.getId(),
+                    "Completed automatically — quotation made from " + boq.getBoqNumber(), currentUser);
+        }
+        Quotation created = boqService.createLiveQuotation(boqId, currentUser);
+        return quotationService.syncLiveFromBoq(created.getId(), boqId);
+    }
+
+    /**
+     * Customer approved what is ticked on the sheet: the quotation is synced one last time and approved
+     * with every line, and the sheet is approved (locked, materials reserved).
+     */
+    @Transactional
+    public Quotation customerApproval(Long boqId, User currentUser) {
+        Quotation quote = liveQuote(boqId, currentUser);
+        Boq boq = boqService.getBoqById(boqId);
+        if (!"APPROVED".equals(boq.getStatus())) boqService.approveBoq(boqId, currentUser);
+        List<Long> ids = quote.getItems().stream().map(QuotationItem::getId).filter(java.util.Objects::nonNull).toList();
+        return quotationService.customerApprove(quote.getId(), ids, currentUser);
+    }
+
+    /**
+     * A change after the customer approved (or on a sheet locked by the older flow): its quotation is marked REVISED and a new editable
+     * sheet revision is opened — its quotation (made on next use) gets a new number. Not allowed once a
+     * project exists.
+     */
+    @Transactional
+    public Boq reopen(Long boqId, User currentUser) {
+        for (Quotation q : quotationRepository.findByBoq_IdOrderByIdDesc(boqId)) {
+            if ("CONVERTED".equals(q.getStatus())) {
+                throw new IllegalStateException("A project was already created from this quotation, so it can't be changed here.");
+            }
+            // Approved quotes, and a still-open quote on an older locked sheet, are superseded by the new one.
+            if ("APPROVED".equals(q.getStatus()) || QuotationService.isLive(q)) {
+                q.setStatus("REVISED");
+                quotationRepository.save(q);
+            }
+        }
+        return boqService.createRevision(boqId, "Changed after customer approval", currentUser);
     }
 
     @Transactional

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Ban, Check, Copy, Hammer, Loader2, MoreVertical, Package, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { Check, Copy, Hammer, Loader2, MoreVertical, Package, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -206,14 +206,13 @@ export default function BoqSheet({
   const rateFor = (workType: string) => labourRates[workType.trim().toLowerCase()]?.rate;
 
   const [showLines, setShowLines] = useState(true);
-  const [selected, setSelected] = useState<Set<number>>(new Set());
-  const toggleSel = (id: number) => setSelected((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  useEffect(() => {
-    // Drop selections for items that no longer exist.
-    setSelected((s) => new Set([...s].filter((id) => items.some((i) => i.id === id))));
-  }, [items]);
-
   const [bulk, setBulk] = useState<null | { mode: "labour" } | { mode: "copy"; targets: number[] }>(null);
+
+  // The tick on each item is the customer's choice: ticked items are in the quote and its total.
+  const setIncluded = (list: BoqItem[], on: boolean) => list
+    .filter((i) => (i.isActive !== false) !== on)
+    .forEach((i) => save("update the quote", () => boqApi.toggleItemActive(boqId, i.id as number, on)));
+  const includedCount = items.filter((i) => i.isActive !== false).length;
 
   const roomTotal = (list: BoqItem[]) =>
     list.filter((i) => i.isActive !== false).reduce((s, i) => s + Number(i.amount ?? 0), 0);
@@ -228,17 +227,18 @@ export default function BoqSheet({
           {canEdit ? <SaveState pending={pending} lastSaved={lastSaved} /> : <span>Locked — view only</span>}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {selected.size > 0 && canEdit && (
-            <>
-              <span className="text-xs font-medium">{selected.size} selected</span>
-              <Button size="sm" variant="outline" onClick={() => setBulk({ mode: "labour" })}>
-                <Hammer className="h-3.5 w-3.5 mr-1" /> Add labour to selected
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => setBulk({ mode: "copy", targets: [...selected] })}>
-                <Copy className="h-3.5 w-3.5 mr-1" /> Copy lines into selected
-              </Button>
-              <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>Clear</Button>
-            </>
+          {items.length > 0 && (
+            <span className="text-xs font-medium text-muted-foreground">
+              {includedCount} of {items.length} in quote
+              {canEdit && includedCount < items.length && (
+                <button type="button" className="ml-1.5 text-primary hover:underline" onClick={() => setIncluded(items, true)}>tick all</button>
+              )}
+            </span>
+          )}
+          {canEdit && items.length > 1 && (
+            <Button size="sm" variant="outline" onClick={() => setBulk({ mode: "labour" })}>
+              <Hammer className="h-3.5 w-3.5 mr-1" /> Add labour to items…
+            </Button>
           )}
           <Button size="sm" variant="ghost" onClick={() => setShowLines((v) => !v)}>
             {showLines ? "Totals only" : "Show material & labour"}
@@ -267,7 +267,17 @@ export default function BoqSheet({
           {g.rooms.map((r) => (
             <div key={r.room} className="rounded-lg border bg-card overflow-visible">
               <div className="flex items-center justify-between gap-2 px-3 py-2.5 border-b bg-muted/40 rounded-t-lg">
-                <span className="font-semibold text-sm">
+                <span className="font-semibold text-sm flex items-center gap-2">
+                  {(() => {
+                    const on = r.items.filter((i) => i.isActive !== false).length;
+                    return (
+                      <input type="checkbox" className="h-4 w-4 accent-primary" disabled={!canEdit}
+                        title="Whole room in the quote"
+                        aria-label={`${r.room} in quote`}
+                        ref={(el) => { if (el) el.indeterminate = on > 0 && on < r.items.length; }}
+                        checked={on === r.items.length} onChange={() => setIncluded(r.items, on !== r.items.length)} />
+                    );
+                  })()}
                   {r.room}
                   <span className="ml-2 text-xs font-normal text-muted-foreground">{r.items.length} item{r.items.length === 1 ? "" : "s"}</span>
                 </span>
@@ -280,8 +290,6 @@ export default function BoqSheet({
                     item={item}
                     canEdit={canEdit}
                     showLines={showLines}
-                    selected={selected.has(item.id as number)}
-                    onToggleSelect={() => toggleSel(item.id as number)}
                     onUpdate={(patch) => updateItem(item.id as number, patch)}
                     onSize={(f, v) => updateSize(item, f, v)}
                     onSetAmount={(v) => setItemAmount(item, v)}
@@ -316,11 +324,10 @@ export default function BoqSheet({
       <BulkDialog
         state={bulk}
         items={items}
-        selectedCount={selected.size}
         rateFor={rateFor}
         onClose={() => setBulk(null)}
-        onAddLabour={(workType, rate) => {
-          const targets = items.filter((i) => selected.has(i.id as number));
+        onAddLabour={(workType, rate, targetIds) => {
+          const targets = items.filter((i) => targetIds.includes(i.id as number));
           rememberRate(workType, rate);
           targets.forEach((t) => save("add the labour", () =>
             boqApi.addLabour(boqId, t.id as number, { workType, quantity: t.quantity ?? 1, rate })));
@@ -366,15 +373,13 @@ function SaveState({ pending, lastSaved }: { pending: number; lastSaved: number 
 const FIELD = "border-border bg-background";
 
 function ItemBlock({
-  item, canEdit, showLines, selected, onToggleSelect, onUpdate, onSize, onSetAmount,
+  item, canEdit, showLines, onUpdate, onSize, onSetAmount,
   onUpdateMaterial, onUpdateLabour, onDeleteMaterial, onDeleteLabour, onAddMaterial, onAddLabour,
   onDelete, onToggleActive, onCopyFrom, rateFor,
 }: {
   item: BoqItem;
   canEdit: boolean;
   showLines: boolean;
-  selected: boolean;
-  onToggleSelect: () => void;
   onUpdate: (patch: Partial<BoqItem>) => void;
   onSize: (field: "length" | "width", v: number | null) => void;
   onSetAmount: (target: number) => void;
@@ -395,20 +400,19 @@ function ItemBlock({
   const f = canEdit ? FIELD : "";
 
   return (
-    <div className={`p-3 ${inactive ? "opacity-50" : ""} ${selected ? "bg-primary/[0.04]" : ""}`}>
+    <div className={`p-3 ${inactive ? "bg-muted/30" : ""}`}>
       {/* ---- Item header ---- */}
       <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
-        {canEdit && (
-          <input type="checkbox" aria-label={`Select ${item.itemName}`} className="mt-2.5 h-4 w-4 accent-primary"
-            checked={selected} onChange={onToggleSelect} />
-        )}
-        <div className="min-w-[12rem] flex-1">
+        <input type="checkbox" aria-label={`${item.itemName} in quote`} title="In the quote (customer's choice)"
+          className="mt-2.5 h-4 w-4 accent-primary" disabled={!canEdit}
+          checked={!inactive} onChange={onToggleActive} />
+        <div className={`min-w-[12rem] flex-1 ${inactive ? "opacity-60" : ""}`}>
           <TextCell value={item.itemName} col="itemName" disabled={!canEdit} className={`font-semibold text-[15px] ${f}`}
             onCommit={(v) => v && onUpdate({ itemName: v })} />
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
             <SelectCell value={item.category} options={BOQ_CATEGORIES} disabled={!canEdit}
               className="h-6 w-auto rounded-full bg-muted px-2 text-[11px] text-muted-foreground" onCommit={(v) => onUpdate({ category: v })} />
-            {inactive && <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-muted text-muted-foreground">Excluded from quote</span>}
+            {inactive && <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">Not in quote</span>}
             {!showLines && lineCount > 0 && <span className="text-[11px] text-muted-foreground">{lineCount} line(s)</span>}
           </div>
         </div>
@@ -446,9 +450,6 @@ function ItemBlock({
               <DropdownMenuItem onClick={() => setAdding("labour")}><Hammer className="h-4 w-4 mr-2" /> Add labour</DropdownMenuItem>
               <DropdownMenuItem onClick={onCopyFrom}><Copy className="h-4 w-4 mr-2" /> Copy lines from another item…</DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={onToggleActive}>
-                {inactive ? <><RotateCcw className="h-4 w-4 mr-2" /> Include in quote</> : <><Ban className="h-4 w-4 mr-2" /> Exclude from quote</>}
-              </DropdownMenuItem>
               <DropdownMenuItem onClick={onDelete} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" /> Delete item</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -748,20 +749,25 @@ function NewRoomRow({ onAdd }: { onAdd: (item: Partial<BoqItem>) => void }) {
 // ---------------------------------------------------------------------------
 
 function BulkDialog({
-  state, items, selectedCount, rateFor, onClose, onAddLabour, onCopy,
+  state, items, rateFor, onClose, onAddLabour, onCopy,
 }: {
   state: null | { mode: "labour" } | { mode: "copy"; targets: number[] };
   items: BoqItem[];
-  selectedCount: number;
   rateFor: (workType: string) => number | undefined;
   onClose: () => void;
-  onAddLabour: (workType: string, rate: number) => void;
+  onAddLabour: (workType: string, rate: number, targetIds: number[]) => void;
   onCopy: (sourceId: number, targetIds: number[]) => void;
 }) {
   const [workType, setWorkType] = useState("");
   const [rate, setRate] = useState("");
   const [sourceId, setSourceId] = useState<number | "">("");
-  useEffect(() => { setWorkType(""); setRate(""); setSourceId(""); }, [state]);
+  // Labour targets: every item in the quote, untick the ones that don't need it.
+  const [picked, setPicked] = useState<Set<number>>(new Set());
+  useEffect(() => {
+    setWorkType(""); setRate(""); setSourceId("");
+    setPicked(new Set(items.filter((i) => i.isActive !== false).map((i) => i.id as number)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state]);
 
   const targets = state?.mode === "copy" ? state.targets : [];
   const sources = items.filter((i) => !targets.includes(i.id as number) && ((i.materials?.length ?? 0) + (i.labours?.length ?? 0)) > 0);
@@ -772,8 +778,17 @@ function BulkDialog({
       <DialogContent>
         {state?.mode === "labour" && (
           <>
-            <DialogHeader><DialogTitle>Add labour to {selectedCount} item(s)</DialogTitle></DialogHeader>
-            <p className="text-xs text-muted-foreground">Each item gets one labour line, with quantity taken from that item's own quantity.</p>
+            <DialogHeader><DialogTitle>Add labour to {picked.size} item(s)</DialogTitle></DialogHeader>
+            <p className="text-xs text-muted-foreground">Each ticked item gets one labour line, with quantity taken from that item's own quantity.</p>
+            <div className="max-h-48 overflow-auto rounded-md border divide-y text-sm">
+              {items.map((i) => (
+                <label key={i.id} className="flex items-center gap-2 px-2 py-1.5 cursor-pointer hover:bg-muted/40">
+                  <input type="checkbox" className="h-4 w-4 accent-primary" checked={picked.has(i.id as number)}
+                    onChange={() => setPicked((s) => { const n = new Set(s); n.has(i.id as number) ? n.delete(i.id as number) : n.add(i.id as number); return n; })} />
+                  <span className="truncate">{[i.roomName, i.itemName].filter(Boolean).join(" › ")}</span>
+                </label>
+              ))}
+            </div>
             <div className="grid grid-cols-[1fr_120px] gap-2">
               <Input autoFocus list={LABOUR_TYPES_LIST} placeholder="Work type (e.g. Painter)" value={workType}
                 onChange={(e) => { setWorkType(e.target.value); const k = rateFor(e.target.value); if (k != null && !rate) setRate(String(k)); }} />
@@ -781,7 +796,7 @@ function BulkDialog({
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={onClose}>Cancel</Button>
-              <Button disabled={!workType.trim()} onClick={() => onAddLabour(workType.trim(), Number(rate) || 0)}>Add to all</Button>
+              <Button disabled={!workType.trim() || picked.size === 0} onClick={() => onAddLabour(workType.trim(), Number(rate) || 0, [...picked])}>Add</Button>
             </DialogFooter>
           </>
         )}

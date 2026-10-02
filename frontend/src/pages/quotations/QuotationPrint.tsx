@@ -31,9 +31,11 @@ export default function QuotationPrint() {
 }
 
 /** The print sheet as an overlay — also opened in place from the lead's Sales Journey (no route change). */
-export function QuotationPrintView({ quotationId, onClose, onSaved }: {
+export function QuotationPrintView({ quotationId, onClose, onSaved, readOnly }: {
   quotationId: number;
   onClose: () => void;
+  /** No Edit button — used where prices are typed on the price sheet, not on the printout. */
+  readOnly?: boolean;
   /** Called after an edit is saved, so the screen underneath can refresh. */
   onSaved?: (q: Quotation) => void;
 }) {
@@ -60,7 +62,7 @@ export function QuotationPrintView({ quotationId, onClose, onSaved }: {
   const status = quotation?.status || "DRAFT";
   const isManager = isAdmin || hasAuthority("ROLE_MANAGER") || hasAuthority("ROLE_PROJECT_MANAGER");
   // Same rule as the server: approved quotations are repriced by managers only; converted never.
-  const canEdit = (hasAuthority("QUOTATION_WRITE") || isAdmin) && status !== "CONVERTED"
+  const canEdit = !readOnly && (hasAuthority("QUOTATION_WRITE") || isAdmin) && status !== "CONVERTED"
     && (status !== "APPROVED" || isManager);
 
   const items = useMemo(() => (quotation?.items || []).filter((i) => i.status !== "REJECTED"), [quotation]);

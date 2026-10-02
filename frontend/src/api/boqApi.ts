@@ -158,4 +158,16 @@ export const quoteWorkspaceApi = {
   /** Finishes the measurement, approves the pricing and raises the full quotation in one step. */
   generateQuotation: (boqId: number) =>
     api.post<Quotation>(`/quote-workspace/boq/${boqId}/generate-quotation`).then((r) => r.data),
+  /**
+   * The sheet's quotation: created on first use (PDF / send / approve), otherwise synced to the sheet.
+   * The sheet stays editable; the server also re-syncs this quotation after every sheet change.
+   */
+  liveQuote: (boqId: number) =>
+    api.post<Quotation>(`/quote-workspace/boq/${boqId}/live-quote`).then((r) => r.data),
+  /** Customer approved the ticked items on the sheet → quotation approved, sheet locked. */
+  customerApproval: (boqId: number) =>
+    api.post<Quotation>(`/quote-workspace/boq/${boqId}/customer-approval`).then((r) => r.data),
+  /** Change after approval: approved quotation becomes REVISED, a new editable sheet opens (next quote = new number). */
+  reopen: (boqId: number) =>
+    api.post<Boq>(`/quote-workspace/boq/${boqId}/reopen`).then((r) => r.data),
 };

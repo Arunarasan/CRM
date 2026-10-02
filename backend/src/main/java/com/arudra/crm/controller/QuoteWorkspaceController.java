@@ -1,5 +1,6 @@
 package com.arudra.crm.controller;
 
+import com.arudra.crm.entity.Boq;
 import com.arudra.crm.entity.Quotation;
 import com.arudra.crm.security.CurrentUserService;
 import com.arudra.crm.service.QuoteWorkspaceService;
@@ -40,6 +41,27 @@ public class QuoteWorkspaceController {
             // finds what the other call created.
             return ResponseEntity.ok(service.startPricing(leadId, currentUserService.getCurrentUser()));
         }
+    }
+
+    /** The sheet's quotation — created on first use, otherwise synced to the sheet. Sheet stays editable. */
+    @PostMapping("/boq/{boqId}/live-quote")
+    @PreAuthorize(WRITE)
+    public ResponseEntity<Quotation> liveQuote(@PathVariable Long boqId) {
+        return ResponseEntity.ok(service.liveQuote(boqId, currentUserService.getCurrentUser()));
+    }
+
+    /** Customer approved the ticked items on the sheet → quotation approved, sheet locked. */
+    @PostMapping("/boq/{boqId}/customer-approval")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN') or (hasAuthority('BOQ_WRITE') and hasAuthority('QUOTATION_APPROVE'))")
+    public ResponseEntity<Quotation> customerApproval(@PathVariable Long boqId) {
+        return ResponseEntity.ok(service.customerApproval(boqId, currentUserService.getCurrentUser()));
+    }
+
+    /** Change after approval: approved quotation → REVISED, new editable sheet (next quote = new number). */
+    @PostMapping("/boq/{boqId}/reopen")
+    @PreAuthorize(WRITE)
+    public ResponseEntity<Boq> reopen(@PathVariable Long boqId) {
+        return ResponseEntity.ok(service.reopen(boqId, currentUserService.getCurrentUser()));
     }
 
     /** Finishes the measurement, approves the pricing and raises the full quotation in one step. */

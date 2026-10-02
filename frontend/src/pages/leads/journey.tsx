@@ -86,12 +86,11 @@ export function resolveJourney(
 
   const measurement = records.measurements[0];
   const hasMeasurement = !!measurement;
-  const measurementDone = measurement?.status === "Completed";
 
   const hasBoq = records.boqs.length > 0;
-  const approvedBoq = records.boqs.find((b: any) => b.status === "APPROVED");
 
   const hasQuotation = records.quotations.length > 0;
+  const customerApproved = records.quotations.some((q: any) => q.status === "APPROVED" || q.status === "CONVERTED");
 
   const converted = !!lead?.isConverted || records.projects.length > 0;
   const closed = !!lead && !lead.isConverted && ["Lost", "Cancelled"].includes(lead.status);
@@ -107,20 +106,19 @@ export function resolveJourney(
     {
       id: "quote",
       label: "Measurement & Quotation",
-      done: hasQuotation,
-      // One stage, but the summary still says exactly which sub-step is next.
-      summary: hasQuotation
-        ? "Quotation raised"
-        : approvedBoq
-          ? "Pricing approved — generate the quotation"
+      // Measure, price, share and customer approval all happen on one page — the stage is done when
+      // the customer has approved.
+      done: customerApproved,
+      summary: customerApproved
+        ? "Customer approved the quote"
+        : hasQuotation
+          ? "Quote shared — mark it approved when the customer agrees"
           : hasBoq
-            ? "Price the work, then generate the quotation"
-            : measurementDone
-              ? "Measurement done — build the pricing"
-              : hasMeasurement
-                ? "Measurement in progress — finish it to start pricing"
-                : "Visit the site and record measurements",
-      actionLabel: hasQuotation ? "Open Quotation" : hasBoq ? "Continue Pricing" : hasMeasurement ? "Continue Measurement" : "Start Measurement",
+            ? "Fill the sheet, share the quote, mark customer approved"
+            : hasMeasurement
+              ? "Measurement recorded — open the quote sheet"
+              : "Visit the site and start the quote sheet",
+      actionLabel: customerApproved ? "Open Quote" : hasBoq ? "Continue Quote" : "Start Quote",
     },
     {
       id: "convert",

@@ -340,6 +340,95 @@ public class QuotationService {
         return saved;
     }
 
+    /** Statuses in which a quotation still follows its pricing sheet (nothing agreed with the customer yet). */
+    private static final Set<String> LIVE_STATUSES = Set.of("DRAFT", "SENT", "UNDER_REVIEW", "NEGOTIATION");
+
+    public static boolean isLive(Quotation q) {
+        return q.getStatus() == null || LIVE_STATUSES.contains(q.getStatus());
+    }
+
+    /**
+     * Copies the pricing sheet's customer discount and GST onto the quotation, replacing its discount
+     * and tax rows. A flat ₹ discount only makes sense for the full scope, so partial/budget quotes
+     * take a percentage discount only.
+     */
+    public static void applyBoqPricing(Quotation quotation, Boq boq, boolean fullScope) {
+        if (quotation.getDiscounts() == null) quotation.setDiscounts(new ArrayList<>());
+        if (quotation.getTaxes() == null) quotation.setTaxes(new ArrayList<>());
+        quotation.getDiscounts().clear();
+        quotation.getTaxes().clear();
+
+        BigDecimal discount = boq.getDiscount() != null ? boq.getDiscount() : BigDecimal.ZERO;
+        boolean flat = "FLAT".equals(boq.getDiscountType());
+        if (discount.signum() > 0 && (!flat || fullScope)) {
+            QuotationDiscount d = new QuotationDiscount();
+            d.setDiscountType("OVERALL");
+            d.setDescription("Customer discount");
+            if (flat) d.setAmount(discount); else d.setPercentage(discount);
+            d.setQuotation(quotation);
+            quotation.getDiscounts().add(d);
+        }
+        if (boq.getTaxPercent() != null && boq.getTaxPercent().signum() > 0) {
+            QuotationTax t = new QuotationTax();
+            t.setTaxType("GST");
+            t.setPercentage(boq.getTaxPercent());
+            t.setIsInclusive(false);
+            t.setQuotation(quotation);
+            quotation.getTaxes().add(t);
+        }
+    }
+
+    /**
+     * Makes a live (not yet customer-approved) quotation an exact copy of its pricing sheet: one line
+     * per included sheet item with the sheet's name, description, size, quantity and amount; lines for
+     * items removed or excluded on the sheet are dropped; discount and GST follow the sheet. The sheet
+     * is the only place prices are typed — the quotation just mirrors it until the customer approves.
+     * Approved / converted / revised quotations are left untouched.
+     */
+    @Transactional
+    public Quotation syncLiveFromBoq(Long quotationId, Long boqId) {
+        Quotation quotation = getQuotationById(quotationId);
+        if (!isLive(quotation)) return quotation;
+        Boq boq = boqRepository.findById(boqId).orElseThrow(() -> new RuntimeException("Pricing sheet not found"));
+
+        Map<Long, QuotationItem> byBoqItemId = new LinkedHashMap<>();
+        for (QuotationItem qi : quotation.getItems()) {
+            if (qi.getBoqItemId() != null) byBoqItemId.put(qi.getBoqItemId(), qi);
+        }
+        Set<Long> included = new java.util.HashSet<>();
+        for (BoqItem item : boq.getItems()) {
+            if (Boolean.FALSE.equals(item.getIsActive())) continue;
+            included.add(item.getId());
+            QuotationItem qi = byBoqItemId.get(item.getId());
+            if (qi == null) {
+                qi = new QuotationItem();
+                qi.setBoqItemId(item.getId());
+                qi.setStatus("PENDING");
+                qi.setQuotation(quotation);
+                quotation.getItems().add(qi);
+            }
+            qi.setItemName(item.getItemName());
+            qi.setDescription(item.getDescription());
+            qi.setUnit(item.getUnit());
+            copyBoqStructureToQuotationItem(item, qi);
+            BigDecimal qty = item.getQuantity() != null && item.getQuantity().signum() != 0 ? item.getQuantity() : BigDecimal.ONE;
+            BigDecimal amount = item.getAmount() != null ? item.getAmount() : BigDecimal.ZERO;
+            qi.setQuantity(qty);
+            qi.setRate(amount.divide(qty, 2, RoundingMode.HALF_UP));
+            qi.setTotalAmount(amount);
+            qi.setCostAmount(amount);
+            // Line-level price tweaks belong to the old two-place editing; the sheet is authoritative now.
+            qi.setDiscountPercentage(null);
+            qi.setGstPercentage(null);
+        }
+        // Sheet items that were deleted or excluded leave the quotation (manual, non-sheet lines stay).
+        quotation.getItems().removeIf(qi -> qi.getBoqItemId() != null && !included.contains(qi.getBoqItemId()));
+        applyBoqPricing(quotation, boq, true);
+
+        recalculateTotals(quotation);
+        return quotationRepository.save(quotation);
+    }
+
     @Transactional
     public Quotation updateApprovalStatus(Long id, String status, User user) {
         Quotation quotation = getQuotationById(id);
@@ -1238,7 +1327,8 @@ public class QuotationService {
         if (quotation.getDiscounts() != null) {
             for (QuotationDiscount d : quotation.getDiscounts()) {
                 if (d.getPercentage() != null && d.getPercentage().compareTo(BigDecimal.ZERO) > 0) {
-                    BigDecimal disc = subTotal.multiply(d.getPercentage().divide(new BigDecimal(100)));
+                    BigDecimal disc = subTotal.multiply(d.getPercentage().divide(new BigDecimal(100)))
+                            .setScale(2, RoundingMode.HALF_UP);
                     d.setAmount(disc);
                     totalDiscount = totalDiscount.add(disc);
                 } else if (d.getAmount() != null) {
@@ -1254,7 +1344,9 @@ public class QuotationService {
         if (quotation.getTaxes() != null) {
             for (QuotationTax t : quotation.getTaxes()) {
                 if (t.getPercentage() != null && t.getPercentage().compareTo(BigDecimal.ZERO) > 0 && !t.getIsInclusive()) {
-                    BigDecimal tax = afterDiscount.multiply(t.getPercentage().divide(new BigDecimal(100)));
+                    // Rounded to paise like the pricing sheet, so the quote total matches it exactly.
+                    BigDecimal tax = afterDiscount.multiply(t.getPercentage().divide(new BigDecimal(100)))
+                            .setScale(2, RoundingMode.HALF_UP);
                     t.setAmount(tax);
                     totalTax = totalTax.add(tax);
                 }

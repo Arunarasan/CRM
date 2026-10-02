@@ -57,6 +57,7 @@ public class BoqService {
     @Autowired private InventoryService inventoryService;
     // Lazy: the mirror pulls in MeasurementService, which is only needed on item edits.
     @Autowired @org.springframework.context.annotation.Lazy private BoqMeasurementMirror measurementMirror;
+    @Autowired @org.springframework.context.annotation.Lazy private LiveQuoteSync liveQuoteSync;
 
     private static final org.slf4j.Logger MIRROR_LOG = org.slf4j.LoggerFactory.getLogger(BoqService.class);
 
@@ -787,6 +788,28 @@ public class BoqService {
         }, "mirror BOQ item " + boqItemId + " to measurement " + measurementId);
     }
 
+    /**
+     * After the current change commits, bring the sheet's live (not yet customer-approved) quotation in
+     * line with it — once per transaction, however many recalculations the change triggered.
+     */
+    private void scheduleLiveQuoteSync(Boq boq) {
+        if (boq == null || boq.getId() == null) return;
+        Long boqId = boq.getId();
+        String key = "liveQuoteSync:" + boqId;
+        if (org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive()) {
+            if (org.springframework.transaction.support.TransactionSynchronizationManager.hasResource(key)) return;
+            org.springframework.transaction.support.TransactionSynchronizationManager.bindResource(key, Boolean.TRUE);
+            org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                    new org.springframework.transaction.support.TransactionSynchronization() {
+                        @Override
+                        public void afterCompletion(int status) {
+                            org.springframework.transaction.support.TransactionSynchronizationManager.unbindResourceIfPossible(key);
+                        }
+                    });
+        }
+        afterCommit(() -> liveQuoteSync.sync(boqId), "sync the live quotation of BOQ " + boqId);
+    }
+
     /** Runs {@code work} once the current transaction commits (immediately when there is none). */
     private void afterCommit(Runnable work, String what) {
         Runnable guarded = () -> {
@@ -1227,6 +1250,7 @@ public class BoqService {
     // =====================================================================
 
     private void recalculateTotals(Boq boq) {
+        scheduleLiveQuoteSync(boq);
         BigDecimal boqMaterialTotal = BigDecimal.ZERO;
         BigDecimal boqLabourTotal = BigDecimal.ZERO;
 
@@ -1462,6 +1486,8 @@ public class BoqService {
             clone.setCategory(item.getCategory());
             clone.setItemName(item.getItemName());
             clone.setDescription(item.getDescription());
+            // Keep the customer's in/out choice — a dropped item stays dropped in the next revision.
+            clone.setIsActive(item.getIsActive());
             clone.setFloorName(item.getFloorName());
             clone.setRoomName(item.getRoomName());
             clone.setMeasurementRoomId(item.getMeasurementRoomId());
@@ -1710,7 +1736,23 @@ public class BoqService {
         if (!"APPROVED".equals(boq.getStatus())) {
             throw new IllegalStateException("Only approved BOQs can be converted to a quotation.");
         }
+        return buildQuotation(boq, mode, itemIds, budgetCap, currentUser);
+    }
 
+    /**
+     * The combined Quote page's quotation: raised straight from a pricing sheet that stays editable
+     * (no BOQ approval first) — it then mirrors the sheet until the customer approves. Advances the
+     * lead workflow the way BOQ approval used to.
+     */
+    @Transactional
+    public Quotation createLiveQuotation(Long boqId, User currentUser) {
+        Boq boq = getBoqById(boqId);
+        Quotation saved = buildQuotation(boq, "FULL_HOUSE", null, null, currentUser);
+        workflowTriggerService.onBoqApproved(boq);
+        return saved;
+    }
+
+    private Quotation buildQuotation(Boq boq, String mode, List<Long> itemIds, BigDecimal budgetCap, User currentUser) {
         String resolvedMode = mode != null ? mode : "FULL_HOUSE";
         List<BoqItem> included = new ArrayList<>();
 
@@ -1773,23 +1815,8 @@ public class BoqService {
         quotation.setItems(qItems);
 
         // The customer discount and GST agreed on the pricing sheet carry into the quotation, so its
-        // total matches what was shown. A flat ₹ discount only makes sense for the full scope.
-        BigDecimal boqDiscount = boq.getDiscount() != null ? boq.getDiscount() : BigDecimal.ZERO;
-        boolean flat = "FLAT".equals(boq.getDiscountType());
-        if (boqDiscount.signum() > 0 && (!flat || "FULL_HOUSE".equals(resolvedMode))) {
-            QuotationDiscount d = new QuotationDiscount();
-            d.setDiscountType("OVERALL");
-            d.setDescription("Customer discount");
-            if (flat) d.setAmount(boqDiscount); else d.setPercentage(boqDiscount);
-            quotation.setDiscounts(new ArrayList<>(List.of(d)));
-        }
-        if (boq.getTaxPercent() != null && boq.getTaxPercent().signum() > 0) {
-            QuotationTax t = new QuotationTax();
-            t.setTaxType("GST");
-            t.setPercentage(boq.getTaxPercent());
-            t.setIsInclusive(false);
-            quotation.setTaxes(new ArrayList<>(List.of(t)));
-        }
+        // total matches what was shown.
+        QuotationService.applyBoqPricing(quotation, boq, "FULL_HOUSE".equals(resolvedMode));
 
         Quotation saved = quotationService.createQuotation(quotation, currentUser);
 
