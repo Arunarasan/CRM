@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { FolderOpen, Plus, Trash2, FileIcon } from "lucide-react";
+import { useEffect, useState } from "react";
+import { FolderOpen, Plus, Trash2, FileIcon, Ruler } from "lucide-react";
+import { measurementApi } from "@/api/measurementApi";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -52,6 +53,8 @@ export default function DocumentsTab({ leadId }: { leadId: string }) {
   }, {});
 
   return (
+    <div className="space-y-4">
+    <MeasurementFiles leadId={leadId} />
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle>Documents</CardTitle>
@@ -199,6 +202,62 @@ export default function DocumentsTab({ leadId }: { leadId: string }) {
           </form>
         </DialogContent>
       </Dialog>
+    </Card>
+    </div>
+  );
+}
+
+/**
+ * Drawings and site photos captured on this lead's measurements (the Quote's "Drawings & photos"
+ * link lands here). Read-only — they're added/removed on the measurement itself.
+ */
+function MeasurementFiles({ leadId }: { leadId: string }) {
+  const [files, setFiles] = useState<{ key: string; name: string; url: string; kind: string; date?: string; image: boolean }[] | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const ms: any[] = (await leadApi.getMeasurements(leadId).catch(() => ({ data: [] }))).data || [];
+      const lists = await Promise.all(ms.map(async (m) => {
+        const [drawings, media] = await Promise.all([
+          measurementApi.getDrawings(m.id).catch(() => []),
+          measurementApi.getMedia(m.id).catch(() => []),
+        ]);
+        return [
+          ...drawings.map((d) => ({ key: `d${d.id}`, name: d.fileName, url: d.filePath, kind: d.drawingType || "Drawing", date: d.createdAt })),
+          ...media.map((x) => ({
+            key: `m${x.id}`, name: x.fileName, url: x.filePath,
+            kind: [x.category || "Photo", x.measurementRoom?.roomName].filter(Boolean).join(" · "), date: x.createdAt,
+          })),
+        ];
+      }));
+      if (alive) setFiles(lists.flat().map((f) => ({ ...f, url: f.url ? resolveFileUrl(f.url) : "", image: isImageDoc({ fileName: f.name, fileUrl: f.url }) })));
+    })();
+    return () => { alive = false; };
+  }, [leadId]);
+
+  if (!files || files.length === 0) return null;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2"><Ruler className="h-4 w-4" /> Measurement drawings & photos</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+          {files.map((f) => (
+            <a key={f.key} href={f.url || undefined} target="_blank" rel="noreferrer"
+              className="border rounded-lg p-3 flex items-center gap-3 bg-muted/30 hover:bg-muted/60">
+              {f.image && f.url
+                ? <img src={f.url} alt={f.name} className="h-14 w-14 rounded-md object-cover border shrink-0" />
+                : <FileIcon className="h-8 w-8 text-muted-foreground shrink-0" />}
+              <div className="flex-1 min-w-0">
+                <span className="text-sm font-medium text-primary truncate block">{f.name}</span>
+                <div className="text-xs text-muted-foreground">{f.kind}{f.date ? ` · ${formatDate(f.date)}` : ""}</div>
+              </div>
+            </a>
+          ))}
+        </div>
+      </CardContent>
     </Card>
   );
 }

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  CheckCircle2, ExternalLink, FileDown, FileOutput, History, Loader2, Lock, Pencil, Printer, RotateCcw, Ruler, Wand2,
+  CheckCircle2, FileDown, FileText, FileOutput, History, Loader2, Lock, Pencil, Printer, RotateCcw, Ruler, Wand2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BaseInput } from "@/components/ui/input";
@@ -194,16 +194,6 @@ export default function QuoteWorkspace({ leadId, onChanged }: { leadId: string; 
 
   // ---------------- Render ----------------
 
-  const boqRef = boq && (isAdmin ? (
-    // The full BOQ page (revisions, reports, partial quotes) is admin-only.
-    <Link to={`/boq/${boq.id}`} state={{ from: `/leads/${leadId}` }}
-      className="hover:text-primary flex items-center gap-1">
-      {boq.boqNumber} · Rev {boq.revisionNumber ?? 1} <ExternalLink className="h-3 w-3" />
-    </Link>
-  ) : (
-    <span>{boq.boqNumber} · Rev {boq.revisionNumber ?? 1}</span>
-  ));
-
   return (
     <section className="rounded-xl border bg-card">
       {/* ---- One header line: what this quote is and where it stands ---- */}
@@ -221,14 +211,14 @@ export default function QuoteWorkspace({ leadId, onChanged }: { leadId: string; 
           </span>
         </span>
         <span className="flex flex-wrap items-center gap-3">
-          {measurement && (
-            <Link to={`/measurements/${measurement.id}`} state={{ from: `/leads/${leadId}` }}
+          {measurement && leadId && (
+            // Drawings & photos live in this lead's Documents tab.
+            <Link to={`/leads/${leadId}?tab=documents`}
               className="hover:text-primary flex items-center gap-1">
-              Drawings & photos <ExternalLink className="h-3 w-3" />
+              <FileText className="h-3 w-3" /> Drawings & photos
             </Link>
           )}
           {history.length > 0 && <HistoryMenu quotes={history} onOpen={(id) => setPrintId(id)} />}
-          {boqRef}
         </span>
       </header>
 

@@ -93,13 +93,20 @@ function StatTile({
 
 export default function LeadProfile() {
   const { id } = useParams<{ id: string }>();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const goBack = useGoBack("/leads");
   const [lead, setLead] = useState<Lead | null>(null);
   const [creator, setCreator] = useState<LeadCreator | null>(null);
   const [users, setUsers] = useState<UserSummary[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState(normalizeTab(searchParams.get("tab") || "overview"));
+  const [activeTab, setActiveTabState] = useState(normalizeTab(searchParams.get("tab") || "overview"));
+  // The open tab lives in ?tab= too, so in-page links (e.g. the Quote's "Drawings & photos") can switch it.
+  const tabParam = searchParams.get("tab");
+  useEffect(() => { if (tabParam) setActiveTabState(normalizeTab(tabParam)); }, [tabParam]);
+  const setActiveTab = (tab: string) => {
+    setActiveTabState(tab);
+    setSearchParams((p) => { p.set("tab", tab); return p; }, { replace: true });
+  };
   // Set by the Next-Step banner to jump into the Journey tab and open the right stage.
   const [focusStep, setFocusStep] = useState<{ id: JourneyStepId; nonce: number } | null>(null);
   const [editOpen, setEditOpen] = useState(false);

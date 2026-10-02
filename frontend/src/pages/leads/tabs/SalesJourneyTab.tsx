@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Check, Pencil, Rocket } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import type { Lead, UserSummary } from "../constants";
 import { formatINR } from "../constants";
 import type { JourneyStepId, LeadJourney } from "../journey";
@@ -135,30 +135,33 @@ function RequirementSummary({ lead, onEdit }: { lead: Lead; onEdit: () => void }
     ["Wood Finish", (lead as any).reqWoodFinish],
   ].filter(([, v]) => v).map(([label]) => label as string);
 
+  const l = lead as any;
+  // Only what's actually been captured — empty fields are noise here; Edit shows the full form.
+  const fields = ([
+    ["Category", l.requirementCategory], ["Property", l.propertyType], ["Stage", l.currentConstructionStage],
+    ["Floors", l.floorCount], ["Area", l.areaSqft ? `${l.areaSqft} sq.ft` : null], ["Rooms", l.roomsRequired],
+    ["Style", l.preferredDesignStyle], ["Material", l.preferredMaterial], ["Colour", l.preferredColorTheme],
+    ["Budget", l.estimatedBudget ? formatINR(l.estimatedBudget) : null], ["Range", budgetRange(lead)],
+    ["Payment", l.paymentPreference], ["Target", l.preferredCompletionDate],
+  ] as const).filter(([, v]) => v != null && v !== "");
+  const empty = fields.length === 0 && scope.length === 0
+    && !l.projectDescription && !l.customerRequirements && !l.specialRequests;
+
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle>Requirement</CardTitle>
-        <Button size="sm" variant="outline" onClick={onEdit}>
-          <Pencil className="h-4 w-4 mr-1" /> Edit Requirement
-        </Button>
-      </CardHeader>
-      <CardContent className="space-y-3 text-sm">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Field label="Property Type" value={(lead as any).propertyType} />
-          <Field label="Construction Stage" value={(lead as any).currentConstructionStage} />
-          <Field label="Floors" value={(lead as any).floorCount} />
-          <Field label="Area (sq.ft)" value={(lead as any).areaSqft} />
-          <Field label="Category" value={(lead as any).requirementCategory} />
-          <Field label="Design Style" value={(lead as any).preferredDesignStyle} />
-          <Field label="Material" value={(lead as any).preferredMaterial} />
-          <Field label="Colour Theme" value={(lead as any).preferredColorTheme} />
-          <Field label="Est. Budget" value={formatINR((lead as any).estimatedBudget)} />
-          <Field label="Budget Range" value={budgetRange(lead)} />
-          <Field label="Payment" value={(lead as any).paymentPreference} />
-          <Field label="Target Completion" value={(lead as any).preferredCompletionDate} />
+      <CardContent className="p-3 sm:p-4 space-y-3 text-sm">
+        <div className="flex items-start justify-between gap-3">
+          {empty ? (
+            <p className="text-muted-foreground">Nothing captured yet.</p>
+          ) : (
+            <div className="flex flex-wrap gap-x-5 gap-y-2">
+              {fields.map(([label, value]) => <Field key={label} label={label} value={value} />)}
+            </div>
+          )}
+          <Button size="sm" variant="outline" className="shrink-0" onClick={onEdit}>
+            <Pencil className="h-4 w-4 mr-1" /> Edit
+          </Button>
         </div>
-        {(lead as any).roomsRequired && <Field label="Rooms Required" value={(lead as any).roomsRequired} />}
         {scope.length > 0 && (
           <div>
             <span className="text-muted-foreground block text-xs mb-1">Scope of Work</span>
