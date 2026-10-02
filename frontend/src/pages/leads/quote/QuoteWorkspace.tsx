@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  Check, ExternalLink, FileText, Loader2, Lock, Pencil, Ruler, Sparkles, Wand2,
+  Check, ChevronDown, ChevronRight, ExternalLink, FileText, Loader2, Lock, Pencil, Ruler, Wand2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -19,7 +19,9 @@ import { QuotationWorkbench } from "@/pages/quotations/QuotationDetails";
 import { NumCell } from "./cells";
 
 /**
- * The combined "Measurement & Quotation" stage: measure → price → quote on one screen.
+ * The combined "Measurement & Quotation" stage as ONE card: rooms, sizes, items, material and labour
+ * are entered once on the item sheet (saved to the measurement too); generating the quotation folds
+ * that sheet away and the quotation (scope, discount, GST, PDF/print, create project) takes over.
  * Measurement, BOQ and Quotation stay separate records underneath (project conversion, material
  * requirements and progress tracking all depend on them) — this just removes the page-hopping.
  */
@@ -43,6 +45,8 @@ export default function QuoteWorkspace({ leadId, onChanged }: { leadId: string; 
   const [confirmQuote, setConfirmQuote] = useState(false);
   /** Quotation opened in place below (a revision / older version); default = the live one. */
   const [shownQuoteId, setShownQuoteId] = useState<number | null>(null);
+  /** Once quoted, the (locked) item sheet folds away — the quotation is the working copy. */
+  const [showSheet, setShowSheet] = useState(false);
 
   const load = useCallback(async () => {
     const [m, b, q] = await Promise.all([
@@ -82,9 +86,8 @@ export default function QuoteWorkspace({ leadId, onChanged }: { leadId: string; 
     [quotations, boq],
   );
 
-  const step = !boq ? 0 : !quotedThisBoq ? 1 : 3;
   const shownId = (shownQuoteId && quotations.some((q) => q.id === shownQuoteId) ? shownQuoteId : null)
-    ?? activeQuote?.id ?? latestQuote?.id ?? null;
+    ?? (quotedThisBoq ? activeQuote?.id : null) ?? null;
   const shownQuote = quotations.find((q) => q.id === shownId);
 
   // ---------------- Actions ----------------
@@ -168,173 +171,184 @@ export default function QuoteWorkspace({ leadId, onChanged }: { leadId: string; 
 
   if (loading) return <ListSkeleton rows={5} />;
 
-  const startButton = canPrice && (
-    <Button size="sm" disabled={busy === "start"} onClick={startPricing}>
-      {busy === "start" ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Wand2 className="h-4 w-4 mr-2" />}
-      Start pricing
+  const reviseButton = (
+    <Button size="sm" variant="outline" disabled={busy === "revise"} onClick={reopenPricing}>
+      {busy === "revise" ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Pencil className="h-4 w-4 mr-2" />}
+      Change prices (new revision)
     </Button>
   );
 
   // ---------------- Render ----------------
 
-  return (
-    <div className="space-y-5">
-      <ProgressStrip step={step} />
+  // One flow, one strip: the quote's own status drives the later steps.
+  const currentQuote = activeQuote ?? latestQuote;
+  const qStatus = currentQuote?.status;
+  const done = [
+    quotedThisBoq,
+    quotedThisBoq,
+    quotedThisBoq && (qStatus === "APPROVED" || qStatus === "CONVERTED"),
+    quotedThisBoq && qStatus === "CONVERTED",
+  ];
+  const boqRef = boq && (isAdmin ? (
+    // The full BOQ page (revisions, reports, partial quotes) is admin-only now.
+    <Link to={`/boq/${boq.id}`} state={{ from: `/leads/${leadId}` }}
+      className="text-xs text-muted-foreground hover:text-primary flex items-center gap-1">
+      {boq.boqNumber} · Rev {boq.revisionNumber ?? 1} <ExternalLink className="h-3 w-3" />
+    </Link>
+  ) : (
+    <span className="text-xs text-muted-foreground">{boq.boqNumber} · Rev {boq.revisionNumber ?? 1}</span>
+  ));
 
-      {/* ============ A. Site & room sizes ============ */}
-      <Section n={1} title="Site & room sizes" done={!!boq} icon={Ruler}
-        right={measurement && (
-          <div className="flex items-center gap-2">
-            <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${statusStyle(measurement.status)}`}>{measurement.status}</span>
-            <Link to={`/measurements/${measurement.id}`} state={{ from: `/leads/${leadId}` }}
-              className="text-xs text-muted-foreground hover:text-primary flex items-center gap-1">
-              Drawings & photos <ExternalLink className="h-3 w-3" />
-            </Link>
+  return (
+    <section className="rounded-xl border bg-card">
+      <header className="space-y-3 px-4 py-3 border-b">
+        <ProgressStrip done={done} />
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+          <span className="flex items-center gap-1.5 min-w-0">
+            <Ruler className="h-3.5 w-3.5 shrink-0" />
+            {measurement ? (
+              <span className="truncate">
+                {measurement.measurementNumber || `Measurement #${measurement.id}`}
+                {measurement.totalArea ? ` · ${measurement.totalArea} sq.ft` : ""}
+                {measurement.measurementDate ? ` · ${formatDate(measurement.measurementDate)}` : ""}
+              </span>
+            ) : <span>No measurement yet</span>}
+            {measurement && <span className={`px-1.5 py-0.5 rounded-full font-medium ${statusStyle(measurement.status)}`}>{measurement.status}</span>}
+          </span>
+          <span className="flex flex-wrap items-center gap-3">
+            {boq && canMeasure && measurement && (
+              <button type="button" onClick={() => setEditMeasurement((v) => !v)}
+                className={`flex items-center gap-1 hover:text-primary ${editMeasurement ? "text-primary font-medium" : ""}`}>
+                <Pencil className="h-3 w-3" /> Room details
+              </button>
+            )}
+            {measurement && (
+              <Link to={`/measurements/${measurement.id}`} state={{ from: `/leads/${leadId}` }}
+                className="hover:text-primary flex items-center gap-1">
+                Drawings & photos <ExternalLink className="h-3 w-3" />
+              </Link>
+            )}
+            {boqRef}
+          </span>
+        </div>
+      </header>
+
+      <div className="p-3 sm:p-4 space-y-4">
+        {/* Room details (ceiling height, doors/windows, scope ticks) — rooms and items themselves are
+            added once, on the item sheet, and saved to the measurement automatically. */}
+        {boq && editMeasurement && measurement && (
+          <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
+            <p className="text-xs text-muted-foreground flex flex-wrap items-center gap-2">
+              Room sizes, doors/windows and scope. Rooms and items are added on the item sheet; size changes update prices automatically.
+              {syncing && <span className="flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> Updating prices…</span>}
+              {boqLocked && <span className="text-amber-700">Prices are locked — change pricing (new revision) for size changes to reach them.</span>}
+            </p>
+            <RoomsTab measurementId={measurement.id} canWrite={canMeasure} onChanged={onMeasurementChanged} roomsOnly />
+            <div className="flex justify-end">
+              <Button size="sm" variant="ghost" onClick={() => setEditMeasurement(false)}>Done</Button>
+            </div>
           </div>
-        )}>
+        )}
+
         {!boq ? (
+          // ---- Nothing yet: visit/measure, then one click opens the item sheet ----
           <div className="space-y-3">
             {!measurement && <SiteVisitsTab leadId={leadId} onChanged={refreshAll} />}
             <div className="rounded-lg border border-dashed p-4 flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="font-medium text-sm">{measurement ? "Measurement recorded" : "Ready to measure & price"}</p>
                 <p className="text-xs text-muted-foreground">
-                  Rooms, sizes and items go straight into the pricing sheet — they're saved to the measurement too.
+                  Add rooms, sizes, items, material and labour in one sheet — it's saved to the measurement too.
                 </p>
               </div>
-              {startButton}
+              {canPrice && (
+                <Button size="sm" disabled={busy === "start"} onClick={startPricing}>
+                  {busy === "start" ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Wand2 className="h-4 w-4 mr-2" />}
+                  Start
+                </Button>
+              )}
             </div>
           </div>
-        ) : editMeasurement && measurement ? (
-          <div className="space-y-3">
-            <p className="text-xs text-muted-foreground flex flex-wrap items-center gap-2">
-              Room sizes and scope here update the pricing automatically.
-              {syncing && <span className="flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> Updating pricing…</span>}
-              {boqLocked && <span className="text-amber-700">Pricing is locked — open a new revision for these changes to reach it.</span>}
-            </p>
-            <RoomsTab measurementId={measurement.id} canWrite={canMeasure} onChanged={onMeasurementChanged} />
-            <div className="flex justify-end">
-              <Button size="sm" variant="ghost" onClick={() => setEditMeasurement(false)}>Done</Button>
-            </div>
-          </div>
-        ) : (
-          <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-            <span className="text-muted-foreground">
-              {measurement ? (measurement.measurementNumber || `Measurement #${measurement.id}`) : "Measurement"}
-              {measurement?.totalArea ? ` · ${measurement.totalArea} sq.ft` : ""}
-              {measurement?.measurementDate ? ` · ${formatDate(measurement.measurementDate)}` : ""}
-              {" "}— items you add below are saved to it automatically.
-            </span>
-            {canMeasure && measurement && (
-              <Button size="sm" variant="outline" onClick={() => setEditMeasurement(true)}>
-                <Pencil className="h-3.5 w-3.5 mr-1" /> Room sizes & scope
-              </Button>
-            )}
-          </div>
-        )}
-      </Section>
-
-      {/* ============ B. Price ============ */}
-      <Section n={2} title="Price — items, material & labour" done={!!boq && boqLocked} icon={Sparkles}
-        right={boq && (isAdmin ? (
-          // The full BOQ page (revisions, reports, partial quotes) is admin-only now.
-          <Link to={`/boq/${boq.id}`} state={{ from: `/leads/${leadId}` }}
-            className="text-xs text-muted-foreground hover:text-primary flex items-center gap-1">
-            {boq.boqNumber} · Rev {boq.revisionNumber ?? 1} <ExternalLink className="h-3 w-3" />
-          </Link>
-        ) : (
-          <span className="text-xs text-muted-foreground">{boq.boqNumber} · Rev {boq.revisionNumber ?? 1}</span>
-        ))}>
-        {!boq ? (
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm text-muted-foreground">No pricing yet. Start it, then add rooms, items, material and labour.</p>
-            {startButton}
-          </div>
-        ) : (
-          <div className="space-y-3">
+        ) : !quotedThisBoq ? (
+          // ---- Measuring & pricing: one item sheet, one set of totals ----
+          <>
             {boqLocked && (
               <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 flex flex-wrap items-center justify-between gap-2">
-                <span className="flex items-center gap-2"><Lock className="h-4 w-4" /> Pricing is approved and locked.</span>
-                {canPrice && (
-                  <Button size="sm" variant="outline" disabled={busy === "revise"} onClick={reopenPricing}>
-                    {busy === "revise" ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Pencil className="h-4 w-4 mr-2" />}
-                    Change pricing (new revision)
-                  </Button>
-                )}
+                <span className="flex items-center gap-2"><Lock className="h-4 w-4" /> Prices are approved and locked.</span>
+                {canPrice && reviseButton}
               </div>
             )}
             <BoqSheet boq={boq} canEdit={canPrice && !boqLocked} onBoqChanged={setBoq} />
-          </div>
-        )}
-      </Section>
-
-      {/* ============ C. Quote ============ */}
-      <Section n={3} title="Quote" done={quotedThisBoq} icon={FileText}>
-        {!boq ? (
-          <p className="text-sm text-muted-foreground">Totals and the quotation appear once pricing has started.</p>
+            <TotalsPanel boq={boq} editable={canPrice && !boqLocked} onSave={saveTotals} />
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-primary/[0.03] p-3">
+              <div className="text-sm">
+                <span>Ready? This creates the customer quotation from the items above.</span>
+                {isAdmin && (
+                  <Link to={`/boq/${boq.id}`} state={{ from: `/leads/${leadId}` }} className="block text-xs text-muted-foreground hover:text-primary mt-0.5">
+                    Need a partial or budget quotation? Open advanced options
+                  </Link>
+                )}
+              </div>
+              {canPrice && (
+                <Button className="bg-green-600 hover:bg-green-700 text-white" disabled={!!busy || (boq.items?.length ?? 0) === 0}
+                  onClick={() => setConfirmQuote(true)}>
+                  <FileText className="h-4 w-4 mr-2" /> Generate Quotation
+                </Button>
+              )}
+            </div>
+          </>
         ) : (
-          <div className="space-y-4">
-            {!activeQuote?.id && <TotalsPanel boq={boq} editable={canPrice && !boqLocked} onSave={saveTotals} />}
-
-            {!quotedThisBoq && (
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-primary/[0.03] p-3">
-                <div className="text-sm">
-                  <span>Ready? This locks the pricing and creates the customer quotation.</span>
-                  {isAdmin && (
-                    <Link to={`/boq/${boq.id}`} state={{ from: `/leads/${leadId}` }} className="block text-xs text-muted-foreground hover:text-primary mt-0.5">
-                      Need a partial or budget quotation? Open advanced options
-                    </Link>
-                  )}
-                </div>
-                {canPrice && (
-                  <Button className="bg-green-600 hover:bg-green-700 text-white" disabled={!!busy || (boq.items?.length ?? 0) === 0}
-                    onClick={() => setConfirmQuote(true)}>
-                    <FileText className="h-4 w-4 mr-2" /> Generate Quotation
-                  </Button>
-                )}
-              </div>
-            )}
-
-            {/* Older quotations (earlier pricing revisions) — opened in place, not on another page. */}
-            {quotations.length > 1 && (
-              <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                <span className="text-muted-foreground mr-1">Quotations:</span>
-                {[...quotations].sort((a, b) => (b.id ?? 0) - (a.id ?? 0)).map((q) => (
-                  <button key={q.id} type="button" onClick={() => setShownQuoteId(q.id)}
-                    className={`rounded-full border px-2.5 py-1 flex items-center gap-1.5 ${q.id === shownId ? "border-primary bg-primary/10 text-primary font-medium" : "hover:bg-muted/50"}`}>
-                    {q.quotationNumber}
-                    <span className="tabular-nums text-muted-foreground">{inr(q.grandTotal ?? q.totalAmount)}</span>
-                    {q.id === latestQuote?.id && <span className="text-[10px] uppercase">· latest</span>}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {shownId && (
-              <div className="rounded-lg border p-3 sm:p-4 bg-background">
-                {shownQuote && shownQuote.id !== activeQuote?.id && (
-                  <p className="mb-3 text-xs text-amber-700">
-                    {activeQuote
-                      ? `Showing an older quotation — the current pricing is quoted as ${activeQuote.quotationNumber}.`
-                      : "The pricing has changed since this quotation — generate a new quotation to quote it."}
-                  </p>
-                )}
-                <QuotationWorkbench key={shownId} quotationId={shownId} embedded
-                  pricingSheetTotal={shownQuote && (shownQuote.boq?.id ?? shownQuote.boqId) === boq.id ? boq.grandTotal : undefined}
-                  onOpenQuotation={(id) => { setShownQuoteId(id); load(); }}
-                  onChanged={() => { load(); onChanged(); }} />
-              </div>
-            )}
+          // ---- Quoted: the quotation is the working copy; the item sheet folds away ----
+          <div className="rounded-lg border flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm">
+            <button type="button" onClick={() => setShowSheet((v) => !v)} className="flex items-center gap-2 hover:text-primary">
+              {showSheet ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+              <span className="font-medium">Items, material & labour</span>
+              <span className="text-muted-foreground tabular-nums">· {boq.items?.filter((i) => i.isActive !== false).length ?? 0} items · {inr(boq.grandTotal)}</span>
+              <Lock className="h-3.5 w-3.5 text-muted-foreground" />
+            </button>
+            {canPrice && reviseButton}
           </div>
         )}
-      </Section>
+        {boq && quotedThisBoq && showSheet && <BoqSheet boq={boq} canEdit={false} onBoqChanged={setBoq} />}
+
+        {/* Quotations — switch in place */}
+        {quotations.length > 1 && (
+          <div className="flex flex-wrap items-center gap-1.5 text-xs">
+            <span className="text-muted-foreground mr-1">Quotations:</span>
+            {[...quotations].sort((a, b) => (b.id ?? 0) - (a.id ?? 0)).map((q) => (
+              <button key={q.id} type="button" onClick={() => setShownQuoteId(q.id === shownId ? null : q.id)}
+                className={`rounded-full border px-2.5 py-1 flex items-center gap-1.5 ${q.id === shownId ? "border-primary bg-primary/10 text-primary font-medium" : "hover:bg-muted/50"}`}>
+                {q.quotationNumber}
+                <span className="tabular-nums text-muted-foreground">{inr(q.grandTotal ?? q.totalAmount)}</span>
+                {q.id === latestQuote?.id && <span className="text-[10px] uppercase">· latest</span>}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {boq && shownId && (
+          <div className={quotedThisBoq && shownId === activeQuote?.id ? "" : "rounded-lg border p-3 sm:p-4 bg-background"}>
+            {shownQuote && shownQuote.id !== activeQuote?.id && (
+              <p className="mb-3 text-xs text-amber-700">
+                {activeQuote
+                  ? `Showing an older quotation — the current prices are quoted as ${activeQuote.quotationNumber}.`
+                  : "Prices have changed since this quotation — generate a new quotation to quote them."}
+              </p>
+            )}
+            <QuotationWorkbench key={shownId} quotationId={shownId} embedded
+              pricingSheetTotal={shownQuote && (shownQuote.boq?.id ?? shownQuote.boqId) === boq.id ? boq.grandTotal : undefined}
+              onOpenQuotation={(id) => { setShownQuoteId(id); load(); }}
+              onChanged={() => { load(); onChanged(); }} />
+          </div>
+        )}
+      </div>
 
       <Dialog open={confirmQuote} onOpenChange={setConfirmQuote}>
         <DialogContent>
           <DialogHeader><DialogTitle>Generate quotation?</DialogTitle></DialogHeader>
           <div className="text-sm space-y-2">
             <p>Grand total <span className="font-semibold">{inr(boq?.grandTotal)}</span> across {boq?.items?.filter((i) => i.isActive !== false).length ?? 0} item(s).</p>
-            <p className="text-muted-foreground">This finishes the measurement, approves and locks the pricing, and creates the quotation in one step. You can still change the pricing later by opening a new revision.</p>
+            <p className="text-muted-foreground">This finishes the measurement, locks the prices, and creates the quotation in one step. You can still change prices later (new revision).</p>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmQuote(false)}>Cancel</Button>
@@ -344,50 +358,30 @@ export default function QuoteWorkspace({ leadId, onChanged }: { leadId: string; 
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </section>
   );
 }
 
-function ProgressStrip({ step }: { step: number }) {
-  const labels = ["Measure", "Price", "Quote"];
+function ProgressStrip({ done }: { done: boolean[] }) {
+  const labels = ["Measure & price", "Quote", "Customer approves", "Project"];
+  const current = done.findIndex((d) => !d);
   return (
     <div className="flex items-center gap-2">
       {labels.map((l, i) => {
-        const done = step > i;
-        const current = step === i;
+        const isDone = done[i];
+        const isCurrent = current === i;
         return (
           <div key={l} className="flex items-center gap-2 flex-1 min-w-0">
             <div className={`h-6 w-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
-              done ? "bg-green-500 text-white" : current ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
-              {done ? <Check className="h-3.5 w-3.5" /> : i + 1}
+              isDone ? "bg-green-500 text-white" : isCurrent ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
+              {isDone ? <Check className="h-3.5 w-3.5" /> : i + 1}
             </div>
-            <span className={`text-xs font-medium truncate ${current ? "text-foreground" : "text-muted-foreground"}`}>{l}</span>
-            {i < labels.length - 1 && <div className={`h-0.5 flex-1 rounded ${done ? "bg-green-500" : "bg-muted"}`} />}
+            <span className={`text-xs font-medium truncate ${isCurrent ? "text-foreground" : "text-muted-foreground"}`}>{l}</span>
+            {i < labels.length - 1 && <div className={`h-0.5 flex-1 rounded ${isDone ? "bg-green-500" : "bg-muted"}`} />}
           </div>
         );
       })}
     </div>
-  );
-}
-
-function Section({ n, title, done, icon: Icon, right, children }: {
-  n: number; title: string; done?: boolean;
-  icon: React.ComponentType<{ className?: string }>;
-  right?: React.ReactNode; children: React.ReactNode;
-}) {
-  return (
-    <section className="rounded-xl border bg-card">
-      <header className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b">
-        <h3 className="font-semibold text-sm flex items-center gap-2">
-          <span className={`h-5 w-5 rounded-full text-[11px] flex items-center justify-center ${done ? "bg-green-500 text-white" : "bg-primary/10 text-primary"}`}>
-            {done ? <Check className="h-3 w-3" /> : n}
-          </span>
-          <Icon className="h-4 w-4 text-muted-foreground" /> {title}
-        </h3>
-        {right}
-      </header>
-      <div className="p-3 sm:p-4">{children}</div>
-    </section>
   );
 }
 

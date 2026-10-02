@@ -33,8 +33,10 @@ const DRAFT_ROOM_TYPE = "UNASSIGNED";
 const isDraftRoom = (r: MeasurementRoom) => r.roomType === DRAFT_ROOM_TYPE;
 const NEW_ROOM_OPTION = "__new_room__";
 
-export default function RoomsTab({ measurementId, canWrite, onChanged }: {
+export default function RoomsTab({ measurementId, canWrite, onChanged, roomsOnly }: {
   measurementId: number; canWrite: boolean; onChanged: () => void;
+  /** Room details only (sizes, openings, scope) — used where items are entered on the pricing sheet. */
+  roomsOnly?: boolean;
 }) {
   const { items: rooms, loading, reload } = useMeasurementSubResource<MeasurementRoom>(
     () => measurementApi.getRooms(measurementId), [measurementId]);
@@ -49,9 +51,10 @@ export default function RoomsTab({ measurementId, canWrite, onChanged }: {
   // Lifted so "Save & Add Items" on the room dialog can open item entry for the room just created.
   const [itemForm, setItemForm] = useState<Partial<MeasurementItem & { roomId: number }> | null>(null);
   // Item-first (bottom-up) is the default; the Floor→Room→Item tree stays available behind the toggle.
-  const [view, setView] = useState<"items" | "tree">(
+  const [savedView, setView] = useState<"items" | "tree">(
     () => (localStorage.getItem("measurementRoomsView") as "items" | "tree") || "items");
-  useEffect(() => { localStorage.setItem("measurementRoomsView", view); }, [view]);
+  useEffect(() => { localStorage.setItem("measurementRoomsView", savedView); }, [savedView]);
+  const view = roomsOnly ? "tree" : savedView;
   const [mergeSource, setMergeSource] = useState<MeasurementRoom | null>(null);
 
   const loadAllItems = useCallback(() => {
@@ -107,7 +110,7 @@ export default function RoomsTab({ measurementId, canWrite, onChanged }: {
           {view === "tree" && floorGroups.length > 1 && ` across ${floorGroups.length} floors`}
           {allItems.length > 0 && ` · ${allItems.length} item${allItems.length === 1 ? "" : "s"}`}
         </h3>
-        <div className="flex items-center gap-2">
+        {!roomsOnly && <div className="flex items-center gap-2">
           <div className="inline-flex rounded-lg border bg-muted/40 p-0.5 text-xs">
             {(["items", "tree"] as const).map((v) => (
               <button key={v} type="button" onClick={() => setView(v)}
@@ -122,7 +125,7 @@ export default function RoomsTab({ measurementId, canWrite, onChanged }: {
               <Plus className="h-4 w-4 mr-2" /> Add Room
             </Button>
           )}
-        </div>
+        </div>}
       </div>
 
       {view === "items" ? (
@@ -152,7 +155,8 @@ export default function RoomsTab({ measurementId, canWrite, onChanged }: {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {floorRooms.map((room) => (
-            <Card key={room.id} className="hover:border-primary/50 transition-colors cursor-pointer" onClick={() => setDetailRoom(room)}>
+            <Card key={room.id} className={`hover:border-primary/50 transition-colors ${roomsOnly ? "" : "cursor-pointer"}`}
+              onClick={() => !roomsOnly && setDetailRoom(room)}>
               <CardContent className="pt-6 space-y-3">
                 <div className="flex items-start justify-between">
                   <div>
@@ -161,7 +165,7 @@ export default function RoomsTab({ measurementId, canWrite, onChanged }: {
                       {room.roomType || "Room"} · {itemCountFor(room.id)} item{itemCountFor(room.id) === 1 ? "" : "s"}
                     </div>
                   </div>
-                  {canWrite && (
+                  {canWrite && !roomsOnly && (
                     <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); removeRoom(room); }}>
                       <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
@@ -187,7 +191,12 @@ export default function RoomsTab({ measurementId, canWrite, onChanged }: {
                     </Badge>
                   )}
                 </div>
-                <div className="flex gap-2">
+                {roomsOnly ? (canWrite && (
+                  <Button size="sm" variant="outline" className="w-full"
+                    onClick={(e) => { e.stopPropagation(); setEditingRoom(room); setFormOpen(true); }}>
+                    <Pencil className="h-3.5 w-3.5 mr-1" /> Edit details
+                  </Button>
+                )) : <div className="flex gap-2">
                   {canWrite && (
                     <Button size="sm" className="flex-1"
                       onClick={(e) => { e.stopPropagation(); setDetailRoom(room); setStartAddItem(true); }}>
@@ -197,7 +206,7 @@ export default function RoomsTab({ measurementId, canWrite, onChanged }: {
                   <Button variant="outline" size="sm" className="flex-1" onClick={(e) => { e.stopPropagation(); setDetailRoom(room); }}>
                     View Details
                   </Button>
-                </div>
+                </div>}
               </CardContent>
             </Card>
           ))}
@@ -206,7 +215,7 @@ export default function RoomsTab({ measurementId, canWrite, onChanged }: {
         ))
       )}
 
-      {view === "tree" && realRooms.length > 0 && (
+      {view === "tree" && !roomsOnly && realRooms.length > 0 && (
         <MeasuredItemsPanel
           measurementId={measurementId}
           rooms={realRooms}

@@ -183,7 +183,7 @@ export default function BoqSheet({
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2 justify-between">
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <SaveState pending={pending} lastSaved={lastSaved} />
+          {canEdit ? <SaveState pending={pending} lastSaved={lastSaved} /> : <span>Locked — view only</span>}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {selected.size > 0 && canEdit && (

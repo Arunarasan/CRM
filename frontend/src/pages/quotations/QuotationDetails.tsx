@@ -300,8 +300,8 @@ export function QuotationWorkbench({
         </div>
       </div>
 
-      {/* ---------- Steps ---------- */}
-      <div className="flex items-center gap-2 text-xs">
+      {/* ---------- Steps (the Sales Journey shows its own strip) ---------- */}
+      {!embedded && <div className="flex items-center gap-2 text-xs">
         {["Price & discount", "Customer approves scope", "Create project"].map((label, i) => {
           const done = step > i + 1;
           const current = step === i + 1;
@@ -316,7 +316,7 @@ export function QuotationWorkbench({
             </div>
           );
         })}
-      </div>
+      </div>}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* ---------- Items ---------- */}
