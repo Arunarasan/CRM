@@ -322,8 +322,11 @@ export default function BoqSheet({
   const groupTotal = (list: BoqItem[]) =>
     list.filter((i) => i.isActive !== false).reduce((s, i) => s + Number(i.amount ?? 0), 0);
 
-  const renameCategory = (g: Group) => {
-    const next = window.prompt("Category name", g.category)?.trim().slice(0, CATEGORY_MAX);
+  // Category being renamed in place (double-click its name, or ⋮ → Rename).
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const renameCategory = (g: Group, typed: string) => {
+    setRenaming(null);
+    const next = typed.trim().slice(0, CATEGORY_MAX);
     if (!next || next === g.category) return;
     if (categoryNames.some((c) => c !== g.category && sameName(c, next))) {
       toast.error(`"${next}" is already on the quote.`);
@@ -391,12 +394,22 @@ export default function BoqSheet({
                 title="Whole category in the quote" aria-label={`${g.category} in quote`}
                 ref={(el) => { if (el) el.indeterminate = on > 0 && on < g.items.length; }}
                 checked={g.items.length > 0 && on === g.items.length} onChange={() => setIncluded(g.items, on !== g.items.length)} />
-              <span className="flex-1 min-w-0 truncate text-sm font-bold uppercase tracking-wide text-primary">
-                {g.category}
-                <span className="ml-2 text-xs font-normal normal-case tracking-normal text-muted-foreground">
-                  {g.items.length} product{g.items.length === 1 ? "" : "s"}
+              {renaming === g.category ? (
+                <CategoryNameInput value={g.category}
+                  onCommit={(v) => renameCategory(g, v)} onCancel={() => setRenaming(null)} />
+              ) : (
+                <span className="flex-1 min-w-0 truncate text-sm font-bold uppercase tracking-wide text-primary">
+                  <span
+                    className={canEdit ? "cursor-text rounded px-0.5 -mx-0.5 hover:bg-primary/10" : ""}
+                    title={canEdit ? "Double-click to rename" : undefined}
+                    onDoubleClick={() => canEdit && setRenaming(g.category)}>
+                    {g.category}
+                  </span>
+                  <span className="ml-2 text-xs font-normal normal-case tracking-normal text-muted-foreground">
+                    {g.items.length} product{g.items.length === 1 ? "" : "s"}
+                  </span>
                 </span>
-              </span>
+              )}
               <span className="text-sm font-bold tabular-nums">{inr(groupTotal(g.items))}</span>
               {canEdit && (
                 <DropdownMenu>
@@ -405,8 +418,8 @@ export default function BoqSheet({
                       <MoreVertical className="h-4 w-4 text-muted-foreground" />
                     </button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => renameCategory(g)}><Pencil className="h-4 w-4 mr-2" /> Rename</DropdownMenuItem>
+                  <DropdownMenuContent align="end" onCloseAutoFocus={(e) => e.preventDefault()}>
+                    <DropdownMenuItem onClick={() => setRenaming(g.category)}><Pencil className="h-4 w-4 mr-2" /> Rename</DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={() => removeCategory(g)} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" /> Remove category</DropdownMenuItem>
                   </DropdownMenuContent>
@@ -516,6 +529,43 @@ export default function BoqSheet({
         }}
       />
     </div>
+  );
+}
+
+/** The category name as a text box: Enter or clicking away saves, Esc cancels. */
+function CategoryNameInput({ value, onCommit, onCancel }: {
+  value: string; onCommit: (v: string) => void; onCancel: () => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  const done = useRef(false);
+  const ref = useRef<HTMLInputElement>(null);
+  // Opened from the ⋮ menu, the menu still holds focus while it closes — take it once it has.
+  useEffect(() => {
+    const grab = () => { if (ref.current && document.activeElement !== ref.current) { ref.current.focus(); ref.current.select(); } };
+    const timers = [0, 120, 300].map((ms) => setTimeout(grab, ms));
+    return () => timers.forEach(clearTimeout);
+  }, []);
+  const finish = (save: boolean) => {
+    if (done.current) return;
+    done.current = true;
+    if (save) onCommit(draft); else onCancel();
+  };
+  return (
+    <input
+      ref={ref}
+      autoFocus
+      onFocus={(e) => e.currentTarget.select()}
+      value={draft}
+      maxLength={CATEGORY_MAX}
+      aria-label="Category name"
+      className="flex-1 min-w-0 h-7 rounded-md border border-primary bg-background px-2 text-sm font-bold uppercase tracking-wide text-primary outline-none ring-2 ring-primary/20"
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => finish(true)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") { e.preventDefault(); finish(true); }
+        if (e.key === "Escape") { e.preventDefault(); finish(false); }
+      }}
+    />
   );
 }
 
