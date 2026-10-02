@@ -81,6 +81,7 @@ public class SupplyInstallService {
             }
         }
 
+        Map<Long, String> colours = colourBreakdown(project);
         List<Map<String, Object>> rows = new ArrayList<>();
         int needed = 0, toBuy = 0, ordered = 0, received = 0, atSite = 0, installed = 0;
         for (ProjectMaterialRequirement r : reqs) {
@@ -126,6 +127,7 @@ public class SupplyInstallService {
             row.put("productId", pid);
             row.put("productName", p.getName());
             row.put("productCode", p.getMaterialCode());
+            row.put("colors", colours.get(pid));
             row.put("imageUrl", p.getImageUrl());
             row.put("unit", r.getUnit() != null ? r.getUnit() : p.getUnit());
             row.put("phaseName", r.getPhase() != null ? r.getPhase().getName() : null);
@@ -182,6 +184,8 @@ public class SupplyInstallService {
         LocalDate expected = body.get("expectedDeliveryDate") != null && !String.valueOf(body.get("expectedDeliveryDate")).isBlank()
                 ? LocalDate.parse(String.valueOf(body.get("expectedDeliveryDate"))) : null;
 
+        Map<Long, String> colours = colourBreakdown(project);
+        Map<Long, List<String>> colourNotesBySupplier = new LinkedHashMap<>();
         Map<Long, Supplier> suppliers = new LinkedHashMap<>();
         Map<Long, List<PurchaseOrderItem>> itemsBySupplier = new LinkedHashMap<>();
         Map<Long, List<ProjectMaterialRequirement>> reqsBySupplier = new LinkedHashMap<>();
@@ -217,6 +221,10 @@ public class SupplyInstallService {
             suppliers.put(s.getId(), s);
             itemsBySupplier.computeIfAbsent(s.getId(), k -> new ArrayList<>()).add(item);
             reqsBySupplier.computeIfAbsent(s.getId(), k -> new ArrayList<>()).add(req);
+            if (colours.containsKey(product.getId())) {
+                colourNotesBySupplier.computeIfAbsent(s.getId(), k -> new ArrayList<>())
+                        .add(product.getName() + ": " + colours.get(product.getId()));
+            }
         }
         if (!missingSupplier.isEmpty()) {
             throw new IllegalStateException("No supplier set for: " + String.join(", ", missingSupplier)
@@ -231,8 +239,10 @@ public class SupplyInstallService {
             po.setProject(project);
             po.setExpectedDeliveryDate(expected);
             if (deliverToSite) po.setDeliveryAddress(project.getPropertyAddress());
+            List<String> colourNotes = colourNotesBySupplier.getOrDefault(e.getKey(), List.of());
             po.setNotes("For project " + project.getProjectName()
-                    + (deliverToSite ? " — deliver directly to the customer's site" : ""));
+                    + (deliverToSite ? " — deliver directly to the customer's site" : "")
+                    + (colourNotes.isEmpty() ? "" : "\nColours — " + String.join("; ", colourNotes)));
             PurchaseOrder saved = purchaseService.createPurchaseOrder(po, e.getValue());
             for (ProjectMaterialRequirement req : reqsBySupplier.get(e.getKey())) {
                 req.setPurchaseOrder(saved);
@@ -349,6 +359,26 @@ public class SupplyInstallService {
      * The quote lines that belong to this project. A quotation split per floor makes one project per
      * floor named "<floor> - Project for …"; keep that floor's lines only.
      */
+    /**
+     * Per product, the colours the quote asks for and how many of each ("Gold ×2 · Teal ×3"), so the
+     * supply list and the purchase order say which colours to buy. Lines without a colour are left out.
+     */
+    private Map<Long, String> colourBreakdown(Project project) {
+        Map<Long, Map<String, BigDecimal>> byProduct = new LinkedHashMap<>();
+        for (QuotationItem q : quoteItems(project)) {
+            if (q.getColor() == null || q.getColor().isBlank() || "REJECTED".equals(q.getStatus())) continue;
+            Long pid = q.getProductId();
+            if (pid == null) continue;
+            BigDecimal qty = q.getQuantity() != null ? q.getQuantity() : BigDecimal.ZERO;
+            byProduct.computeIfAbsent(pid, k -> new LinkedHashMap<>()).merge(q.getColor().trim(), qty, BigDecimal::add);
+        }
+        Map<Long, String> out = new LinkedHashMap<>();
+        byProduct.forEach((pid, m) -> out.put(pid, m.entrySet().stream()
+                .map(e -> e.getKey() + " ×" + e.getValue().stripTrailingZeros().toPlainString())
+                .collect(java.util.stream.Collectors.joining(" · "))));
+        return out;
+    }
+
     private List<QuotationItem> quoteItems(Project project) {
         Quotation q = project.getQuotation();
         if (q == null || q.getItems() == null) return List.of();

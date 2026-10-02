@@ -103,6 +103,36 @@ public class TaskChecklistService {
         return true;
     }
 
+    /**
+     * Brings a named checklist in line with {@code lines} after a scope change: missing lines are added,
+     * un-ticked lines that are no longer wanted are removed, ticked ones are kept (work already done).
+     * Creates the checklist when the task has none of that name yet.
+     */
+    @Transactional
+    public void syncNamedChecklist(Task task, String name, List<String> lines) {
+        if (task == null || task.getId() == null || lines == null) return;
+        TaskChecklist checklist = checklistRepository.findByTaskId(task.getId()).stream()
+                .filter(c -> name.equalsIgnoreCase(c.getName())).findFirst().orElse(null);
+        if (checklist == null) {
+            if (!lines.isEmpty()) applyItems(task, name, lines);
+            return;
+        }
+        List<TaskChecklistItem> existing = checklistItemRepository.findByChecklistId(checklist.getId());
+        java.util.Set<String> wanted = new java.util.LinkedHashSet<>(lines);
+        int order = existing.stream().mapToInt(i -> i.getOrderIndex() == null ? 0 : i.getOrderIndex()).max().orElse(-1) + 1;
+        for (TaskChecklistItem item : existing) {
+            if (wanted.remove(item.getContent())) continue;
+            if (!Boolean.TRUE.equals(item.getIsCompleted())) checklistItemRepository.delete(item);
+        }
+        for (String content : wanted) {
+            TaskChecklistItem item = new TaskChecklistItem();
+            item.setChecklist(checklist);
+            item.setContent(content);
+            item.setOrderIndex(order++);
+            checklistItemRepository.save(item);
+        }
+    }
+
     /** Seeds the default checklist only if the task has none yet (idempotent). Returns true if created. */
     @Transactional
     public boolean ensureDefaultChecklist(Task task) {

@@ -18,8 +18,9 @@ import { NumCell } from "@/pages/leads/quote/cells";
 import QuotationPdfDialog from "./QuotationPdfDialog";
 import { QuotationPrintView } from "./QuotationPrint";
 import { lineTotal, pricingPatch, quoteTotals, readPricing, type DiscountMode } from "./quotationPricing";
+import { resolveFileUrl } from "@/lib/uploadFile";
 import {
-  QUOTATION_STATUS_LABELS, QUOTATION_STATUS_STYLES, buildQuotationTree,
+  QUOTATION_STATUS_LABELS, QUOTATION_STATUS_STYLES, buildCategoryBlocks, lineDiscountAmount, quoteCharges,
   type Quotation, type QuotationItem,
 } from "@/types/quotation";
 
@@ -132,14 +133,16 @@ export function QuotationWorkbench({
   const priceEditable = canWrite && !converted && (!approved || isManager);
   const scopeEditable = canApprove && !converted && (!approved || editingScope);
 
-  const tree = useMemo(() => buildQuotationTree(items), [items]);
+  const blocks = useMemo(() => buildCategoryBlocks(items), [items]);
+  // The sheet's rule (discount on products only) unless this is an older quote with an overall discount.
+  const itemsOnly = quotation ? readPricing(quotation).itemsOnly : true;
 
   // ---- Live totals for the ticked scope (same formula as the server) ----
   const totals = useMemo(() => quoteTotals(quotation ?? {}, {
     items: items.filter((i) => i.id != null && scope.has(i.id)),
     rateDrafts,
-    pricing: { mode: discountMode, value: discountValue, gst: gstPercent },
-  }), [items, scope, rateDrafts, quotation, discountMode, discountValue, gstPercent]);
+    pricing: { mode: discountMode, value: discountValue, gst: gstPercent, itemsOnly },
+  }), [items, scope, rateDrafts, quotation, discountMode, discountValue, gstPercent, itemsOnly]);
 
   const serverScope = useMemo(
     () => new Set(items.filter((i) => i.status !== "REJECTED").map((i) => i.id!)), [items]);
@@ -164,7 +167,7 @@ export function QuotationWorkbench({
     save({ items: items.map((i) => (i.id === item.id ? { ...i, rate: rate ?? 0 } : i)) }, "Price");
 
   const savePricing = (mode: DiscountMode, value: number, gst: number) =>
-    save(pricingPatch({ mode, value, gst }), "Discount & GST");
+    save(pricingPatch({ mode, value, gst, itemsOnly }), "Discount & GST");
 
   const confirmCustomerApproval = async () => {
     setBusy(true);
@@ -346,63 +349,70 @@ export function QuotationWorkbench({
           </div>
 
           <div className="px-2 pb-3">
-            {tree.floors.map((f) => (
-              <div key={f.floor} className="mt-2">
-                {(tree.floors.length > 1 || f.floor !== "General") && (
-                  <div className="px-2 text-xs font-semibold uppercase tracking-wide text-primary">{f.floor}</div>
-                )}
-                {f.rooms.map((r) => {
-                  const roomItems = r.categories.flatMap((c) => c.items);
-                  const ids = roomItems.map((i) => i.id!).filter(Boolean);
-                  const allOn = ids.every((x) => scope.has(x));
-                  return (
-                    <div key={r.room} className="mt-1 rounded-lg border">
-                      <div className="flex items-center gap-2 px-2 py-1.5 bg-muted/40 rounded-t-lg">
-                        <input type="checkbox" className="h-4 w-4 accent-primary" disabled={!scopeEditable}
-                          checked={allOn} onChange={() => toggleScope(ids, !allOn)} aria-label={`Select ${r.room}`} />
-                        <span className="text-sm font-medium flex-1">{r.room}</span>
-                        <span className="text-sm font-semibold tabular-nums">
-                          {inr(roomItems.filter((i) => scope.has(i.id!)).reduce((s, i) => s + lineTotal(i, rateDrafts[i.id!] !== undefined ? rateDrafts[i.id!] ?? 0 : i.rate), 0))}
-                        </span>
-                      </div>
-                      <div className="divide-y">
-                        {roomItems.map((it) => {
-                          const on = it.id != null && scope.has(it.id);
-                          const draft = rateDrafts[it.id!];
-                          const shownTotal = lineTotal(it, draft !== undefined ? draft ?? 0 : it.rate);
-                          return (
-                            <div key={it.id} className={`grid grid-cols-[28px_minmax(0,1fr)] sm:grid-cols-[28px_minmax(0,1fr)_88px_110px_110px] gap-x-2 gap-y-1 items-center px-2 py-1.5 ${on ? "" : "opacity-50"}`}>
-                              <input type="checkbox" className="h-4 w-4 accent-primary justify-self-center" disabled={!scopeEditable}
-                                checked={on} onChange={() => toggleScope([it.id!], !on)} aria-label={`Include ${it.itemName}`} />
-                              <div className="min-w-0">
-                                <p className={`text-sm truncate ${on ? "" : "line-through"}`}>{it.itemName}</p>
-                                {(it.specification || it.brand) && <p className="text-[11px] text-muted-foreground truncate">{it.specification || it.brand}</p>}
-                                {it.description && <p className="text-[11px] text-muted-foreground whitespace-pre-line line-clamp-2">{it.description}</p>}
-                              </div>
-                              <div className="col-start-2 sm:col-start-auto flex sm:block items-center justify-between gap-2 text-sm sm:text-right text-muted-foreground">
-                                <span className="sm:hidden text-[11px] uppercase">Qty</span>{it.quantity ?? "—"} {it.unit ?? ""}
-                              </div>
-                              <div className="col-start-2 sm:col-start-auto flex sm:block items-center justify-between gap-2">
-                                <span className="sm:hidden text-[11px] uppercase text-muted-foreground">Rate</span>
-                                {priceEditable ? (
-                                  <div className="w-28 sm:w-auto"><NumCell value={it.rate} col="qRate" className="border-border"
-                                    onDraft={(v) => setRateDrafts((d) => ({ ...d, [it.id!]: v }))}
-                                    onCommit={(v) => saveRate(it, v)} /></div>
-                                ) : <span className="text-sm tabular-nums sm:block sm:text-right">{inr(it.rate)}</span>}
-                              </div>
-                              <div className="col-start-2 sm:col-start-auto flex sm:block items-center justify-between gap-2">
-                                <span className="sm:hidden text-[11px] uppercase text-muted-foreground">Amount</span>
-                                <span className="text-sm font-semibold tabular-nums sm:block sm:text-right">{inr(shownTotal)}</span>
-                              </div>
+            {blocks.map((block) => {
+              const ids = block.items.map((i) => i.id!).filter(Boolean);
+              const allOn = ids.every((x) => scope.has(x));
+              return (
+                <div key={block.category} className="mt-2 rounded-lg border">
+                  <div className="flex items-center gap-2 px-2 py-1.5 bg-primary/[0.06] rounded-t-lg">
+                    <input type="checkbox" className="h-4 w-4 accent-primary" disabled={!scopeEditable}
+                      checked={allOn} onChange={() => toggleScope(ids, !allOn)} aria-label={`Select ${block.category}`} />
+                    <span className="text-sm font-semibold uppercase tracking-wide text-primary flex-1">{block.category}</span>
+                    <span className="text-sm font-semibold tabular-nums">
+                      {inr(block.items.filter((i) => scope.has(i.id!)).reduce((s, i) => s + lineTotal(i, rateDrafts[i.id!] !== undefined ? rateDrafts[i.id!] ?? 0 : i.rate), 0))}
+                    </span>
+                  </div>
+                  <div className="divide-y">
+                    {block.items.map((it) => {
+                      const on = it.id != null && scope.has(it.id);
+                      const draft = rateDrafts[it.id!];
+                      const shownTotal = lineTotal(it, draft !== undefined ? draft ?? 0 : it.rate);
+                      const disc = lineDiscountAmount(it);
+                      const where = it.location || it.roomName;
+                      return (
+                        <div key={it.id} className={`grid grid-cols-[28px_minmax(0,1fr)] sm:grid-cols-[28px_minmax(0,1fr)_88px_110px_110px] gap-x-2 gap-y-1 items-center px-2 py-1.5 ${on ? "" : "opacity-50"}`}>
+                          <input type="checkbox" className="h-4 w-4 accent-primary justify-self-center" disabled={!scopeEditable}
+                            checked={on} onChange={() => toggleScope([it.id!], !on)} aria-label={`Include ${it.itemName}`} />
+                          <div className="min-w-0 flex items-start gap-2">
+                            {it.imageUrl && (
+                              <img src={resolveFileUrl(it.imageUrl)} alt="" className="h-10 w-10 shrink-0 rounded border object-cover"
+                                onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                            )}
+                            <div className="min-w-0">
+                              <p className={`text-sm truncate ${on ? "" : "line-through"}`}>{it.itemName}</p>
+                              {(it.color || where) && (
+                                <p className="text-[11px] text-muted-foreground truncate">
+                                  {[it.color && `Colour: ${it.color}`, where].filter(Boolean).join(" · ")}
+                                </p>
+                              )}
+                              {it.description && <p className="text-[11px] text-muted-foreground whitespace-pre-line line-clamp-2">{it.description}</p>}
                             </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
+                          </div>
+                          <div className="col-start-2 sm:col-start-auto flex sm:block items-center justify-between gap-2 text-sm sm:text-right text-muted-foreground">
+                            <span className="sm:hidden text-[11px] uppercase">Qty</span>{it.quantity ?? "—"} {it.unit ?? ""}
+                          </div>
+                          <div className="col-start-2 sm:col-start-auto flex sm:block items-center justify-between gap-2">
+                            <span className="sm:hidden text-[11px] uppercase text-muted-foreground">Rate</span>
+                            {priceEditable ? (
+                              <div className="w-28 sm:w-auto"><NumCell value={it.rate != null ? Math.round(it.rate * 100) / 100 : it.rate} col="qRate" className="border-border"
+                                onDraft={(v) => setRateDrafts((d) => ({ ...d, [it.id!]: v }))}
+                                onCommit={(v) => saveRate(it, v)} /></div>
+                            ) : <span className="text-sm tabular-nums sm:block sm:text-right">{inr(it.rate)}</span>}
+                          </div>
+                          <div className="col-start-2 sm:col-start-auto flex sm:block items-center justify-between gap-2">
+                            <span className="sm:hidden text-[11px] uppercase text-muted-foreground">Amount</span>
+                            <span className="sm:block sm:text-right">
+                              <span className="text-sm font-semibold tabular-nums">{inr(shownTotal)}</span>
+                              {disc > 0 && <span className="block text-[11px] text-emerald-700 tabular-nums">−{inr(disc)} off</span>}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
             {items.length === 0 && <p className="text-sm text-muted-foreground p-4 text-center">No items on this quotation.</p>}
           </div>
         </div>
@@ -411,7 +421,7 @@ export function QuotationWorkbench({
         <div className="space-y-5">
           <div className="border rounded-xl bg-card p-4 space-y-2 text-sm lg:sticky lg:top-4">
             <h3 className="font-semibold">Customer price</h3>
-            <Row label={`Items (${totals.count})`} value={inr(totals.subtotal)} />
+            <Row label={`Products (${totals.count})`} value={inr(totals.itemsTotal)} />
             <div className="flex items-center justify-between gap-2">
               <span className="text-muted-foreground flex items-center gap-1">
                 Discount
@@ -431,6 +441,9 @@ export function QuotationWorkbench({
                 <span className="w-24 text-right tabular-nums text-muted-foreground">− {inr(totals.discount)}</span>
               </div>
             </div>
+            {quoteCharges(quotation).map((c, i) => (
+              <Row key={i} label={c.note ? `${c.label} · ${c.note}` : c.label} value={`+ ${inr(c.amount)}`} />
+            ))}
             <div className="flex items-center justify-between gap-2">
               <span className="text-muted-foreground">GST %</span>
               <div className="flex items-center gap-2">

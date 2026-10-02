@@ -121,8 +121,25 @@ public class Boq extends BaseEntity {
     @Column(name = "labour_total_override", precision = 15, scale = 2)
     private BigDecimal labourTotalOverride;
 
+    /** Sum of the active lines' own discounts (already taken out of subtotal). */
+    @Column(name = "line_discount_total", nullable = false, precision = 15, scale = 2)
+    private BigDecimal lineDiscountTotal = BigDecimal.ZERO;
+
     @Column(precision = 15, scale = 2)
-    private BigDecimal subtotal = BigDecimal.ZERO;
+    private BigDecimal subtotal = BigDecimal.ZERO; // items after their line discounts
+
+    /** Quote-level labour and shipping charges: added after the customer discount, before GST. */
+    @Column(name = "labour_charge", precision = 15, scale = 2)
+    private BigDecimal labourCharge;
+
+    @Column(name = "labour_note", length = 255)
+    private String labourNote;
+
+    @Column(name = "shipping_charge", precision = 15, scale = 2)
+    private BigDecimal shippingCharge;
+
+    @Column(name = "shipping_note", length = 255)
+    private String shippingNote;
 
     @Column(name = "discount_type", length = 20)
     private String discountType = "PERCENT"; // PERCENT or FLAT

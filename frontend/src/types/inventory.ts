@@ -35,6 +35,12 @@ export interface WarehouseStockSummary {
   itemCount: number;
 }
 
+export interface ProductColor {
+  name: string;
+  hex?: string | null;
+  imageUrl?: string | null;
+}
+
 export interface Product {
   id: number;
   name: string;
@@ -68,6 +74,8 @@ export interface Product {
   pattern?: string;
   color?: string;
   colorFamily?: string;
+  /** Colours this product comes in, picked per line on a quotation. */
+  colors?: ProductColor[];
   availableSizes?: string[];
   // Window suitability & design structure
   productType?: string;

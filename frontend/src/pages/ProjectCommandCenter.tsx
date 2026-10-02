@@ -1718,6 +1718,12 @@ export default function ProjectCommandCenter() {
 
             {/* PAYMENTS & INVOICES TAB */}
             <TabsContent value="payments" className="space-y-6 mt-0 h-full outline-none">
+              {Number(profitability?.excessPaid ?? 0) > 0 && (
+                <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                  The customer has paid {inr(Number(profitability?.collected ?? 0))} — <span className="font-semibold">{inr(Number(profitability?.excessPaid))}</span> more
+                  than the contract value ({inr(Number(profitability?.quotationValue ?? 0))}) after a quote change. Refund it or adjust it against other work.
+                </div>
+              )}
               <ProjectPaymentsTab project={project} onChanged={fetchProjectData} />
             </TabsContent>
 
@@ -2014,7 +2020,8 @@ export default function ProjectCommandCenter() {
             {/* MEASUREMENT & QUOTATION — the same combined workspace as the lead's Sales Journey */}
             <TabsContent value="quote" className="space-y-4 mt-0 h-full outline-none">
               {project.lead?.id ? (
-                <QuoteWorkspace leadId={String(project.lead.id)} onChanged={fetchCore} />
+                <QuoteWorkspace leadId={String(project.lead.id)} projectId={project.id}
+                  onChanged={() => { fetchCore(); fetchProjectData(); }} />
               ) : (
                 <div className="rounded-xl border bg-card p-6 text-sm text-muted-foreground">
                   This project wasn't created from a lead, so it has no measurement & quotation workspace.

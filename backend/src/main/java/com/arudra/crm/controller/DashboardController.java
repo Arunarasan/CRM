@@ -51,7 +51,7 @@ public class DashboardController {
         // 1. Top Metrics
         summary.setTotalCustomers(customerRepository.count());
         summary.setTotalLeads(leadRepository.count());
-        summary.setActiveProjects(projectRepository.countByStatus("RUNNING"));
+        summary.setActiveProjects(projectRepository.countActive());
         summary.setPendingTasks(taskRepository.countByStatus("PENDING"));
         
         BigDecimal totalRev = quotationRepository.sumTotalRevenue();
@@ -92,7 +92,7 @@ public class DashboardController {
         }).collect(Collectors.toList());
         summary.setTodaysFollowUps(todaysFollowUps);
 
-        List<DashboardSummaryDTO.ProjectProgress> activeProjects = projectRepository.findByStatus("RUNNING").stream().map(p -> {
+        List<DashboardSummaryDTO.ProjectProgress> activeProjects = projectRepository.findActive().stream().map(p -> {
             DashboardSummaryDTO.ProjectProgress pp = new DashboardSummaryDTO.ProjectProgress();
             pp.setId(p.getId());
             pp.setName(p.getProjectName());

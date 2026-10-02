@@ -75,6 +75,18 @@ export interface BoqItem {
   category?: string;
   itemName: string;
   description?: string;
+  /** Catalogue product this line sells (null for a custom line). */
+  productId?: number | null;
+  imageUrl?: string | null;
+  color?: string | null;
+  /** Optional note of where it goes ("Hall window") — not a grouping level. */
+  location?: string | null;
+  /** Optional line discount (null = none). */
+  discountType?: "PERCENT" | "FLAT" | null;
+  discountValue?: number | null;
+  /** Price before the line discount; amount = grossAmount − discountAmount. */
+  grossAmount?: number;
+  discountAmount?: number;
   floorName?: string;
   roomName?: string;
   measurementRoomId?: number;
@@ -197,7 +209,14 @@ export interface Boq {
   // Lump-sum overrides for the material/labour totals — null/undefined = auto-sum from line items.
   materialTotalOverride?: number | null;
   labourTotalOverride?: number | null;
+  /** Sum of the lines' own discounts (already out of subtotal). */
+  lineDiscountTotal?: number;
+  /** Items after line discounts. Then − customer discount + labour + shipping → GST → grand total. */
   subtotal?: number;
+  labourCharge?: number | null;
+  labourNote?: string | null;
+  shippingCharge?: number | null;
+  shippingNote?: string | null;
   discountType?: "PERCENT" | "FLAT";
   discount?: number;
   discountAmount?: number;

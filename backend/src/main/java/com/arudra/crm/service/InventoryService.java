@@ -65,6 +65,16 @@ public class InventoryService {
         return productRepository.findAll(pageRequest);
     }
 
+    public List<Product> getProductsByIds(List<Long> ids) {
+        if (ids == null || ids.isEmpty()) return List.of();
+        return productRepository.findAllById(ids.stream().limit(200).toList());
+    }
+
+    public Page<Product> getProductsInCategory(Long categoryId, String search, int page, int size) {
+        String q = search != null && !search.isBlank() ? search.trim() : null;
+        return productRepository.findInCategory(categoryId, q, PageRequest.of(page, size, Sort.by("name").ascending()));
+    }
+
     public List<InventoryItem> getAllStock() {
         return itemRepository.findAll();
     }
@@ -129,6 +139,7 @@ public class InventoryService {
         product.setPattern(details.getPattern());
         product.setColor(details.getColor());
         product.setColorFamily(details.getColorFamily());
+        product.setColors(details.getColors());
         product.setAvailableSizes(details.getAvailableSizes());
         // Window suitability & design structure
         product.setProductType(details.getProductType());

@@ -56,6 +56,16 @@ public class QuotationItem extends BaseEntity {
     @Column(name = "item_name", nullable = false, length = 255)
     private String itemName;
 
+    /** Catalogue product (null for a custom line). Plain id; FK in V109. */
+    @Column(name = "product_id")
+    private Long productId;
+
+    @Column(name = "image_url", length = 1000)
+    private String imageUrl;
+
+    @Column(length = 150)
+    private String location;
+
     @Column(columnDefinition = "TEXT")
     private String description;
 
@@ -113,11 +123,16 @@ public class QuotationItem extends BaseEntity {
     @Column(nullable = false, precision = 15, scale = 2)
     private BigDecimal quantity;
 
-    @Column(nullable = false, precision = 15, scale = 2)
+    /** 4 decimals so rate × qty lands exactly on an amount that doesn't divide evenly (V110). */
+    @Column(nullable = false, precision = 15, scale = 4)
     private BigDecimal rate;
 
     @Column(name = "discount_percentage", precision = 5, scale = 2)
     private BigDecimal discountPercentage = BigDecimal.ZERO;
+
+    /** Flat ₹ line discount, used when no percentage is set (the pricing sheet sends its exact amount). */
+    @Column(name = "discount_amount", precision = 15, scale = 2)
+    private BigDecimal discountAmount;
 
     @Column(name = "gst_percentage", precision = 5, scale = 2)
     private BigDecimal gstPercentage = BigDecimal.ZERO;

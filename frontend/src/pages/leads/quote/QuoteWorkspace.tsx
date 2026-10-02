@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { toast } from "@/components/ui/toast";
 import { useAuth } from "@/hooks/useAuth";
-import { boqApi, quoteWorkspaceApi } from "@/api/boqApi";
+import { boqApi, quoteWorkspaceApi, type ProjectChangeResult, type ProjectQuoteStatus } from "@/api/boqApi";
 import { quotationApi } from "@/api/quotationApi";
 import type { Boq } from "@/types/boq";
 import { QUOTATION_STATUS_LABELS, QUOTATION_STATUS_STYLES, type Quotation } from "@/types/quotation";
@@ -31,6 +31,8 @@ import { NumCell } from "./cells";
  *   - Print / Customer approved / Create Project act on the sheet directly.
  * The quotation record is made on first use and the server keeps it identical to the sheet until the
  * customer approves; the sheet then locks. A change after approval opens a new sheet → new quotation.
+ * Inside a project (projectId) it is a change order instead: "Make changes" unlocks the project's
+ * own sheet and "Customer approved change" updates that same project — never a new one.
  * Measurement, BOQ and Quotation stay separate records underneath — this only removes the re-entry.
  */
 
@@ -40,8 +42,10 @@ const errMsg = (e: any, fallback: string) =>
   e?.response?.data?.message || (typeof e?.response?.data === "string" ? e.response.data : "") || fallback;
 const QUOTE_DONE = new Set(["APPROVED", "CONVERTED"]);
 
-export default function QuoteWorkspace({ leadId, onChanged, fieldMode, onCreateProject }: {
+export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode, onCreateProject }: {
   leadId: string;
+  /** Opened from the project: changes update this project (change order), no Create Project. */
+  projectId?: number;
   onChanged: () => void;
   /** Field employee's phone view: no desktop links; "Send to office" + employee Create Project. */
   fieldMode?: boolean;
@@ -52,6 +56,9 @@ export default function QuoteWorkspace({ leadId, onChanged, fieldMode, onCreateP
   const canPrice = hasAuthority("BOQ_WRITE") || isAdmin;
   const canApprove = isAdmin || (canPrice && hasAuthority("QUOTATION_APPROVE"));
   const canConvert = isAdmin || hasAuthority("QUOTATION_WRITE");
+  // Changing a running project's quote: admins and project managers only.
+  const canChangeProject = isAdmin || hasAuthority("ROLE_PROJECT_MANAGER");
+  const projectMode = projectId != null;
 
   const [loading, setLoading] = useState(true);
   const [measurements, setMeasurements] = useState<any[]>([]);
@@ -62,21 +69,30 @@ export default function QuoteWorkspace({ leadId, onChanged, fieldMode, onCreateP
   const [approveOpen, setApproveOpen] = useState(false);
   const [changeOpen, setChangeOpen] = useState(false);
   const [convertCfg, setConvertCfg] = useState<{ advanceAmount: string; advanceMethod: string } | null>(null);
+  const [projectQuote, setProjectQuote] = useState<ProjectQuoteStatus | null>(null);
+  const [changeResult, setChangeResult] = useState<ProjectChangeResult | null>(null);
 
   const load = useCallback(async () => {
-    const [m, b, q] = await Promise.all([
+    const [m, b, q, pq] = await Promise.all([
       leadApi.getMeasurements(leadId).catch(() => ({ data: [] })),
       leadApi.getBoqs(leadId).catch(() => ({ data: [] })),
       leadApi.getQuotations(leadId).catch(() => ({ data: [] })),
+      // One retry: a read can lose a lock race with a just-finished change on a busy database.
+      projectId != null
+        ? quoteWorkspaceApi.projectStatus(projectId).catch(() => quoteWorkspaceApi.projectStatus(projectId)).catch(() => null)
+        : Promise.resolve(null),
     ]);
     setMeasurements(m.data || []);
     const list: Boq[] = b.data || [];
     setQuotations(q.data || []);
-    // Work on the latest revision only — older ones are history.
-    const current = [...list].filter((x) => x.isLatestVersion !== false).sort((x, y) => (y.id ?? 0) - (x.id ?? 0))[0]
+    setProjectQuote(pq);
+    // In a project: the sheet the project was built from. Otherwise the latest revision — older ones are history.
+    const current = (pq?.boqId ? list.find((x) => x.id === pq.boqId) : undefined)
+      ?? [...list].filter((x) => x.isLatestVersion !== false).sort((x, y) => (y.id ?? 0) - (x.id ?? 0))[0]
       ?? [...list].sort((x, y) => (y.id ?? 0) - (x.id ?? 0))[0];
-    setBoq(current?.id ? await boqApi.get(current.id).catch(() => current) : null);
-  }, [leadId]);
+    const id = pq?.boqId ?? current?.id;
+    setBoq(id ? await boqApi.get(id).catch(() => current ?? null) : null);
+  }, [leadId, projectId]);
 
   useEffect(() => { setLoading(true); load().finally(() => setLoading(false)); }, [load]);
 
@@ -97,11 +113,18 @@ export default function QuoteWorkspace({ leadId, onChanged, fieldMode, onCreateP
     () => [...quotations].filter((q) => q.id !== quote?.id).sort((a, b) => (b.id ?? 0) - (a.id ?? 0)),
     [quotations, quote],
   );
+  // The project this sheet already built (seen from the lead page): changes are made there, not here.
+  const sheetProject = useMemo(
+    () => (!projectMode && boq ? quotations.find((q) => (q.boq?.id ?? q.boqId) === boq.id && q.project?.id)?.project : undefined),
+    [projectMode, quotations, boq],
+  );
   const approved = !!quote && QUOTE_DONE.has(quote.status);
   const converted = quote?.status === "CONVERTED";
   // Locked = the customer approved it (or the older flow approved the sheet before quoting).
   const locked = boq?.status === "APPROVED";
-  const editable = canPrice && !locked;
+  // A change to the running project is open (sheet unlocked, customer hasn't approved it yet).
+  const changeInProgress = projectMode && !!projectQuote?.changeOpen;
+  const editable = canPrice && !locked && !sheetProject && (!projectMode || canChangeProject);
   const inQuote = (boq?.items || []).filter((i) => i.isActive !== false);
 
   // ---------------- Actions ----------------
@@ -111,7 +134,7 @@ export default function QuoteWorkspace({ leadId, onChanged, fieldMode, onCreateP
     setBusy("start");
     try {
       const res = await quoteWorkspaceApi.startPricing(leadId);
-      toast.success(res.boqCreated ? "Quote sheet ready — add rooms and items below" : "Quote sheet opened");
+      toast.success(res.boqCreated ? "Quote sheet ready — add a category and its products below" : "Quote sheet opened");
       await refreshAll();
     } catch (e) {
       toast.error(errMsg(e, "Could not open the quote sheet."));
@@ -138,7 +161,7 @@ export default function QuoteWorkspace({ leadId, onChanged, fieldMode, onCreateP
    * or refreshed from the sheet by the server.
    */
   const currentQuotation = async (): Promise<Quotation> => {
-    if (approved && quote?.id) return quotationApi.get(quote.id);
+    if (approved && quote?.id && !changeInProgress) return quotationApi.get(quote.id);
     const q = await quoteWorkspaceApi.liveQuote(boq!.id as number);
     if (!quote) load();
     return q;
@@ -181,12 +204,45 @@ export default function QuoteWorkspace({ leadId, onChanged, fieldMode, onCreateP
     if (!boq?.id) return;
     setBusy("change");
     try {
+      if (projectMode) {
+        await quoteWorkspaceApi.startProjectChange(projectId!);
+        toast.success("Sheet open for the customer's changes — the project updates when they approve");
+        setChangeOpen(false);
+        await refreshAll();
+        return;
+      }
       await quoteWorkspaceApi.reopen(boq.id);
       toast.success("Sheet opened for changes — the next quotation gets a new number");
       setChangeOpen(false);
       await refreshAll();
     } catch (e) {
       toast.error(errMsg(e, "Could not open the sheet for changes."));
+    } finally { setBusy(null); }
+  };
+
+  /** Customer approved the change → the same project follows the new quote. */
+  const confirmProjectChange = async () => {
+    setBusy("approve");
+    try {
+      const res = await quoteWorkspaceApi.approveProjectChange(projectId!);
+      setApproveOpen(false);
+      if (res.unchanged) toast.success(`Nothing was changed — the project stays on ${projectQuote?.quotationNumber}`);
+      else setChangeResult(res);
+      await refreshAll();
+    } catch (e) {
+      toast.error(errMsg(e, "Could not apply the change to the project."));
+    } finally { setBusy(null); }
+  };
+
+  /** Close an open change with no edits — the sheet locks again on the project's quote. */
+  const discardProjectChange = async () => {
+    setBusy("discard");
+    try {
+      await quoteWorkspaceApi.discardProjectChange(projectId!);
+      toast.success("Change closed — nothing was changed");
+      await refreshAll();
+    } catch (e) {
+      toast.error(errMsg(e, "Could not close the change."));
     } finally { setBusy(null); }
   };
 
@@ -246,7 +302,7 @@ export default function QuoteWorkspace({ leadId, onChanged, fieldMode, onCreateP
               <div>
                 <p className="font-medium text-sm">Start the quote</p>
                 <p className="text-xs text-muted-foreground">
-                  One sheet for rooms, sizes, items, prices and the customer's choices — measure and price as you go.
+                  One sheet for categories, products, colours, prices and the customer's choices — price as you go.
                 </p>
               </div>
               {canPrice && (
@@ -259,8 +315,53 @@ export default function QuoteWorkspace({ leadId, onChanged, fieldMode, onCreateP
           </div>
         ) : (
           <>
+            {/* ---- Seen from the lead: the project owns this sheet now ---- */}
+            {sheetProject && (
+              <div className="rounded-lg border border-green-300 bg-green-50 p-3 text-sm text-green-900 flex flex-wrap items-center justify-between gap-2">
+                <span className="flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4" />
+                  Project {sheetProject.projectCode || ""} runs on this quote. Customer changes are made from the project, so the same project is updated.
+                </span>
+                {!fieldMode && (
+                  <Link to={`/projects/${sheetProject.id}?tab=quote`}>
+                    <Button size="sm" variant="outline" className="bg-background">Open project's quote</Button>
+                  </Link>
+                )}
+              </div>
+            )}
+
+            {/* ---- In a project: its quote, or the change in progress ---- */}
+            {projectMode && (locked ? (
+              <div className="rounded-lg border border-green-300 bg-green-50 p-3 text-sm text-green-900 flex flex-wrap items-center justify-between gap-2">
+                <span className="flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4" />
+                  This project runs on {projectQuote?.quotationNumber || quote?.quotationNumber} · {inr(projectQuote?.contractValue ?? quote?.grandTotal)}.
+                </span>
+                {canPrice && canChangeProject && projectQuote?.canChange && (
+                  <Button size="sm" variant="outline" className="bg-background" onClick={() => setChangeOpen(true)}>
+                    <Pencil className="h-4 w-4 mr-2" /> Make changes
+                  </Button>
+                )}
+              </div>
+            ) : changeInProgress && (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 flex flex-wrap sm:flex-nowrap items-start gap-2">
+                <Pencil className="h-4 w-4 mt-0.5 shrink-0" />
+                <span className="flex-1">
+                  <span className="font-semibold">Change in progress — not yet approved by the customer.</span>{" "}
+                  The project keeps running on {projectQuote?.quotationNumber} ({inr(projectQuote?.contractValue)}) until you press
+                  "Customer approved change". Work already started on site can't be removed — change its quantity instead.
+                </span>
+                {canChangeProject && (
+                  <Button size="sm" variant="outline" className="bg-background shrink-0" disabled={!!busy} onClick={discardProjectChange}
+                    aria-label="Discard change" title="Closes the change — only when nothing was edited">
+                    {busy === "discard" && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Discard
+                  </Button>
+                )}
+              </div>
+            ))}
+
             {/* ---- Approved / locked banner ---- */}
-            {locked && (
+            {locked && !projectMode && !sheetProject && (
               <div className={`rounded-lg border p-3 text-sm flex flex-wrap items-center justify-between gap-2 ${approved
                 ? "border-green-300 bg-green-50 text-green-900" : "border-amber-300 bg-amber-50 text-amber-900"}`}>
                 <span className="flex items-center gap-2">
@@ -295,25 +396,31 @@ export default function QuoteWorkspace({ leadId, onChanged, fieldMode, onCreateP
                 <Button variant="outline" size="sm" disabled={!!busy || inQuote.length === 0} onClick={openPrint}>
                   {busy === "print" ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Printer className="h-4 w-4 mr-2" />} Print
                 </Button>
-                {fieldMode && !approved && (
+                {fieldMode && !approved && !sheetProject && (
                   <Button variant="outline" size="sm" disabled={!!busy || inQuote.length === 0 || sentToOffice} onClick={sendToOffice}>
                     {busy === "send" && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                     {sentToOffice ? "Sent to office" : "Send to office"}
                   </Button>
                 )}
-                {fieldMode && !converted && onCreateProject && (
+                {fieldMode && !converted && !sheetProject && onCreateProject && (
                   <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" disabled={!!busy || inQuote.length === 0}
                     onClick={onCreateProject}>
                     <FileOutput className="h-4 w-4 mr-2" /> {approved ? "Create Project" : "Customer agreed · Create Project"}
                   </Button>
                 )}
-                {!fieldMode && !approved && canApprove && (
+                {projectMode && changeInProgress && canChangeProject && (
+                  <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" disabled={!!busy || inQuote.length === 0}
+                    onClick={() => setApproveOpen(true)}>
+                    <CheckCircle2 className="h-4 w-4 mr-2" /> Customer approved change
+                  </Button>
+                )}
+                {!projectMode && !sheetProject && !fieldMode && !approved && canApprove && (
                   <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" disabled={!!busy || inQuote.length === 0}
                     onClick={() => setApproveOpen(true)}>
                     <CheckCircle2 className="h-4 w-4 mr-2" /> Customer approved
                   </Button>
                 )}
-                {!fieldMode && approved && !converted && canConvert && (
+                {!projectMode && !sheetProject && !fieldMode && approved && !converted && canConvert && (
                   <Button size="sm" disabled={!!busy} onClick={() => setConvertCfg({ advanceAmount: "", advanceMethod: "Cash" })}>
                     <FileOutput className="h-4 w-4 mr-2" /> Create Project
                   </Button>
@@ -324,8 +431,60 @@ export default function QuoteWorkspace({ leadId, onChanged, fieldMode, onCreateP
         )}
       </div>
 
+      {/* ---- Customer approved the change (project) ---- */}
+      <Dialog open={approveOpen && projectMode} onOpenChange={setApproveOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Customer approved the change?</DialogTitle></DialogHeader>
+          <div className="text-sm space-y-2">
+            <Row label={`Now (${projectQuote?.quotationNumber ?? "current quote"})`} value={inr(projectQuote?.contractValue)} />
+            <Row label="After the change" value={inr(boq?.grandTotal)} strong />
+            <Row label="Difference" strong value={(() => {
+              const d = Number(boq?.grandTotal ?? 0) - Number(projectQuote?.contractValue ?? 0);
+              return `${d >= 0 ? "+" : "−"} ${inr(Math.abs(d))}`;
+            })()} />
+            <p className="text-muted-foreground pt-1">
+              The change gets a new quotation number and this same project is updated: its work items, checklist,
+              supply list, budget and unbilled payment milestones follow the new quote. Invoices already raised stay as they are.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setApproveOpen(false)}>Cancel</Button>
+            <Button className="bg-green-600 hover:bg-green-700 text-white" disabled={busy === "approve"} onClick={confirmProjectChange}>
+              {busy === "approve" && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Update the project
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ---- What the change did ---- */}
+      <Dialog open={!!changeResult} onOpenChange={(o) => !o && setChangeResult(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Project updated</DialogTitle></DialogHeader>
+          {changeResult && (
+            <div className="text-sm space-y-2">
+              <p>{changeResult.oldQuotationNumber} → <span className="font-semibold">{changeResult.newQuotationNumber}</span></p>
+              <Row label="Contract value" value={`${inr(changeResult.oldTotal)} → ${inr(changeResult.newTotal)}`} strong />
+              <Row label="Items" value={`${changeResult.itemsAdded} added · ${changeResult.itemsRemoved} removed · ${changeResult.itemsChanged} changed`} />
+              {changeResult.milestonesRescaled > 0 && <Row label="Payment milestones re-worked" value={String(changeResult.milestonesRescaled)} />}
+              {changeResult.supplyFlagged > 0 && (
+                <p className="rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
+                  {changeResult.supplyFlagged} material(s) were removed from the quote but already bought — see Supply & Install.
+                </p>
+              )}
+              {changeResult.excessPaid > 0 && (
+                <p className="rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
+                  The customer has paid {inr(changeResult.collected)} — {inr(changeResult.excessPaid)} more than the new total.
+                  Refund or adjust it from Payments.
+                </p>
+              )}
+            </div>
+          )}
+          <DialogFooter><Button onClick={() => setChangeResult(null)}>Done</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* ---- Customer approval ---- */}
-      <Dialog open={approveOpen} onOpenChange={setApproveOpen}>
+      <Dialog open={approveOpen && !projectMode} onOpenChange={setApproveOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader><DialogTitle>Customer approved this quote?</DialogTitle></DialogHeader>
           <div className="text-sm space-y-2">
@@ -349,7 +508,9 @@ export default function QuoteWorkspace({ leadId, onChanged, fieldMode, onCreateP
         <DialogContent className="max-w-md">
           <DialogHeader><DialogTitle>Make changes?</DialogTitle></DialogHeader>
           <p className="text-sm text-muted-foreground">
-            {approved
+            {projectMode
+              ? `The sheet opens for the customer's changes. The project keeps running on ${projectQuote?.quotationNumber ?? "its current quote"} until the customer approves; then this same project is updated and the change gets a new quotation number.`
+              : approved
               ? `${quote?.quotationNumber} was approved by the customer. Changing it opens the sheet again and the next quotation gets a new number; ${quote?.quotationNumber} is kept as history (Revised).`
               : "These prices are locked. Changing them opens the sheet again and the next quotation gets a new number."}
           </p>
@@ -438,6 +599,8 @@ function HistoryMenu({ quotes, onOpen }: { quotes: any[]; onOpen: (id: number) =
 type TotalsPatch = {
   discountType?: "PERCENT" | "FLAT"; discount?: number | null; taxPercent?: number | null;
   materialTotalOverride?: number | null; labourTotalOverride?: number | null;
+  labourCharge?: number | null; labourNote?: string | null;
+  shippingCharge?: number | null; shippingNote?: string | null;
 };
 
 /**
@@ -453,20 +616,23 @@ function TotalsPanel({ boq, editable, onSave }: { boq: Boq; editable: boolean; o
   const itemsMaterial = active.reduce((s, i) => s + Number(i.materialTotal ?? 0), 0);
   const itemsLabour = active.reduce((s, i) => s + Number(i.labourTotal ?? 0), 0);
   const manual = boq.materialTotalOverride != null || boq.labourTotalOverride != null;
+  const lineDiscounts = Number(boq.lineDiscountTotal ?? 0);
+  // Labour and shipping are added after the discount (never discounted) and before GST.
+  const charges = Number(boq.labourCharge ?? 0) + Number(boq.shippingCharge ?? 0);
   const f = editable ? "h-9 !border-border !bg-background" : "h-9";
 
-  /** Final price → flat discount that lands on it (final = (subtotal − discount) × (1 + GST%)). */
+  /** Final price → flat discount that lands on it (final = (subtotal − discount + charges) × (1 + GST%)). */
   const setFinal = (target: number | null) => {
     if (target == null) return;
     const r2 = (n: number) => Math.round(n * 100) / 100;
     // Same maths as the server (GST rounded to paise), so try the neighbouring paise and keep the
     // discount that lands exactly on the typed price.
-    const grandFor = (d: number) => r2(subtotal - d + r2((subtotal - d) * gstPct / 100));
-    const guess = r2(subtotal - target / (1 + gstPct / 100));
+    const grandFor = (d: number) => r2(subtotal - d + charges + r2((subtotal - d + charges) * gstPct / 100));
+    const guess = r2(subtotal + charges - target / (1 + gstPct / 100));
     const discount = [guess, r2(guess - 0.01), r2(guess + 0.01), r2(guess - 0.02), r2(guess + 0.02)]
       .reduce((best, d) => (Math.abs(grandFor(d) - target) < Math.abs(grandFor(best) - target) ? d : best), guess);
     if (discount < 0) {
-      toast.error(`That's above the item total (${inr(subtotal * (1 + gstPct / 100))}) — raise item amounts instead.`);
+      toast.error(`That's above the full price (${inr((subtotal + charges) * (1 + gstPct / 100))}) — raise item amounts instead.`);
       return;
     }
     onSave({ discountType: "FLAT", discount });
@@ -477,10 +643,10 @@ function TotalsPanel({ boq, editable, onSave }: { boq: Boq; editable: boolean; o
       {/* Cost card */}
       <div className="rounded-xl border p-4 space-y-2 text-sm">
         <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Items total</h4>
-        <Row label="Material" value={inr(boq.materialTotal)} />
-        <Row label="Labour" value={inr(boq.labourTotal)} />
+        <Row label="Products" value={inr(subtotal + lineDiscounts)} />
+        {lineDiscounts > 0 && <Row label="Line discounts" value={`− ${inr(lineDiscounts)}`} />}
         <div className="flex items-center justify-between border-t pt-2">
-          <span className="font-medium">Subtotal</span>
+          <span className="font-medium">Products total</span>
           <span className="text-lg font-bold tabular-nums">{inr(subtotal)}</span>
         </div>
         {manual && (
@@ -518,6 +684,11 @@ function TotalsPanel({ boq, editable, onSave }: { boq: Boq; editable: boolean; o
           </div>
           <span className="col-span-2 -mt-1 text-right text-xs text-muted-foreground tabular-nums">− {inr(boq.discountAmount)}</span>
 
+          <ChargeRow label="Labour" amount={boq.labourCharge} note={boq.labourNote} notePlaceholder="e.g. Installation, 2 days"
+            editable={editable} f={f} onSave={(amount, note) => onSave({ labourCharge: amount, labourNote: note })} />
+          <ChargeRow label="Shipping" amount={boq.shippingCharge} note={boq.shippingNote} notePlaceholder="e.g. Transport to site"
+            editable={editable} f={f} onSave={(amount, note) => onSave({ shippingCharge: amount, shippingNote: note })} />
+
           <label className="text-muted-foreground">GST %</label>
           <div className="w-24 justify-self-end"><NumCell value={boq.taxPercent ?? 0} disabled={!editable} className={f} onCommit={(v) => onSave({ taxPercent: v ?? 0 })} /></div>
           <span className="col-span-2 -mt-1 text-right text-xs text-muted-foreground tabular-nums">+ {inr(boq.taxAmount)}</span>
@@ -531,9 +702,37 @@ function TotalsPanel({ boq, editable, onSave }: { boq: Boq; editable: boolean; o
             className={`h-11 text-xl font-bold text-primary ${editable ? "!border-primary/40 !bg-background" : ""}`}
             onCommit={setFinal} />
         </div>
-        <p className="text-[11px] text-muted-foreground">Discount and GST carry into the quotation.</p>
+        <p className="text-[11px] text-muted-foreground">Discount applies to products only. Labour and shipping are added after it; GST is on everything.</p>
       </div>
     </div>
+  );
+}
+
+/** Labour / shipping: an amount added after the discount, with an optional note for the customer. */
+function ChargeRow({ label, amount, note, notePlaceholder, editable, f, onSave }: {
+  label: string; amount?: number | null; note?: string | null; notePlaceholder: string;
+  editable: boolean; f: string; onSave: (amount: number | null, note: string | null) => void;
+}) {
+  const [draft, setDraft] = useState(note ?? "");
+  useEffect(() => setDraft(note ?? ""), [note]);
+  const has = Number(amount ?? 0) > 0;
+  return (
+    <>
+      <label className="text-muted-foreground">{label} ₹</label>
+      <div className="w-24 justify-self-end">
+        <NumCell value={has ? amount : null} placeholder="0" disabled={!editable} className={f}
+          onCommit={(v) => onSave(v && v > 0 ? v : null, v && v > 0 ? note ?? null : null)} />
+      </div>
+      {(has || (editable && draft)) && (
+        editable ? (
+          <input value={draft} placeholder={notePlaceholder} aria-label={`${label} note`}
+            className="col-span-2 -mt-1 h-7 w-full rounded-md border border-transparent bg-transparent px-2 text-right text-xs text-muted-foreground outline-none hover:border-border focus:border-primary focus:bg-background"
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={() => draft.trim() !== (note ?? "") && onSave(amount ?? null, draft.trim() || null)}
+            onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()} />
+        ) : note ? <span className="col-span-2 -mt-1 text-right text-xs text-muted-foreground">{note}</span> : null
+      )}
+    </>
   );
 }
 

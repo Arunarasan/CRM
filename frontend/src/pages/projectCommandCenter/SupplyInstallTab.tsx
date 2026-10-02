@@ -336,6 +336,7 @@ export default function SupplyInstallTab({ projectId, onChanged }: { projectId: 
                       <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${st.tone}`}>{st.label}</span>
                       {r.phaseName && <span className="text-xs text-slate-400">{r.phaseName}</span>}
                     </div>
+                    {r.colors && <div className="mt-0.5 text-xs text-slate-600">Colours: {r.colors}</div>}
                     <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-slate-500">
                       <span>Need <b className="text-slate-800">{qty(r.required)} {unit}</b></span>
                       <span>In store {qty(r.inStock)}</span>
@@ -397,7 +398,10 @@ export default function SupplyInstallTab({ projectId, onChanged }: { projectId: 
             {pickedRows.map((r) => (
               <div key={r.requirementId} className="rounded-lg border p-3 space-y-2">
                 <div className="flex justify-between gap-2 text-sm">
-                  <span className="font-medium">{r.productName}</span>
+                  <span className="font-medium">
+                    {r.productName}
+                    {r.colors && <span className="block text-xs font-normal text-slate-500">Colours: {r.colors}</span>}
+                  </span>
                   <span className="text-xs text-slate-500">need {qty(r.required)} · in store {qty(r.inStock)} · ordered {qty(r.ordered)}</span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">

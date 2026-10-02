@@ -2,8 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ExternalLink, FileDown, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { buildQuotationTree, type Quotation } from "@/types/quotation";
-import { downloadQuotationPdf, quotationPdfUrl, selectionTotals } from "@/lib/quotationPdf";
+import { buildCategoryBlocks, type Quotation } from "@/types/quotation";
+import { downloadQuotationPdf, loadPdfImages, quotationPdfUrl, selectionTotals } from "@/lib/quotationPdf";
 
 const inr = (v?: number | null) =>
   "₹" + Number(v ?? 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
@@ -31,7 +31,15 @@ export default function QuotationPdfDialog({
       .filter((i) => i.status !== "REJECTED").map((i) => i.id).filter((id): id is number => id != null),
     [defaultSelectedIds, quotation.items],
   );
-  const tree = useMemo(() => buildQuotationTree(quotation.items || []), [quotation.items]);
+  const blocks = useMemo(() => buildCategoryBlocks(quotation.items || []), [quotation.items]);
+  // Line photos for the PDF, loaded once per open (jsPDF needs them as data URLs).
+  const [images, setImages] = useState<Record<string, string>>({});
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    loadPdfImages(quotation).then((m) => alive && setImages(m));
+    return () => { alive = false; };
+  }, [open, quotation]);
 
   const [selected, setSelected] = useState<Set<number>>(new Set(initialIds));
   const [includeExtras, setIncludeExtras] = useState(true);
@@ -45,7 +53,7 @@ export default function QuotationPdfDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  const sel = useMemo(() => ({ itemIds: selected, includeExtras }), [selected, includeExtras]);
+  const sel = useMemo(() => ({ itemIds: selected, includeExtras, images }), [selected, includeExtras, images]);
   const totals = useMemo(() => selectionTotals(quotation, sel), [quotation, sel]);
 
   // Debounced preview render; revoke the previous blob URL so they don't pile up.
@@ -98,33 +106,22 @@ export default function QuotationPdfDialog({
               </div>
             </div>
             <div className="overflow-y-auto p-2 space-y-2 max-h-[38vh] md:max-h-none md:flex-1">
-              {tree.floors.map((f) => {
-                const fIds = idsOf(f.rooms.flatMap((r) => r.categories.flatMap((c) => c.items)));
+              {blocks.map((b) => {
+                const ids = idsOf(b.items);
                 return (
-                  <div key={f.floor}>
-                    <TriCheck state={stateOf(fIds)} label={f.floor} onChange={(on) => setMany(fIds, on)} bold upper />
-                    <div className="ml-5 mt-1 space-y-1.5">
-                      {f.rooms.map((r) => {
-                        const items = r.categories.flatMap((c) => c.items);
-                        const rIds = idsOf(items);
-                        return (
-                          <div key={r.room}>
-                            <TriCheck state={stateOf(rIds)} label={r.room} onChange={(on) => setMany(rIds, on)} bold />
-                            <div className="ml-5 mt-0.5">
-                              {items.map((it) => (
-                                <label key={it.id ?? it.itemName} className="flex items-center gap-2 py-1 text-sm cursor-pointer hover:bg-muted/50 rounded px-1">
-                                  <input type="checkbox" className="h-4 w-4 accent-primary"
-                                    checked={it.id != null && selected.has(it.id)}
-                                    disabled={it.id == null}
-                                    onChange={(e) => it.id != null && setMany([it.id], e.target.checked)} />
-                                  <span className="flex-1 min-w-0 truncate">{it.itemName}</span>
-                                  <span className="text-xs tabular-nums text-muted-foreground">{inr(it.totalAmount)}</span>
-                                </label>
-                              ))}
-                            </div>
-                          </div>
-                        );
-                      })}
+                  <div key={b.category}>
+                    <TriCheck state={stateOf(ids)} label={b.category} onChange={(on) => setMany(ids, on)} bold upper />
+                    <div className="ml-5 mt-0.5">
+                      {b.items.map((it) => (
+                        <label key={it.id ?? it.itemName} className="flex items-center gap-2 py-1 text-sm cursor-pointer hover:bg-muted/50 rounded px-1">
+                          <input type="checkbox" className="h-4 w-4 accent-primary"
+                            checked={it.id != null && selected.has(it.id)}
+                            disabled={it.id == null}
+                            onChange={(e) => it.id != null && setMany([it.id], e.target.checked)} />
+                          <span className="flex-1 min-w-0 truncate">{it.itemName}{it.color ? ` · ${it.color}` : ""}</span>
+                          <span className="text-xs tabular-nums text-muted-foreground">{inr(it.totalAmount)}</span>
+                        </label>
+                      ))}
                     </div>
                   </div>
                 );

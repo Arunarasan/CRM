@@ -41,10 +41,65 @@ public class FileUploadController {
             "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "csv", "zip", "dwg", "dxf");
     private static final long MAX_SIZE_BYTES = 25L * 1024 * 1024;
 
+    private static final long MAX_IMAGE_PROXY_BYTES = 10L * 1024 * 1024;
+
     private final StorageService storageService;
+
+    /** Public origin of stored files on S3 / R2 (blank when files are stored on local disk). */
+    @org.springframework.beans.factory.annotation.Value("${app.storage.s3.public-base-url:}")
+    private String publicBaseUrl;
+
+    @org.springframework.beans.factory.annotation.Value("${app.upload.dir:./uploads}")
+    private String uploadDir;
+
+    private final java.net.http.HttpClient http = java.net.http.HttpClient.newBuilder()
+            .connectTimeout(java.time.Duration.ofSeconds(10))
+            .followRedirects(java.net.http.HttpClient.Redirect.NEVER)
+            .build();
 
     public FileUploadController(StorageService storageService) {
         this.storageService = storageService;
+    }
+
+    /**
+     * Hands back one of OUR stored images through the API, for pages that must read the pixels (the
+     * quotation PDF draws line photos onto a canvas) — the storage bucket doesn't send CORS headers, so
+     * the browser can't read the image directly. Only files from our own storage (the configured public
+     * bucket URL, or the local /uploads folder) and only images are served; anything else is refused.
+     */
+    @GetMapping("/image")
+    public ResponseEntity<byte[]> image(@RequestParam String url) throws IOException, InterruptedException {
+        String localPrefix = "/uploads/";
+        int at = url.indexOf(localPrefix);
+        boolean local = url.startsWith(localPrefix)
+                || (at > 0 && url.substring(0, at).matches("https?://[^/]+"));
+        byte[] bytes;
+        String contentType;
+        if (StringUtils.hasText(publicBaseUrl) && url.startsWith(publicBaseUrl.replaceAll("/+$", "") + "/")) {
+            java.net.http.HttpResponse<byte[]> res = http.send(
+                    java.net.http.HttpRequest.newBuilder(java.net.URI.create(url))
+                            .timeout(java.time.Duration.ofSeconds(20)).GET().build(),
+                    java.net.http.HttpResponse.BodyHandlers.ofByteArray());
+            if (res.statusCode() != 200) return ResponseEntity.notFound().build();
+            bytes = res.body();
+            contentType = res.headers().firstValue("Content-Type").orElse("");
+        } else if (local) {
+            String key = url.substring(at < 0 ? 0 : at).substring(localPrefix.length()).split("[?#]")[0];
+            java.nio.file.Path root = java.nio.file.Path.of(uploadDir).toAbsolutePath().normalize();
+            java.nio.file.Path file = root.resolve(key).normalize();
+            if (!file.startsWith(root) || !java.nio.file.Files.isRegularFile(file)) return ResponseEntity.notFound().build();
+            bytes = java.nio.file.Files.readAllBytes(file);
+            contentType = java.nio.file.Files.probeContentType(file);
+        } else {
+            return ResponseEntity.badRequest().build();
+        }
+        if (contentType == null || !contentType.startsWith("image/") || bytes.length > MAX_IMAGE_PROXY_BYTES) {
+            return ResponseEntity.badRequest().build();
+        }
+        return ResponseEntity.ok()
+                .contentType(org.springframework.http.MediaType.parseMediaType(contentType))
+                .cacheControl(org.springframework.http.CacheControl.maxAge(java.time.Duration.ofHours(1)).cachePrivate())
+                .body(bytes);
     }
 
     @PostMapping

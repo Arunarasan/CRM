@@ -43,6 +43,10 @@ export const boqApi = {
       taxPercent?: number | null;
       materialTotalOverride?: number | null;
       labourTotalOverride?: number | null;
+      labourCharge?: number | null;
+      labourNote?: string | null;
+      shippingCharge?: number | null;
+      shippingNote?: string | null;
     },
   ) => api.put<Boq>(`${BASE}/${id}/totals`, payload).then((r) => r.data),
   remove: (id: number) => api.delete(`${BASE}/${id}`),
@@ -170,4 +174,31 @@ export const quoteWorkspaceApi = {
   /** Change after approval: approved quotation becomes REVISED, a new editable sheet opens (next quote = new number). */
   reopen: (boqId: number) =>
     api.post<Boq>(`/quote-workspace/boq/${boqId}/reopen`).then((r) => r.data),
+
+  // ---- Quote changes on a running project (same project is updated, never a new one) ----
+  projectStatus: (projectId: number | string) =>
+    api.get<ProjectQuoteStatus>(`/quote-workspace/project/${projectId}`).then((r) => r.data),
+  /** Unlocks the project's own sheet for a customer change. */
+  startProjectChange: (projectId: number | string) =>
+    api.post<ProjectQuoteStatus>(`/quote-workspace/project/${projectId}/change`).then((r) => r.data),
+  /** Closes an open change that has no edits (refused if the sheet was changed). */
+  discardProjectChange: (projectId: number | string) =>
+    api.post<ProjectQuoteStatus>(`/quote-workspace/project/${projectId}/discard-change`).then((r) => r.data),
+  /** Customer approved the change → the project follows the new quote ({unchanged: true} if nothing was edited). */
+  approveProjectChange: (projectId: number | string) =>
+    api.post<ProjectChangeResult & { unchanged?: boolean }>(`/quote-workspace/project/${projectId}/approve-change`).then((r) => r.data),
+};
+
+export type ProjectQuoteStatus = {
+  projectId: number; projectCode?: string; boqId?: number | null; quotationId?: number | null;
+  quotationNumber?: string | null; contractValue?: number | null; changeOpen: boolean; canChange: boolean;
+};
+
+export type ProjectChangeResult = {
+  projectId: number; oldQuotationNumber?: string; newQuotationId: number; newQuotationNumber?: string;
+  oldTotal: number; newTotal: number; difference: number;
+  itemsAdded: number; itemsRemoved: number; itemsChanged: number;
+  workItemsCreated?: number; workItemsCancelled?: number;
+  supplyUpdated: number; supplyFlagged: number; milestonesRescaled: number;
+  collected: number; excessPaid: number;
 };

@@ -28,9 +28,20 @@ public class InventoryController {
     @PreAuthorize(READ)
     public ResponseEntity<Page<Product>> getProducts(
             @RequestParam(required = false) String search,
+            @RequestParam(required = false) Long categoryId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
+        if (categoryId != null) {
+            return ResponseEntity.ok(inventoryService.getProductsInCategory(categoryId, search, page, size));
+        }
         return ResponseEntity.ok(inventoryService.getProducts(search, page, size));
+    }
+
+    /** Several products by id (quote sheet: colours / photos of the products on its lines). */
+    @GetMapping("/products/lookup")
+    @PreAuthorize(READ)
+    public ResponseEntity<java.util.List<Product>> lookupProducts(@RequestParam java.util.List<Long> ids) {
+        return ResponseEntity.ok(inventoryService.getProductsByIds(ids));
     }
 
     @PostMapping("/products")

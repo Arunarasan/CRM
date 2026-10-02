@@ -148,6 +148,7 @@ export interface ProjectProgress {
 export interface ProjectModuleDashboard {
   totalProjects: number;
   runningProjects: number;
+  activeProjects?: number;
   completedProjects: number;
   delayedProjects: number;
   todaysTasks: number;

@@ -64,4 +64,17 @@ public class BoqItemMaterial extends BaseEntity {
 
     @Transient
     private Integer availableStock;
+
+    /**
+     * How much of the product this line really needs. The material line that prices a catalogue
+     * product line (item.productId == product) can be stored as a lump sum (qty 1 × the price), so its
+     * own quantity isn't the customer's — the quote line's quantity is (2 rolls, 3 panels…).
+     */
+    public BigDecimal supplyQuantity() {
+        if (item != null && item.getProductId() != null && product != null
+                && item.getProductId().equals(product.getId()) && item.getQuantity() != null) {
+            return item.getQuantity();
+        }
+        return finalQuantity != null ? finalQuantity : quantity;
+    }
 }

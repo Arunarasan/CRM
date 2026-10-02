@@ -14,4 +14,9 @@ public interface ProjectRoomItemRepository extends JpaRepository<ProjectRoomItem
 
     /** All work items in a project, walking Item -> Room -> Phase -> Project. Used by the progress dashboard. */
     List<ProjectRoomItem> findByRoomPhaseProjectId(Long projectId);
+
+    /** The project work item(s) built from a BOQ line — across every room it may have moved between. */
+    List<ProjectRoomItem> findByBoqItemId(Long boqItemId);
+
+    List<ProjectRoomItem> findByRoomPhaseProjectIdAndBoqItemId(Long projectId, Long boqItemId);
 }

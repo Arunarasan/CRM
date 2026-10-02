@@ -1,6 +1,10 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { buildQuotationTree, type Quotation, type QuotationItem } from "@/types/quotation";
+import {
+  buildCategoryBlocks, lineDiscountAmount, quoteCharges, type Quotation, type QuotationItem,
+} from "@/types/quotation";
+import api from "@/lib/api";
+import { resolveFileUrl } from "@/lib/uploadFile";
 
 // jsPDF's built-in fonts don't carry the ₹ glyph, so use "Rs." in the PDF to avoid tofu boxes.
 const money = (v?: number) =>
@@ -13,6 +17,8 @@ export interface PdfSelection {
   itemIds?: Set<number>;
   /** Include quotation-level labour / additional charges that aren't tied to an item. */
   includeExtras?: boolean;
+  /** Line photos as data URLs (from loadPdfImages); photos missing here are left out. */
+  images?: Record<string, string>;
 }
 
 export interface SelectionTotals {
@@ -87,19 +93,63 @@ export function quotationPdfUrl(quotation: Quotation, sel: PdfSelection = {}): s
 }
 
 /**
- * Builds a floor-grouped PDF of the quotation:
- * FLOOR heading → per Room table (Item, Specification, Qty, Material, Labour, Total) → Room Total →
- * Floor Total, then Floor Summary + Grand Summary + Terms. Uses the same buildQuotationTree grouping
- * as the on-screen tree so the two always match.
+ * Loads the line photos as data URLs for the PDF (jsPDF can't fetch). Photos that can't be read
+ * (blocked by the image host, missing) are simply left out. Shrunk to thumbnails to keep the PDF small.
+ */
+export async function loadPdfImages(quotation: Quotation): Promise<Record<string, string>> {
+  const urls = [...new Set((quotation.items || []).map((i) => i.imageUrl).filter((u): u is string => !!u))];
+  const out: Record<string, string> = {};
+  await Promise.all(urls.map(async (url) => {
+    try {
+      // Our own stored photos come through the API (the storage bucket sends no CORS headers, so
+      // a canvas can't read them directly); other links are tried as-is.
+      let src = resolveFileUrl(url);
+      let revoke: string | null = null;
+      try {
+        const res = await api.get(`/uploads/image`, { params: { url: src }, responseType: "blob" });
+        src = revoke = URL.createObjectURL(res.data);
+      } catch { /* not one of ours — try the link directly */ }
+      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const el = new Image();
+        el.crossOrigin = "anonymous";
+        el.onload = () => resolve(el);
+        el.onerror = reject;
+        el.src = src;
+      }).finally(() => { if (revoke) setTimeout(() => URL.revokeObjectURL(revoke!), 0); });
+      const size = 160;
+      const canvas = document.createElement("canvas");
+      canvas.width = size; canvas.height = size;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      // Centre-crop to a square, like the thumbnails on screen.
+      const s = Math.min(img.naturalWidth, img.naturalHeight);
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, size, size);
+      ctx.drawImage(img, (img.naturalWidth - s) / 2, (img.naturalHeight - s) / 2, s, s, 0, 0, size, size);
+      out[url] = canvas.toDataURL("image/jpeg", 0.8);
+    } catch { /* leave this photo out */ }
+  }));
+  return out;
+}
+
+/**
+ * Builds the quotation PDF, grouped Category → Product: a bar per category, then a table of its
+ * products (photo, name with colour / location / description, qty, rate, discount, amount) and the
+ * category total; then the summary — products total, discount, labour / shipping, GST, grand total —
+ * and the terms.
  */
 export function buildQuotationPdf(quotation: Quotation, sel: PdfSelection = {}): jsPDF {
   const totals = selectionTotals(quotation, sel);
-  const tree = buildQuotationTree(totals.items);
+  const blocks = buildCategoryBlocks(totals.items);
+  const images = sel.images || {};
+  const hasPhotos = totals.items.some((i) => i.imageUrl && images[i.imageUrl]);
+  const hasDiscounts = totals.items.some((i) => lineDiscountAmount(i) > 0);
   const doc = new jsPDF("p", "mm", "a4");
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
   const marginX = 14;
   const bottom = pageH - 16;
+  const rx = pageW - marginX;
   let y = 18;
 
   const ensure = (needed: number) => {
@@ -115,7 +165,6 @@ export function buildQuotationPdf(quotation: Quotation, sel: PdfSelection = {}):
     marginX, y + 5,
   );
   const client = quotation.customer?.name || quotation.lead?.name;
-  const rx = pageW - marginX;
   let ry = y;
   if (client) { doc.setFont("helvetica", "bold").setTextColor(15, 23, 42).text(client, rx, ry, { align: "right" }); ry += 4.5; }
   doc.setFont("helvetica", "normal").setTextColor(100, 116, 139);
@@ -123,6 +172,9 @@ export function buildQuotationPdf(quotation: Quotation, sel: PdfSelection = {}):
   if (quotation.expiryDate) { doc.text(`Valid until: ${quotation.expiryDate}`, rx, ry, { align: "right" }); }
   doc.setTextColor(0, 0, 0);
   y += 10;
+  doc.setDrawColor(30, 41, 59).setLineWidth(0.5);
+  doc.line(marginX, y, rx, y);
+  y += 6;
   if (totals.isPartial) {
     doc.setFont("helvetica", "italic").setFontSize(8.5).setTextColor(100, 116, 139);
     const scopeCount = (quotation.items || []).filter((i) => i.status !== "REJECTED").length;
@@ -131,105 +183,93 @@ export function buildQuotationPdf(quotation: Quotation, sel: PdfSelection = {}):
     y += 6;
   }
 
-  // --- Floors ---
-  for (const floor of tree.floors) {
-    ensure(18);
-    // Floor bar
+  // --- Categories ---
+  const PHOTO = 14; // mm
+  for (const block of blocks) {
+    ensure(24);
     doc.setFillColor(30, 41, 59);
     doc.rect(marginX, y, pageW - 2 * marginX, 7, "F");
     doc.setFont("helvetica", "bold").setFontSize(10).setTextColor(255, 255, 255);
-    doc.text(floor.floor.toUpperCase(), marginX + 2, y + 4.8);
-    doc.text(money(floor.total), rx - 2, y + 4.8, { align: "right" });
+    doc.text(block.category.toUpperCase(), marginX + 2, y + 4.8);
+    doc.text(money(block.total), rx - 2, y + 4.8, { align: "right" });
     doc.setTextColor(0, 0, 0);
-    y += 10;
-
-    for (const room of floor.rooms) {
-      ensure(16);
-      doc.setFont("helvetica", "bold").setFontSize(9).setTextColor(51, 65, 85);
-      doc.text(room.room, marginX, y);
-      doc.setTextColor(0, 0, 0);
-      y += 2;
-
-      const body = room.categories.flatMap((cat) =>
-        cat.items.map((it) => [
-          it.description ? `${it.itemName || ""}\n${it.description}` : it.itemName || "",
-          it.specification || it.brand || "",
-          `${it.quantity ?? ""} ${it.unit ?? ""}`.trim(),
-          money(it.materialCost),
-          money(it.labourCost),
-          money(it.totalAmount),
-        ]),
-      );
-
-      autoTable(doc, {
-        startY: y,
-        head: [["Item", "Specification", "Qty", "Material", "Labour", "Total"]],
-        body,
-        foot: [[
-          { content: `${room.room} Total`, colSpan: 5, styles: { halign: "left", fontStyle: "bold" } },
-          { content: money(room.total), styles: { halign: "right", fontStyle: "bold" } },
-        ]],
-        styles: { fontSize: 8, cellPadding: 1.4, lineColor: [226, 232, 240], lineWidth: 0.1 },
-        headStyles: { fillColor: [241, 245, 249], textColor: [71, 85, 105], fontStyle: "bold" },
-        footStyles: { fillColor: [248, 250, 252], textColor: [15, 23, 42] },
-        columnStyles: {
-          2: { halign: "right", cellWidth: 20 },
-          3: { halign: "right", cellWidth: 24 },
-          4: { halign: "right", cellWidth: 24 },
-          5: { halign: "right", cellWidth: 26 },
-        },
-        margin: { left: marginX, right: marginX },
-        theme: "grid",
-      });
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      y = (doc as any).lastAutoTable.finalY + 5;
-    }
-
-    ensure(10);
-    doc.setDrawColor(30, 41, 59).setLineWidth(0.4);
-    doc.line(marginX, y, rx, y);
-    y += 4;
-    doc.setFont("helvetica", "bold").setFontSize(9.5);
-    doc.text(`${floor.floor} Total`, marginX, y);
-    doc.text(money(floor.total), rx, y, { align: "right" });
     y += 8;
+
+    const head = ["#", ...(hasPhotos ? [""] : []), "Product", "Qty", "Rate", ...(hasDiscounts ? ["Discount"] : []), "Amount"];
+    const photoCol = hasPhotos ? 1 : -1;
+    const body = block.items.map((it, idx) => {
+      const where = it.location || it.roomName;
+      const sub = [it.color ? `Colour: ${it.color}` : "", where || ""].filter(Boolean).join(" · ");
+      const product = [it.itemName || "", sub, it.description || ""].filter(Boolean).join("\n");
+      const disc = lineDiscountAmount(it);
+      return [
+        String(idx + 1),
+        ...(hasPhotos ? [""] : []),
+        product,
+        `${it.quantity ?? ""} ${it.unit ?? ""}`.trim(),
+        money(it.rate),
+        ...(hasDiscounts ? [disc > 0 ? `- ${money(disc)}` : ""] : []),
+        money(it.totalAmount),
+      ];
+    });
+    const colCount = head.length;
+    const right = (i: number) => ({ halign: "right" as const, cellWidth: i });
+    const columnStyles: Record<number, object> = { 0: { cellWidth: 7, textColor: [148, 163, 184] } };
+    if (hasPhotos) columnStyles[photoCol] = { cellWidth: PHOTO + 2, minCellHeight: PHOTO + 2 };
+    columnStyles[colCount - 1] = right(26);
+    columnStyles[colCount - 2] = right(hasDiscounts ? 22 : 24);
+    if (hasDiscounts) columnStyles[colCount - 3] = right(24);
+    columnStyles[hasDiscounts ? colCount - 4 : colCount - 3] = right(18);
+
+    autoTable(doc, {
+      startY: y,
+      head: [head],
+      body,
+      foot: [[
+        { content: `${block.category} total`, colSpan: colCount - 1, styles: { halign: "left", fontStyle: "bold" } },
+        { content: money(block.total), styles: { halign: "right", fontStyle: "bold" } },
+      ]],
+      styles: { fontSize: 8, cellPadding: 1.4, lineColor: [226, 232, 240], lineWidth: 0.1, valign: "top" },
+      headStyles: { fillColor: [241, 245, 249], textColor: [71, 85, 105], fontStyle: "bold" },
+      footStyles: { fillColor: [248, 250, 252], textColor: [15, 23, 42] },
+      columnStyles,
+      margin: { left: marginX, right: marginX },
+      theme: "grid",
+      didDrawCell: (data) => {
+        if (data.section !== "body" || data.column.index !== photoCol) return;
+        const it = block.items[data.row.index];
+        const src = it?.imageUrl ? images[it.imageUrl] : undefined;
+        if (src) doc.addImage(src, "JPEG", data.cell.x + 1, data.cell.y + 1, PHOTO, PHOTO);
+      },
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    y = (doc as any).lastAutoTable.finalY + 6;
   }
 
-  // --- Floor Summary ---
-  ensure(14 + tree.floors.length * 6);
-  doc.setFont("helvetica", "bold").setFontSize(10).setTextColor(51, 65, 85);
-  doc.text("Floor Summary", marginX, y);
-  doc.setTextColor(0, 0, 0);
-  y += 2;
-  autoTable(doc, {
-    startY: y,
-    body: tree.floors.map((f) => [f.floor, money(f.total)]),
-    styles: { fontSize: 8.5, cellPadding: 1.4 },
-    columnStyles: { 1: { halign: "right" } },
-    margin: { left: marginX, right: marginX },
-    theme: "plain",
-  });
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  y = (doc as any).lastAutoTable.finalY + 6;
-
-  // --- Grand Summary (right aligned) ---
-  ensure(40);
-  const gLabelX = pageW - marginX - 60;
-  const line = (label: string, val: string, bold = false) => {
-    doc.setFont("helvetica", bold ? "bold" : "normal").setFontSize(bold ? 11 : 9);
+  // --- Summary (right aligned) ---
+  const charges = quoteCharges(quotation);
+  ensure(30 + (blocks.length > 1 ? blocks.length * 5 : 0) + charges.length * 5);
+  const gLabelX = pageW - marginX - 75;
+  const line = (label: string, val: string, opts: { bold?: boolean; muted?: boolean } = {}) => {
+    doc.setFont("helvetica", opts.bold ? "bold" : "normal").setFontSize(opts.bold ? 11 : opts.muted ? 8.5 : 9);
+    doc.setTextColor(opts.muted ? 100 : 15, opts.muted ? 116 : 23, opts.muted ? 139 : 42);
     doc.text(label, gLabelX, y);
     doc.text(val, rx, y, { align: "right" });
-    y += bold ? 7 : 5;
+    y += opts.bold ? 7 : 5;
   };
-  line("Material Total", money(totals.materialTotal));
-  line("Labour Total", money(totals.labourTotal));
-  line("Additional Charges", money(totals.additionalCharges));
-  line("Discount", `- ${money(totals.discount)}`);
-  line("GST", `+ ${money(totals.gst)}`);
+  if (blocks.length > 1) blocks.forEach((b) => line(b.category, money(b.total), { muted: true }));
+  const itemsTotal = totals.items.reduce((s, i) => s + n(i.totalAmount), 0);
+  line("Products total", money(itemsTotal));
+  if (totals.discount > 0) line("Discount", `- ${money(totals.discount)}`);
+  if (sel.includeExtras ?? true) {
+    charges.forEach((c) => line(c.note ? `${c.label} (${c.note})` : c.label, `+ ${money(c.amount)}`));
+  }
+  if (totals.gst > 0) line("GST", `+ ${money(totals.gst)}`);
   doc.setDrawColor(30, 41, 59).setLineWidth(0.4);
   doc.line(gLabelX, y - 1, rx, y - 1);
   y += 3;
-  line("Grand Total", money(totals.grandTotal), true);
+  line("Grand Total", money(totals.grandTotal), { bold: true });
+  doc.setTextColor(0, 0, 0);
 
   // --- Terms ---
   if (quotation.termsAndConditions) {

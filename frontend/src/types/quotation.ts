@@ -10,6 +10,11 @@ export interface QuotationItem {
   itemCode?: string;
   category?: string;
   itemName: string;
+  productId?: number | null;
+  imageUrl?: string | null;
+  location?: string | null;
+  /** Flat ₹ line discount (used when no percentage is set). */
+  discountAmount?: number | null;
   description?: string;
   unit?: string;
   quantity?: number;
@@ -66,6 +71,12 @@ export interface Quotation {
   boq?: EntityRef;
   project?: EntityRef;
   items?: QuotationItem[];
+  discounts?: { discountType?: string; description?: string; percentage?: number | null; amount?: number | null }[];
+  taxes?: { taxType?: string; percentage?: number | null; amount?: number | null; isInclusive?: boolean }[];
+  /** Quote-level labour lines (older quotes). */
+  labours?: { workType?: string; hours?: number | null; rate?: number | null; amount?: number | null }[];
+  /** Quote-level charges — the pricing sheet sends "Labour" and "Shipping" here. */
+  additionalCharges?: { chargeType?: string; amount?: number | null; description?: string | null }[];
   discount?: number;
   gst?: number;
   materialTotal?: number;
@@ -166,7 +177,7 @@ export interface QuotationTreeSummary {
   total: number;
 }
 
-const num = (v?: number) => (typeof v === "number" && !Number.isNaN(v) ? v : 0);
+const num = (v?: number | null) => (typeof v === "number" && !Number.isNaN(v) ? v : 0);
 
 /**
  * Groups quotation items into a Floor -> Room -> Category -> Item tree, preserving the BOQ ordering
@@ -219,3 +230,59 @@ export function buildQuotationTree(items: QuotationItem[] = []): QuotationTreeSu
 
   return { floors, material: gMaterial, labour: gLabour, total: gTotal };
 }
+
+// ---------------------------------------------------------------------------
+// Category → Product layout (customer view, print, PDF)
+// ---------------------------------------------------------------------------
+
+export interface QuotationCategoryBlock {
+  category: string;
+  items: QuotationItem[];
+  total: number;
+}
+
+/**
+ * Groups lines by category in the same order as the quote sheet (floor/room/item order, then id).
+ * Lines without a category land under "Others".
+ */
+export function buildCategoryBlocks(items: QuotationItem[] = []): QuotationCategoryBlock[] {
+  const order = (i: QuotationItem) => [num(i.floorOrder), num(i.roomOrder), num(i.itemOrder), num(i.id)];
+  const sorted = [...items].sort((a, b) => {
+    const x = order(a), y = order(b);
+    for (let k = 0; k < x.length; k++) if (x[k] !== y[k]) return x[k] - y[k];
+    return 0;
+  });
+  const blocks: QuotationCategoryBlock[] = [];
+  for (const it of sorted) {
+    const name = it.category?.trim() || "Others";
+    let b = blocks.find((x) => x.category.toLowerCase() === name.toLowerCase());
+    if (!b) { b = { category: name, items: [], total: 0 }; blocks.push(b); }
+    b.items.push(it);
+    b.total += num(it.totalAmount);
+  }
+  return blocks;
+}
+
+/** Price before the line discount (rate × qty). */
+export const lineGross = (it: QuotationItem) => num(it.rate) * num(it.quantity);
+
+/** The line's own discount in ₹ (percentage or flat). */
+export function lineDiscountAmount(it: QuotationItem): number {
+  const gross = lineGross(it);
+  if (num(it.discountPercentage) > 0) return Math.round(gross * num(it.discountPercentage)) / 100;
+  return Math.min(num(it.discountAmount), gross);
+}
+
+/** Labour, shipping and any other quote-level charges, as label / amount / note rows. */
+export function quoteCharges(q: Quotation): { label: string; amount: number; note?: string }[] {
+  const out: { label: string; amount: number; note?: string }[] = [];
+  const labourRows = (q.labours || []).filter((l) => num(l.amount) > 0);
+  if (labourRows.length) {
+    out.push({ label: "Labour", amount: labourRows.reduce((s, l) => s + num(l.amount), 0),
+      note: labourRows.map((l) => l.workType).filter(Boolean).join(", ") || undefined });
+  }
+  (q.additionalCharges || []).filter((c) => num(c.amount) > 0).forEach((c) =>
+    out.push({ label: c.chargeType || "Charges", amount: num(c.amount), note: c.description || undefined }));
+  return out;
+}
+

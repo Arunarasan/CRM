@@ -21,6 +21,7 @@ import { useHoverInfo, InfoRow } from "@/components/ui/hover-info";
 import BarcodeScanner from "./components/BarcodeScanner";
 import ImageCaptureField from "@/components/ImageCaptureField";
 import MultiImageCaptureField from "@/components/MultiImageCaptureField";
+import ProductColorsEditor from "./ProductColorsEditor";
 import { resolveFileUrl } from "@/lib/uploadFile";
 
 const emptyForm: Partial<Product> = { unit: INVENTORY_UNITS[0], status: "ACTIVE", minStockLevel: 10 };
@@ -118,10 +119,10 @@ function ProductInfo({ p }: { p: Product }) {
           <InfoRow label="Max stock" value={p.maxStockLevel != null ? `${p.maxStockLevel} ${p.unit}` : undefined} />
           <InfoRow label="Lead time" value={p.leadTimeDays != null ? `${p.leadTimeDays} days` : undefined} />
         </div>
-        {(p.fabricComposition || p.color || p.productType) && (
+        {(p.fabricComposition || p.color || p.colors?.length || p.productType) && (
           <div className="pt-1.5">
             <InfoRow label="Fabric" value={p.fabricComposition} />
-            <InfoRow label="Colour" value={p.color} />
+            <InfoRow label="Colour" value={p.colors?.length ? p.colors.map((c) => c.name).join(", ") : p.color} />
             <InfoRow label="Type" value={p.productType} />
           </div>
         )}
@@ -418,6 +419,16 @@ export default function MaterialMaster() {
                 label="More Photos (swatches, close-ups, room shots)"
                 value={(form.imageUrls || []).map((url) => ({ url, fileName: url.split("/").pop() || "image" }))}
                 onChange={(imgs) => setForm({ ...form, imageUrls: imgs.map((i) => i.url) })}
+              />
+            </div>
+
+            {/* ---- Colours (picked per line on quotations) ---- */}
+            <SectionHead>Colours</SectionHead>
+            <div className="col-span-2">
+              <ProductColorsEditor
+                value={form.colors}
+                photos={[form.imageUrl, ...(form.imageUrls || [])].filter((u): u is string => !!u)}
+                onChange={(colors) => setForm({ ...form, colors })}
               />
             </div>
 

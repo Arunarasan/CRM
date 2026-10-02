@@ -21,6 +21,14 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
            "LOWER(c.name) LIKE LOWER(CONCAT('%', :search, '%'))")
     Page<Product> searchProducts(@Param("search") String search, Pageable pageable);
 
+    /** Active products in a category or one of its direct sub-categories, optionally narrowed by a search. */
+    @Query("SELECT p FROM Product p LEFT JOIN p.category c LEFT JOIN c.parent pc LEFT JOIN p.subCategory sc WHERE " +
+           "(c.id = :categoryId OR pc.id = :categoryId OR sc.id = :categoryId) AND (p.status IS NULL OR p.status <> 'INACTIVE') AND " +
+           "(:search IS NULL OR LOWER(p.name) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
+           "LOWER(p.sku) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
+           "LOWER(p.brand) LIKE LOWER(CONCAT('%', :search, '%')))")
+    Page<Product> findInCategory(@Param("categoryId") Long categoryId, @Param("search") String search, Pageable pageable);
+
     java.util.Optional<Product> findFirstByMaterialCodeIgnoreCaseOrSkuIgnoreCaseOrBarcodeOrQrCode(
             String materialCode, String sku, String barcode, String qrCode);
 }

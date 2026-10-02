@@ -14,6 +14,8 @@ public interface WorkPackageItemRepository extends JpaRepository<WorkPackageItem
 
     List<WorkPackageItem> findByWorkPackageIdOrderByIdAsc(Long workPackageId);
 
+    boolean existsByBoqItem_Id(Long boqItemId);
+
     Optional<WorkPackageItem> findFirstByWorkPackageIdAndBoqItemId(Long workPackageId, Long boqItemId);
 
     /** Guards double-allocation: a BOQ item may only sit in one live work package. */

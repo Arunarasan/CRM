@@ -3,7 +3,7 @@ import api from "@/lib/api";
 import { projectApi } from "@/api/projectApi";
 import { ProjectModuleDashboard } from "@/types/project";
 import {
-  Search, Activity, AlertTriangle, ListChecks, CheckCircle2, LayoutGrid, List,
+  Search, Activity, AlertTriangle, ListChecks, LayoutGrid, List,
   Filter, Plus, MoreHorizontal, ChevronRight, ChevronLeft, FolderKanban, ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -271,8 +271,7 @@ export default function Projects() {
     label: string; value: number; icon: typeof Activity; tint: string; ring: string;
     segment?: SegmentKey; onClick?: () => void;
   }[] = [
-    { label: "Running", value: dashboard?.runningProjects ?? 0, icon: Activity, tint: "bg-emerald-500/10 text-emerald-500", ring: "ring-emerald-500", segment: "inProgress" },
-    { label: "Completed", value: dashboard?.completedProjects ?? 0, icon: CheckCircle2, tint: "bg-emerald-500/10 text-emerald-500", ring: "ring-emerald-500", segment: "completed" },
+    { label: "Active Projects", value: dashboard?.activeProjects ?? 0, icon: Activity, tint: "bg-emerald-500/10 text-emerald-500", ring: "ring-emerald-500", segment: "all" },
     { label: "Delayed", value: dashboard?.delayedProjects ?? 0, icon: AlertTriangle, tint: "bg-rose-500/10 text-rose-500", ring: "ring-rose-500", segment: "delayed" },
     { label: "Pending Tasks", value: dashboard?.pendingTasks ?? 0, icon: ListChecks, tint: "bg-amber-500/10 text-amber-500", ring: "ring-amber-500", onClick: () => navigate("/tasks") },
   ];
@@ -370,7 +369,7 @@ export default function Projects() {
       </div>
 
       {/* KPI row — tiles double as quick filters */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      <div className="grid grid-cols-3 gap-3 sm:gap-4">
         {kpis.map((kpi) => {
           const { label, value, icon: Icon, tint, ring, segment: seg } = kpi;
           const active = seg ? segment === seg : false;

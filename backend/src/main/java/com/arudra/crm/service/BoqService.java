@@ -55,6 +55,8 @@ public class BoqService {
     @Autowired private NotificationService notificationService;
     @Autowired private QuotationService quotationService;
     @Autowired private InventoryService inventoryService;
+    @Autowired private ProjectRoomItemRepository projectRoomItemRepository;
+    @Autowired private WorkPackageItemRepository workPackageItemRepository;
     // Lazy: the mirror pulls in MeasurementService, which is only needed on item edits.
     @Autowired @org.springframework.context.annotation.Lazy private BoqMeasurementMirror measurementMirror;
     @Autowired @org.springframework.context.annotation.Lazy private LiveQuoteSync liveQuoteSync;
@@ -625,11 +627,29 @@ public class BoqService {
         if (data.containsKey("labourTotalOverride")) {
             existing.setLabourTotalOverride(toBigDecimal(data.get("labourTotalOverride")));
         }
+        if (data.containsKey("labourCharge")) {
+            existing.setLabourCharge(toBigDecimal(data.get("labourCharge")));
+        }
+        if (data.containsKey("labourNote")) {
+            existing.setLabourNote(blankToNull(data.get("labourNote")));
+        }
+        if (data.containsKey("shippingCharge")) {
+            existing.setShippingCharge(toBigDecimal(data.get("shippingCharge")));
+        }
+        if (data.containsKey("shippingNote")) {
+            existing.setShippingNote(blankToNull(data.get("shippingNote")));
+        }
 
         recalculateTotals(existing);
         Boq saved = boqRepository.save(existing);
         logActivity(saved, "Updated", "BOQ totals adjusted", currentUser);
         return saved;
+    }
+
+    private static String blankToNull(Object value) {
+        if (value == null) return null;
+        String s = value.toString().trim();
+        return s.isEmpty() ? null : s;
     }
 
     /** Lenient JSON-number/string → BigDecimal; blank or null yields null (used to clear an override). */
@@ -708,6 +728,8 @@ public class BoqService {
         item.setItemCode(nextItemCode());
         if (item.getStatus() == null) item.setStatus("PENDING");
         if (item.getIsActive() == null) item.setIsActive(true);
+        if (item.getGrossAmount() == null) item.setGrossAmount(BigDecimal.ZERO);
+        if (item.getDiscountAmount() == null) item.setDiscountAmount(BigDecimal.ZERO);
         if (item.getMaterials() != null) item.getMaterials().forEach(m -> m.setItem(item));
         if (item.getLabours() != null) item.getLabours().forEach(l -> l.setItem(item));
         // Persist the item itself first. Adding a transient item to the managed BOQ and saving the BOQ
@@ -753,6 +775,12 @@ public class BoqService {
         item.setQuantity(updated.getQuantity());
         item.setUnit(updated.getUnit());
         item.setRemarks(updated.getRemarks());
+        item.setProductId(updated.getProductId());
+        item.setImageUrl(updated.getImageUrl());
+        item.setColor(updated.getColor());
+        item.setLocation(updated.getLocation());
+        item.setDiscountType(updated.getDiscountType());
+        item.setDiscountValue(updated.getDiscountValue());
         if (updated.getStatus() != null) item.setStatus(updated.getStatus());
         recalculateTotals(boq);
         boqRepository.save(boq);
@@ -770,6 +798,8 @@ public class BoqService {
     private void mirrorToMeasurement(Boq boq, BoqItem item, User currentUser) {
         if (boq.getMeasurement() == null || boq.getMeasurement().getId() == null) return;
         if (item.getMeasurementItemId() == null && item.getMeasurementRoomId() != null) return; // derived line
+        // Category → product lines have no room: nothing to measure, so they stay off the measurement.
+        if (item.getMeasurementItemId() == null && (item.getRoomName() == null || item.getRoomName().isBlank())) return;
         Long measurementId = boq.getMeasurement().getId();
         Long boqItemId = item.getId();
         Long linkedItemId = item.getMeasurementItemId();
@@ -866,6 +896,16 @@ public class BoqService {
         Boq boq = getBoqById(boqId);
         ensureEditable(boq);
         BoqItem item = getOwnedItem(boq, itemId);
+        if (isProjectSheet(boq)) {
+            ensureNotStartedOnSite(item);
+            // A contractor work package still points at this line (FK) — drop it from the quote instead.
+            if (workPackageItemRepository.existsByBoqItem_Id(item.getId())) {
+                toggleItemActive(boqId, itemId, false, "Removed in a quote change", currentUser);
+                return;
+            }
+        }
+        // Its change-history rows reference it (FK) — keep them, unlinked, or the delete fails.
+        changeLogRepository.detachItem(item.getId());
         boq.getItems().remove(item);
         recalculateTotals(boq);
         boqRepository.save(boq);
@@ -885,6 +925,7 @@ public class BoqService {
         Boq boq = getBoqById(boqId);
         ensureEditable(boq);
         BoqItem item = getOwnedItem(boq, itemId);
+        if (!active && isProjectSheet(boq)) ensureNotStartedOnSite(item);
         boolean was = Boolean.TRUE.equals(item.getIsActive());
         item.setIsActive(active);
         recalculateTotals(boq);
@@ -902,6 +943,7 @@ public class BoqService {
         List<BoqItem> affected = new ArrayList<>();
         for (BoqItem item : boq.getItems()) {
             if (item.getPhase() != null && item.getPhase().getId().equals(phaseId) && roomName.equals(item.getRoomName())) {
+                if (!active && isProjectSheet(boq)) ensureNotStartedOnSite(item);
                 item.setIsActive(active);
                 affected.add(item);
             }
@@ -1043,13 +1085,14 @@ public class BoqService {
     }
 
     private void attachStockWarning(BoqItemMaterial material) {
-        if (material.getProduct() == null || material.getFinalQuantity() == null) return;
+        BigDecimal needed = material.supplyQuantity();
+        if (material.getProduct() == null || needed == null) return;
         List<InventoryItem> stock = inventoryItemRepository.findByProductId(material.getProduct().getId());
         int available = stock.stream().mapToInt(InventoryItem::getAvailableQuantity).sum();
         material.setAvailableStock(available);
-        if (BigDecimal.valueOf(available).compareTo(material.getFinalQuantity()) < 0) {
+        if (BigDecimal.valueOf(available).compareTo(needed) < 0) {
             material.setStockWarning("Only " + available + " " + (material.getUnit() != null ? material.getUnit() : "") +
-                    " available in stock, " + material.getFinalQuantity() + " required.");
+                    " available in stock, " + needed + " required.");
         }
     }
 
@@ -1253,6 +1296,7 @@ public class BoqService {
         scheduleLiveQuoteSync(boq);
         BigDecimal boqMaterialTotal = BigDecimal.ZERO;
         BigDecimal boqLabourTotal = BigDecimal.ZERO;
+        BigDecimal lineDiscountTotal = BigDecimal.ZERO;
 
         if (boq.getItems() != null) {
             for (BoqItem item : boq.getItems()) {
@@ -1287,11 +1331,16 @@ public class BoqService {
 
                 item.setMaterialTotal(itemMaterialTotal);
                 item.setLabourTotal(itemLabourTotal);
-                item.setAmount(itemMaterialTotal.add(itemLabourTotal));
+                BigDecimal gross = itemMaterialTotal.add(itemLabourTotal);
+                BigDecimal lineDiscount = lineDiscount(item, gross);
+                item.setGrossAmount(gross);
+                item.setDiscountAmount(lineDiscount);
+                item.setAmount(gross.subtract(lineDiscount));
 
                 if (active) {
                     boqMaterialTotal = boqMaterialTotal.add(itemMaterialTotal);
                     boqLabourTotal = boqLabourTotal.add(itemLabourTotal);
+                    lineDiscountTotal = lineDiscountTotal.add(lineDiscount);
                 }
             }
         }
@@ -1305,7 +1354,8 @@ public class BoqService {
 
         boq.setMaterialTotal(effectiveMaterialTotal);
         boq.setLabourTotal(effectiveLabourTotal);
-        BigDecimal subtotal = effectiveMaterialTotal.add(effectiveLabourTotal);
+        boq.setLineDiscountTotal(lineDiscountTotal);
+        BigDecimal subtotal = effectiveMaterialTotal.add(effectiveLabourTotal).subtract(lineDiscountTotal);
         boq.setSubtotal(subtotal);
 
         BigDecimal discountInput = boq.getDiscount() != null ? boq.getDiscount() : BigDecimal.ZERO;
@@ -1318,13 +1368,29 @@ public class BoqService {
         discountAmount = discountAmount.setScale(2, RoundingMode.HALF_UP);
         boq.setDiscountAmount(discountAmount);
 
-        BigDecimal afterDiscount = subtotal.subtract(discountAmount);
+        // Labour and shipping are never discounted, but GST applies to them.
+        BigDecimal taxable = subtotal.subtract(discountAmount)
+                .add(nz(boq.getLabourCharge())).add(nz(boq.getShippingCharge()));
         BigDecimal taxPercent = boq.getTaxPercent() != null ? boq.getTaxPercent() : BigDecimal.ZERO;
-        BigDecimal taxAmount = afterDiscount.multiply(taxPercent.divide(HUNDRED, 6, RoundingMode.HALF_UP))
+        BigDecimal taxAmount = taxable.multiply(taxPercent.divide(HUNDRED, 6, RoundingMode.HALF_UP))
                 .setScale(2, RoundingMode.HALF_UP);
         boq.setTaxAmount(taxAmount);
 
-        boq.setGrandTotal(afterDiscount.add(taxAmount));
+        boq.setGrandTotal(taxable.add(taxAmount));
+    }
+
+    private static BigDecimal nz(BigDecimal v) {
+        return v != null ? v : BigDecimal.ZERO;
+    }
+
+    /** The line's own discount (PERCENT of its gross, or FLAT ₹), never more than the gross. */
+    private static BigDecimal lineDiscount(BoqItem item, BigDecimal gross) {
+        BigDecimal value = item.getDiscountValue();
+        if (value == null || value.signum() <= 0 || gross.signum() <= 0) return BigDecimal.ZERO;
+        BigDecimal d = "FLAT".equals(item.getDiscountType())
+                ? value
+                : gross.multiply(value.divide(HUNDRED, 6, RoundingMode.HALF_UP));
+        return d.min(gross).setScale(2, RoundingMode.HALF_UP);
     }
 
     // =====================================================================
@@ -1345,6 +1411,10 @@ public class BoqService {
         copy.setTaxPercent(original.getTaxPercent());
         copy.setMaterialTotalOverride(original.getMaterialTotalOverride());
         copy.setLabourTotalOverride(original.getLabourTotalOverride());
+        copy.setLabourCharge(original.getLabourCharge());
+        copy.setLabourNote(original.getLabourNote());
+        copy.setShippingCharge(original.getShippingCharge());
+        copy.setShippingNote(original.getShippingNote());
         copy.setLead(original.getLead());
         copy.setSiteVisit(original.getSiteVisit());
         copy.setLinkStatus(original.getLinkStatus());
@@ -1414,6 +1484,10 @@ public class BoqService {
         revision.setTaxPercent(original.getTaxPercent());
         revision.setMaterialTotalOverride(original.getMaterialTotalOverride());
         revision.setLabourTotalOverride(original.getLabourTotalOverride());
+        revision.setLabourCharge(original.getLabourCharge());
+        revision.setLabourNote(original.getLabourNote());
+        revision.setShippingCharge(original.getShippingCharge());
+        revision.setShippingNote(original.getShippingNote());
         revision.setBoqNumber(nextBoqNumber());
         revision.setRevisionNumber(original.getRevisionNumber() + 1);
         revision.setParentBoqId(original.getParentBoqId() != null ? original.getParentBoqId() : original.getId());
@@ -1501,6 +1575,12 @@ public class BoqService {
             clone.setUnit(item.getUnit());
             clone.setStatus("PENDING");
             clone.setRemarks(item.getRemarks());
+            clone.setProductId(item.getProductId());
+            clone.setImageUrl(item.getImageUrl());
+            clone.setColor(item.getColor());
+            clone.setLocation(item.getLocation());
+            clone.setDiscountType(item.getDiscountType());
+            clone.setDiscountValue(item.getDiscountValue());
 
             List<BoqItemMaterial> materials = new ArrayList<>();
             if (item.getMaterials() != null) {
@@ -1722,7 +1802,7 @@ public class BoqService {
     }
 
     private int reservableQuantity(BoqItemMaterial material) {
-        BigDecimal qty = material.getFinalQuantity() != null ? material.getFinalQuantity() : material.getQuantity();
+        BigDecimal qty = material.supplyQuantity();
         return qty != null ? qty.setScale(0, RoundingMode.CEILING).intValue() : 0;
     }
 
@@ -1802,12 +1882,7 @@ public class BoqService {
             qi.setDescription(item.getDescription());
             qi.setUnit(item.getUnit());
             com.arudra.crm.service.QuotationService.copyBoqStructureToQuotationItem(item, qi);
-            qi.setQuantity(item.getQuantity() != null ? item.getQuantity() : BigDecimal.ONE);
-            BigDecimal totalAmount = item.getAmount() != null ? item.getAmount() : BigDecimal.ZERO;
-            BigDecimal qty = qi.getQuantity() != null && qi.getQuantity().compareTo(BigDecimal.ZERO) != 0 ? qi.getQuantity() : BigDecimal.ONE;
-            qi.setRate(totalAmount.divide(qty, 2, RoundingMode.HALF_UP));
-            qi.setTotalAmount(totalAmount);
-            qi.setCostAmount(totalAmount);
+            QuotationService.applyBoqLinePricing(item, qi);
             qi.setBoqItemId(item.getId());
             qi.setStatus("PENDING");
             qItems.add(qi);
@@ -1999,6 +2074,85 @@ public class BoqService {
             return;
         }
         notificationService.dispatch(title, message, "BOQ", recipient.getId(), "/boq/" + boq.getId());
+    }
+
+    // =====================================================================
+    // Quote changes on a running project (change order on the project's own sheet)
+    // =====================================================================
+
+    /** True when this sheet is the one a project was built from — its edits are a change order. */
+    public boolean isProjectSheet(Boq boq) {
+        return boq != null && boq.getId() != null && projectRepository.existsByBoqId(boq.getId());
+    }
+
+    /**
+     * Work already done on site can't be taken out of the quote: the line's project work item must be
+     * untouched (0%, not started). Changing its quantity or price is still allowed.
+     */
+    private void ensureNotStartedOnSite(BoqItem item) {
+        for (ProjectRoomItem work : projectRoomItemRepository.findByBoqItemId(item.getId())) {
+            if ("CANCELLED".equalsIgnoreCase(work.getStatus())) continue;
+            int pct = work.getProgress() == null ? 0 : work.getProgress();
+            boolean started = pct > 0 || List.of("STARTED", "IN_PROGRESS", "INSPECTION", "COMPLETED", "REWORK")
+                    .contains(work.getStatus() == null ? "" : work.getStatus().toUpperCase());
+            if (started) {
+                throw new IllegalStateException("\"" + item.getItemName() + "\" is already "
+                        + (pct > 0 ? pct + "% done" : "started") + " on site, so it can't be removed. Change its quantity instead.");
+            }
+        }
+    }
+
+    /**
+     * Opens the project's approved sheet for a change, in place — the project's rooms, work items and
+     * tasks are keyed to these line ids, so a copied revision would orphan them. The approved quotation
+     * stays as it was (history); the change gets a new quotation number when it is next made.
+     */
+    @Transactional
+    public Boq unlockForProjectChange(Long boqId, User currentUser) {
+        Boq boq = getBoqById(boqId);
+        if (!"APPROVED".equals(boq.getStatus())) return boq;
+        boq.setStatus("DRAFT");
+        Boq saved = boqRepository.save(boq);
+        logActivity(saved, "Change Started", "Opened for a quote change on the running project", currentUser);
+        return saved;
+    }
+
+    /**
+     * Locks the sheet again once the customer approves the change. Unlike {@link #approveBoq} this does
+     * not reserve every material again (the project already holds them) or re-run the lead workflow.
+     */
+    @Transactional
+    public Boq approveProjectChange(Long boqId, User currentUser) {
+        Boq boq = getBoqById(boqId);
+        boq.setStatus("APPROVED");
+        boq.setApprovedBy(currentUser);
+        boq.setApprovedDate(LocalDateTime.now());
+        for (BoqItem item : boq.getItems()) {
+            item.setStatus(Boolean.FALSE.equals(item.getIsActive()) ? "PENDING" : "EXECUTED");
+        }
+        Boq saved = boqRepository.save(boq);
+        logActivity(saved, "Change Approved", "Customer approved the quote change", currentUser);
+        return saved;
+    }
+
+    /** A change was discarded with nothing edited: the sheet locks again and points back at the project's quote. */
+    @Transactional
+    public Boq relockProjectSheet(Long boqId, Quotation projectQuote, User currentUser) {
+        Boq boq = getBoqById(boqId);
+        boq.setStatus("APPROVED");
+        for (BoqItem item : boq.getItems()) {
+            item.setStatus(Boolean.FALSE.equals(item.getIsActive()) ? "PENDING" : "EXECUTED");
+        }
+        boq.setQuotation(projectQuote);
+        Boq saved = boqRepository.save(boq);
+        logActivity(saved, "Change Discarded", "Quote change closed without changes", currentUser);
+        return saved;
+    }
+
+    /** The change order's quotation: built from the sheet like a live quote, without lead-workflow side effects. */
+    @Transactional
+    public Quotation createChangeQuotation(Long boqId, User currentUser) {
+        return buildQuotation(getBoqById(boqId), "FULL_HOUSE", null, null, currentUser);
     }
 
     /**

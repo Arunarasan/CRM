@@ -61,7 +61,7 @@ public class QuoteProductLinker {
             List<BoqItemMaterial> materials = boqItem != null ? boqItem.getMaterials() : List.of();
             boolean anyMaterialLine = false;
             for (BoqItemMaterial m : materials) {
-                BigDecimal qty = m.getFinalQuantity() != null ? m.getFinalQuantity() : m.getQuantity();
+                BigDecimal qty = m.supplyQuantity();
                 if (qty == null || qty.signum() <= 0) continue;
                 if (m.getProduct() != null) {
                     anyMaterialLine = true;
@@ -74,6 +74,15 @@ public class QuoteProductLinker {
                 out.add(new Line(q.getBoqItemId(), m.getMaterialName().trim(), p, qty, m.getUnit() != null ? m.getUnit() : q.getUnit(), p != null));
             }
             if (anyMaterialLine) continue;
+
+            // Picked from the catalogue on the sheet: no guessing needed.
+            Long pickedId = q.getProductId() != null ? q.getProductId() : (boqItem != null ? boqItem.getProductId() : null);
+            Product picked = pickedId != null ? productRepository.findById(pickedId).orElse(null) : null;
+            BigDecimal pickedQty = q.getQuantity() != null ? q.getQuantity() : (boqItem != null ? boqItem.getQuantity() : null);
+            if (picked != null && pickedQty != null && pickedQty.signum() > 0) {
+                out.add(new Line(q.getBoqItemId(), q.getItemName(), picked, pickedQty, q.getUnit(), true));
+                continue;
+            }
 
             // No material breakdown: the quote line itself is the product (curtains, blinds, wallpaper…).
             BigDecimal qty = q.getQuantity() != null ? q.getQuantity() : (boqItem != null ? boqItem.getQuantity() : null);

@@ -45,6 +45,8 @@ export interface SupplyRow {
   productId: number;
   productName: string;
   productCode?: string | null;
+  /** Colours the quote asks for, e.g. "Gold ×2 · Teal ×3" (also written on the purchase order). */
+  colors?: string | null;
   imageUrl?: string | null;
   unit?: string | null;
   phaseName?: string | null;

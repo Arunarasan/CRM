@@ -1,0 +1,464 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Camera, ImageIcon, ImagePlus, Loader2, Plus, Search, Trash2, X } from "lucide-react";
+import api from "@/lib/api";
+import { resolveFileUrl, uploadFile } from "@/lib/uploadFile";
+import { compressImageFile } from "@/lib/imageProcessing";
+import { inventoryApi } from "@/api/inventoryApi";
+import { toast } from "@/components/ui/toast";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import type { InventoryCategory, Product, ProductColor } from "@/types/inventory";
+import { NumCell } from "./cells";
+
+// Building blocks for the Category → Product quote sheet: the category picker, the catalogue product
+// picker, and the per-line photo / colour / discount cells.
+
+const inr = (v?: number | null) =>
+  "₹" + Number(v ?? 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
+
+const norm = (s?: string | null) => (s ?? "").trim().toLowerCase();
+
+// ---------------------------------------------------------------------------
+// Catalogue data
+// ---------------------------------------------------------------------------
+
+let categoriesCache: Promise<InventoryCategory[]> | null = null;
+
+/** Saved inventory categories (loaded once per page visit) + a name → category lookup. */
+export function useCategories() {
+  const [list, setList] = useState<InventoryCategory[]>([]);
+  useEffect(() => {
+    categoriesCache ??= inventoryApi.getCategories().catch(() => { categoriesCache = null; return []; });
+    let alive = true;
+    categoriesCache.then((c) => alive && setList(c));
+    return () => { alive = false; };
+  }, []);
+  const byName = useMemo(() => {
+    const m = new Map<string, InventoryCategory>();
+    list.forEach((c) => m.set(norm(c.name), c));
+    return m;
+  }, [list]);
+  const add = (c: InventoryCategory) => {
+    setList((l) => [...l, c]);
+    categoriesCache = Promise.resolve([...list, c]);
+  };
+  return { list, byName, add };
+}
+
+/** The catalogue products behind the sheet's lines — for their colour options and photos. */
+export function useLineProducts(ids: number[]) {
+  const [map, setMap] = useState<Record<number, Product>>({});
+  const key = [...new Set(ids)].sort((a, b) => a - b).join(",");
+  useEffect(() => {
+    const missing = key ? key.split(",").map(Number).filter((id) => !map[id]) : [];
+    if (missing.length === 0) return;
+    api.get<Product[]>(`/inventory/products/lookup?ids=${missing.join(",")}`)
+      .then((r) => setMap((m) => { const n = { ...m }; r.data.forEach((p) => { n[p.id] = p; }); return n; }))
+      .catch(() => { /* colours just fall back to free text */ });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  const remember = (p: Product) => setMap((m) => ({ ...m, [p.id]: p }));
+  return { products: map, remember };
+}
+
+/** A product's colour options; an older product with only a single colour offers that one. */
+export function colorsOf(p?: Product): ProductColor[] {
+  if (!p) return [];
+  if (p.colors && p.colors.length) return p.colors;
+  return p.color ? [{ name: p.color }] : [];
+}
+
+/** Every photo of a product: main, gallery and colour photos (deduped). */
+export function photosOf(p?: Product): string[] {
+  if (!p) return [];
+  const all = [p.imageUrl, ...(p.imageUrls || []), ...colorsOf(p).map((c) => c.imageUrl)];
+  return [...new Set(all.filter((u): u is string => !!u))];
+}
+
+/** A short spec line used as the default description of a picked product. */
+export function productSummary(p: Product): string | undefined {
+  const parts = [p.brand, p.fabricComposition, p.pattern, p.fabricWidth && `${p.fabricWidth} wide`].filter(Boolean);
+  return parts.length ? parts.join(" · ") : undefined;
+}
+
+export const priceOf = (p: Product) => Number(p.sellingPrice ?? p.price ?? 0);
+
+// ---------------------------------------------------------------------------
+// Add a category: a saved one, or a custom name (optionally saved to the catalogue)
+// ---------------------------------------------------------------------------
+
+const CATEGORY_LIST = "quote-category-names";
+
+export function AddCategoryBar({ categories, used, onAdd, onSaveCategory }: {
+  categories: InventoryCategory[];
+  /** Category names already on the sheet (not offered again). */
+  used: string[];
+  onAdd: (name: string) => void;
+  onSaveCategory: (c: InventoryCategory) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [saveToCatalog, setSaveToCatalog] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const usedSet = new Set(used.map(norm));
+  const options = categories.filter((c) => !usedSet.has(norm(c.name)));
+  const saved = categories.find((c) => norm(c.name) === norm(name));
+  const already = usedSet.has(norm(name));
+
+  const submit = async (picked?: string) => {
+    const n = (picked ?? name).trim();
+    if (!n) return;
+    if (usedSet.has(norm(n))) { toast.error(`"${n}" is already on the quote.`); return; }
+    const match = categories.find((c) => norm(c.name) === norm(n));
+    if (!match && saveToCatalog) {
+      setBusy(true);
+      try {
+        onSaveCategory(await inventoryApi.createCategory({ name: n }));
+      } catch {
+        toast.error("Couldn't save the category to the catalogue — added to this quote only.");
+      } finally {
+        setBusy(false);
+      }
+    }
+    onAdd(match?.name ?? n);
+    setName("");
+    setOpen(false);
+  };
+
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)}
+        className="w-full rounded-xl border border-dashed p-3 text-sm font-medium text-primary hover:bg-primary/[0.04] flex items-center justify-center gap-1.5">
+        <Plus className="h-4 w-4" /> Add category
+      </button>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-dashed p-3 space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm font-medium">New category</span>
+        <Input autoFocus list={CATEGORY_LIST} placeholder="Pick a saved category or type a new name" className="h-9 flex-1 min-w-[14rem]"
+          value={name} onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") submit(); if (e.key === "Escape") setOpen(false); }} />
+        <datalist id={CATEGORY_LIST}>
+          {options.map((c) => <option key={c.id} value={c.name}>{c.parent?.name ? `in ${c.parent.name}` : ""}</option>)}
+        </datalist>
+        <Button size="sm" disabled={!name.trim() || already || busy} onClick={() => submit()}>
+          {busy && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />} Add
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
+      </div>
+      {name.trim() && !saved && !already && (
+        <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
+          <input type="checkbox" className="h-3.5 w-3.5 accent-primary" checked={saveToCatalog} onChange={(e) => setSaveToCatalog(e.target.checked)} />
+          New category — also save it to the catalogue so it can be picked next time
+        </label>
+      )}
+      {options.length > 0 && !name.trim() && (
+        <div className="flex flex-wrap gap-1.5">
+          {options.slice(0, 16).map((c) => (
+            <button key={c.id} type="button" onClick={() => submit(c.name)}
+              className="rounded-full border bg-background px-3 py-1 text-xs hover:border-primary hover:text-primary">
+              {c.name}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Add a product to a category: catalogue search (that category first), or a custom product
+// ---------------------------------------------------------------------------
+
+export function ProductPicker({ categoryId, categoryName, onPick, onCustom }: {
+  categoryId?: number;
+  categoryName: string;
+  onPick: (p: Product) => void;
+  onCustom: (name: string) => void;
+}) {
+  const [q, setQ] = useState("");
+  const [open, setOpen] = useState(false);
+  const [results, setResults] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [active, setActive] = useState(-1);
+  const boxRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const search = q.trim();
+    if (!categoryId && !search) { setResults([]); return; }
+    const t = setTimeout(() => {
+      setLoading(true);
+      const params = new URLSearchParams({ size: "20" });
+      if (categoryId) params.set("categoryId", String(categoryId));
+      if (search) params.set("search", search);
+      api.get(`/inventory/products?${params}`)
+        .then((res) => { setResults(res.data.content || []); setActive(-1); })
+        .catch(() => setResults([]))
+        .finally(() => setLoading(false));
+    }, search ? 250 : 0);
+    return () => clearTimeout(t);
+  }, [q, open, categoryId]);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => { if (!boxRef.current?.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [open]);
+
+  const pick = (p: Product) => { onPick(p); setQ(""); setOpen(false); };
+  const custom = () => { if (q.trim()) { onCustom(q.trim()); setQ(""); setOpen(false); } };
+
+  return (
+    <div ref={boxRef} className="relative flex-1 min-w-0">
+      <div className="relative">
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          className="h-9 pl-8"
+          placeholder={`Add a product to ${categoryName} — search, or type a custom name and press Enter`}
+          value={q}
+          onFocus={() => setOpen(true)}
+          onChange={(e) => { setQ(e.target.value); setOpen(true); }}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowDown") { e.preventDefault(); setActive((a) => Math.min(a + 1, results.length - 1)); }
+            else if (e.key === "ArrowUp") { e.preventDefault(); setActive((a) => Math.max(a - 1, -1)); }
+            else if (e.key === "Enter") {
+              e.preventDefault();
+              if (active >= 0 && results[active]) pick(results[active]); else custom();
+            } else if (e.key === "Escape") setOpen(false);
+          }}
+        />
+      </div>
+      {open && (loading || results.length > 0 || q.trim()) && (
+        <div className="absolute z-30 mt-1 w-full max-h-80 overflow-auto rounded-md border bg-popover shadow-lg">
+          {loading && results.length === 0 && (
+            <div className="px-3 py-2 text-xs text-muted-foreground flex items-center gap-1.5"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading products…</div>
+          )}
+          {results.map((p, i) => (
+            <button key={p.id} type="button" onMouseDown={(e) => { e.preventDefault(); pick(p); }}
+              className={`w-full text-left px-2 py-1.5 text-sm flex items-center gap-2.5 hover:bg-muted ${i === active ? "bg-muted" : ""}`}>
+              <Thumb url={photosOf(p)[0]} size="h-9 w-9" />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-medium">{p.name}</span>
+                <span className="block truncate text-xs text-muted-foreground">
+                  {[p.brand, colorsOf(p).length > 1 ? `${colorsOf(p).length} colours` : colorsOf(p)[0]?.name].filter(Boolean).join(" · ") || " "}
+                </span>
+              </span>
+              <span className="text-xs text-muted-foreground shrink-0 tabular-nums">
+                {priceOf(p) ? inr(priceOf(p)) : "—"}{p.unit ? ` / ${p.unit}` : ""}
+              </span>
+            </button>
+          ))}
+          {!loading && results.length === 0 && categoryId && !q.trim() && (
+            <div className="px-3 py-2 text-xs text-muted-foreground">No products saved in {categoryName} yet — type a name to add a custom one.</div>
+          )}
+          {q.trim() && (
+            <button type="button" onMouseDown={(e) => { e.preventDefault(); custom(); }}
+              className="w-full text-left px-3 py-2 text-sm border-t hover:bg-muted flex items-center gap-1.5 text-primary">
+              <Plus className="h-4 w-4" /> Add “{q.trim()}” as a custom product
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Per-line cells
+// ---------------------------------------------------------------------------
+
+export function Thumb({ url, size = "h-11 w-11" }: { url?: string | null; size?: string }) {
+  const [broken, setBroken] = useState(false);
+  useEffect(() => setBroken(false), [url]);
+  return url && !broken ? (
+    <img src={resolveFileUrl(url)} alt="" onError={() => setBroken(true)}
+      className={`${size} shrink-0 rounded-md border object-cover bg-muted`} />
+  ) : (
+    <span className={`${size} shrink-0 rounded-md border bg-muted/60 flex items-center justify-center`}>
+      <ImageIcon className="h-4 w-4 text-muted-foreground/60" />
+    </span>
+  );
+}
+
+/**
+ * The line's photo, chosen while making the quote: take one with the camera, pick one from the
+ * gallery, use one of the product's own photos, or remove it. Photos are shrunk before upload.
+ */
+export function ImageCell({ url, options, disabled, onChange, module = "QUOTATION" }: {
+  url?: string | null;
+  options: string[];
+  disabled: boolean;
+  onChange: (url: string | null) => void;
+  /** Upload folder on the server. */
+  module?: string;
+}) {
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const galleryRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(false);
+  const upload = async (file?: File) => {
+    if (!file) return;
+    setBusy(true);
+    try {
+      const small = await compressImageFile(file, { maxDimension: 1200, quality: 0.8 });
+      onChange((await uploadFile(small, module)).fileUrl);
+    } catch {
+      toast.error("Couldn't upload the photo.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const onFile = (e: React.ChangeEvent<HTMLInputElement>) => { upload(e.target.files?.[0]); e.target.value = ""; };
+  if (disabled) return <Thumb url={url} />;
+  return (
+    <>
+      {/* capture opens the rear camera straight away on phones; the other input opens the gallery */}
+      <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onFile} />
+      <input ref={galleryRef} type="file" accept="image/*" className="hidden" onChange={onFile} />
+      <DropdownMenu open={open} onOpenChange={setOpen}>
+        <DropdownMenuTrigger asChild>
+          <button type="button" className="relative rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30"
+            title={url ? "Change photo" : "Add photo"} aria-label={url ? "Change photo" : "Add photo"}>
+            <Thumb url={url} />
+            {!url && !busy && (
+              <span className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full bg-primary text-primary-foreground flex items-center justify-center">
+                <Plus className="h-3 w-3" />
+              </span>
+            )}
+            {busy && <span className="absolute inset-0 flex items-center justify-center bg-background/70 rounded-md"><Loader2 className="h-4 w-4 animate-spin" /></span>}
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-64 p-2 space-y-2">
+          <div className="grid grid-cols-2 gap-1.5">
+            <Button size="sm" variant="outline" onClick={() => { setOpen(false); cameraRef.current?.click(); }}>
+              <Camera className="h-3.5 w-3.5 mr-1" /> Take photo
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => { setOpen(false); galleryRef.current?.click(); }}>
+              <ImagePlus className="h-3.5 w-3.5 mr-1" /> Gallery
+            </Button>
+          </div>
+          {options.length > 0 && (
+            <>
+              <p className="px-0.5 text-[11px] text-muted-foreground">Product photos</p>
+              <div className="grid grid-cols-4 gap-1.5">
+                {options.map((o) => (
+                  <button key={o} type="button" onClick={() => { setOpen(false); onChange(o); }}
+                    className={`rounded-md ${o === url ? "ring-2 ring-primary" : ""}`}>
+                    <Thumb url={o} size="h-12 w-12" />
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+          {url && (
+            <Button size="sm" variant="ghost" className="w-full text-destructive" onClick={() => { setOpen(false); onChange(null); }}>
+              <Trash2 className="h-3.5 w-3.5 mr-1" /> Remove photo
+            </Button>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </>
+  );
+}
+
+/** Colour: one of the product's colours (with swatch), or any custom text. */
+export function ColorCell({ value, colors, disabled, onChange }: {
+  value?: string | null;
+  colors: ProductColor[];
+  disabled: boolean;
+  onChange: (name: string | null, color?: ProductColor) => void;
+}) {
+  const known = colors.find((c) => norm(c.name) === norm(value));
+  const [custom, setCustom] = useState(false);
+  const [draft, setDraft] = useState(value ?? "");
+  useEffect(() => setDraft(value ?? ""), [value]);
+  const swatch = known?.hex;
+
+  if (disabled) {
+    return value ? (
+      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+        {swatch && <Swatch hex={swatch} />}{value}
+      </span>
+    ) : null;
+  }
+
+  if (colors.length > 0 && !custom && (!value || known)) {
+    return (
+      <span className="inline-flex items-center gap-1">
+        {swatch && <Swatch hex={swatch} />}
+        <select value={known?.name ?? ""} aria-label="Colour"
+          className="h-7 rounded-md border border-border bg-background px-1.5 text-xs max-w-[10rem]"
+          onChange={(e) => {
+            if (e.target.value === "__custom") { setCustom(true); return; }
+            const c = colors.find((x) => x.name === e.target.value);
+            onChange(c?.name ?? null, c);
+          }}>
+          <option value="">Colour…</option>
+          {colors.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
+          <option value="__custom">Other colour…</option>
+        </select>
+      </span>
+    );
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1">
+      <input value={draft} placeholder="Colour" aria-label="Colour"
+        className="h-7 w-32 rounded-md border border-border bg-background px-2 text-xs outline-none focus:border-primary"
+        autoFocus={custom}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => { setCustom(false); if (draft.trim() !== (value ?? "")) onChange(draft.trim() || null); }}
+        onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") { setDraft(value ?? ""); setCustom(false); } }} />
+      {colors.length > 0 && value && !known && (
+        <button type="button" className="text-muted-foreground hover:text-foreground" aria-label="Pick from colours"
+          onClick={() => onChange(null)}><X className="h-3.5 w-3.5" /></button>
+      )}
+    </span>
+  );
+}
+
+const Swatch = ({ hex }: { hex: string }) => (
+  <span className="h-3.5 w-3.5 shrink-0 rounded-full border" style={{ background: hex }} />
+);
+
+/** Optional line discount: hidden behind "+ Discount" until used; % or ₹. */
+export function DiscountCell({ type, value, amount, disabled, onChange }: {
+  type?: "PERCENT" | "FLAT" | null;
+  value?: number | null;
+  amount?: number | null;
+  disabled: boolean;
+  onChange: (type: "PERCENT" | "FLAT" | null, value: number | null) => void;
+}) {
+  const has = value != null && Number(value) > 0;
+  const [editing, setEditing] = useState(false);
+  const flat = type === "FLAT";
+  if (disabled) {
+    return has ? <span className="block text-right text-xs text-emerald-700 tabular-nums">−{inr(amount)}{!flat && ` (${value}%)`}</span> : <span className="block text-right text-xs text-muted-foreground">—</span>;
+  }
+  if (!has && !editing) {
+    return (
+      <button type="button" onClick={() => setEditing(true)}
+        className="w-full h-8 text-right text-xs text-muted-foreground hover:text-primary">+ Discount</button>
+    );
+  }
+  return (
+    <div className="space-y-0.5">
+      <div className="flex items-center gap-1">
+        <button type="button" title="Switch % / ₹"
+          onClick={() => onChange(flat ? "PERCENT" : "FLAT", has ? value ?? null : null)}
+          className="h-8 w-7 shrink-0 rounded-md border border-border bg-background text-xs font-semibold">
+          {flat ? "₹" : "%"}
+        </button>
+        <NumCell value={has ? value : null} placeholder="0" className="!border-border !bg-background"
+          onCommit={(v) => { setEditing(false); onChange(v && v > 0 ? (type ?? "PERCENT") : null, v && v > 0 ? v : null); }} />
+      </div>
+      {has && <span className="block text-right text-[11px] text-emerald-700 tabular-nums">−{inr(amount)}</span>}
+    </div>
+  );
+}

@@ -1569,6 +1569,9 @@ public class ProjectService {
         long total = allProjects.size();
         long running = allProjects.stream().filter(p -> "RUNNING".equalsIgnoreCase(p.getStatus())).count();
         long completed = allProjects.stream().filter(p -> "COMPLETED".equalsIgnoreCase(p.getStatus())).count();
+        long active = allProjects.stream()
+                .filter(p -> p.getStatus() == null || !java.util.Set.of("COMPLETED", "CLOSED", "CANCELLED").contains(p.getStatus().toUpperCase()))
+                .count();
         long delayed = allProjects.stream()
                 .filter(p -> p.getEndDate() != null && p.getEndDate().isBefore(today)
                         && !"COMPLETED".equalsIgnoreCase(p.getStatus()) && !"CANCELLED".equalsIgnoreCase(p.getStatus()))
@@ -1593,6 +1596,7 @@ public class ProjectService {
         Map<String, Object> dashboard = new java.util.LinkedHashMap<>();
         dashboard.put("totalProjects", total);
         dashboard.put("runningProjects", running);
+        dashboard.put("activeProjects", active);
         dashboard.put("completedProjects", completed);
         dashboard.put("delayedProjects", delayed);
         dashboard.put("todaysTasks", todaysTasks);
@@ -1849,6 +1853,12 @@ public class ProjectService {
      */
     @Transactional
     public void seedExecutionChecklist(Long projectId) {
+        seedExecutionChecklist(projectId, false);
+    }
+
+    /** {@code refresh=true} (a quote change) updates an existing checklist instead of leaving it alone. */
+    @Transactional
+    public void seedExecutionChecklist(Long projectId, boolean refresh) {
         Task exec = findExecutionTask(projectId);
         if (exec == null) return;
         Boq boq = exec.getProject() != null ? exec.getProject().getBoq() : null;
@@ -1867,7 +1877,8 @@ public class ProjectService {
             if (!loc.isBlank()) sb.append(" (").append(loc).append(')');
             lines.add(sb.toString());
         }
-        if (!lines.isEmpty()) taskChecklistService.seedNamedChecklist(exec, WORK_ITEMS_CHECKLIST, lines);
+        if (refresh) taskChecklistService.syncNamedChecklist(exec, WORK_ITEMS_CHECKLIST, lines);
+        else if (!lines.isEmpty()) taskChecklistService.seedNamedChecklist(exec, WORK_ITEMS_CHECKLIST, lines);
     }
 
     /**
@@ -2005,6 +2016,18 @@ public class ProjectService {
             reconcilePhaseBucket(project, null, unphased, counters, generateTasks);
         }
 
+        // Work items whose sheet line was deleted outright no longer count either.
+        java.util.Set<Long> sheetLineIds = new java.util.HashSet<>();
+        allItems.forEach(i -> sheetLineIds.add(i.getId()));
+        for (ProjectRoomItem work : roomItemRepository.findByRoomPhaseProjectId(projectId)) {
+            if (work.getBoqItemId() == null || sheetLineIds.contains(work.getBoqItemId())
+                    || "CANCELLED".equalsIgnoreCase(work.getStatus())) continue;
+            if (boqItemRepository.existsById(work.getBoqItemId())) continue; // a line of another sheet — leave it
+            work.setStatus("CANCELLED");
+            roomItemRepository.save(work);
+            counters.itemsCancelled++;
+        }
+
         // Newly generated items start at 0% — recompute every room so stale room/phase/project
         // percentages settle to the real rollup (a full pass here, incremental everywhere else).
         for (ProjectRoom room : roomRepository.findByPhaseProjectId(projectId)) {
@@ -2019,14 +2042,24 @@ public class ProjectService {
         result.put("tasksReactivated", counters.tasksReactivated);
         result.put("materialsCreated", counters.materialsCreated);
         result.put("materialsReleased", counters.materialsReleased);
+        result.put("itemsCreated", counters.itemsCreated);
+        result.put("itemsCancelled", counters.itemsCancelled);
         return result;
+    }
+
+    /** Supply-list rows that came from matching quote lines to products, not from BOQ material lines. */
+    public static boolean isQuoteLinkedRequirement(ProjectMaterialRequirement r) {
+        String remarks = r.getRemarks();
+        return remarks != null && (remarks.startsWith("Auto-linked from quote") || remarks.startsWith("Linked from quote")
+                || remarks.startsWith("Added by quote change"));
     }
 
     /** Name of the auto-created project phase that holds BOQ items not assigned to any BOQ phase. */
     private static final String DEFAULT_PHASE_NAME = "General Works";
 
     private static class Counters {
-        int phasesCreated, roomsCreated, tasksCreated, tasksCancelled, tasksReactivated, materialsCreated, materialsReleased;
+        int phasesCreated, roomsCreated, tasksCreated, tasksCancelled, tasksReactivated, materialsCreated, materialsReleased,
+                itemsCreated, itemsCancelled;
     }
 
     /** Reconciles one phase bucket: a real BoqPhase, or (boqPhase == null) the default bucket for unphased items.
@@ -2072,6 +2105,14 @@ public class ProjectService {
                 boolean itemActive = phaseActive && !Boolean.FALSE.equals(boqItem.getIsActive());
 
                 if (!itemActive) {
+                    // Out of the quote: its work item stops counting toward progress (kept, for history).
+                    for (ProjectRoomItem dropped : roomItemRepository.findByRoomPhaseProjectIdAndBoqItemId(project.getId(), boqItem.getId())) {
+                        if (!"CANCELLED".equalsIgnoreCase(dropped.getStatus())) {
+                            dropped.setStatus("CANCELLED");
+                            roomItemRepository.save(dropped);
+                            counters.itemsCancelled++;
+                        }
+                    }
                     if (generateTasks) {
                         Task existingTask = taskRepository.findByGeneratedFromBoqItemId(boqItem.getId()).orElse(null);
                         if (existingTask != null && !"CANCELLED".equals(existingTask.getStatus())) {
@@ -2088,7 +2129,9 @@ public class ProjectService {
                     continue;
                 }
 
-                String roomName = boqItem.getRoomName() != null ? boqItem.getRoomName() : "General";
+                // Category → product quotes have no rooms: their category becomes the work area.
+                String roomName = notBlank(boqItem.getRoomName()) ? boqItem.getRoomName()
+                        : notBlank(boqItem.getCategory()) ? boqItem.getCategory() : "General";
                 ProjectRoom room = roomRepository.findByPhaseIdAndRoomName(phase.getId(), roomName).orElse(null);
                 if (room == null) {
                     room = new ProjectRoom();
@@ -2112,11 +2155,21 @@ public class ProjectService {
                 }
                 room = roomRepository.save(room);
 
-                ProjectRoomItem roomItem = roomItemRepository.findByRoomIdAndBoqItemId(room.getId(), boqItem.getId()).orElse(null);
+                // Looked up across the whole project, so a line moved to another room on the sheet moves
+                // its work item (and its progress) instead of leaving it behind and adding a duplicate.
+                ProjectRoomItem roomItem = roomItemRepository.findByRoomPhaseProjectIdAndBoqItemId(project.getId(), boqItem.getId())
+                        .stream().findFirst().orElse(null);
                 if (roomItem == null) {
                     roomItem = new ProjectRoomItem();
                     roomItem.setRoom(room);
                     roomItem.setBoqItemId(boqItem.getId());
+                    counters.itemsCreated++;
+                } else if (!roomItem.getRoom().getId().equals(room.getId())) {
+                    roomItem.setRoom(room);
+                }
+                if ("CANCELLED".equalsIgnoreCase(roomItem.getStatus())) {
+                    int pct = roomItem.getProgress() == null ? 0 : roomItem.getProgress();
+                    roomItem.setStatus(pct >= 100 ? "COMPLETED" : pct > 0 ? "IN_PROGRESS" : "PENDING");
                 }
                 roomItem.setItemType(boqItem.getCategory() != null ? boqItem.getCategory().toUpperCase() : "CUSTOM");
                 roomItem.setItemName(boqItem.getItemName());
@@ -2160,7 +2213,7 @@ public class ProjectService {
 
                 for (BoqItemMaterial material : boqItemMaterialRepository.findByItemId(boqItem.getId())) {
                     if (material.getProduct() == null) continue;
-                    BigDecimal qty = material.getFinalQuantity() != null ? material.getFinalQuantity() : BigDecimal.ZERO;
+                    BigDecimal qty = material.supplyQuantity() != null ? material.supplyQuantity() : BigDecimal.ZERO;
                     requiredByProduct.merge(material.getProduct().getId(), qty, BigDecimal::add);
                     unitByProduct.putIfAbsent(material.getProduct().getId(), material.getUnit());
                     productByProductId.putIfAbsent(material.getProduct().getId(), material.getProduct());
@@ -2178,8 +2231,11 @@ public class ProjectService {
                             || (defaultBucket && r.getPhase() == null))
                     .toList();
             for (ProjectMaterialRequirement requirement : existingRequirements) {
-                requirement.setPhase(finalPhase);
                 Long productId = requirement.getProduct().getId();
+                // Rows linked from the quote lines by name (Supply & Install) aren't BOQ materials — this
+                // recompute would zero them. They are kept up to date by quote changes instead.
+                if (!requiredByProduct.containsKey(productId) && isQuoteLinkedRequirement(requirement)) continue;
+                requirement.setPhase(finalPhase);
                 BigDecimal previousRequired = requirement.getRequiredQty() != null ? requirement.getRequiredQty() : BigDecimal.ZERO;
                 BigDecimal newRequired = requiredByProduct.remove(productId);
                 if (newRequired == null) newRequired = BigDecimal.ZERO;
@@ -2287,5 +2343,9 @@ public class ProjectService {
         stats.put("siteVisitsToday", visitsToday.size());
         
         return stats;
+    }
+
+    private static boolean notBlank(String s) {
+        return s != null && !s.isBlank();
     }
 }

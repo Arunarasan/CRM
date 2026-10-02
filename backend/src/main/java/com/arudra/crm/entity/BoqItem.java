@@ -42,6 +42,20 @@ public class BoqItem extends BaseEntity {
     @Column(name = "item_name", nullable = false, length = 255)
     private String itemName;
 
+    /** Catalogue product this line sells (null for a custom line). Plain id; FK in V109. */
+    @Column(name = "product_id")
+    private Long productId;
+
+    @Column(name = "image_url", length = 1000)
+    private String imageUrl;
+
+    @Column(length = 100)
+    private String color;
+
+    /** Optional free-text note of where it goes ("Hall window") — not a grouping level. */
+    @Column(length = 150)
+    private String location;
+
     @Column(columnDefinition = "TEXT")
     private String description;
 
@@ -115,8 +129,22 @@ public class BoqItem extends BaseEntity {
     @Column(name = "labour_total", precision = 15, scale = 2)
     private BigDecimal labourTotal = BigDecimal.ZERO;
 
+    /** materialTotal + labourTotal, before the line discount. */
+    @Column(name = "gross_amount", nullable = false, precision = 15, scale = 2)
+    private BigDecimal grossAmount = BigDecimal.ZERO;
+
+    /** Optional line discount: PERCENT or FLAT (null = none), and its raw input. */
+    @Column(name = "discount_type", length = 10)
+    private String discountType;
+
+    @Column(name = "discount_value", precision = 15, scale = 2)
+    private BigDecimal discountValue;
+
+    @Column(name = "discount_amount", nullable = false, precision = 15, scale = 2)
+    private BigDecimal discountAmount = BigDecimal.ZERO; // computed
+
     @Column(precision = 15, scale = 2)
-    private BigDecimal amount = BigDecimal.ZERO; // computed = materialTotal + labourTotal
+    private BigDecimal amount = BigDecimal.ZERO; // computed = grossAmount - discountAmount
 
     /** Soft disable — excludes the item from active totals/tasks/inventory while preserving it and its history. */
     @Column(name = "is_active", nullable = false)

@@ -123,6 +123,12 @@ public class Product extends BaseEntity {
     @Column(name = "color_family", length = 60)
     private String colorFamily;
 
+    /** Colours this product comes in (name + swatch + photo), picked per line on a quotation. */
+    @Convert(converter = com.arudra.crm.util.ProductColorListConverter.class)
+    @Column(name = "colors_json", columnDefinition = "TEXT")
+    @com.fasterxml.jackson.annotation.JsonProperty("colors")
+    private List<com.arudra.crm.util.ProductColorListConverter.ProductColor> colors;
+
     /** Standard cut / panel sizes stocked, e.g. "5 ft", "7 ft", "9 ft", "Custom". */
     @Convert(converter = StringListConverter.class)
     @Column(name = "available_sizes", columnDefinition = "TEXT")

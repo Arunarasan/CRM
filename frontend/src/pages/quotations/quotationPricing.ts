@@ -4,7 +4,8 @@ import type { Quotation, QuotationItem } from "@/types/quotation";
 // Sales Journey, so every screen shows the same numbers as the server (QuotationService.recalculateTotals).
 
 export type DiscountMode = "PERCENT" | "FLAT";
-export interface QuotePricing { mode: DiscountMode; value: number; gst: number }
+/** itemsOnly: the discount applies to the products only, never to labour / shipping (the sheet's rule). */
+export interface QuotePricing { mode: DiscountMode; value: number; gst: number; itemsOnly?: boolean }
 
 const num = (v: unknown) => Number(v ?? 0) || 0;
 
@@ -13,6 +14,7 @@ export function lineTotal(it: QuotationItem, rate = it.rate) {
   if (rate == null || it.quantity == null) return num(it.totalAmount);
   let t = num(rate) * num(it.quantity);
   if (num(it.discountPercentage) > 0) t -= t * num(it.discountPercentage) / 100;
+  else if (num(it.discountAmount) > 0) t -= Math.min(num(it.discountAmount), t);
   t += num(it.additionalCharges);
   if (num(it.gstPercentage) > 0) t += t * num(it.gstPercentage) / 100;
   return t;
@@ -23,17 +25,19 @@ export function readPricing(q: Quotation): QuotePricing {
   const discounts: any[] = (q as any).discounts || [];
   const taxes: any[] = (q as any).taxes || [];
   const gst = taxes.filter((t) => !t.isInclusive).reduce((s, t) => s + num(t.percentage), 0);
+  const itemsOnly = discounts.length === 0 || discounts.every((d) => d.discountType === "ITEMS");
   if (discounts.length === 1 && num(discounts[0].percentage) > 0) {
-    return { mode: "PERCENT", value: num(discounts[0].percentage), gst };
+    return { mode: "PERCENT", value: num(discounts[0].percentage), gst, itemsOnly };
   }
-  return num(q.discount) > 0 ? { mode: "FLAT", value: num(q.discount), gst } : { mode: "PERCENT", value: 0, gst };
+  return num(q.discount) > 0 ? { mode: "FLAT", value: num(q.discount), gst, itemsOnly } : { mode: "PERCENT", value: 0, gst, itemsOnly };
 }
 
 /** Update payload for the customer discount + GST (replaces the discount and tax rows). */
 export function pricingPatch(p: QuotePricing) {
   return {
     discounts: p.value > 0 ? [{
-      discountType: "OVERALL", description: "Customer discount",
+      // Same rule as the pricing sheet: the discount is on the products, not labour / shipping.
+      discountType: p.itemsOnly === false ? "OVERALL" : "ITEMS", description: "Customer discount",
       ...(p.mode === "PERCENT" ? { percentage: p.value } : { amount: p.value }),
     }] : [],
     taxes: p.gst > 0 ? [{ taxType: "GST", percentage: p.gst, isInclusive: false }] : [],
@@ -56,10 +60,11 @@ export function quoteTotals(
   const labours = ((q as any).labours || []).reduce((s: number, l: any) => s + num(l.amount), 0);
   const charges = ((q as any).additionalCharges || []).reduce((s: number, c: any) => s + num(c.amount), 0);
   const subtotal = itemsTotal + labours + charges;
-  const discount = pricing.mode === "PERCENT" ? subtotal * pricing.value / 100 : pricing.value;
+  const base = pricing.itemsOnly === false ? subtotal : itemsTotal;
+  const discount = pricing.mode === "PERCENT" ? base * pricing.value / 100 : pricing.value;
   const gst = (subtotal - discount) * pricing.gst / 100;
   return {
-    count: items.length, subtotal, discount, gst, grand: subtotal - discount + gst,
+    count: items.length, itemsTotal, charges: labours + charges, subtotal, discount, gst, grand: subtotal - discount + gst,
     material: items.reduce((s, i) => s + num(i.materialCost), 0),
     labour: items.reduce((s, i) => s + num(i.labourCost), 0),
   };

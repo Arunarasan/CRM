@@ -305,6 +305,8 @@ export interface ProjectProfitability {
   revenue: number;
   collected: number;
   outstanding: number;
+  /** Paid beyond the contract value (e.g. after a quote change lowered it). */
+  excessPaid?: number;
   materialCost: number;
   labourCost: number;
   expensesByCategory: Record<string, number>;

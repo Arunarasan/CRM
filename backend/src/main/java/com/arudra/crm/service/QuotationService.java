@@ -346,6 +346,18 @@ public class QuotationService {
     /** Statuses in which a quotation still follows its pricing sheet (nothing agreed with the customer yet). */
     private static final Set<String> LIVE_STATUSES = Set.of("DRAFT", "SENT", "UNDER_REVIEW", "NEGOTIATION");
 
+    /** Quote-level labour and charges (labour / shipping from the sheet), not tied to any line. */
+    public static BigDecimal quoteLevelCharges(Quotation q) {
+        BigDecimal sum = BigDecimal.ZERO;
+        if (q.getLabours() != null) {
+            for (QuotationLabour l : q.getLabours()) if (l.getAmount() != null) sum = sum.add(l.getAmount());
+        }
+        if (q.getAdditionalCharges() != null) {
+            for (QuotationAdditionalCharge c : q.getAdditionalCharges()) if (c.getAmount() != null) sum = sum.add(c.getAmount());
+        }
+        return sum;
+    }
+
     public static boolean isLive(Quotation q) {
         return q.getStatus() == null || LIVE_STATUSES.contains(q.getStatus());
     }
@@ -355,6 +367,41 @@ public class QuotationService {
      * and tax rows. A flat ₹ discount only makes sense for the full scope, so partial/budget quotes
      * take a percentage discount only.
      */
+    /** Discount type whose percentage applies to the items only, not to header labour/charges. */
+    public static final String ITEMS_DISCOUNT = "ITEMS";
+    public static final String LABOUR_CHARGE = "Labour";
+    public static final String SHIPPING_CHARGE = "Shipping";
+    private static final Set<String> SHEET_CHARGES = Set.of(LABOUR_CHARGE, SHIPPING_CHARGE);
+
+    private static void addSheetCharge(Quotation quotation, String type, BigDecimal amount, String note) {
+        if (amount == null || amount.signum() <= 0) return;
+        QuotationAdditionalCharge c = new QuotationAdditionalCharge();
+        c.setChargeType(type);
+        c.setAmount(amount);
+        c.setDescription(note);
+        c.setQuotation(quotation);
+        quotation.getAdditionalCharges().add(c);
+    }
+
+    /**
+     * Prices a quotation line exactly like its sheet line: rate = price before the line discount ÷ qty,
+     * the line discount as a flat ₹ amount, so the line total equals the sheet amount.
+     */
+    public static void applyBoqLinePricing(BoqItem item, QuotationItem qi) {
+        BigDecimal qty = item.getQuantity() != null && item.getQuantity().signum() != 0 ? item.getQuantity() : BigDecimal.ONE;
+        BigDecimal amount = item.getAmount() != null ? item.getAmount() : BigDecimal.ZERO;
+        BigDecimal discount = item.getDiscountAmount() != null ? item.getDiscountAmount() : BigDecimal.ZERO;
+        BigDecimal gross = item.getGrossAmount() != null && item.getGrossAmount().signum() > 0
+                ? item.getGrossAmount() : amount.add(discount);
+        qi.setQuantity(qty);
+        qi.setRate(gross.divide(qty, 4, RoundingMode.HALF_UP));
+        qi.setDiscountPercentage(null);
+        qi.setDiscountAmount(discount.signum() > 0 ? discount : null);
+        qi.setGstPercentage(null);
+        qi.setTotalAmount(amount);
+        qi.setCostAmount(amount);
+    }
+
     public static void applyBoqPricing(Quotation quotation, Boq boq, boolean fullScope) {
         if (quotation.getDiscounts() == null) quotation.setDiscounts(new ArrayList<>());
         if (quotation.getTaxes() == null) quotation.setTaxes(new ArrayList<>());
@@ -365,12 +412,18 @@ public class QuotationService {
         boolean flat = "FLAT".equals(boq.getDiscountType());
         if (discount.signum() > 0 && (!flat || fullScope)) {
             QuotationDiscount d = new QuotationDiscount();
-            d.setDiscountType("OVERALL");
+            // The sheet discounts the items only — never its labour / shipping charges.
+            d.setDiscountType(ITEMS_DISCOUNT);
             d.setDescription("Customer discount");
             if (flat) d.setAmount(discount); else d.setPercentage(discount);
             d.setQuotation(quotation);
             quotation.getDiscounts().add(d);
         }
+        if (quotation.getAdditionalCharges() == null) quotation.setAdditionalCharges(new ArrayList<>());
+        quotation.getAdditionalCharges().removeIf(c -> SHEET_CHARGES.contains(c.getChargeType()));
+        addSheetCharge(quotation, LABOUR_CHARGE, boq.getLabourCharge(), boq.getLabourNote());
+        addSheetCharge(quotation, SHIPPING_CHARGE, boq.getShippingCharge(), boq.getShippingNote());
+
         if (boq.getTaxPercent() != null && boq.getTaxPercent().signum() > 0) {
             QuotationTax t = new QuotationTax();
             t.setTaxType("GST");
@@ -414,15 +467,8 @@ public class QuotationService {
             qi.setDescription(item.getDescription());
             qi.setUnit(item.getUnit());
             copyBoqStructureToQuotationItem(item, qi);
-            BigDecimal qty = item.getQuantity() != null && item.getQuantity().signum() != 0 ? item.getQuantity() : BigDecimal.ONE;
-            BigDecimal amount = item.getAmount() != null ? item.getAmount() : BigDecimal.ZERO;
-            qi.setQuantity(qty);
-            qi.setRate(amount.divide(qty, 2, RoundingMode.HALF_UP));
-            qi.setTotalAmount(amount);
-            qi.setCostAmount(amount);
-            // Line-level price tweaks belong to the old two-place editing; the sheet is authoritative now.
-            qi.setDiscountPercentage(null);
-            qi.setGstPercentage(null);
+            // The sheet is authoritative: its price, line discount and nothing else.
+            applyBoqLinePricing(item, qi);
         }
         // Sheet items that were deleted or excluded leave the quotation (manual, non-sheet lines stay).
         quotation.getItems().removeIf(qi -> qi.getBoqItemId() != null && !included.contains(qi.getBoqItemId()));
@@ -593,8 +639,8 @@ public class QuotationService {
         boqItem.setStatus("APPROVED");
         boqItemRepository.save(boqItem);
         for (BoqItemMaterial m : boqItem.getMaterials()) {
-            if (m.getProduct() != null && m.getFinalQuantity() != null) {
-                inventoryService.reserveStock(m.getProduct().getId(), m.getFinalQuantity().setScale(0, RoundingMode.CEILING).intValue(),
+            if (m.getProduct() != null && m.supplyQuantity() != null) {
+                inventoryService.reserveStock(m.getProduct().getId(), m.supplyQuantity().setScale(0, RoundingMode.CEILING).intValue(),
                         "QUOTATION", boqItem.getBoq().getId());
             }
         }
@@ -604,8 +650,8 @@ public class QuotationService {
         BoqItem boqItem = boqItemRepository.findById(boqItemId).orElse(null);
         if (boqItem == null) return;
         for (BoqItemMaterial m : boqItem.getMaterials()) {
-            if (m.getProduct() != null && m.getFinalQuantity() != null) {
-                inventoryService.releaseReservation(m.getProduct().getId(), m.getFinalQuantity().setScale(0, RoundingMode.CEILING).intValue(),
+            if (m.getProduct() != null && m.supplyQuantity() != null) {
+                inventoryService.releaseReservation(m.getProduct().getId(), m.supplyQuantity().setScale(0, RoundingMode.CEILING).intValue(),
                         "QUOTATION", boqItem.getBoq().getId());
             }
         }
@@ -686,6 +732,7 @@ public class QuotationService {
         if (approvedItems.isEmpty()) {
             throw new IllegalStateException("No approved items to convert. Approve at least one line item first.");
         }
+        ensureNoProjectYet(quotation);
 
         ensureCustomerForConversion(quotation, user);
 
@@ -724,6 +771,44 @@ public class QuotationService {
         logActivity(quotation, "CONVERTED", "Converted to " + projects.size() + " project(s): " +
                 projects.stream().map(Project::getProjectCode).reduce((a, b) -> a + ", " + b).orElse(""), user);
         return projects;
+    }
+
+    /**
+     * One lead, one project: once a quotation became a project, later quote changes update that project
+     * (ProjectQuoteChangeService) instead of creating another one. Empty stub projects (no quotation yet)
+     * don't count — conversion adopts those.
+     */
+    private void ensureNoProjectYet(Quotation quotation) {
+        if (quotation.getLead() == null || quotation.getLead().getId() == null) return;
+        projectRepository.findByLeadIdOrderByIdDesc(quotation.getLead().getId()).stream()
+                .filter(p -> p.getQuotation() != null && !"CANCELLED".equalsIgnoreCase(p.getStatus()))
+                .findFirst()
+                .ifPresent(p -> {
+                    throw new IllegalStateException("This lead already has project " + p.getProjectCode()
+                            + ". Make quote changes from that project's Measurement & Quotation tab — they update the same project.");
+                });
+    }
+
+    /**
+     * The customer approved a change to a running project: every line of the change quotation is
+     * approved and the quotation becomes the project's quotation. No stock is reserved and no advance
+     * invoice raised here — the project already exists; ProjectQuoteChangeService applies the difference.
+     */
+    @Transactional
+    public Quotation approveProjectChange(Long quotationId, Project project, User user) {
+        Quotation quotation = getQuotationById(quotationId);
+        for (QuotationItem item : quotation.getItems()) item.setStatus("APPROVED");
+        recalculateTotals(quotation);
+        if (quotation.getCustomer() == null) quotation.setCustomer(project.getCustomer());
+        quotation.setProject(project);
+        quotation.setStatus("CONVERTED");
+        quotation.setInternalApprovalStatus("APPROVED");
+        quotation.setApprovedDate(LocalDateTime.now());
+        quotation.setApprovedBy(user);
+        Quotation saved = quotationRepository.save(quotation);
+        logActivity(saved, "CUSTOMER_APPROVED", "Customer approved the change to project " + project.getProjectCode()
+                + " — total " + saved.getGrandTotal(), user);
+        return saved;
     }
 
     /**
@@ -795,6 +880,9 @@ public class QuotationService {
         BigDecimal budget = items.stream()
                 .map(i -> i.getTotalAmount() != null ? i.getTotalAmount() : BigDecimal.ZERO)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+        // Labour / shipping on the quote are part of the job's value; a floor-split project gets only
+        // its own floor's lines, so they're left out there rather than counted once per floor.
+        if (floorLabel == null) budget = budget.add(quoteLevelCharges(quotation));
         project.setBudget(budget);
 
         Project savedProject = projectRepository.save(project);
@@ -840,11 +928,11 @@ public class QuotationService {
             BoqItem boqItem = boqItemRepository.findById(qItem.getBoqItemId()).orElse(null);
             if (boqItem == null) continue;
             for (BoqItemMaterial m : boqItem.getMaterials()) {
-                if (m.getProduct() != null && m.getFinalQuantity() != null) {
+                if (m.getProduct() != null && m.supplyQuantity() != null) {
                     inventoryService.deductReservedStock(m.getProduct().getId(),
-                            m.getFinalQuantity().setScale(0, RoundingMode.CEILING).intValue(),
+                            m.supplyQuantity().setScale(0, RoundingMode.CEILING).intValue(),
                             "PROJECT", savedProject.getId());
-                    requiredByProduct.merge(m.getProduct().getId(), m.getFinalQuantity(), BigDecimal::add);
+                    requiredByProduct.merge(m.getProduct().getId(), m.supplyQuantity(), BigDecimal::add);
                     productById.putIfAbsent(m.getProduct().getId(), m.getProduct());
                     unitByProduct.putIfAbsent(m.getProduct().getId(), m.getUnit());
                 }
@@ -1188,6 +1276,10 @@ public class QuotationService {
                 copyItem.setQuantity(item.getQuantity());
                 copyItem.setRate(item.getRate());
                 copyItem.setDiscountPercentage(item.getDiscountPercentage());
+                copyItem.setDiscountAmount(item.getDiscountAmount());
+                copyItem.setProductId(item.getProductId());
+                copyItem.setImageUrl(item.getImageUrl());
+                copyItem.setLocation(item.getLocation());
                 copyItem.setGstPercentage(item.getGstPercentage());
                 copyItem.setTaxAmount(item.getTaxAmount());
                 copyItem.setTotalAmount(item.getTotalAmount());
@@ -1305,6 +1397,8 @@ public class QuotationService {
                     if (item.getDiscountPercentage() != null && item.getDiscountPercentage().compareTo(BigDecimal.ZERO) > 0) {
                         BigDecimal disc = itemTotal.multiply(item.getDiscountPercentage().divide(new BigDecimal(100)));
                         itemTotal = itemTotal.subtract(disc);
+                    } else if (item.getDiscountAmount() != null && item.getDiscountAmount().signum() > 0) {
+                        itemTotal = itemTotal.subtract(item.getDiscountAmount().min(itemTotal));
                     }
                     // per-item additional charges (added to the taxable base for this line)
                     if (item.getAdditionalCharges() != null && item.getAdditionalCharges().compareTo(BigDecimal.ZERO) > 0) {
@@ -1317,6 +1411,8 @@ public class QuotationService {
                         item.setTaxAmount(tax);
                         itemTotal = itemTotal.add(tax);
                     }
+                    // Each line is money in paise, so the quote total is the sum of what the lines show.
+                    itemTotal = itemTotal.setScale(2, RoundingMode.HALF_UP);
                     item.setTotalAmount(itemTotal);
                     if (inScope) totalItems = totalItems.add(itemTotal);
                 }
@@ -1351,7 +1447,8 @@ public class QuotationService {
         if (quotation.getDiscounts() != null) {
             for (QuotationDiscount d : quotation.getDiscounts()) {
                 if (d.getPercentage() != null && d.getPercentage().compareTo(BigDecimal.ZERO) > 0) {
-                    BigDecimal disc = subTotal.multiply(d.getPercentage().divide(new BigDecimal(100)))
+                    BigDecimal base = ITEMS_DISCOUNT.equals(d.getDiscountType()) ? totalItems : subTotal;
+                    BigDecimal disc = base.multiply(d.getPercentage().divide(new BigDecimal(100)))
                             .setScale(2, RoundingMode.HALF_UP);
                     d.setAmount(disc);
                     totalDiscount = totalDiscount.add(disc);
@@ -1389,6 +1486,10 @@ public class QuotationService {
      */
     public static void copyBoqStructureToQuotationItem(BoqItem item, QuotationItem qi) {
         qi.setCategory(item.getCategory());
+        qi.setProductId(item.getProductId());
+        qi.setImageUrl(item.getImageUrl());
+        qi.setLocation(item.getLocation());
+        if (item.getColor() != null && !item.getColor().isBlank()) qi.setColor(item.getColor());
         qi.setFloorName(item.getFloorName());
         qi.setRoomName(item.getRoomName());
         qi.setFloorOrder(item.getFloorOrder() != null ? item.getFloorOrder() : 0);

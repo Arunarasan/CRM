@@ -76,7 +76,10 @@ public class QuoteWorkspaceService {
             measurementService.autoComplete(measurement.getId(),
                     "Completed automatically — quotation made from " + boq.getBoqNumber(), currentUser);
         }
-        Quotation created = boqService.createLiveQuotation(boqId, currentUser);
+        // A running project's sheet: its change gets its own quotation, without lead-workflow side effects.
+        Quotation created = boqService.isProjectSheet(boq)
+                ? boqService.createChangeQuotation(boqId, currentUser)
+                : boqService.createLiveQuotation(boqId, currentUser);
         return quotationService.syncLiveFromBoq(created.getId(), boqId);
     }
 
@@ -86,6 +89,10 @@ public class QuoteWorkspaceService {
      */
     @Transactional
     public Quotation customerApproval(Long boqId, User currentUser) {
+        if (boqService.isProjectSheet(boqService.getBoqById(boqId))) {
+            throw new IllegalStateException("This quote belongs to a project — approve the change from the project's "
+                    + "Measurement & Quotation tab so the same project is updated.");
+        }
         Quotation quote = liveQuote(boqId, currentUser);
         Boq boq = boqService.getBoqById(boqId);
         if (!"APPROVED".equals(boq.getStatus())) boqService.approveBoq(boqId, currentUser);
@@ -102,7 +109,8 @@ public class QuoteWorkspaceService {
     public Boq reopen(Long boqId, User currentUser) {
         for (Quotation q : quotationRepository.findByBoq_IdOrderByIdDesc(boqId)) {
             if ("CONVERTED".equals(q.getStatus())) {
-                throw new IllegalStateException("A project was already created from this quotation, so it can't be changed here.");
+                throw new IllegalStateException("A project was already created from this quotation — make changes from the "
+                        + "project's Measurement & Quotation tab so the same project is updated.");
             }
             // Approved quotes, and a still-open quote on an older locked sheet, are superseded by the new one.
             if ("APPROVED".equals(q.getStatus()) || QuotationService.isLive(q)) {

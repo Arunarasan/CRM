@@ -30,6 +30,13 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
     @Query("SELECT COUNT(p) FROM Project p WHERE UPPER(p.status) IN :statuses")
     long countByStatusCategory(@Param("statuses") java.util.List<String> statuses);
 
+    /** Active = every project not yet finished (anything but COMPLETED / CLOSED / CANCELLED). */
+    @Query("SELECT COUNT(p) FROM Project p WHERE p.status IS NULL OR UPPER(p.status) NOT IN ('COMPLETED', 'CLOSED', 'CANCELLED')")
+    long countActive();
+
+    @Query("SELECT p FROM Project p WHERE p.status IS NULL OR UPPER(p.status) NOT IN ('COMPLETED', 'CLOSED', 'CANCELLED')")
+    java.util.List<Project> findActive();
+
     /**
      * "Team not assigned": an active project (not completed/closed/cancelled) with nobody on the
      * delivery team — no project manager, site engineer, supervisor and no assigned employees.
@@ -62,6 +69,7 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
     Page<Project> findByCustomerId(Long customerId, Pageable pageable);
     java.util.List<Project> findByLeadIdOrderByIdDesc(Long leadId);
     boolean existsByBoqId(Long boqId);
+    java.util.List<Project> findByBoqId(Long boqId);
 
     java.util.Optional<Project> findByShareToken(String shareToken);
 }

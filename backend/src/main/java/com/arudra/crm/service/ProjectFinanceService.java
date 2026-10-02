@@ -250,6 +250,8 @@ public class ProjectFinanceService {
         result.put("revenue", invoiced);
         result.put("collected", collected);
         result.put("outstanding", invoiced.subtract(collected).max(BigDecimal.ZERO));
+        // A quote change can lower the contract below what was already paid — shown, never auto-refunded.
+        result.put("excessPaid", collected.subtract(quotationValue).max(BigDecimal.ZERO));
         result.put("materialCost", materialCost);
         result.put("labourCost", labourCost);
         result.put("expensesByCategory", byCategory);
