@@ -103,6 +103,13 @@ export const leadApi = {
   getStatusHistory: (id: string | number) => api.get(`/leads/${id}/status-history`),
 
   convertFull: (id: string | number, payload: any) => api.post(`/leads/${id}/convert-full`, payload),
-  markLost: (id: string | number, payload: { reason: string; competitor?: string; feedback?: string }) =>
-    api.post(`/leads/${id}/lost`, payload),
+  markLost: (id: string | number, payload: {
+    reason: string; competitor?: string; feedback?: string; winBackDate?: string; winBackNote?: string;
+  }) => api.post(`/leads/${id}/lost`, payload),
+  // Plan (or clear, with no date) when to try a lost lead again.
+  scheduleWinBack: (id: string | number, payload: { date?: string; note?: string }) =>
+    api.post(`/leads/${id}/win-back`, payload),
+  // Bring a lost lead back into the pipeline (status defaults to the one it had before it was lost).
+  reopen: (id: string | number, payload: { status?: string; remarks: string; assigneeId?: number; followUpDate?: string }) =>
+    api.post(`/leads/${id}/reopen`, payload),
 };

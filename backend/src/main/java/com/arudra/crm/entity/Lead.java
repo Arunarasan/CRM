@@ -389,4 +389,11 @@ public class Lead extends BaseEntity {
     @Column(name = "can_reopen")
     private Boolean canReopen = true;
 
+    /** Win-back: the date to try a lost lead again (a reminder task is due that day). Null = none planned. */
+    @Column(name = "win_back_date")
+    private java.time.LocalDate winBackDate;
+
+    @Column(name = "win_back_note", length = 500)
+    private String winBackNote;
+
 }

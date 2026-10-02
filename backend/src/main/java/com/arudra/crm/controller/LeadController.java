@@ -441,6 +441,29 @@ public class LeadController {
             @RequestBody Map<String, String> payload) {
         return ResponseEntity.ok(leadService.markAsLost(id, payload.get("reason"),
                 payload.get("competitor"), payload.get("feedback"),
+                parseDate(payload.get("winBackDate")), payload.get("winBackNote"),
                 currentUserService.getCurrentUser()));
+    }
+
+    /** Plan (or change / clear, with no date) when to try a lost lead again. */
+    @PostMapping("/{id}/win-back")
+    @PreAuthorize(WRITE)
+    public ResponseEntity<Lead> scheduleWinBack(@PathVariable Long id, @RequestBody Map<String, String> payload) {
+        return ResponseEntity.ok(leadService.scheduleWinBack(id, parseDate(payload.get("date")),
+                payload.get("note"), currentUserService.getCurrentUser()));
+    }
+
+    /** Bring a lost lead back into the pipeline. */
+    @PostMapping("/{id}/reopen")
+    @PreAuthorize(WRITE)
+    public ResponseEntity<Lead> reopenLead(@PathVariable Long id, @RequestBody Map<String, String> payload) {
+        String assignee = payload.get("assigneeId");
+        return ResponseEntity.ok(leadService.reopenLead(id, payload.get("status"), payload.get("remarks"),
+                assignee == null || assignee.isBlank() ? null : Long.valueOf(assignee),
+                parseDate(payload.get("followUpDate")), currentUserService.getCurrentUser()));
+    }
+
+    private static java.time.LocalDate parseDate(String value) {
+        return value == null || value.isBlank() ? null : java.time.LocalDate.parse(value);
     }
 }

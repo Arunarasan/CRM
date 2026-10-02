@@ -317,6 +317,9 @@ export interface Lead {
   lostReason?: string;
   competitor?: string;
   customerFeedback?: string;
+  canReopen?: boolean;
+  winBackDate?: string;
+  winBackNote?: string;
   createdAt?: string;
   updatedAt?: string;
   createdBy?: string;

@@ -816,13 +816,142 @@ public class LeadService {
 
     @Transactional
     public Lead markAsLost(Long leadId, String reason, String competitor, String feedback, User currentUser) {
+        return markAsLost(leadId, reason, competitor, feedback, null, null, currentUser);
+    }
+
+    /** Marks the lead lost; an optional win-back date plans a "try again" reminder for that day. */
+    @Transactional
+    public Lead markAsLost(Long leadId, String reason, String competitor, String feedback,
+                           LocalDate winBackDate, String winBackNote, User currentUser) {
         Lead lead = getLeadById(leadId);
         lead.setLostReason(reason);
         lead.setCompetitor(competitor);
         lead.setCustomerFeedback(feedback);
         lead.setLeadTemperature("Cold");
         leadRepository.save(lead);
-        return updateLeadStatus(leadId, "Lost", reason, currentUser);
+        Lead lost = updateLeadStatus(leadId, "Lost", reason, currentUser);
+        if (winBackDate != null) scheduleWinBack(leadId, winBackDate, winBackNote, currentUser);
+        return lost;
+    }
+
+    private static final String WIN_BACK_TASK = "Win-back";
+
+    /**
+     * Plans when to try a lost lead again: stores the date on the lead and replaces any pending win-back
+     * reminder with one due that morning, assigned to the sales executive (else whoever planned it); the
+     * daily lead reminder job notifies them. A null date cancels the plan.
+     */
+    @Transactional
+    public Lead scheduleWinBack(Long leadId, LocalDate date, String note, User currentUser) {
+        Lead lead = getLeadById(leadId);
+        if (!"Lost".equals(lead.getStatus())) {
+            throw new IllegalStateException("Win-back can only be planned for a lost lead.");
+        }
+        if (date != null && date.isBefore(LocalDate.now())) {
+            throw new IllegalArgumentException("Win-back date can't be in the past.");
+        }
+        cancelPendingWinBack(lead);
+        lead.setWinBackDate(date);
+        lead.setWinBackNote(date == null || note == null || note.isBlank() ? null : note.trim());
+        Lead saved = leadRepository.save(lead);
+
+        if (date != null) {
+            LeadReminder reminder = new LeadReminder();
+            reminder.setLead(saved);
+            reminder.setTitle("Win-back: try " + saved.getName() + " again");
+            reminder.setTaskType(WIN_BACK_TASK);
+            reminder.setPriority("Medium");
+            reminder.setReminderTime(date.atTime(10, 0));
+            String why = saved.getWinBackNote() != null ? saved.getWinBackNote()
+                    : "Lost: " + (saved.getLostReason() != null ? saved.getLostReason() : "no reason given");
+            reminder.setDescription(why.length() > 200 ? why.substring(0, 200) : why);
+            reminder.setAssignedTo(saved.getAssignedSalesExecutive() != null ? saved.getAssignedSalesExecutive() : currentUser);
+            leadReminderRepository.save(reminder);
+            logActivity(saved, "WIN_BACK_PLANNED", "Win-back planned for " + date
+                    + (saved.getWinBackNote() != null ? ": " + saved.getWinBackNote() : ""), currentUser);
+        } else {
+            logActivity(saved, "WIN_BACK_CANCELLED", "Win-back plan cleared", currentUser);
+        }
+        return saved;
+    }
+
+    private void cancelPendingWinBack(Lead lead) {
+        for (LeadReminder r : leadReminderRepository.findByLeadIdOrderByReminderTimeAsc(lead.getId())) {
+            if (WIN_BACK_TASK.equals(r.getTaskType()) && !Boolean.TRUE.equals(r.getIsCompleted())) {
+                r.setStatus("Cancelled");
+                r.setIsCompleted(true);
+                r.setCompletedAt(LocalDateTime.now());
+                leadReminderRepository.save(r);
+            }
+        }
+    }
+
+    /**
+     * Brings a lost lead back into the pipeline: restores the status it had before it was lost (or the
+     * one chosen), warms it up, optionally reassigns the sales executive and plans the next follow-up
+     * (with a reminder), and closes any pending win-back reminder. The lost reason stays in the status
+     * history and activity log. Lost never touched the lead's workflow tasks, so the journey resumes
+     * where it stopped.
+     */
+    @Transactional
+    public Lead reopenLead(Long leadId, String status, String remarks, Long assigneeId,
+                           LocalDate followUpDate, User currentUser) {
+        Lead lead = getLeadById(leadId);
+        if (!"Lost".equals(lead.getStatus())) {
+            throw new IllegalStateException("Only a lost lead can be reopened. Current status: " + lead.getStatus());
+        }
+        if (Boolean.FALSE.equals(lead.getCanReopen())) {
+            throw new IllegalStateException("This lead is marked as not reopenable.");
+        }
+        if (remarks == null || remarks.isBlank()) {
+            throw new IllegalArgumentException("Say why the lead is being reopened.");
+        }
+        String target = status != null && !status.isBlank() ? status : statusBeforeLost(leadId);
+        if (LeadWorkflow.CLOSED_STATUSES.contains(target)) {
+            throw new IllegalArgumentException("Reopen to an open status, not " + target + ".");
+        }
+
+        String wasLostFor = lead.getLostReason();
+        cancelPendingWinBack(lead);
+        lead.setWinBackDate(null);
+        lead.setWinBackNote(null);
+        lead.setLostReason(null);
+        lead.setLeadTemperature("Warm");
+        leadRepository.save(lead);
+        if (assigneeId != null) applyAssignment(lead, assigneeId, "Sales Executive", currentUser);
+
+        Lead reopened = updateLeadStatus(leadId, target, "Reopened: " + remarks.trim(), currentUser);
+        logActivity(reopened, "REOPENED", "Lead reopened from Lost"
+                + (wasLostFor != null ? " (was lost: " + wasLostFor + ")" : "") + ". " + remarks.trim(), currentUser);
+
+        if (followUpDate != null) {
+            reopened.setNextFollowUpDate(followUpDate);
+            reopened.setNextFollowUpTime(null);
+            leadRepository.save(reopened);
+            LeadReminder reminder = new LeadReminder();
+            reminder.setLead(reopened);
+            reminder.setTitle("Follow-up: " + reopened.getName() + " (reopened)");
+            reminder.setTaskType("Call Customer");
+            reminder.setPriority("High");
+            reminder.setReminderTime(followUpDate.atTime(9, 0));
+            String why = remarks.trim();
+            reminder.setDescription(why.length() > 200 ? why.substring(0, 200) : why);
+            reminder.setAssignedTo(reopened.getAssignedSalesExecutive() != null
+                    ? reopened.getAssignedSalesExecutive() : currentUser);
+            leadReminderRepository.save(reminder);
+        }
+        return reopened;
+    }
+
+    /** The status a lead had just before it was last marked Lost ("Contacted" when unknown). */
+    public String statusBeforeLost(Long leadId) {
+        for (LeadStatusHistory h : leadStatusHistoryRepository.findByLeadIdOrderByChangedAtDesc(leadId)) {
+            if ("Lost".equals(h.getNewStatus())) {
+                String before = h.getOldStatus();
+                return before != null && !LeadWorkflow.CLOSED_STATUSES.contains(before) ? before : "Contacted";
+            }
+        }
+        return "Contacted";
     }
 
     /** Soft delete: the lead and its full history remain in the database. */
