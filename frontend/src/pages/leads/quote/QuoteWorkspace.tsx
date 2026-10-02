@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  CheckCircle2, FileDown, FileText, FileOutput, History, Loader2, Lock, Pencil, Printer, RotateCcw, Ruler, Wand2,
+  CheckCircle2, FileText, FileOutput, History, Loader2, Lock, Pencil, Printer, RotateCcw, Ruler, Wand2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BaseInput } from "@/components/ui/input";
@@ -18,7 +18,6 @@ import { QUOTATION_STATUS_LABELS, QUOTATION_STATUS_STYLES, type Quotation } from
 import { leadApi } from "../leadApi";
 import { formatDate } from "../constants";
 import { ListSkeleton } from "../tabs/shared";
-import QuotationPdfDialog from "@/pages/quotations/QuotationPdfDialog";
 import { QuotationPrintView } from "@/pages/quotations/QuotationPrint";
 import BoqSheet from "./BoqSheet";
 import { NumCell } from "./cells";
@@ -29,7 +28,7 @@ import { NumCell } from "./cells";
  *   - each item row carries its size, quantity, description, material/labour and amount;
  *   - the tick on each row is the customer's choice (unticked = not in the quote or its total);
  *   - discount, GST and the final price sit under the sheet;
- *   - PDF / Print / Customer approved / Create Project act on the sheet directly.
+ *   - Print / Customer approved / Create Project act on the sheet directly.
  * The quotation record is made on first use and the server keeps it identical to the sheet until the
  * customer approves; the sheet then locks. A change after approval opens a new sheet → new quotation.
  * Measurement, BOQ and Quotation stay separate records underneath — this only removes the re-entry.
@@ -59,7 +58,6 @@ export default function QuoteWorkspace({ leadId, onChanged, fieldMode, onCreateP
   const [quotations, setQuotations] = useState<any[]>([]);
   const [boq, setBoq] = useState<Boq | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [pdfQuote, setPdfQuote] = useState<Quotation | null>(null);
   const [printId, setPrintId] = useState<number | null>(null);
   const [approveOpen, setApproveOpen] = useState(false);
   const [changeOpen, setChangeOpen] = useState(false);
@@ -136,7 +134,7 @@ export default function QuoteWorkspace({ leadId, onChanged, fieldMode, onCreateP
   };
 
   /**
-   * The quotation for PDF / print: an approved or converted one as it is; otherwise made (first time)
+   * The quotation for print: an approved or converted one as it is; otherwise made (first time)
    * or refreshed from the sheet by the server.
    */
   const currentQuotation = async (): Promise<Quotation> => {
@@ -146,10 +144,6 @@ export default function QuoteWorkspace({ leadId, onChanged, fieldMode, onCreateP
     return q;
   };
 
-  const openPdf = async () => {
-    setBusy("pdf");
-    try { setPdfQuote(await currentQuotation()); } catch (e) { toast.error(errMsg(e, "Could not prepare the quotation.")); } finally { setBusy(null); }
-  };
   const openPrint = async () => {
     setBusy("print");
     try { setPrintId((await currentQuotation()).id as number); } catch (e) { toast.error(errMsg(e, "Could not prepare the quotation.")); } finally { setBusy(null); }
@@ -298,9 +292,6 @@ export default function QuoteWorkspace({ leadId, onChanged, fieldMode, onCreateP
                 <span className="font-bold tabular-nums text-primary">{inr(boq.grandTotal)}</span>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <Button variant="outline" size="sm" disabled={!!busy || inQuote.length === 0} onClick={openPdf}>
-                  {busy === "pdf" ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <FileDown className="h-4 w-4 mr-2" />} PDF
-                </Button>
                 <Button variant="outline" size="sm" disabled={!!busy || inQuote.length === 0} onClick={openPrint}>
                   {busy === "print" ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Printer className="h-4 w-4 mr-2" />} Print
                 </Button>
@@ -403,9 +394,6 @@ export default function QuoteWorkspace({ leadId, onChanged, fieldMode, onCreateP
         </DialogContent>
       </Dialog>
 
-      {pdfQuote && (
-        <QuotationPdfDialog quotation={pdfQuote} open={!!pdfQuote} onOpenChange={(o) => !o && setPdfQuote(null)} />
-      )}
       {printId && <QuotationPrintView quotationId={printId} readOnly onClose={() => setPrintId(null)} />}
     </section>
   );
