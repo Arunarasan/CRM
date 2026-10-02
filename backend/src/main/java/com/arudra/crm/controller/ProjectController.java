@@ -34,6 +34,9 @@ public class ProjectController {
     @Autowired
     private CurrentUserService currentUserService;
 
+    @Autowired
+    private com.arudra.crm.service.SupplyInstallService supplyInstallService;
+
     @GetMapping
     @PreAuthorize(READ)
     public ResponseEntity<Page<Project>> getAllProjects(
@@ -403,6 +406,50 @@ public class ProjectController {
     public ResponseEntity<ApiResponse<PurchaseOrder>> requestPurchase(@PathVariable Long reqId) {
         return ResponseEntity.ok(ApiResponse.success(
                 projectService.requestPurchase(reqId, currentUserService.getCurrentUser())));
+    }
+
+    // Supply & Install: each material moves To Buy → Ordered → Received → At Site → Installed
+
+    @GetMapping("/{id}/supply-install")
+    @PreAuthorize(READ)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getSupplyInstall(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.success(supplyInstallService.getBoard(id)));
+    }
+
+    @PostMapping("/{id}/supply-install/purchase")
+    @PreAuthorize(WRITE)
+    public ResponseEntity<ApiResponse<List<PurchaseOrder>>> buySupplyItems(
+            @PathVariable Long id, @RequestBody Map<String, Object> body) {
+        return ResponseEntity.ok(ApiResponse.success(supplyInstallService.purchase(id, body)));
+    }
+
+    @PostMapping("/{id}/supply-install/load-from-quote")
+    @PreAuthorize(WRITE)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> loadSupplyFromQuote(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.success(supplyInstallService.loadFromQuote(id)));
+    }
+
+    @PostMapping("/{id}/supply-install/link")
+    @PreAuthorize(WRITE)
+    public ResponseEntity<ApiResponse<ProjectMaterialRequirement>> linkSupplyQuoteLine(
+            @PathVariable Long id, @RequestBody Map<String, Object> body) {
+        return ResponseEntity.ok(ApiResponse.success(supplyInstallService.linkQuoteLine(id, body)));
+    }
+
+    @PostMapping("/{id}/supply-install/{reqId}/send-to-site")
+    @PreAuthorize(WRITE)
+    public ResponseEntity<ApiResponse<InventoryTransaction>> sendSupplyToSite(
+            @PathVariable Long id, @PathVariable Long reqId, @RequestBody Map<String, Object> body) {
+        return ResponseEntity.ok(ApiResponse.success(supplyInstallService.sendToSite(id, reqId, body)));
+    }
+
+    @PutMapping("/{id}/supply-install/{reqId}/installed")
+    @PreAuthorize(WRITE)
+    public ResponseEntity<ApiResponse<ProjectMaterialRequirement>> setSupplyInstalled(
+            @PathVariable Long id, @PathVariable Long reqId, @RequestBody Map<String, Object> body) {
+        Object q = body.get("installedQty");
+        return ResponseEntity.ok(ApiResponse.success(supplyInstallService.setInstalled(id, reqId,
+                q == null ? java.math.BigDecimal.ZERO : new java.math.BigDecimal(String.valueOf(q)))));
     }
 
     // Project-scoped stock movements (stock entry / stock reduce) + purchase summary

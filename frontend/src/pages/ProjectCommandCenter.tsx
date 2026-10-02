@@ -16,6 +16,7 @@ import { ProjectChangeRequest } from "@/types/changeRequest";
 import ProjectPaymentsTab from "@/pages/projectFinance/ProjectPaymentsTab";
 import BulkWorkUpdateDialog from "@/pages/projectCommandCenter/BulkWorkUpdateDialog";
 import HandoverTab from "@/pages/projectCommandCenter/HandoverTab";
+import SupplyInstallTab from "@/pages/projectCommandCenter/SupplyInstallTab";
 import CameraCaptureButton from "@/components/CameraCaptureButton";
 import { format, differenceInDays } from "date-fns";
 import {
@@ -153,7 +154,7 @@ const TAB_GROUPS: { id: string; label: string; icon: React.ComponentType<{ class
     ["changeRequests", "Change Requests"],
   ] },
   { id: "resources", label: "Resources", icon: Package, sections: [
-    ["materials", "Materials"], ["contractors", "Contractors"], ["labour", "Labour"],
+    ["supplyInstall", "Supply & Install"], ["materials", "Materials"], ["contractors", "Contractors"], ["labour", "Labour"],
   ] },
   { id: "handover", label: "Handover", icon: CheckCircle2, sections: [["handover", "Handover"]] },
   { id: "documents", label: "Documents", icon: FileText, sections: [["media", "Documents"]] },
@@ -2100,6 +2101,10 @@ export default function ProjectCommandCenter() {
             </TabsContent>
 
             {/* MEDIA TAB */}
+            <TabsContent value="supplyInstall" className="mt-0 h-full outline-none">
+              <SupplyInstallTab projectId={projectId} onChanged={fetchProjectData} />
+            </TabsContent>
+
             <TabsContent value="handover" className="mt-0 h-full outline-none">
               <HandoverTab project={project} onChanged={fetchProjectData} />
             </TabsContent>

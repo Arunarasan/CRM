@@ -47,6 +47,10 @@ public class ProjectMaterialRequirement extends BaseEntity {
     @Column(name = "consumed_qty", precision = 15, scale = 2)
     private BigDecimal consumedQty = BigDecimal.ZERO;
 
+    /** Supply & Install: quantity fitted at the customer's site. */
+    @Column(name = "installed_qty", precision = 15, scale = 2)
+    private BigDecimal installedQty = BigDecimal.ZERO;
+
     @Column(length = 20)
     private String unit;
 

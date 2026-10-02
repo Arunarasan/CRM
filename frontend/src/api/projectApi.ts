@@ -37,6 +37,43 @@ export interface HandoverBoard {
   stages: string[];
 }
 
+export type SupplyStage = 'TO_BUY' | 'IN_STOCK' | 'ORDERED' | 'RECEIVED' | 'AT_SITE' | 'INSTALLED' | 'NOT_NEEDED';
+
+/** One material on the Supply & Install tracker. */
+export interface SupplyRow {
+  requirementId: number;
+  productId: number;
+  productName: string;
+  productCode?: string | null;
+  imageUrl?: string | null;
+  unit?: string | null;
+  phaseName?: string | null;
+  required: number;
+  inStock: number;
+  ordered: number;
+  received: number;
+  sentToSite: number;
+  installed: number;
+  suggestedBuy: number;
+  unitCost?: number | null;
+  stage: SupplyStage;
+  supplierName?: string | null;
+  orders: { id: number; poNumber: string; status: string; supplierName?: string; expectedDeliveryDate?: string | null; quantity: number; received: number }[];
+}
+
+export interface SupplyBoard {
+  rows: SupplyRow[];
+  summary: {
+    items: number; toBuy: number; ordered: number; received: number; atSite: number; installed: number;
+    readyToInstall: boolean; quotedValue: number; purchaseCost: number; margin: number;
+  };
+  lateOrders: { id: number; poNumber: string; supplierName?: string; expectedDeliveryDate: string; daysLate: number }[];
+  siteAddress?: string | null;
+  hasQuote?: boolean;
+  /** Quote lines no catalogue product could be matched to. */
+  unlinked?: { name: string; quantity: number; unit?: string | null }[];
+}
+
 /** Compact work item for the batch "Update Work" sheet (across all rooms of a project). */
 export interface ProjectItemBrief {
   id: number;
@@ -137,6 +174,22 @@ export const projectApi = {
     api.get<HandoverBoard>(`${BASE}/${projectId}/handover`).then((r) => r.data),
   handoverProject: (projectId: number, notes?: string) =>
     api.post(`${BASE}/${projectId}/handover`, { notes }).then((r) => r.data),
+
+  // Supply & Install tracker
+  getSupplyInstall: (projectId: number) =>
+    api.get<SupplyBoard>(`${BASE}/${projectId}/supply-install`).then((r) => r.data),
+  buySupplyItems: (projectId: number, body: {
+    lines: { requirementId: number; quantity: number; supplierId?: number }[];
+    expectedDeliveryDate?: string; deliverToSite?: boolean;
+  }) => api.post<{ id: number; poNumber: string }[]>(`${BASE}/${projectId}/supply-install/purchase`, body).then((r) => r.data),
+  loadSupplyFromQuote: (projectId: number) =>
+    api.post<{ added: number }>(`${BASE}/${projectId}/supply-install/load-from-quote`, {}).then((r) => r.data),
+  linkSupplyQuoteLine: (projectId: number, body: { name: string; productId: number; quantity: number; unit?: string | null }) =>
+    api.post(`${BASE}/${projectId}/supply-install/link`, body).then((r) => r.data),
+  sendSupplyToSite: (projectId: number, reqId: number, quantity: number) =>
+    api.post(`${BASE}/${projectId}/supply-install/${reqId}/send-to-site`, { quantity }).then((r) => r.data),
+  setSupplyInstalled: (projectId: number, reqId: number, installedQty: number) =>
+    api.put(`${BASE}/${projectId}/supply-install/${reqId}/installed`, { installedQty }).then((r) => r.data),
 
   // Materials
   getMaterials: (projectId: number) =>

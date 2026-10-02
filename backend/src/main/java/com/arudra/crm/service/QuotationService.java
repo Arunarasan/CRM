@@ -21,6 +21,9 @@ public class QuotationService {
     private QuotationRepository quotationRepository;
 
     @Autowired
+    private QuoteProductLinker quoteProductLinker;
+
+    @Autowired
     private WorkflowTriggerService workflowTriggerService;
 
     @Autowired
@@ -859,6 +862,27 @@ public class QuotationService {
                     + "; reserved stock was consumed at conversion.");
             projectMaterialRequirementRepository.save(requirement);
         }
+
+        // Quote lines with no product attached (the sheet is free text): link them to catalogue
+        // products by name so the project's Supply & Install list starts filled in.
+        Set<Long> listed = new HashSet<>();
+        projectMaterialRequirementRepository.findByProjectIdOrderByIdAsc(savedProject.getId())
+                .forEach(r -> { if (r.getProduct() != null) listed.add(r.getProduct().getId()); });
+        Map<Long, ProjectMaterialRequirement> autoLinked = new LinkedHashMap<>();
+        for (QuoteProductLinker.Line line : quoteProductLinker.resolve(items, true)) {
+            if (!line.matched() || listed.contains(line.product().getId())) continue;
+            ProjectMaterialRequirement r = autoLinked.computeIfAbsent(line.product().getId(), pid -> {
+                ProjectMaterialRequirement fresh = new ProjectMaterialRequirement();
+                fresh.setProject(savedProject);
+                fresh.setProduct(line.product());
+                fresh.setRequiredQty(BigDecimal.ZERO);
+                fresh.setUnit(line.unit() != null ? line.unit() : line.product().getUnit());
+                fresh.setRemarks("Auto-linked from quote " + quotation.getQuotationNumber() + ": " + line.source());
+                return fresh;
+            });
+            r.setRequiredQty(r.getRequiredQty().add(line.quantity()));
+        }
+        projectMaterialRequirementRepository.saveAll(autoLinked.values());
 
         return savedProject;
     }
