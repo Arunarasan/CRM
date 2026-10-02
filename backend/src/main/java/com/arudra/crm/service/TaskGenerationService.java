@@ -98,8 +98,10 @@ public class TaskGenerationService {
         // Copy the subject pointers off the instance so the task is queryable by lead/project.
         if ("LEAD".equals(instance.getScope())) {
             task.setLeadId(instance.getLeadId());
-            // The Site Visit & Measurement task is due on the visit date agreed during requirement.
-            if ("TT_VISIT_MEASURE".equals(tpl.getCode()) && instance.getLeadId() != null) {
+            // The site-visit task (and the merged visit + quote task) is due on the visit date agreed
+            // during requirement.
+            if (("TT_VISIT_MEASURE".equals(tpl.getCode()) || "TT_MEASURE_QUOTE".equals(tpl.getCode()))
+                    && instance.getLeadId() != null) {
                 leadRepository.findById(instance.getLeadId()).ifPresent(l -> {
                     if (l.getSiteVisitDate() != null) task.setDueDate(l.getSiteVisitDate());
                 });

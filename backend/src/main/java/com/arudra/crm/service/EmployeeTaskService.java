@@ -87,6 +87,11 @@ public class EmployeeTaskService {
     private QuotationService quotationService;
     @Autowired
     @org.springframework.context.annotation.Lazy
+    private QuoteWorkspaceService quoteWorkspaceService;
+    @Autowired
+    private BoqRepository boqRepository;
+    @Autowired
+    @org.springframework.context.annotation.Lazy
     private ProjectService projectService;
     @Autowired
     @org.springframework.context.annotation.Lazy
@@ -1148,6 +1153,18 @@ public class EmployeeTaskService {
         List<Quotation> quotes = quotationRepository.findByLeadIdOrderByCreatedAtDesc(leadId);
         Quotation quote = quotes.stream().filter(q -> !"REVISED".equals(q.getStatus())).findFirst()
                 .orElse(quotes.isEmpty() ? null : quotes.get(0));
+        // Combined Quote page: the customer agreed to what is ticked on the sheet. Approve it the same way
+        // the office does — final sync from the sheet, sheet locked, quotation approved — making the
+        // quotation first if it was never shared. Older flows (no sheet behind it) keep the header path.
+        Long sheetId = quote != null && quote.getBoq() != null ? quote.getBoq().getId() : null;
+        if (quote == null) {
+            sheetId = boqRepository.findByLeadIdAndIsDeletedFalseOrderByIdDesc(leadId).stream()
+                    .filter(b -> !Boolean.FALSE.equals(b.getIsLatestVersion()))
+                    .map(Boq::getId).findFirst().orElse(null);
+        }
+        if (sheetId != null && (quote == null || QuotationService.isLive(quote))) {
+            quote = quoteWorkspaceService.customerApproval(sheetId, employee);
+        }
         if (quote == null || quote.getId() == null) {
             throw new IllegalStateException("No quotation found for this lead. Create the quotation first.");
         }

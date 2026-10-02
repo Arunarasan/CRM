@@ -41,7 +41,14 @@ const errMsg = (e: any, fallback: string) =>
   e?.response?.data?.message || (typeof e?.response?.data === "string" ? e.response.data : "") || fallback;
 const QUOTE_DONE = new Set(["APPROVED", "CONVERTED"]);
 
-export default function QuoteWorkspace({ leadId, onChanged }: { leadId: string; onChanged: () => void }) {
+export default function QuoteWorkspace({ leadId, onChanged, fieldMode, onCreateProject }: {
+  leadId: string;
+  onChanged: () => void;
+  /** Field employee's phone view: no desktop links; "Send to office" + employee Create Project. */
+  fieldMode?: boolean;
+  /** Field mode: open the employee Create Project sheet (it records the customer's approval too). */
+  onCreateProject?: () => void;
+}) {
   const { hasAuthority, isAdmin } = useAuth();
   const canPrice = hasAuthority("BOQ_WRITE") || isAdmin;
   const canApprove = isAdmin || (canPrice && hasAuthority("QUOTATION_APPROVE"));
@@ -161,6 +168,21 @@ export default function QuoteWorkspace({ leadId, onChanged }: { leadId: string; 
     } finally { setBusy(null); }
   };
 
+  // Field staff without approval rights hand the quote to the office (it stays live until approved).
+  const sentToOffice = !!quote && !approved && quote.internalApprovalStatus === "PENDING" && !!quote.approvedBy;
+  const sendToOffice = async () => {
+    if (!boq?.id) return;
+    setBusy("send");
+    try {
+      const q = await quoteWorkspaceApi.liveQuote(boq.id);
+      await quotationApi.updateApprovalStatus(q.id as number, "PENDING");
+      toast.success(`${q.quotationNumber} sent to the office for approval`);
+      await refreshAll();
+    } catch (e) {
+      toast.error(errMsg(e, "Could not send the quote."));
+    } finally { setBusy(null); }
+  };
+
   const confirmChange = async () => {
     if (!boq?.id) return;
     setBusy("change");
@@ -211,7 +233,7 @@ export default function QuoteWorkspace({ leadId, onChanged }: { leadId: string; 
           </span>
         </span>
         <span className="flex flex-wrap items-center gap-3">
-          {measurement && leadId && (
+          {measurement && !fieldMode && leadId && (
             // Drawings & photos live in this lead's Documents tab.
             <Link to={`/leads/${leadId}?tab=documents`}
               className="hover:text-primary flex items-center gap-1">
@@ -282,13 +304,25 @@ export default function QuoteWorkspace({ leadId, onChanged }: { leadId: string; 
                 <Button variant="outline" size="sm" disabled={!!busy || inQuote.length === 0} onClick={openPrint}>
                   {busy === "print" ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Printer className="h-4 w-4 mr-2" />} Print
                 </Button>
-                {!approved && canApprove && (
+                {fieldMode && !approved && (
+                  <Button variant="outline" size="sm" disabled={!!busy || inQuote.length === 0 || sentToOffice} onClick={sendToOffice}>
+                    {busy === "send" && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                    {sentToOffice ? "Sent to office" : "Send to office"}
+                  </Button>
+                )}
+                {fieldMode && !converted && onCreateProject && (
+                  <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" disabled={!!busy || inQuote.length === 0}
+                    onClick={onCreateProject}>
+                    <FileOutput className="h-4 w-4 mr-2" /> {approved ? "Create Project" : "Customer agreed · Create Project"}
+                  </Button>
+                )}
+                {!fieldMode && !approved && canApprove && (
                   <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" disabled={!!busy || inQuote.length === 0}
                     onClick={() => setApproveOpen(true)}>
                     <CheckCircle2 className="h-4 w-4 mr-2" /> Customer approved
                   </Button>
                 )}
-                {approved && !converted && canConvert && (
+                {!fieldMode && approved && !converted && canConvert && (
                   <Button size="sm" disabled={!!busy} onClick={() => setConvertCfg({ advanceAmount: "", advanceMethod: "Cash" })}>
                     <FileOutput className="h-4 w-4 mr-2" /> Create Project
                   </Button>

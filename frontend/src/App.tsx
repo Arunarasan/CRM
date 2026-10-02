@@ -117,7 +117,7 @@ const TaskDetailMobile = lazy(() => import("./pages/employeeTasks/TaskDetail"));
 const EmployeeVisitMeasure = lazy(() => import("./pages/employeeTasks/EmployeeVisitMeasure"));
 const EmployeeBoq = lazy(() => import("./pages/employeeTasks/EmployeeBoq"));
 const EmployeeQuotation = lazy(() => import("./pages/employeeTasks/EmployeeQuotation"));
-const EmployeeBoqQuote = lazy(() => import("./pages/employeeTasks/EmployeeBoqQuote"));
+const EmployeeQuote = lazy(() => import("./pages/employeeTasks/EmployeeQuote"));
 const MobileNotifications = lazy(() => import("./pages/employeeTasks/MobileNotifications"));
 
 // Employee Self-Service Portal — HR screens inside the same mobile shell.
@@ -318,7 +318,9 @@ function App() {
             <Route path="visit-measure/new" element={<EmployeeVisitMeasure />} />
             <Route path="boq/new" element={<EmployeeBoq />} />
             <Route path="quotation/new" element={<EmployeeQuotation />} />
-            <Route path="boq-quote/new" element={<EmployeeBoqQuote />} />
+            {/* One combined quote page for the merged task; the older BOQ & Quotation task opens it too. */}
+            <Route path="quote/new" element={<EmployeeQuote />} />
+            <Route path="boq-quote/new" element={<EmployeeQuote />} />
             <Route path="notifications" element={<MobileNotifications />} />
             {/* Self-service HR portal screens */}
             <Route path="more" element={<EmployeeMore />} />

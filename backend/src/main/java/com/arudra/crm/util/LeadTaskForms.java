@@ -35,7 +35,7 @@ public final class LeadTaskForms {
     public static boolean isModuleDriven(String templateCode) {
         return switch (templateCode == null ? "" : templateCode) {
             case "TT_MEASURE_SITE", "TT_PREPARE_BOQ", "TT_SCHEDULE_VISIT", "TT_CONDUCT_VISIT",
-                 "TT_VISIT_MEASURE", "TT_GENERATE_QUOTE", "TT_BOQ_QUOTE" -> true;
+                 "TT_VISIT_MEASURE", "TT_GENERATE_QUOTE", "TT_BOQ_QUOTE", "TT_MEASURE_QUOTE" -> true;
             default -> false;
         };
     }
@@ -57,6 +57,8 @@ public final class LeadTaskForms {
             case "TT_GENERATE_QUOTE" -> "/employee/quotation/new?leadId=" + leadId;
             // Combined step: one page does the BOQ then the quotation in a two-step flow.
             case "TT_BOQ_QUOTE" -> "/employee/boq-quote/new?leadId=" + leadId;
+            // Merged step: the one combined Quote page — visit notes, rooms, sizes, prices, approval.
+            case "TT_MEASURE_QUOTE" -> "/employee/quote/new?leadId=" + leadId;
             default -> null;
         };
     }
@@ -71,6 +73,7 @@ public final class LeadTaskForms {
             case "TT_CONDUCT_VISIT" -> "Open Site Visit page";
             case "TT_GENERATE_QUOTE" -> "Open Quotation page";
             case "TT_BOQ_QUOTE" -> "Open BOQ & Quotation";
+            case "TT_MEASURE_QUOTE" -> "Open the quote";
             default -> null;
         };
     }
