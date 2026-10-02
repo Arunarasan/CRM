@@ -152,6 +152,10 @@ export default function MeasurementDetails() {
   if (!measurement || !measurementId) return <div className="p-8 text-destructive">Failed to load measurement.</div>;
 
   const status = measurement.status || "Draft";
+  // A lead's measurement is edited on the lead's Quote page (rooms, sizes and items live on the quote
+  // sheet). Here everyone sees drawings & photos; only admins keep the full measurement tools.
+  const quoteOwned = !!measurement.lead?.id;
+  const photosOnly = quoteOwned && !isAdmin;
   const currentStageIndex = WORKFLOW_STAGES.indexOf(status === "Revision Required" ? "Under Review" : status);
   const progressPct = status === "Completed"
     ? 100
@@ -190,7 +194,7 @@ export default function MeasurementDetails() {
             </div>
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
+        {!photosOnly && <div className="flex flex-wrap gap-2">
           {canWrite && ["Draft", "Assigned", "Accepted"].includes(status) && (
             <Button variant="outline" disabled={actionBusy} onClick={() => runAction(() => measurementApi.start(measurementId))}>
               <PlayCircle className="mr-2 h-4 w-4" /> Start Measurement
@@ -248,8 +252,20 @@ export default function MeasurementDetails() {
               <XCircle className="h-4 w-4 mr-2" /> Cancel
             </Button>
           )}
-        </div>
+        </div>}
       </div>
+
+      {quoteOwned && (
+        <div className="rounded-lg border border-primary/30 bg-primary/[0.04] p-3 text-sm flex flex-wrap items-center justify-between gap-2">
+          <span>
+            Rooms, sizes and items for this lead are entered on its <span className="font-medium">Quote</span> page.
+            {photosOnly ? " Add drawings and site photos here." : " Changes made here as admin flow into the quote sheet."}
+          </span>
+          <Link to={`/leads/${measurement.lead!.id}?tab=journey`}>
+            <Button size="sm" variant="outline" className="bg-background">Open the quote</Button>
+          </Link>
+        </div>
+      )}
 
       {actionError && (
         <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
@@ -258,7 +274,7 @@ export default function MeasurementDetails() {
       )}
 
       {/* The BOQ button only exists at Completed, so say what still has to happen to get there. */}
-      {canWrite && boqs.length === 0 && !["Completed", "Cancelled"].includes(status) && (
+      {canWrite && !quoteOwned && boqs.length === 0 && !["Completed", "Cancelled"].includes(status) && (
         <div className="rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground">
           <span className="font-medium text-foreground">Next step to generate the BOQ: </span>
           {BOQ_READINESS[status] ?? "move this measurement through the workflow to Completed."}
@@ -346,14 +362,14 @@ export default function MeasurementDetails() {
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="overview" className="w-full">
+      <Tabs defaultValue={photosOnly ? "drawings" : "overview"} className="w-full">
         <div className="overflow-x-auto">
           <TabsList className="w-full justify-start border-b rounded-none pb-px bg-transparent h-auto p-0 space-x-5">
-            {[
+            {(photosOnly ? [["drawings", "Drawings"], ["media", "Photos & videos"]] : [
               ["overview", "Overview"], ["rooms", `Rooms & Items (${rooms.length})`], ["drawings", "Drawings"],
               ["media", "Media"], ["checklist", "Checklist"], ["assignments", "Team"],
               ["activity", "Timeline"], ["revisions", "Revisions"],
-            ].map(([value, label]) => (
+            ]).map(([value, label]) => (
               <TabsTrigger key={value} value={value} className={TAB_TRIGGER_CLASS}>{label}</TabsTrigger>
             ))}
           </TabsList>

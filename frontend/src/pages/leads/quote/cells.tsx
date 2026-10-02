@@ -52,7 +52,10 @@ export function NumCell({
   const shown = value == null ? "" : String(value);
   const [draft, setDraft] = useState(shown);
   const focused = useRef(false);
-  useEffect(() => { if (!focused.current) setDraft(shown); }, [shown]);
+  // Only a value the user actually typed is saved. Until they type, a focused cell keeps following
+  // the server — e.g. tabbing from Rate into Amount must show the new amount, not save the old one.
+  const typed = useRef(false);
+  useEffect(() => { if (!focused.current || !typed.current) setDraft(shown); }, [shown]);
 
   return (
     <input
@@ -62,13 +65,14 @@ export function NumCell({
       placeholder={placeholder}
       className={`${cellBase} text-right tabular-nums ${className}`}
       value={draft}
-      onFocus={(e) => { focused.current = true; e.currentTarget.select(); }}
-      onChange={(e) => { setDraft(e.target.value); onDraft?.(toNum(e.target.value)); }}
+      onFocus={(e) => { focused.current = true; typed.current = false; e.currentTarget.select(); }}
+      onChange={(e) => { typed.current = true; setDraft(e.target.value); onDraft?.(toNum(e.target.value)); }}
       onBlur={() => {
         focused.current = false;
         const n = toNum(draft);
-        if (n !== (value ?? null)) onCommit(n);
+        if (typed.current && n !== (value ?? null)) onCommit(n);
         else setDraft(shown);
+        typed.current = false;
         onDraft?.(undefined);
       }}
       onKeyDown={(e) => handleKeys(e, () => { setDraft(shown); onDraft?.(undefined); })}
@@ -91,7 +95,10 @@ export function TextCell({
   const shown = value ?? "";
   const [draft, setDraft] = useState(shown);
   const focused = useRef(false);
-  useEffect(() => { if (!focused.current) setDraft(shown); }, [shown]);
+  // Only a value the user actually typed is saved. Until they type, a focused cell keeps following
+  // the server — e.g. tabbing from Rate into Amount must show the new amount, not save the old one.
+  const typed = useRef(false);
+  useEffect(() => { if (!focused.current || !typed.current) setDraft(shown); }, [shown]);
 
   return (
     <input
@@ -101,13 +108,14 @@ export function TextCell({
       placeholder={placeholder}
       className={`${cellBase} ${className}`}
       value={draft}
-      onFocus={() => { focused.current = true; }}
-      onChange={(e) => setDraft(e.target.value)}
+      onFocus={() => { focused.current = true; typed.current = false; }}
+      onChange={(e) => { typed.current = true; setDraft(e.target.value); }}
       onBlur={() => {
         focused.current = false;
         const t = draft.trim();
-        if (t !== shown.trim()) onCommit(t);
+        if (typed.current && t !== shown.trim()) onCommit(t);
         else setDraft(shown);
+        typed.current = false;
       }}
       onKeyDown={(e) => handleKeys(e, () => setDraft(shown))}
     />

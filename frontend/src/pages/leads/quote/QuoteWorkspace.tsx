@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   CheckCircle2, ExternalLink, FileDown, FileOutput, History, Loader2, Lock, Pencil, Printer, RotateCcw, Ruler, Wand2,
@@ -18,8 +18,6 @@ import { QUOTATION_STATUS_LABELS, QUOTATION_STATUS_STYLES, type Quotation } from
 import { leadApi } from "../leadApi";
 import { formatDate } from "../constants";
 import { ListSkeleton } from "../tabs/shared";
-import SiteVisitsTab from "../tabs/SiteVisitsTab";
-import RoomsTab from "@/pages/measurements/tabs/RoomsTab";
 import QuotationPdfDialog from "@/pages/quotations/QuotationPdfDialog";
 import { QuotationPrintView } from "@/pages/quotations/QuotationPrint";
 import BoqSheet from "./BoqSheet";
@@ -45,7 +43,6 @@ const QUOTE_DONE = new Set(["APPROVED", "CONVERTED"]);
 
 export default function QuoteWorkspace({ leadId, onChanged }: { leadId: string; onChanged: () => void }) {
   const { hasAuthority, isAdmin } = useAuth();
-  const canMeasure = hasAuthority("MEASUREMENT_WRITE") || isAdmin;
   const canPrice = hasAuthority("BOQ_WRITE") || isAdmin;
   const canApprove = isAdmin || (canPrice && hasAuthority("QUOTATION_APPROVE"));
   const canConvert = isAdmin || hasAuthority("QUOTATION_WRITE");
@@ -55,7 +52,6 @@ export default function QuoteWorkspace({ leadId, onChanged }: { leadId: string; 
   const [quotations, setQuotations] = useState<any[]>([]);
   const [boq, setBoq] = useState<Boq | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [editMeasurement, setEditMeasurement] = useState(false);
   const [pdfQuote, setPdfQuote] = useState<Quotation | null>(null);
   const [printId, setPrintId] = useState<number | null>(null);
   const [approveOpen, setApproveOpen] = useState(false);
@@ -116,25 +112,6 @@ export default function QuoteWorkspace({ leadId, onChanged }: { leadId: string; 
       toast.error(errMsg(e, "Could not open the quote sheet."));
     } finally { setBusy(null); }
   };
-
-  // Room-size / scope edits on the measurement flow into the sheet automatically (debounced).
-  const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [syncing, setSyncing] = useState(false);
-  const onMeasurementChanged = () => {
-    if (!boq?.id || locked || !canPrice) { load(); return; }
-    if (syncTimer.current) clearTimeout(syncTimer.current);
-    const boqId = boq.id;
-    syncTimer.current = setTimeout(async () => {
-      setSyncing(true);
-      try {
-        await boqApi.syncFromMeasurement(boqId);
-        await load();
-      } catch (e) {
-        toast.error(errMsg(e, "Measurement saved, but the sheet could not be updated."));
-      } finally { setSyncing(false); }
-    }, 800);
-  };
-  useEffect(() => () => { if (syncTimer.current) clearTimeout(syncTimer.current); }, []);
 
   const saveTotals = async (patch: Parameters<typeof boqApi.updateTotals>[1]) => {
     if (!boq?.id) return;
@@ -244,12 +221,6 @@ export default function QuoteWorkspace({ leadId, onChanged }: { leadId: string; 
           </span>
         </span>
         <span className="flex flex-wrap items-center gap-3">
-          {boq && canMeasure && measurement && (
-            <button type="button" onClick={() => setEditMeasurement((v) => !v)}
-              className={`flex items-center gap-1 hover:text-primary ${editMeasurement ? "text-primary font-medium" : ""}`}>
-              <Pencil className="h-3 w-3" /> Room details
-            </button>
-          )}
           {measurement && (
             <Link to={`/measurements/${measurement.id}`} state={{ from: `/leads/${leadId}` }}
               className="hover:text-primary flex items-center gap-1">
@@ -262,28 +233,14 @@ export default function QuoteWorkspace({ leadId, onChanged }: { leadId: string; 
       </header>
 
       <div className="p-3 sm:p-4 space-y-4">
-        {boq && editMeasurement && measurement && (
-          <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
-            <p className="text-xs text-muted-foreground flex flex-wrap items-center gap-2">
-              Room sizes, doors/windows and scope. Rooms and items are added on the sheet below.
-              {syncing && <span className="flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> Updating…</span>}
-            </p>
-            <RoomsTab measurementId={measurement.id} canWrite={canMeasure && !locked} onChanged={onMeasurementChanged} roomsOnly />
-            <div className="flex justify-end">
-              <Button size="sm" variant="ghost" onClick={() => setEditMeasurement(false)}>Done</Button>
-            </div>
-          </div>
-        )}
-
         {!boq ? (
           // ---- Nothing yet: visit/measure, then one click opens the sheet ----
           <div className="space-y-3">
-            {!measurement && <SiteVisitsTab leadId={leadId} onChanged={refreshAll} />}
             <div className="rounded-lg border border-dashed p-4 flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="font-medium text-sm">{measurement ? "Measurement recorded" : "Ready to measure & quote"}</p>
+                <p className="font-medium text-sm">Start the quote</p>
                 <p className="text-xs text-muted-foreground">
-                  One sheet for rooms, sizes, items, prices and the customer's choices.
+                  One sheet for rooms, sizes, items, prices and the customer's choices — measure and price as you go.
                 </p>
               </div>
               {canPrice && (
@@ -484,7 +441,7 @@ function TotalsPanel({ boq, editable, onSave }: { boq: Boq; editable: boolean; o
   const itemsMaterial = active.reduce((s, i) => s + Number(i.materialTotal ?? 0), 0);
   const itemsLabour = active.reduce((s, i) => s + Number(i.labourTotal ?? 0), 0);
   const manual = boq.materialTotalOverride != null || boq.labourTotalOverride != null;
-  const f = editable ? "h-9 border-border bg-background" : "h-9";
+  const f = editable ? "h-9 !border-border !bg-background" : "h-9";
 
   /** Final price → flat discount that lands on it (final = (subtotal − discount) × (1 + GST%)). */
   const setFinal = (target: number | null) => {
@@ -559,7 +516,7 @@ function TotalsPanel({ boq, editable, onSave }: { boq: Boq; editable: boolean; o
             Final price{editable && <span className="font-normal opacity-70"> · type a price — the discount is worked out</span>}
           </label>
           <NumCell value={boq.grandTotal} disabled={!editable}
-            className={`h-11 text-xl font-bold text-primary ${editable ? "border-primary/40 bg-background" : ""}`}
+            className={`h-11 text-xl font-bold text-primary ${editable ? "!border-primary/40 !bg-background" : ""}`}
             onCommit={setFinal} />
         </div>
         <p className="text-[11px] text-muted-foreground">Discount and GST carry into the quotation.</p>

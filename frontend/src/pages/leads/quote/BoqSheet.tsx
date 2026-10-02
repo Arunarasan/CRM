@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, Copy, Hammer, Loader2, MoreVertical, Package, Plus, Trash2 } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Copy, Hammer, Loader2, MoreVertical, Package, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -116,7 +116,9 @@ export default function BoqSheet({
       patch.area = area;
       if (AREA_UNITS.includes(item.unit || "") && qtyTracksArea) patch.quantity = area;
     }
-    return updateItem(item.id as number, patch);
+    const res = updateItem(item.id as number, patch);
+    if (patch.quantity != null && patch.quantity !== item.quantity) followQty(item, Number(item.quantity ?? 0), patch.quantity);
+    return res;
   };
 
   const updateMaterial = (itemId: number, matId: number, patch: Partial<BoqItemMaterial>) =>
@@ -154,6 +156,14 @@ export default function BoqSheet({
           units: Number(m.quantity) * (1 + Number(m.wastePercent ?? 0) / 100) })),
         ...labs.map((l) => ({ kind: "l" as const, id: l.id as number, rate: Number(l.rate), units: Number(l.quantity) })),
       ];
+      // One price line and the amount doesn't divide evenly by its quantity (₹2,500 for 3): a rate in
+      // paise can't land on it, so store it as a lump sum — the typed amount is what the customer sees.
+      if (lines.length === 1 && Math.abs(round2(target / lines[0].units) * lines[0].units - target) >= 0.005) {
+        const x = lines[0];
+        if (x.kind === "m") updateMaterial(id, x.id, { quantity: 1, wastePercent: 0, sellingRate: round2(target) });
+        else updateLabour(id, x.id, { quantity: 1, rate: round2(target) });
+        return;
+      }
       const scaledSum = lines.reduce((s, x) => s + x.units * x.rate, 0);
       let remaining = target - (current - scaledSum);
       lines.forEach((x, i) => {
@@ -167,14 +177,51 @@ export default function BoqSheet({
     const first = (item.materials || []).find((m) => Number(m.quantity ?? 0) > 0);
     if (first) {
       const units = Number(first.quantity) * (1 + Number(first.wastePercent ?? 0) / 100);
-      updateMaterial(id, first.id as number, { sellingRate: round2(target / units) });
+      const r = round2(target / units);
+      updateMaterial(id, first.id as number, Math.abs(r * units - target) < 0.005
+        ? { sellingRate: r }
+        : { quantity: 1, wastePercent: 0, sellingRate: round2(target) });
       return;
     }
     const qty = Number(item.quantity ?? 0) > 0 ? Number(item.quantity) : 1;
+    const r = round2(target / qty);
+    const even = Math.abs(r * qty - target) < 0.005;
     save("set the amount", () => boqApi.addMaterial(boqId, id, {
-      materialName: item.itemName || "Item", quantity: qty, unit: item.unit, wastePercent: 0, sellingRate: round2(target / qty),
+      materialName: item.itemName || "Item", quantity: even ? qty : 1, unit: item.unit, wastePercent: 0,
+      sellingRate: even ? r : round2(target),
     }));
   };
+
+  /**
+   * Quantity edit, invoice-style: material / labour lines that were following the item's quantity
+   * follow the new one too, so Amount stays Rate × Qty.
+   */
+  const updateQty = (item: BoqItem, v: number | null) => {
+    if (v == null || v === item.quantity) return;
+    const old = Number(item.quantity ?? 0);
+    updateItem(item.id as number, { quantity: v });
+    followQty(item, old, v);
+  };
+  const followQty = (item: BoqItem, oldQty: number, newQty: number) => {
+    const id = item.id as number;
+    item.materials?.forEach((m) => {
+      if (Math.abs(Number(m.quantity ?? 0) - oldQty) < 0.005) updateMaterial(id, m.id as number, { quantity: newQty });
+    });
+    item.labours?.forEach((l) => {
+      if (Math.abs(Number(l.quantity ?? 0) - oldQty) < 0.005) updateLabour(id, l.id as number, { quantity: newQty });
+    });
+  };
+
+  /** Add an item with its price in one go: Rate × Qty becomes one price line on it. */
+  const addPricedItem = (it: Partial<BoqItem>, rate: number) =>
+    save("add the item", async () => {
+      const created = await boqApi.addItem(boqId, it);
+      if (rate > 0 && created?.id) {
+        await boqApi.addMaterial(boqId, created.id, {
+          materialName: it.itemName || "Item", quantity: it.quantity ?? 1, unit: it.unit, wastePercent: 0, sellingRate: rate,
+        });
+      }
+    });
 
   // ---------------- Derived view data ----------------
 
@@ -205,7 +252,11 @@ export default function BoqSheet({
   }, [items]);
   const rateFor = (workType: string) => labourRates[workType.trim().toLowerCase()]?.rate;
 
-  const [showLines, setShowLines] = useState(true);
+  // Cost breakdown (material / labour lines) is for whoever prices the work — hidden by default.
+  const [showLines, setShowLines] = useState(() => {
+    try { return localStorage.getItem("quoteShowBreakdown") === "1"; } catch { return false; }
+  });
+  useEffect(() => { try { localStorage.setItem("quoteShowBreakdown", showLines ? "1" : "0"); } catch { /* ignore */ } }, [showLines]);
   const [bulk, setBulk] = useState<null | { mode: "labour" } | { mode: "copy"; targets: number[] }>(null);
 
   // The tick on each item is the customer's choice: ticked items are in the quote and its total.
@@ -226,7 +277,7 @@ export default function BoqSheet({
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           {canEdit ? <SaveState pending={pending} lastSaved={lastSaved} /> : <span>Locked — view only</span>}
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-3">
           {items.length > 0 && (
             <span className="text-xs font-medium text-muted-foreground">
               {includedCount} of {items.length} in quote
@@ -235,14 +286,15 @@ export default function BoqSheet({
               )}
             </span>
           )}
-          {canEdit && items.length > 1 && (
+          {canEdit && showLines && items.length > 1 && (
             <Button size="sm" variant="outline" onClick={() => setBulk({ mode: "labour" })}>
               <Hammer className="h-3.5 w-3.5 mr-1" /> Add labour to items…
             </Button>
           )}
-          <Button size="sm" variant="ghost" onClick={() => setShowLines((v) => !v)}>
-            {showLines ? "Totals only" : "Show material & labour"}
-          </Button>
+          <label className="flex items-center gap-1.5 text-xs font-medium cursor-pointer select-none">
+            <input type="checkbox" className="h-3.5 w-3.5 accent-primary" checked={showLines} onChange={(e) => setShowLines(e.target.checked)} />
+            Show cost breakdown
+          </label>
         </div>
       </div>
 
@@ -253,73 +305,87 @@ export default function BoqSheet({
         {groups.map((g) => <option key={g.floor} value={g.floor} />)}
       </datalist>
 
-      {groups.length === 0 && (
-        <p className="text-sm text-muted-foreground border rounded-lg p-4 text-center">
-          No items yet. Add a room and its first item below.
-        </p>
-      )}
-
-      {groups.map((g) => (
-        <div key={g.floor} className="space-y-2">
-          {groups.length > 1 || g.floor !== "General" ? (
-            <div className="text-xs font-semibold uppercase tracking-wide text-primary px-1">{g.floor}</div>
-          ) : null}
-          {g.rooms.map((r) => (
-            <div key={r.room} className="rounded-lg border bg-card overflow-visible">
-              <div className="flex items-center justify-between gap-2 px-3 py-2.5 border-b bg-muted/40 rounded-t-lg">
-                <span className="font-semibold text-sm flex items-center gap-2">
-                  {(() => {
-                    const on = r.items.filter((i) => i.isActive !== false).length;
-                    return (
-                      <input type="checkbox" className="h-4 w-4 accent-primary" disabled={!canEdit}
-                        title="Whole room in the quote"
-                        aria-label={`${r.room} in quote`}
-                        ref={(el) => { if (el) el.indeterminate = on > 0 && on < r.items.length; }}
-                        checked={on === r.items.length} onChange={() => setIncluded(r.items, on !== r.items.length)} />
-                    );
-                  })()}
-                  {r.room}
-                  <span className="ml-2 text-xs font-normal text-muted-foreground">{r.items.length} item{r.items.length === 1 ? "" : "s"}</span>
-                </span>
-                <span className="text-sm font-bold tabular-nums">{inr(roomTotal(r.items))}</span>
-              </div>
-              <div className="divide-y">
-                {r.items.map((item) => (
-                  <ItemBlock
-                    key={item.id}
-                    item={item}
-                    canEdit={canEdit}
-                    showLines={showLines}
-                    onUpdate={(patch) => updateItem(item.id as number, patch)}
-                    onSize={(f, v) => updateSize(item, f, v)}
-                    onSetAmount={(v) => setItemAmount(item, v)}
-                    onUpdateMaterial={(mid, patch) => updateMaterial(item.id as number, mid, patch)}
-                    onUpdateLabour={(lid, patch) => updateLabour(item.id as number, lid, patch)}
-                    rateFor={rateFor}
-                    onDeleteMaterial={(mid) => save("remove the material", () => boqApi.deleteMaterial(boqId, item.id as number, mid))}
-                    onDeleteLabour={(lid) => save("remove the labour", () => boqApi.deleteLabour(boqId, item.id as number, lid))}
-                    onAddMaterial={(m) => save("add the material", () => boqApi.addMaterial(boqId, item.id as number, m))}
-                    onAddLabour={(l) => { rememberRate(l.workType, l.rate); return save("add the labour", () => boqApi.addLabour(boqId, item.id as number, l)); }}
-                    onDelete={() => {
-                      if (!window.confirm(`Remove "${item.itemName}" from the pricing?`)) return;
-                      save("delete the item", () => boqApi.deleteItem(boqId, item.id as number));
-                    }}
-                    onToggleActive={() => save("update the item", () => boqApi.toggleItemActive(boqId, item.id as number, item.isActive === false))}
-                    onCopyFrom={() => setBulk({ mode: "copy", targets: [item.id as number] })}
-                  />
-                ))}
-              </div>
-              {canEdit && (
-                <NewItemRow
-                  onAdd={(it) => save("add the item", () => boqApi.addItem(boqId, { ...it, floorName: g.floor === "General" ? undefined : g.floor, roomName: r.room }))}
-                />
-              )}
-            </div>
-          ))}
+      <div className="rounded-xl border overflow-hidden">
+        {/* Column header (desktop) */}
+        <div className={`hidden md:grid ${ROW} items-center bg-muted/60 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground`}>
+          <span title="In the quote">✓</span>
+          <span>Item &amp; description</span>
+          <span className="text-center">Size (L × W)</span>
+          <span className="text-right">Qty</span>
+          <span>Unit</span>
+          <span className="text-right">Rate ₹</span>
+          <span className="text-right">Amount ₹</span>
+          <span />
         </div>
-      ))}
 
-      {canEdit && <NewRoomRow onAdd={(it) => save("add the room", () => boqApi.addItem(boqId, it))} />}
+        {groups.length === 0 && (
+          <p className="text-sm text-muted-foreground p-6 text-center">
+            No items yet. Add a room and its first item below.
+          </p>
+        )}
+
+        {groups.map((g) => (
+          <div key={g.floor}>
+            {(groups.length > 1 || g.floor !== "General") && (
+              <div className="border-t bg-primary/[0.06] px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-primary">{g.floor}</div>
+            )}
+            {g.rooms.map((r) => {
+              const on = r.items.filter((i) => i.isActive !== false).length;
+              return (
+                <div key={r.room} className="border-t">
+                  {/* Room row */}
+                  <div className="flex items-center gap-2 bg-muted/30 px-3 py-2">
+                    <input type="checkbox" className="h-4 w-4 accent-primary" disabled={!canEdit}
+                      title="Whole room in the quote" aria-label={`${r.room} in quote`}
+                      ref={(el) => { if (el) el.indeterminate = on > 0 && on < r.items.length; }}
+                      checked={on === r.items.length} onChange={() => setIncluded(r.items, on !== r.items.length)} />
+                    <span className="font-semibold text-sm flex-1">
+                      {r.room}
+                      <span className="ml-2 text-xs font-normal text-muted-foreground">{r.items.length} item{r.items.length === 1 ? "" : "s"}</span>
+                    </span>
+                    <span className="text-sm font-bold tabular-nums">{inr(roomTotal(r.items))}</span>
+                  </div>
+
+                  <div className="divide-y">
+                    {r.items.map((item) => (
+                      <ItemRow
+                        key={item.id}
+                        item={item}
+                        canEdit={canEdit}
+                        showLines={showLines}
+                        onUpdate={(patch) => updateItem(item.id as number, patch)}
+                        onQty={(v) => updateQty(item, v)}
+                        onSize={(f, v) => updateSize(item, f, v)}
+                        onSetAmount={(v) => setItemAmount(item, v)}
+                        onUpdateMaterial={(mid, patch) => updateMaterial(item.id as number, mid, patch)}
+                        onUpdateLabour={(lid, patch) => updateLabour(item.id as number, lid, patch)}
+                        rateFor={rateFor}
+                        onDeleteMaterial={(mid) => save("remove the material", () => boqApi.deleteMaterial(boqId, item.id as number, mid))}
+                        onDeleteLabour={(lid) => save("remove the labour", () => boqApi.deleteLabour(boqId, item.id as number, lid))}
+                        onAddMaterial={(m) => save("add the material", () => boqApi.addMaterial(boqId, item.id as number, m))}
+                        onAddLabour={(l) => { rememberRate(l.workType, l.rate); return save("add the labour", () => boqApi.addLabour(boqId, item.id as number, l)); }}
+                        onDelete={() => {
+                          if (!window.confirm(`Remove "${item.itemName}"?`)) return;
+                          save("delete the item", () => boqApi.deleteItem(boqId, item.id as number));
+                        }}
+                        onToggleActive={() => save("update the quote", () => boqApi.toggleItemActive(boqId, item.id as number, item.isActive === false))}
+                        onCopyFrom={() => setBulk({ mode: "copy", targets: [item.id as number] })}
+                      />
+                    ))}
+                  </div>
+                  {canEdit && (
+                    <NewItemRow
+                      onAdd={(it, rate) => addPricedItem({ ...it, floorName: g.floor === "General" ? undefined : g.floor, roomName: r.room }, rate)}
+                    />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+
+      {canEdit && <NewRoomRow onAdd={(it, rate) => addPricedItem(it, rate)} />}
 
       <BulkDialog
         state={bulk}
@@ -360,20 +426,23 @@ export default function BoqSheet({
 function SaveState({ pending, lastSaved }: { pending: number; lastSaved: number | null }) {
   if (pending > 0) return <span className="flex items-center gap-1"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Saving…</span>;
   if (lastSaved) return <span className="flex items-center gap-1 text-green-600"><Check className="h-3.5 w-3.5" /> All changes saved</span>;
-  return <span>Edit any cell — changes save automatically</span>;
+  return <span>Type in any box — it saves by itself</span>;
 }
 
 // ---------------------------------------------------------------------------
-// One item as a card: name + size/qty + amount on top, its material and labour lines below, each
-// line reading like a sentence ("202 Sqft × ₹200 + 0% waste = ₹40,400"). Every editable value is a
-// visible field — nothing hides behind hover.
+// One item = one table row: tick · name + description · size · qty · unit · rate · amount.
+// Rate × Qty = Amount, like an invoice; typing either one sets the price. The material / labour
+// cost breakdown sits behind "Details" (or "Show cost breakdown") for whoever prices the work.
 // ---------------------------------------------------------------------------
 
-/** Visible input styling for editable cells (the bare spreadsheet cells only show a border on hover). */
-const FIELD = "border-border bg-background";
+/** Desktop column layout shared by the header and every item row. */
+const ROW = "md:grid md:grid-cols-[28px_minmax(0,1fr)_150px_72px_92px_104px_116px_64px] md:gap-2";
 
-function ItemBlock({
-  item, canEdit, showLines, onUpdate, onSize, onSetAmount,
+/** Visible input styling for editable cells (the bare spreadsheet cells only show a border on hover). */
+const FIELD = "!border-border !bg-background";
+
+function ItemRow({
+  item, canEdit, showLines, onUpdate, onQty, onSize, onSetAmount,
   onUpdateMaterial, onUpdateLabour, onDeleteMaterial, onDeleteLabour, onAddMaterial, onAddLabour,
   onDelete, onToggleActive, onCopyFrom, rateFor,
 }: {
@@ -381,6 +450,7 @@ function ItemBlock({
   canEdit: boolean;
   showLines: boolean;
   onUpdate: (patch: Partial<BoqItem>) => void;
+  onQty: (v: number | null) => void;
   onSize: (field: "length" | "width", v: number | null) => void;
   onSetAmount: (target: number) => void;
   onUpdateMaterial: (id: number, patch: Partial<BoqItemMaterial>) => void;
@@ -395,79 +465,88 @@ function ItemBlock({
   rateFor: (workType: string) => number | undefined;
 }) {
   const inactive = item.isActive === false;
+  const [open, setOpen] = useState(false);
   const [adding, setAdding] = useState<null | "material" | "labour">(null);
   const lineCount = (item.materials?.length ?? 0) + (item.labours?.length ?? 0);
+  const qty = Number(item.quantity ?? 0);
+  const amount = Number(item.amount ?? 0);
+  const rate = qty > 0 ? Math.round((amount / qty) * 100) / 100 : amount;
   const f = canEdit ? FIELD : "";
+  const detailsOpen = open || showLines;
 
   return (
-    <div className={`p-3 ${inactive ? "bg-muted/30" : ""}`}>
-      {/* ---- Item header ---- */}
-      <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
+    <div className={inactive ? "bg-muted/40" : ""}>
+      <div className={`grid grid-cols-[28px_minmax(0,1fr)_auto] gap-x-2 gap-y-1.5 items-start px-3 py-2.5 ${ROW} md:items-start`}>
+        {/* ✓ in quote */}
         <input type="checkbox" aria-label={`${item.itemName} in quote`} title="In the quote (customer's choice)"
-          className="mt-2.5 h-4 w-4 accent-primary" disabled={!canEdit}
+          className="mt-2 h-4 w-4 accent-primary justify-self-center" disabled={!canEdit}
           checked={!inactive} onChange={onToggleActive} />
-        <div className={`min-w-[12rem] flex-1 ${inactive ? "opacity-60" : ""}`}>
-          <TextCell value={item.itemName} col="itemName" disabled={!canEdit} className={`font-semibold text-[15px] ${f}`}
-            onCommit={(v) => v && onUpdate({ itemName: v })} />
-          <div className="mt-1 flex flex-wrap items-center gap-1.5">
-            <SelectCell value={item.category} options={BOQ_CATEGORIES} disabled={!canEdit}
-              className="h-6 w-auto rounded-full bg-muted px-2 text-[11px] text-muted-foreground" onCommit={(v) => onUpdate({ category: v })} />
-            {inactive && <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">Not in quote</span>}
-            {!showLines && lineCount > 0 && <span className="text-[11px] text-muted-foreground">{lineCount} line(s)</span>}
+
+        {/* Item + description */}
+        <div className={`min-w-0 ${inactive ? "opacity-60" : ""}`}>
+          <div className="flex items-center gap-1.5">
+            <TextCell value={item.itemName} col="itemName" disabled={!canEdit} className={`font-medium ${f}`}
+              onCommit={(v) => v && onUpdate({ itemName: v })} />
+            {inactive && <span className="shrink-0 text-[10px] uppercase px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">Not in quote</span>}
           </div>
+          <DescriptionBox value={item.description} disabled={!canEdit}
+            onCommit={(v) => onUpdate({ description: v || undefined })} />
         </div>
 
-        <Field label="Size (L × W)">
-          <div className="flex items-center gap-1">
-            <div className="w-16"><NumCell value={item.length} col="length" placeholder="L" disabled={!canEdit} className={f} onCommit={(v) => onSize("length", v)} /></div>
-            <span className="text-muted-foreground text-xs">×</span>
-            <div className="w-16"><NumCell value={item.width} col="width" placeholder="W" disabled={!canEdit} className={f} onCommit={(v) => onSize("width", v)} /></div>
-          </div>
-        </Field>
-        <Field label="Quantity">
-          <div className="flex items-center gap-1">
-            <div className="w-20"><NumCell value={item.quantity} col="qty" disabled={!canEdit} className={f} onCommit={(v) => onUpdate({ quantity: v ?? undefined })} /></div>
-            <div className="w-24"><SelectCell value={item.unit} options={BOQ_UNITS} disabled={!canEdit} className={f} onCommit={(v) => onUpdate({ unit: v })} /></div>
-          </div>
-        </Field>
-        <Field label="Amount" hint={canEdit ? "type a total — rates adjust" : undefined}>
-          <div className="w-32">
-            <NumCell value={item.amount} col="amount" disabled={!canEdit}
-              className={`font-bold text-base ${canEdit ? "border-primary/40 bg-primary/[0.04]" : ""}`}
-              onCommit={(v) => v != null && onSetAmount(v)} />
-          </div>
-        </Field>
+        {/* Actions (mobile: top-right) */}
+        <div className="row-start-1 col-start-3 md:hidden flex items-center">
+          <RowActions canEdit={canEdit} open={detailsOpen} lineCount={lineCount} onToggle={() => setOpen((v) => !v)}
+            onAddMaterial={() => { setOpen(true); setAdding("material"); }} onAddLabour={() => { setOpen(true); setAdding("labour"); }}
+            onCopyFrom={onCopyFrom} onDelete={onDelete} />
+        </div>
 
-        {canEdit && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button type="button" className="mt-5 h-8 w-8 rounded-md hover:bg-muted flex items-center justify-center" aria-label="Item actions">
-                <MoreVertical className="h-4 w-4 text-muted-foreground" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => setAdding("material")}><Package className="h-4 w-4 mr-2" /> Add material</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setAdding("labour")}><Hammer className="h-4 w-4 mr-2" /> Add labour</DropdownMenuItem>
-              <DropdownMenuItem onClick={onCopyFrom}><Copy className="h-4 w-4 mr-2" /> Copy lines from another item…</DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={onDelete} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" /> Delete item</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
+        {/* Numbers — a labelled 2×2 grid on phones, table cells on desktop */}
+        <div className="col-span-3 col-start-1 md:col-span-1 md:col-start-auto grid grid-cols-2 gap-2 md:contents pl-[36px] md:pl-0">
+          <Cell label="Size (L × W)">
+            <div className="flex items-center gap-1">
+              <NumCell value={item.length} col="length" placeholder="L" disabled={!canEdit} className={`text-center ${f}`} onCommit={(v) => onSize("length", v)} />
+              <span className="text-muted-foreground text-xs">×</span>
+              <NumCell value={item.width} col="width" placeholder="W" disabled={!canEdit} className={`text-center ${f}`} onCommit={(v) => onSize("width", v)} />
+            </div>
+          </Cell>
+          <Cell label="Qty">
+            <NumCell value={item.quantity} col="qty" disabled={!canEdit} className={f} onCommit={onQty} />
+          </Cell>
+          <Cell label="Unit">
+            <SelectCell value={item.unit} options={BOQ_UNITS} disabled={!canEdit} className={f} onCommit={(v) => onUpdate({ unit: v })} />
+          </Cell>
+          <Cell label="Rate ₹">
+            <NumCell value={rate} col="rate" disabled={!canEdit} className={f}
+              onCommit={(v) => v != null && onSetAmount(Math.round(v * (qty > 0 ? qty : 1) * 100) / 100)} />
+          </Cell>
+          <Cell label="Amount ₹" className="col-span-2 md:col-span-1">
+            <NumCell value={item.amount} col="amount" disabled={!canEdit}
+              className={`font-semibold ${canEdit ? "!border-primary/40 !bg-primary/[0.04]" : ""}`}
+              onCommit={(v) => v != null && onSetAmount(v)} />
+          </Cell>
+        </div>
+
+        <div className="hidden md:flex items-center justify-end pt-0.5">
+          <RowActions canEdit={canEdit} open={detailsOpen} lineCount={lineCount} onToggle={() => setOpen((v) => !v)}
+            onAddMaterial={() => { setOpen(true); setAdding("material"); }} onAddLabour={() => { setOpen(true); setAdding("labour"); }}
+            onCopyFrom={onCopyFrom} onDelete={onDelete} />
+        </div>
       </div>
 
-      {/* ---- Description (goes onto the quotation, print and PDF) ---- */}
-      {(canEdit || item.description) && (
-        <DescriptionBox value={item.description} disabled={!canEdit}
-          onCommit={(v) => onUpdate({ description: v || undefined })} />
-      )}
-
-      {/* ---- Material + labour ---- */}
-      {showLines && (
-        <div className="mt-3 rounded-lg bg-muted/30 p-2 space-y-1.5">
+      {/* ---- Details: category + material / labour behind the amount ---- */}
+      {detailsOpen && (
+        <div className="mx-3 mb-3 md:ml-[44px] rounded-lg bg-muted/40 p-2 space-y-1.5">
+          <div className="flex flex-wrap items-center gap-2 px-1 text-xs text-muted-foreground">
+            <span>Cost breakdown</span>
+            <span>·</span>
+            <span className="flex items-center gap-1">Category
+              <SelectCell value={item.category} options={BOQ_CATEGORIES} disabled={!canEdit}
+                className="h-6 w-auto rounded-full bg-background px-2 text-[11px]" onCommit={(v) => onUpdate({ category: v })} />
+            </span>
+          </div>
           {lineCount === 0 && !adding && (
             <p className="px-1 text-xs text-muted-foreground">
-              No material or labour yet{canEdit ? " — add them below, or just type the Amount above." : "."}
+              No material or labour lines — the amount is a single price{canEdit ? ". Add lines to build it up." : "."}
             </p>
           )}
           {item.materials?.map((m) => (
@@ -505,11 +584,11 @@ function ItemBlock({
             <div className="flex flex-wrap gap-2 pt-0.5">
               <button type="button" onClick={() => setAdding("material")}
                 className="text-xs font-medium text-sky-700 border border-sky-200 bg-background hover:bg-sky-50 rounded-full px-3 py-1 flex items-center gap-1">
-                <Plus className="h-3.5 w-3.5" /> Add material
+                <Plus className="h-3.5 w-3.5" /> Material
               </button>
               <button type="button" onClick={() => setAdding("labour")}
                 className="text-xs font-medium text-amber-700 border border-amber-200 bg-background hover:bg-amber-50 rounded-full px-3 py-1 flex items-center gap-1">
-                <Plus className="h-3.5 w-3.5" /> Add labour
+                <Plus className="h-3.5 w-3.5" /> Labour
               </button>
             </div>
           )}
@@ -519,7 +598,49 @@ function ItemBlock({
   );
 }
 
-/** Free-text item description; grows with its text and saves on blur. */
+/** "Details" toggle + ⋮ menu for one item row. */
+function RowActions({ canEdit, open, lineCount, onToggle, onAddMaterial, onAddLabour, onCopyFrom, onDelete }: {
+  canEdit: boolean; open: boolean; lineCount: number; onToggle: () => void;
+  onAddMaterial: () => void; onAddLabour: () => void; onCopyFrom: () => void; onDelete: () => void;
+}) {
+  return (
+    <>
+      <button type="button" onClick={onToggle} title={open ? "Hide cost breakdown" : "Show cost breakdown"}
+        className={`h-8 px-1.5 rounded-md text-xs flex items-center gap-0.5 hover:bg-muted ${open ? "text-primary" : "text-muted-foreground"}`}>
+        {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+        {lineCount > 0 && <span className="tabular-nums">{lineCount}</span>}
+      </button>
+      {canEdit && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button type="button" className="h-8 w-7 rounded-md hover:bg-muted flex items-center justify-center" aria-label="Item actions">
+              <MoreVertical className="h-4 w-4 text-muted-foreground" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={onAddMaterial}><Package className="h-4 w-4 mr-2" /> Add material</DropdownMenuItem>
+            <DropdownMenuItem onClick={onAddLabour}><Hammer className="h-4 w-4 mr-2" /> Add labour</DropdownMenuItem>
+            <DropdownMenuItem onClick={onCopyFrom}><Copy className="h-4 w-4 mr-2" /> Copy lines from another item…</DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={onDelete} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" /> Delete item</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+    </>
+  );
+}
+
+/** A table cell on desktop; a labelled field on phones. */
+function Cell({ label, className = "", children }: { label: string; className?: string; children: React.ReactNode }) {
+  return (
+    <div className={`min-w-0 ${className}`}>
+      <span className="md:hidden block text-[10px] font-medium uppercase text-muted-foreground mb-0.5">{label}</span>
+      {children}
+    </div>
+  );
+}
+
+/** Item description under the name: quiet until you click it; grows with its text; saves on blur. */
 function DescriptionBox({ value, disabled, onCommit }: {
   value?: string | null; disabled: boolean; onCommit: (v: string) => void;
 }) {
@@ -530,27 +651,15 @@ function DescriptionBox({ value, disabled, onCommit }: {
     const el = ref.current;
     if (el) { el.style.height = "auto"; el.style.height = `${el.scrollHeight}px`; }
   }, [draft]);
+  if (disabled && !value) return null;
   return (
-    <div className="mt-2">
-      <label className="block text-[11px] font-medium text-muted-foreground mb-0.5">Description</label>
-      <textarea ref={ref} rows={1} value={draft} disabled={disabled}
-        placeholder="Design, finish, colour, brand, work details… (shows on the quotation)"
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={() => draft.trim() !== (value ?? "").trim() && onCommit(draft.trim())}
-        onKeyDown={(e) => { if (e.key === "Escape") { setDraft(value ?? ""); e.currentTarget.blur(); } }}
-        className="w-full resize-none overflow-hidden rounded-md border border-border bg-background px-2 py-1.5 text-sm leading-snug outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:border-transparent disabled:bg-transparent disabled:px-0" />
-    </div>
-  );
-}
-
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
-  return (
-    <div className="min-w-0">
-      <span className="block text-[11px] font-medium text-muted-foreground mb-0.5">
-        {label}{hint && <span className="font-normal opacity-70"> · {hint}</span>}
-      </span>
-      {children}
-    </div>
+    <textarea ref={ref} rows={1} value={draft} disabled={disabled}
+      placeholder="+ Add description"
+      title="Shows on the quotation, print and PDF"
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => draft.trim() !== (value ?? "").trim() && onCommit(draft.trim())}
+      onKeyDown={(e) => { if (e.key === "Escape") { setDraft(value ?? ""); e.currentTarget.blur(); } }}
+      className="mt-0.5 w-full resize-none overflow-hidden rounded-md border border-transparent bg-transparent px-2 py-1 text-xs leading-snug text-muted-foreground outline-none hover:border-border focus:border-primary focus:bg-background focus:text-foreground focus:ring-2 focus:ring-primary/20 placeholder:text-muted-foreground/70 disabled:hover:border-transparent" />
   );
 }
 
@@ -694,51 +803,53 @@ function NewLabourRow({ defaultQty, rateFor, onAdd, onDone }: {
   );
 }
 
-function NewItemRow({ onAdd }: { onAdd: (item: Partial<BoqItem>) => void }) {
+function NewItemRow({ onAdd }: { onAdd: (item: Partial<BoqItem>, rate: number) => void }) {
   const [name, setName] = useState("");
   const [qty, setQty] = useState("1");
   const [unit, setUnit] = useState("Nos");
-  const [category, setCategory] = useState("Others");
+  const [rate, setRate] = useState("");
   const submit = () => {
     if (!name.trim()) return;
-    onAdd({ itemName: name.trim(), quantity: Number(qty) || 1, unit, category });
-    setName(""); setQty("1");
+    onAdd({ itemName: name.trim(), quantity: Number(qty) || 1, unit, category: "Others" }, Number(rate) || 0);
+    setName(""); setQty("1"); setRate("");
   };
+  const onKey = (e: React.KeyboardEvent) => e.key === "Enter" && submit();
   return (
-    <div className="flex flex-wrap items-center gap-2 px-3 py-2 border-t bg-muted/20 rounded-b-lg">
+    <div className="flex flex-wrap items-center gap-2 px-3 py-2 border-t bg-muted/10">
       <Plus className="h-4 w-4 text-muted-foreground shrink-0" />
-      <Input placeholder="Add item to this room, press Enter" className="h-8 flex-1 min-w-[10rem]" value={name}
-        onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()} />
+      <Input placeholder="Add item to this room…" className="h-8 flex-1 min-w-[10rem]" value={name}
+        onChange={(e) => setName(e.target.value)} onKeyDown={onKey} />
       <Input inputMode="decimal" className="h-8 w-16 text-right" value={qty} onChange={(e) => setQty(e.target.value)}
-        onKeyDown={(e) => e.key === "Enter" && submit()} aria-label="Quantity" />
+        onKeyDown={onKey} aria-label="Quantity" title="Quantity" />
       <select className="h-8 rounded-md border bg-background px-1 text-sm" value={unit} onChange={(e) => setUnit(e.target.value)} aria-label="Unit">
         {BOQ_UNITS.map((u) => <option key={u}>{u}</option>)}
       </select>
-      <select className="h-8 rounded-md border bg-background px-1 text-sm" value={category} onChange={(e) => setCategory(e.target.value)} aria-label="Category">
-        {BOQ_CATEGORIES.map((c) => <option key={c}>{c}</option>)}
-      </select>
-      {name.trim() && <Button size="sm" onClick={submit}>Add</Button>}
+      <Input inputMode="decimal" placeholder="Rate ₹" className="h-8 w-24 text-right" value={rate}
+        onChange={(e) => setRate(e.target.value)} onKeyDown={onKey} aria-label="Rate" />
+      <Button size="sm" disabled={!name.trim()} onClick={submit}>Add</Button>
     </div>
   );
 }
 
-function NewRoomRow({ onAdd }: { onAdd: (item: Partial<BoqItem>) => void }) {
+function NewRoomRow({ onAdd }: { onAdd: (item: Partial<BoqItem>, rate: number) => void }) {
   const [floor, setFloor] = useState("");
   const [room, setRoom] = useState("");
   const [name, setName] = useState("");
+  const [rate, setRate] = useState("");
   const ready = room.trim() && name.trim();
   const submit = () => {
     if (!ready) return;
-    onAdd({ floorName: floor.trim() || undefined, roomName: room.trim(), itemName: name.trim(), quantity: 1, unit: "Nos", category: "Others" });
-    setRoom(""); setName("");
+    onAdd({ floorName: floor.trim() || undefined, roomName: room.trim(), itemName: name.trim(), quantity: 1, unit: "Nos", category: "Others" }, Number(rate) || 0);
+    setRoom(""); setName(""); setRate("");
   };
   const onKey = (e: React.KeyboardEvent) => e.key === "Enter" && submit();
   return (
-    <div className="rounded-lg border border-dashed p-3 flex flex-wrap items-center gap-2">
+    <div className="rounded-xl border border-dashed p-3 flex flex-wrap items-center gap-2">
       <span className="text-sm font-medium flex items-center gap-1"><Plus className="h-4 w-4" /> New room</span>
-      <Input list={FLOORS_LIST} placeholder="Floor (optional)" className="h-8 w-36" value={floor} onChange={(e) => setFloor(e.target.value)} onKeyDown={onKey} />
-      <Input placeholder="Room name" className="h-8 w-40" value={room} onChange={(e) => setRoom(e.target.value)} onKeyDown={onKey} />
+      <Input placeholder="Room name (e.g. Master Bedroom)" className="h-8 w-56" value={room} onChange={(e) => setRoom(e.target.value)} onKeyDown={onKey} />
       <Input placeholder="First item" className="h-8 flex-1 min-w-[10rem]" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={onKey} />
+      <Input inputMode="decimal" placeholder="Rate ₹" className="h-8 w-24 text-right" value={rate} onChange={(e) => setRate(e.target.value)} onKeyDown={onKey} />
+      <Input list={FLOORS_LIST} placeholder="Floor (optional)" className="h-8 w-36" value={floor} onChange={(e) => setFloor(e.target.value)} onKeyDown={onKey} />
       <Button size="sm" disabled={!ready} onClick={submit}>Add room</Button>
     </div>
   );
