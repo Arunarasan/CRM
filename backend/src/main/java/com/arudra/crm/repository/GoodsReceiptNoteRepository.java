@@ -14,4 +14,5 @@ public interface GoodsReceiptNoteRepository extends JpaRepository<GoodsReceiptNo
     List<GoodsReceiptNote> findByStatusOrderByIdDesc(String status);
     List<GoodsReceiptNote> findTop30ByReceivedByUserIdOrderByIdDesc(Long receivedByUserId);
     long countByStatus(String status);
+    List<GoodsReceiptNote> findByPurchaseOrderProjectIdOrderByIdDesc(Long projectId);
 }

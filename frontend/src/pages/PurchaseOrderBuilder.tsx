@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import api from "@/lib/api";
 import { purchaseApi } from "@/api/purchaseApi";
 import { inventoryApi } from "@/api/inventoryApi";
@@ -25,6 +25,9 @@ const blankLine = (): Line => ({ key: keySeed++, product: null, quantity: 1, uni
 export default function PurchaseOrderBuilder() {
   const navigate = useNavigate();
   const goBack = useGoBack("/purchases/orders");
+  // ?projectId=<id> — opened from a project's Purchase Orders tab: prefill it and return there on save.
+  const [params] = useSearchParams();
+  const fromProject = params.get("projectId") || "";
 
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
@@ -32,7 +35,7 @@ export default function PurchaseOrderBuilder() {
 
   const [supplierId, setSupplierId] = useState("");
   const [warehouseId, setWarehouseId] = useState("");
-  const [projectId, setProjectId] = useState("");
+  const [projectId, setProjectId] = useState(fromProject);
   const [expectedDeliveryDate, setExpectedDeliveryDate] = useState("");
   const [paymentTerms, setPaymentTerms] = useState("");
   const [deliveryAddress, setDeliveryAddress] = useState("");
@@ -100,7 +103,7 @@ export default function PurchaseOrderBuilder() {
       const items = validItems.map((l) => ({ product: { id: l.product!.id }, quantity: l.quantity, unitPrice: l.unitPrice }));
       const created = await purchaseApi.createPurchaseOrder(po, items);
       toast.success(`${created.poNumber} created as a draft.`);
-      navigate(`/purchases/orders/${created.id}`);
+      navigate(fromProject ? `/projects/${fromProject}?tab=purchaseOrders` : `/purchases/orders/${created.id}`);
     } catch (e) {
       toast.error(apiError(e, "Could not create the purchase order."));
       setSaving(false);

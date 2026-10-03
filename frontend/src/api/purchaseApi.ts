@@ -11,6 +11,41 @@ import {
 
 const BASE = '/purchases';
 
+export interface PoShipment {
+  id: number; purchaseOrderId: number; shippingId: string; transporterName?: string | null; deliveryPlace?: string | null;
+  dispatchDate?: string | null; notes?: string | null; status: 'IN_TRANSIT' | 'RECEIVED';
+  grnId?: number | null; receivedAt?: string | null;
+}
+export interface OrderLine {
+  productId: number; productName: string; unit?: string | null; unitPrice?: number; totalPrice?: number;
+  ordered: number; received: number; outstanding: number;
+}
+export interface ProjectPurchaseOrder {
+  id: number; poNumber: string; status: string; date: string; expectedDeliveryDate?: string | null;
+  supplierId?: number; supplierName?: string; warehouseName?: string | null;
+  paymentTerms?: string | null; deliveryAddress?: string | null; notes?: string | null;
+  subtotal?: number; taxPercent?: number; taxAmount?: number; discountAmount?: number; transportationCost?: number;
+  totalAmount: number; paid: number; balance: number; qtyOrdered: number; qtyReceived: number;
+  items: OrderLine[]; shipments: PoShipment[];
+  payments: { id: number; amount: number; paymentDate: string; paymentType?: string; paymentMethod?: string; referenceNumber?: string; notes?: string }[];
+}
+export interface ProjectPurchases {
+  summary: { orderCount: number; totalOrdered: number; totalPaid: number; balance: number; shipmentsInTransit: number };
+  orders: ProjectPurchaseOrder[];
+}
+export interface ProjectReceipt {
+  id: number; grnNumber: string; shippingId?: string | null; date: string; status: string; qcStatus: string;
+  receivedBy?: string | null; supplierInvoiceNumber?: string | null; vehicleNumber?: string | null; notes?: string | null;
+  warehouseName?: string | null; purchaseOrderId: number; poNumber: string; supplierName?: string | null;
+  totalAccepted: number; totalDamaged: number; photos: string[];
+  items: { productName: string; unit?: string | null; receivedQuantity: number; acceptedQuantity: number; damagedQuantity: number; remarks?: string | null }[];
+}
+export interface ShipmentLookup {
+  shipmentId: number; shippingId: string; shipmentStatus: 'IN_TRANSIT' | 'RECEIVED'; transporterName?: string | null; deliveryPlace?: string | null;
+  dispatchDate?: string | null; grnNumber?: string | null; purchaseOrderId: number; poNumber: string; poStatus: string;
+  supplierName?: string | null; warehouseId?: number | null; warehouseName?: string | null; items: OrderLine[];
+}
+
 export interface PoPage { content: PurchaseOrder[]; totalElements: number; totalPages: number }
 
 export const purchaseApi = {
@@ -103,6 +138,20 @@ export const purchaseApi = {
   getPaymentsForBill: (billId: number) => api.get<PurchasePayment[]>(`${BASE}/bills/${billId}/payments`).then((r) => r.data),
   getPaymentsForPo: (poId: number) => api.get<PurchasePayment[]>(`${BASE}/orders/${poId}/payments`).then((r) => r.data),
   addPayment: (payment: Record<string, unknown>) => api.post<PurchasePayment>(`${BASE}/payments`, payment).then((r) => r.data),
+
+  // Shipments (several deliveries per PO, each with a shipping ID) + project procurement
+  getShipments: (poId: number) => api.get<PoShipment[]>(`${BASE}/orders/${poId}/shipments`).then((r) => r.data),
+  addShipment: (poId: number, shipment: { shippingId: string; transporterName?: string; deliveryPlace?: string; dispatchDate?: string; notes?: string }) =>
+    api.post<PoShipment>(`${BASE}/orders/${poId}/shipments`, shipment).then((r) => r.data),
+  deleteShipment: (id: number) => api.delete(`${BASE}/shipments/${id}`),
+  getProjectPurchases: (projectId: number) =>
+    api.get<ProjectPurchases>(`${BASE}/projects/${projectId}/orders`).then((r) => r.data),
+  getProjectReceipts: (projectId: number) =>
+    api.get<ProjectReceipt[]>(`${BASE}/projects/${projectId}/receipts`).then((r) => r.data),
+  lookupShipment: (projectId: number, shippingId: string) =>
+    api.get<ShipmentLookup[]>(`${BASE}/projects/${projectId}/shipments/lookup`, { params: { shippingId } }).then((r) => r.data),
+  receiveGoods: (submission: Record<string, unknown>) =>
+    api.post<GoodsReceiptNote>(`${BASE}/goods-receipts`, submission).then((r) => r.data),
 
   // Returns
   getAllReturns: () => api.get<PurchaseReturn[]>(`${BASE}/returns`).then((r) => r.data),

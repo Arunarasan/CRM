@@ -13,6 +13,7 @@ public class GoodsReceiptSubmission {
     public Long warehouseId;            // optional; defaults to the PO's destination warehouse
     public String supplierInvoiceNumber;
     public String vehicleNumber;
+    public String shippingId;           // optional; marks the matching shipment RECEIVED (created if new)
     public String qcStatus;             // PASS (default), PARTIAL_PASS, REJECT
     public String qcRemarks;
     public String notes;

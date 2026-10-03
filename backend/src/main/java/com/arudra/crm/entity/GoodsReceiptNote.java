@@ -62,6 +62,10 @@ public class GoodsReceiptNote extends BaseEntity {
     @Column(columnDefinition = "TEXT")
     private String notes;
 
+    /** Shipping/tracking ID of the delivery this receipt verified (see PurchaseOrderShipment). */
+    @Column(name = "shipping_id", length = 100)
+    private String shippingId;
+
     @OneToMany(mappedBy = "grn", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<GrnPhoto> photos = new ArrayList<>();
 }

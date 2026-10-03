@@ -45,7 +45,7 @@ public class GoodsReceiptApprovalLog extends BaseEntity {
     @Column(name = "approved_by_role", length = 80)
     private String approvedByRole;
 
-    /** PORTAL (employee mobile) or DESKTOP (order page). */
+    /** PORTAL (employee mobile), DESKTOP (order page) or PROJECT (project Goods Received tab). */
     @Column(name = "source", length = 20)
     private String source;
 

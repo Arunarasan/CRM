@@ -49,6 +49,7 @@ public class PurchaseService {
     @Autowired private ProductRepository productRepository;
     @Autowired private WarehouseRepository warehouseRepository;
     @Autowired private GoodsReceiptApprovalLogRepository approvalLogRepository;
+    @Autowired private PurchaseOrderShipmentRepository shipmentRepository;
     @Autowired @org.springframework.context.annotation.Lazy private ProjectFinanceService projectFinanceService;
 
     // =====================================================================
@@ -686,6 +687,18 @@ public class PurchaseService {
         }
         PurchaseOrder po = poRepository.findById(sub.purchaseOrderId)
                 .orElseThrow(() -> new IllegalArgumentException("Purchase order not found"));
+        if (!OPEN_PO_STATUSES.contains(po.getStatus())) {
+            throw new IllegalStateException(po.getPoNumber() + " is " + po.getStatus()
+                    + " — only an approved, open purchase order can receive goods");
+        }
+        String shippingId = blankToNull(sub.shippingId);
+        PurchaseOrderShipment shipment = null;
+        if (shippingId != null) {
+            shipment = shipmentRepository.findOnOrder(shippingId, po.getId()).stream().findFirst().orElse(null);
+            if (shipment != null && "RECEIVED".equals(shipment.getStatus())) {
+                throw new IllegalStateException("Shipment " + shippingId + " was already received on " + po.getPoNumber());
+            }
+        }
 
         Warehouse warehouse = sub.warehouseId != null
                 ? warehouseRepository.findById(sub.warehouseId)
@@ -701,6 +714,7 @@ public class PurchaseService {
         grn.setSupplierInvoiceNumber(blankToNull(sub.supplierInvoiceNumber));
         grn.setVehicleNumber(blankToNull(sub.vehicleNumber));
         grn.setNotes(blankToNull(sub.notes));
+        grn.setShippingId(shippingId);
 
         List<GoodsReceiptNoteItem> items = new ArrayList<>();
         for (GoodsReceiptSubmission.Line line : sub.items) {
@@ -726,11 +740,238 @@ public class PurchaseService {
 
         String qc = (sub.qcStatus == null || sub.qcStatus.isBlank()) ? "PASS" : sub.qcStatus.trim();
         recordQualityCheck(savedGrn.getId(), qc, null, blankToNull(sub.qcRemarks));
+        if (shippingId != null) {
+            // The delivery has been checked either way (a rejected one goes back via a return).
+            if (shipment == null) {
+                shipment = new PurchaseOrderShipment();
+                shipment.setPurchaseOrder(po);
+                shipment.setShippingId(shippingId);
+                shipment.setDeliveryPlace(blankToNull(po.getDeliveryAddress()));
+            }
+            shipment.setStatus("RECEIVED");
+            shipment.setGrnId(savedGrn.getId());
+            shipment.setReceivedAt(LocalDateTime.now());
+            shipmentRepository.save(shipment);
+        }
         if ("REJECT".equals(qc)) {
             // A rejected delivery is not approved; admin raises a return. Leave the GRN as DRAFT.
             return grnRepository.findById(savedGrn.getId()).orElse(savedGrn);
         }
         return approveGrn(savedGrn.getId(), source);
+    }
+
+    // =====================================================================
+    // Shipments (one PO → many deliveries, each with a shipping ID) + project procurement view
+    // =====================================================================
+
+    public List<PurchaseOrderShipment> getShipments(Long poId) {
+        return shipmentRepository.findByPurchaseOrderIdAndIsDeletedFalseOrderByIdAsc(poId);
+    }
+
+    @Transactional
+    public PurchaseOrderShipment addShipment(Long poId, PurchaseOrderShipment input) {
+        PurchaseOrder po = poRepository.findById(poId)
+                .orElseThrow(() -> new IllegalArgumentException("Purchase order not found"));
+        if (List.of("CANCELLED", "REJECTED", "COMPLETED").contains(po.getStatus())) {
+            throw new IllegalStateException("Cannot add a shipment to a " + po.getStatus() + " purchase order");
+        }
+        String shippingId = input != null ? blankToNull(input.getShippingId()) : null;
+        if (shippingId == null) throw new IllegalArgumentException("Shipping ID is required");
+        if (!shipmentRepository.findOnOrder(shippingId, poId).isEmpty()) {
+            throw new IllegalArgumentException("Shipping ID " + shippingId + " is already on " + po.getPoNumber());
+        }
+        PurchaseOrderShipment s = new PurchaseOrderShipment();
+        s.setPurchaseOrder(po);
+        s.setShippingId(shippingId);
+        s.setTransporterName(blankToNull(input.getTransporterName()));
+        // Defaults to the PO's delivery address when not given.
+        String place = blankToNull(input.getDeliveryPlace());
+        s.setDeliveryPlace(place != null ? place : blankToNull(po.getDeliveryAddress()));
+        s.setDispatchDate(input.getDispatchDate());
+        s.setNotes(blankToNull(input.getNotes()));
+        return shipmentRepository.save(s);
+    }
+
+    @Transactional
+    public void deleteShipment(Long shipmentId) {
+        PurchaseOrderShipment s = shipmentRepository.findById(shipmentId)
+                .orElseThrow(() -> new IllegalArgumentException("Shipment not found"));
+        if ("RECEIVED".equals(s.getStatus())) {
+            throw new IllegalStateException("A received shipment cannot be removed");
+        }
+        s.setIsDeleted(true);
+        s.setDeletedAt(LocalDateTime.now());
+        shipmentRepository.save(s);
+    }
+
+    /**
+     * Finds the purchase order(s) on this project expecting the given shipping ID, with each line's
+     * ordered/received/outstanding quantity — the start of the goods-received check.
+     */
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> lookupShipment(Long projectId, String shippingId) {
+        String id = blankToNull(shippingId);
+        if (id == null) throw new IllegalArgumentException("Enter a shipping ID");
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (PurchaseOrderShipment s : shipmentRepository.findForProject(id, projectId)) {
+            PurchaseOrder po = s.getPurchaseOrder();
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("shipmentId", s.getId());
+            row.put("shippingId", s.getShippingId());
+            row.put("shipmentStatus", s.getStatus());
+            row.put("transporterName", s.getTransporterName());
+            row.put("deliveryPlace", s.getDeliveryPlace());
+            row.put("dispatchDate", s.getDispatchDate());
+            row.put("grnNumber", s.getGrnId() != null
+                    ? grnRepository.findById(s.getGrnId()).map(GoodsReceiptNote::getGrnNumber).orElse(null) : null);
+            row.put("purchaseOrderId", po.getId());
+            row.put("poNumber", po.getPoNumber());
+            row.put("poStatus", po.getStatus());
+            row.put("supplierName", po.getSupplier() != null ? po.getSupplier().getName() : null);
+            row.put("warehouseId", po.getWarehouse() != null ? po.getWarehouse().getId() : null);
+            row.put("warehouseName", po.getWarehouse() != null ? po.getWarehouse().getName() : null);
+            row.put("items", orderLines(po.getId()));
+            out.add(row);
+        }
+        return out;
+    }
+
+    private List<Map<String, Object>> orderLines(Long poId) {
+        List<Map<String, Object>> lines = new ArrayList<>();
+        for (PurchaseOrderItem poi : poiRepository.findByPurchaseOrderId(poId)) {
+            int ordered = poi.getQuantity() != null ? poi.getQuantity() : 0;
+            int received = poi.getReceivedQuantity() != null ? poi.getReceivedQuantity() : 0;
+            Map<String, Object> line = new LinkedHashMap<>();
+            line.put("productId", poi.getProduct().getId());
+            line.put("productName", poi.getProduct().getName());
+            line.put("unit", poi.getProduct().getUnit());
+            line.put("unitPrice", poi.getUnitPrice());
+            line.put("totalPrice", poi.getTotalPrice());
+            line.put("ordered", ordered);
+            line.put("received", received);
+            line.put("outstanding", Math.max(ordered - received, 0));
+            lines.add(line);
+        }
+        return lines;
+    }
+
+    /** Every purchase order on a project with its money (total/paid/balance), shipments and receipt progress. */
+    @Transactional(readOnly = true)
+    public Map<String, Object> getProjectPurchases(Long projectId) {
+        List<Map<String, Object>> orders = new ArrayList<>();
+        BigDecimal ordered = BigDecimal.ZERO, paid = BigDecimal.ZERO;
+        int inTransit = 0;
+        for (PurchaseOrder po : poRepository.findByProjectIdOrderByIdDesc(projectId)) {
+            if (Boolean.TRUE.equals(po.getIsDeleted())) continue;
+            List<PurchasePayment> payments = paymentRepository.findByPurchaseOrderId(po.getId()).stream()
+                    .filter(p -> !Boolean.TRUE.equals(p.getIsDeleted())).toList();
+            BigDecimal poPaid = payments.stream().map(PurchasePayment::getAmount)
+                    .filter(Objects::nonNull).reduce(BigDecimal.ZERO, BigDecimal::add);
+            BigDecimal total = po.getTotalAmount() != null ? po.getTotalAmount() : BigDecimal.ZERO;
+            List<Map<String, Object>> lines = orderLines(po.getId());
+            int qtyOrdered = 0, qtyReceived = 0;
+            for (Map<String, Object> l : lines) {
+                qtyOrdered += (Integer) l.get("ordered");
+                qtyReceived += Math.min((Integer) l.get("received"), (Integer) l.get("ordered"));
+            }
+            List<PurchaseOrderShipment> shipments = getShipments(po.getId());
+            for (PurchaseOrderShipment sh : shipments) if ("IN_TRANSIT".equals(sh.getStatus())) inTransit++;
+
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("id", po.getId());
+            row.put("poNumber", po.getPoNumber());
+            row.put("status", po.getStatus());
+            row.put("date", po.getDate());
+            row.put("expectedDeliveryDate", po.getExpectedDeliveryDate());
+            row.put("supplierId", po.getSupplier() != null ? po.getSupplier().getId() : null);
+            row.put("supplierName", po.getSupplier() != null ? po.getSupplier().getName() : null);
+            row.put("warehouseName", po.getWarehouse() != null ? po.getWarehouse().getName() : null);
+            row.put("paymentTerms", po.getPaymentTerms());
+            row.put("deliveryAddress", po.getDeliveryAddress());
+            row.put("notes", po.getNotes());
+            row.put("subtotal", po.getSubtotal());
+            row.put("taxPercent", po.getTaxPercent());
+            row.put("taxAmount", po.getTaxAmount());
+            row.put("discountAmount", po.getDiscountAmount());
+            row.put("transportationCost", po.getTransportationCost());
+            row.put("totalAmount", total);
+            row.put("paid", poPaid);
+            row.put("balance", total.subtract(poPaid).max(BigDecimal.ZERO));
+            row.put("qtyOrdered", qtyOrdered);
+            row.put("qtyReceived", qtyReceived);
+            row.put("items", lines);
+            row.put("shipments", shipments);
+            row.put("payments", payments.stream().map(p -> {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("id", p.getId());
+                m.put("amount", p.getAmount());
+                m.put("paymentDate", p.getPaymentDate());
+                m.put("paymentType", p.getPaymentType());
+                m.put("paymentMethod", p.getPaymentMethod());
+                m.put("referenceNumber", p.getReferenceNumber());
+                m.put("notes", p.getNotes());
+                return m;
+            }).toList());
+            orders.add(row);
+            if (!List.of("CANCELLED", "REJECTED").contains(po.getStatus())) {
+                ordered = ordered.add(total);
+                paid = paid.add(poPaid);
+            }
+        }
+        Map<String, Object> summary = new LinkedHashMap<>();
+        summary.put("orderCount", orders.size());
+        summary.put("totalOrdered", ordered);
+        summary.put("totalPaid", paid);
+        summary.put("balance", ordered.subtract(paid).max(BigDecimal.ZERO));
+        summary.put("shipmentsInTransit", inTransit);
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("summary", summary);
+        out.put("orders", orders);
+        return out;
+    }
+
+    /** Goods-received reports for every purchase order on a project, newest first, with their lines. */
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getProjectReceipts(Long projectId) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (GoodsReceiptNote g : grnRepository.findByPurchaseOrderProjectIdOrderByIdDesc(projectId)) {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("id", g.getId());
+            row.put("grnNumber", g.getGrnNumber());
+            row.put("shippingId", g.getShippingId());
+            row.put("date", g.getDate());
+            row.put("status", g.getStatus());
+            row.put("qcStatus", g.getQcStatus());
+            row.put("receivedBy", g.getReceivedByUser() != null ? g.getReceivedByUser().getName() : g.getReceivedBy());
+            row.put("supplierInvoiceNumber", g.getSupplierInvoiceNumber());
+            row.put("vehicleNumber", g.getVehicleNumber());
+            row.put("notes", g.getNotes());
+            row.put("warehouseName", g.getWarehouse() != null ? g.getWarehouse().getName() : null);
+            PurchaseOrder po = g.getPurchaseOrder();
+            row.put("purchaseOrderId", po.getId());
+            row.put("poNumber", po.getPoNumber());
+            row.put("supplierName", po.getSupplier() != null ? po.getSupplier().getName() : null);
+            int accepted = 0, damaged = 0;
+            List<Map<String, Object>> lines = new ArrayList<>();
+            for (GoodsReceiptNoteItem i : grniRepository.findByGrnId(g.getId())) {
+                Map<String, Object> l = new LinkedHashMap<>();
+                l.put("productName", i.getProduct() != null ? i.getProduct().getName() : null);
+                l.put("unit", i.getProduct() != null ? i.getProduct().getUnit() : null);
+                l.put("receivedQuantity", i.getReceivedQuantity());
+                l.put("acceptedQuantity", i.getAcceptedQuantity());
+                l.put("damagedQuantity", i.getDamagedQuantity());
+                l.put("remarks", i.getRemarks());
+                accepted += i.getAcceptedQuantity() != null ? i.getAcceptedQuantity() : 0;
+                damaged += i.getDamagedQuantity() != null ? i.getDamagedQuantity() : 0;
+                lines.add(l);
+            }
+            row.put("totalAccepted", accepted);
+            row.put("totalDamaged", damaged);
+            row.put("items", lines);
+            row.put("photos", grnPhotoRepository.findByGrnId(g.getId()).stream().map(GrnPhoto::getPhotoUrl).toList());
+            out.add(row);
+        }
+        return out;
     }
 
     /** GRNs recorded (received) by a given user — the portal "my receipts" history. */

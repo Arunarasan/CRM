@@ -195,6 +195,52 @@ public class PurchaseController {
         return ResponseEntity.ok(purchaseService.approveGrn(id));
     }
 
+    // --- Shipments (several deliveries per PO, each with its own shipping ID) ---
+    @GetMapping("/orders/{id}/shipments")
+    @PreAuthorize(READ)
+    public ResponseEntity<List<PurchaseOrderShipment>> getShipments(@PathVariable Long id) {
+        return ResponseEntity.ok(purchaseService.getShipments(id));
+    }
+
+    @PostMapping("/orders/{id}/shipments")
+    @PreAuthorize(WRITE)
+    public ResponseEntity<PurchaseOrderShipment> addShipment(@PathVariable Long id, @RequestBody PurchaseOrderShipment shipment) {
+        return ResponseEntity.ok(purchaseService.addShipment(id, shipment));
+    }
+
+    @DeleteMapping("/shipments/{id}")
+    @PreAuthorize(WRITE)
+    public ResponseEntity<Void> deleteShipment(@PathVariable Long id) {
+        purchaseService.deleteShipment(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    // --- Project procurement: the project page's Purchase Orders + Goods Received tabs ---
+    @GetMapping("/projects/{projectId}/orders")
+    @PreAuthorize(READ)
+    public ResponseEntity<Map<String, Object>> getProjectPurchases(@PathVariable Long projectId) {
+        return ResponseEntity.ok(purchaseService.getProjectPurchases(projectId));
+    }
+
+    @GetMapping("/projects/{projectId}/receipts")
+    @PreAuthorize(ANY)
+    public ResponseEntity<List<Map<String, Object>>> getProjectReceipts(@PathVariable Long projectId) {
+        return ResponseEntity.ok(purchaseService.getProjectReceipts(projectId));
+    }
+
+    @GetMapping("/projects/{projectId}/shipments/lookup")
+    @PreAuthorize(ANY)
+    public ResponseEntity<List<Map<String, Object>>> lookupShipment(@PathVariable Long projectId, @RequestParam String shippingId) {
+        return ResponseEntity.ok(purchaseService.lookupShipment(projectId, shippingId));
+    }
+
+    /** Verify a delivery by shipping ID and approve the receipt in one step (same engine as the portal). */
+    @PostMapping("/goods-receipts")
+    @PreAuthorize(ANY)
+    public ResponseEntity<GoodsReceiptNote> receiveGoods(@RequestBody com.arudra.crm.dto.GoodsReceiptSubmission submission) {
+        return ResponseEntity.ok(purchaseService.receiveAndApprove(submission, "PROJECT"));
+    }
+
     /** Admin-facing goods-receipt approval log — who approved each receipt, when, and from where. */
     @GetMapping("/goods-receipt-logs")
     @PreAuthorize(READ)
