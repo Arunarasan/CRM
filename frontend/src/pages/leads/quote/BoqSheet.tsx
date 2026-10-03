@@ -390,7 +390,6 @@ export default function BoqSheet({
   const setIncluded = (list: BoqItem[], on: boolean) => list
     .filter((i) => (i.isActive !== false) !== on)
     .forEach((i) => save("update the quote", () => boqApi.toggleItemActive(boqId, i.id as number, on)));
-  const includedCount = items.filter((i) => i.isActive !== false).length;
 
   const groupTotal = (list: BoqItem[]) =>
     list.filter((i) => i.isActive !== false).reduce((s, i) => s + Number(i.amount ?? 0), 0);
