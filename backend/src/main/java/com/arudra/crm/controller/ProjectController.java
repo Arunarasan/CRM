@@ -60,6 +60,13 @@ public class ProjectController {
         return ResponseEntity.ok(projectService.getProjectDashboard(id));
     }
 
+    /** Work grouped by category (Wall, Windows…) with per-line progress — Execution › Work Categories. */
+    @GetMapping("/{id}/work-categories")
+    @PreAuthorize(READ)
+    public ResponseEntity<List<Map<String, Object>>> getWorkCategories(@PathVariable Long id) {
+        return ResponseEntity.ok(projectService.getWorkCategories(id));
+    }
+
     @GetMapping("/{id}/command-center-stats")
     @PreAuthorize(READ)
     public ResponseEntity<Map<String, Object>> getCommandCenterStats(@PathVariable Long id) {

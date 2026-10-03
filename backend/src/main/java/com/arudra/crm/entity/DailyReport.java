@@ -88,7 +88,7 @@ public class DailyReport extends BaseEntity {
     private Long cashPaymentId;
 
     @Column(nullable = false, length = 20)
-    private String status = "SUBMITTED"; // SUBMITTED, REVIEWED
+    private String status = "SUBMITTED"; // SUBMITTED, REVIEWED (approved), REJECTED
 
     @OneToMany(mappedBy = "report", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<DailyReportMedia> media = new ArrayList<>();

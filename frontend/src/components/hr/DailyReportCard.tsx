@@ -81,10 +81,10 @@ export default function DailyReportCard({
         </div>
         <span
           className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-            reviewed ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
+            reviewed ? "bg-emerald-100 text-emerald-700" : report.status === "REJECTED" ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-700"
           }`}
         >
-          {reviewed ? "Reviewed" : "New"}
+          {reviewed ? "Reviewed" : report.status === "REJECTED" ? "Rejected" : "New"}
         </span>
       </button>
 

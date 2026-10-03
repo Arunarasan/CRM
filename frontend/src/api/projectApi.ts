@@ -77,6 +77,26 @@ export interface SupplyBoard {
 }
 
 /** Compact work item for the batch "Update Work" sheet (across all rooms of a project). */
+export interface WorkCategoryLine {
+  name: string;
+  description?: string | null;
+  quantity?: number | null;
+  unit?: string | null;
+  amount?: number | null;
+  workItemId?: number | null;
+  progress: number;
+  status?: string | null;
+}
+export interface WorkCategory {
+  category: string;
+  itemCount: number;
+  doneCount: number;
+  progress: number;
+  amount: number;
+  trackable: boolean;
+  items: WorkCategoryLine[];
+}
+
 export interface ProjectItemBrief {
   id: number;
   itemName: string;
@@ -163,6 +183,9 @@ export const projectApi = {
   ) => api.put<{ updated: number; skipped: number }>(`${BASE}/items/bulk-progress`, payload).then((r) => r.data),
   reopenItem: (itemId: number) =>
     api.post<ProjectRoomItem>(`${BASE}/items/${itemId}/reopen`).then((r) => r.data),
+  // Work grouped by category (Wall, Windows…) with per-line progress — Execution › Work Categories.
+  getWorkCategories: (projectId: number) =>
+    api.get<WorkCategory[]>(`${BASE}/${projectId}/work-categories`).then((r) => r.data),
   getItemTimeline: (itemId: number) =>
     api.get<ProjectItemProgressLog[]>(`${BASE}/items/${itemId}/timeline`).then((r) => r.data),
   deleteItem: (itemId: number) => api.delete(`${BASE}/items/${itemId}`),

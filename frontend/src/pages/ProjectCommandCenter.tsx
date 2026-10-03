@@ -44,12 +44,14 @@ import ApprovalsTab from "@/pages/projectCommandCenter/tabs/ApprovalsTab";
 import ChangeRequestsTab from "@/pages/projectCommandCenter/tabs/ChangeRequestsTab";
 import DailyLogsTab from "@/pages/projectCommandCenter/tabs/DailyLogsTab";
 import FieldProgressTab from "@/pages/projectCommandCenter/tabs/FieldProgressTab";
-import EntityDailyReports from "@/components/hr/EntityDailyReports";
 import QualityTab from "@/pages/projectCommandCenter/tabs/QualityTab";
 import IssuesRisksTab from "@/pages/projectCommandCenter/tabs/IssuesRisksTab";
 import DocumentsTab from "@/pages/projectCommandCenter/tabs/DocumentsTab";
 import LabourTab from "@/pages/projectCommandCenter/tabs/LabourTab";
 import ServiceWarrantyTab from "@/pages/projectCommandCenter/tabs/ServiceWarrantyTab";
+import ProjectReportsTab from "@/pages/projectCommandCenter/tabs/ProjectReportsTab";
+import WorkCategoriesTab from "@/pages/projectCommandCenter/tabs/WorkCategoriesTab";
+import { dailyReportApi } from "@/api/dailyReportApi";
 import TrackingLinkDialog from "@/components/projects/TrackingLinkDialog";
 import { ProjectInfoRow, ProjectJourneyBar, ProjectHeaderSummary, waLink } from "@/pages/projectCommandCenter/ProjectJourneyHeader";
 import ResourceSelect, { ResourceSelection } from "@/components/workforce/ResourceSelect";
@@ -194,8 +196,8 @@ function ActivityList({ items }: { items: ActivityItem[] }) {
 const TAB_GROUPS: { id: string; label: string; icon: React.ComponentType<{ className?: string }>; sections: [string, string][] }[] = [
   { id: "overview", label: "Overview", icon: ClipboardList, sections: [["overview", "Overview"]] },
   { id: "execution", label: "Execution", icon: Layers, sections: [
-    ["phases", "Phases & Rooms"], ["execution", "Daily Logs & Reports"],
-    ["fieldProgress", "Tasks"], ["quality", "Quality & Issues"],
+    ["fieldProgress", "Tasks"], ["workCategories", "Work Categories"], ["execution", "Daily Logs"],
+    ["reports", "Reports"], ["quality", "Quality & Issues"], ["phases", "Floors & Rooms"],
   ] },
   { id: "commercial", label: "Commercial", icon: Wallet, sections: [
     ["payments", "Payments & Invoices"], ["quote", "Measurement & Quotation"], ["approvals", "Approvals"],
@@ -210,6 +212,8 @@ const TAB_GROUPS: { id: string; label: string; icon: React.ComponentType<{ class
   // Shown only once the project is COMPLETED (see the tab-strip filter below).
   { id: "service", label: "Service & Warranty", icon: Settings, sections: [["serviceWarranty", "Service & Warranty"]] },
 ];
+// Reachable from inside another section (Work Categories → "Floors & rooms view"), not the strip.
+const HIDDEN_SECTIONS = new Set(["phases"]);
 const groupOf = (section: string) =>
   TAB_GROUPS.find((g) => g.sections.some(([v]) => v === section)) || TAB_GROUPS[0];
 
@@ -244,6 +248,11 @@ export default function ProjectCommandCenter() {
   const [profitability, setProfitability] = useState<ProjectProfitability | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false); // "Update Work" batch sheet
   const [trackingOpen, setTrackingOpen] = useState(false);
+  const [reportsPending, setReportsPending] = useState(0);
+  const loadReportsPending = () => {
+    dailyReportApi.list({ projectId: Number(id), status: 'SUBMITTED' }).then((r) => setReportsPending(r.length)).catch(() => {});
+  };
+  useEffect(loadReportsPending, [id]);
   const [scrolled, setScrolled] = useState(false); // collapses the big header into a compact sticky bar
 
   // "Build from approved quotation" picker (replaces the old blind "Generate from BOQ" button)
@@ -1017,15 +1026,15 @@ export default function ProjectCommandCenter() {
 
                 {/* Secondary strip — sections inside the active area */}
                 {active.sections.length > 1 && (
-                  <div className="flex flex-wrap gap-1 px-1">
-                    {active.sections.map(([value, label]) => {
+                  <div className="flex gap-1 px-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    {active.sections.filter(([value]) => !HIDDEN_SECTIONS.has(value) || value === activeTab).map(([value, label]) => {
                       const isActive = value === activeTab;
                       return (
                         <button
                           key={value}
                           type="button"
                           onClick={() => setActiveTab(value)}
-                          className={`rounded-lg px-3 py-1 text-xs font-medium transition flex items-center gap-1.5 shrink-0 ${isActive ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200" : "text-slate-500 hover:bg-slate-50"}`}
+                          className={`rounded-lg px-3 py-1 text-xs font-medium whitespace-nowrap transition flex items-center gap-1.5 shrink-0 ${isActive ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200" : "text-slate-500 hover:bg-slate-50"}`}
                         >
                           {label}
                           {value === "quality" && issueCount > 0 && (
@@ -1038,6 +1047,20 @@ export default function ProjectCommandCenter() {
                 )}
               </div>
             );
+          })()}
+
+          {groupOf(activeTab).id === 'execution' && (() => {
+            const t = fieldTasks || [];
+            const done = t.filter((x: any) => x.status === 'COMPLETED').length;
+            const weekAgo = Date.now() - 7 * 86400000;
+            const logsWeek = (dailyLogs || []).filter((l: any) => l.logDate && new Date(l.logDate).getTime() >= weekAgo).length;
+            const delayed = stats?.tasks?.delayed ?? 0;
+            return <StatStrip className="grid grid-cols-2 @4xl:grid-cols-4 gap-2.5 mb-3" items={[
+              { label: 'Tasks Done', value: `${done}/${t.length}`, sub: t.length ? `${Math.round((done / t.length) * 100)}% complete` : 'no tasks yet', icon: CheckCircle2, tone: 'emerald' },
+              { label: 'Delayed', value: delayed, sub: delayed ? 'past due date' : 'on schedule', icon: Clock, tone: delayed ? 'rose' : 'sky' },
+              { label: 'Logs This Week', value: logsWeek, sub: `${(dailyLogs || []).length} in total`, icon: ClipboardList, tone: 'violet' },
+              { label: 'Reports Pending', value: reportsPending, sub: reportsPending ? 'waiting for approval' : 'all reviewed', icon: FileText, tone: reportsPending ? 'amber' : 'emerald' },
+            ]} />;
           })()}
 
           <div className="pb-20">
@@ -2030,40 +2053,23 @@ export default function ProjectCommandCenter() {
             </TabsContent>
 
             {/* DAILY LOGS & REPORTS — the site's execution logs + the employees' submitted daily reports, together */}
-            <TabsContent value="execution" className="space-y-6 mt-0 h-full outline-none">
-              {(() => {
-                const logs = dailyLogs || [];
-                const withIssues = logs.filter((l: any) => l.issues && String(l.issues).trim()).length;
-                const avgManpower = logs.length ? Math.round(logs.reduce((s: number, l: any) => s + (Number(l.manpower) || 0), 0) / logs.length) : 0;
-                const latest = logs.length ? [...logs].map((l: any) => l.logDate).sort().slice(-1)[0] : null;
-                return <StatStrip items={[
-                  { label: 'Daily Logs', value: logs.length, sub: 'entries recorded', icon: ClipboardList, tone: 'emerald' },
-                  { label: 'Avg Manpower', value: avgManpower, sub: 'per logged day', icon: Users, tone: 'sky' },
-                  { label: 'Latest Log', value: latest ? format(new Date(latest), 'dd MMM') : '—', sub: latest ? 'last entry' : 'no logs yet', icon: Calendar, tone: 'violet' },
-                  { label: 'Logs with Issues', value: withIssues, sub: withIssues ? 'need attention' : 'all clear', icon: AlertTriangle, tone: 'orange' },
-                ]} />;
-              })()}
+            <TabsContent value="execution" className="mt-0 h-full outline-none">
               <DailyLogsTab projectId={projectId} dailyLogs={dailyLogs} onChanged={fetchCore} />
-              <div className="border-t border-slate-100 pt-8">
-                <EntityDailyReports projectId={projectId} />
-              </div>
+            </TabsContent>
+
+            <TabsContent value="reports" className="mt-0 h-full outline-none">
+              <ProjectReportsTab projectId={projectId} onCountsChanged={loadReportsPending} />
+            </TabsContent>
+
+            <TabsContent value="workCategories" className="mt-0 h-full outline-none">
+              <WorkCategoriesTab projectId={projectId} onChanged={fetchProjectData} onOpenRooms={() => setActiveTab('phases')} />
             </TabsContent>
 
             {/* FIELD PROGRESS TAB — read-only view into the mobile Employee Task module (manager: live progress + employee timeline) */}
-            <TabsContent value="fieldProgress" className="space-y-6 mt-0 h-full outline-none">
-              {(() => {
-                const t = fieldTasks || [];
-                const done = t.filter((x: any) => x.status === 'COMPLETED').length;
-                const inprog = t.filter((x: any) => x.status === 'IN_PROGRESS').length;
-                const waiting = t.filter((x: any) => x.status === 'WAITING_APPROVAL').length;
-                return <StatStrip items={[
-                  { label: 'Total Tasks', value: t.length, sub: 'on this project', icon: CheckSquare, tone: 'emerald' },
-                  { label: 'Completed', value: done, sub: t.length ? `${Math.round((done / t.length) * 100)}% done` : '—', icon: CheckCircle2, tone: 'sky' },
-                  { label: 'In Progress', value: inprog, sub: 'active now', icon: Play, tone: 'amber' },
-                  { label: 'Awaiting Approval', value: waiting, sub: waiting ? 'review needed' : 'none pending', icon: Clock, tone: 'violet' },
-                ]} />;
-              })()}
-              <FieldProgressTab projectId={projectId} fieldTasks={fieldTasks} onChanged={() => api.get(`/tasks/project/${projectId}`).then(res => setFieldTasks(res.data)).catch(() => {})} />
+            <TabsContent value="fieldProgress" className="mt-0 h-full outline-none">
+              <FieldProgressTab projectId={projectId} fieldTasks={fieldTasks}
+                onAddTask={() => { setQuickActionView('create_task'); setQuickActionOpen(true); }}
+                onChanged={() => api.get(`/tasks/project/${projectId}`).then(res => setFieldTasks(res.data)).catch(() => {})} />
             </TabsContent>
 
             {/* CONTRACTORS TAB — subcontracted scope on this project, as work packages */}

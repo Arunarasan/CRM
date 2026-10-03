@@ -39,7 +39,7 @@ export default function DailyReportsPage() {
 
   const set = (patch: Partial<DailyReportFilters>) => setFilters((f) => ({ ...f, ...patch }));
 
-  const pendingCount = useMemo(() => reports.filter((r) => r.status !== "REVIEWED").length, [reports]);
+  const pendingCount = useMemo(() => reports.filter((r) => r.status === "SUBMITTED").length, [reports]);
 
   const onReviewed = (updated: AdminDailyReport) =>
     setReports((rs) => rs.map((r) => (r.id === updated.id ? updated : r)));
@@ -92,6 +92,7 @@ export default function DailyReportsPage() {
             <option value="">All</option>
             <option value="SUBMITTED">New (unreviewed)</option>
             <option value="REVIEWED">Reviewed</option>
+            <option value="REJECTED">Rejected</option>
           </select>
         </label>
         {(filters.employeeId || filters.from || filters.to || filters.status) && (

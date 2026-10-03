@@ -66,6 +66,13 @@ public class DailyReportController {
         return ResponseEntity.ok(dailyReportService.review(id, comment, currentUserService.getCurrentUser()));
     }
 
+    @PostMapping("/daily-reports/{id}/reject")
+    @PreAuthorize(HR_WRITE)
+    public ResponseEntity<DailyReport> reject(@PathVariable Long id, @RequestBody(required = false) Map<String, String> body) {
+        String reason = body == null ? null : body.get("managerComment");
+        return ResponseEntity.ok(dailyReportService.reject(id, reason, currentUserService.getCurrentUser()));
+    }
+
     /** Reports submitted by one employee — for the HR employee-profile "Reports" tab. */
     @GetMapping("/employees/{employeeId}/daily-reports")
     @PreAuthorize(HR_READ)

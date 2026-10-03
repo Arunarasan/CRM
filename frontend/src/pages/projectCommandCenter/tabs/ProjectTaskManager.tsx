@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Loader2, Sparkles, UserPlus, Zap, X } from "lucide-react";
+import { Loader2, UserPlus, Zap, X, Plus, ChevronRight, LayoutGrid } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { smartAssignmentApi, type TaskBoardRow, type TaskAssigneeView } from "@/api/smartAssignmentApi";
 import { employeeTaskApi } from "@/api/employeeTaskApi";
 import { taskApi } from "@/api/taskApi";
@@ -9,8 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import ResourceSelect, { type ResourceSelection } from "@/components/workforce/ResourceSelect";
 import TaskCard from "@/components/tasks/TaskCard";
 import TaskEditor from "@/components/tasks/TaskEditor";
-import TaskLanes from "@/components/tasks/TaskLanes";
-import { bucketToLane, type TaskCardModel, type TaskFormValues } from "@/components/tasks/taskShared";
+import { bucketToLane, TASK_LANES, LANE_STYLES, type TaskCardModel, type TaskFormValues } from "@/components/tasks/taskShared";
 
 const PROJECT_PRIORITIES = ["LOW", "MEDIUM", "HIGH"];
 
@@ -31,7 +31,19 @@ const addOneDay = (iso?: string | null) => {
  * tasks tab), with inline edit (rename / priority / reschedule / description / delete) via the
  * shared TaskEditor, plus the existing one-click Auto-assign and manual assign/remove.
  */
-export default function ProjectTaskManager({ projectId, onChanged }: { projectId: number; onChanged?: () => void }) {
+export default function ProjectTaskManager({ projectId, onChanged, onAddTask, fieldTasks = [] }: {
+  projectId: number;
+  onChanged?: () => void;
+  /** Opens the page's "create task" sheet. */
+  onAddTask?: () => void;
+  /** Raw project tasks — supply each card's % progress. */
+  fieldTasks?: any[];
+}) {
+  const navigate = useNavigate();
+  const progressOf = useMemo(
+    () => Object.fromEntries((fieldTasks || []).map((t: any) => [t.id, Number(t.progress) || 0])) as Record<number, number>,
+    [fieldTasks],
+  );
   const [rows, setRows] = useState<TaskBoardRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<number | null>(null);
@@ -184,31 +196,28 @@ export default function ProjectTaskManager({ projectId, onChanged }: { projectId
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_1px_2px_rgba(0,0,0,0.03)] overflow-hidden">
-      <div className="p-4 border-b bg-slate-50 flex flex-wrap items-center justify-between gap-3">
-        <h3 className="font-bold text-slate-800 flex items-center"><Sparkles className="w-4 h-4 mr-2 text-emerald-600" /> Project Tasks &amp; Assignment</h3>
-        {unassigned.length > 0 && (
-          <Button size="sm" onClick={handleAutoAssignAll} disabled={bulkRunning}>
-            {bulkRunning ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Zap className="w-4 h-4 mr-1" />}
-            Auto-assign all ({unassigned.length})
-          </Button>
-        )}
-      </div>
-
-      {/* Bucket summary */}
-      <div className="grid grid-cols-3 sm:grid-cols-5 divide-x divide-slate-100 border-b">
-        {([
-          ["Unassigned", counts.UNASSIGNED || 0, "text-rose-600"],
-          ["Assigned", counts.ASSIGNED || 0, "text-emerald-600"],
-          ["In progress", counts.IN_PROGRESS || 0, "text-cyan-600"],
-          ["Needs approval", counts.NEEDS_APPROVAL || 0, "text-amber-600"],
-          ["Completed", counts.COMPLETED || 0, "text-emerald-600"],
-        ] as [string, number, string][]).map(([label, val, cls]) => (
-          <div key={label} className="p-3 text-center">
-            <div className={`text-xl font-black ${cls}`}>{val}</div>
-            <div className="text-[11px] font-medium text-slate-400">{label}</div>
-          </div>
-        ))}
+    <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden @container">
+      <div className="px-4 py-3 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <h3 className="text-base font-bold text-slate-900 flex items-center gap-2"><LayoutGrid className="w-5 h-5 text-emerald-700" /> Task Board</h3>
+          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-500">{rows.length}</span>
+          {(counts.UNASSIGNED || 0) > 0 && (
+            <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-600 ring-1 ring-rose-100">{counts.UNASSIGNED} unassigned</span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {unassigned.length > 0 && (
+            <Button size="sm" variant="outline" onClick={handleAutoAssignAll} disabled={bulkRunning} className="h-9 rounded-xl">
+              {bulkRunning ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Zap className="w-4 h-4 mr-1 text-amber-500" />}
+              Auto-assign all
+            </Button>
+          )}
+          {onAddTask && (
+            <Button size="sm" onClick={onAddTask} className="h-9 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white">
+              <Plus className="w-4 h-4 mr-1" /> Add Task
+            </Button>
+          )}
+        </div>
       </div>
 
       {loading ? (
@@ -216,59 +225,86 @@ export default function ProjectTaskManager({ projectId, onChanged }: { projectId
       ) : rows.length === 0 ? (
         <div className="px-4 py-8 text-center text-sm text-slate-400">No tasks on this project yet.</div>
       ) : (
-        <div className="p-4">
-        <TaskLanes
-          items={ordered}
-          laneOf={(t) => bucketToLane(t.bucket)}
-          keyOf={(t) => t.id}
-          gridClassName="grid gap-2.5 sm:grid-cols-2"
-          renderCard={(t) => {
-            const busy = busyId === t.id;
-            const done = t.bucket === "COMPLETED";
+        <div className="p-3 grid grid-cols-1 @2xl:grid-cols-2 @6xl:grid-cols-4 gap-3">
+          {TASK_LANES.map((lane) => {
+            const style = LANE_STYLES[lane.id];
+            const laneRows = ordered.filter((t) => bucketToLane(t.bucket) === lane.id);
             return (
-              <TaskCard
-                task={toModel(t)}
-                hideAssignees
-                onEdit={() => openEdit(t)}
-                onSnooze={() => snooze(t)}
-                actions={
-                  <div className="flex w-full flex-wrap items-center gap-1.5">
-                    {t.assignees.length === 0 ? (
-                      <span className="text-xs text-slate-400">Unassigned</span>
-                    ) : (
-                      t.assignees.map((a) => (
-                        <span key={`${a.resourceType}-${a.resourceId}`} className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-700">
-                          {a.name}
-                          {!done && (
-                            <button type="button" onClick={() => handleRemove(t.id, a)} disabled={busy} className="text-slate-400 hover:text-rose-500 disabled:opacity-40" title={`Remove ${a.name}`}>
-                              <X className="h-3 w-3" />
-                            </button>
-                          )}
-                        </span>
-                      ))
-                    )}
-                    <span className="ml-auto flex items-center gap-1.5">
-                      {busy ? (
-                        <Loader2 className="h-4 w-4 animate-spin text-slate-400" />
-                      ) : !done && (
-                        <>
-                          {t.assignees.length === 0 && (
-                            <Button size="sm" onClick={() => handleAutoAssign(t.id)} disabled={bulkRunning} title="Assign best-fit automatically">
-                              <Zap className="w-3.5 h-3.5 mr-1" /> Auto
-                            </Button>
-                          )}
-                          <Button size="sm" variant="outline" onClick={() => { setManualSel(null); setManualFor(t); }} disabled={bulkRunning} title="Choose who to assign">
-                            <UserPlus className="w-3.5 h-3.5 mr-1" /> {t.assignees.length === 0 ? "Assign" : "Add"}
-                          </Button>
-                        </>
-                      )}
-                    </span>
-                  </div>
-                }
-              />
+              <div key={lane.id} className="rounded-2xl bg-slate-50/70 border border-slate-100 p-2.5 flex flex-col min-w-0">
+                <div className="mb-2 flex items-center gap-2 px-1">
+                  <span className={`h-2 w-2 rounded-full ${style.dot}`} />
+                  <h4 className="text-xs font-bold uppercase tracking-wide text-slate-600">{lane.label}</h4>
+                  <span className="ml-auto rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-slate-500 ring-1 ring-slate-200">{laneRows.length}</span>
+                </div>
+                <div className="space-y-2">
+                  {laneRows.length === 0 && (
+                    <div className="rounded-xl border border-dashed border-slate-200 py-5 text-center text-xs text-slate-400">No tasks</div>
+                  )}
+                  {laneRows.map((t) => {
+                    const busy = busyId === t.id;
+                    const done = t.bucket === "COMPLETED";
+                    const pct = done ? 100 : (progressOf[t.id] ?? 0);
+                    return (
+                      <TaskCard
+                        key={t.id}
+                        task={toModel(t)}
+                        hideAssignees
+                        onEdit={() => openEdit(t)}
+                        onSnooze={() => snooze(t)}
+                        className="transition-shadow hover:shadow-md"
+                        actions={
+                          <div className="w-full space-y-2">
+                            <div className="flex items-center gap-2">
+                              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100">
+                                <div className={`h-full rounded-full ${pct >= 100 ? "bg-emerald-600" : "bg-amber-500"}`} style={{ width: `${pct}%` }} />
+                              </div>
+                              <span className="text-[11px] font-bold text-slate-600 w-9 text-right">{pct}%</span>
+                            </div>
+                            <div className="flex w-full flex-wrap items-center gap-1.5">
+                              {t.assignees.length === 0 ? (
+                                <span className="text-xs text-slate-400">Unassigned</span>
+                              ) : (
+                                t.assignees.map((a) => (
+                                  <span key={`${a.resourceType}-${a.resourceId}`} className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-700">
+                                    {a.name}
+                                    {!done && (
+                                      <button type="button" onClick={() => handleRemove(t.id, a)} disabled={busy} className="text-slate-400 hover:text-rose-500 disabled:opacity-40" title={`Remove ${a.name}`}>
+                                        <X className="h-3 w-3" />
+                                      </button>
+                                    )}
+                                  </span>
+                                ))
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              {busy ? (
+                                <Loader2 className="h-4 w-4 animate-spin text-slate-400" />
+                              ) : !done && (
+                                <>
+                                  {t.assignees.length === 0 && (
+                                    <Button size="sm" onClick={() => handleAutoAssign(t.id)} disabled={bulkRunning} title="Assign best-fit automatically" className="h-7 px-2 text-xs">
+                                      <Zap className="w-3.5 h-3.5 mr-1" /> Auto
+                                    </Button>
+                                  )}
+                                  <Button size="sm" variant="outline" onClick={() => { setManualSel(null); setManualFor(t); }} disabled={bulkRunning} title="Choose who to assign" className="h-7 px-2 text-xs">
+                                    <UserPlus className="w-3.5 h-3.5 mr-1" /> {t.assignees.length === 0 ? "Assign" : "Add"}
+                                  </Button>
+                                </>
+                              )}
+                              <button type="button" onClick={() => navigate(`/projects/${projectId}/tasks/${t.id}`)}
+                                className="ml-auto inline-flex items-center gap-0.5 text-[11px] font-semibold text-emerald-700 hover:text-emerald-900">
+                                Report <ChevronRight className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        }
+                      />
+                    );
+                  })}
+                </div>
+              </div>
             );
-          }}
-        />
+          })}
         </div>
       )}
 

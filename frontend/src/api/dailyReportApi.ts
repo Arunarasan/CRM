@@ -22,7 +22,10 @@ export interface AdminDailyReport {
   materialRequired?: string | null;
   remarks?: string | null;
   managerComment?: string | null;
-  status: string; // SUBMITTED | REVIEWED
+  status: string; // SUBMITTED | REVIEWED (approved) | REJECTED
+  cashCollected?: number | null;
+  cashPaymentMethod?: string | null;
+  cashReference?: string | null;
   createdAt?: string | null;
   employee?: { id: number; name: string; email?: string } | null;
   project?: { id: number; projectName?: string } | null;
@@ -73,6 +76,8 @@ export const dailyReportApi = {
     api.get<AdminDailyReport>(`/hr/daily-reports/${id}`).then((r) => r.data),
   review: (id: number, managerComment?: string) =>
     api.post<AdminDailyReport>(`/hr/daily-reports/${id}/review`, { managerComment }).then((r) => r.data),
+  reject: (id: number, managerComment: string) =>
+    api.post<AdminDailyReport>(`/hr/daily-reports/${id}/reject`, { managerComment }).then((r) => r.data),
   summary: () =>
     api.get<DailyReportSummary>(`/hr/daily-reports/summary`).then((r) => r.data),
   forEmployee: (employeeId: number) =>

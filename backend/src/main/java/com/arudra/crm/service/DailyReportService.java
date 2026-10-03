@@ -99,6 +99,23 @@ public class DailyReportService {
         return saved;
     }
 
+    /** Send a report back: status REJECTED with the manager's reason, and the employee is told why. */
+    public DailyReport reject(Long id, String reason, User reviewer) {
+        if (reason == null || reason.isBlank()) {
+            throw new IllegalArgumentException("Give a reason for rejecting the report");
+        }
+        DailyReport report = get(id);
+        report.setManagerComment(reason.trim());
+        report.setStatus("REJECTED");
+        DailyReport saved = dailyReportRepository.save(report);
+        if (saved.getEmployee() != null) {
+            notificationService.dispatch("Daily report rejected",
+                    "Your report for " + saved.getReportDate() + " was rejected: " + reason.trim(),
+                    "DAILY_REPORT", saved.getEmployee().getId(), "/employee/daily-reports");
+        }
+        return saved;
+    }
+
     /** Roll-up used by the Reports Hub: this-month volume, pending review, and a per-employee breakdown. */
     public Map<String, Object> summary() {
         LocalDate today = LocalDate.now();

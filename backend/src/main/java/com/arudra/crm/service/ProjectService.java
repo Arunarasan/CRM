@@ -302,6 +302,81 @@ public class ProjectService {
         return result;
     }
 
+    /**
+     * The project's work grouped by category (Wall, Windows, Curtains…), from the quotation lines.
+     * Each line carries its progress from the matching execution work item (by BOQ line, then by
+     * name). Projects without a quotation fall back to their work items grouped by item type.
+     */
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getWorkCategories(Long projectId) {
+        Project project = getProjectById(projectId);
+        List<ProjectRoomItem> workItems = roomItemRepository.findByRoomPhaseProjectId(projectId);
+        Map<Long, ProjectRoomItem> byBoq = new java.util.HashMap<>();
+        Map<String, ProjectRoomItem> byName = new java.util.HashMap<>();
+        for (ProjectRoomItem w : workItems) {
+            if (w.getBoqItemId() != null) byBoq.putIfAbsent(w.getBoqItemId(), w);
+            if (w.getItemName() != null) byName.putIfAbsent(w.getItemName().trim().toLowerCase(), w);
+        }
+
+        Map<String, List<Map<String, Object>>> groups = new LinkedHashMap<>();
+        java.util.Set<Long> used = new java.util.HashSet<>();
+        Quotation q = project.getQuotation();
+        if (q != null && q.getItems() != null) {
+            q.getItems().stream()
+                    .filter(qi -> !Boolean.TRUE.equals(qi.getIsDeleted()))
+                    .sorted(java.util.Comparator.comparing((QuotationItem qi) -> qi.getItemOrder() == null ? 0 : qi.getItemOrder()))
+                    .forEach(qi -> {
+                        ProjectRoomItem w = qi.getBoqItemId() != null ? byBoq.get(qi.getBoqItemId()) : null;
+                        if (w == null && qi.getItemName() != null) w = byName.get(qi.getItemName().trim().toLowerCase());
+                        if (w != null) used.add(w.getId());
+                        Map<String, Object> line = new LinkedHashMap<>();
+                        line.put("name", qi.getItemName());
+                        line.put("description", firstNonBlank(qi.getColor(), qi.getSpecification(), qi.getRoomName()));
+                        line.put("quantity", qi.getQuantity());
+                        line.put("unit", qi.getUnit());
+                        line.put("amount", qi.getTotalAmount());
+                        line.put("workItemId", w != null ? w.getId() : null);
+                        line.put("progress", w != null && w.getProgress() != null ? w.getProgress() : 0);
+                        line.put("status", w != null ? w.getStatus() : null);
+                        String cat = firstNonBlank(qi.getCategory());
+                        groups.computeIfAbsent(cat != null ? cat : "Other", k -> new java.util.ArrayList<>()).add(line);
+                    });
+        }
+        // Work items not tied to a quotation line (or no quotation at all): group by item type.
+        for (ProjectRoomItem w : workItems) {
+            if (used.contains(w.getId())) continue;
+            Map<String, Object> line = new LinkedHashMap<>();
+            line.put("name", w.getItemName());
+            line.put("description", w.getRoom() != null ? w.getRoom().getRoomName() : null);
+            line.put("quantity", w.getQuantity());
+            line.put("unit", w.getUnit());
+            line.put("amount", null);
+            line.put("workItemId", w.getId());
+            line.put("progress", w.getProgress() == null ? 0 : w.getProgress());
+            line.put("status", w.getStatus());
+            String type = w.getItemType() == null || w.getItemType().isBlank() ? "Other"
+                    : w.getItemType().substring(0, 1).toUpperCase() + w.getItemType().substring(1).toLowerCase().replace('_', ' ');
+            groups.computeIfAbsent(type, k -> new java.util.ArrayList<>()).add(line);
+        }
+
+        List<Map<String, Object>> out = new java.util.ArrayList<>();
+        groups.forEach((cat, lines) -> {
+            int pct = (int) Math.round(lines.stream().mapToInt(l -> (Integer) l.get("progress")).average().orElse(0));
+            BigDecimal amount = lines.stream().map(l -> (BigDecimal) l.get("amount")).filter(java.util.Objects::nonNull)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            Map<String, Object> g = new LinkedHashMap<>();
+            g.put("category", cat);
+            g.put("itemCount", lines.size());
+            g.put("doneCount", lines.stream().filter(l -> (Integer) l.get("progress") >= 100).count());
+            g.put("progress", pct);
+            g.put("amount", amount);
+            g.put("trackable", lines.stream().anyMatch(l -> l.get("workItemId") != null));
+            g.put("items", lines);
+            out.add(g);
+        });
+        return out;
+    }
+
     /** Stage-2 handover stages; every other stage (Stitching, Shipping, Manufacturing, custom…) is stage 1. */
     private static boolean isInstallStage(String stage) {
         return stage != null && (stage.equalsIgnoreCase("Installation") || stage.equalsIgnoreCase("Fitting"));
