@@ -90,7 +90,9 @@ export const priceOf = (p: Product) => Number(p.sellingPrice ?? p.price ?? 0);
 
 const CATEGORY_LIST = "quote-category-names";
 
-export function AddCategoryBar({ categories, used, onAdd, onSaveCategory }: {
+export function AddCategoryBar({ categories, used, onAdd, onSaveCategory, openSignal }: {
+  /** Bumped by the page's "Add Item → New category" to open the bar. */
+  openSignal?: number;
   categories: InventoryCategory[];
   /** Category names already on the sheet (not offered again). */
   used: string[];
@@ -98,6 +100,7 @@ export function AddCategoryBar({ categories, used, onAdd, onSaveCategory }: {
   onSaveCategory: (c: InventoryCategory) => void;
 }) {
   const [open, setOpen] = useState(false);
+  useEffect(() => { if (openSignal) setOpen(true); }, [openSignal]);
   const [name, setName] = useState("");
   const [saveToCatalog, setSaveToCatalog] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -129,14 +132,14 @@ export function AddCategoryBar({ categories, used, onAdd, onSaveCategory }: {
   if (!open) {
     return (
       <button type="button" onClick={() => setOpen(true)}
-        className="w-full rounded-xl border border-dashed p-3 text-sm font-medium text-primary hover:bg-primary/[0.04] flex items-center justify-center gap-1.5">
+        className="w-full rounded-lg border border-dashed p-2.5 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/40 flex items-center justify-center gap-1.5">
         <Plus className="h-4 w-4" /> Add category
       </button>
     );
   }
 
   return (
-    <div className="rounded-xl border border-dashed p-3 space-y-2">
+    <div id="quote-add-category" className="rounded-lg border border-dashed p-3 space-y-2">
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm font-medium">New category</span>
         <Input autoFocus list={CATEGORY_LIST} placeholder="Pick a saved category or type a new name" className="h-9 flex-1 min-w-[14rem]"
@@ -448,34 +451,45 @@ export function DiscountCell({ type, value, amount, disabled, onChange }: {
   disabled: boolean;
   onChange: (type: "PERCENT" | "FLAT" | null, value: number | null) => void;
 }) {
-  const has = value != null && Number(value) > 0;
-  const [editing, setEditing] = useState(false);
+  const v = Number(value ?? 0);
+  const has = v > 0;
   const flat = type === "FLAT";
+  const [custom, setCustom] = useState(false);
   if (disabled) {
-    return has ? <span className="block text-right text-xs text-emerald-700 tabular-nums">−{inr(amount)}{!flat && ` (${value}%)`}</span> : <span className="block text-right text-xs text-muted-foreground">—</span>;
+    return <span className="block px-2 text-sm tabular-nums text-muted-foreground">{has ? (flat ? inr(v) : `${v}%`) : "0%"}</span>;
   }
-  if (!has && !editing) {
-    // Wide table: a quiet "—" that offers "+ Discount" when the row is hovered. Narrow: the link, always.
+  if (custom) {
+    // Any other % or a flat ₹ amount.
     return (
-      <button type="button" onClick={() => setEditing(true)} aria-label="Add discount"
-        className="h-6 @[820px]:h-8 w-full text-left @[820px]:text-right text-xs text-muted-foreground hover:text-primary">
-        <span className="hidden @[820px]:inline @[820px]:group-hover:hidden">—</span>
-        <span className="@[820px]:hidden @[820px]:group-hover:inline">+ Discount</span>
-      </button>
-    );
-  }
-  return (
-    <div className="space-y-0.5 max-w-[10rem] @[820px]:max-w-none">
       <div className="flex items-center gap-1">
         <button type="button" title="Switch % / ₹"
-          onClick={() => onChange(flat ? "PERCENT" : "FLAT", has ? value ?? null : null)}
+          onClick={() => onChange(flat ? "PERCENT" : "FLAT", has ? v : null)}
           className="h-8 w-7 shrink-0 rounded-md border border-border bg-background text-xs font-semibold">
           {flat ? "₹" : "%"}
         </button>
-        <NumCell value={has ? value : null} placeholder="0" className="!border-border !bg-background"
-          onCommit={(v) => { setEditing(false); onChange(v && v > 0 ? (type ?? "PERCENT") : null, v && v > 0 ? v : null); }} />
+        <NumCell value={has ? v : null} placeholder="0" className="!border-border !bg-background"
+          onCommit={(n) => { setCustom(false); onChange(n && n > 0 ? (type ?? "PERCENT") : null, n && n > 0 ? n : null); }} />
       </div>
-      {has && <span className="block text-right text-[11px] text-emerald-700 tabular-nums">−{inr(amount)}</span>}
-    </div>
+    );
+  }
+  // A plain dropdown like the mockup: common % values, the current one, and "Other…".
+  const presets = [0, 5, 10, 15, 20];
+  const current = !has ? "P0" : flat ? `F${v}` : `P${v}`;
+  const options = presets.map((p) => `P${p}`);
+  if (!options.includes(current)) options.splice(1, 0, current);
+  const label = (o: string) => (o.startsWith("F") ? inr(Number(o.slice(1))) : `${o.slice(1)}%`);
+  return (
+    <select value={current} aria-label="Discount" title={has ? `− ${inr(amount)}` : "No discount"}
+      className="h-8 w-full rounded-md border border-border bg-background px-2 text-sm tabular-nums outline-none focus:border-ring focus:ring-2 focus:ring-ring/20"
+      onChange={(e) => {
+        const o = e.target.value;
+        if (o === "other") { setCustom(true); return; }
+        const n = Number(o.slice(1));
+        if (o.startsWith("F")) return;
+        onChange(n > 0 ? "PERCENT" : null, n > 0 ? n : null);
+      }}>
+      {options.map((o) => <option key={o} value={o}>{label(o)}</option>)}
+      <option value="other">Other…</option>
+    </select>
   );
 }

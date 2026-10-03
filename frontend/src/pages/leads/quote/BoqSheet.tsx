@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlignLeft, Check, ChevronDown, ChevronRight, FolderOpen, Hammer, Loader2, MapPin, MoreVertical, Package, Pencil, Plus, Trash2 } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Check, ChevronDown, ChevronRight, FolderOpen, Hammer, Layers, Loader2, MapPin, MoreVertical, Package, PackageSearch, Pencil, Plus, SlidersHorizontal, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -97,8 +98,10 @@ function materialPayload(m: BoqItemMaterial, patch: Partial<BoqItemMaterial>): P
 type Group = { category: string; items: BoqItem[] };
 
 export default function BoqSheet({
-  boq, canEdit, onBoqChanged, showBreakdown, onSaveState,
+  boq, canEdit, onBoqChanged, showBreakdown, onSaveState, actionsTarget,
 }: {
+  /** The page's tab bar slot for "Add from Inventory" / "Add Item" (rendered there via a portal). */
+  actionsTarget?: HTMLElement | null;
   boq: Boq;
   canEdit: boolean;
   onBoqChanged: (b: Boq) => void;
@@ -369,6 +372,19 @@ export default function BoqSheet({
   const [bulk, setBulk] = useState<null | { mode: "labour" }>(null);
   // Category ⋮ → Add material / Add labour: a line of its own in that category.
   const [catLine, setCatLine] = useState<null | { category: string; kind: "material" | "labour" }>(null);
+  const [inventoryOpen, setInventoryOpen] = useState(false);
+  const [newCategorySignal, setNewCategorySignal] = useState(0);
+  /** "Add Item": jump to a category's empty last row and put the cursor in it. */
+  const focusNewRow = (category?: string) => {
+    const target = category ?? groups[groups.length - 1]?.category;
+    if (!target) { setNewCategorySignal((n) => n + 1); return; }
+    setCollapsed((cur) => { const n = new Set(cur); n.delete(target); return n; });
+    setTimeout(() => {
+      const row = [...document.querySelectorAll<HTMLElement>("[data-newrow]")].find((el) => el.dataset.newrow === target);
+      row?.scrollIntoView({ block: "center", behavior: "smooth" });
+      row?.querySelector("input")?.focus();
+    }, 50);
+  };
 
   // The tick on each item is the customer's choice: ticked items are in the quote and its total.
   const setIncluded = (list: BoqItem[], on: boolean) => list
@@ -405,33 +421,53 @@ export default function BoqSheet({
     // A container: the item table switches to its desktop columns by the room it actually has
     // (sidebar open, summary panel beside it, project page…), not by the screen width.
     <div className="@container space-y-3">
-      {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-2 justify-between">
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          {!canEdit ? <span>Locked — view only</span> : !onSaveState && <SaveState pending={pending} lastSaved={lastSaved} />}
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          {items.length > 0 && (
-            <span className="text-xs font-medium text-muted-foreground">
-              {includedCount} of {items.length} in quote
-              {canEdit && includedCount < items.length && (
-                <button type="button" className="ml-1.5 text-[#2563EB] hover:underline" onClick={() => setIncluded(items, true)}>tick all</button>
-              )}
-            </span>
-          )}
-          {canEdit && showLines && items.length > 1 && (
-            <Button size="sm" variant="outline" onClick={() => setBulk({ mode: "labour" })}>
-              <Hammer className="h-3.5 w-3.5 mr-1" /> Add labour to items…
-            </Button>
-          )}
+      {(!canEdit || !onSaveState || showBreakdown === undefined) && (
+        <div className="flex flex-wrap items-center gap-3 justify-between text-xs text-muted-foreground">
+          {!canEdit ? <span>Locked — view only</span> : !onSaveState ? <SaveState pending={pending} lastSaved={lastSaved} /> : <span />}
           {showBreakdown === undefined && (
-            <label className="flex items-center gap-1.5 text-xs font-medium cursor-pointer select-none">
+            <label className="flex items-center gap-1.5 font-medium cursor-pointer select-none">
               <input type="checkbox" className="h-3.5 w-3.5 accent-primary" checked={showLines} onChange={(e) => setShowLines(e.target.checked)} />
               Show cost breakdown
             </label>
           )}
         </div>
-      </div>
+      )}
+
+      {/* "Add from Inventory" · "Add Item ▾" — in the page's tab bar when it gives a slot, else here */}
+      {canEdit && (() => {
+        const actions = (
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" className="h-8" onClick={() => setInventoryOpen(true)}>
+              <PackageSearch className="h-4 w-4" /> Add from Inventory
+            </Button>
+            <div className="inline-flex">
+              <Button size="sm" className="h-8 rounded-r-none bg-[#1F5C3F] hover:bg-[#184A33] text-white" onClick={() => focusNewRow()}>
+                <Plus className="h-4 w-4" /> Add Item
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="sm" className="h-8 rounded-l-none border-l border-white/20 px-2 bg-[#1F5C3F] hover:bg-[#184A33] text-white" aria-label="More ways to add">
+                    <ChevronDown className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-60">
+                  {groups.map((g) => (
+                    <DropdownMenuItem key={g.category} onClick={() => focusNewRow(g.category)}>
+                      <Plus className="h-4 w-4 mr-2" /> Add to {g.category}
+                    </DropdownMenuItem>
+                  ))}
+                  {groups.length > 0 && <DropdownMenuSeparator />}
+                  <DropdownMenuItem onClick={() => setNewCategorySignal((n) => n + 1)}><Layers className="h-4 w-4 mr-2" /> New category</DropdownMenuItem>
+                  {items.length > 1 && (
+                    <DropdownMenuItem onClick={() => setBulk({ mode: "labour" })}><Hammer className="h-4 w-4 mr-2" /> Add labour to several products…</DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
+        );
+        return actionsTarget ? createPortal(actions, actionsTarget) : <div className="flex justify-end">{actions}</div>;
+      })()}
 
       <datalist id={LABOUR_TYPES_LIST}>
         {Object.values(labourRates).map((r) => <option key={r.label} value={r.label}>{`₹${r.rate}`}</option>)}
@@ -451,13 +487,13 @@ export default function BoqSheet({
           // No overflow-hidden here: the product picker's dropdown must be able to spill out.
           <div key={g.category} className="rounded-lg border bg-card">
             {/* Category header */}
-            <div className={`flex items-center gap-2 bg-muted/60 px-3 py-2 ${folded ? "rounded-lg" : "rounded-t-lg"}`}>
+            <div className={`flex items-center gap-2 bg-muted px-3 py-2.5 ${folded ? "rounded-lg" : "rounded-t-lg"}`}>
               <button type="button" onClick={() => toggleCollapsed(g.category)}
                 aria-label={folded ? `Show ${g.category}` : `Hide ${g.category}`} aria-expanded={!folded}
                 className="h-6 w-6 -ml-1 rounded-md hover:bg-primary/10 flex items-center justify-center text-muted-foreground">
                 {folded ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
               </button>
-              <input type="checkbox" className="h-4 w-4 accent-primary" disabled={!canEdit || g.items.length === 0}
+              <input type="checkbox" className="h-4 w-4 accent-primary @[820px]:hidden" disabled={!canEdit || g.items.length === 0}
                 title="Whole category in the quote" aria-label={`${g.category} in quote`}
                 ref={(el) => { if (el) el.indeterminate = on > 0 && on < g.items.length; }}
                 checked={g.items.length > 0 && on === g.items.length} onChange={() => setIncluded(g.items, on !== g.items.length)} />
@@ -465,21 +501,21 @@ export default function BoqSheet({
                 <CategoryNameInput value={g.category}
                   onCommit={(v) => renameCategory(g, v)} onCancel={() => setRenaming(null)} />
               ) : (
-                <span className="flex-1 min-w-0 truncate text-sm font-semibold uppercase tracking-wide">
-                  <FolderOpen className="inline h-4 w-4 mr-1.5 -mt-0.5 text-muted-foreground" aria-hidden />
+                <span className="flex-1 min-w-0 truncate text-sm font-bold uppercase tracking-wide">
+                  <FolderOpen className="inline h-[18px] w-[18px] mr-2 -mt-0.5 text-[#D97706]" aria-hidden />
                   <span
                     className={canEdit ? "cursor-text rounded px-0.5 -mx-0.5 hover:bg-primary/10" : ""}
                     title={canEdit ? "Double-click to rename" : undefined}
                     onDoubleClick={() => canEdit && setRenaming(g.category)}>
                     {g.category}
                   </span>
-                  <span className="ml-2 text-xs font-normal normal-case tracking-normal text-muted-foreground">
-                    {g.items.length} product{g.items.length === 1 ? "" : "s"}
+                  <span className="ml-3 text-sm font-normal normal-case tracking-normal text-muted-foreground">
+                    {g.items.length} item{g.items.length === 1 ? "" : "s"}
                   </span>
                 </span>
               )}
-              <span className="hidden sm:inline text-xs text-muted-foreground">Category total</span>
-              <span className="text-sm font-semibold tabular-nums">{inr(groupTotal(g.items))}</span>
+              <span className="hidden sm:inline text-sm text-muted-foreground">Category total:</span>
+              <span className="text-sm font-bold tabular-nums">{inr(groupTotal(g.items))}</span>
               {canEdit && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -500,23 +536,28 @@ export default function BoqSheet({
             </div>
 
             {!folded && (g.items.length > 0 || canEdit) && (
-              <div className={`hidden @[820px]:grid ${ROW} items-center border-t bg-muted/20 px-3 py-2 text-xs font-medium text-muted-foreground`}>
-                <span title="In the quote" className="text-center">✓</span>
+              <div className={`hidden @[820px]:grid ${ROW} items-center border-t px-3 py-2 text-sm text-muted-foreground`}>
+                <input type="checkbox" className="h-4 w-4 accent-primary justify-self-center" disabled={!canEdit || g.items.length === 0}
+                  title="Whole category in the quote" aria-label={`${g.category} in quote`}
+                  ref={(el) => { if (el) el.indeterminate = on > 0 && on < g.items.length; }}
+                  checked={g.items.length > 0 && on === g.items.length} onChange={() => setIncluded(g.items, on !== g.items.length)} />
+                <span className="text-center">#</span>
                 <span className="col-span-2">Product</span>
-                <span className="hidden @[1100px]:block">Description</span>
-                <span className="text-right">Qty</span>
-                <span>Unit</span>
-                <span className="text-right">Rate ₹</span>
-                <span className="text-right">Discount</span>
-                <span className="text-right">Amount ₹</span>
+                <span className="hidden @[1000px]:block">Description</span>
+                <span className="text-right pr-2">Qty</span>
+                <span className="pl-2">Unit</span>
+                <span className="text-right pr-2">Rate (₹)</span>
+                <span className="pl-2">Disc.</span>
+                <span className="text-right pr-2">Amount (₹)</span>
                 <span />
               </div>
             )}
 
             {!folded && <div className="divide-y border-t">
-              {g.items.map((item) => (
+              {g.items.map((item, idx) => (
                 <ItemRow
                   key={item.id}
+                  index={idx + 1}
                   item={item}
                   product={item.productId != null ? products[item.productId] : undefined}
                   categories={categoryNames}
@@ -541,7 +582,7 @@ export default function BoqSheet({
               ))}
             </div>}
             {!folded && canEdit && (
-              <NewItemRow categoryId={saved?.id} categoryName={g.category} first={g.items.length === 0}
+              <NewItemRow key={`new-${g.category}`} categoryId={saved?.id} categoryName={g.category} first={g.items.length === 0}
                 onAdd={(d) => addRow(g.category, d)} />
             )}
           </div>
@@ -550,12 +591,24 @@ export default function BoqSheet({
 
       {canEdit && (
         <AddCategoryBar
+          openSignal={newCategorySignal}
           categories={savedCategories}
           used={categoryNames}
           onSaveCategory={rememberCategory}
           onAdd={(name) => setExtraCategories((l) => [...l, name.slice(0, CATEGORY_MAX)])}
         />
       )}
+
+      <InventoryDialog
+        open={inventoryOpen}
+        categories={categoryNames}
+        categoryId={(c) => categoryByName.get(c.trim().toLowerCase())?.id}
+        onClose={() => setInventoryOpen(false)}
+        onPick={(category, prod) => {
+          addRow(category, { name: prod.name, product: prod, qty: 1, unit: prod.unit || "Nos", rate: priceOf(prod) });
+          toast.success(`${prod.name} added to ${category}`);
+        }}
+      />
 
       <CategoryLineDialog
         state={catLine}
@@ -638,8 +691,8 @@ function SaveState({ pending, lastSaved }: { pending: number; lastSaved: number 
 // ---------------------------------------------------------------------------
 
 /** Desktop column layout shared by the header and every product row. */
-const ROW = "@[820px]:grid @[820px]:grid-cols-[24px_40px_minmax(0,1fr)_60px_76px_88px_84px_104px_56px] "
-  + "@[1100px]:grid-cols-[24px_40px_minmax(0,1.1fr)_minmax(0,1fr)_60px_76px_88px_84px_104px_56px] @[820px]:gap-x-2 @[820px]:gap-y-0";
+const ROW = "@[820px]:grid @[820px]:grid-cols-[28px_24px_40px_minmax(0,1fr)_68px_84px_88px_84px_108px_32px] "
+  + "@[1000px]:grid-cols-[28px_24px_40px_minmax(0,1.2fr)_minmax(0,1fr)_68px_84px_88px_84px_108px_32px] @[820px]:gap-x-2 @[820px]:gap-y-0";
 
 /** Visible input styling for editable cells (the bare spreadsheet cells only show a border on hover). */
 const FIELD = "!border-border !bg-background";
@@ -647,13 +700,16 @@ const FIELD = "!border-border !bg-background";
  * Item-row cells read like a table: plain values in the wide layout that outline when the row is
  * hovered (and highlight on focus); in the narrow layout (phones — no hover) they're always boxes.
  */
-const CELL = "!border-border !bg-background focus:!border-ring @[820px]:!border-transparent @[820px]:!bg-transparent @[820px]:group-hover:!border-border @[820px]:focus:!border-ring @[820px]:focus:!bg-background";
+const CELL = "!border-border !bg-background focus:!border-ring";
+/** The product name reads as plain bold text until you hover or click it. */
+const NAME_CELL = "@[820px]:!border-transparent @[820px]:!bg-transparent @[820px]:group-hover:!border-border focus:!border-ring focus:!bg-background";
 
 function ItemRow({
-  item, product, categories, canEdit, showLines, onUpdate, onQty, onSize, onSetGross, onSetAmount, onColor,
+  index, item, product, categories, canEdit, showLines, onUpdate, onQty, onSize, onSetGross, onSetAmount, onColor,
   onUpdateMaterial, onUpdateLabour, onDeleteMaterial, onDeleteLabour, onAddMaterial, onAddLabour,
   onDelete, onToggleActive, rateFor,
 }: {
+  index: number;
   item: BoqItem;
   product?: Product;
   categories: string[];
@@ -678,7 +734,6 @@ function ItemRow({
   const inactive = item.isActive === false;
   const [open, setOpen] = useState(false);
   const [adding, setAdding] = useState<null | "material" | "labour">(null);
-  const [descOpen, setDescOpen] = useState(false);
   // A typed-in price is already the row's Rate/Amount — don't repeat it as a breakdown line.
   const priceLine = priceLineOf(item);
   const materials = (item.materials || []).filter((m) => m !== priceLine);
@@ -695,63 +750,62 @@ function ItemRow({
     return [...new Set(all)];
   }, [product, item.imageUrl]);
 
-  const showDesc = !!item.description || descOpen;
   const editName = (v: string) => {
     if (!v) return;
     onUpdate({ itemName: v });
     if (priceLine) onUpdateMaterial(priceLine.id as number, { materialName: v });
   };
+  const badge = item.productId == null
+    ? <span className="shrink-0 rounded px-1.5 py-px text-[10px] font-semibold uppercase bg-[#EFF6FF] text-[#1D4ED8]" title="Typed in — not from the inventory catalogue">Custom</span>
+    : <span className="shrink-0 rounded px-1.5 py-px text-[10px] font-semibold uppercase bg-[#ECFDF5] text-[#16805C]" title="From the inventory catalogue">Inventory</span>;
+  // Colour / location show as quiet text under the name; they're edited in Details.
+  const meta = [item.color, item.location || item.roomName].filter(Boolean).join(" · ");
+  const menu = (
+    <RowMenu canEdit={canEdit} open={detailsOpen} lineCount={lineCount}
+      onToggle={() => setOpen((v) => !v)} onDelete={onDelete} />
+  );
 
   return (
     <div className={`group transition-colors ${inactive ? "bg-muted/30" : "hover:bg-muted/20"}`}>
-      <div className={`grid grid-cols-[24px_40px_minmax(0,1fr)_auto] gap-x-2 gap-y-2 items-start px-3 py-2.5 ${ROW}`}>
+      <div className={`grid grid-cols-[24px_40px_minmax(0,1fr)_auto] gap-x-2 gap-y-2 items-start px-3 py-2.5 ${ROW} @[820px]:items-center @[820px]:py-1.5`}>
         {/* ✓ in quote */}
         <input type="checkbox" aria-label={`${item.itemName} in quote`} title="In the quote (customer's choice)"
-          className="mt-2.5 h-4 w-4 accent-primary justify-self-center" disabled={!canEdit}
+          className="mt-2.5 @[820px]:mt-0 h-4 w-4 accent-primary justify-self-center" disabled={!canEdit}
           checked={!inactive} onChange={onToggleActive} />
+
+        {/* # */}
+        <span className="hidden @[820px]:block text-center text-sm tabular-nums text-muted-foreground">{index}</span>
 
         {/* Photo */}
         <div className={inactive ? "opacity-60" : ""}>
           <ImageCell url={item.imageUrl} options={photos} disabled={!canEdit} onChange={(url) => onUpdate({ imageUrl: url })} />
         </div>
 
-        {/* Product: name, then one quiet line of details — empty ones are links, not boxes */}
+        {/* Product: name + badge; quiet details underneath */}
         <div className={`min-w-0 ${inactive ? "opacity-60" : ""}`}>
-          <TextCell value={item.itemName} col="itemName" disabled={!canEdit} className={`font-medium ${f}`} onCommit={editName}
-            title={item.productId == null ? "Custom product — not from the catalogue" : undefined} />
-          <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 px-1 text-xs text-muted-foreground">
-            {inactive && <span className="shrink-0 text-[10px] font-medium uppercase px-1.5 py-px rounded bg-[#FFFBEB] text-[#B7791F]">Not in quote</span>}
-            {item.productId == null ? (
-              <span className="shrink-0 text-[10px] font-medium uppercase px-1.5 py-px rounded bg-[#EFF6FF] text-[#1D4ED8]" title="Typed in — not from the inventory catalogue">Custom</span>
-            ) : (
-              <span className="shrink-0 text-[10px] font-medium uppercase px-1.5 py-px rounded bg-muted text-muted-foreground" title="From the inventory catalogue">Inventory</span>
-            )}
-            <ColorCell value={item.color} colors={colorsOf(product)} disabled={!canEdit} onChange={onColor} />
-            <LocationBox value={item.location} fallback={item.roomName} disabled={!canEdit}
-              onCommit={(v) => onUpdate({ location: v || null })} />
-            {canEdit && !showDesc && (
-              <button type="button" onClick={() => setDescOpen(true)} title="Add a description (shows on the quotation)"
-                className="@[1100px]:hidden h-6 rounded px-1 hover:bg-muted hover:text-foreground flex items-center gap-1">
-                <AlignLeft className="h-3.5 w-3.5" /><span className="@[820px]:hidden">Description</span>
-              </button>
-            )}
+          <div className="flex min-w-0 items-center gap-1.5">
+            <div className="min-w-0 flex-1 @[820px]:flex-none @[820px]:max-w-[70%]">
+              <TextCell value={item.itemName} col="itemName" disabled={!canEdit} className={`font-semibold ${canEdit ? `${CELL} ${NAME_CELL}` : ""}`} onCommit={editName} />
+            </div>
+            {badge}
           </div>
-        </div>
-
-        {/* Description — under the name, or its own column when the table is wide enough */}
-        <div className={`col-start-3 col-span-2 min-w-0 @[820px]:row-start-2 @[820px]:col-start-3 @[820px]:col-span-1 @[1100px]:row-start-1 @[1100px]:col-start-4 ${showDesc ? "" : "hidden @[1100px]:block"} ${inactive ? "opacity-60" : ""}`}>
-          {(showDesc || canEdit) && (
-            <DescriptionBox value={item.description} disabled={!canEdit} autoFocus={descOpen && !item.description}
-              onDone={() => setDescOpen(false)}
-              onCommit={(v) => onUpdate({ description: v || undefined })} />
+          {(inactive || meta || item.description) && (
+            <div className="flex min-w-0 items-center gap-1.5 px-2 text-xs text-muted-foreground">
+              {inactive && <span className="shrink-0 rounded px-1.5 py-px text-[10px] font-semibold uppercase bg-[#FFFBEB] text-[#B7791F]">Not in quote</span>}
+              {meta && <span className="truncate">{meta}</span>}
+              {item.description && <span className="truncate @[1000px]:hidden">{meta ? "· " : ""}{item.description}</span>}
+            </div>
           )}
         </div>
 
-        {/* Actions (phone: top-right) */}
-        <div className="row-start-1 col-start-4 @[820px]:hidden flex items-center">
-          <RowActions canEdit={canEdit} open={detailsOpen} lineCount={lineCount} onToggle={() => setOpen((v) => !v)}
-            onDelete={onDelete} />
+        {/* Description column (wide tables) */}
+        <div className={`hidden @[1000px]:block min-w-0 ${inactive ? "opacity-60" : ""}`}>
+          <DescriptionBox value={item.description} disabled={!canEdit}
+            onCommit={(v) => onUpdate({ description: v || undefined })} />
         </div>
+
+        {/* Actions (phone: top-right) */}
+        <div className="row-start-1 col-start-4 @[820px]:hidden flex items-center">{menu}</div>
 
         {/* Numbers — one labelled strip on phones (Qty · Unit · Rate · Amount), table cells on desktop */}
         <div className="col-span-4 col-start-1 @[820px]:col-span-1 @[820px]:col-start-auto grid grid-cols-2 @[420px]:grid-cols-[60px_76px_minmax(0,1fr)_minmax(0,1fr)] gap-x-2 gap-y-1.5 @[820px]:contents rounded-lg bg-muted/40 p-2 @[820px]:p-0">
@@ -765,26 +819,36 @@ function ItemRow({
             <NumCell value={rate} col="rate" disabled={!canEdit} className={f}
               onCommit={(v) => v != null && onSetGross(Math.round(v * (qty > 0 ? qty : 1) * 100) / 100)} />
           </Cell>
-          <Cell label={Number(item.discountValue ?? 0) > 0 ? "Discount" : ""} className="order-last col-span-2 @[420px]:col-span-4 -mt-1 @[820px]:mt-0 @[820px]:order-none @[820px]:col-span-1">
+          <Cell label="Disc." className="order-last col-span-2 @[420px]:col-span-4 @[820px]:order-none @[820px]:col-span-1 max-w-[9rem] @[820px]:max-w-none">
             <DiscountCell type={item.discountType} value={item.discountValue} amount={item.discountAmount} disabled={!canEdit}
               onChange={(type, value) => onUpdate({ discountType: type, discountValue: value })} />
           </Cell>
           <Cell label="Amount ₹">
             <NumCell value={item.amount} col="amount" disabled={!canEdit}
-              className={`font-semibold text-foreground ${f}`}
+              className={`font-semibold text-foreground ${canEdit ? "!border-border !bg-muted/70 focus:!border-ring focus:!bg-background" : ""}`}
               onCommit={(v) => v != null && onSetAmount(v)} />
           </Cell>
         </div>
 
-        <div className="hidden @[820px]:flex items-center justify-end">
-          <RowActions canEdit={canEdit} open={detailsOpen} lineCount={lineCount} onToggle={() => setOpen((v) => !v)}
-            onDelete={onDelete} />
-        </div>
+        <div className="hidden @[820px]:flex items-center justify-center">{menu}</div>
       </div>
 
       {/* ---- Details: size, category, and the material / labour behind the price ---- */}
       {detailsOpen && (
-        <div className="mx-3 mb-3 @[820px]:ml-[92px] rounded-lg border bg-muted/40 p-2 space-y-1.5">
+        <div className="mx-3 mb-3 @[820px]:ml-[140px] rounded-lg border bg-muted/40 p-2 space-y-1.5">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-1 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1.5">Colour
+              <ColorCell value={item.color} colors={colorsOf(product)} disabled={!canEdit} onChange={onColor} />
+            </span>
+            <span className="flex items-center gap-1.5">
+              <LocationBox value={item.location} fallback={item.roomName} disabled={!canEdit}
+                onCommit={(v) => onUpdate({ location: v || null })} />
+            </span>
+            <span className="min-w-[12rem] flex-1 @[1000px]:hidden">
+              <DescriptionBox value={item.description} disabled={!canEdit}
+                onCommit={(v) => onUpdate({ description: v || undefined })} />
+            </span>
+          </div>
           <p className="px-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
             Cost breakdown <span className="normal-case tracking-normal font-normal">· qty × rate + waste % = line total · lines add up to the item amount</span>
           </p>
@@ -881,10 +945,10 @@ function NewItemRow({ categoryId, categoryName, first, onAdd }: {
   const enterAdds = (e: React.KeyboardEvent) => { if (e.key === "Enter") { e.preventDefault(); add(); } };
 
   return (
-    <div className={`grid grid-cols-[24px_minmax(0,1fr)] gap-x-2 gap-y-2 items-center px-3 py-2 border-t rounded-b-lg ${ROW}`}>
+    <div data-newrow={categoryName} className={`grid grid-cols-[24px_minmax(0,1fr)] gap-x-2 gap-y-2 items-center px-3 py-2 border-t rounded-b-lg ${ROW}`}>
       <Plus className="h-4 w-4 text-muted-foreground justify-self-center" aria-hidden />
-      {/* Product — spans the photo + name columns */}
-      <div className="min-w-0 @[820px]:col-span-2">
+      {/* Product — spans the #, photo, name (and description) columns */}
+      <div className="min-w-0 @[820px]:col-span-3 @[1000px]:col-span-4">
         <ProductPicker
           categoryId={categoryId}
           categoryName={categoryName}
@@ -895,7 +959,7 @@ function NewItemRow({ categoryId, categoryName, first, onAdd }: {
             setTimeout(() => { qtyRef.current?.focus(); qtyRef.current?.select(); }, 0);
           }}
           onCustom={() => setTimeout(() => { qtyRef.current?.focus(); qtyRef.current?.select(); }, 0)}
-          placeholder={first ? `Add the first product to ${categoryName}…` : "Add product — name or code…"}
+          placeholder={first ? `Add the first product to ${categoryName} — search name or code…` : "Add product — search name or code..."}
           inputClassName={`${box} pl-8`}
           inputRef={nameRef}
         />
@@ -903,7 +967,6 @@ function NewItemRow({ categoryId, categoryName, first, onAdd }: {
 
       {/* Numbers — a strip on phones, table cells on desktop */}
       <div className="col-span-2 col-start-1 @[820px]:col-span-1 @[820px]:col-start-auto grid grid-cols-2 @[420px]:grid-cols-[60px_76px_minmax(0,1fr)_minmax(0,1fr)] gap-x-2 @[820px]:contents">
-        <span className="hidden @[1100px]:block" />
         <Cell label="Qty">
           <input ref={qtyRef} inputMode="decimal" aria-label="Quantity" className={`${box} text-right tabular-nums`}
             value={d.qty || ""} placeholder="1" onFocus={(e) => e.currentTarget.select()}
@@ -921,14 +984,14 @@ function NewItemRow({ categoryId, categoryName, first, onAdd }: {
             onChange={(e) => setD((x) => ({ ...x, rate: num(e.target.value) }))} onKeyDown={enterAdds} />
         </Cell>
         <span className="hidden @[820px]:block" />
-        <Cell label="Amount ₹">
+        <Cell label="Amount ₹" className="@[820px]:hidden">
           <span className="flex h-8 items-center justify-end px-2 text-sm font-semibold tabular-nums text-muted-foreground">
             {amount > 0 ? inr(amount) : "—"}
           </span>
         </Cell>
       </div>
 
-      <Button size="sm" variant="outline" className="col-span-2 @[820px]:col-span-1 h-8" disabled={!ready || busy} onClick={add}
+      <Button size="sm" variant="outline" className="col-span-2 h-8" disabled={!ready || busy} onClick={add}
         title="Add this product (Enter)">
         {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Plus className="h-4 w-4 @[820px]:mr-0 mr-1" /><span className="@[820px]:hidden">Add product</span></>}
       </Button>
@@ -959,24 +1022,31 @@ function LocationBox({ value, fallback, disabled, onCommit }: {
   );
 }
 
-/** Breakdown toggle + delete for one item row (material / labour for a whole category live in its ⋮ menu). */
-function RowActions({ canEdit, open, lineCount, onToggle, onDelete }: {
+/** One product's ⋮: details & cost breakdown, remove (undo-able). */
+function RowMenu({ canEdit, open, lineCount, onToggle, onDelete }: {
   canEdit: boolean; open: boolean; lineCount: number; onToggle: () => void; onDelete: () => void;
 }) {
   return (
-    <>
-      <button type="button" onClick={onToggle} title={open ? "Hide cost breakdown" : "Show cost breakdown"}
-        className={`h-8 px-1.5 rounded-md text-xs flex items-center gap-0.5 hover:bg-muted ${open ? "text-primary" : "text-muted-foreground"}`}>
-        {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-        {lineCount > 0 && <span className="tabular-nums">{lineCount}</span>}
-      </button>
-      {canEdit && (
-        <button type="button" onClick={onDelete} title="Remove this product (you can undo)" aria-label="Remove product"
-          className="h-8 w-7 rounded-md flex items-center justify-center text-muted-foreground hover:bg-destructive/10 hover:text-destructive">
-          <Trash2 className="h-4 w-4" />
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button type="button" aria-label="Product actions"
+          className={`relative h-8 w-7 rounded-md flex items-center justify-center hover:bg-muted ${open ? "text-foreground" : "text-muted-foreground"}`}>
+          <MoreVertical className="h-4 w-4" />
+          {lineCount > 0 && <span className="absolute -top-0.5 -right-0.5 h-3.5 min-w-3.5 rounded-full bg-muted px-0.5 text-[9px] leading-[14px] tabular-nums text-muted-foreground">{lineCount}</span>}
         </button>
-      )}
-    </>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-60">
+        <DropdownMenuItem onClick={onToggle}>
+          <SlidersHorizontal className="h-4 w-4 mr-2" /> {open ? "Hide details" : "Colour, location & cost breakdown"}
+        </DropdownMenuItem>
+        {canEdit && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={onDelete} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" /> Remove product</DropdownMenuItem>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -1012,12 +1082,12 @@ function DescriptionBox({ value, disabled, onCommit, autoFocus, onDone }: {
   if (disabled && !value) return null;
   return (
     <textarea ref={ref} rows={1} value={draft} disabled={disabled} autoFocus={autoFocus}
-      placeholder="Add description…"
+      placeholder={disabled ? "" : "Add description…"}
       title="Shows on the quotation, print and PDF"
       onChange={(e) => setDraft(e.target.value)}
       onBlur={() => { if (draft.trim() !== (value ?? "").trim()) onCommit(draft.trim()); onDone?.(); }}
       onKeyDown={(e) => { if (e.key === "Escape") { setDraft(value ?? ""); e.currentTarget.blur(); } }}
-      className="w-full min-h-8 resize-none overflow-hidden rounded-md border border-transparent bg-transparent px-2 py-1.5 text-xs leading-snug text-muted-foreground outline-none group-hover:border-border focus:border-ring focus:bg-background focus:text-foreground focus:ring-2 focus:ring-ring/20 placeholder:text-muted-foreground/60 disabled:group-hover:border-transparent" />
+      className="w-full min-h-8 resize-none overflow-hidden rounded-md border border-transparent bg-transparent px-2 py-1.5 text-sm leading-snug text-foreground/80 outline-none group-hover:border-border focus:border-ring focus:bg-background focus:text-foreground focus:ring-2 focus:ring-ring/20 placeholder:text-muted-foreground/60 disabled:group-hover:border-transparent" />
   );
 }
 
@@ -1158,6 +1228,49 @@ function NewLabourRow({ defaultQty, rateFor, onAdd, onDone }: {
       <Button size="sm" onClick={submit}>Add</Button>
       <Button size="sm" variant="ghost" onClick={onDone}>Done</Button>
     </div>
+  );
+}
+
+/** "Add from Inventory": pick a category, then any number of catalogue products. */
+function InventoryDialog({ open, categories, categoryId, onClose, onPick }: {
+  open: boolean;
+  categories: string[];
+  categoryId: (name: string) => number | undefined;
+  onClose: () => void;
+  onPick: (category: string, p: Product) => void;
+}) {
+  const [category, setCategory] = useState("");
+  useEffect(() => { if (open) setCategory((c) => (c && categories.includes(c) ? c : categories[0] ?? "")); }, [open, categories]);
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="quote-neutral max-w-lg">
+        <DialogHeader><DialogTitle>Add from Inventory</DialogTitle></DialogHeader>
+        {categories.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Add a category to the quote first — products are grouped by category.</p>
+        ) : (
+          <div className="space-y-3">
+            <label className="block text-xs text-muted-foreground">Add to category
+              <select className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm text-foreground" value={category}
+                onChange={(e) => setCategory(e.target.value)}>
+                {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </label>
+            <div className="min-h-[18rem]">
+              <ProductPicker
+                key={category}
+                categoryId={categoryId(category)}
+                categoryName={category}
+                placeholder="Search products by name, code or category…"
+                onPick={(p) => onPick(category, p)}
+                onCustom={() => toast.info("Pick a product from the list — use the table's last row for a custom one.")}
+              />
+              <p className="mt-2 text-[11px] text-muted-foreground">Pick as many as you need — each is added with its saved rate.</p>
+            </div>
+          </div>
+        )}
+        <DialogFooter><Button variant="outline" onClick={onClose}>Done</Button></DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

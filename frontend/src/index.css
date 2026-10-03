@@ -229,7 +229,7 @@
   --card-foreground: 215 28% 17%;
   --popover: 0 0% 100%;
   --popover-foreground: 215 28% 17%;
-  --primary: 215 28% 17%;             /* charcoal — structure & primary buttons */
+  --primary: 151 49% 24%;             /* #1F5C3F deep green — primary buttons, ticks */
   --primary-foreground: 0 0% 100%;
   --secondary: 210 40% 96%;
   --secondary-foreground: 215 28% 17%;
@@ -240,9 +240,12 @@
   --border: 214 32% 91%;              /* #E2E8F0 */
   --input: 214 32% 91%;
   --ring: 221 83% 53%;                /* #2563EB focus */
-  --gold: 215 28% 17%;                /* default Button → charcoal, not gold */
+  --gold: 151 49% 24%;                /* default Button → the same green, not gold */
   --gold-foreground: 0 0% 100%;
   --destructive: 0 72% 51%;           /* #DC2626 */
   color: hsl(var(--foreground));
 }
 .quote-neutral .shadow-gold { box-shadow: 0 1px 2px rgb(15 23 42 / 0.06); }
+@container (min-width: 1360px) {
+  .quote-layout .quote-grid { grid-template-columns: minmax(0, 1fr) 320px; }
+}
