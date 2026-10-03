@@ -71,6 +71,20 @@ function grossForNet(i: BoqItem, net: number) {
   return v >= 100 ? net : net / (1 - v / 100);
 }
 
+/**
+ * The single price line an item gets when its Rate / Amount is typed straight in (same name or qty
+ * as the item, no waste, nothing else under it). It only repeats the row above, so it stays hidden
+ * until the price is built up from more than one line.
+ */
+function priceLineOf(i: BoqItem): BoqItemMaterial | null {
+  if ((i.labours?.length ?? 0) > 0 || (i.materials?.length ?? 0) !== 1) return null;
+  const m = i.materials![0];
+  if (Number(m.wastePercent ?? 0) !== 0) return null;
+  const sameNameAsItem = sameName(m.materialName || "", i.itemName || "") || m.materialName === "Item";
+  const sameQty = Math.abs(Number(m.quantity ?? 0) - Number(i.quantity ?? 0)) < 0.005 || Number(m.quantity ?? 0) === 1;
+  return sameNameAsItem && sameQty ? m : null;
+}
+
 /** Payload for the full-replace item update — children are managed by their own endpoints. */
 function itemPayload(item: BoqItem, patch: Partial<BoqItem>): Partial<BoqItem> {
   const { materials: _m, labours: _l, ...rest } = item;
@@ -617,12 +631,17 @@ function ItemRow({
   const inactive = item.isActive === false;
   const [open, setOpen] = useState(false);
   const [adding, setAdding] = useState<null | "material" | "labour">(null);
-  const lineCount = (item.materials?.length ?? 0) + (item.labours?.length ?? 0);
+  // A typed-in price is already the row's Rate/Amount — don't repeat it as a breakdown line.
+  const priceLine = priceLineOf(item);
+  const materials = (item.materials || []).filter((m) => m !== priceLine);
+  const lineCount = materials.length + (item.labours?.length ?? 0);
   const qty = Number(item.quantity ?? 0);
   const gross = grossOf(item);
   const rate = qty > 0 ? Math.round((gross / qty) * 100) / 100 : gross;
   const f = canEdit ? FIELD : "";
-  const detailsOpen = open || showLines;
+  // "Show cost breakdown" opens items that have a breakdown; a plain-priced item stays one row
+  // (its chevron still opens size / category / build-up).
+  const detailsOpen = open || (showLines && lineCount > 0);
   const photos = useMemo(() => {
     const all = [...photosOf(product), ...(item.imageUrl ? [item.imageUrl] : [])];
     return [...new Set(all)];
@@ -645,7 +664,11 @@ function ItemRow({
         <div className={`min-w-0 ${inactive ? "opacity-60" : ""}`}>
           <div className="flex items-center gap-1.5">
             <TextCell value={item.itemName} col="itemName" disabled={!canEdit} className={`font-medium ${f}`}
-              onCommit={(v) => v && onUpdate({ itemName: v })} />
+              onCommit={(v) => {
+                if (!v) return;
+                onUpdate({ itemName: v });
+                if (priceLine) onUpdateMaterial(priceLine.id as number, { materialName: v });
+              }} />
             {inactive && <span className="shrink-0 text-[10px] uppercase px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">Not in quote</span>}
             {item.productId == null && canEdit && (
               <span className="shrink-0 text-[10px] uppercase px-1.5 py-0.5 rounded bg-muted text-muted-foreground" title="Not from the catalogue">Custom</span>
@@ -697,29 +720,34 @@ function ItemRow({
         </div>
       </div>
 
-      {/* ---- Details: category, size, and the material / labour behind the price ---- */}
+      {/* ---- Details: size, category, and the material / labour behind the price ---- */}
       {detailsOpen && (
-        <div className="mx-3 mb-3 md:ml-[92px] rounded-lg bg-muted/40 p-2 space-y-1.5">
-          <div className="flex flex-wrap items-center gap-2 px-1 text-xs text-muted-foreground">
-            <span>Cost breakdown</span>
-            <span>·</span>
-            <span className="flex items-center gap-1">Category
-              <SelectCell value={item.category} options={categories} disabled={!canEdit}
-                className="h-6 w-auto rounded-full bg-background px-2 text-[11px]" onCommit={(v) => onUpdate({ category: v })} />
-            </span>
-            <span>·</span>
-            <span className="flex items-center gap-1">Size
-              <span className="w-16"><NumCell value={item.length} col="length" placeholder="L" disabled={!canEdit} className={`h-6 text-center text-xs ${f}`} onCommit={(v) => onSize("length", v)} /></span>
+        <div className="mx-3 mb-3 md:ml-[92px] rounded-lg border border-dashed bg-muted/30 p-2 space-y-1.5">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-1 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1.5">Size
+              <span className="w-14"><NumCell value={item.length} col="length" placeholder="L" disabled={!canEdit} className={`h-7 text-center text-xs ${f}`} onCommit={(v) => onSize("length", v)} /></span>
               ×
-              <span className="w-16"><NumCell value={item.width} col="width" placeholder="W" disabled={!canEdit} className={`h-6 text-center text-xs ${f}`} onCommit={(v) => onSize("width", v)} /></span>
+              <span className="w-14"><NumCell value={item.width} col="width" placeholder="W" disabled={!canEdit} className={`h-7 text-center text-xs ${f}`} onCommit={(v) => onSize("width", v)} /></span>
             </span>
+            <span className="flex items-center gap-1.5">Move to
+              <SelectCell value={item.category} options={categories} disabled={!canEdit}
+                className="h-7 w-auto rounded-full bg-background px-2 text-[11px]" onCommit={(v) => onUpdate({ category: v })} />
+            </span>
+            {canEdit && !adding && (
+              <span className="flex flex-wrap items-center gap-2 md:ml-auto">
+                {lineCount === 0 && <span title="Optional — only if you want the price built up from parts">Build price from</span>}
+                <button type="button" onClick={() => setAdding("material")}
+                  className="text-xs font-medium text-sky-700 border border-sky-200 bg-background hover:bg-sky-50 rounded-full px-3 py-1 flex items-center gap-1">
+                  <Plus className="h-3.5 w-3.5" /> Material
+                </button>
+                <button type="button" onClick={() => setAdding("labour")}
+                  className="text-xs font-medium text-amber-700 border border-amber-200 bg-background hover:bg-amber-50 rounded-full px-3 py-1 flex items-center gap-1">
+                  <Plus className="h-3.5 w-3.5" /> Labour
+                </button>
+              </span>
+            )}
           </div>
-          {lineCount === 0 && !adding && (
-            <p className="px-1 text-xs text-muted-foreground">
-              No material or labour lines — the amount is a single price{canEdit ? ". Add lines to build it up." : "."}
-            </p>
-          )}
-          {item.materials?.map((m) => (
+          {materials.map((m) => (
             <MaterialLine key={m.id} m={m} canEdit={canEdit}
               onUpdate={(patch) => onUpdateMaterial(m.id as number, patch)}
               onDelete={() => onDeleteMaterial(m.id as number)} />
@@ -748,19 +776,6 @@ function ItemRow({
           )}
           {adding === "labour" && (
             <NewLabourRow defaultQty={item.quantity ?? 1} rateFor={rateFor} onAdd={onAddLabour} onDone={() => setAdding(null)} />
-          )}
-
-          {canEdit && !adding && (
-            <div className="flex flex-wrap gap-2 pt-0.5">
-              <button type="button" onClick={() => setAdding("material")}
-                className="text-xs font-medium text-sky-700 border border-sky-200 bg-background hover:bg-sky-50 rounded-full px-3 py-1 flex items-center gap-1">
-                <Plus className="h-3.5 w-3.5" /> Material
-              </button>
-              <button type="button" onClick={() => setAdding("labour")}
-                className="text-xs font-medium text-amber-700 border border-amber-200 bg-background hover:bg-amber-50 rounded-full px-3 py-1 flex items-center gap-1">
-                <Plus className="h-3.5 w-3.5" /> Labour
-              </button>
-            </div>
           )}
         </div>
       )}
