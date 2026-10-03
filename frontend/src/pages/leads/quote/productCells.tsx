@@ -46,6 +46,48 @@ export function useCategories() {
   return { list, byName, add };
 }
 
+// ---------------------------------------------------------------------------
+// Website catalogue (the public site's categories & products) — offered next to inventory
+// ---------------------------------------------------------------------------
+
+export type WebsiteProduct = {
+  id: number; name: string; slug: string; sku?: string | null; categorySlug?: string | null;
+  shortDescription?: string | null; image?: string | null;
+  specifications?: { label: string; value: string }[] | null;
+};
+export type WebsiteCategory = { id: number; name: string; slug: string };
+
+let websiteCache: Promise<{ categories: WebsiteCategory[]; products: WebsiteProduct[] }> | null = null;
+function loadWebsiteCatalog() {
+  websiteCache ??= Promise.all([
+    // The api client already unwraps { success, data } responses.
+    api.get("/public/categories").then((r) => (Array.isArray(r.data) ? r.data : r.data?.data ?? []) as WebsiteCategory[]),
+    api.get("/public/products").then((r) => (Array.isArray(r.data) ? r.data : r.data?.data ?? []) as WebsiteProduct[]),
+  ]).then(([categories, products]) => ({ categories, products }))
+    .catch(() => { websiteCache = null; return { categories: [], products: [] }; });
+  return websiteCache;
+}
+
+export function useWebsiteCatalog() {
+  const [data, setData] = useState<{ categories: WebsiteCategory[]; products: WebsiteProduct[] }>({ categories: [], products: [] });
+  useEffect(() => {
+    let alive = true;
+    loadWebsiteCatalog().then((d) => alive && setData(d));
+    return () => { alive = false; };
+  }, []);
+  return data;
+}
+
+/** Website "Sold by" → a quote unit. */
+const WEB_UNITS: Record<string, string> = {
+  sqft: "Sqft", sqm: "Sqm", pcs: "Nos", pc: "Nos", nos: "Nos", set: "Set", feet: "Rft", ft: "Rft", rft: "Rft",
+  meter: "Mtr", metre: "Mtr", roll: "Roll", pair: "Pair", pack: "Pack", kg: "Kg",
+};
+export function websiteUnit(p: WebsiteProduct) {
+  const v = p.specifications?.find((s) => norm(s.label) === "sold by")?.value;
+  return (v && WEB_UNITS[norm(v)]) || "Nos";
+}
+
 /** The catalogue products behind the sheet's lines — for their colour options and photos. */
 export function useLineProducts(ids: number[]) {
   const [map, setMap] = useState<Record<number, Product>>({});
@@ -105,15 +147,23 @@ export function AddCategoryBar({ categories, used, onAdd, onSaveCategory, openSi
   const [saveToCatalog, setSaveToCatalog] = useState(true);
   const [busy, setBusy] = useState(false);
   const usedSet = new Set(used.map(norm));
-  const options = categories.filter((c) => !usedSet.has(norm(c.name)));
-  const saved = categories.find((c) => norm(c.name) === norm(name));
+  const website = useWebsiteCatalog();
+  // Inventory categories first, then the website's (same name only once).
+  const all = useMemo(() => {
+    const seen = new Set(categories.map((c) => norm(c.name)));
+    const web = website.categories.filter((c) => !seen.has(norm(c.name)))
+      .map((c) => ({ id: -c.id, name: c.name } as InventoryCategory));
+    return [...categories, ...web];
+  }, [categories, website.categories]);
+  const options = all.filter((c) => !usedSet.has(norm(c.name)));
+  const saved = all.find((c) => norm(c.name) === norm(name));
   const already = usedSet.has(norm(name));
 
   const submit = async (picked?: string) => {
     const n = (picked ?? name).trim();
     if (!n) return;
     if (usedSet.has(norm(n))) { toast.error(`"${n}" is already on the quote.`); return; }
-    const match = categories.find((c) => norm(c.name) === norm(n));
+    const match = all.find((c) => norm(c.name) === norm(n));
     if (!match && saveToCatalog) {
       setBusy(true);
       try {
@@ -178,11 +228,13 @@ export function AddCategoryBar({ categories, used, onAdd, onSaveCategory, openSi
 // ---------------------------------------------------------------------------
 
 export function ProductPicker({
-  categoryId, categoryName, onPick, onCustom, value, onValueChange, placeholder, inputClassName, inputRef, hideIcon,
+  categoryId, categoryName, onPick, onPickWebsite, onCustom, value, onValueChange, placeholder, inputClassName, inputRef, hideIcon,
 }: {
   categoryId?: number;
   categoryName: string;
   onPick: (p: Product) => void;
+  /** Website catalogue products are offered too when this is given. */
+  onPickWebsite?: (p: WebsiteProduct) => void;
   onCustom: (name: string) => void;
   /** Controlled text (the table's new-item row keeps the picked name in the box). */
   value?: string;
@@ -200,6 +252,21 @@ export function ProductPicker({
   const [loading, setLoading] = useState(false);
   const [active, setActive] = useState(-1);
   const boxRef = useRef<HTMLDivElement>(null);
+  const website = useWebsiteCatalog();
+  // Website products: this category's when nothing is typed, otherwise anything matching the text
+  // (this category's first). Kept short so inventory stays the main list.
+  const webResults = useMemo(() => {
+    if (!onPickWebsite) return [];
+    const cat = website.categories.find((c) => norm(c.name) === norm(categoryName)
+      || norm(c.name).includes(norm(categoryName)) || norm(categoryName).includes(norm(c.name)));
+    const t = norm(q);
+    const inCat = (p: WebsiteProduct) => !!cat && p.categorySlug === cat.slug;
+    const list = t
+      ? website.products.filter((p) => norm(p.name).includes(t) || norm(p.sku).includes(t))
+      : website.products.filter(inCat);
+    return [...list].sort((a, b) => Number(inCat(b)) - Number(inCat(a))).slice(0, 8);
+  }, [onPickWebsite, website, categoryName, q]);
+  const total = results.length + webResults.length;
 
   useEffect(() => {
     if (!open) return;
@@ -227,6 +294,11 @@ export function ProductPicker({
 
   // Controlled: the parent decides what the box shows after a pick; uncontrolled: it clears.
   const pick = (p: Product) => { onPick(p); if (value === undefined) setQ(""); setOpen(false); };
+  const pickWeb = (p: WebsiteProduct) => { onPickWebsite?.(p); if (value === undefined) setQ(""); setOpen(false); };
+  const pickActive = () => {
+    if (active < results.length) pick(results[active]);
+    else pickWeb(webResults[active - results.length]);
+  };
   const custom = () => { if (q.trim()) { onCustom(q.trim()); if (value === undefined) setQ(""); setOpen(false); } };
 
   return (
@@ -241,17 +313,18 @@ export function ProductPicker({
           onFocus={() => setOpen(true)}
           onChange={(e) => { setQ(e.target.value); setOpen(true); }}
           onKeyDown={(e) => {
-            if (e.key === "ArrowDown") { e.preventDefault(); setActive((a) => Math.min(a + 1, results.length - 1)); }
+            if (e.key === "ArrowDown") { e.preventDefault(); setActive((a) => Math.min(a + 1, total - 1)); }
             else if (e.key === "ArrowUp") { e.preventDefault(); setActive((a) => Math.max(a - 1, -1)); }
             else if (e.key === "Enter" || (e.key === "Tab" && !e.shiftKey && open && (active >= 0 || q.trim()))) {
               if (e.key === "Enter") e.preventDefault();
-              if (active >= 0 && results[active]) pick(results[active]); else custom();
+              if (active >= 0 && active < total) pickActive(); else custom();
             } else if (e.key === "Escape") setOpen(false);
           }}
         />
       </div>
-      {open && (loading || results.length > 0 || q.trim()) && (
-        <div className="absolute z-30 mt-1 w-full max-h-80 overflow-auto rounded-md border bg-popover shadow-lg">
+      {open && (loading || total > 0 || q.trim()) && (
+        <div className="absolute z-30 mt-1 w-full max-h-96 overflow-auto rounded-md border bg-popover shadow-lg">
+          {results.length > 0 && onPickWebsite && <ListHeading>Materials · inventory</ListHeading>}
           {loading && results.length === 0 && (
             <div className="px-3 py-2 text-xs text-muted-foreground flex items-center gap-1.5"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading products…</div>
           )}
@@ -270,7 +343,23 @@ export function ProductPicker({
               </span>
             </button>
           ))}
-          {!loading && results.length === 0 && categoryId && !q.trim() && (
+          {webResults.length > 0 && (
+            <>
+              <ListHeading>Website catalogue</ListHeading>
+              {webResults.map((p, i) => (
+                <button key={`w${p.id}`} type="button" onMouseDown={(e) => { e.preventDefault(); pickWeb(p); }}
+                  className={`w-full text-left px-2 py-1.5 text-sm flex items-center gap-2.5 hover:bg-muted ${results.length + i === active ? "bg-muted" : ""}`}>
+                  <Thumb url={p.image} size="h-9 w-9" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium">{p.name}</span>
+                    <span className="block truncate text-xs text-muted-foreground">{[p.sku, p.shortDescription].filter(Boolean).join(" · ") || " "}</span>
+                  </span>
+                  <span className="text-xs text-muted-foreground shrink-0">per {websiteUnit(p)}</span>
+                </button>
+              ))}
+            </>
+          )}
+          {!loading && total === 0 && !q.trim() && (
             <div className="px-3 py-2 text-xs text-muted-foreground">No products saved in {categoryName} yet — type a name to add a custom one.</div>
           )}
           {q.trim() && (
@@ -284,6 +373,12 @@ export function ProductPicker({
     </div>
   );
 }
+
+const ListHeading = ({ children }: { children: React.ReactNode }) => (
+  <div className="sticky top-0 z-10 border-b bg-muted/90 px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground backdrop-blur">
+    {children}
+  </div>
+);
 
 // ---------------------------------------------------------------------------
 // Per-line cells
@@ -380,6 +475,38 @@ export function ImageCell({ url, options, disabled, onChange, module = "QUOTATIO
         </DropdownMenuContent>
       </DropdownMenu>
     </>
+  );
+}
+
+/** Colour as a table input box: type anything, or pick one of the product's colours. */
+export function ColourBox({ value, colors, disabled, onChange, className = "" }: {
+  value?: string | null;
+  colors: ProductColor[];
+  disabled: boolean;
+  onChange: (name: string | null, color?: ProductColor) => void;
+  className?: string;
+}) {
+  const [draft, setDraft] = useState(value ?? "");
+  useEffect(() => setDraft(value ?? ""), [value]);
+  const listId = useMemo(() => `colours-${Math.random().toString(36).slice(2)}`, []);
+  const known = colors.find((c) => norm(c.name) === norm(draft));
+  if (disabled) return <span className="block truncate px-2 text-sm">{value || "—"}</span>;
+  return (
+    <span className={`relative block ${className}`}>
+      {known?.hex && <span className="pointer-events-none absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 rounded-full border" style={{ background: known.hex }} />}
+      <input value={draft} list={colors.length ? listId : undefined} placeholder="Colour" aria-label="Colour"
+        className={`h-8 w-full rounded-md border border-border bg-background ${known?.hex ? "pl-6" : "pl-2"} pr-2 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/20`}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => {
+          const t = draft.trim();
+          if (t === (value ?? "")) return;
+          onChange(t || null, colors.find((c) => norm(c.name) === norm(t)));
+        }}
+        onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") { setDraft(value ?? ""); e.currentTarget.blur(); } }} />
+      {colors.length > 0 && (
+        <datalist id={listId}>{colors.map((c) => <option key={c.name} value={c.name} />)}</datalist>
+      )}
+    </span>
   );
 }
 

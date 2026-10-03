@@ -16,8 +16,8 @@ import {
 import type { Product, ProductColor } from "@/types/inventory";
 import { NumCell, ProductSearch, SelectCell, TextCell } from "./cells";
 import {
-  AddCategoryBar, ColorCell, DiscountCell, ImageCell, ProductPicker,
-  colorsOf, photosOf, priceOf, productSummary, useCategories, useLineProducts,
+  AddCategoryBar, ColourBox, DiscountCell, ImageCell, ProductPicker, type WebsiteProduct,
+  colorsOf, photosOf, priceOf, productSummary, useCategories, useLineProducts, websiteUnit,
 } from "./productCells";
 
 // The quote sheet, organised Category → Product. Every line is edited in place, saved on blur, and
@@ -297,10 +297,11 @@ export default function BoqSheet({
     const p = d.product;
     if (p) rememberProduct(p);
     const color = p ? colorsOf(p)[0] : undefined;
+    const web = d.web;
     return addPricedItem({
       category, itemName: d.name.trim(), productId: p?.id,
-      description: p ? productSummary(p) : undefined,
-      imageUrl: p ? color?.imageUrl || photosOf(p)[0] || undefined : undefined, color: color?.name,
+      description: p ? productSummary(p) : web?.shortDescription || undefined,
+      imageUrl: p ? color?.imageUrl || photosOf(p)[0] || undefined : web?.image || undefined, color: color?.name,
       quantity: d.qty > 0 ? d.qty : 1, unit: d.unit || "Nos",
     }, d.rate);
   };
@@ -542,7 +543,8 @@ export default function BoqSheet({
                   checked={g.items.length > 0 && on === g.items.length} onChange={() => setIncluded(g.items, on !== g.items.length)} />
                 <span className="text-center">#</span>
                 <span className="col-span-2">Product</span>
-                <span className="hidden @[1000px]:block">Description</span>
+                <span className="hidden @[1100px]:block">Description</span>
+                <span className="hidden @[1100px]:block">Colour</span>
                 <span className="text-right pr-2">Qty</span>
                 <span className="pl-2">Unit</span>
                 <span className="text-right pr-2">Rate (₹)</span>
@@ -606,6 +608,10 @@ export default function BoqSheet({
         onPick={(category, prod) => {
           addRow(category, { name: prod.name, product: prod, qty: 1, unit: prod.unit || "Nos", rate: priceOf(prod) });
           toast.success(`${prod.name} added to ${category}`);
+        }}
+        onPickWebsite={(category, web) => {
+          addRow(category, { name: web.name, web, qty: 1, unit: websiteUnit(web), rate: 0 });
+          toast.success(`${web.name} added to ${category} — type its rate`);
         }}
       />
 
@@ -691,7 +697,7 @@ function SaveState({ pending, lastSaved }: { pending: number; lastSaved: number 
 
 /** Desktop column layout shared by the header and every product row. */
 const ROW = "@[820px]:grid @[820px]:grid-cols-[28px_24px_40px_minmax(0,1fr)_68px_84px_88px_84px_108px_32px] "
-  + "@[1000px]:grid-cols-[28px_24px_40px_minmax(0,1.2fr)_minmax(0,1fr)_68px_84px_88px_84px_108px_32px] @[820px]:gap-x-2 @[820px]:gap-y-0";
+  + "@[1100px]:grid-cols-[28px_24px_40px_minmax(0,1.1fr)_minmax(0,1fr)_116px_64px_80px_84px_80px_104px_32px] @[820px]:gap-x-2 @[820px]:gap-y-0";
 
 /** Visible input styling for editable cells (the bare spreadsheet cells only show a border on hover). */
 const FIELD = "!border-border !bg-background";
@@ -757,8 +763,8 @@ function ItemRow({
   const badge = item.productId == null
     ? <span className="shrink-0 rounded px-1.5 py-px text-[10px] font-semibold uppercase bg-[#EFF6FF] text-[#1D4ED8]" title="Typed in — not from the inventory catalogue">Custom</span>
     : <span className="shrink-0 rounded px-1.5 py-px text-[10px] font-semibold uppercase bg-[#ECFDF5] text-[#16805C]" title="From the inventory catalogue">Inventory</span>;
-  // Colour / location show as quiet text under the name; they're edited in Details.
-  const meta = [item.color, item.location || item.roomName].filter(Boolean).join(" · ");
+  // Location shows as quiet text under the name; it's edited in Details.
+  const meta = item.location || item.roomName || "";
   const menu = (
     <RowMenu canEdit={canEdit} open={detailsOpen} lineCount={lineCount}
       onToggle={() => setOpen((v) => !v)} onDelete={onDelete} />
@@ -788,19 +794,29 @@ function ItemRow({
             </div>
             {badge}
           </div>
-          {(inactive || meta || item.description) && (
+          {(inactive || meta) && (
             <div className="flex min-w-0 items-center gap-1.5 px-2 text-xs text-muted-foreground">
               {inactive && <span className="shrink-0 rounded px-1.5 py-px text-[10px] font-semibold uppercase bg-[#FFFBEB] text-[#B7791F]">Not in quote</span>}
               {meta && <span className="truncate">{meta}</span>}
-              {item.description && <span className="truncate @[1000px]:hidden">{meta ? "· " : ""}{item.description}</span>}
             </div>
           )}
+          {/* Description + colour boxes — under the name until the table has room for their own columns */}
+          <div className="mt-1 flex flex-wrap items-start gap-1.5 @[1100px]:hidden">
+            <div className="min-w-[10rem] flex-1">
+              <DescriptionBox value={item.description} disabled={!canEdit}
+                onCommit={(v) => onUpdate({ description: v || undefined })} />
+            </div>
+            <ColourBox value={item.color} colors={colorsOf(product)} disabled={!canEdit} onChange={onColor} className="w-32" />
+          </div>
         </div>
 
-        {/* Description column (wide tables) */}
-        <div className={`hidden @[1000px]:block min-w-0 ${inactive ? "opacity-60" : ""}`}>
+        {/* Description + Colour columns (wide tables) */}
+        <div className={`hidden @[1100px]:block min-w-0 ${inactive ? "opacity-60" : ""}`}>
           <DescriptionBox value={item.description} disabled={!canEdit}
             onCommit={(v) => onUpdate({ description: v || undefined })} />
+        </div>
+        <div className={`hidden @[1100px]:block min-w-0 ${inactive ? "opacity-60" : ""}`}>
+          <ColourBox value={item.color} colors={colorsOf(product)} disabled={!canEdit} onChange={onColor} />
         </div>
 
         {/* Actions (phone: top-right) */}
@@ -836,16 +852,9 @@ function ItemRow({
       {detailsOpen && (
         <div className="mx-3 mb-3 @[820px]:ml-[140px] rounded-lg border bg-muted/40 p-2 space-y-1.5">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-1 text-xs text-muted-foreground">
-            <span className="flex items-center gap-1.5">Colour
-              <ColorCell value={item.color} colors={colorsOf(product)} disabled={!canEdit} onChange={onColor} />
-            </span>
-            <span className="flex items-center gap-1.5">
+            <span className="flex items-center gap-1.5">Location
               <LocationBox value={item.location} fallback={item.roomName} disabled={!canEdit}
                 onCommit={(v) => onUpdate({ location: v || null })} />
-            </span>
-            <span className="min-w-[12rem] flex-1 @[1000px]:hidden">
-              <DescriptionBox value={item.description} disabled={!canEdit}
-                onCommit={(v) => onUpdate({ description: v || undefined })} />
             </span>
           </div>
           <p className="px-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
@@ -911,7 +920,7 @@ function ItemRow({
   );
 }
 
-type NewRowDraft = { name: string; product?: Product; qty: number; unit: string; rate: number };
+type NewRowDraft = { name: string; product?: Product; web?: WebsiteProduct; qty: number; unit: string; rate: number };
 const EMPTY_ROW: NewRowDraft = { name: "", qty: 1, unit: "Nos", rate: 0 };
 
 /**
@@ -947,14 +956,23 @@ function NewItemRow({ categoryId, categoryName, first, onAdd }: {
     <div data-newrow={categoryName} className={`grid grid-cols-[24px_minmax(0,1fr)] gap-x-2 gap-y-2 items-center px-3 py-2 border-t rounded-b-lg ${ROW}`}>
       <Plus className="h-4 w-4 text-muted-foreground justify-self-center" aria-hidden />
       {/* Product — spans the #, photo, name (and description) columns */}
-      <div className="min-w-0 @[820px]:col-span-3 @[1000px]:col-span-4">
+      <div className="min-w-0 @[820px]:col-span-3 @[1100px]:col-span-5">
         <ProductPicker
           categoryId={categoryId}
           categoryName={categoryName}
           value={d.name}
-          onValueChange={(v) => setD((x) => ({ ...x, name: v, product: x.product && v === x.product.name ? x.product : undefined }))}
+          onValueChange={(v) => setD((x) => ({
+            ...x, name: v,
+            product: x.product && v === x.product.name ? x.product : undefined,
+            web: x.web && v === x.web.name ? x.web : undefined,
+          }))}
           onPick={(p) => {
-            setD((x) => ({ ...x, name: p.name, product: p, unit: p.unit || x.unit, rate: priceOf(p) || x.rate }));
+            setD((x) => ({ ...x, name: p.name, product: p, web: undefined, unit: p.unit || x.unit, rate: priceOf(p) || x.rate }));
+            setTimeout(() => { qtyRef.current?.focus(); qtyRef.current?.select(); }, 0);
+          }}
+          onPickWebsite={(p) => {
+            // Website products carry no price — the rate is typed in next.
+            setD((x) => ({ ...x, name: p.name, web: p, product: undefined, unit: websiteUnit(p) }));
             setTimeout(() => { qtyRef.current?.focus(); qtyRef.current?.select(); }, 0);
           }}
           onCustom={() => setTimeout(() => { qtyRef.current?.focus(); qtyRef.current?.select(); }, 0)}
@@ -1036,7 +1054,7 @@ function RowMenu({ canEdit, open, lineCount, onToggle, onDelete }: {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-60">
         <DropdownMenuItem onClick={onToggle}>
-          <SlidersHorizontal className="h-4 w-4 mr-2" /> {open ? "Hide details" : "Colour, location & cost breakdown"}
+          <SlidersHorizontal className="h-4 w-4 mr-2" /> {open ? "Hide details" : "Location & cost breakdown"}
         </DropdownMenuItem>
         {canEdit && (
           <>
@@ -1081,12 +1099,12 @@ function DescriptionBox({ value, disabled, onCommit, autoFocus, onDone }: {
   if (disabled && !value) return null;
   return (
     <textarea ref={ref} rows={1} value={draft} disabled={disabled} autoFocus={autoFocus}
-      placeholder={disabled ? "" : "Add description…"}
+      placeholder={disabled ? "" : "Description"}
       title="Shows on the quotation, print and PDF"
       onChange={(e) => setDraft(e.target.value)}
       onBlur={() => { if (draft.trim() !== (value ?? "").trim()) onCommit(draft.trim()); onDone?.(); }}
       onKeyDown={(e) => { if (e.key === "Escape") { setDraft(value ?? ""); e.currentTarget.blur(); } }}
-      className="w-full min-h-8 resize-none overflow-hidden rounded-md border border-transparent bg-transparent px-2 py-1.5 text-sm leading-snug text-foreground/80 outline-none group-hover:border-border focus:border-ring focus:bg-background focus:text-foreground focus:ring-2 focus:ring-ring/20 placeholder:text-muted-foreground/60 disabled:group-hover:border-transparent" />
+      className="w-full min-h-8 resize-none overflow-hidden rounded-md border border-border bg-background px-2 py-1.5 text-sm leading-snug outline-none disabled:border-transparent disabled:bg-transparent group-hover:border-border focus:border-ring focus:bg-background focus:text-foreground focus:ring-2 focus:ring-ring/20 placeholder:text-muted-foreground/60 disabled:group-hover:border-transparent" />
   );
 }
 
@@ -1231,19 +1249,20 @@ function NewLabourRow({ defaultQty, rateFor, onAdd, onDone }: {
 }
 
 /** "Add from Inventory": pick a category, then any number of catalogue products. */
-function InventoryDialog({ open, categories, categoryId, onClose, onPick }: {
+function InventoryDialog({ open, categories, categoryId, onClose, onPick, onPickWebsite }: {
   open: boolean;
   categories: string[];
   categoryId: (name: string) => number | undefined;
   onClose: () => void;
   onPick: (category: string, p: Product) => void;
+  onPickWebsite: (category: string, p: WebsiteProduct) => void;
 }) {
   const [category, setCategory] = useState("");
   useEffect(() => { if (open) setCategory((c) => (c && categories.includes(c) ? c : categories[0] ?? "")); }, [open, categories]);
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="quote-neutral max-w-lg">
-        <DialogHeader><DialogTitle>Add from Inventory</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>Add from Inventory & Website catalogue</DialogTitle></DialogHeader>
         {categories.length === 0 ? (
           <p className="text-sm text-muted-foreground">Add a category to the quote first — products are grouped by category.</p>
         ) : (
@@ -1261,6 +1280,7 @@ function InventoryDialog({ open, categories, categoryId, onClose, onPick }: {
                 categoryName={category}
                 placeholder="Search products by name, code or category…"
                 onPick={(p) => onPick(category, p)}
+                onPickWebsite={(p) => onPickWebsite(category, p)}
                 onCustom={() => toast.info("Pick a product from the list — use the table's last row for a custom one.")}
               />
               <p className="mt-2 text-[11px] text-muted-foreground">Pick as many as you need — each is added with its saved rate.</p>
