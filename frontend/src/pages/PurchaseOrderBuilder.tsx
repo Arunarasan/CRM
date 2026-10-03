@@ -12,7 +12,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import SearchableSelect from "@/components/ui/searchable-select";
 import ProductSearchSelect from "@/pages/inventory/components/ProductSearchSelect";
-import { ArrowLeft, Plus, Trash2, Save, PackageSearch } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Save, PackageSearch, UserPlus } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface ProjectLite { id: number; projectName?: string }
 interface Line { key: number; product: Product | null; quantity: number; unitPrice: number }
@@ -46,6 +47,7 @@ export default function PurchaseOrderBuilder() {
   const [notes, setNotes] = useState("");
   const [lines, setLines] = useState<Line[]>([blankLine()]);
   const [saving, setSaving] = useState(false);
+  const [newSupplierOpen, setNewSupplierOpen] = useState(false);
 
   const [lowStock, setLowStock] = useState<BuyNowRow[]>([]);
   const [showLowStock, setShowLowStock] = useState(true);
@@ -116,7 +118,7 @@ export default function PurchaseOrderBuilder() {
   const projectOptions = projects.map((p) => ({ value: String(p.id), label: p.projectName || `Project #${p.id}` }));
 
   return (
-    <div className="pb-24">
+    <div>
       <div className="p-4 md:p-8 max-w-5xl mx-auto space-y-6">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" onClick={goBack}><ArrowLeft className="w-5 h-5" /></Button>
@@ -130,9 +132,18 @@ export default function PurchaseOrderBuilder() {
         <section className="bg-white border rounded-2xl shadow-sm p-5 space-y-4">
           <h2 className="text-sm font-bold uppercase tracking-wide text-slate-400">1 · Supplier &amp; delivery</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Field label="Supplier" required>
-              <SearchableSelect value={supplierId} onChange={setSupplierId} options={supplierOptions} placeholder="Search supplier…" />
-            </Field>
+            <div className="text-sm">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-semibold text-slate-700">Supplier<span className="text-red-500"> *</span></span>
+                <button type="button" onClick={() => setNewSupplierOpen(true)}
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 hover:underline">
+                  <UserPlus className="h-3.5 w-3.5" /> New supplier
+                </button>
+              </div>
+              <div className="mt-1">
+                <SearchableSelect value={supplierId} onChange={setSupplierId} options={supplierOptions} placeholder="Search supplier…" />
+              </div>
+            </div>
             <Field label="Deliver to warehouse">
               <SearchableSelect value={warehouseId} onChange={setWarehouseId} options={warehouseOptions} placeholder="Search warehouse…" clearLabel="— none —" />
             </Field>
@@ -249,11 +260,9 @@ export default function PurchaseOrderBuilder() {
             <div className="flex justify-between border-t pt-2 mt-2 text-base"><span className="font-bold text-slate-800">Grand Total</span><span className="font-black text-slate-900">{currency(totals.grand)}</span></div>
           </div>
         </section>
-      </div>
 
-      {/* Sticky action bar */}
-      <div className="fixed bottom-0 inset-x-0 z-20 border-t bg-white/95 backdrop-blur px-4 md:px-8 py-3">
-        <div className="max-w-5xl mx-auto flex items-center justify-between gap-3">
+        {/* Action bar — sticks to the bottom of the content column (not over the sidebar or the items) */}
+        <div className="sticky bottom-3 z-20 flex items-center justify-between gap-3 rounded-2xl border bg-white/95 px-4 py-3 shadow-[0_8px_24px_-12px_rgba(0,0,0,0.25)] backdrop-blur">
           <span className="text-sm text-muted-foreground hidden sm:block">
             {validItems.length} item{validItems.length === 1 ? "" : "s"} · <span className="font-semibold text-slate-800">{currency(totals.grand)}</span>
           </span>
@@ -263,6 +272,10 @@ export default function PurchaseOrderBuilder() {
           </div>
         </div>
       </div>
+
+      <QuickSupplierDialog open={newSupplierOpen} onClose={() => setNewSupplierOpen(false)}
+        onCreated={(sup) => { setSuppliers((list) => [...list, sup]); setSupplierId(String(sup.id)); }} />
+
     </div>
   );
 }
@@ -278,4 +291,54 @@ function Field({ label, required, children }: { label: string; required?: boolea
 
 function Row({ label, value, valueClass }: { label: string; value: string; valueClass?: string }) {
   return <div className="flex justify-between"><span className="text-slate-500">{label}</span><span className={`font-semibold ${valueClass ?? ""}`}>{value}</span></div>;
+}
+
+/** Add a supplier on the spot with just the basics; GST, bank and other details can be filled in later. */
+function QuickSupplierDialog({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: (s: Supplier) => void }) {
+  const blank = { name: "", phone: "", contactPerson: "", city: "", gstin: "" };
+  const [form, setForm] = useState(blank);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => { if (open) setForm(blank); }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  const set = (k: keyof typeof blank) => (e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const save = async () => {
+    if (!form.name.trim()) { toast.error("Enter the supplier's name."); return; }
+    setSaving(true);
+    try {
+      const created = await purchaseApi.createSupplier({
+        name: form.name.trim(),
+        phone: form.phone.trim() || undefined,
+        contactPerson: form.contactPerson.trim() || undefined,
+        city: form.city.trim() || undefined,
+        gstin: form.gstin.trim() || undefined,
+      });
+      toast.success(`${created.name} added — fill in the rest later from Suppliers.`);
+      onCreated(created);
+      onClose();
+    } catch (e) {
+      toast.error(apiError(e, "Could not add the supplier."));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && !saving && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader><DialogTitle className="flex items-center gap-2"><UserPlus className="h-5 w-5 text-emerald-600" /> New supplier</DialogTitle></DialogHeader>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="sm:col-span-2"><Field label="Name" required><Input autoFocus value={form.name} onChange={set("name")} placeholder="Business name" /></Field></div>
+          <Field label="Phone"><Input type="tel" value={form.phone} onChange={set("phone")} placeholder="Mobile number" /></Field>
+          <Field label="Contact person"><Input value={form.contactPerson} onChange={set("contactPerson")} /></Field>
+          <Field label="City"><Input value={form.city} onChange={set("city")} /></Field>
+          <Field label="GSTIN"><Input value={form.gstin} onChange={set("gstin")} placeholder="Optional" /></Field>
+        </div>
+        <p className="text-xs text-slate-400">Only the name is needed now — add address, bank and other details later from Purchasing › Suppliers.</p>
+        <div className="flex justify-end gap-2 border-t pt-3">
+          <Button variant="outline" disabled={saving} onClick={onClose}>Cancel</Button>
+          <Button disabled={saving} onClick={save}><Save className="w-4 h-4 mr-2" /> {saving ? "Saving…" : "Add supplier"}</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
 }
