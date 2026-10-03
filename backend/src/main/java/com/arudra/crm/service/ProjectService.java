@@ -711,6 +711,64 @@ public class ProjectService {
         return projectRepository.save(project);
     }
 
+    /**
+     * "Mark Completed" from the project header: the team confirms the client approved the work and
+     * every product was delivered, attaches handover photos, and the project is completed and
+     * handed over in one step. Photos are saved to the project's documents ("Handover Photos").
+     * Still gated on {@link ProjectCompletionService} unless {@code force} is set.
+     */
+    @org.springframework.transaction.annotation.Transactional
+    public Project completeWithHandover(Long projectId, boolean clientApproved, boolean productsDelivered,
+                                        String notes, List<String> photoUrls, boolean force, User user) {
+        if (!clientApproved) throw new IllegalArgumentException("Confirm the client has approved the work.");
+        if (!productsDelivered) throw new IllegalArgumentException("Confirm all products have been delivered.");
+        Project project = getProjectById(projectId);
+        if ("COMPLETED".equalsIgnoreCase(project.getStatus())) {
+            throw new IllegalStateException("Project is already completed.");
+        }
+        if (!force) {
+            String blocking = projectCompletionService.blockingSummary(projectId);
+            if (!blocking.isEmpty()) {
+                throw new IllegalStateException("Project isn't ready to complete — " + blocking
+                        + ". Resolve these or override to force completion.");
+            }
+        }
+        java.time.LocalDate today = java.time.LocalDate.now();
+        project.setStatus("COMPLETED");
+        project.setProgress(100);
+        project.setActualCompletionDate(today);
+        project.setHandoverDate(today);
+        String trimmed = notes == null ? "" : notes.trim();
+        String summary = "Client approved · All products delivered" + (trimmed.isEmpty() ? "" : " — " + trimmed);
+        project.setHandoverNotes(summary.length() > 500 ? summary.substring(0, 500) : summary);
+        Project saved = projectRepository.save(project);
+
+        int photos = 0;
+        if (photoUrls != null) {
+            for (String url : photoUrls) {
+                if (url == null || url.isBlank()) continue;
+                ProjectDocument doc = new ProjectDocument();
+                doc.setProject(saved);
+                doc.setDocumentType("Handover Photos");
+                doc.setFileUrl(url);
+                doc.setFileName("Handover photo " + (++photos));
+                doc.setUploadedBy(user);
+                doc.setRemarks("Taken at handover on " + today);
+                documentRepository.save(doc);
+            }
+        }
+
+        ProjectActivityLog log = new ProjectActivityLog();
+        log.setProject(saved);
+        log.setUser(user);
+        log.setRole("System");
+        log.setDescription("Project completed & handed over — client approved, all products delivered"
+                + (photos > 0 ? ", " + photos + " handover photo" + (photos == 1 ? "" : "s") : "")
+                + (force ? " (readiness checklist overridden)" : ""));
+        activityLogRepository.save(log);
+        return saved;
+    }
+
     // =====================================================================
     // Customer handover flow — stage tasks + progress bar + handover
     // =====================================================================

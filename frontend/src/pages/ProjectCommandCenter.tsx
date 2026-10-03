@@ -15,7 +15,7 @@ import { ProjectPhase, ProjectRoom, ProjectRoomItem, ProjectMaterialRequirement,
 import { ProjectChangeRequest } from "@/types/changeRequest";
 import ProjectPaymentsTab from "@/pages/projectFinance/ProjectPaymentsTab";
 import BulkWorkUpdateDialog from "@/pages/projectCommandCenter/BulkWorkUpdateDialog";
-import HandoverTab from "@/pages/projectCommandCenter/HandoverTab";
+import CompleteProjectDialog from "@/pages/projectCommandCenter/CompleteProjectDialog";
 import ProjectPurchaseOrdersTab from "@/pages/projectCommandCenter/tabs/ProjectPurchaseOrdersTab";
 import ProjectGoodsReceivedTab from "@/pages/projectCommandCenter/tabs/ProjectGoodsReceivedTab";
 import CameraCaptureButton from "@/components/CameraCaptureButton";
@@ -206,7 +206,6 @@ const TAB_GROUPS: { id: string; label: string; icon: React.ComponentType<{ class
   { id: "resources", label: "Resources", icon: Package, sections: [
     ["purchaseOrders", "Purchase Orders"], ["goodsReceived", "Goods Received"],
   ] },
-  { id: "handover", label: "Handover", icon: CheckCircle2, sections: [["handover", "Handover"]] },
   { id: "documents", label: "Documents", icon: FileText, sections: [["media", "Documents"]] },
   { id: "activity", label: "Activity", icon: History, sections: [["activity", "Activity"]] },
   // Shown only once the project is COMPLETED (see the tab-strip filter below).
@@ -219,6 +218,8 @@ const SECTION_ALIAS: Record<string, string> = { received: "payments", profit: "p
 // Retired Resources sections — old ?tab= links land on Purchase Orders instead.
 const RETIRED_SECTIONS: Record<string, string> = {
   supplyInstall: "purchaseOrders", materials: "purchaseOrders", contractors: "purchaseOrders", labour: "purchaseOrders",
+  // Handover moved into the Mark Completed dialog.
+  handover: "overview",
 };
 const groupOf = (section: string) =>
   TAB_GROUPS.find((g) => g.sections.some(([v]) => v === section)) || TAB_GROUPS[0];
@@ -748,30 +749,9 @@ export default function ProjectCommandCenter() {
       .catch((err) => toast.error(err?.response?.data?.message || err?.message || "Failed to request purchase"));
   };
 
-  const handleCompleteProject = async () => {
-    if (!confirm("Mark this project as COMPLETED?")) return;
-    try {
-      await api.post(`/projects/${id}/complete`, { certificate: "placeholder-cert-data" });
-      await fetchProjectData();
-      toast.success("Project marked completed");
-    } catch (err: any) {
-      const msg = err?.response?.data?.message || "Failed to complete project";
-      // The completion gate rejects with a readiness summary; let an approver override the checklist.
-      if (/ready to complete/i.test(msg)) {
-        if (confirm(`${msg}\n\nComplete anyway (override the readiness checklist)?`)) {
-          try {
-            await api.post(`/projects/${id}/complete`, { certificate: "placeholder-cert-data", force: "true" });
-            await fetchProjectData();
-            toast.success("Project marked completed");
-          } catch (e: any) {
-            toast.error(e?.response?.data?.message || "Failed to complete project");
-          }
-        }
-      } else {
-        toast.error(msg);
-      }
-    }
-  };
+  // Mark Completed opens the handover dialog (photos + client approval + delivery confirmation).
+  const [completeOpen, setCompleteOpen] = useState(false);
+  const handleCompleteProject = () => setCompleteOpen(true);
 
   const handleStartExecution = () => {
     api.post(`/projects/${id}/start-execution`)
@@ -906,7 +886,6 @@ export default function ProjectCommandCenter() {
                       {project.status !== 'COMPLETED' && (
                         <DropdownMenuItem onSelect={handleCompleteProject}><CheckCircle2 className="w-4 h-4 mr-2"/> Mark Completed</DropdownMenuItem>
                       )}
-                      <DropdownMenuItem onSelect={() => setActiveTab('handover')}><Flag className="w-4 h-4 mr-2"/> Open Handover</DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                   {(stats?.health === 'WARNING' || stats?.health === 'CRITICAL') && (
@@ -972,7 +951,7 @@ export default function ProjectCommandCenter() {
           </div>
         </div>
 
-        <ProjectJourneyBar stages={summary.journey || []} onOpen={() => setActiveTab('handover')} />
+        <ProjectJourneyBar stages={summary.journey || []} onOpen={() => setActiveTab('fieldProgress')} />
       </div>
       <TrackingLinkDialog projectId={Number(projectId)} open={trackingOpen} onOpenChange={setTrackingOpen} />
 
@@ -2226,9 +2205,8 @@ export default function ProjectCommandCenter() {
               <ProjectGoodsReceivedTab projectId={projectId} />
             </TabsContent>
 
-            <TabsContent value="handover" className="mt-0 h-full outline-none">
-              <HandoverTab project={project} onChanged={fetchProjectData} onProgress={fetchCore} />
-            </TabsContent>
+            <CompleteProjectDialog projectId={projectId} open={completeOpen} onClose={() => setCompleteOpen(false)}
+              onCompleted={async () => { await fetchProjectData(); fetchCore(); }} />
 
             <TabsContent value="media" className="mt-0 h-full outline-none">
               <DocumentsTab projectId={projectId} documents={documents} onChanged={fetchCore} />

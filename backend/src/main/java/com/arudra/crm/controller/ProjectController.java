@@ -183,6 +183,22 @@ public class ProjectController {
         return ResponseEntity.ok(projectService.completeProject(id, payload == null ? null : payload.get("certificate"), force));
     }
 
+    public static class CompleteHandoverRequest {
+        public boolean clientApproved;
+        public boolean productsDelivered;
+        public String notes;
+        public List<String> photoUrls;
+        public boolean force;
+    }
+
+    /** Mark Completed: client approval + delivery confirmation + handover photos, in one step. */
+    @PostMapping("/{id}/complete-handover")
+    @PreAuthorize(APPROVE)
+    public ResponseEntity<Project> completeWithHandover(@PathVariable Long id, @RequestBody CompleteHandoverRequest req) {
+        return ResponseEntity.ok(projectService.completeWithHandover(id, req.clientApproved, req.productsDelivered,
+                req.notes, req.photoUrls, req.force, currentUserService.getCurrentUser()));
+    }
+
     /** Completion-gate readiness checklist (which §42 conditions are met / outstanding). */
     @GetMapping("/{id}/completion-readiness")
     @PreAuthorize(READ)
