@@ -31,7 +31,7 @@ function stageBadge(status: string): { text: string; cls: string } {
  * collected-payment %, plus a milestone timeline: as work crosses each stage's trigger the stage
  * auto-bills (invoice raised, marked Due). Money is never auto-collected — a human still marks paid.
  */
-export default function CompletionBillingTracker({ project, onChanged, refreshSignal }: { project: any; onChanged?: () => void; refreshSignal?: number }) {
+export default function CompletionBillingTracker({ project, onChanged, refreshSignal, compact }: { project: any; onChanged?: () => void; refreshSignal?: number; compact?: boolean }) {
   const { hasAuthority } = useAuth();
   const canWrite = hasAuthority("FINANCE_WRITE");
   const projectId = project?.id;
@@ -118,11 +118,11 @@ export default function CompletionBillingTracker({ project, onChanged, refreshSi
         </label>
       </div>
 
-      <div className="p-4 space-y-4">
+      <div className={compact ? "p-3 space-y-3" : "p-4 space-y-4"}>
         {/* Work vs money, side by side */}
-        <div className="grid grid-cols-1 @xl:grid-cols-2 gap-3">
-          <Bar label="Work completed" percent={data.workPercent} tone="work" caption={`${data.workPercent}% of the work done`} />
-          <Bar label="Payments collected" percent={data.paymentPercent} tone="money" caption={`${inr(data.collectedTotal)} of ${inr(data.scheduledTotal)}`} />
+        <div className={`grid grid-cols-1 @xl:grid-cols-2 ${compact ? "gap-2" : "gap-3"}`}>
+          <Bar label="Work completed" percent={data.workPercent} tone="work" caption={`${data.workPercent}% of the work done`} compact={compact} />
+          <Bar label="Payments collected" percent={data.paymentPercent} tone="money" caption={`${inr(data.collectedTotal)} of ${inr(data.scheduledTotal)}`} compact={compact} />
         </div>
 
         {data.fullySettled && (
@@ -132,9 +132,11 @@ export default function CompletionBillingTracker({ project, onChanged, refreshSi
         )}
 
         {/* Milestone stepper — a row of steps on wide screens, a list on phones */}
-        <ol className={`grid grid-cols-1 gap-2.5 ${data.stages.length >= 4 ? "@3xl:grid-cols-2 @6xl:grid-cols-4" : data.stages.length === 3 ? "@4xl:grid-cols-3" : "@2xl:grid-cols-2"}`}>
+        <ol className={`grid grid-cols-1 gap-2.5 ${compact
+          ? (data.stages.length >= 4 ? "!grid-cols-2 @3xl:!grid-cols-4" : data.stages.length === 3 ? "!grid-cols-2 @md:!grid-cols-3" : "!grid-cols-2")
+          : (data.stages.length >= 4 ? "@3xl:grid-cols-2 @6xl:grid-cols-4" : data.stages.length === 3 ? "@4xl:grid-cols-3" : "@2xl:grid-cols-2")}`}>
           {data.stages.map((s, i) => (
-            <MilestoneStep key={s.id} s={s} index={i} workPercent={data.workPercent}
+            <MilestoneStep key={s.id} s={s} index={i} workPercent={data.workPercent} compact={compact}
               canWrite={canWrite} raising={raisingId === s.id} onRaise={() => raiseInvoice(s.id)} />
           ))}
         </ol>
@@ -143,7 +145,7 @@ export default function CompletionBillingTracker({ project, onChanged, refreshSi
   );
 }
 
-function MilestoneStep({ s, index, workPercent, canWrite, raising, onRaise }: { s: BillingStage; index: number; workPercent: number; canWrite: boolean; raising: boolean; onRaise: () => void }) {
+function MilestoneStep({ s, index, workPercent, canWrite, raising, onRaise, compact }: { s: BillingStage; index: number; workPercent: number; canWrite: boolean; raising: boolean; onRaise: () => void; compact?: boolean }) {
   const badge = stageBadge(s.status);
   const isPaid = s.status === "PAID";
   // A progress-driven stage that work hasn't reached yet is "locked" (upcoming).
@@ -157,7 +159,7 @@ function MilestoneStep({ s, index, workPercent, canWrite, raising, onRaise }: { 
   const circle = isPaid ? "bg-emerald-700 text-white" : s.status === "OVERDUE" ? "bg-rose-600 text-white" : due ? "bg-amber-500 text-white" : "bg-slate-100 text-slate-500";
 
   return (
-    <li className={`rounded-2xl border p-3 transition-shadow hover:shadow-md ${box}`}>
+    <li className={`rounded-2xl border transition-shadow hover:shadow-md ${compact ? "p-2.5" : "p-3"} ${box}`}>
       <div className="flex items-start gap-2.5">
         <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${circle}`}>
           {isPaid ? <CheckCircle2 className="h-4 w-4" /> : locked ? <Lock className="h-3.5 w-3.5" /> : index + 1}
@@ -170,7 +172,7 @@ function MilestoneStep({ s, index, workPercent, canWrite, raising, onRaise }: { 
               {locked ? "Upcoming" : badge.text}
             </span>
           </div>
-          <div className="mt-1 text-lg font-bold text-slate-900">{inr(s.amount)}</div>
+          <div className={`mt-1 font-bold text-slate-900 ${compact ? "text-base" : "text-lg"}`}>{inr(s.amount)}</div>
           <div className="mt-1 flex flex-wrap items-center gap-1">
             {s.progressDriven ? (
               <span className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${s.reached ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
@@ -199,8 +201,21 @@ function MilestoneStep({ s, index, workPercent, canWrite, raising, onRaise }: { 
   );
 }
 
-function Bar({ label, percent, caption, tone }: { label: string; percent: number; caption: string; tone: "work" | "money" }) {
+function Bar({ label, percent, caption, tone, compact }: { label: string; percent: number; caption: string; tone: "work" | "money"; compact?: boolean }) {
   const barCls = tone === "work" ? "bg-sky-600" : "bg-emerald-600";
+  if (compact) {
+    return (
+      <div className="rounded-xl bg-slate-50/70 px-3 py-2">
+        <div className="flex items-center justify-between text-[11px]">
+          <span className="font-semibold text-slate-500">{label}</span>
+          <span className="text-slate-400">{caption} · <span className="font-bold text-slate-800">{percent}%</span></span>
+        </div>
+        <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
+          <div className={`h-full rounded-full transition-all ${barCls}`} style={{ width: `${Math.min(100, Math.max(0, percent))}%` }} />
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="rounded-xl border border-slate-100 bg-slate-50/60 px-3.5 py-3">
       <div className="flex items-center justify-between">

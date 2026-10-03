@@ -41,16 +41,19 @@ function paidLabel(status: string): { text: string; cls: string } {
 
 interface LineItem { description: string; quantity: number; unitPrice: number; }
 
-export type CommercialMode = "billing" | "payments" | "profit";
+export type CommercialMode = "all" | "billing" | "payments" | "profit";
 
 /**
- * Project money, one Commercial section at a time (the shared stats row lives on the page):
+ * Project money (the shared stats row lives on the page):
+ *  - all:      one compact screen — schedule + invoices on the left; profit, payments received and
+ *              expenses on the right (stacks on narrow screens)
  *  - billing:  payment schedule / auto-billing tracker + invoices (maker, issue, paid/unpaid, print)
  *  - payments: money received, as a timeline, with pending field collections to approve
  *  - profit:   cash vs accrual profit + project expenses
+ * `focus` scrolls the combined screen to the payments or expenses block (old deep links).
  * Reuses /api/finance.
  */
-export default function ProjectPaymentsTab({ project, onChanged, mode = "billing" }: { project: any; onChanged?: () => void; mode?: CommercialMode }) {
+export default function ProjectPaymentsTab({ project, onChanged, mode = "billing", focus }: { project: any; onChanged?: () => void; mode?: CommercialMode; focus?: "payments" | "expenses" }) {
   const { hasAuthority, hasAnyAuthority } = useAuth();
   const canRead = hasAuthority("FINANCE_READ");
   const canWrite = hasAuthority("FINANCE_WRITE");
@@ -78,6 +81,12 @@ export default function ProjectPaymentsTab({ project, onChanged, mode = "billing
 
   // Reload invoices AND signal the billing tracker to refresh (payment % moved).
   const reloadAll = () => { load(); setTick((t) => t + 1); };
+
+  useEffect(() => {
+    if (mode !== "all" || !focus) return;
+    const t = setTimeout(() => document.getElementById(`money-${focus}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 350);
+    return () => clearTimeout(t);
+  }, [mode, focus]);
 
   const [invFilter, setInvFilter] = useState<InvoiceFilter>("ALL");
   const invCounts = useMemo(() => {
@@ -146,10 +155,14 @@ export default function ProjectPaymentsTab({ project, onChanged, mode = "billing
     return <ProjectProfitPanel project={project} refreshSignal={tick} />;
   }
 
+  const compact = mode === "all";
+  const moneyChanged = () => { reloadAll(); onChanged?.(); };
+
   return (
-    <div className="space-y-3">
+    <div className={compact ? "grid grid-cols-1 @5xl:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)] gap-3 items-start" : "space-y-3"}>
+      <div className="space-y-3 min-w-0">
       {/* Payment schedule — work % milestones that auto-raise invoices */}
-      <CompletionBillingTracker project={project} refreshSignal={tick} onChanged={reloadAll} />
+      <CompletionBillingTracker project={project} refreshSignal={tick} onChanged={reloadAll} compact={compact} />
 
       {loading ? (
         <div className="flex justify-center py-10 text-slate-400"><Loader2 className="h-6 w-6 animate-spin" /></div>
@@ -191,6 +204,58 @@ export default function ProjectPaymentsTab({ project, onChanged, mode = "billing
             ) : shownInvoices.length === 0 ? (
               <p className="py-8 text-center text-sm text-slate-400">No invoices in this filter.</p>
             ) : (
+              compact ? (
+              <div className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-100">
+                {shownInvoices.map((i) => {
+                  const badge = paidLabel(i.status);
+                  const busy = busyId === i.id;
+                  const total = Number(i.totalAmount || 0);
+                  const paid = Number(i.amountPaid || 0);
+                  const pct = total ? Math.min(100, Math.round((paid / total) * 100)) : 0;
+                  const live = i.status !== "CANCELLED" && i.status !== "DRAFT";
+                  const overdue = live && i.dueDate && i.status !== "PAID"
+                    && new Date(i.dueDate).getTime() < new Date(new Date().toDateString()).getTime();
+                  return (
+                    <div key={i.id} className={`flex flex-col @xl:flex-row @xl:items-center gap-2 px-3 py-2.5 hover:bg-slate-50/60 ${i.status === "CANCELLED" ? "opacity-60" : ""}`}>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-bold text-slate-900">{i.invoiceNumber}</span>
+                          <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${overdue ? "bg-rose-100 text-rose-700" : badge.cls}`}>{overdue ? "Overdue" : badge.text}</span>
+                        </div>
+                        <div className="text-[11px] text-slate-400 truncate">
+                          <span className="capitalize">{String(i.invoiceType || "").toLowerCase()}</span> · {i.date ? format(new Date(i.date), "dd MMM") : "—"}
+                          {i.dueDate && live && i.status !== "PAID" && <span className={overdue ? "font-semibold text-rose-600" : ""}> · due {format(new Date(i.dueDate), "dd MMM")}</span>}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 @xl:w-44 shrink-0">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-baseline justify-between gap-2">
+                            <span className="text-sm font-bold text-slate-900">{inr(total)}</span>
+                            {live && Number(i.balanceDue || 0) > 0 && <span className="text-[10px] font-semibold text-rose-600">{inr(i.balanceDue)} due</span>}
+                          </div>
+                          {live && <div className="mt-1 h-1 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-emerald-600" style={{ width: `${pct}%` }} /></div>}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0 @xl:justify-end">
+                        {busy && <Loader2 className="h-4 w-4 animate-spin text-slate-400" />}
+                        {canWrite && i.status === "DRAFT" && !busy && <ActionBtn onClick={() => issue(i.id)} title="Issue">Issue</ActionBtn>}
+                        {canCollect && live && i.status !== "PAID" && !busy && (
+                          <ActionBtn onClick={() => setPayFor(i)} tone="green" title="Mark paid"><CheckCircle2 className="h-3.5 w-3.5" /> Paid</ActionBtn>
+                        )}
+                        {canWrite && i.status === "PAID" && !busy && (
+                          <ActionBtn onClick={() => markUnpaid(i)} tone="red" title="Mark unpaid"><RotateCcw className="h-3.5 w-3.5" /></ActionBtn>
+                        )}
+                        {live && customerPhone && (
+                          <a href={invoiceWhatsApp(i)} target="_blank" rel="noreferrer" title="Send on WhatsApp"
+                            className="inline-flex items-center rounded-md border border-emerald-200 px-1.5 py-1 text-emerald-700 hover:bg-emerald-50"><MessageCircle className="h-3.5 w-3.5" /></a>
+                        )}
+                        {i.status !== "DRAFT" && <ActionBtn onClick={() => doPrint(i)} title="Print invoice"><Printer className="h-3.5 w-3.5" /></ActionBtn>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              ) : (
               <div className="grid grid-cols-1 @2xl:grid-cols-2 @5xl:grid-cols-3 gap-2.5">
                 {shownInvoices.map((i) => {
                   const badge = paidLabel(i.status);
@@ -260,9 +325,24 @@ export default function ProjectPaymentsTab({ project, onChanged, mode = "billing
                   );
                 })}
               </div>
+              )
             )}
           </div>
         </section>
+      )}
+
+      </div>
+
+      {compact && (
+        <div className="space-y-3 min-w-0">
+          <ProjectProfitPanel project={project} refreshSignal={tick} part="profit" compact />
+          <div id="money-payments" className="scroll-mt-40">
+            <PaymentsSection projectId={projectId} customerId={customerId} canWrite={canWrite} canCollect={canCollect} onChanged={moneyChanged} compact />
+          </div>
+          <div id="money-expenses" className="scroll-mt-40">
+            <ProjectProfitPanel project={project} refreshSignal={tick} part="expenses" compact onChanged={moneyChanged} />
+          </div>
+        </div>
       )}
 
       {makerOpen && customerId && (
@@ -309,9 +389,12 @@ const methodLabel = (m?: string) => (m || "—").replace(/_/g, " ");
  * collected on site (from their daily report) arrives PENDING_APPROVAL and is pinned on top with
  * Approve / Reject; office-collected money is added with "Record Payment" (confirmed immediately).
  */
-function PaymentsSection({ projectId, customerId, canWrite, canCollect, onChanged }: {
+function PaymentsSection({ projectId, customerId, canWrite, canCollect, onChanged, compact }: {
   projectId: number; customerId?: number; canWrite: boolean; canCollect: boolean; onChanged: () => void;
+  /** Latest five as a flat list, with "Show all" opening the full month timeline. */
+  compact?: boolean;
 }) {
+  const [showAll, setShowAll] = useState(false);
   const [rows, setRows] = useState<CustomerPayment[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<number | null>(null);
@@ -380,7 +463,7 @@ function PaymentsSection({ projectId, customerId, canWrite, canCollect, onChange
           <div className="text-xs text-slate-400">Record money received here. Field staff can also log cash collected in their daily report.</div>
         </div>
       ) : (
-        <div className="p-3 space-y-4">
+        <div className={compact ? "p-3 space-y-2.5" : "p-3 space-y-4"}>
           {/* Waiting for approval — pinned on top */}
           {pending.length > 0 && (
             <div className="rounded-2xl border border-amber-200 bg-amber-50/60 p-3">
@@ -424,8 +507,36 @@ function PaymentsSection({ projectId, customerId, canWrite, canCollect, onChange
             </div>
           )}
 
+          {/* Compact: latest payments as a flat list */}
+          {compact && !showAll && history.length > 0 && (
+            <div className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-100">
+              {history.slice(0, 5).map((p) => {
+                const st = PAY_STATUS[p.status] || PAY_STATUS.CONFIRMED;
+                const rejected = p.status === "REJECTED";
+                return (
+                  <div key={p.id} className={`flex items-center gap-2.5 px-3 py-2 ${rejected ? "opacity-60" : ""}`}>
+                    <span className={`h-2 w-2 shrink-0 rounded-full ${st.dot}`} />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[11px] text-slate-400 truncate">
+                        {p.paymentDate ? format(new Date(p.paymentDate), "dd MMM") : "—"} · {methodLabel(p.paymentMethod)}
+                        {p.collectedBy?.name && <> · {p.collectedBy.name}</>}
+                        {p.invoice?.invoiceNumber && <> · {p.invoice.invoiceNumber}</>}
+                      </div>
+                    </div>
+                    <span className={`text-sm font-bold shrink-0 ${rejected ? "line-through text-slate-400" : "text-slate-900"}`}>{inr(p.amount)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {compact && history.length > 5 && (
+            <button type="button" onClick={() => setShowAll((v) => !v)} className="w-full rounded-xl bg-slate-50 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100">
+              {showAll ? "Show less" : `Show all ${history.length} payments`}
+            </button>
+          )}
+
           {/* Timeline */}
-          {months.map(([month, list]) => {
+          {(!compact || showAll) && months.map(([month, list]) => {
             const monthTotal = list.filter((p) => p.status === "CONFIRMED").reduce((s, p) => s + (p.amount || 0), 0);
             return (
               <div key={month}>

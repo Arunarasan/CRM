@@ -41,7 +41,16 @@ const sourceLabel = (s?: string) => {
  * cash basis (money that actually moved) and booked basis (invoiced vs billed cost), where the money
  * went by type, and every expense booked against the project with a quick "Add expense".
  */
-export default function ProjectProfitPanel({ project, refreshSignal = 0 }: { project: any; refreshSignal?: number }) {
+export default function ProjectProfitPanel({ project, refreshSignal = 0, part = "both", compact, onChanged }: {
+  project: any;
+  refreshSignal?: number;
+  /** Which card(s) to render — the combined Billing & Payments view places them separately. */
+  part?: "both" | "profit" | "expenses";
+  /** Tighter layout: smaller profit tiles, latest expenses only (with "show all"). */
+  compact?: boolean;
+  /** Told after an expense is added/deleted, so sibling money views refresh. */
+  onChanged?: () => void;
+}) {
   const { hasAuthority } = useAuth();
   const canRead = hasAuthority("FINANCE_READ");
   const canWrite = hasAuthority("FINANCE_WRITE");
@@ -54,19 +63,22 @@ export default function ProjectProfitPanel({ project, refreshSignal = 0 }: { pro
   const [basis, setBasis] = useState<"cash" | "booked">("cash");
   const [catFilter, setCatFilter] = useState<string>("ALL");
   const [adding, setAdding] = useState(false);
+  const [showAll, setShowAll] = useState(false);
+  const needProf = part !== "expenses";
+  const needExp = part !== "profit";
 
   const load = useCallback(() => {
     if (!projectId) return;
     setLoading(true);
     // getProjectProfitability re-syncs costs server-side, so it reflects the latest bills.
     Promise.all([
-      financeApi.getProjectProfitability(projectId),
-      financeApi.getExpenses(projectId, 0, 200),
+      needProf ? financeApi.getProjectProfitability(projectId) : Promise.resolve(null),
+      needExp ? financeApi.getExpenses(projectId, 0, 200) : Promise.resolve(null),
     ])
-      .then(([p, e]) => { setProf(p); setExpenses(e.content || []); })
+      .then(([p, e]) => { if (p) setProf(p); if (e) setExpenses(e.content || []); })
       .catch((err) => { if (err?.response?.status !== 403) console.error(err); })
       .finally(() => setLoading(false));
-  }, [projectId]);
+  }, [projectId, needProf, needExp]);
 
   useEffect(load, [load]);
   // Refetch when the parent signals a billing/payment change.
@@ -89,26 +101,29 @@ export default function ProjectProfitPanel({ project, refreshSignal = 0 }: { pro
   if (!canRead) {
     return <div className="rounded-2xl border border-slate-100 bg-white p-6 text-sm text-slate-500">You don't have access to project profit.</div>;
   }
-  if (loading && !prof) {
-    return <div className="flex justify-center py-10 text-slate-400"><Loader2 className="h-6 w-6 animate-spin" /></div>;
+  if (loading && (needProf ? !prof : expenses.length === 0)) {
+    return <div className="flex justify-center rounded-2xl border border-slate-100 bg-white py-8 text-slate-400"><Loader2 className="h-5 w-5 animate-spin" /></div>;
   }
-  if (!prof) return null;
+  if (needProf && !prof) return null;
 
   const cash = basis === "cash";
-  const moneyIn = cash ? prof.customerPaid : prof.revenue;
-  const moneyOut = cash ? prof.cashOut : prof.totalExpenses;
-  const profit = cash ? prof.cashProfit : prof.netProfit;
-  const margin = cash ? prof.cashMarginPercent : prof.profitPercent;
+  const pf = prof || ({} as ProjectProfitability);
+  const moneyIn = cash ? pf.customerPaid : pf.revenue;
+  const moneyOut = cash ? pf.cashOut : pf.totalExpenses;
+  const profit = (cash ? pf.cashProfit : pf.netProfit) || 0;
+  const margin = cash ? pf.cashMarginPercent : pf.profitPercent;
   const outParts: [string, number][] = cash
-    ? [["Contractor paid", prof.contractorPaid], ["Product purchase", prof.purchasePaid], ["Other expenses", prof.otherExpensesPaid]]
-    : [["Material cost", prof.materialCost], ["Labour / contractor", prof.labourCost], ["Other", Math.max(0, prof.totalExpenses - prof.materialCost - prof.labourCost)]];
-  const shown = catFilter === "ALL" ? expenses : expenses.filter((e) => e.category === catFilter);
+    ? [["Contractor paid", pf.contractorPaid], ["Product purchase", pf.purchasePaid], ["Other expenses", pf.otherExpensesPaid]]
+    : [["Material cost", pf.materialCost], ["Labour / contractor", pf.labourCost], ["Other", Math.max(0, (pf.totalExpenses || 0) - (pf.materialCost || 0) - (pf.labourCost || 0))]];
+  const filtered = catFilter === "ALL" ? expenses : expenses.filter((e) => e.category === catFilter);
+  const shown = compact && !showAll ? filtered.slice(0, 5) : filtered;
   const positive = profit >= 0;
+  const OUT_COLORS = ["bg-rose-500", "bg-amber-500", "bg-slate-400"];
 
   return (
     <div className="space-y-3 @container">
       {/* Profit equation */}
-      <section className="rounded-2xl border border-slate-100 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+      {needProf && <section className="rounded-2xl border border-slate-100 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
         <div className="px-4 py-3 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
           <h3 className="text-base font-bold text-slate-900 flex items-center gap-2"><TrendingUp className="h-5 w-5 text-emerald-700" /> Profit</h3>
           <div className="flex items-center gap-2">
@@ -125,7 +140,21 @@ export default function ProjectProfitPanel({ project, refreshSignal = 0 }: { pro
             </Button>
           </div>
         </div>
-        <div className="p-4">
+        <div className={compact ? "p-3" : "p-4"}>
+          {compact ? (
+            <div className="grid grid-cols-3 gap-2">
+              {([[cash ? "Customer paid" : "Invoiced", moneyIn, "bg-emerald-50", "text-emerald-800"], [cash ? "Paid out" : "Total cost", moneyOut, "bg-rose-50", "text-rose-800"]] as [string, number, string, string][]).map(([l, v, bg, fg]) => (
+                <div key={l} className={`rounded-xl ${bg} px-2.5 py-2 min-w-0`}>
+                  <div className={`text-[10px] font-semibold ${fg} truncate`}>{l}</div>
+                  <div className="mt-0.5 text-sm font-bold text-slate-900 truncate">{inr(v)}</div>
+                </div>
+              ))}
+              <div className={`rounded-xl px-2.5 py-2 min-w-0 text-white ${positive ? "bg-emerald-800" : "bg-rose-600"}`}>
+                <div className="text-[10px] font-semibold text-white/80 truncate">{positive ? "Profit" : "Loss"} · {Number(margin || 0).toFixed(1)}%</div>
+                <div className="mt-0.5 text-sm font-bold truncate">{inr(profit)}</div>
+              </div>
+            </div>
+          ) : (
           <div className="grid grid-cols-1 @2xl:grid-cols-[1fr_auto_1fr_auto_1fr] items-stretch gap-2">
             <div className="rounded-2xl bg-emerald-50 px-4 py-3">
               <div className="text-[11px] font-semibold text-emerald-800">{cash ? "Customer paid" : "Invoiced"}</div>
@@ -147,8 +176,23 @@ export default function ProjectProfitPanel({ project, refreshSignal = 0 }: { pro
               <div className="text-[11px] text-white/80">{Number(margin || 0).toFixed(1)}% margin</div>
             </div>
           </div>
+          )}
 
           {/* Money out, broken down */}
+          {compact ? (
+            <div className="mt-2.5">
+              <div className="flex h-1.5 overflow-hidden rounded-full bg-slate-100">
+                {outParts.map(([label, val], idx) => (
+                  <div key={label} className={OUT_COLORS[idx]} style={{ width: `${moneyOut ? (Number(val || 0) / moneyOut) * 100 : 0}%` }} />
+                ))}
+              </div>
+              <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-500">
+                {outParts.map(([label, val], idx) => (
+                  <span key={label} className="inline-flex items-center gap-1"><span className={`h-2 w-2 rounded-full ${OUT_COLORS[idx]}`} /> {label} <span className="font-semibold text-slate-700">{inr(val)}</span></span>
+                ))}
+              </div>
+            </div>
+          ) : (
           <div className="mt-3 grid grid-cols-1 @xl:grid-cols-3 gap-2">
             {outParts.map(([label, val]) => {
               const pct = moneyOut ? Math.round((Number(val || 0) / moneyOut) * 100) : 0;
@@ -164,14 +208,15 @@ export default function ProjectProfitPanel({ project, refreshSignal = 0 }: { pro
               );
             })}
           </div>
-          {cash && Number(prof.outstanding || 0) > 0 && (
-            <p className="mt-2 text-[11px] text-slate-400">Still to collect from the customer: <span className="font-semibold text-slate-600">{inr(prof.outstanding)}</span> — profit grows as it comes in.</p>
+          )}
+          {cash && !compact && Number(pf.outstanding || 0) > 0 && (
+            <p className="mt-2 text-[11px] text-slate-400">Still to collect from the customer: <span className="font-semibold text-slate-600">{inr(pf.outstanding)}</span> — profit grows as it comes in.</p>
           )}
         </div>
-      </section>
+      </section>}
 
       {/* Expenses */}
-      <section className="rounded-2xl border border-slate-100 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+      {needExp && <section className="rounded-2xl border border-slate-100 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
         <div className="px-4 py-3 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <h3 className="text-base font-bold text-slate-900 flex items-center gap-2"><Receipt className="h-5 w-5 text-emerald-700" /> Expenses</h3>
@@ -181,8 +226,8 @@ export default function ProjectProfitPanel({ project, refreshSignal = 0 }: { pro
             <Button size="sm" onClick={() => setAdding(true)} className="h-9 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white"><Plus className="h-4 w-4 mr-1" /> Add expense</Button>
           )}
         </div>
-        <div className="p-4 space-y-3">
-          {canWrite && adding && <QuickAddExpense projectId={projectId} onAdded={() => { load(); setAdding(false); }} onCancel={() => setAdding(false)} />}
+        <div className={compact ? "p-3 space-y-2.5" : "p-4 space-y-3"}>
+          {canWrite && adding && <QuickAddExpense projectId={projectId} onAdded={() => { load(); setAdding(false); onChanged?.(); }} onCancel={() => setAdding(false)} />}
 
           {/* By type */}
           {byCategory.length > 0 && (
@@ -230,7 +275,7 @@ export default function ProjectProfitPanel({ project, refreshSignal = 0 }: { pro
                       <button type="button" title="Delete expense" className="text-slate-300 hover:text-red-500"
                         onClick={() => {
                           if (!confirm("Delete this expense?")) return;
-                          financeApi.deleteExpense(e.id).then(load)
+                          financeApi.deleteExpense(e.id).then(() => { load(); onChanged?.(); })
                             .catch((err) => toast.error(err?.response?.data?.message || "Could not delete"));
                         }}>
                         <Trash2 className="h-4 w-4" />
@@ -241,9 +286,16 @@ export default function ProjectProfitPanel({ project, refreshSignal = 0 }: { pro
               ))
             )}
           </div>
-          <p className="text-[11px] text-slate-400">Purchases, contractor bills and payroll are added automatically (Sync costs to refresh). Add travel, shipping, tools and other costs yourself.</p>
+          {compact && filtered.length > 5 && (
+            <button type="button" onClick={() => setShowAll((v) => !v)} className="w-full rounded-xl bg-slate-50 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100">
+              {showAll ? "Show less" : `Show all ${filtered.length} expenses`}
+            </button>
+          )}
+          {!compact && (
+            <p className="text-[11px] text-slate-400">Purchases, contractor bills and payroll are added automatically (Sync costs to refresh). Add travel, shipping, tools and other costs yourself.</p>
+          )}
         </div>
-      </section>
+      </section>}
     </div>
   );
 }

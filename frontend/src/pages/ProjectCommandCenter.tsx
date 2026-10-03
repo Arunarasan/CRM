@@ -16,7 +16,8 @@ import { ProjectChangeRequest } from "@/types/changeRequest";
 import ProjectPaymentsTab from "@/pages/projectFinance/ProjectPaymentsTab";
 import BulkWorkUpdateDialog from "@/pages/projectCommandCenter/BulkWorkUpdateDialog";
 import HandoverTab from "@/pages/projectCommandCenter/HandoverTab";
-import SupplyInstallTab from "@/pages/projectCommandCenter/SupplyInstallTab";
+import ProjectPurchaseOrdersTab from "@/pages/projectCommandCenter/tabs/ProjectPurchaseOrdersTab";
+import ProjectGoodsReceivedTab from "@/pages/projectCommandCenter/tabs/ProjectGoodsReceivedTab";
 import CameraCaptureButton from "@/components/CameraCaptureButton";
 import { format, differenceInDays, formatDistanceToNow } from "date-fns";
 import {
@@ -199,11 +200,11 @@ const TAB_GROUPS: { id: string; label: string; icon: React.ComponentType<{ class
     ["reports", "Reports"], ["quality", "Quality & Issues"], ["phases", "Floors & Rooms"],
   ] },
   { id: "commercial", label: "Commercial", icon: Wallet, sections: [
-    ["payments", "Billing"], ["received", "Payments"], ["profit", "Expenses & Profit"],
+    ["payments", "Billing & Payments"], ["received", "Payments"], ["profit", "Expenses & Profit"],
     ["quote", "Quotation"], ["approvals", "Approvals & Changes"], ["changeRequests", "Change Requests"],
   ] },
   { id: "resources", label: "Resources", icon: Package, sections: [
-    ["supplyInstall", "Supply & Install"], ["materials", "Materials"], ["contractors", "Contractors"], ["labour", "Labour"],
+    ["purchaseOrders", "Purchase Orders"], ["goodsReceived", "Goods Received"],
   ] },
   { id: "handover", label: "Handover", icon: CheckCircle2, sections: [["handover", "Handover"]] },
   { id: "documents", label: "Documents", icon: FileText, sections: [["media", "Documents"]] },
@@ -212,7 +213,13 @@ const TAB_GROUPS: { id: string; label: string; icon: React.ComponentType<{ class
   { id: "service", label: "Service & Warranty", icon: Settings, sections: [["serviceWarranty", "Service & Warranty"]] },
 ];
 // Reachable from inside another section (Work Categories → "Floors & rooms view"), not the strip.
-const HIDDEN_SECTIONS = new Set(["phases", "changeRequests"]);
+const HIDDEN_SECTIONS = new Set(["phases", "changeRequests", "received", "profit"]);
+// Old section keys that now live inside another section's screen — highlight that section instead.
+const SECTION_ALIAS: Record<string, string> = { received: "payments", profit: "payments", changeRequests: "approvals" };
+// Retired Resources sections — old ?tab= links land on Purchase Orders instead.
+const RETIRED_SECTIONS: Record<string, string> = {
+  supplyInstall: "purchaseOrders", materials: "purchaseOrders", contractors: "purchaseOrders", labour: "purchaseOrders",
+};
 const groupOf = (section: string) =>
   TAB_GROUPS.find((g) => g.sections.some(([v]) => v === section)) || TAB_GROUPS[0];
 
@@ -223,7 +230,8 @@ export default function ProjectCommandCenter() {
   const projectId = Number(id);
   // ?tab=<section> deep-links straight to a section (e.g. ?tab=quote from an old BOQ link).
   const [activeTab, setActiveTab] = useState(() => {
-    const t = new URLSearchParams(window.location.search).get("tab");
+    const raw = new URLSearchParams(window.location.search).get("tab");
+    const t = raw && (RETIRED_SECTIONS[raw] || raw);
     return t && TAB_GROUPS.some((g) => g.sections.some(([v]) => v === t)) ? t : "overview";
   });
   const [data, setData] = useState<any>(null);
@@ -1027,8 +1035,8 @@ export default function ProjectCommandCenter() {
                 {/* Secondary strip — sections inside the active area */}
                 {active.sections.length > 1 && (
                   <div className="flex gap-1 px-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                    {active.sections.filter(([value]) => !HIDDEN_SECTIONS.has(value) || value === activeTab).map(([value, label]) => {
-                      const isActive = value === activeTab;
+                    {active.sections.filter(([value]) => !HIDDEN_SECTIONS.has(value) || (value === activeTab && !SECTION_ALIAS[value])).map(([value, label]) => {
+                      const isActive = value === (SECTION_ALIAS[activeTab] ?? activeTab);
                       return (
                         <button
                           key={value}
@@ -1782,7 +1790,7 @@ export default function ProjectCommandCenter() {
 
             {/* PAYMENTS & INVOICES TAB */}
             <TabsContent value="payments" className="mt-0 h-full outline-none">
-              <ProjectPaymentsTab project={project} mode="billing" onChanged={fetchProjectData} />
+              <ProjectPaymentsTab project={project} mode="all" onChanged={fetchProjectData} />
             </TabsContent>
 
             {/* MATERIALS TAB */}
@@ -2077,11 +2085,11 @@ export default function ProjectCommandCenter() {
 
             {/* MEASUREMENT & QUOTATION — the same combined workspace as the lead's Sales Journey */}
             <TabsContent value="received" className="mt-0 h-full outline-none">
-              <ProjectPaymentsTab project={project} mode="payments" onChanged={fetchProjectData} />
+              <ProjectPaymentsTab project={project} mode="all" focus="payments" onChanged={fetchProjectData} />
             </TabsContent>
 
             <TabsContent value="profit" className="mt-0 h-full outline-none">
-              <ProjectPaymentsTab project={project} mode="profit" onChanged={fetchProjectData} />
+              <ProjectPaymentsTab project={project} mode="all" focus="expenses" onChanged={fetchProjectData} />
             </TabsContent>
 
             <TabsContent value="quote" className="space-y-3 mt-0 h-full outline-none">
@@ -2210,8 +2218,12 @@ export default function ProjectCommandCenter() {
             </TabsContent>
 
             {/* MEDIA TAB */}
-            <TabsContent value="supplyInstall" className="mt-0 h-full outline-none">
-              <SupplyInstallTab projectId={projectId} onChanged={fetchProjectData} />
+            <TabsContent value="purchaseOrders" className="mt-0 h-full outline-none">
+              <ProjectPurchaseOrdersTab projectId={projectId} />
+            </TabsContent>
+
+            <TabsContent value="goodsReceived" className="mt-0 h-full outline-none">
+              <ProjectGoodsReceivedTab projectId={projectId} />
             </TabsContent>
 
             <TabsContent value="handover" className="mt-0 h-full outline-none">
