@@ -137,11 +137,13 @@ export function QuotationPrintView({ quotationId, onClose, onSaved, readOnly }: 
 
   const lead: any = quotation.lead || {};
   const cust: any = quotation.customer || {};
-  const clientCode = cust.customerCode || lead.leadNumber;
-  const site = quotation.project?.projectName || lead.siteAddress || cust.siteAddress
-    || (quotation.siteVisit as any)?.locationAddress || lead.city || cust.city;
+  const clientCode = cust.customerCode;
+  const meas: any = quotation.measurement || {};
+  const site = quotation.project?.projectName || meas.siteAddress || lead.siteAddress || cust.siteAddress
+    || (quotation.siteVisit as any)?.locationAddress || lead.address || cust.address || lead.city || cust.city;
   const qDate = editing ? fields.quotationDate : quotation.quotationDate;
-  const xDate = editing ? fields.expiryDate : quotation.expiryDate;
+  // No validity saved yet → 14 days from the quote date (the standard terms).
+  const xDate = (editing ? fields.expiryDate : quotation.expiryDate) || addDays(qDate, 14);
   const validDays = daysBetween(qDate, xDate);
   const terms = (quotation.termsAndConditions || "").split(/\r?\n/)
     .map((t) => t.replace(/^\s*(\d+[.)]|[-•*])\s*/, "").trim()).filter(Boolean);
@@ -477,6 +479,14 @@ function fmtDate(d?: string | null) {
   if (!d) return "—";
   const dt = new Date(d);
   return isNaN(dt.getTime()) ? d : dt.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+function addDays(d: string | null | undefined, n: number) {
+  if (!d) return undefined;
+  const dt = new Date(d);
+  if (isNaN(dt.getTime())) return undefined;
+  dt.setDate(dt.getDate() + n);
+  return dt.toISOString().slice(0, 10);
 }
 
 function daysBetween(a?: string | null, b?: string | null) {

@@ -166,14 +166,31 @@ public class QuotationService {
         resolveRefs(quotation);
         linkCollections(quotation);
 
-        if (quotation.getQuotationNumber() == null) {
-            quotation.setQuotationNumber("QT-" + System.currentTimeMillis());
+        boolean autoNumber = quotation.getQuotationNumber() == null;
+        if (autoNumber) quotation.setQuotationNumber(tempNumber());
+        // Valid for 14 days by default (the standard terms say so).
+        if (quotation.getExpiryDate() == null && quotation.getQuotationDate() != null) {
+            quotation.setExpiryDate(quotation.getQuotationDate().plusDays(DEFAULT_VALIDITY_DAYS));
         }
 
         recalculateTotals(quotation);
         Quotation saved = quotationRepository.save(quotation);
+        if (autoNumber) saved = assignNumber(saved);
         logActivity(saved, "CREATED", "Quotation created.", user);
         return saved;
+    }
+
+    private static final int DEFAULT_VALIDITY_DAYS = 14;
+
+    /** Placeholder so the NOT NULL / UNIQUE column is satisfied until the id is known. */
+    private static String tempNumber() {
+        return "TMP-" + java.util.UUID.randomUUID().toString().substring(0, 12);
+    }
+
+    /** Short, sequential, customer-facing number from the row id: QT-000012. */
+    private Quotation assignNumber(Quotation q) {
+        q.setQuotationNumber(String.format("QT-%06d", q.getId()));
+        return quotationRepository.save(q);
     }
 
     @Transactional
@@ -211,7 +228,7 @@ public class QuotationService {
     public Quotation duplicateQuotation(Long id, User user) {
         Quotation original = getQuotationById(id);
         Quotation copy = new Quotation();
-        copy.setQuotationNumber("QT-" + System.currentTimeMillis());
+        copy.setQuotationNumber(tempNumber());
         copy.setCustomer(original.getCustomer());
         copy.setLead(original.getLead());
         copy.setBoq(original.getBoq());
@@ -224,7 +241,7 @@ public class QuotationService {
         copyCollections(original, copy);
 
         recalculateTotals(copy);
-        Quotation saved = quotationRepository.save(copy);
+        Quotation saved = assignNumber(quotationRepository.save(copy));
         logActivity(saved, "DUPLICATED", "Created as a duplicate of Quotation #" + original.getQuotationNumber(), user);
         return saved;
     }
