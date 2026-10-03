@@ -187,7 +187,15 @@ export const quoteWorkspaceApi = {
   /** Customer approved the change → the project follows the new quote ({unchanged: true} if nothing was edited). */
   approveProjectChange: (projectId: number | string) =>
     api.post<ProjectChangeResult & { unchanged?: boolean }>(`/quote-workspace/project/${projectId}/approve-change`).then((r) => r.data),
+  /** The lead's existing project this sheet's quote would update (empty object when there is none). */
+  leadProject: (boqId: number) =>
+    api.get<Partial<LeadProjectStatus>>(`/quote-workspace/boq/${boqId}/lead-project`).then((r) => r.data),
+  /** Applies this lead sheet's approved quote to the lead's existing project (same project, new quote no.). */
+  applyToProject: (boqId: number) =>
+    api.post<ProjectChangeResult & { unchanged?: boolean; projectCode?: string }>(`/quote-workspace/boq/${boqId}/apply-to-project`).then((r) => r.data),
 };
+
+export type LeadProjectStatus = ProjectQuoteStatus & { projectName?: string; sheetTotal?: number | null };
 
 export type ProjectQuoteStatus = {
   projectId: number; projectCode?: string; boqId?: number | null; quotationId?: number | null;

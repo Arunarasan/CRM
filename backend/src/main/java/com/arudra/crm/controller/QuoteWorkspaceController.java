@@ -63,6 +63,19 @@ public class QuoteWorkspaceController {
         return ResponseEntity.ok(projectChanges.approveChange(projectId, currentUserService.getCurrentUser()));
     }
 
+    /** The lead's existing project this sheet's quote would update ({} when the lead has none). */
+    @GetMapping("/boq/{boqId}/lead-project")
+    public ResponseEntity<Map<String, Object>> leadProject(@PathVariable Long boqId) {
+        return ResponseEntity.ok(projectChanges.leadProject(boqId));
+    }
+
+    /** Applies this lead sheet's approved quote to the lead's existing project (same project, new quote no.). */
+    @PostMapping("/boq/{boqId}/apply-to-project")
+    @PreAuthorize(PROJECT_CHANGE)
+    public ResponseEntity<Map<String, Object>> applyToProject(@PathVariable Long boqId) {
+        return ResponseEntity.ok(projectChanges.applyLeadSheet(boqId, currentUserService.getCurrentUser()));
+    }
+
     /** Opens the pricing sheet for a lead, creating the measurement and BOQ when missing. */
     @PostMapping("/lead/{leadId}/start-pricing")
     @PreAuthorize(WRITE)

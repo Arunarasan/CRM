@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  BadgePercent, Building2, CalendarDays, Calculator, CheckCircle2, ChevronDown, Eye, FileOutput,
+  AlertTriangle, BadgePercent, Building2, CalendarDays, Calculator, CheckCircle2, ChevronDown, Eye, FileOutput,
   FileText, History, Image as ImageIcon, Info, Layers, Loader2, Lock, Pencil, RotateCcw,
   Save, Send, Share2, Users, Wand2,
 } from "lucide-react";
@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { toast } from "@/components/ui/toast";
 import { useAuth } from "@/hooks/useAuth";
-import { boqApi, quoteWorkspaceApi, type ProjectChangeResult, type ProjectQuoteStatus } from "@/api/boqApi";
+import { boqApi, quoteWorkspaceApi, type LeadProjectStatus, type ProjectChangeResult, type ProjectQuoteStatus } from "@/api/boqApi";
 import { quotationApi } from "@/api/quotationApi";
 import type { Boq } from "@/types/boq";
 import { QUOTATION_STATUS_LABELS, QUOTATION_STATUS_STYLES, type Quotation } from "@/types/quotation";
@@ -73,6 +73,9 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
   const [convertCfg, setConvertCfg] = useState<{ advanceAmount: string; advanceMethod: string } | null>(null);
   const [projectQuote, setProjectQuote] = useState<ProjectQuoteStatus | null>(null);
   const [changeResult, setChangeResult] = useState<ProjectChangeResult | null>(null);
+  // Seen from the lead: the lead's project made from an earlier quote — a newly approved quote updates it.
+  const [leadProject, setLeadProject] = useState<LeadProjectStatus | null>(null);
+  const [applyOpen, setApplyOpen] = useState(false);
   // Items (what the customer sees) vs Cost Breakdown (material / labour behind each price).
   const [view, setView] = useState<"items" | "cost" | "photos" | "history">(() => {
     try { return localStorage.getItem("quoteShowBreakdown") === "1" ? "cost" : "items"; } catch { return "items"; }
@@ -105,7 +108,12 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
       ?? [...list].filter((x) => x.isLatestVersion !== false).sort((x, y) => (y.id ?? 0) - (x.id ?? 0))[0]
       ?? [...list].sort((x, y) => (y.id ?? 0) - (x.id ?? 0))[0];
     const id = pq?.boqId ?? current?.id;
-    setBoq(id ? await boqApi.get(id).catch(() => current ?? null) : null);
+    const [sheet, lp] = await Promise.all([
+      id ? boqApi.get(id).catch(() => current ?? null) : Promise.resolve(null),
+      id && projectId == null ? quoteWorkspaceApi.leadProject(id).catch(() => null) : Promise.resolve(null),
+    ]);
+    setBoq(sheet);
+    setLeadProject(lp?.projectId ? (lp as LeadProjectStatus) : null);
   }, [leadId, projectId]);
 
   useEffect(() => { setLoading(true); load().finally(() => setLoading(false)); }, [load]);
@@ -292,6 +300,20 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
     } finally { setBusy(null); }
   };
 
+  const doApplyToProject = async () => {
+    if (!boq?.id) return;
+    setBusy("apply");
+    try {
+      const res = await quoteWorkspaceApi.applyToProject(boq.id);
+      setApplyOpen(false);
+      if (res.unchanged) toast.success(`Project ${res.projectCode || ""} already matches this quote — nothing to change`);
+      else setChangeResult(res);
+      await refreshAll();
+    } catch (e) {
+      toast.error(errMsg(e, "Could not update the project."));
+    } finally { setBusy(null); }
+  };
+
   if (loading) return <ListSkeleton rows={5} />;
 
   const GREEN = "bg-[#1F5C3F] hover:bg-[#184A33] text-white";
@@ -302,6 +324,10 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
       ? { label: "Customer Approved Change", icon: CheckCircle2, onClick: () => setApproveOpen(true), disabled: !!busy || noItems }
       : !projectMode && !sheetProject && !fieldMode && !approved && canApprove
         ? { label: "Customer Approved", icon: CheckCircle2, onClick: () => setApproveOpen(true), disabled: !!busy || noItems }
+        : !projectMode && !sheetProject && !fieldMode && approved && !converted && leadProject
+          ? canChangeProject
+            ? { label: `Update Project ${leadProject.projectCode || ""}`.trim(), icon: FileOutput, onClick: () => setApplyOpen(true), disabled: !!busy || !leadProject.canChange }
+            : null
         : !projectMode && !sheetProject && !fieldMode && approved && !converted && canConvert
           ? { label: "Create Project", icon: FileOutput, onClick: () => setConvertCfg({ advanceAmount: "", advanceMethod: "Cash" }), disabled: !!busy }
           : fieldMode && !converted && !sheetProject && onCreateProject
@@ -395,6 +421,28 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
                 {!fieldMode && (
                   <Link to={`/projects/${sheetProject.id}?tab=quote`}>
                     <Button size="sm" variant="outline" className="bg-background">Open project's quote</Button>
+                  </Link>
+                )}
+              </div>
+            )}
+
+            {/* ---- Seen from the lead: the lead already has a project from an earlier quote ---- */}
+            {!projectMode && !sheetProject && !converted && leadProject && (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 flex flex-wrap sm:flex-nowrap items-start gap-2">
+                <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                <span className="flex-1">
+                  <span className="font-semibold">This lead already has project {leadProject.projectCode}</span>{" "}
+                  ({leadProject.quotationNumber} · {inr(leadProject.contractValue)}). A new project won't be created —{" "}
+                  {approved
+                    ? canChangeProject
+                      ? <>press "Update Project" to apply this quote to it.</>
+                      : <>an admin or project manager can apply this quote to it.</>
+                    : <>once the customer approves this quote, it updates that project.</>}
+                  {!leadProject.canChange && <> The project is closed, so its quote can't be changed.</>}
+                </span>
+                {!fieldMode && (
+                  <Link to={`/projects/${leadProject.projectId}?tab=quote`} className="shrink-0">
+                    <Button size="sm" variant="outline" className="bg-background">Open project</Button>
                   </Link>
                 )}
               </div>
@@ -602,6 +650,37 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
             <Button variant="outline" onClick={() => setChangeOpen(false)}>Cancel</Button>
             <Button disabled={busy === "change"} onClick={confirmChange}>
               {busy === "change" && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Make changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ---- Apply this quote to the lead's existing project ---- */}
+      <Dialog open={applyOpen} onOpenChange={(o) => !o && busy !== "apply" && setApplyOpen(false)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Update existing project?</DialogTitle></DialogHeader>
+          {leadProject && (
+            <div className="text-sm space-y-3">
+              <p className="rounded-md border border-amber-300 bg-amber-50 p-2 text-amber-900 flex gap-2">
+                <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                <span>
+                  This lead already has project <span className="font-semibold">{leadProject.projectCode}</span>.
+                  No new project is created — this quote replaces that project's quotation.
+                </span>
+              </p>
+              <Row label="Current quote" value={`${leadProject.quotationNumber || "—"} · ${inr(leadProject.contractValue)}`} />
+              <Row label="This quote" value={`${quote?.quotationNumber || "—"} · ${inr(quote?.grandTotal ?? leadProject.sheetTotal)}`} strong />
+              <p className="text-xs text-muted-foreground">
+                The project gets a new quotation number. Its items, work tasks, budget, Supply &amp; Install list and
+                not-yet-billed payment milestones follow the new quote. Work already started on site is kept; an item
+                already started can't be dropped. Record any advance from the project's Payments tab.
+              </p>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setApplyOpen(false)} disabled={busy === "apply"}>Cancel</Button>
+            <Button onClick={doApplyToProject} disabled={busy === "apply"} className="bg-[#16805C] hover:bg-[#126B4C] text-white">
+              {busy === "apply" && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Update Project
             </Button>
           </DialogFooter>
         </DialogContent>

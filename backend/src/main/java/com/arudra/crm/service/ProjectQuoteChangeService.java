@@ -206,6 +206,66 @@ public class ProjectQuoteChangeService {
     }
 
     /**
+     * The project a lead sheet's quote would land on: the lead's running project built from a quote.
+     * Empty map when the lead has none (then a normal Create Project applies).
+     */
+    @Transactional(readOnly = true)
+    public Map<String, Object> leadProject(Long boqId) {
+        Boq sheet = boqService.getBoqById(boqId);
+        Project project = findLeadProject(sheet);
+        if (project == null) return Map.of();
+        Map<String, Object> out = new LinkedHashMap<>(status(project.getId()));
+        out.put("projectName", project.getProjectName());
+        out.put("sheetTotal", sheet.getGrandTotal());
+        return out;
+    }
+
+    /**
+     * The lead priced a new quote after its project was created and the customer approved it: the
+     * project's own sheet takes over that quote's lines (matched lines keep their work progress) and the
+     * change is approved on the SAME project — new quotation number, budget, work items, supply list and
+     * unbilled milestones, exactly as a change made from the project's tab.
+     */
+    @Transactional
+    public Map<String, Object> applyLeadSheet(Long sourceBoqId, User user) {
+        Boq source = boqService.getBoqById(sourceBoqId);
+        if (boqService.isProjectSheet(source)) {
+            throw new IllegalStateException("This sheet already belongs to a project — make changes from the project's Measurement & Quotation tab.");
+        }
+        Project project = findLeadProject(source);
+        if (project == null) {
+            throw new IllegalStateException("This lead has no project yet — use Create Project.");
+        }
+        if (project.getBoq() != null && !"APPROVED".equals(project.getBoq().getStatus())) {
+            throw new IllegalStateException("Project " + project.getProjectCode() + " already has a quote change open. "
+                    + "Approve or discard it on the project's Measurement & Quotation tab first.");
+        }
+        startChange(project.getId(), user);
+        boqService.copySheetInto(project.getBoq().getId(), sourceBoqId, user);
+        Map<String, Object> out = new LinkedHashMap<>(approveChange(project.getId(), user));
+
+        // The lead's sheet now lives on in the project: its quotation is retired and points at the project,
+        // so the lead page shows it read-only ("project X runs on this quote") instead of offering it again.
+        for (Quotation q : quotationRepository.findByBoq_IdOrderByIdDesc(sourceBoqId)) {
+            if ("CONVERTED".equals(q.getStatus()) || "REVISED".equals(q.getStatus())) continue;
+            q.setStatus("REVISED");
+            q.setProject(project);
+            quotationRepository.save(q);
+        }
+        log(project, user, "Quote " + source.getBoqNumber() + " priced on the lead was applied to this project.");
+        out.put("projectCode", project.getProjectCode());
+        return out;
+    }
+
+    private Project findLeadProject(Boq sheet) {
+        Long leadId = sheet.getLead() != null ? sheet.getLead().getId() : null;
+        if (leadId == null) return null;
+        return projectRepository.findByLeadIdOrderByIdDesc(leadId).stream()
+                .filter(p -> p.getQuotation() != null && !"CANCELLED".equalsIgnoreCase(p.getStatus()))
+                .findFirst().orElse(null);
+    }
+
+    /**
      * Closes an open change without applying anything — only while the sheet still matches the project's
      * quote, so edits are never silently thrown away.
      */

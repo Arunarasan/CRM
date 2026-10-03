@@ -2149,6 +2149,118 @@ public class BoqService {
         return saved;
     }
 
+    /**
+     * Makes the project's open sheet say what another sheet of the same lead says (a quote the lead
+     * priced after the project was created). Lines are matched by floor / room / item name so a matched
+     * line keeps its id — and with it the project's work item and progress. Unmatched project lines are
+     * removed (the on-site guard still applies); unmatched source lines are added. Quote-level discount,
+     * GST, labour and shipping are copied too. The target must already be unlocked for a change.
+     */
+    @Transactional
+    public Boq copySheetInto(Long targetBoqId, Long sourceBoqId, User currentUser) {
+        Boq target = getBoqById(targetBoqId);
+        Boq source = getBoqById(sourceBoqId);
+        ensureEditable(target);
+
+        Map<String, Deque<BoqItem>> unmatched = new LinkedHashMap<>();
+        for (BoqItem item : target.getItems()) {
+            unmatched.computeIfAbsent(lineKey(item), k -> new ArrayDeque<>()).add(item);
+        }
+        Map<String, BoqPhase> phasesByName = new HashMap<>();
+        for (BoqPhase phase : boqPhaseRepository.findByBoqIdOrderBySequenceAsc(target.getId())) {
+            if (phase.getPhaseName() != null) phasesByName.putIfAbsent(phase.getPhaseName().trim().toLowerCase(), phase);
+        }
+
+        int updated = 0, added = 0, removed = 0;
+        for (BoqItem src : source.getItems()) {
+            Deque<BoqItem> candidates = unmatched.get(lineKey(src));
+            BoqItem line = candidates != null ? candidates.pollFirst() : null;
+            BoqItem copy = cloneItems(List.of(src)).get(0);
+            if (line == null) {
+                copy.setBoq(target);
+                copy.setItemCode(nextItemCode());
+                copy.setMeasurementItemId(null);
+                copy.setMeasurementRoomId(null);
+                copy.setFloorOrder(src.getFloorOrder());
+                copy.setRoomOrder(src.getRoomOrder());
+                copy.setItemOrder(src.getItemOrder());
+                if (src.getPhase() != null && src.getPhase().getPhaseName() != null) {
+                    copy.setPhase(phasesByName.get(src.getPhase().getPhaseName().trim().toLowerCase()));
+                }
+                BoqItem saved = boqItemRepository.saveAndFlush(copy);
+                saved.setOriginItemId(saved.getId());
+                target.getItems().add(saved);
+                logChange(target, saved, null, "ADD_ITEM", "item", null, saved.getItemName(), "Applied lead quote", currentUser);
+                added++;
+                continue;
+            }
+            if (Boolean.FALSE.equals(src.getIsActive()) && !Boolean.FALSE.equals(line.getIsActive())) ensureNotStartedOnSite(line);
+            logChange(target, line, null, "DIMENSIONS_CHANGED", "quantity", line.getQuantity(), src.getQuantity(), "Applied lead quote", currentUser);
+            line.setCategory(src.getCategory());
+            line.setDescription(src.getDescription());
+            line.setLength(src.getLength());
+            line.setWidth(src.getWidth());
+            line.setHeight(src.getHeight());
+            line.setArea(src.getArea());
+            line.setPerimeter(src.getPerimeter());
+            line.setQuantity(src.getQuantity());
+            line.setUnit(src.getUnit());
+            line.setRemarks(src.getRemarks());
+            line.setProductId(src.getProductId());
+            line.setImageUrl(src.getImageUrl());
+            line.setColor(src.getColor());
+            line.setLocation(src.getLocation());
+            line.setDiscountType(src.getDiscountType());
+            line.setDiscountValue(src.getDiscountValue());
+            line.setIsActive(src.getIsActive());
+            line.setFloorOrder(src.getFloorOrder());
+            line.setRoomOrder(src.getRoomOrder());
+            line.setItemOrder(src.getItemOrder());
+            line.getMaterials().clear();
+            copy.getMaterials().forEach(m -> { m.setItem(line); line.getMaterials().add(m); });
+            line.getLabours().clear();
+            copy.getLabours().forEach(l -> { l.setItem(line); line.getLabours().add(l); });
+            updated++;
+        }
+        // Project lines the new quote doesn't have.
+        for (Deque<BoqItem> left : unmatched.values()) {
+            for (BoqItem line : left) {
+                ensureNotStartedOnSite(line);
+                if (workPackageItemRepository.existsByBoqItem_Id(line.getId())) {
+                    line.setIsActive(false);
+                } else {
+                    changeLogRepository.detachItem(line.getId());
+                    target.getItems().remove(line);
+                }
+                logChange(target, null, null, "REMOVE_ITEM", "item", line.getItemName(), null, "Applied lead quote", currentUser);
+                removed++;
+            }
+        }
+
+        target.setDiscountType(source.getDiscountType());
+        target.setDiscount(source.getDiscount());
+        target.setTaxPercent(source.getTaxPercent());
+        target.setMaterialTotalOverride(source.getMaterialTotalOverride());
+        target.setLabourTotalOverride(source.getLabourTotalOverride());
+        target.setLabourCharge(source.getLabourCharge());
+        target.setLabourNote(source.getLabourNote());
+        target.setShippingCharge(source.getShippingCharge());
+        target.setShippingNote(source.getShippingNote());
+        recalculateTotals(target);
+        Boq saved = boqRepository.saveAndFlush(target);
+        logActivity(saved, "Lead Quote Applied", "Lines copied from " + source.getBoqNumber() + ": "
+                + updated + " updated, " + added + " added, " + removed + " removed", currentUser);
+        return saved;
+    }
+
+    private static String lineKey(BoqItem item) {
+        return norm(item.getFloorName()) + "|" + norm(item.getRoomName()) + "|" + norm(item.getItemName());
+    }
+
+    private static String norm(String s) {
+        return s == null ? "" : s.trim().replaceAll("\\s+", " ").toLowerCase();
+    }
+
     /** The change order's quotation: built from the sheet like a live quote, without lead-workflow side effects. */
     @Transactional
     public Quotation createChangeQuotation(Long boqId, User currentUser) {
