@@ -147,7 +147,7 @@ export function QuotationPrintView({ quotationId, onClose, onSaved, readOnly }: 
   let rowNo = 0;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-auto bg-neutral-200">
+    <div className="qp-overlay fixed inset-0 z-50 overflow-auto bg-neutral-200">
       <style>{QP_CSS}</style>
 
       {/* Screen-only toolbar */}
@@ -471,9 +471,10 @@ function discLabel(it: QuotationItem) {
 // Scoped, exact colours (the app's Tailwind palette is remapped by the theme, so the sheet doesn't use it).
 const QP_CSS = `
 .qp-scroll { padding: 24px 16px; }
+/* A4 sheet: laid out at 920px, zoomed to 794px = 210mm (96dpi); 1300px tall = 297mm. */
 .qp { --ink:#0f2a33; --gold:#c99a3e; --line:#e3e8ee; --muted:#5d6b78; --soft:#f6f8fb;
-  max-width: 920px; margin: 0 auto; background:#fff; color: var(--ink); font-family: Inter, system-ui, sans-serif;
-  box-shadow: 0 10px 40px rgba(15,42,51,.15); border-radius: 14px; overflow: hidden;
+  width: 920px; min-height: 1300px; zoom: 0.863; display:flex; flex-direction:column; margin: 0 auto; background:#fff; color: var(--ink); font-family: Inter, system-ui, sans-serif;
+  box-shadow: 0 10px 40px rgba(15,42,51,.15); border-radius: 4px; overflow: hidden;
   -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 .qp * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 .qp-banner { display:flex; height:118px; background:#f3f1ec; position:relative; }
@@ -488,7 +489,7 @@ const QP_CSS = `
   background: linear-gradient(90deg,rgba(247,246,242,0),#f7f6f2 30%); }
 .qp-banner-tag p { font-family:"Playfair Display",Georgia,serif; font-size:21px; line-height:1.15; color:#123f4d; margin:0; }
 .qp-banner-tag span { display:block; width:56px; height:2px; background:var(--gold); margin-top:10px; }
-.qp-body { padding: 22px 22px 18px; }
+.qp-body { padding: 26px 30px 26px; flex:1; display:flex; flex-direction:column; }
 .qp-head { display:flex; gap:12px; align-items:stretch; margin-bottom: 18px; }
 .qp-title { flex: 0 0 auto; padding-right: 4px; }
 .qp-title h1 { font-family:"Playfair Display",Georgia,serif; font-weight:700; font-size:38px; line-height:1; color:#0b1f3a; margin:6px 0 10px; letter-spacing:.3px; }
@@ -551,7 +552,7 @@ const QP_CSS = `
 .qp-final-ico { width:26px; height:26px; border-radius:50%; background:#fff; color:#0b2a35; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14px; }
 .qp-final-label { flex:1; font-family:"Playfair Display",Georgia,serif; font-size:20px; font-weight:600; }
 .qp-final-val { font-family:"Playfair Display",Georgia,serif; font-size:24px; font-weight:700; white-space:nowrap; }
-.qp-foot { display:flex; align-items:flex-end; gap:20px; margin-top:22px; break-inside:avoid; page-break-inside:avoid; }
+.qp-foot { display:flex; align-items:flex-end; gap:20px; margin-top:auto; padding-top:26px; break-inside:avoid; page-break-inside:avoid; }
 .qp-thanks { flex: 1.3; }
 .qp-script { font-family:"Playfair Display",Georgia,serif; font-style:italic; font-size:30px; color:var(--gold); margin:0; transform: rotate(-4deg); transform-origin:left; }
 .qp-thanks p:last-child { font-size:13px; color:#3d4a56; margin:4px 0 0 18px; }
@@ -563,7 +564,8 @@ const QP_CSS = `
 .qp-contact svg { width:14px; height:14px; color:var(--ink); flex-shrink:0; }
 .qp-qr { display:flex; align-items:flex-end; gap:6px; font-size:11px; color:var(--muted); line-height:1.25; }
 .qp-input { border:1px solid #cbd5e1; background:#fffbeb; border-radius:4px; padding:1px 4px; font-size:12px; }
-@media (max-width: 760px) {
+@media screen and (max-width: 820px) {
+  .qp { width:auto; min-height:0; zoom:1; }
   .qp-head, .qp-bottom, .qp-foot { flex-wrap:wrap; }
   .qp-meta { flex-wrap:wrap; flex-basis:100%; } .qp-summary { flex-basis:100%; }
   .qp-banner-tag { display:none; } .qp-banner-brand { flex-basis:70%; } .qp-title h1 { font-size:34px; }
@@ -572,9 +574,12 @@ const QP_CSS = `
 @media print {
   body * { visibility: hidden !important; }
   #quotation-print, #quotation-print * { visibility: visible !important; }
-  #quotation-print { position: absolute; left: 0; top: 0; width: 100%; max-width:none; box-shadow: none !important; margin: 0 !important; border-radius:0; }
+  .qp-overlay { position: static !important; overflow: visible !important; }
+  #quotation-print { position: absolute; left: 0; top: 0; width: 920px; min-height: 1295px; zoom: 0.863;
+    box-shadow: none !important; margin: 0 !important; border-radius:0; }
   .qp-scroll { padding:0; }
   .no-print { display: none !important; }
-  @page { size: A4; margin: 8mm; }
+  @page { size: A4; margin: 10mm 0; }
+  @page :first { margin: 0; }
 }
 `;
