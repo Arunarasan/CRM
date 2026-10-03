@@ -23,8 +23,16 @@ interface ProjectReview {
  * page). Shows the shareable link with a copy button, an on/off toggle, a regenerate (revoke) action,
  * and moderation of the reviews customers leave from that page.
  */
-export default function TrackingLinkDialog({ projectId }: { projectId: number }) {
-  const [open, setOpen] = useState(false);
+export default function TrackingLinkDialog({ projectId, open: openProp, onOpenChange }: {
+  projectId: number;
+  /** Controlled mode (e.g. opened from a menu item) — no trigger button is rendered. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}) {
+  const [openState, setOpenState] = useState(false);
+  const controlled = openProp !== undefined;
+  const open = controlled ? !!openProp : openState;
+  const setOpen = (v: boolean) => { if (controlled) onOpenChange?.(v); else setOpenState(v); };
   const [token, setToken] = useState<string | null>(null);
   const [enabled, setEnabled] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -85,11 +93,13 @@ export default function TrackingLinkDialog({ projectId }: { projectId: number })
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="outline" className="rounded-xl border-slate-200 text-slate-600">
-          <Link2 className="w-4 h-4 mr-2" /> Tracking Link
-        </Button>
-      </DialogTrigger>
+      {!controlled && (
+        <DialogTrigger asChild>
+          <Button variant="outline" className="rounded-xl border-slate-200 text-slate-600">
+            <Link2 className="w-4 h-4 mr-2" /> Tracking Link
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2"><Link2 className="w-5 h-5 text-emerald-600" /> Public Tracking Link</DialogTitle>

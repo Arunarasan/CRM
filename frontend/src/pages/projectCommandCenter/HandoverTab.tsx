@@ -23,7 +23,7 @@ const STATUS_TONE: Record<string, string> = {
  * at 100% the "Handover to Customer" button marks the project completed and stamps the handover date.
  * Installation is auto-seeded and required.
  */
-export default function HandoverTab({ project, onChanged }: { project: any; onChanged?: () => void }) {
+export default function HandoverTab({ project, onChanged, onProgress }: { project: any; onChanged?: () => void; onProgress?: () => void }) {
   const canWrite = true; // the project team drives the handover flow
   const projectId = project?.id as number;
 
@@ -58,7 +58,7 @@ export default function HandoverTab({ project, onChanged }: { project: any; onCh
   const commitProgress = (taskId: number, value: number) => {
     setBoard((b) => b && { ...b, tasks: b.tasks.map((t) => t.id === taskId ? { ...t, progress: value } : t) });
     api.put(`/tasks/${taskId}/progress`, { progress: value })
-      .then(() => load())
+      .then(() => { load(); onProgress?.(); })
       .catch(() => toast.error("Could not save progress"));
   };
 
@@ -81,7 +81,7 @@ export default function HandoverTab({ project, onChanged }: { project: any; onCh
   const removeTask = (t: HandoverTask) => {
     if (t.required) return;
     if (!confirm(`Delete task "${t.taskName}"?`)) return;
-    api.delete(`/tasks/${t.id}`).then(load).catch(() => toast.error("Could not delete task"));
+    api.delete(`/tasks/${t.id}`).then(() => { load(); onProgress?.(); }).catch(() => toast.error("Could not delete task"));
   };
 
   const grouped = useMemo(() => {
@@ -142,7 +142,7 @@ export default function HandoverTab({ project, onChanged }: { project: any; onCh
       </section>
 
       {/* Add stage task */}
-      {canWrite && !handedOver && <AddTask projectId={projectId} stages={board.stages} onAdded={load} />}
+      {canWrite && !handedOver && <AddTask projectId={projectId} stages={board.stages} onAdded={() => { load(); onProgress?.(); }} />}
 
       {/* Tasks grouped by stage */}
       <div className="space-y-3">

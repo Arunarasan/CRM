@@ -24,10 +24,10 @@ import {
   AlertTriangle, CheckCircle2, FileImage,
   TrendingUp, Plus, CheckSquare, Layers, Package, Sparkles,
   ChevronDown, ChevronRight, ShoppingCart, ClipboardCheck,
-  Phone, Mail, Play, History, RotateCcw, Lock,
+  Phone, Play, History, RotateCcw, Lock,
   MoreHorizontal, MapPin, MessageCircle, Wallet, Users,
   Pencil, Check, X, Trash2,
-  Copy, Calendar, Clock, Flag, Building2, FileText, IndianRupee,
+  Calendar, Clock, Flag, Building2, FileText, IndianRupee,
   BarChart3, StickyNote, FileBarChart, Home, Settings, ClipboardList,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -50,6 +50,7 @@ import DocumentsTab from "@/pages/projectCommandCenter/tabs/DocumentsTab";
 import LabourTab from "@/pages/projectCommandCenter/tabs/LabourTab";
 import ServiceWarrantyTab from "@/pages/projectCommandCenter/tabs/ServiceWarrantyTab";
 import TrackingLinkDialog from "@/components/projects/TrackingLinkDialog";
+import { ProjectInfoRow, ProjectJourneyBar, ProjectHeaderSummary } from "@/pages/projectCommandCenter/ProjectJourneyHeader";
 import ResourceSelect, { ResourceSelection } from "@/components/workforce/ResourceSelect";
 import { ResourceType } from "@/types/workforce";
 import { useGoBack } from "@/hooks/useGoBack";
@@ -194,6 +195,7 @@ export default function ProjectCommandCenter() {
   const [masterBoq, setMasterBoq] = useState<any>(null);
   const [profitability, setProfitability] = useState<ProjectProfitability | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false); // "Update Work" batch sheet
+  const [trackingOpen, setTrackingOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false); // collapses the big header into a compact sticky bar
 
   // "Build from approved quotation" picker (replaces the old blind "Generate from BOQ" button)
@@ -716,6 +718,7 @@ export default function ProjectCommandCenter() {
   if (!data || !data.project) return <div className="p-8 text-red-500">Project not found</div>;
 
   const { project, stages, dailyLogs, qualityChecks, issues, risks, documents } = data;
+  const summary: ProjectHeaderSummary = data.summary || {};
   // Estimate budget is taken from the approved BOQ's grand total (falls back to the linked BOQ
   // revision, then the manual budget/estimate). Amount spent comes from live project expenses.
   const approvedBoqId: number | null = masterBoq?.id ?? data?.boq?.id ?? null;
@@ -826,29 +829,9 @@ export default function ProjectCommandCenter() {
               <Button variant="ghost" size="icon" onClick={goBack} title="Back" className="mt-1 h-8 w-8 rounded-full bg-white/70 text-slate-500 hover:text-slate-700 shrink-0 shadow-sm"><ArrowLeft className="h-4 w-4" /></Button>
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h1 className="text-lg sm:text-xl lg:text-2xl font-bold tracking-tight text-slate-800 truncate">{project.customer?.name || project.projectName}</h1>
-                  {project.customer?.city && (
-                    <span className="inline-flex items-center gap-1 text-sm font-medium text-slate-400"><MapPin className="w-3.5 h-3.5 text-emerald-500" />{project.customer.city}</span>
-                  )}
-                </div>
-                <div className="flex items-center gap-2 mt-1 flex-wrap text-xs">
-                  <span className="font-mono font-semibold text-slate-500 bg-slate-100 rounded px-2 py-0.5">{project.projectCode}</span>
-                  <button type="button" title="Copy project code"
-                    onClick={() => { navigator.clipboard?.writeText(project.projectCode || '').then(() => toast.success('Project code copied')).catch(() => {}); }}
-                    className="text-slate-300 hover:text-emerald-600"><Copy className="w-3.5 h-3.5" /></button>
-                  {project.projectName && <span className="text-slate-400 truncate">{project.projectName}</span>}
-                </div>
-                <div className="text-slate-400 flex items-center gap-3 sm:gap-4 text-xs sm:text-sm mt-1.5 flex-wrap">
-                  <span className="flex items-center gap-1"><User className="w-4 h-4"/> Customer ID: {project.customer?.id ?? '—'}</span>
-                  <span className="flex items-center gap-1"><Mail className="w-4 h-4 text-emerald-400"/> {project.customer?.email || 'N/A'}</span>
-                  {project.customer?.phone && (
-                    <a href={`tel:${project.customer.phone}`} className="flex items-center gap-1 hover:text-emerald-600"><Phone className="w-4 h-4 text-emerald-400"/> {project.customer.phone}</a>
-                  )}
-                </div>
-                <div className="flex items-center gap-2 mt-2 flex-wrap">
+                  <h1 className="text-lg sm:text-xl lg:text-2xl font-bold tracking-tight text-slate-800 truncate">{summary.customerName || project.customer?.name || project.projectName}</h1>
                   <span className={`px-2.5 py-0.5 text-[11px] rounded-full font-semibold uppercase tracking-wide ${
-                    project.status === 'RUNNING' ? 'bg-emerald-100 text-emerald-700' :
-                    project.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-700' :
+                    project.status === 'RUNNING' || project.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-700' :
                     'bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100'
                   }`}>
                     {project.status.replace(/_/g, ' ')}
@@ -861,12 +844,12 @@ export default function ProjectCommandCenter() {
                     </span>
                   )}
                 </div>
+                <ProjectInfoRow summary={summary} />
               </div>
             </div>
 
             <div className="flex flex-col items-end gap-2">
               <div className="flex items-center gap-2 shrink-0">
-                <TrackingLinkDialog projectId={Number(projectId)} />
                 <Button variant="outline" className="rounded-xl border-slate-200 text-slate-600 bg-white" onClick={() => { setActiveTab('overview'); startEdit('overview'); }}>
                   <Pencil className="w-4 h-4 mr-2" /> Edit Project
                 </Button>
@@ -887,6 +870,7 @@ export default function ProjectCommandCenter() {
                       </>
                     )}
                     <DropdownMenuItem asChild><Link to={`/tasks?projectId=${projectId}`}>View Tasks</Link></DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setTrackingOpen(true)}>Customer Tracking Link</DropdownMenuItem>
                     {project.customer?.id && (
                       <DropdownMenuItem asChild><Link to={`/customers/${project.customer.id}`}>View Customer</Link></DropdownMenuItem>
                     )}
@@ -913,35 +897,13 @@ export default function ProjectCommandCenter() {
               </div>
             </div>
           </div>
-        </div>
-      </div>
 
-      {/* Quick Stats strip */}
-      {stats && (
-        <div className="bg-white px-4 sm:px-6 lg:px-8 py-2.5 shrink-0 z-10">
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
-            {[
-              { label: "Today's Tasks", value: stats.tasks?.inProgress || 0, sub: 'Nothing for today', icon: CheckCircle2, bg: 'bg-emerald-50/70', ring: 'border-emerald-100', chip: 'bg-emerald-100 text-emerald-600', text: 'text-slate-800', tab: 'fieldProgress' },
-              { label: 'Delayed Tasks', value: stats.tasks?.delayed || 0, sub: 'Need attention', icon: Clock, bg: 'bg-rose-50/70', ring: 'border-rose-100', chip: 'bg-rose-100 text-rose-600', text: 'text-slate-800', tab: 'fieldProgress' },
-              { label: 'Open Issues', value: stats.issues?.open || 0, sub: 'All clear', icon: AlertTriangle, bg: 'bg-orange-50/70', ring: 'border-orange-100', chip: 'bg-orange-100 text-orange-600', text: 'text-slate-800', tab: 'quality' },
-              { label: 'Pending Approvals', value: stats.approvals?.pending || 0, sub: 'Awaiting approval', icon: FileText, bg: 'bg-violet-50/70', ring: 'border-violet-100', chip: 'bg-violet-100 text-violet-600', text: 'text-slate-800', tab: 'approvals' },
-              { label: 'Employees Working', value: stats.todayManpower || 0, sub: 'Not assigned', icon: Users, bg: 'bg-emerald-50/70', ring: 'border-emerald-100', chip: 'bg-emerald-100 text-emerald-600', text: 'text-slate-800', tab: 'labour' },
-              { label: 'Site Visits', value: stats.siteVisitsToday || 0, sub: 'No visits yet', icon: MapPin, bg: 'bg-sky-50/70', ring: 'border-sky-100', chip: 'bg-sky-100 text-sky-600', text: 'text-slate-800', tab: 'execution' },
-            ].map((s) => (
-              <button key={s.label} type="button" onClick={() => setActiveTab(s.tab)}
-                className={`${s.bg} ${s.ring} border rounded-xl px-3 py-2 flex flex-col text-left transition hover:shadow-sm group`}>
-                <div className="flex items-center justify-between">
-                  <span className={`flex h-7 w-7 items-center justify-center rounded-lg ${s.chip}`}><s.icon className="w-3.5 h-3.5" /></span>
-                  <ChevronRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-400" />
-                </div>
-                <span className="text-[11px] font-semibold text-slate-500 mt-1.5 truncate">{s.label}</span>
-                <span className={`text-xl font-black ${s.text} leading-tight`}>{s.value}</span>
-                <span className="text-[10px] font-medium text-slate-400 truncate">{s.sub}</span>
-              </button>
-            ))}
+          <div className="relative">
+            <ProjectJourneyBar stages={summary.journey || []} onOpen={() => setActiveTab('handover')} />
           </div>
         </div>
-      )}
+      </div>
+      <TrackingLinkDialog projectId={Number(projectId)} open={trackingOpen} onOpenChange={setTrackingOpen} />
 
       <div className="flex flex-col">
         <div className="px-4 sm:px-6 lg:px-8 pt-3 pb-4">
@@ -2113,7 +2075,7 @@ export default function ProjectCommandCenter() {
             </TabsContent>
 
             <TabsContent value="handover" className="mt-0 h-full outline-none">
-              <HandoverTab project={project} onChanged={fetchProjectData} />
+              <HandoverTab project={project} onChanged={fetchProjectData} onProgress={fetchCore} />
             </TabsContent>
 
             <TabsContent value="media" className="mt-0 h-full outline-none">

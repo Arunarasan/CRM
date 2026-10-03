@@ -273,6 +273,7 @@ public class ProjectService {
         return projectRepository.findById(id).orElseThrow(() -> new RuntimeException("Project not found"));
     }
     
+    @Transactional(readOnly = true)
     public Map<String, Object> getProjectDashboard(Long id) {
         Project project = getProjectById(id);
         
@@ -286,18 +287,149 @@ public class ProjectService {
         List<ProjectDocument> documents = documentRepository.findByProjectId(id);
         List<ProjectPayment> payments = paymentRepository.findByProjectId(id);
         
-        return Map.of(
-            "project", project,
-            "stages", stages,
-            "dailyLogs", dailyLogs,
-            "qualityChecks", qualityChecks,
-            "approvals", approvals,
-            "activityLogs", activityLogs,
-            "issues", issues,
-            "risks", risks,
-            "documents", documents,
-            "payments", payments
-        );
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("project", project);
+        result.put("stages", stages);
+        result.put("dailyLogs", dailyLogs);
+        result.put("qualityChecks", qualityChecks);
+        result.put("approvals", approvals);
+        result.put("activityLogs", activityLogs);
+        result.put("issues", issues);
+        result.put("risks", risks);
+        result.put("documents", documents);
+        result.put("payments", payments);
+        result.put("summary", buildHeaderSummary(project));
+        return result;
+    }
+
+    /** Stage-2 handover stages; every other stage (Stitching, Shipping, Manufacturing, custom…) is stage 1. */
+    private static boolean isInstallStage(String stage) {
+        return stage != null && (stage.equalsIgnoreCase("Installation") || stage.equalsIgnoreCase("Fitting"));
+    }
+
+    private static String firstNonBlank(String... values) {
+        for (String v : values) if (v != null && !v.isBlank()) return v.trim();
+        return null;
+    }
+
+    /**
+     * The project header's at-a-glance block: who the customer is and how to reach them, who brought
+     * the lead in, what was sold, and where the job is in the 3-stage journey
+     * (1 Production → 2 Installation & Fitting → 3 Handover & Review).
+     */
+    private Map<String, Object> buildHeaderSummary(Project project) {
+        Map<String, Object> s = new LinkedHashMap<>();
+        Customer c = project.getCustomer();
+        Lead lead = project.getLead();
+
+        String phone = firstNonBlank(c != null ? c.getPhone() : null, lead != null ? lead.getMobileNumber() : null);
+        String whatsapp = firstNonBlank(c != null ? c.getWhatsappNumber() : null, lead != null ? lead.getWhatsappNumber() : null, phone);
+        String city = firstNonBlank(c != null ? c.getCity() : null, lead != null ? lead.getCity() : null);
+        s.put("customerName", firstNonBlank(c != null ? c.getName() : null, lead != null ? lead.getName() : null, project.getProjectName()));
+        s.put("phone", phone);
+        s.put("whatsapp", whatsapp);
+        s.put("whatsappSameAsPhone", phone != null && whatsapp != null
+                && whatsapp.replaceAll("\\D", "").endsWith(phone.replaceAll("\\D", "")));
+        s.put("city", city);
+        String address = firstNonBlank(project.getPropertyAddress(), c != null ? c.getSiteAddress() : null,
+                c != null ? c.getBillingAddress() : null);
+        s.put("address", address);
+
+        // Navigation: a saved map link wins, then pinned coordinates, then an address search.
+        String mapUrl = null;
+        if (c != null && c.getGoogleMapLocation() != null && c.getGoogleMapLocation().startsWith("http")) {
+            mapUrl = c.getGoogleMapLocation();
+        } else if (c != null && c.getLatitude() != null && c.getLongitude() != null) {
+            mapUrl = "https://www.google.com/maps/dir/?api=1&destination=" + c.getLatitude() + "," + c.getLongitude();
+        } else {
+            String q = address != null ? address + (city != null ? ", " + city : "") : city;
+            if (q != null) mapUrl = "https://www.google.com/maps/dir/?api=1&destination="
+                    + java.net.URLEncoder.encode(q, java.nio.charset.StandardCharsets.UTF_8);
+        }
+        s.put("mapUrl", mapUrl);
+
+        // Employee who brought the lead in: its creator (when a real user), else owner / sales exec.
+        String leadBy = null;
+        if (lead != null) {
+            String creator = lead.getCreatedBy();
+            if (creator != null && !creator.isBlank() && !"system".equalsIgnoreCase(creator)) {
+                leadBy = userRepository.findByEmail(creator).map(User::getName).orElse(null);
+            }
+            if (leadBy == null && lead.getLeadOwner() != null) leadBy = lead.getLeadOwner().getName();
+            if (leadBy == null && lead.getAssignedSalesExecutive() != null) leadBy = lead.getAssignedSalesExecutive().getName();
+        }
+        s.put("leadBy", leadBy);
+
+        // What was sold: categories + products from the quotation lines.
+        java.util.Set<String> categories = new java.util.LinkedHashSet<>();
+        java.util.Set<String> products = new java.util.LinkedHashSet<>();
+        if (project.getQuotation() != null && project.getQuotation().getItems() != null) {
+            for (QuotationItem qi : project.getQuotation().getItems()) {
+                if (Boolean.TRUE.equals(qi.getIsDeleted())) continue;
+                if (qi.getCategory() != null && !qi.getCategory().isBlank()) categories.add(qi.getCategory().trim());
+                if (qi.getItemName() != null && !qi.getItemName().isBlank()) products.add(qi.getItemName().trim());
+            }
+        }
+        if (categories.isEmpty()) {
+            String fallback = firstNonBlank(project.getProjectCategory(), lead != null ? lead.getRequirementCategory() : null);
+            if (fallback != null) categories.add(fallback);
+        }
+        s.put("categories", new java.util.ArrayList<>(categories));
+        s.put("products", new java.util.ArrayList<>(products));
+
+        // 3-stage journey, rolled up from the handover stage tasks.
+        List<Task> stageTasks = taskRepository.findByProjectId(project.getId()).stream()
+                .filter(t -> t.getStage() != null && !Boolean.TRUE.equals(t.getIsDeleted()))
+                .toList();
+        List<Map<String, Object>> journey = new java.util.ArrayList<>();
+        journey.add(stageSummary(1, "Production", stageTasks.stream().filter(t -> !isInstallStage(t.getStage())).toList()));
+        journey.add(stageSummary(2, "Installation & Fitting", stageTasks.stream().filter(t -> isInstallStage(t.getStage())).toList()));
+
+        List<ProjectReview> reviews = projectReviewRepository.findByProjectIdAndIsDeletedFalseOrderByCreatedAtDesc(project.getId());
+        boolean handedOver = project.getHandoverDate() != null || "COMPLETED".equalsIgnoreCase(project.getStatus());
+        Map<String, Object> s3 = new LinkedHashMap<>();
+        s3.put("number", 3);
+        s3.put("name", "Handover & Review");
+        List<Map<String, Object>> s3Works = new java.util.ArrayList<>();
+        s3Works.add(Map.of("name", "Handed over to customer", "progress", handedOver ? 100 : 0));
+        s3Works.add(Map.of("name", "Customer review", "progress", reviews.isEmpty() ? 0 : 100));
+        s3.put("works", s3Works);
+        int s3Pct = (handedOver ? 50 : 0) + (reviews.isEmpty() ? 0 : 50);
+        s3.put("progress", s3Pct);
+        s3.put("status", s3Pct >= 100 ? "COMPLETED" : s3Pct > 0 ? "IN_PROGRESS" : "PENDING");
+        s3.put("handoverDate", project.getHandoverDate());
+        s3.put("reviewCount", reviews.size());
+        java.util.OptionalDouble avg = reviews.stream().filter(r -> r.getRating() != null).mapToInt(ProjectReview::getRating).average();
+        s3.put("avgRating", avg.isPresent() ? Math.round(avg.getAsDouble() * 10) / 10.0 : null);
+        journey.add(s3);
+        s.put("journey", journey);
+        return s;
+    }
+
+    private Map<String, Object> stageSummary(int number, String name, List<Task> tasks) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("number", number);
+        m.put("name", name);
+        List<Map<String, Object>> works = new java.util.ArrayList<>();
+        int sum = 0;
+        List<Task> sorted = tasks.stream()
+                .sorted(java.util.Comparator.comparingInt((Task t) -> stageOrder(t.getStage()))
+                        .thenComparing(t -> t.getId() == null ? 0L : t.getId()))
+                .toList();
+        for (Task t : sorted) {
+            int p = t.getProgress() == null ? 0 : t.getProgress();
+            sum += p;
+            Map<String, Object> w = new LinkedHashMap<>();
+            w.put("name", t.getTaskName());
+            w.put("stage", t.getStage());
+            w.put("progress", p);
+            works.add(w);
+        }
+        int pct = tasks.isEmpty() ? 0 : Math.round((float) sum / tasks.size());
+        m.put("works", works);
+        m.put("progress", pct);
+        m.put("status", !tasks.isEmpty() && pct >= 100 ? "COMPLETED" : pct > 0 ? "IN_PROGRESS" : "PENDING");
+        return m;
     }
 
     /**
@@ -510,7 +642,7 @@ public class ProjectService {
 
     /** Recommended (not fixed) stages; Installation is auto-seeded and required. */
     private static final List<String> HANDOVER_STAGES =
-            List.of("Material", "Stitching", "Making", "Works", "Installation");
+            List.of("Stitching", "Shipping", "Manufacturing", "Installation", "Fitting");
 
     private int stageOrder(String stage) {
         int i = HANDOVER_STAGES.indexOf(stage);
