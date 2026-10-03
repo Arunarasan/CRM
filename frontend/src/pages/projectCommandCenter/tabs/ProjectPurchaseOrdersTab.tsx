@@ -146,8 +146,8 @@ function Section({ title, action, children }: { title: string; action?: React.Re
 
 function OrderDetailDialog({ order: o, onClose, onChanged }: { order: ProjectPurchaseOrder | null; onClose: () => void; onChanged: () => void }) {
   const [busy, setBusy] = useState(false);
-  const blankShip = () => ({ open: false, shippingId: "", transporterName: "", deliveryPlace: "", dispatchDate: today() });
-  const [shipForm, setShipForm] = useState<{ open: boolean; shippingId: string; transporterName: string; deliveryPlace: string; dispatchDate: string }>(blankShip);
+  const blankShip = () => ({ open: false, shippingId: "", transporterName: "", deliveryPlace: "", otherPlace: false, dispatchDate: today() });
+  const [shipForm, setShipForm] = useState<{ open: boolean; shippingId: string; transporterName: string; deliveryPlace: string; otherPlace: boolean; dispatchDate: string }>(blankShip);
   const [payForm, setPayForm] = useState<{ open: boolean; amount: string; paymentMethod: string; paymentDate: string; referenceNumber: string; notes: string }>(
     { open: false, amount: "", paymentMethod: "BANK_TRANSFER", paymentDate: today(), referenceNumber: "", notes: "" });
 
@@ -159,6 +159,14 @@ function OrderDetailDialog({ order: o, onClose, onChanged }: { order: ProjectPur
 
   if (!o) return null;
   const canShip = !["CANCELLED", "REJECTED", "COMPLETED"].includes(o.status);
+  // The PO's delivery places; each shipment goes to one of them (or somewhere else).
+  const addresses = o.deliveryAddresses?.length ? o.deliveryAddresses : o.deliveryAddress ? [o.deliveryAddress] : [];
+  const shipmentsTo = (a: string) => o.shipments.filter((sh) => sh.deliveryPlace === a).length;
+  const openShipForm = () => {
+    // Suggest the first address that has no shipment yet, so a split order fills naturally.
+    const next = addresses.find((a) => shipmentsTo(a) === 0) || addresses[0] || "";
+    setShipForm((f) => ({ ...f, open: true, deliveryPlace: next, otherPlace: addresses.length === 0 }));
+  };
 
   const run = async (fn: () => Promise<unknown>, ok: string, fail: string) => {
     setBusy(true);
@@ -209,7 +217,19 @@ function OrderDetailDialog({ order: o, onClose, onChanged }: { order: ProjectPur
             <div><div className="text-slate-400">Expected delivery</div><div className="font-semibold text-slate-800">{fmtDate(o.expectedDeliveryDate)}</div></div>
             <div><div className="text-slate-400">Receive into</div><div className="font-semibold text-slate-800">{o.warehouseName || "—"}</div></div>
             {o.paymentTerms && <div><div className="text-slate-400">Payment terms</div><div className="font-semibold text-slate-800">{o.paymentTerms}</div></div>}
-            {o.deliveryAddress && <div className="col-span-2"><div className="text-slate-400">Delivery address</div><div className="font-semibold text-slate-800">{o.deliveryAddress}</div></div>}
+            {addresses.length > 0 && (
+              <div className="col-span-2 @2xl:col-span-4">
+                <div className="text-slate-400">{addresses.length > 1 ? `Delivery addresses (${addresses.length})` : "Delivery address"}</div>
+                <div className="space-y-0.5">
+                  {addresses.map((a) => (
+                    <div key={a} className="flex items-start gap-1 font-semibold text-slate-800">
+                      <MapPin className="h-3 w-3 mt-0.5 shrink-0 text-slate-400" /><span>{a}</span>
+                      {shipmentsTo(a) > 0 && <span className="font-normal text-slate-400">· {shipmentsTo(a)} shipment{shipmentsTo(a) === 1 ? "" : "s"}</span>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="flex flex-wrap gap-2">
@@ -253,7 +273,7 @@ function OrderDetailDialog({ order: o, onClose, onChanged }: { order: ProjectPur
           </Section>
 
           <Section title={`Shipments (${o.shipments.length})`}
-            action={canShip && !shipForm.open && <Button size="sm" variant="outline" onClick={() => setShipForm((f) => ({ ...f, open: true, deliveryPlace: f.deliveryPlace || o.deliveryAddress || "" }))}><Plus className="w-3.5 h-3.5 mr-1" /> Add shipping ID</Button>}>
+            action={canShip && !shipForm.open && <Button size="sm" variant="outline" onClick={openShipForm}><Plus className="w-3.5 h-3.5 mr-1" /> Add shipping ID</Button>}>
             {o.shipments.length === 0 && !shipForm.open && <p className="text-xs text-slate-400">No shipping IDs yet. Add one when the supplier dispatches — an order can arrive in several shipments.</p>}
             <div className="space-y-1.5">
               {o.shipments.map((sh) => (
@@ -282,7 +302,21 @@ function OrderDetailDialog({ order: o, onClose, onChanged }: { order: ProjectPur
                 <div><Label className="text-xs">Shipping ID *</Label><Input value={shipForm.shippingId} onChange={(e) => setShipForm((f) => ({ ...f, shippingId: e.target.value }))} placeholder="AWB / LR / docket no." /></div>
                 <div><Label className="text-xs">Transporter</Label><Input value={shipForm.transporterName} onChange={(e) => setShipForm((f) => ({ ...f, transporterName: e.target.value }))} placeholder="Courier / lorry" /></div>
                 <div><Label className="text-xs">Dispatch date</Label><Input type="date" value={shipForm.dispatchDate} onChange={(e) => setShipForm((f) => ({ ...f, dispatchDate: e.target.value }))} /></div>
-                <div className="@lg:col-span-3"><Label className="text-xs">Delivery place</Label><Input value={shipForm.deliveryPlace} onChange={(e) => setShipForm((f) => ({ ...f, deliveryPlace: e.target.value }))} placeholder="Site address, our godown, or transport office to collect from" /></div>
+                <div className="@lg:col-span-3 space-y-1.5"><Label className="text-xs">Delivery place</Label>
+                  {addresses.length > 0 && (
+                    <select className={selectCls} value={shipForm.otherPlace ? "__other" : shipForm.deliveryPlace}
+                      onChange={(e) => setShipForm((f) => e.target.value === "__other"
+                        ? { ...f, otherPlace: true, deliveryPlace: "" }
+                        : { ...f, otherPlace: false, deliveryPlace: e.target.value })}>
+                      {addresses.map((a) => <option key={a} value={a}>{a}{shipmentsTo(a) ? ` (${shipmentsTo(a)} already)` : ""}</option>)}
+                      <option value="__other">Somewhere else…</option>
+                    </select>
+                  )}
+                  {shipForm.otherPlace && (
+                    <Input value={shipForm.deliveryPlace} onChange={(e) => setShipForm((f) => ({ ...f, deliveryPlace: e.target.value }))}
+                      placeholder="Site address, our godown, or transport office to collect from" />
+                  )}
+                </div>
                 <div className="@lg:col-span-3 flex justify-end gap-2">
                   <Button size="sm" variant="outline" onClick={() => setShipForm((f) => ({ ...f, open: false }))}>Cancel</Button>
                   <Button size="sm" disabled={busy} onClick={addShipment}>Save shipment</Button>

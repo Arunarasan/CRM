@@ -38,7 +38,8 @@ export default function PurchaseOrderBuilder() {
   const [projectId, setProjectId] = useState(fromProject);
   const [expectedDeliveryDate, setExpectedDeliveryDate] = useState("");
   const [paymentTerms, setPaymentTerms] = useState("");
-  const [deliveryAddress, setDeliveryAddress] = useState("");
+  // One order can ship to several places (site, godown, transport office) — one per shipment.
+  const [deliveryAddresses, setDeliveryAddresses] = useState<string[]>([""]);
   const [taxPercent, setTaxPercent] = useState("18");
   const [discountAmount, setDiscountAmount] = useState("0");
   const [transportationCost, setTransportationCost] = useState("0");
@@ -93,7 +94,7 @@ export default function PurchaseOrderBuilder() {
         warehouse: warehouseId ? { id: Number(warehouseId) } : null,
         project: projectId ? { id: Number(projectId) } : null,
         expectedDeliveryDate: expectedDeliveryDate || null,
-        deliveryAddress: deliveryAddress || null,
+        deliveryAddresses: deliveryAddresses.map((a) => a.trim()).filter(Boolean),
         paymentTerms: paymentTerms || null,
         taxPercent: Number(taxPercent) || 0,
         discountAmount: Number(discountAmount) || 0,
@@ -144,9 +145,26 @@ export default function PurchaseOrderBuilder() {
             <Field label="Payment terms">
               <Input placeholder="e.g. 30 days credit" value={paymentTerms} onChange={(e) => setPaymentTerms(e.target.value)} />
             </Field>
-            <Field label="Delivery address">
-              <Input value={deliveryAddress} onChange={(e) => setDeliveryAddress(e.target.value)} />
-            </Field>
+            <div className="text-sm md:col-span-2">
+              <span className="font-semibold text-slate-700">Delivery addresses</span>
+              <span className="ml-1.5 text-xs text-slate-400">— add one per place the shipments will go</span>
+              <div className="mt-1 space-y-2">
+                {deliveryAddresses.map((a, i) => (
+                  <div key={i} className="flex gap-2">
+                    <Input value={a} placeholder={i === 0 ? "e.g. customer site address" : "e.g. our godown / transport office"}
+                      onChange={(e) => setDeliveryAddresses((list) => list.map((x, j) => (j === i ? e.target.value : x)))} />
+                    {deliveryAddresses.length > 1 && (
+                      <Button type="button" variant="outline" size="icon" aria-label="Remove address"
+                        onClick={() => setDeliveryAddresses((list) => list.filter((_, j) => j !== i))}><Trash2 className="h-4 w-4" /></Button>
+                    )}
+                  </div>
+                ))}
+                <button type="button" onClick={() => setDeliveryAddresses((list) => [...list, ""])}
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 hover:underline">
+                  <Plus className="h-3.5 w-3.5" /> Add another address
+                </button>
+              </div>
+            </div>
           </div>
         </section>
 

@@ -290,7 +290,7 @@ export default function PurchaseOrderProfile() {
         <Meta label="Payment Terms" value={po.paymentTerms || "—"} />
         <Meta label="Sent" value={po.sentAt ? fmtDate(po.sentAt) : "—"} />
         <Meta label="Confirmed" value={po.confirmedAt ? fmtDate(po.confirmedAt) : "—"} />
-        <Meta label="Delivery Address" value={po.deliveryAddress || "—"} />
+        <Meta label={(po.deliveryAddresses?.length ?? 0) > 1 ? "Delivery Addresses" : "Delivery Address"} value={po.deliveryAddresses?.length ? po.deliveryAddresses.join(" · ") : po.deliveryAddress || "—"} />
       </div>
 
       {/* Items */}

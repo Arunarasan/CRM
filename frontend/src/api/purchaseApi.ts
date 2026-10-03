@@ -23,7 +23,7 @@ export interface OrderLine {
 export interface ProjectPurchaseOrder {
   id: number; poNumber: string; status: string; date: string; expectedDeliveryDate?: string | null;
   supplierId?: number; supplierName?: string; warehouseName?: string | null;
-  paymentTerms?: string | null; deliveryAddress?: string | null; notes?: string | null;
+  paymentTerms?: string | null; deliveryAddress?: string | null; deliveryAddresses?: string[]; notes?: string | null;
   subtotal?: number; taxPercent?: number; taxAmount?: number; discountAmount?: number; transportationCost?: number;
   totalAmount: number; paid: number; balance: number; qtyOrdered: number; qtyReceived: number;
   items: OrderLine[]; shipments: PoShipment[];

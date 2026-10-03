@@ -123,6 +123,7 @@ export interface PurchaseOrder {
   task?: { id: number; taskName?: string } | null;
   purchaseRequest?: { id: number; requestNumber?: string } | null;
   deliveryAddress?: string;
+  deliveryAddresses?: string[];
   paymentTerms?: string;
   subtotal?: number;
   taxPercent?: number;

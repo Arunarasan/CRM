@@ -77,6 +77,26 @@ public class PurchaseOrder extends BaseEntity {
     @Column(name = "delivery_address", columnDefinition = "TEXT")
     private String deliveryAddress;
 
+    /** Every place this order delivers to — each shipment picks one. deliveryAddress mirrors the first. */
+    @Convert(converter = com.arudra.crm.util.StringListConverter.class)
+    @Column(name = "delivery_addresses", columnDefinition = "TEXT")
+    private java.util.List<String> deliveryAddresses = new java.util.ArrayList<>();
+
+    /** Keeps the single legacy field and the list in step, whichever one a caller set. */
+    @PrePersist
+    @PreUpdate
+    void syncDeliveryAddresses() {
+        java.util.List<String> list = new java.util.ArrayList<>();
+        if (deliveryAddresses != null) {
+            for (String a : deliveryAddresses) {
+                if (a != null && !a.isBlank() && !list.contains(a.trim())) list.add(a.trim());
+            }
+        }
+        if (list.isEmpty() && deliveryAddress != null && !deliveryAddress.isBlank()) list.add(deliveryAddress.trim());
+        deliveryAddresses = list;
+        deliveryAddress = list.isEmpty() ? null : list.get(0);
+    }
+
     @Column(name = "payment_terms", length = 100)
     private String paymentTerms;
 

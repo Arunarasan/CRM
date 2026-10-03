@@ -331,6 +331,7 @@ public class PurchaseService {
         po.setTask(details.getTask());
         po.setExpectedDeliveryDate(details.getExpectedDeliveryDate());
         po.setDeliveryAddress(details.getDeliveryAddress());
+        po.setDeliveryAddresses(details.getDeliveryAddresses());
         po.setPaymentTerms(details.getPaymentTerms());
         po.setTaxPercent(details.getTaxPercent());
         po.setDiscountAmount(details.getDiscountAmount());
@@ -787,6 +788,13 @@ public class PurchaseService {
         // Defaults to the PO's delivery address when not given.
         String place = blankToNull(input.getDeliveryPlace());
         s.setDeliveryPlace(place != null ? place : blankToNull(po.getDeliveryAddress()));
+        // A new place becomes one of the order's delivery addresses, so the PO lists them all.
+        if (place != null && (po.getDeliveryAddresses() == null || !po.getDeliveryAddresses().contains(place))) {
+            List<String> addresses = new ArrayList<>(po.getDeliveryAddresses() == null ? List.of() : po.getDeliveryAddresses());
+            addresses.add(place);
+            po.setDeliveryAddresses(addresses);
+            poRepository.save(po);
+        }
         s.setDispatchDate(input.getDispatchDate());
         s.setNotes(blankToNull(input.getNotes()));
         return shipmentRepository.save(s);
@@ -888,6 +896,7 @@ public class PurchaseService {
             row.put("warehouseName", po.getWarehouse() != null ? po.getWarehouse().getName() : null);
             row.put("paymentTerms", po.getPaymentTerms());
             row.put("deliveryAddress", po.getDeliveryAddress());
+            row.put("deliveryAddresses", po.getDeliveryAddresses());
             row.put("notes", po.getNotes());
             row.put("subtotal", po.getSubtotal());
             row.put("taxPercent", po.getTaxPercent());
