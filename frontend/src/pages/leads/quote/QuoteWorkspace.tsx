@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  BadgePercent, Building2, CalendarDays, Calculator, Check, CheckCircle2, ChevronDown, ChevronRight, Eye, FileOutput,
-  FileText, History, Image as ImageIcon, Info, Layers, Loader2, Lock, Pencil, Printer, RotateCcw,
+  BadgePercent, Building2, CalendarDays, Calculator, CheckCircle2, ChevronDown, Eye, FileOutput,
+  FileText, History, Image as ImageIcon, Info, Layers, Loader2, Lock, Pencil, RotateCcw,
   Save, Send, Share2, Users, Wand2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BaseInput } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "@/components/ui/toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -356,54 +356,6 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
 
   return (
     <section className="quote-layout quote-neutral space-y-3">
-      {/* ---- Compact sticky header: where you are, the quote's state, the next actions ---- */}
-      <div className="sticky top-0 z-20 -mx-1 px-1 py-2.5 bg-background/95 backdrop-blur flex flex-wrap items-center gap-x-3 gap-y-2">
-        <div className="min-w-0 flex-1">
-          {!fieldMode && (
-            <nav aria-label="Breadcrumb" className="hidden sm:flex items-center gap-1 text-xs text-muted-foreground">
-              {projectMode ? (
-                <><Link to="/projects" className="hover:text-foreground">Projects</Link><ChevronRight className="h-3 w-3" />
-                  <Link to={`/projects/${projectId}`} className="hover:text-foreground">{projectQuote?.quotationNumber ? "Project" : `Project #${projectId}`}</Link></>
-              ) : (
-                <><Link to="/leads" className="hover:text-foreground">Leads</Link><ChevronRight className="h-3 w-3" />
-                  <Link to={`/leads/${leadId}`} className="hover:text-foreground">Lead #{leadId}</Link></>
-              )}
-              <ChevronRight className="h-3 w-3" /><span className="font-medium text-foreground">Measurement & Quotation</span>
-            </nav>
-          )}
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="text-base sm:text-xl font-bold tracking-tight"><span className="sm:hidden">Quotation</span><span className="hidden sm:inline">Measurement & Quotation</span></h3>
-            <QuoteStatus quote={quote} locked={locked} />
-            {sentToOffice && <span className="rounded-full bg-[#EFF6FF] px-2 py-0.5 text-xs font-medium text-[#1D4ED8]">Sent to office</span>}
-          </div>
-        </div>
-        {boq && (
-          <div className="flex flex-wrap items-center gap-2">
-            {editable && <span className="hidden sm:flex mr-1"><AutosaveState {...saveState} /></span>}
-            <Button variant="outline" size="sm" className="h-9" disabled={!!busy || noItems} onClick={openPrint} title="See the quotation as the customer will">
-              {busy === "print" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />} Preview
-            </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="h-9" aria-label="More actions">More <ChevronDown className="h-4 w-4" /></Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="quote-neutral w-56">
-                <DropdownMenuItem disabled={inQuote.length === 0} onClick={openPrint}><Printer className="h-4 w-4 mr-2" /> Print</DropdownMenuItem>
-                <DropdownMenuItem disabled={inQuote.length === 0} onClick={shareQuote}><Share2 className="h-4 w-4 mr-2" /> Share quote</DropdownMenuItem>
-                <DropdownMenuSeparator />
-                {!fieldMode && <DropdownMenuItem onClick={() => setView("photos")}><ImageIcon className="h-4 w-4 mr-2" /> Photos & drawings</DropdownMenuItem>}
-                <DropdownMenuItem onClick={() => setView("history")}><History className="h-4 w-4 mr-2" /> Quote history ({history.length})</DropdownMenuItem>
-                {secondary.length > 0 && <DropdownMenuSeparator />}
-                {secondary.map((a) => (
-                  <DropdownMenuItem key={a.label} disabled={a.disabled} onClick={a.onClick}><a.icon className="h-4 w-4 mr-2" /> {a.label}</DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <span className="hidden sm:inline-flex">{renderPrimary()}</span>
-          </div>
-        )}
-      </div>
-
       {/* ---- Quotation information ---- */}
       <dl className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 rounded-xl border bg-card shadow-sm">
         <InfoTile icon={Users} label="Customer" value={customerName} sub={customerId !== "—" ? customerId : undefined} />
@@ -535,8 +487,9 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
                     <span className="font-bold tabular-nums">{inr(boq.grandTotal)}</span>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <Button variant="outline" size="sm" className="h-9" disabled={!!busy || noItems} onClick={openPrint} aria-label="Print">
-                      {busy === "print" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}<span className="hidden sm:inline">Print</span>
+                    <Button variant="outline" size="sm" className="h-9" disabled={!!busy || noItems} onClick={openPrint} aria-label="Preview"
+                      title="See the quotation as the customer will — print or save as PDF from there">
+                      {busy === "print" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}<span className="hidden sm:inline">Preview</span>
                     </Button>
                     <Button variant="outline" size="sm" className="h-9" disabled={!!busy || noItems} onClick={shareQuote} aria-label="Share quote"
                       title="Send the quote number and total — share sheet on phones, WhatsApp on desktop">
@@ -688,18 +641,6 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
 
       {printId && <QuotationPrintView quotationId={printId} readOnly onClose={() => setPrintId(null)} />}
     </section>
-  );
-}
-
-/** "Not sent yet" / "QT-… · Draft" / "Approved" / "Project created" — one chip in the header. */
-function QuoteStatus({ quote, locked }: { quote?: any; locked: boolean }) {
-  if (!quote) {
-    return <span className="whitespace-nowrap rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">{locked ? "Locked" : "Draft — not shared yet"}</span>;
-  }
-  return (
-    <span className={`max-w-[14rem] truncate whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${QUOTATION_STATUS_STYLES[quote.status] || "bg-muted text-muted-foreground"}`}>
-      {quote.quotationNumber} · {QUOTATION_STATUS_LABELS[quote.status] || quote.status}
-    </span>
   );
 }
 
@@ -899,16 +840,6 @@ function ViewTab({ active, icon: Icon, onClick, children }: {
         ? "border-foreground font-medium text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
       <Icon className="h-4 w-4" /> {children}
     </button>
-  );
-}
-
-/** "Saving…" / "Saved" — the sheet saves every edit by itself, so there's no Save button to press. */
-function AutosaveState({ pending, lastSaved }: { pending: number; lastSaved: number | null }) {
-  if (pending > 0) return <span className="flex items-center gap-1 text-xs text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Saving…</span>;
-  return (
-    <span className="flex items-center gap-1 text-xs text-muted-foreground" title="Every change saves automatically">
-      <Check className="h-3.5 w-3.5 text-[#16805C]" /> {lastSaved ? "All changes saved" : "Autosave on"}
-    </span>
   );
 }
 
