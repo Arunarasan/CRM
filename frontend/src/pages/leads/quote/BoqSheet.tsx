@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlignLeft, Check, ChevronDown, ChevronRight, Copy, FolderOpen, Hammer, Loader2, MapPin, MoreVertical, Package, Pencil, Plus, Trash2 } from "lucide-react";
+import { AlignLeft, Check, ChevronDown, ChevronRight, FolderOpen, Hammer, Loader2, MapPin, MoreVertical, Package, Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -272,6 +272,14 @@ export default function BoqSheet({
       }
     });
 
+  /** Category-level labour (e.g. "Fitting — whole wall"): its own line, priced by one labour line. */
+  const addLabourItem = (category: string, workType: string, qty: number, unit: string, rate: number) =>
+    save("add the labour", async () => {
+      const created = await boqApi.addItem(boqId, { category, itemName: workType, quantity: qty, unit });
+      rememberRate(workType, rate);
+      if (rate > 0 && created?.id) await boqApi.addLabour(boqId, created.id, { workType, quantity: qty, rate });
+    });
+
   // ---------------- Catalogue ----------------
 
   const { list: savedCategories, byName: categoryByName, add: rememberCategory } = useCategories();
@@ -358,7 +366,9 @@ export default function BoqSheet({
     if (next.has(c)) next.delete(c); else next.add(c);
     return next;
   });
-  const [bulk, setBulk] = useState<null | { mode: "labour" } | { mode: "copy"; targets: number[] }>(null);
+  const [bulk, setBulk] = useState<null | { mode: "labour" }>(null);
+  // Category ⋮ → Add material / Add labour: a line of its own in that category.
+  const [catLine, setCatLine] = useState<null | { category: string; kind: "material" | "labour" }>(null);
 
   // The tick on each item is the customer's choice: ticked items are in the quote and its total.
   const setIncluded = (list: BoqItem[], on: boolean) => list
@@ -478,6 +488,9 @@ export default function BoqSheet({
                     </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" onCloseAutoFocus={(e) => e.preventDefault()}>
+                    <DropdownMenuItem onClick={() => setCatLine({ category: g.category, kind: "material" })}><Package className="h-4 w-4 mr-2" /> Add material</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setCatLine({ category: g.category, kind: "labour" })}><Hammer className="h-4 w-4 mr-2" /> Add labour</DropdownMenuItem>
+                    <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={() => setRenaming(g.category)}><Pencil className="h-4 w-4 mr-2" /> Rename</DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={() => removeCategory(g)} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" /> Remove category</DropdownMenuItem>
@@ -524,7 +537,6 @@ export default function BoqSheet({
                   onAddLabour={(l) => { rememberRate(l.workType, l.rate); return save("add the labour", () => boqApi.addLabour(boqId, item.id as number, l)); }}
                   onDelete={() => deleteWithUndo(item)}
                   onToggleActive={() => save("update the quote", () => boqApi.toggleItemActive(boqId, item.id as number, item.isActive === false))}
-                  onCopyFrom={() => setBulk({ mode: "copy", targets: [item.id as number] })}
                 />
               ))}
             </div>}
@@ -545,6 +557,19 @@ export default function BoqSheet({
         />
       )}
 
+      <CategoryLineDialog
+        state={catLine}
+        rateFor={rateFor}
+        onClose={() => setCatLine(null)}
+        onAdd={(name, qty, unit, rate) => {
+          if (!catLine) return;
+          if (catLine.kind === "labour") addLabourItem(catLine.category, name, qty, unit, rate);
+          else addPricedItem({ category: catLine.category, itemName: name, quantity: qty, unit }, rate);
+          toast.success(`${catLine.kind === "labour" ? "Labour" : "Material"} added to ${catLine.category}`);
+          setCatLine(null);
+        }}
+      />
+
       <BulkDialog
         state={bulk}
         items={items}
@@ -556,24 +581,6 @@ export default function BoqSheet({
           targets.forEach((t) => save("add the labour", () =>
             boqApi.addLabour(boqId, t.id as number, { workType, quantity: t.quantity ?? 1, rate })));
           toast.success(`Labour added to ${targets.length} item(s)`);
-          setBulk(null);
-        }}
-        onCopy={(sourceId, targetIds) => {
-          const src = items.find((i) => i.id === sourceId);
-          if (!src) return;
-          for (const tid of targetIds) {
-            if (tid === sourceId) continue;
-            src.materials?.forEach((m) => save("copy the material", () => boqApi.addMaterial(boqId, tid, {
-              product: m.product?.id ? { id: m.product.id } : undefined, materialName: m.materialName,
-              quantity: m.quantity, unit: m.unit, wastePercent: m.wastePercent, costPrice: m.costPrice,
-              sellingRate: m.sellingRate, vendor: m.vendor,
-            })));
-            src.labours?.forEach((l) => save("copy the labour", () => boqApi.addLabour(boqId, tid, {
-              workType: l.workType, labourCategory: l.labourCategory, quantity: l.quantity, rate: l.rate,
-              contractorName: l.contractorName,
-            })));
-          }
-          toast.success(`Copied ${(src.materials?.length ?? 0) + (src.labours?.length ?? 0)} line(s) from ${src.itemName}`);
           setBulk(null);
         }}
       />
@@ -645,7 +652,7 @@ const CELL = "!border-border !bg-background focus:!border-ring @[820px]:!border-
 function ItemRow({
   item, product, categories, canEdit, showLines, onUpdate, onQty, onSize, onSetGross, onSetAmount, onColor,
   onUpdateMaterial, onUpdateLabour, onDeleteMaterial, onDeleteLabour, onAddMaterial, onAddLabour,
-  onDelete, onToggleActive, onCopyFrom, rateFor,
+  onDelete, onToggleActive, rateFor,
 }: {
   item: BoqItem;
   product?: Product;
@@ -666,7 +673,6 @@ function ItemRow({
   onAddLabour: (l: Partial<BoqItemLabour>) => void;
   onDelete: () => void;
   onToggleActive: () => void;
-  onCopyFrom: () => void;
   rateFor: (workType: string) => number | undefined;
 }) {
   const inactive = item.isActive === false;
@@ -744,8 +750,7 @@ function ItemRow({
         {/* Actions (phone: top-right) */}
         <div className="row-start-1 col-start-4 @[820px]:hidden flex items-center">
           <RowActions canEdit={canEdit} open={detailsOpen} lineCount={lineCount} onToggle={() => setOpen((v) => !v)}
-            onAddMaterial={() => { setOpen(true); setAdding("material"); }} onAddLabour={() => { setOpen(true); setAdding("labour"); }}
-            onCopyFrom={onCopyFrom} onDelete={onDelete} />
+            onDelete={onDelete} />
         </div>
 
         {/* Numbers — one labelled strip on phones (Qty · Unit · Rate · Amount), table cells on desktop */}
@@ -773,8 +778,7 @@ function ItemRow({
 
         <div className="hidden @[820px]:flex items-center justify-end">
           <RowActions canEdit={canEdit} open={detailsOpen} lineCount={lineCount} onToggle={() => setOpen((v) => !v)}
-            onAddMaterial={() => { setOpen(true); setAdding("material"); }} onAddLabour={() => { setOpen(true); setAdding("labour"); }}
-            onCopyFrom={onCopyFrom} onDelete={onDelete} />
+            onDelete={onDelete} />
         </div>
       </div>
 
@@ -955,10 +959,9 @@ function LocationBox({ value, fallback, disabled, onCommit }: {
   );
 }
 
-/** "Details" toggle + ⋮ menu for one item row. */
-function RowActions({ canEdit, open, lineCount, onToggle, onAddMaterial, onAddLabour, onCopyFrom, onDelete }: {
-  canEdit: boolean; open: boolean; lineCount: number; onToggle: () => void;
-  onAddMaterial: () => void; onAddLabour: () => void; onCopyFrom: () => void; onDelete: () => void;
+/** Breakdown toggle + delete for one item row (material / labour for a whole category live in its ⋮ menu). */
+function RowActions({ canEdit, open, lineCount, onToggle, onDelete }: {
+  canEdit: boolean; open: boolean; lineCount: number; onToggle: () => void; onDelete: () => void;
 }) {
   return (
     <>
@@ -968,20 +971,10 @@ function RowActions({ canEdit, open, lineCount, onToggle, onAddMaterial, onAddLa
         {lineCount > 0 && <span className="tabular-nums">{lineCount}</span>}
       </button>
       {canEdit && (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button type="button" className="h-8 w-7 rounded-md hover:bg-muted flex items-center justify-center" aria-label="Item actions">
-              <MoreVertical className="h-4 w-4 text-muted-foreground" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={onAddMaterial}><Package className="h-4 w-4 mr-2" /> Add material</DropdownMenuItem>
-            <DropdownMenuItem onClick={onAddLabour}><Hammer className="h-4 w-4 mr-2" /> Add labour</DropdownMenuItem>
-            <DropdownMenuItem onClick={onCopyFrom}><Copy className="h-4 w-4 mr-2" /> Copy lines from another item…</DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={onDelete} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" /> Delete item</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <button type="button" onClick={onDelete} title="Remove this product (you can undo)" aria-label="Remove product"
+          className="h-8 w-7 rounded-md flex items-center justify-center text-muted-foreground hover:bg-destructive/10 hover:text-destructive">
+          <Trash2 className="h-4 w-4" />
+        </button>
       )}
     </>
   );
@@ -1168,34 +1161,87 @@ function NewLabourRow({ defaultQty, rateFor, onAdd, onDone }: {
   );
 }
 
+/** Category ⋮ → Add material / Add labour: one line for the category, e.g. "Fevicol" or "Fitting labour". */
+function CategoryLineDialog({ state, rateFor, onClose, onAdd }: {
+  state: null | { category: string; kind: "material" | "labour" };
+  rateFor: (workType: string) => number | undefined;
+  onClose: () => void;
+  onAdd: (name: string, qty: number, unit: string, rate: number) => void;
+}) {
+  const [name, setName] = useState("");
+  const [qty, setQty] = useState("1");
+  const [unit, setUnit] = useState("Nos");
+  const [rate, setRate] = useState("");
+  useEffect(() => { setName(""); setQty("1"); setUnit(state?.kind === "labour" ? "Lump Sum" : "Nos"); setRate(""); }, [state]);
+  const labour = state?.kind === "labour";
+  const amount = (Number(qty) || 0) * (Number(rate) || 0);
+  const submit = () => name.trim() && onAdd(name.trim(), Number(qty) || 1, unit, Number(rate) || 0);
+  const units = BOQ_UNITS.includes(unit) ? BOQ_UNITS : [unit, ...BOQ_UNITS];
+
+  return (
+    <Dialog open={!!state} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="quote-neutral max-w-md">
+        <DialogHeader><DialogTitle>Add {labour ? "labour" : "material"} to {state?.category}</DialogTitle></DialogHeader>
+        <p className="text-xs text-muted-foreground">
+          {labour
+            ? "Labour for the whole category, e.g. fitting or installation — it shows as its own line."
+            : "A material for the whole category, e.g. adhesive or fixings — it shows as its own line."}
+        </p>
+        <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); submit(); }}>
+          <Input autoFocus list={labour ? LABOUR_TYPES_LIST : undefined} value={name}
+            placeholder={labour ? "Work type (e.g. Fitting, Carpenter)" : "Material name (e.g. Fevicol, Screws)"}
+            onChange={(e) => {
+              setName(e.target.value);
+              const known = labour ? rateFor(e.target.value) : undefined;
+              if (known != null && !rate) setRate(String(known));
+            }} />
+          <div className="grid grid-cols-3 gap-2">
+            <label className="text-xs text-muted-foreground">Qty
+              <Input inputMode="decimal" className="mt-1 text-right" value={qty} onChange={(e) => setQty(e.target.value)} />
+            </label>
+            <label className="text-xs text-muted-foreground">Unit
+              <select className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm text-foreground" value={unit} onChange={(e) => setUnit(e.target.value)}>
+                {units.map((u) => <option key={u} value={u}>{u}</option>)}
+              </select>
+            </label>
+            <label className="text-xs text-muted-foreground">Rate ₹
+              <Input inputMode="decimal" className="mt-1 text-right" value={rate} placeholder="0" onChange={(e) => setRate(e.target.value)} />
+            </label>
+          </div>
+          <p className="text-right text-sm">Amount <span className="font-semibold tabular-nums">{inr(amount)}</span></p>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+            <Button type="submit" disabled={!name.trim()}>Add {labour ? "labour" : "material"}</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ---------------------------------------------------------------------------
-// Bulk actions: add one labour line to many items / copy lines from one item to others
+// Bulk action: add one labour line to many items
 // ---------------------------------------------------------------------------
 
 function BulkDialog({
-  state, items, rateFor, onClose, onAddLabour, onCopy,
+  state, items, rateFor, onClose, onAddLabour,
 }: {
-  state: null | { mode: "labour" } | { mode: "copy"; targets: number[] };
+  state: null | { mode: "labour" };
   items: BoqItem[];
   rateFor: (workType: string) => number | undefined;
   onClose: () => void;
   onAddLabour: (workType: string, rate: number, targetIds: number[]) => void;
-  onCopy: (sourceId: number, targetIds: number[]) => void;
 }) {
   const [workType, setWorkType] = useState("");
   const [rate, setRate] = useState("");
-  const [sourceId, setSourceId] = useState<number | "">("");
   // Labour targets: every item in the quote, untick the ones that don't need it.
   const [picked, setPicked] = useState<Set<number>>(new Set());
   useEffect(() => {
-    setWorkType(""); setRate(""); setSourceId("");
+    setWorkType(""); setRate("");
     setPicked(new Set(items.filter((i) => i.isActive !== false).map((i) => i.id as number)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state]);
 
-  const targets = state?.mode === "copy" ? state.targets : [];
-  const sources = items.filter((i) => !targets.includes(i.id as number) && ((i.materials?.length ?? 0) + (i.labours?.length ?? 0)) > 0);
-  const src = items.find((i) => i.id === sourceId);
 
   return (
     <Dialog open={!!state} onOpenChange={(v) => !v && onClose()}>
@@ -1221,38 +1267,6 @@ function BulkDialog({
             <DialogFooter>
               <Button variant="outline" onClick={onClose}>Cancel</Button>
               <Button disabled={!workType.trim() || picked.size === 0} onClick={() => onAddLabour(workType.trim(), Number(rate) || 0, [...picked])}>Add</Button>
-            </DialogFooter>
-          </>
-        )}
-        {state?.mode === "copy" && (
-          <>
-            <DialogHeader>
-              <DialogTitle>Copy material & labour {targets.length > 1 ? `into ${targets.length} items` : "into this item"}</DialogTitle>
-            </DialogHeader>
-            {sources.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No other item has material or labour lines to copy yet.</p>
-            ) : (
-              <>
-                <select className="w-full h-9 rounded-md border bg-background px-2 text-sm" value={sourceId}
-                  onChange={(e) => setSourceId(e.target.value ? Number(e.target.value) : "")}>
-                  <option value="">Copy from…</option>
-                  {sources.map((i) => (
-                    <option key={i.id} value={i.id}>
-                      {[i.category, i.itemName].filter(Boolean).join(" › ")} ({(i.materials?.length ?? 0) + (i.labours?.length ?? 0)} lines)
-                    </option>
-                  ))}
-                </select>
-                {src && (
-                  <div className="rounded-md border bg-muted/30 p-2 text-xs space-y-0.5 max-h-48 overflow-auto">
-                    {src.materials?.map((m) => <div key={`m${m.id}`}>📦 {m.materialName} — {m.quantity} {m.unit} × ₹{m.sellingRate}</div>)}
-                    {src.labours?.map((l) => <div key={`l${l.id}`}>🔨 {l.workType} — {l.quantity} × ₹{l.rate}</div>)}
-                  </div>
-                )}
-              </>
-            )}
-            <DialogFooter>
-              <Button variant="outline" onClick={onClose}>Cancel</Button>
-              <Button disabled={!src} onClick={() => src && onCopy(src.id as number, targets)}>Copy lines</Button>
             </DialogFooter>
           </>
         )}
