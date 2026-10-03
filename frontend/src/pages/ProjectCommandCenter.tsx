@@ -40,8 +40,7 @@ import { Input, BaseInput } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import ProjectContractorsTab from "@/pages/contractors/ProjectContractorsTab";
-import ApprovalsTab from "@/pages/projectCommandCenter/tabs/ApprovalsTab";
-import ChangeRequestsTab from "@/pages/projectCommandCenter/tabs/ChangeRequestsTab";
+import DecisionsTab from "@/pages/projectCommandCenter/tabs/DecisionsTab";
 import DailyLogsTab from "@/pages/projectCommandCenter/tabs/DailyLogsTab";
 import FieldProgressTab from "@/pages/projectCommandCenter/tabs/FieldProgressTab";
 import QualityTab from "@/pages/projectCommandCenter/tabs/QualityTab";
@@ -201,7 +200,7 @@ const TAB_GROUPS: { id: string; label: string; icon: React.ComponentType<{ class
   ] },
   { id: "commercial", label: "Commercial", icon: Wallet, sections: [
     ["payments", "Billing"], ["received", "Payments"], ["profit", "Expenses & Profit"],
-    ["quote", "Quotation"], ["approvals", "Approvals"], ["changeRequests", "Change Requests"],
+    ["quote", "Quotation"], ["approvals", "Approvals & Changes"], ["changeRequests", "Change Requests"],
   ] },
   { id: "resources", label: "Resources", icon: Package, sections: [
     ["supplyInstall", "Supply & Install"], ["materials", "Materials"], ["contractors", "Contractors"], ["labour", "Labour"],
@@ -213,7 +212,7 @@ const TAB_GROUPS: { id: string; label: string; icon: React.ComponentType<{ class
   { id: "service", label: "Service & Warranty", icon: Settings, sections: [["serviceWarranty", "Service & Warranty"]] },
 ];
 // Reachable from inside another section (Work Categories → "Floors & rooms view"), not the strip.
-const HIDDEN_SECTIONS = new Set(["phases"]);
+const HIDDEN_SECTIONS = new Set(["phases", "changeRequests"]);
 const groupOf = (section: string) =>
   TAB_GROUPS.find((g) => g.sections.some(([v]) => v === section)) || TAB_GROUPS[0];
 
@@ -248,6 +247,7 @@ export default function ProjectCommandCenter() {
   const [profitability, setProfitability] = useState<ProjectProfitability | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false); // "Update Work" batch sheet
   const [trackingOpen, setTrackingOpen] = useState(false);
+  const [quoteOpen, setQuoteOpen] = useState(false); // full measurement & quotation workspace
   const [reportsPending, setReportsPending] = useState(0);
   const loadReportsPending = () => {
     dailyReportApi.list({ projectId: Number(id), status: 'SUBMITTED' }).then((r) => setReportsPending(r.length)).catch(() => {});
@@ -2084,9 +2084,62 @@ export default function ProjectCommandCenter() {
               <ProjectPaymentsTab project={project} mode="profit" onChanged={fetchProjectData} />
             </TabsContent>
 
-            <TabsContent value="quote" className="space-y-4 mt-0 h-full outline-none">
+            <TabsContent value="quote" className="space-y-3 mt-0 h-full outline-none">
+              {(() => {
+                const q = project.quotation;
+                if (!q) return null;
+                const items = (q.items || []).filter((i: any) => !i.isDeleted);
+                const expired = q.expiryDate && new Date(q.expiryDate).getTime() < new Date(new Date().toDateString()).getTime();
+                const st = String(q.status || 'DRAFT');
+                return (
+                  <section className="rounded-2xl border border-slate-100 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+                    <div className="p-4 flex flex-col @3xl:flex-row @3xl:items-center gap-4">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <FileText className="h-5 w-5 text-emerald-700" />
+                          <span className="text-base font-bold text-slate-900">{q.quotationNumber || 'Quotation'}</span>
+                          {Number(q.revisionNumber || 0) > 0 && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">Rev {q.revisionNumber}</span>}
+                          <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold uppercase ${st === 'APPROVED' || st === 'CONVERTED' ? 'bg-emerald-100 text-emerald-800' : st === 'REJECTED' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-800'}`}>{st.replace(/_/g, ' ')}</span>
+                        </div>
+                        <div className="mt-2 text-2xl font-bold text-slate-900">{inr(Number(q.grandTotal || 0))}</div>
+                        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-500">
+                          <span>{items.length} item{items.length === 1 ? '' : 's'}</span>
+                          {q.quotationDate && <span>Quoted {shortDate(q.quotationDate)}</span>}
+                          {q.expiryDate && <span className={expired ? 'font-semibold text-rose-600' : ''}>{expired ? 'Expired' : 'Valid till'} {shortDate(q.expiryDate)}</span>}
+                          {q.approvedDate && <span>Approved {shortDate(q.approvedDate)}</span>}
+                        </div>
+                        {(summary.categories || []).length > 0 && (
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {(summary.categories || []).map((c) => (
+                              <span key={c} className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-semibold text-amber-800">{c}</span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-2 shrink-0">
+                        {q.id && (
+                          <a href={`${import.meta.env.BASE_URL.replace(/\/$/, '')}/quotations/${q.id}/print`} target="_blank" rel="noreferrer"
+                            className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                            <FileBarChart className="h-4 w-4 text-emerald-700" /> Print / PDF
+                          </a>
+                        )}
+                        {project.lead?.id && (
+                          <Button size="sm" variant="outline" onClick={() => setQuoteOpen(true)} className="h-9 rounded-xl">
+                            <Pencil className="h-4 w-4 mr-1" /> Change quote
+                          </Button>
+                        )}
+                        {project.lead?.id && (
+                          <Button size="sm" onClick={() => setQuoteOpen((o) => !o)} className="h-9 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white">
+                            {quoteOpen ? 'Hide workspace' : 'Open full workspace'} <ChevronDown className={`h-4 w-4 ml-1 transition-transform ${quoteOpen ? 'rotate-180' : ''}`} />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </section>
+                );
+              })()}
               {project.lead?.id ? (
-                <QuoteWorkspace leadId={String(project.lead.id)} projectId={project.id}
+                (quoteOpen || !project.quotation) && <QuoteWorkspace leadId={String(project.lead.id)} projectId={project.id}
                   onChanged={() => { fetchCore(); fetchProjectData(); }} />
               ) : (
                 <div className="rounded-xl border bg-card p-6 text-sm text-muted-foreground">
@@ -2097,14 +2150,14 @@ export default function ProjectCommandCenter() {
             </TabsContent>
 
             {/* APPROVALS TAB */}
-            <TabsContent value="approvals" className="space-y-4 mt-0 h-full outline-none">
-              <ApprovalsTab projectId={projectId} approvals={data.approvals} onChanged={fetchCore} onStatsChanged={fetchStats} />
-            </TabsContent>
-
-            {/* CHANGE REQUESTS TAB */}
-            <TabsContent value="changeRequests" className="space-y-6 mt-0 h-full outline-none">
-              <ChangeRequestsTab projectId={projectId} phases={phases} changeRequests={changeRequests} onChangeRequestsChanged={() => changeRequestApi.getByProject(projectId).then(setChangeRequests)} onFullRefresh={fetchProjectData} />
-            </TabsContent>
+            {(["approvals", "changeRequests"] as const).map((key) => (
+              <TabsContent key={key} value={key} className="mt-0 h-full outline-none">
+                <DecisionsTab projectId={projectId} approvals={data.approvals} changeRequests={changeRequests} phases={phases}
+                  onApprovalsChanged={fetchCore} onStatsChanged={fetchStats}
+                  onChangeRequestsChanged={() => changeRequestApi.getByProject(projectId).then(setChangeRequests)}
+                  onFullRefresh={fetchProjectData} />
+              </TabsContent>
+            ))}
 
             {/* DAILY LOGS & REPORTS — the site's execution logs + the employees' submitted daily reports, together */}
             <TabsContent value="execution" className="mt-0 h-full outline-none">

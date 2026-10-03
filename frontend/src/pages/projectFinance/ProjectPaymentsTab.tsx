@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import {
   Plus, Trash2, FileText, Loader2, IndianRupee, AlertCircle,
-  CheckCircle2, RotateCcw, Printer, Ban, Clock, User as UserIcon,
+  CheckCircle2, RotateCcw, Printer, Ban, Clock, User as UserIcon, MessageCircle,
 } from "lucide-react";
 import { financeApi } from "@/api/financeApi";
 import type { Invoice, InvoiceType, CustomerPayment } from "@/types/finance";
@@ -21,6 +21,11 @@ import ProjectProfitPanel from "./ProjectProfitPanel";
 const inr = (n?: number | null) =>
   "₹" + Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
 const today = () => new Date().toISOString().slice(0, 10);
+
+type InvoiceFilter = "ALL" | "UNPAID" | "PAID" | "DRAFT";
+const INVOICE_FILTERS: [InvoiceFilter, string][] = [["ALL", "All"], ["UNPAID", "Unpaid"], ["PAID", "Paid"], ["DRAFT", "Draft"]];
+const invoiceBucket = (st: string): InvoiceFilter | null =>
+  st === "PAID" ? "PAID" : st === "DRAFT" ? "DRAFT" : st === "CANCELLED" ? null : "UNPAID";
 
 const INVOICE_TYPES: InvoiceType[] = ["ADVANCE", "PROGRESS", "FINAL", "PROFORMA"];
 const METHODS = ["CASH", "UPI", "CARD", "BANK_TRANSFER", "CHEQUE", "NEFT", "OTHER"];
@@ -73,6 +78,27 @@ export default function ProjectPaymentsTab({ project, onChanged, mode = "billing
 
   // Reload invoices AND signal the billing tracker to refresh (payment % moved).
   const reloadAll = () => { load(); setTick((t) => t + 1); };
+
+  const [invFilter, setInvFilter] = useState<InvoiceFilter>("ALL");
+  const invCounts = useMemo(() => {
+    const c: Record<string, number> = { ALL: invoices.length };
+    invoices.forEach((i) => { const b = invoiceBucket(i.status); if (b) c[b] = (c[b] || 0) + 1; });
+    return c;
+  }, [invoices]);
+  const shownInvoices = invFilter === "ALL" ? invoices : invoices.filter((i) => invoiceBucket(i.status) === invFilter);
+
+  // WhatsApp hand-off: opens a chat with the customer and a ready-to-send invoice message.
+  const customerPhone: string | undefined = project?.customer?.whatsappNumber || project?.customer?.phone;
+  const invoiceWhatsApp = (i: Invoice) => {
+    let d = String(customerPhone || "").replace(/\D/g, "");
+    if (d.length === 10) d = `91${d}`;
+    const bal = Number(i.balanceDue || 0);
+    const msg = `Dear ${project?.customer?.name || "Customer"},\n\nInvoice ${i.invoiceNumber} for ${inr(i.totalAmount)}`
+      + (bal > 0 ? ` — balance due ${inr(bal)}` : " — fully paid")
+      + (i.dueDate && bal > 0 ? ` (due ${format(new Date(i.dueDate), "dd MMM yyyy")})` : "")
+      + `.\n\nThank you,\nJB Decor`;
+    return `https://wa.me/${d}?text=${encodeURIComponent(msg)}`;
+  };
 
   const [makerOpen, setMakerOpen] = useState(false);
   const [payFor, setPayFor] = useState<Invoice | null>(null);
@@ -130,76 +156,111 @@ export default function ProjectPaymentsTab({ project, onChanged, mode = "billing
       ) : denied ? (
         <div className="rounded-xl border border-slate-100 bg-white p-6 text-slate-500">Billing data is restricted for your role.</div>
       ) : (
-        <section className="rounded-2xl border border-slate-100 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-          <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-3">
+        <section className="rounded-2xl border border-slate-100 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)] @container">
+          <div className="px-4 py-3 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <h3 className="text-base font-bold text-slate-900 flex items-center gap-2"><FileText className="h-5 w-5 text-emerald-700" /> Invoices</h3>
               <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-500">{invoices.length}</span>
             </div>
-            {canWrite && customerId && (
-              <Button size="sm" onClick={() => setMakerOpen(true)} className="h-9 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white"><Plus className="h-4 w-4 mr-1" /> New Invoice</Button>
-            )}
-          </div>
-          <div className="p-4">
-          {!customerId && (
-            <p className="mb-3 text-sm text-amber-600">This project has no linked customer, so invoices can't be raised yet.</p>
-          )}
-          {invoices.length === 0 ? (
-            <p className="py-6 text-center text-sm text-slate-400">No invoices for this project yet.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-left text-xs uppercase tracking-wider text-slate-400">
-                    <th className="py-2 pr-4">Invoice #</th><th className="py-2 pr-4">Type</th><th className="py-2 pr-4">Date</th>
-                    <th className="py-2 pr-4 text-right">Total</th><th className="py-2 pr-4 text-right">Paid</th>
-                    <th className="py-2 pr-4 text-right">Balance</th><th className="py-2 pr-4">Status</th>
-                    <th className="py-2 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {invoices.map((i) => {
-                    const badge = paidLabel(i.status);
-                    const busy = busyId === i.id;
-                    return (
-                      <tr key={i.id} className="border-b last:border-0">
-                        <td className="py-2 pr-4 font-medium text-slate-700">{i.invoiceNumber}</td>
-                        <td className="py-2 pr-4 text-slate-500">{i.invoiceType}</td>
-                        <td className="py-2 pr-4 text-slate-500">{i.date ? format(new Date(i.date), "dd MMM yyyy") : "-"}</td>
-                        <td className="py-2 pr-4 text-right font-medium">{inr(i.totalAmount)}</td>
-                        <td className="py-2 pr-4 text-right text-emerald-600">{inr(i.amountPaid)}</td>
-                        <td className="py-2 pr-4 text-right text-slate-700">{inr(i.balanceDue)}</td>
-                        <td className="py-2 pr-4"><span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${badge.cls}`}>{badge.text}</span></td>
-                        <td className="py-2">
-                          <div className="flex items-center justify-end gap-1.5">
-                            {busy && <Loader2 className="h-4 w-4 animate-spin text-slate-400" />}
-                            {canWrite && i.status === "DRAFT" && !busy && (
-                              <ActionBtn onClick={() => issue(i.id)} title="Issue">Issue</ActionBtn>
-                            )}
-                            {canCollect && i.status !== "CANCELLED" && i.status !== "PAID" && !busy && (
-                              <ActionBtn onClick={() => setPayFor(i)} tone="green" title="Mark paid">
-                                <CheckCircle2 className="h-3.5 w-3.5" /> Paid
-                              </ActionBtn>
-                            )}
-                            {canWrite && i.status === "PAID" && !busy && (
-                              <ActionBtn onClick={() => markUnpaid(i)} tone="red" title="Mark unpaid">
-                                <RotateCcw className="h-3.5 w-3.5" /> Unpaid
-                              </ActionBtn>
-                            )}
-                            {i.status !== "DRAFT" && (
-                              <ActionBtn onClick={() => doPrint(i)} title="Print invoice">
-                                <Printer className="h-3.5 w-3.5" /> Print
-                              </ActionBtn>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+            <div className="flex items-center gap-2">
+              {invoices.length > 0 && (
+                <div className="flex gap-1 rounded-xl bg-slate-100 p-1">
+                  {INVOICE_FILTERS.map(([f, label]) => (
+                    <button key={f} type="button" onClick={() => setInvFilter(f)}
+                      className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition ${invFilter === f ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>
+                      {label} <span className="text-slate-400">{invCounts[f] || 0}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {canWrite && customerId && (
+                <Button size="sm" onClick={() => setMakerOpen(true)} className="h-9 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white"><Plus className="h-4 w-4 mr-1" /> New Invoice</Button>
+              )}
             </div>
-          )}
+          </div>
+          <div className="p-3">
+            {!customerId && (
+              <p className="mb-3 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-700">This project has no linked customer, so invoices can't be raised yet.</p>
+            )}
+            {invoices.length === 0 ? (
+              <div className="py-10 text-center">
+                <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-slate-400"><FileText className="h-5 w-5" /></span>
+                <div className="mt-2 text-sm font-semibold text-slate-600">No invoices yet</div>
+                <div className="text-xs text-slate-400">Raise one from a payment milestone above, or create it with New Invoice.</div>
+              </div>
+            ) : shownInvoices.length === 0 ? (
+              <p className="py-8 text-center text-sm text-slate-400">No invoices in this filter.</p>
+            ) : (
+              <div className="grid grid-cols-1 @2xl:grid-cols-2 @5xl:grid-cols-3 gap-2.5">
+                {shownInvoices.map((i) => {
+                  const badge = paidLabel(i.status);
+                  const busy = busyId === i.id;
+                  const total = Number(i.totalAmount || 0);
+                  const paid = Number(i.amountPaid || 0);
+                  const pct = total ? Math.min(100, Math.round((paid / total) * 100)) : 0;
+                  const overdue = i.dueDate && i.status !== "PAID" && i.status !== "CANCELLED" && i.status !== "DRAFT"
+                    && new Date(i.dueDate).getTime() < new Date(new Date().toDateString()).getTime();
+                  return (
+                    <div key={i.id} className={`rounded-2xl border p-3.5 transition-shadow hover:shadow-md ${i.status === "CANCELLED" ? "border-slate-100 opacity-60" : overdue ? "border-rose-200" : "border-slate-100"}`}>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="text-sm font-bold text-slate-900 truncate">{i.invoiceNumber}</div>
+                          <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-400">
+                            <span className="rounded-full bg-slate-100 px-1.5 py-0.5 font-semibold text-slate-600 capitalize">{String(i.invoiceType || "").toLowerCase()}</span>
+                            <span>{i.date ? format(new Date(i.date), "dd MMM yyyy") : "—"}</span>
+                            {i.dueDate && <span className={overdue ? "font-semibold text-rose-600" : ""}>· due {format(new Date(i.dueDate), "dd MMM")}</span>}
+                          </div>
+                        </div>
+                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${overdue ? "bg-rose-100 text-rose-700" : badge.cls}`}>{overdue ? "Overdue" : badge.text}</span>
+                      </div>
+                      <div className="mt-3 flex items-end justify-between gap-2">
+                        <div className="text-xl font-bold text-slate-900">{inr(total)}</div>
+                        {i.status !== "CANCELLED" && i.status !== "DRAFT" && (
+                          <div className="text-right text-[11px] text-slate-500">
+                            {Number(i.balanceDue || 0) > 0 ? <>Balance <span className="font-bold text-rose-600">{inr(i.balanceDue)}</span></> : <span className="font-semibold text-emerald-700">Fully paid</span>}
+                          </div>
+                        )}
+                      </div>
+                      {i.status !== "CANCELLED" && i.status !== "DRAFT" && (
+                        <div className="mt-2">
+                          <div className="h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-emerald-600 transition-all" style={{ width: `${pct}%` }} /></div>
+                          <div className="mt-1 text-[11px] text-slate-400">{inr(paid)} received · {pct}%</div>
+                        </div>
+                      )}
+                      <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-slate-100 pt-2.5">
+                        {busy && <Loader2 className="h-4 w-4 animate-spin text-slate-400" />}
+                        {canWrite && i.status === "DRAFT" && !busy && (
+                          <ActionBtn onClick={() => issue(i.id)} title="Issue">Issue</ActionBtn>
+                        )}
+                        {canCollect && i.status !== "CANCELLED" && i.status !== "PAID" && i.status !== "DRAFT" && !busy && (
+                          <ActionBtn onClick={() => setPayFor(i)} tone="green" title="Record payment against this invoice">
+                            <CheckCircle2 className="h-3.5 w-3.5" /> Mark paid
+                          </ActionBtn>
+                        )}
+                        {canWrite && i.status === "PAID" && !busy && (
+                          <ActionBtn onClick={() => markUnpaid(i)} tone="red" title="Mark unpaid">
+                            <RotateCcw className="h-3.5 w-3.5" /> Unpaid
+                          </ActionBtn>
+                        )}
+                        <span className="ml-auto flex items-center gap-1.5">
+                          {i.status !== "DRAFT" && i.status !== "CANCELLED" && customerPhone && (
+                            <a href={invoiceWhatsApp(i)} target="_blank" rel="noreferrer" title="Send on WhatsApp"
+                              className="inline-flex items-center gap-1 rounded-md border border-emerald-200 px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-50">
+                              <MessageCircle className="h-3.5 w-3.5" /> WhatsApp
+                            </a>
+                          )}
+                          {i.status !== "DRAFT" && (
+                            <ActionBtn onClick={() => doPrint(i)} title="Print invoice">
+                              <Printer className="h-3.5 w-3.5" /> Print
+                            </ActionBtn>
+                          )}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </section>
       )}

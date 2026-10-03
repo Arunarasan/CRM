@@ -17,9 +17,11 @@ interface Props {
   onChangeRequestsChanged: () => void;
   /** Approving cascades to BOQ/tasks/materials/quotation — reload everything. */
   onFullRefresh: () => void;
+  /** Render only the "New Change Request" button + dialog (used by the merged Approvals & Changes list). */
+  triggerOnly?: boolean;
 }
 
-export default function ChangeRequestsTab({ projectId, phases, changeRequests, onChangeRequestsChanged, onFullRefresh }: Props) {
+export default function ChangeRequestsTab({ projectId, phases, changeRequests, onChangeRequestsChanged, onFullRefresh, triggerOnly }: Props) {
   const [newChangeRequest, setNewChangeRequest] = useState<{ changeType: ChangeRequestType; reason: string; description: string }>({
     changeType: 'CUSTOMER_REQUEST', reason: '', description: '',
   });
@@ -58,13 +60,12 @@ export default function ChangeRequestsTab({ projectId, phases, changeRequests, o
       .catch(() => toast.error("Failed to mark change request completed"));
   };
 
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-slate-800 flex items-center"><FileEdit className="w-5 h-5 mr-2 text-emerald-600"/> Project Change Requests</h2>
+  const dialog = (
         <Dialog>
           <DialogTrigger asChild>
-            <Button><Plus className="w-4 h-4 mr-2"/> New Change Request</Button>
+            {triggerOnly
+              ? <Button size="sm" variant="outline" className="h-9 rounded-xl"><Plus className="w-4 h-4 mr-1"/> Change Request</Button>
+              : <Button><Plus className="w-4 h-4 mr-2"/> New Change Request</Button>}
           </DialogTrigger>
           <DialogContent>
             <DialogHeader><DialogTitle>New Change Request</DialogTitle></DialogHeader>
@@ -109,6 +110,14 @@ export default function ChangeRequestsTab({ projectId, phases, changeRequests, o
             </div>
           </DialogContent>
         </Dialog>
+  );
+  if (triggerOnly) return dialog;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-bold text-slate-800 flex items-center"><FileEdit className="w-5 h-5 mr-2 text-emerald-600"/> Project Change Requests</h2>
+        {dialog}
       </div>
 
       <div className="space-y-3">

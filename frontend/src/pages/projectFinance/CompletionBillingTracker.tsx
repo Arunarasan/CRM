@@ -20,7 +20,7 @@ function stageBadge(status: string): { text: string; cls: string } {
   switch (status) {
     case "PAID": return { text: "Paid", cls: "bg-emerald-100 text-emerald-700" };
     case "PARTIAL": return { text: "Partial", cls: "bg-amber-100 text-amber-700" };
-    case "INVOICED": return { text: "Due", cls: "bg-emerald-100 text-emerald-700" };
+    case "INVOICED": return { text: "Due", cls: "bg-amber-100 text-amber-800" };
     case "OVERDUE": return { text: "Overdue", cls: "bg-red-100 text-red-600" };
     default: return { text: "Pending", cls: "bg-slate-100 text-slate-500" };
   }
@@ -92,17 +92,15 @@ export default function CompletionBillingTracker({ project, onChanged, refreshSi
   // No payment plan yet — offer to seed the standard milestone plan.
   if (!data.hasSchedule) {
     return (
-      <section className="rounded-2xl border border-slate-100 bg-white p-6 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
-        <div className="flex items-center gap-2 text-lg font-bold text-slate-800">
-          <CircleDollarSign className="h-5 w-5 text-emerald-600" /> Completion &amp; Billing
+      <section className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-5 flex flex-col sm:flex-row sm:items-center gap-3">
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700"><CircleDollarSign className="h-5 w-5" /></span>
+        <div className="flex-1">
+          <div className="text-sm font-bold text-slate-900">No payment schedule yet</div>
+          <p className="text-xs text-slate-500">Add milestones (e.g. advance, 50%, 90%, completion) so invoices raise automatically as work progresses.</p>
         </div>
-        <p className="mt-2 text-sm text-slate-500">
-          No payment milestone plan yet. Add one so invoices raise automatically as work progresses
-          (e.g. 50%, 75%, 90%, on completion).
-        </p>
         {canWrite && (
-          <Button className="mt-4" onClick={generatePlan} disabled={busy}>
-            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />} Create standard plan
+          <Button onClick={generatePlan} disabled={busy} className="rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white shrink-0">
+            {busy ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Zap className="h-4 w-4 mr-1" />} Create standard plan
           </Button>
         )}
       </section>
@@ -110,39 +108,33 @@ export default function CompletionBillingTracker({ project, onChanged, refreshSi
   }
 
   return (
-    <section className="rounded-2xl border border-slate-100 bg-white p-6 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2 text-lg font-bold text-slate-800">
-          <CircleDollarSign className="h-5 w-5 text-emerald-600" /> Completion &amp; Billing
-        </div>
-        <label className="flex items-center gap-2 text-sm text-slate-600">
+    <section className="rounded-2xl border border-slate-100 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)] @container">
+      <div className="px-4 py-3 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
+        <h3 className="text-base font-bold text-slate-900 flex items-center gap-2"><CircleDollarSign className="h-5 w-5 text-emerald-700" /> Payment Schedule</h3>
+        <label className="flex items-center gap-2 text-xs text-slate-600">
           <Zap className={`h-4 w-4 ${data.autoBillingEnabled ? "text-amber-500" : "text-slate-300"}`} />
-          <span className="font-medium">Auto-bill on progress</span>
-          <Switch checked={data.autoBillingEnabled} disabled={!canWrite || busy}
-            onCheckedChange={(v) => toggleAuto(!!v)} />
+          <span className="font-semibold">Auto-bill on progress</span>
+          <Switch checked={data.autoBillingEnabled} disabled={!canWrite || busy} onCheckedChange={(v) => toggleAuto(!!v)} />
         </label>
       </div>
 
-      {/* Two progress bars: work vs payments */}
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Bar label="Work completed" percent={data.workPercent} tone="blue"
-          caption={`${data.workPercent}% of tasks done`} />
-        <Bar label="Payments collected" percent={data.paymentPercent} tone="emerald"
-          caption={`${inr(data.collectedTotal)} of ${inr(data.scheduledTotal)}`} />
-      </div>
-
-      {data.fullySettled && (
-        <div className="mt-4 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
-          <PartyPopper className="h-4 w-4" /> Fully completed and fully paid.
+      <div className="p-4 space-y-4">
+        {/* Work vs money, side by side */}
+        <div className="grid grid-cols-1 @xl:grid-cols-2 gap-3">
+          <Bar label="Work completed" percent={data.workPercent} tone="work" caption={`${data.workPercent}% of the work done`} />
+          <Bar label="Payments collected" percent={data.paymentPercent} tone="money" caption={`${inr(data.collectedTotal)} of ${inr(data.scheduledTotal)}`} />
         </div>
-      )}
 
-      {/* Milestone timeline */}
-      <div className="mt-6">
-        <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">Payment milestones</h4>
-        <ol className="relative space-y-1 border-l border-slate-200 pl-5">
-          {data.stages.map((s) => (
-            <MilestoneRow key={s.id} s={s} workPercent={data.workPercent}
+        {data.fullySettled && (
+          <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-800">
+            <PartyPopper className="h-4 w-4" /> Fully completed and fully paid.
+          </div>
+        )}
+
+        {/* Milestone stepper — a row of steps on wide screens, a list on phones */}
+        <ol className={`grid grid-cols-1 gap-2.5 ${data.stages.length >= 4 ? "@3xl:grid-cols-2 @6xl:grid-cols-4" : data.stages.length === 3 ? "@4xl:grid-cols-3" : "@2xl:grid-cols-2"}`}>
+          {data.stages.map((s, i) => (
+            <MilestoneStep key={s.id} s={s} index={i} workPercent={data.workPercent}
               canWrite={canWrite} raising={raisingId === s.id} onRaise={() => raiseInvoice(s.id)} />
           ))}
         </ol>
@@ -151,60 +143,54 @@ export default function CompletionBillingTracker({ project, onChanged, refreshSi
   );
 }
 
-function MilestoneRow({ s, workPercent, canWrite, raising, onRaise }: { s: BillingStage; workPercent: number; canWrite: boolean; raising: boolean; onRaise: () => void }) {
+function MilestoneStep({ s, index, workPercent, canWrite, raising, onRaise }: { s: BillingStage; index: number; workPercent: number; canWrite: boolean; raising: boolean; onRaise: () => void }) {
   const badge = stageBadge(s.status);
   const isPaid = s.status === "PAID";
-  // A progress-driven stage that work hasn't reached yet is "locked".
+  // A progress-driven stage that work hasn't reached yet is "locked" (upcoming).
   const locked = s.progressDriven && !s.reached && s.status === "PENDING";
+  const due = !isPaid && !locked;
   // Not yet invoiced and there's an amount to bill — a human can raise it now.
   const canRaise = canWrite && !s.invoice && s.status === "PENDING" && Number(s.amount) > 0;
+  const toGo = locked ? Math.max(0, Number(s.triggerPercentage) - workPercent) : 0;
 
-  const dotCls = isPaid
-    ? "bg-emerald-500 border-emerald-500"
-    : s.status === "PENDING"
-      ? (locked ? "bg-white border-slate-300" : "bg-emerald-500 border-emerald-500")
-      : "bg-emerald-500 border-emerald-500";
+  const box = isPaid ? "border-emerald-200 bg-emerald-50/50" : s.status === "OVERDUE" ? "border-rose-200 bg-rose-50/40" : due ? "border-amber-200 bg-amber-50/50" : "border-slate-100 bg-white";
+  const circle = isPaid ? "bg-emerald-700 text-white" : s.status === "OVERDUE" ? "bg-rose-600 text-white" : due ? "bg-amber-500 text-white" : "bg-slate-100 text-slate-500";
 
   return (
-    <li className="relative py-2">
-      <span className={`absolute -left-[27px] top-3.5 flex h-3.5 w-3.5 items-center justify-center rounded-full border-2 ${dotCls}`}>
-        {isPaid && <CheckCircle2 className="h-3.5 w-3.5 text-white" />}
-      </span>
-      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-slate-800">{prettyStage(s.stage)}</span>
+    <li className={`rounded-2xl border p-3 transition-shadow hover:shadow-md ${box}`}>
+      <div className="flex items-start gap-2.5">
+        <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${circle}`}>
+          {isPaid ? <CheckCircle2 className="h-4 w-4" /> : locked ? <Lock className="h-3.5 w-3.5" /> : index + 1}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <span className="text-sm font-bold text-slate-900 leading-tight">{prettyStage(s.stage)}</span>
+            <span className={`shrink-0 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${locked ? "bg-slate-100 text-slate-500" : badge.cls}`}>
+              {s.status === "PENDING" && !locked && <Clock className="h-3 w-3" />}
+              {locked ? "Upcoming" : badge.text}
+            </span>
+          </div>
+          <div className="mt-1 text-lg font-bold text-slate-900">{inr(s.amount)}</div>
+          <div className="mt-1 flex flex-wrap items-center gap-1">
             {s.progressDriven ? (
-              <span className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
-                s.reached ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-400"}`}>
-                {locked ? <Lock className="h-2.5 w-2.5" /> : <ChevronRight className="h-2.5 w-2.5" />}
-                at {Number(s.triggerPercentage)}%
+              <span className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${s.reached ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
+                {locked ? <Lock className="h-2.5 w-2.5" /> : <ChevronRight className="h-2.5 w-2.5" />} at {Number(s.triggerPercentage)}% work
               </span>
             ) : (
-              <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-400">manual</span>
+              <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500">manual</span>
             )}
             {s.autoTriggered && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-600">
-                <Zap className="h-2.5 w-2.5" /> auto
-              </span>
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700"><Zap className="h-2.5 w-2.5" /> auto</span>
             )}
           </div>
-          <p className="mt-0.5 text-xs text-slate-400">
-            {s.invoice ? `Invoice ${s.invoice.invoiceNumber}` : locked ? `Unlocks at ${Number(s.triggerPercentage)}% work` : "Not invoiced"}
-            {locked && workPercent > 0 ? ` · ${Math.max(0, Number(s.triggerPercentage) - workPercent)}% to go` : ""}
+          <p className="mt-1.5 text-[11px] text-slate-500">
+            {s.invoice ? <>Invoice <span className="font-semibold text-slate-700">{s.invoice.invoiceNumber}</span></> : locked ? `${toGo}% more work to unlock` : "Not invoiced yet"}
           </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-slate-700">{inr(s.amount)}</span>
-          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${badge.cls}`}>
-            {s.status === "PENDING" && !locked && <Clock className="h-3 w-3" />}
-            {badge.text}
-          </span>
           {canRaise && (
             <button type="button" onClick={onRaise} disabled={raising}
               title={locked ? "Raise this invoice now (before work reaches the trigger)" : "Raise this invoice now"}
-              className="inline-flex items-center gap-1 rounded-md border border-emerald-200 px-2 py-1 text-[11px] font-medium text-emerald-600 transition-colors hover:bg-emerald-50 disabled:opacity-50">
-              {raising ? <Loader2 className="h-3 w-3 animate-spin" /> : <FilePlus2 className="h-3 w-3" />} Raise
+              className="mt-2 inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-emerald-700 transition-colors hover:bg-emerald-50 disabled:opacity-50">
+              {raising ? <Loader2 className="h-3 w-3 animate-spin" /> : <FilePlus2 className="h-3 w-3" />} Raise invoice
             </button>
           )}
         </div>
@@ -213,19 +199,18 @@ function MilestoneRow({ s, workPercent, canWrite, raising, onRaise }: { s: Billi
   );
 }
 
-function Bar({ label, percent, caption, tone }: { label: string; percent: number; caption: string; tone: "blue" | "emerald" }) {
-  const barCls = tone === "blue" ? "bg-emerald-500" : "bg-emerald-500";
-  const pctCls = tone === "blue" ? "text-emerald-600" : "text-emerald-600";
+function Bar({ label, percent, caption, tone }: { label: string; percent: number; caption: string; tone: "work" | "money" }) {
+  const barCls = tone === "work" ? "bg-sky-600" : "bg-emerald-600";
   return (
-    <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-4">
+    <div className="rounded-xl border border-slate-100 bg-slate-50/60 px-3.5 py-3">
       <div className="flex items-center justify-between">
-        <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">{label}</span>
-        <span className={`text-lg font-black ${pctCls}`}>{percent}%</span>
+        <span className="text-xs font-semibold text-slate-500">{label}</span>
+        <span className="text-base font-bold text-slate-900">{percent}%</span>
       </div>
-      <div className="mt-2 h-2.5 w-full overflow-hidden rounded-full bg-slate-200">
+      <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-200">
         <div className={`h-full rounded-full transition-all ${barCls}`} style={{ width: `${Math.min(100, Math.max(0, percent))}%` }} />
       </div>
-      <p className="mt-1.5 text-xs text-slate-500">{caption}</p>
+      <p className="mt-1.5 text-[11px] text-slate-500">{caption}</p>
     </div>
   );
 }

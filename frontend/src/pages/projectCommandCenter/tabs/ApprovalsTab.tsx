@@ -12,13 +12,15 @@ interface Props {
   approvals: any[];
   onChanged: () => void;
   onStatsChanged: () => void;
+  /** Render only the "Request Approval" button + dialog (used by the merged Approvals & Changes list). */
+  triggerOnly?: boolean;
 }
 
 // Standard approval gates in the delivery lifecycle; "Other" lets the user type a custom one.
 const APPROVAL_TYPES = ["Design Approval", "Material Approval", "Stage Approval", "Completion Approval", "Other"];
 
 /** Customer approvals — request a new one, then approve/reject pending decisions. */
-export default function ApprovalsTab({ projectId, approvals, onChanged, onStatsChanged }: Props) {
+export default function ApprovalsTab({ projectId, approvals, onChanged, onStatsChanged, triggerOnly }: Props) {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ approvalType: "Design Approval", customType: "", remarks: "" });
@@ -46,15 +48,13 @@ export default function ApprovalsTab({ projectId, approvals, onChanged, onStatsC
 
   const pending = approvals?.filter((a: any) => a.status === "PENDING").length || 0;
 
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-slate-800 flex items-center">
-          <ClipboardCheck className="w-5 h-5 mr-2 text-emerald-600"/> Customer Approvals
-          {pending > 0 && <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">{pending} pending</span>}
-        </h2>
+  const dialog = (
         <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild><Button><Plus className="w-4 h-4 mr-2"/> Request Approval</Button></DialogTrigger>
+          <DialogTrigger asChild>
+            {triggerOnly
+              ? <Button size="sm" variant="outline" className="h-9 rounded-xl"><Plus className="w-4 h-4 mr-1"/> Request Approval</Button>
+              : <Button><Plus className="w-4 h-4 mr-2"/> Request Approval</Button>}
+          </DialogTrigger>
           <DialogContent>
             <DialogHeader><DialogTitle>Request Customer Approval</DialogTitle></DialogHeader>
             <div className="space-y-4 pt-4">
@@ -81,6 +81,17 @@ export default function ApprovalsTab({ projectId, approvals, onChanged, onStatsC
             </div>
           </DialogContent>
         </Dialog>
+  );
+  if (triggerOnly) return dialog;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-bold text-slate-800 flex items-center">
+          <ClipboardCheck className="w-5 h-5 mr-2 text-emerald-600"/> Customer Approvals
+          {pending > 0 && <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">{pending} pending</span>}
+        </h2>
+        {dialog}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
