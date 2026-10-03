@@ -177,32 +177,32 @@ export default function EmployeeProfile() {
 
   return (
     <div className="flex flex-col h-full bg-slate-50">
-      {/* -------- Header -------- */}
-      <div className="bg-white border-b px-4 md:px-8 py-6 sticky top-0 z-10">
-        <div className="flex items-start gap-4 md:gap-6 max-w-7xl mx-auto w-full">
-          <Button variant="ghost" size="icon" onClick={goBack} title="Back" className="rounded-full mt-1 shrink-0"><ArrowLeft className="w-5 h-5" /></Button>
+      {/* -------- Header — compact on phones (scrolls away), sticky from tablet up -------- */}
+      <div className="border-b bg-card px-4 py-4 md:sticky md:top-0 md:z-10 md:px-8 md:py-5">
+        <div className="mx-auto flex w-full max-w-7xl items-start gap-3 md:gap-5">
+          <Button variant="ghost" size="icon" onClick={goBack} title="Back" aria-label="Back" className="-ml-2 mt-1 shrink-0 rounded-full"><ArrowLeft className="h-5 w-5" /></Button>
 
           {photo
-            ? <img src={resolveFileUrl(photo)} alt="" className="w-20 h-20 md:w-24 md:h-24 rounded-full object-cover border-4 border-white shadow-md shrink-0" />
-            : <div className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-slate-100 flex items-center justify-center shrink-0 border-4 border-white shadow-md text-3xl font-black text-slate-400">
+            ? <img src={resolveFileUrl(photo)} alt="" className="h-14 w-14 shrink-0 rounded-full border-2 border-white object-cover shadow md:h-20 md:w-20" />
+            : <div className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-emerald-100 text-lg font-semibold text-emerald-800 md:h-20 md:w-20 md:text-2xl">
                 {(employee.firstName?.[0] || "") + (employee.lastName?.[0] || "")}
               </div>}
 
-          <div className="flex-1 min-w-0">
-            <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
               <div className="min-w-0">
-                <h1 className="text-2xl font-bold tracking-tight text-slate-900 truncate">{fullName}</h1>
-                <p className="text-sm font-semibold text-emerald-600">
+                <h1 className="truncate text-xl font-semibold tracking-tight text-slate-900 md:text-2xl">{fullName}</h1>
+                <p className="truncate text-sm text-slate-600">
                   {employee.designation || "No designation"} · {employee.department?.name || "No department"}
                 </p>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <span className={`px-3 py-1 text-xs font-bold uppercase tracking-wider rounded-full ${statusTone}`}>{employee.status}</span>
-                <Button variant="outline" size="sm" onClick={openEdit}><Pencil className="w-4 h-4 mr-1.5" /> Edit</Button>
+              <div className="flex shrink-0 items-center gap-2">
+                <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusTone}`}>{String(employee.status || "").replace(/_/g, " ").toLowerCase().replace(/^./, (c: string) => c.toUpperCase())}</span>
+                <Button variant="outline" size="sm" onClick={openEdit}><Pencil className="mr-1.5 h-4 w-4" /> Edit</Button>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mt-5 text-sm">
+            <div className="mt-3 hidden grid-cols-2 gap-3 text-sm sm:grid md:mt-4 md:grid-cols-4 md:gap-4">
               <Fact icon={<IdCard className="w-4 h-4" />} label="Employee ID" value={employee.employeeCode} />
               <Fact icon={<Mail className="w-4 h-4" />} label="Email" value={employee.email} />
               <Fact icon={<Phone className="w-4 h-4" />} label="Phone" value={employee.phone || w.mobile} />
@@ -210,11 +210,17 @@ export default function EmployeeProfile() {
             </div>
           </div>
         </div>
+        {/* Phones: contact as tap targets instead of a 4-cell grid */}
+        <div className="mt-3 flex flex-wrap gap-2 sm:hidden">
+          {employee.employeeCode && <span className="inline-flex h-9 items-center gap-1.5 rounded-md bg-slate-100 px-3 text-xs font-medium text-slate-700"><IdCard className="h-3.5 w-3.5" /> {employee.employeeCode}</span>}
+          {(employee.phone || w.mobile) && <a href={`tel:${employee.phone || w.mobile}`} className="inline-flex h-9 items-center gap-1.5 rounded-md border px-3 text-xs font-medium text-slate-700"><Phone className="h-3.5 w-3.5" /> {employee.phone || w.mobile}</a>}
+          {employee.email && <a href={`mailto:${employee.email}`} aria-label="Email" className="inline-flex h-9 w-9 items-center justify-center rounded-md border text-slate-700"><Mail className="h-3.5 w-3.5" /></a>}
+        </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 md:p-8 max-w-7xl mx-auto w-full">
+      <div className="mx-auto w-full max-w-7xl flex-1 overflow-y-auto p-4 md:p-8">
         {/* -------- Quick stats -------- */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4 md:gap-4">
           <StatTile icon={<CheckSquare className="w-5 h-5 text-emerald-600" />} label="Tasks completed" value={workStats?.tasksDone ?? 0} />
           <StatTile icon={<FolderKanban className="w-5 h-5 text-emerald-600" />} label="Projects worked" value={workStats?.projectsDone ?? 0} />
           <StatTile icon={<CalendarClock className="w-5 h-5 text-cyan-600" />} label="Days present" value={presentDays} />
@@ -222,7 +228,8 @@ export default function EmployeeProfile() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full flex flex-col">
-          <TabsList className="grid w-full grid-cols-2 md:grid-cols-8 bg-white border shadow-sm p-1 h-auto md:h-12 rounded-xl mb-6 shrink-0">
+          <div className="-mx-4 mb-5 shrink-0 overflow-x-auto px-4 md:mx-0 md:px-0">
+          <TabsList className="h-auto w-max gap-0.5 rounded-xl border bg-card p-1 shadow-sm lg:grid lg:w-full lg:grid-cols-8">
             <TabTrig value="overview" icon={<Briefcase className="w-4 h-4 mr-2" />}>Overview</TabTrig>
             <TabTrig value="attendance" icon={<CalendarClock className="w-4 h-4 mr-2" />}>Time &amp; Leave</TabTrig>
             <TabTrig value="leads" icon={<Target className="w-4 h-4 mr-2" />}>Leads</TabTrig>
@@ -232,6 +239,7 @@ export default function EmployeeProfile() {
             <TabTrig value="performance" icon={<Award className="w-4 h-4 mr-2" />}>Performance</TabTrig>
             <TabTrig value="reviews" icon={<Star className="w-4 h-4 mr-2" />}>Reviews</TabTrig>
           </TabsList>
+          </div>
 
           {/* ---- Overview (inline-editable cards, lead-profile style) ---- */}
           <TabsContent value="overview">
@@ -598,7 +606,7 @@ export default function EmployeeProfile() {
 
 function TabTrig({ value, icon, children }: { value: string; icon: React.ReactNode; children: React.ReactNode }) {
   return (
-    <TabsTrigger value={value} className="rounded-lg h-11 md:h-full font-bold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+    <TabsTrigger value={value} className="h-10 rounded-lg px-3 font-medium data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
       {icon}{children}
     </TabsTrigger>
   );
@@ -607,8 +615,8 @@ function TabTrig({ value, icon, children }: { value: string; icon: React.ReactNo
 function Fact({ icon, label, value }: { icon: React.ReactNode; label: string; value?: string | null }) {
   return (
     <div className="min-w-0">
-      <p className="flex items-center gap-1 text-slate-400 font-bold uppercase text-[10px]"><span className="text-slate-300">{icon}</span>{label}</p>
-      <p className="font-semibold text-slate-800 truncate">{value || "—"}</p>
+      <p className="flex items-center gap-1 text-xs text-slate-500"><span className="text-slate-400">{icon}</span>{label}</p>
+      <p className="truncate font-medium text-slate-900">{value || "—"}</p>
     </div>
   );
 }
@@ -616,19 +624,19 @@ function Fact({ icon, label, value }: { icon: React.ReactNode; label: string; va
 function MiniStat({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="bg-white p-3 text-center">
-      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</p>
-      <p className="text-lg font-black text-slate-900 mt-0.5">{value}</p>
+      <p className="text-xs text-slate-500">{label}</p>
+      <p className="mt-0.5 text-lg font-semibold tabular-nums text-slate-900">{value}</p>
     </div>
   );
 }
 
 function StatTile({ icon, label, value }: { icon: React.ReactNode; label: string; value: React.ReactNode }) {
   return (
-    <div className="bg-white border rounded-2xl shadow-sm p-4 flex items-center gap-3">
-      <div className="w-10 h-10 rounded-xl bg-slate-50 grid place-items-center shrink-0">{icon}</div>
+    <div className="flex items-center gap-3 rounded-xl border bg-card p-3 shadow-sm md:p-4">
+      <div className="hidden h-10 w-10 shrink-0 place-items-center rounded-lg bg-slate-50 sm:grid">{icon}</div>
       <div className="min-w-0">
-        <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 truncate">{label}</p>
-        <p className="text-2xl font-black text-slate-900 leading-tight">{value}</p>
+        <p className="truncate text-xs font-medium text-slate-500">{label}</p>
+        <p className="truncate text-lg font-semibold leading-tight tabular-nums text-slate-900 md:text-xl">{value}</p>
       </div>
     </div>
   );

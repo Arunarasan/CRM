@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, ShieldCheck } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import { FilterChips, SectionHeader } from "./hrUi";
 import { profileApprovalsApi, type AdminProfileChangeRequest } from "@/api/profileApprovalsApi";
 import ProfileApprovalsPanel from "./ProfileApprovalsPanel";
 
@@ -28,23 +29,13 @@ export default function ProfileApprovalsPage() {
 
   return (
     <div className="max-w-3xl">
-      <div className="mb-4 flex items-center gap-2">
-        <ShieldCheck className="h-5 w-5 text-primary" />
-        <h2 className="text-lg font-semibold text-slate-900">Profile & Document Approvals</h2>
-      </div>
-      <p className="mb-4 text-sm text-muted-foreground">
-        Changes employees submit from the self-service app land here for review. Nothing updates the
-        master record until you approve it.
-      </p>
-
-      <div className="mb-4 flex gap-1 rounded-lg border bg-white p-1 text-sm w-fit">
-        {FILTERS.map((f) => (
-          <button key={f} onClick={() => setFilter(f)}
-            className={`rounded-md px-3 py-1.5 font-medium capitalize transition-colors ${
-              filter === f ? "bg-primary text-primary-foreground" : "text-slate-500 hover:text-slate-800"}`}>
-            {f.toLowerCase()}
-          </button>
-        ))}
+      <div className="mb-4 space-y-3">
+        <SectionHeader
+          title="Profile & document approvals"
+          description="Changes employees submit from the self-service app. Nothing updates the master record until you approve it."
+        />
+        <FilterChips<Filter> value={filter} onChange={setFilter}
+          options={FILTERS.map((f) => ({ key: f, label: f.charAt(0) + f.slice(1).toLowerCase() }))} />
       </div>
 
       {loading ? (

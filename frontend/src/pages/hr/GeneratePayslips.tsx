@@ -5,8 +5,8 @@ import type { PayrollPreviewRow } from "@/types/payroll";
 import { inr } from "@/pages/workforce/WorkforceFinanceTab";
 import { toast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
-import { BaseInput } from "@/components/ui/input";
-import { Clock, PlayCircle, Search, CircleHelp, FileText, Settings2 } from "lucide-react";
+import { SearchField } from "@/pages/workforce/hrUi";
+import { Clock, PlayCircle, CircleHelp, FileText, Settings2 } from "lucide-react";
 
 type Basis = "HOURLY" | "MONTHLY";
 
@@ -98,14 +98,10 @@ export default function GeneratePayslips({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <h3 className="flex items-center gap-2 font-bold text-slate-800">
-          <Clock className="w-5 h-5 text-cyan-600" /> Hours this month — choose Hourly or Monthly
+        <h3 className="flex items-center gap-2 font-semibold text-slate-900">
+          <Clock className="w-4 h-4 text-slate-500" /> Hours this month — choose Hourly or Monthly
         </h3>
-        <div className="flex items-center gap-2 px-3 h-10 rounded-md border bg-white w-full sm:w-64">
-          <Search className="w-4 h-4 text-slate-400" />
-          <BaseInput value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search employee…"
-            className="flex-1 bg-transparent text-sm outline-none" />
-        </div>
+        <SearchField value={q} onChange={setQ} placeholder="Search employee…" className="w-full sm:w-64" />
       </div>
 
       <p className="flex items-start gap-1.5 text-xs text-slate-500">
@@ -118,13 +114,13 @@ export default function GeneratePayslips({
       </p>
 
       {/* desktop */}
-      <div className="hidden md:block bg-white border rounded-2xl shadow-sm overflow-x-auto">
+      <div className="hidden md:block bg-card border rounded-xl shadow-sm overflow-x-auto">
         <table className="w-full text-sm min-w-[860px]">
-          <thead className="bg-slate-50 text-xs font-bold text-slate-500 uppercase">
+          <thead className="bg-slate-50 text-xs font-medium text-slate-500">
             <tr>
               <th className="p-3 w-10">
                 {canProcess && pending.length > 0 && (
-                  <input type="checkbox" checked={allPicked} onChange={toggleAll} aria-label="Select all" />
+                  <input type="checkbox" className="h-5 w-5 accent-[hsl(var(--primary))]" checked={allPicked} onChange={toggleAll} aria-label="Select all" />
                 )}
               </th>
               <th className="text-left p-3">Employee</th>
@@ -139,7 +135,7 @@ export default function GeneratePayslips({
               <tr key={r.employeeId} className="border-t align-top">
                 <td className="p-3">
                   {canProcess && !r.recordId && r.defaultBasis && (
-                    <input type="checkbox" checked={!!picked[r.employeeId]}
+                    <input type="checkbox" className="h-5 w-5 accent-[hsl(var(--primary))]" checked={!!picked[r.employeeId]}
                       onChange={(e) => setPicked((p) => ({ ...p, [r.employeeId]: e.target.checked }))} />
                   )}
                 </td>
@@ -161,11 +157,11 @@ export default function GeneratePayslips({
       {/* mobile */}
       <div className="md:hidden space-y-2">
         {visible.map((r) => (
-          <div key={r.employeeId} className="rounded-xl border bg-white p-3 shadow-sm">
+          <div key={r.employeeId} className="rounded-xl border bg-card p-3 shadow-sm">
             <div className="flex items-start justify-between gap-2">
               <div className="flex items-center gap-2">
                 {canProcess && !r.recordId && r.defaultBasis && (
-                  <input type="checkbox" checked={!!picked[r.employeeId]}
+                  <input type="checkbox" className="h-5 w-5 accent-[hsl(var(--primary))]" checked={!!picked[r.employeeId]}
                     onChange={(e) => setPicked((p) => ({ ...p, [r.employeeId]: e.target.checked }))} />
                 )}
                 <Person r={r} onEditWage={canProcess ? onEditWage : undefined} />
@@ -183,12 +179,12 @@ export default function GeneratePayslips({
       </div>
 
       {canProcess && pending.length > 0 && (
-        <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 rounded-2xl border bg-white/95 p-3 shadow-md backdrop-blur">
+        <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card/95 p-3 shadow-md backdrop-blur">
           <div className="text-sm text-slate-600">
             <b className="text-slate-900">{selected.length}</b> selected · base pay <b className="text-slate-900">{inr(selectedTotal)}</b>
           </div>
-          <Button size="lg" onClick={generate} disabled={busy || selected.length === 0} className="w-full sm:w-auto">
-            <PlayCircle className={`w-5 h-5 mr-2 ${busy ? "animate-pulse" : ""}`} />
+          <Button onClick={generate} disabled={busy || selected.length === 0} className="w-full sm:w-auto">
+            <PlayCircle className={`w-4 h-4 mr-1.5 ${busy ? "animate-pulse" : ""}`} />
             {busy ? "Generating…" : `Generate ${selected.length} payslip${selected.length === 1 ? "" : "s"}`}
           </Button>
         </div>
@@ -209,8 +205,8 @@ function Person({ r, onEditWage }: { r: PayrollPreviewRow; onEditWage?: (employe
         </span>
       </Link>
       {onEditWage && (
-        <button type="button" title="Wage & pay basis" onClick={() => onEditWage(r.employeeId)}
-          className="shrink-0 rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
+        <button type="button" title="Wage & pay basis" aria-label="Wage & pay basis" onClick={() => onEditWage(r.employeeId)}
+          className="shrink-0 rounded p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
           <Settings2 className="w-4 h-4" />
         </button>
       )}

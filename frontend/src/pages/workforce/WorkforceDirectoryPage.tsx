@@ -1,44 +1,55 @@
-import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { workforceApi } from "@/api/workforceApi";
 import type { WorkforceListRow, WorkforceMeta } from "@/types/workforce";
 import {
   RESOURCE_TYPE_LABELS, RESOURCE_TYPE_STYLES, WORKFORCE_STATUSES, WORKFORCE_STATUS_TONE,
 } from "@/types/workforce";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, RefreshCw } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import ResponsiveList, { type Column } from "@/components/ui/responsive-list";
+import FilterSheet from "@/components/ui/filter-sheet";
+import { Plus, RefreshCw, SlidersHorizontal, Users, Phone, Mail, Briefcase } from "lucide-react";
 import AddWorkforceDialog from "./AddWorkforceDialog";
 import api from "@/lib/api";
 import { toast } from "@/components/ui/toast";
+import { FilterChips, PersonChip, SearchField } from "./hrUi";
+
+const humanize = (s?: string) => (s ? s.charAt(0) + s.slice(1).toLowerCase().replace(/_/g, " ") : "");
 
 export default function WorkforceDirectoryPage() {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [rows, setRows] = useState<WorkforceListRow[]>([]);
   const [meta, setMeta] = useState<WorkforceMeta | null>(null);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const [search, setSearch] = useState("");
-  const [type, setType] = useState("");
+  const [query, setQuery] = useState(""); // debounced search sent to the server
+  const [type, setType] = useState("ALL"); // filtered client-side so the chips can show counts
   const [skill, setSkill] = useState("");
   const [status, setStatus] = useState("");
-  const [department, setDepartment] = useState("");
+  // A department card's "View people" link opens the directory pre-filtered.
+  const [department, setDepartment] = useState<string>(() => (location.state as { department?: string } | null)?.department ?? "");
   const [company, setCompany] = useState("");
 
   useEffect(() => { workforceApi.meta().then(setMeta).catch(console.error); }, []);
+  useEffect(() => { const t = setTimeout(() => setQuery(search.trim()), 300); return () => clearTimeout(t); }, [search]);
 
   const load = useCallback(() => {
     setLoading(true);
     workforceApi.list({
-      search: search || undefined, type: type || undefined, skill: skill || undefined,
+      search: query || undefined, skill: skill || undefined,
       status: status || undefined, department: department || undefined, company: company || undefined,
     })
       .then(setRows)
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [search, type, skill, status, department, company]);
+  }, [query, skill, status, department, company]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -52,100 +63,159 @@ export default function WorkforceDirectoryPage() {
       .finally(() => setSyncing(false));
   };
 
+  const typeOptions = useMemo(() => {
+    const counts: Record<string, number> = {};
+    rows.forEach((r) => { counts[r.workforceType] = (counts[r.workforceType] ?? 0) + 1; });
+    return [
+      { key: "ALL", label: "Everyone", count: rows.length },
+      ...Object.keys(counts).sort().map((k) => ({ key: k, label: `${RESOURCE_TYPE_LABELS[k] ?? humanize(k)}s`, count: counts[k] })),
+    ];
+  }, [rows]);
+  const visible = useMemo(() => (type === "ALL" ? rows : rows.filter((r) => r.workforceType === type)), [rows, type]);
+
+  const activeFilters = [skill, status, department, company].filter(Boolean).length;
+  const clearFilters = () => { setSkill(""); setStatus(""); setDepartment(""); setCompany(""); };
+
+  const columns: Column<WorkforceListRow>[] = [
+    {
+      key: "name", header: "Name",
+      cell: (w) => <PersonChip name={w.fullName} sub={w.companyName || w.department || undefined}
+        tone={w.workforceType === "EMPLOYEE" ? "employee" : "contractor"} to={`/workforce/${w.id}`} />,
+    },
+    { key: "type", header: "Type", cell: (w) => <TypePill type={w.workforceType} /> },
+    { key: "skill", header: "Skill", cell: (w) => <span className="text-slate-700">{w.primarySkill || "—"}</span> },
+    { key: "status", header: "Status", cell: (w) => <AvailabilityPill status={w.status} /> },
+    {
+      key: "projects", header: "Active projects", headClassName: "text-right", cellClassName: "text-right tabular-nums",
+      cell: (w) => w.activeProjects > 0 ? <span className="font-semibold text-slate-900">{w.activeProjects}</span> : <span className="text-slate-400">0</span>,
+    },
+    {
+      key: "contact", header: "Contact",
+      cell: (w) => (
+        <div className="text-xs">
+          <div className="text-slate-700">{w.mobile || "—"}</div>
+          {w.email && <div className="max-w-[14rem] truncate text-slate-500">{w.email}</div>}
+        </div>
+      ),
+    },
+  ];
+
+  const select = "h-10 w-full rounded-md border border-input bg-card px-3 text-sm";
+
   return (
     <div className="space-y-4">
-      <div className="flex flex-col md:flex-row md:items-center gap-3">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <Input className="pl-9" placeholder="Search by name, mobile, email or skill…"
-                 value={search} onChange={(e) => setSearch(e.target.value)} />
+      {/* Toolbar: search + filters + actions. Actions collapse to icons on phones. */}
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+        <SearchField value={search} onChange={setSearch} placeholder="Search name, mobile, email or skill…" className="lg:max-w-md lg:flex-1" />
+        <div className="flex items-center gap-2 lg:ml-auto">
+          <Button variant="outline" onClick={() => setFiltersOpen(true)} className="flex-1 sm:flex-none">
+            <SlidersHorizontal className="mr-1.5 h-4 w-4" /> Filters
+            {activeFilters > 0 && <span className="ml-1.5 rounded-full bg-primary px-1.5 text-[11px] font-semibold text-primary-foreground">{activeFilters}</span>}
+          </Button>
+          <Button variant="outline" onClick={syncUsers} disabled={syncing} title="Match login users to employee records" aria-label="Sync users" className="shrink-0 px-3">
+            <RefreshCw className={`h-4 w-4 sm:mr-1.5 ${syncing ? "animate-spin" : ""}`} /> <span className="hidden sm:inline">Sync users</span>
+          </Button>
+          <Button onClick={() => setOpen(true)} className="flex-1 sm:flex-none">
+            <Plus className="mr-1.5 h-4 w-4" /> Add person
+          </Button>
         </div>
-        <Filter value={type} onChange={setType} placeholder="All types"
-                options={(meta?.types ?? []).map((t) => ({ value: t.value, label: t.label }))} />
-        <Filter value={skill} onChange={setSkill} placeholder="All skills"
-                options={(meta?.skills ?? []).map((s) => ({ value: s, label: s }))} />
-        <Filter value={status} onChange={setStatus} placeholder="All statuses"
-                options={WORKFORCE_STATUSES.map((s) => ({ value: s, label: s.replace(/_/g, " ") }))} />
-        <Filter value={department} onChange={setDepartment} placeholder="All departments"
-                options={(meta?.departments ?? []).map((d) => ({ value: d.name, label: d.name }))} />
-        <div className="w-full md:w-44">
-          <Input placeholder="Company…" value={company} onChange={(e) => setCompany(e.target.value)} />
-        </div>
-        <Button variant="outline" onClick={syncUsers} disabled={syncing} className="shrink-0">
-          <RefreshCw className={`w-4 h-4 mr-1 ${syncing ? "animate-spin" : ""}`} /> Sync Users
-        </Button>
-        <Button onClick={() => setOpen(true)} className="shrink-0">
-          <Plus className="w-4 h-4 mr-1" /> Add Workforce
-        </Button>
       </div>
 
-      <div className="bg-white border rounded-2xl shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 text-slate-500">
-              <tr className="text-left">
-                <th className="p-3 font-semibold">Name</th>
-                <th className="p-3 font-semibold">Type</th>
-                <th className="p-3 font-semibold">Skill</th>
-                <th className="p-3 font-semibold">Status</th>
-                <th className="p-3 font-semibold text-center">Active Projects</th>
-                <th className="p-3 font-semibold">Contact</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {loading && <tr><td colSpan={6} className="p-8 text-center text-muted-foreground">Loading…</td></tr>}
-              {!loading && rows.length === 0 && (
-                <tr><td colSpan={6} className="p-8 text-center text-muted-foreground">
-                  No workforce matches these filters.
-                </td></tr>
-              )}
-              {rows.map((w) => (
-                <tr key={w.id} className="hover:bg-slate-50">
-                  <td className="p-3">
-                    <Link to={`/workforce/${w.id}`} className="font-bold text-slate-800 hover:text-primary">
-                      {w.fullName}
-                    </Link>
-                    <div className="text-xs text-muted-foreground">
-                      {w.companyName || w.department || ""}
-                    </div>
-                  </td>
-                  <td className="p-3">
-                    <Badge className={RESOURCE_TYPE_STYLES[w.workforceType] ?? "bg-slate-100 text-slate-700"}>
-                      {RESOURCE_TYPE_LABELS[w.workforceType] ?? w.workforceType}
-                    </Badge>
-                  </td>
-                  <td className="p-3">{w.primarySkill || "—"}</td>
-                  <td className="p-3">
-                    <Badge className={WORKFORCE_STATUS_TONE[w.status] ?? "bg-slate-100 text-slate-700"}>
-                      {w.status.replace(/_/g, " ")}
-                    </Badge>
-                  </td>
-                  <td className="p-3 text-center font-semibold">{w.activeProjects}</td>
-                  <td className="p-3 text-xs">
-                    <div>{w.mobile || "—"}</div>
-                    <div className="text-muted-foreground">{w.email || ""}</div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      <FilterChips options={typeOptions} value={type} onChange={setType} />
+
+      <ResponsiveList
+        items={visible}
+        columns={columns}
+        getRowKey={(w) => w.id}
+        loading={loading}
+        onRowClick={(w) => navigate(`/workforce/${w.id}`)}
+        emptyIcon={Users}
+        emptyTitle={search || activeFilters ? "Nobody matches these filters" : "No one in the directory yet"}
+        emptyDescription={search || activeFilters ? "Try a different search or clear the filters." : "Add your first employee or contractor to get started."}
+        emptyAction={search || activeFilters
+          ? <Button variant="outline" size="sm" onClick={() => { setSearch(""); clearFilters(); }}>Clear search & filters</Button>
+          : <Button size="sm" onClick={() => setOpen(true)}><Plus className="mr-1 h-4 w-4" /> Add person</Button>}
+        renderCard={(w) => (
+          <div className="space-y-2.5">
+            <div className="flex items-start justify-between gap-2">
+              <PersonChip name={w.fullName} sub={w.companyName || w.department || undefined}
+                tone={w.workforceType === "EMPLOYEE" ? "employee" : "contractor"} />
+              <AvailabilityPill status={w.status} />
+            </div>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 pl-[2.875rem] text-xs text-slate-600">
+              <TypePill type={w.workforceType} />
+              {w.primarySkill && <span className="inline-flex items-center gap-1"><Briefcase className="h-3.5 w-3.5 text-slate-400" />{w.primarySkill}</span>}
+              {w.activeProjects > 0 && <span><b className="text-slate-900">{w.activeProjects}</b> active project{w.activeProjects === 1 ? "" : "s"}</span>}
+            </div>
+            {(w.mobile || w.email) && (
+              <div className="flex gap-2 pl-[2.875rem]">
+                {w.mobile && (
+                  <a href={`tel:${w.mobile}`} onClick={(e) => e.stopPropagation()}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-md border px-3 text-xs font-medium text-slate-700 hover:bg-slate-50">
+                    <Phone className="h-3.5 w-3.5" /> {w.mobile}
+                  </a>
+                )}
+                {w.email && (
+                  <a href={`mailto:${w.email}`} onClick={(e) => e.stopPropagation()} aria-label={`Email ${w.fullName}`}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-md border text-slate-700 hover:bg-slate-50">
+                    <Mail className="h-3.5 w-3.5" />
+                  </a>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      />
+
+      {!loading && visible.length > 0 && (
+        <p className="text-xs text-slate-500">Showing {visible.length} of {rows.length}</p>
+      )}
+
+      <FilterSheet open={filtersOpen} onClose={() => setFiltersOpen(false)} activeCount={activeFilters} onClear={clearFilters}>
+        <div className="space-y-1.5">
+          <Label>Status</Label>
+          <select className={select} value={status} onChange={(e) => setStatus(e.target.value)}>
+            <option value="">Any status</option>
+            {WORKFORCE_STATUSES.map((s) => <option key={s} value={s}>{humanize(s)}</option>)}
+          </select>
         </div>
-      </div>
+        <div className="space-y-1.5">
+          <Label>Skill</Label>
+          <select className={select} value={skill} onChange={(e) => setSkill(e.target.value)}>
+            <option value="">Any skill</option>
+            {(meta?.skills ?? []).map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>
+        <div className="space-y-1.5">
+          <Label>Department</Label>
+          <select className={select} value={department} onChange={(e) => setDepartment(e.target.value)}>
+            <option value="">Any department</option>
+            {(meta?.departments ?? []).map((d) => <option key={d.name} value={d.name}>{d.name}</option>)}
+          </select>
+        </div>
+        <div className="space-y-1.5">
+          <Label>Company</Label>
+          <Input placeholder="Contractor's company…" value={company} onChange={(e) => setCompany(e.target.value)} />
+        </div>
+      </FilterSheet>
 
       <AddWorkforceDialog open={open} onOpenChange={setOpen} meta={meta} onSaved={load} />
     </div>
   );
 }
 
-function Filter({ value, onChange, placeholder, options }: {
-  value: string; onChange: (v: string) => void; placeholder: string;
-  options: { value: string; label: string }[];
-}) {
+function TypePill({ type }: { type: string }) {
   return (
-    <select className="h-10 rounded-md border bg-white px-3 text-sm shrink-0"
-            value={value} onChange={(e) => onChange(e.target.value)}>
-      <option value="">{placeholder}</option>
-      {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-    </select>
+    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${RESOURCE_TYPE_STYLES[type] ?? "bg-slate-100 text-slate-700"}`}>
+      {RESOURCE_TYPE_LABELS[type] ?? humanize(type)}
+    </span>
+  );
+}
+
+function AvailabilityPill({ status }: { status: string }) {
+  return (
+    <span className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold ${WORKFORCE_STATUS_TONE[status] ?? "bg-slate-100 text-slate-700"}`}>
+      {humanize(status)}
+    </span>
   );
 }

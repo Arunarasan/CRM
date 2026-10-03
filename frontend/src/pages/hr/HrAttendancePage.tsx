@@ -68,8 +68,8 @@ function DirectCorrection() {
   };
 
   return (
-    <section className="rounded-2xl border bg-card shadow-sm">
-      <header className="flex items-center justify-between border-b px-5 py-4">
+    <section className="rounded-xl border bg-card shadow-sm">
+      <header className="flex items-center justify-between border-b px-4 py-3 sm:px-5 sm:py-4">
         <div className="flex items-center gap-2">
           <Clock3 className="h-5 w-5 text-primary" />
           <h2 className="text-base font-semibold">Correct / add attendance directly</h2>
@@ -77,7 +77,7 @@ function DirectCorrection() {
         {!open && <Button size="sm" variant="outline" onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> New</Button>}
       </header>
       {open && (
-        <div className="p-5">
+        <div className="p-4 sm:p-5">
           <p className="mb-3 text-xs text-muted-foreground">
             Set a day's clock-in/out for any employee (fixes a wrong time, adds a missed clock-out, or a whole missed day). Hours & pay recompute.
           </p>
@@ -148,8 +148,8 @@ function CorrectionApprovals() {
   if (!loading && rows.length === 0) return null;
 
   return (
-    <section className="rounded-2xl border bg-card shadow-sm">
-      <header className="flex items-center gap-2 border-b px-5 py-4">
+    <section className="rounded-xl border bg-card shadow-sm">
+      <header className="flex items-center gap-2 border-b px-4 py-3 sm:px-5 sm:py-4">
         <Clock3 className="h-5 w-5 text-primary" />
         <h2 className="text-base font-semibold">Time-correction requests</h2>
         {rows.length > 0 && <span className="ml-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">{rows.length}</span>}
@@ -159,7 +159,7 @@ function CorrectionApprovals() {
       ) : (
         <ul className="divide-y">
           {rows.map((r) => (
-            <li key={r.id} className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <li key={r.id} className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:px-5 sm:items-center sm:justify-between">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-x-2">
                   <span className="font-medium">{r.employeeName}</span>
@@ -174,7 +174,7 @@ function CorrectionApprovals() {
                 </p>
                 {r.reason && <p className="text-xs text-muted-foreground">{r.reason}</p>}
               </div>
-              <div className="flex shrink-0 gap-2">
+              <div className="grid shrink-0 grid-cols-2 gap-2 sm:flex">
                 <Button variant="forest" size="sm" disabled={busy === r.id} onClick={() => resolve(r, true)}>
                   {busy === r.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} Approve
                 </Button>
@@ -220,8 +220,8 @@ function MethodRequests() {
   if (!loading && rows.length === 0) return null;
 
   return (
-    <section className="rounded-2xl border bg-card shadow-sm">
-      <header className="flex items-center gap-2 border-b px-5 py-4">
+    <section className="rounded-xl border bg-card shadow-sm">
+      <header className="flex items-center gap-2 border-b px-4 py-3 sm:px-5 sm:py-4">
         <Fingerprint className="h-5 w-5 text-primary" />
         <h2 className="text-base font-semibold">Biometric attendance requests</h2>
         {rows.length > 0 && (
@@ -233,7 +233,7 @@ function MethodRequests() {
       ) : (
         <ul className="divide-y">
           {rows.map((r) => (
-            <li key={r.employeeId} className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <li key={r.employeeId} className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:px-5 sm:items-center sm:justify-between">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-x-2">
                   <span className="font-medium">{r.employeeName}</span>
@@ -243,7 +243,7 @@ function MethodRequests() {
                   Wants to switch from <b>{r.currentMethod ?? 'GEO'}</b> to biometric ({r.requestedMethod}).
                 </p>
               </div>
-              <div className="flex shrink-0 gap-2">
+              <div className="grid shrink-0 grid-cols-2 gap-2 sm:flex">
                 <Button variant="forest" size="sm" disabled={busy === r.employeeId} onClick={() => resolve(r, true)}>
                   {busy === r.employeeId ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} Approve
                 </Button>
@@ -290,8 +290,8 @@ function PendingApprovals() {
   };
 
   return (
-    <section className="rounded-2xl border bg-card shadow-sm">
-      <header className="flex items-center gap-2 border-b px-5 py-4">
+    <section className="rounded-xl border bg-card shadow-sm">
+      <header className="flex items-center gap-2 border-b px-4 py-3 sm:px-5 sm:py-4">
         <ShieldAlert className="h-5 w-5 text-amber-500" />
         <h2 className="text-base font-semibold">Clock-ins needing approval</h2>
         {rows.length > 0 && (
@@ -302,11 +302,11 @@ function PendingApprovals() {
       {loading ? (
         <p className="px-5 py-8 text-center text-sm text-muted-foreground"><Loader2 className="mr-2 inline h-4 w-4 animate-spin" />Loading…</p>
       ) : rows.length === 0 ? (
-        <p className="px-5 py-8 text-center text-sm text-muted-foreground">Nothing to review — all clock-ins verified. 🎉</p>
+        <p className="px-5 py-8 text-center text-sm text-muted-foreground">Nothing to review — all clock-ins verified.</p>
       ) : (
         <ul className="divide-y">
           {rows.map((r) => (
-            <li key={r.sessionId} className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <li key={r.sessionId} className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:px-5 sm:items-center sm:justify-between">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                   <span className="font-medium">{r.employeeName}</span>
@@ -327,7 +327,7 @@ function PendingApprovals() {
                   )}
                 </p>
               </div>
-              <div className="flex shrink-0 gap-2">
+              <div className="grid shrink-0 grid-cols-2 gap-2 sm:flex">
                 <Button variant="forest" size="sm" disabled={busy === r.sessionId} onClick={() => resolve(r, true)}>
                   {busy === r.sessionId ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} Approve
                 </Button>
@@ -412,8 +412,8 @@ function OfficeLocations() {
     setDraft((d) => ({ ...(d ?? EMPTY), [k]: v }));
 
   return (
-    <section className="rounded-2xl border bg-card shadow-sm">
-      <header className="flex items-center justify-between border-b px-5 py-4">
+    <section className="rounded-xl border bg-card shadow-sm">
+      <header className="flex items-center justify-between border-b px-4 py-3 sm:px-5 sm:py-4">
         <div className="flex items-center gap-2">
           <MapPin className="h-5 w-5 text-primary" />
           <h2 className="text-base font-semibold">Office locations</h2>
@@ -421,12 +421,12 @@ function OfficeLocations() {
         {!draft && <Button size="sm" onClick={() => setDraft({ ...EMPTY })}><Plus className="h-4 w-4" /> Add location</Button>}
       </header>
 
-      <p className="px-5 pt-3 text-xs text-muted-foreground">
+      <p className="px-4 pt-3 text-xs text-muted-foreground sm:px-5">
         Geo-fenced clock-ins must be within a location's radius. With no active location, geo clock-ins aren't enforced.
       </p>
 
       {draft && (
-        <div className="mx-5 mt-3 rounded-xl border bg-muted/30 p-4">
+        <div className="mx-4 mt-3 rounded-xl border bg-muted/30 p-3 sm:mx-5 sm:p-4">
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Name">
               <BaseInput className={INPUT} value={draft.name} onChange={(e) => set('name', e.target.value)} placeholder="Head Office" />
@@ -489,7 +489,7 @@ function OfficeLocations() {
       ) : (
         <ul className="divide-y">
           {rows.map((r) => (
-            <li key={r.id} className="flex items-center justify-between gap-3 px-5 py-3">
+            <li key={r.id} className="flex items-center justify-between gap-3 px-4 py-3 sm:px-5">
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="font-medium">{r.name}</span>
@@ -516,7 +516,7 @@ function OfficeLocations() {
   );
 }
 
-const INPUT = 'h-9 w-full rounded-md border border-input bg-card px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring';
+const INPUT = 'h-10 w-full rounded-md border border-input bg-card px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring';
 
 function Field({ label, full, children }: { label: string; full?: boolean; children: React.ReactNode }) {
   return (
