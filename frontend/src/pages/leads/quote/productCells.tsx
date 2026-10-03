@@ -437,9 +437,17 @@ export function ImageCell({ url, options, disabled, onChange, module = "QUOTATIO
     if (!url) return;
     setBusy(true);
     try {
-      const r = await fetch(resolveFileUrl(url));
-      if (!r.ok) throw new Error("fetch failed");
-      const blob = await r.blob();
+      // Our stored photos come through the API — the storage bucket sends no CORS headers, so the
+      // browser can't read them directly. Other links are tried as-is.
+      const src = resolveFileUrl(url);
+      let blob: Blob;
+      try {
+        blob = (await api.get(`/uploads/image`, { params: { url: src }, responseType: "blob" })).data;
+      } catch {
+        const r = await fetch(src);
+        if (!r.ok) throw new Error("fetch failed");
+        blob = await r.blob();
+      }
       setEditing(new File([blob], "photo", { type: blob.type || "image/jpeg" }));
     } catch {
       toast.error("Couldn't open this photo for editing.");

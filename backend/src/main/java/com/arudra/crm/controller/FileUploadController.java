@@ -76,10 +76,15 @@ public class FileUploadController {
         byte[] bytes;
         String contentType;
         if (StringUtils.hasText(publicBaseUrl) && url.startsWith(publicBaseUrl.replaceAll("/+$", "") + "/")) {
-            java.net.http.HttpResponse<byte[]> res = http.send(
-                    java.net.http.HttpRequest.newBuilder(java.net.URI.create(url))
-                            .timeout(java.time.Duration.ofSeconds(20)).GET().build(),
-                    java.net.http.HttpResponse.BodyHandlers.ofByteArray());
+            java.net.http.HttpResponse<byte[]> res;
+            try {
+                res = http.send(
+                        java.net.http.HttpRequest.newBuilder(java.net.URI.create(url.replace(" ", "%20")))
+                                .timeout(java.time.Duration.ofSeconds(20)).GET().build(),
+                        java.net.http.HttpResponse.BodyHandlers.ofByteArray());
+            } catch (IOException | IllegalArgumentException e) {
+                return ResponseEntity.status(org.springframework.http.HttpStatus.BAD_GATEWAY).build();
+            }
             if (res.statusCode() != 200) return ResponseEntity.notFound().build();
             bytes = res.body();
             contentType = res.headers().firstValue("Content-Type").orElse("");
