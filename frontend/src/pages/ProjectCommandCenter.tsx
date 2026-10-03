@@ -18,7 +18,7 @@ import BulkWorkUpdateDialog from "@/pages/projectCommandCenter/BulkWorkUpdateDia
 import HandoverTab from "@/pages/projectCommandCenter/HandoverTab";
 import SupplyInstallTab from "@/pages/projectCommandCenter/SupplyInstallTab";
 import CameraCaptureButton from "@/components/CameraCaptureButton";
-import { format, differenceInDays } from "date-fns";
+import { format, differenceInDays, formatDistanceToNow } from "date-fns";
 import {
   ArrowLeft, User, Activity,
   AlertTriangle, CheckCircle2, FileImage,
@@ -26,9 +26,10 @@ import {
   ChevronDown, ChevronRight, ShoppingCart, ClipboardCheck,
   Phone, Play, History, RotateCcw, Lock,
   MoreHorizontal, MapPin, MessageCircle, Wallet, Users,
-  Pencil, Check, X, Trash2,
+  Pencil, Check, Trash2,
   Calendar, Clock, Flag, Building2, FileText, IndianRupee,
-  BarChart3, StickyNote, FileBarChart, Home, Settings, ClipboardList,
+  BarChart3, FileBarChart, Home, Settings, ClipboardList,
+  ArrowRight, Percent, Zap, Info, Navigation, UserCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
@@ -50,7 +51,7 @@ import DocumentsTab from "@/pages/projectCommandCenter/tabs/DocumentsTab";
 import LabourTab from "@/pages/projectCommandCenter/tabs/LabourTab";
 import ServiceWarrantyTab from "@/pages/projectCommandCenter/tabs/ServiceWarrantyTab";
 import TrackingLinkDialog from "@/components/projects/TrackingLinkDialog";
-import { ProjectInfoRow, ProjectJourneyBar, ProjectHeaderSummary } from "@/pages/projectCommandCenter/ProjectJourneyHeader";
+import { ProjectInfoRow, ProjectJourneyBar, ProjectHeaderSummary, waLink } from "@/pages/projectCommandCenter/ProjectJourneyHeader";
 import ResourceSelect, { ResourceSelection } from "@/components/workforce/ResourceSelect";
 import { ResourceType } from "@/types/workforce";
 import { useGoBack } from "@/hooks/useGoBack";
@@ -75,20 +76,6 @@ const itemStatusStyle = (status?: string) => ITEM_STATUS_STYLES[(status || 'PEND
 // Compact inline editor input, sized to sit inside an overview cell without reflowing the layout.
 const cellInput = "w-full h-8 rounded-md border border-input bg-background px-2 text-sm";
 
-/** One overview row: label + value (view), or label + editor (edit). Read-only rows omit children. */
-function EditRow({ label, editing, view, children, danger }: {
-  label: React.ReactNode; editing: boolean; view: React.ReactNode; children?: React.ReactNode; danger?: boolean;
-}) {
-  const showEdit = editing && !!children;
-  return (
-    <div className="flex items-baseline justify-between gap-3 border-b border-dashed border-slate-100 pb-2">
-      <span className="text-xs font-medium text-slate-400 shrink-0 flex items-center gap-1.5">{label}</span>
-      {showEdit
-        ? <div className="min-w-0 flex-1 pl-3">{children}</div>
-        : <span className={`text-sm font-semibold text-right ${danger ? 'text-rose-600' : 'text-slate-700'}`}>{view}</span>}
-    </div>
-  );
-}
 const progressBarColor = (pct: number) => pct >= 100 ? 'bg-emerald-500' : pct >= 50 ? 'bg-emerald-500' : pct > 0 ? 'bg-amber-500' : 'bg-slate-300';
 
 // Premium stat-strip tones, matching the Overview stats cards (bg / border / icon-chip).
@@ -141,6 +128,66 @@ function StatStrip({ items, className = 'grid grid-cols-2 md:grid-cols-4 gap-2.5
   );
 }
 
+// Overview card chrome, matching the premium mockup.
+const CARD = "bg-white rounded-2xl border border-slate-100 p-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)]";
+const CARD_TITLE = "text-base font-bold text-slate-900 flex items-center gap-2";
+
+const STATUS_PILL: Record<string, string> = {
+  PLANNING: "bg-sky-50 text-sky-700 ring-sky-200",
+  PENDING: "bg-amber-50 text-amber-700 ring-amber-200",
+  APPROVED: "bg-sky-50 text-sky-700 ring-sky-200",
+  RUNNING: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+  PAUSED: "bg-amber-50 text-amber-700 ring-amber-200",
+  ON_HOLD: "bg-amber-50 text-amber-700 ring-amber-200",
+  COMPLETED: "bg-emerald-100 text-emerald-800 ring-emerald-300",
+  CANCELLED: "bg-rose-50 text-rose-700 ring-rose-200",
+  CLOSED: "bg-slate-100 text-slate-600 ring-slate-200",
+};
+
+type ActivityKind = "created" | "stage" | "edit" | "document" | "issue" | "log" | "payment";
+type ActivityItem = { date?: string; activity: string; by?: string; details?: string; kind: ActivityKind };
+const ACTIVITY_ICON: Record<ActivityKind, [React.ComponentType<{ className?: string }>, string]> = {
+  created: [Plus, "bg-emerald-100 text-emerald-700"],
+  stage: [ArrowRight, "bg-sky-100 text-sky-700"],
+  edit: [Pencil, "bg-amber-100 text-amber-700"],
+  document: [FileText, "bg-sky-50 text-sky-600"],
+  issue: [AlertTriangle, "bg-rose-100 text-rose-600"],
+  log: [ClipboardList, "bg-slate-100 text-slate-600"],
+  payment: [IndianRupee, "bg-emerald-50 text-emerald-700"],
+};
+const activityKindOf = (text: string): ActivityKind => {
+  const t = text.toLowerCase();
+  if (t.includes("created") || t.includes("converted")) return "created";
+  if (t.includes("stage") || t.includes("status") || t.includes("execution") || t.includes("handover") || t.includes("completed")) return "stage";
+  if (t.includes("payment") || t.includes("invoice")) return "payment";
+  if (t.includes("document") || t.includes("upload")) return "document";
+  if (t.includes("issue") || t.includes("risk")) return "issue";
+  return "edit";
+};
+
+function ActivityList({ items }: { items: ActivityItem[] }) {
+  if (items.length === 0) return <div className="py-8 text-center text-sm text-slate-400">No activity yet.</div>;
+  return (
+    <div className="divide-y divide-slate-100">
+      {items.map((a, i) => {
+        const [Icon, tone] = ACTIVITY_ICON[a.kind];
+        return (
+          <div key={i} className="flex items-start gap-3 py-2.5">
+            <span className={`flex h-9 w-9 items-center justify-center rounded-full shrink-0 ${tone}`}><Icon className="w-4 h-4" /></span>
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-medium text-slate-800 truncate" title={a.details ? `${a.activity}: ${a.details}` : a.activity}>
+                {a.activity}{a.details ? <>: <span className="font-semibold">{a.details}</span></> : null}
+              </div>
+              {a.by && <div className="text-xs text-slate-400 truncate">by {a.by}</div>}
+            </div>
+            {a.date && <div className="text-[11px] text-slate-400 whitespace-nowrap pt-0.5" title={format(new Date(a.date), 'dd MMM yyyy, hh:mm a')}>{formatDistanceToNow(new Date(a.date), { addSuffix: true })}</div>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // The 12 operational sections grouped into 5 task-shaped areas, so the tab bar reads as
 // "where in the project am I working" instead of a wall of equal chips. Each section keeps its
 // own content block untouched — this is purely how they're navigated.
@@ -159,6 +206,7 @@ const TAB_GROUPS: { id: string; label: string; icon: React.ComponentType<{ class
   ] },
   { id: "handover", label: "Handover", icon: CheckCircle2, sections: [["handover", "Handover"]] },
   { id: "documents", label: "Documents", icon: FileText, sections: [["media", "Documents"]] },
+  { id: "activity", label: "Activity", icon: History, sections: [["activity", "Activity"]] },
   // Shown only once the project is COMPLETED (see the tab-strip filter below).
   { id: "service", label: "Service & Warranty", icon: Settings, sections: [["serviceWarranty", "Service & Warranty"]] },
 ];
@@ -785,17 +833,17 @@ export default function ProjectCommandCenter() {
 
   const daysRemainingText = daysRemaining === null ? '—' : daysRemaining < 0 ? `${Math.abs(daysRemaining)} Days Over` : `${daysRemaining} Days`;
 
-  // Recent Activity — synthesized from the project's live sub-records, newest first.
-  const activityFeed = (() => {
-    const items: { date?: string; activity: string; by?: string; details: string }[] = [];
-    (dailyLogs || []).forEach((l: any) => items.push({ date: l.logDate, activity: 'Daily Log', by: l.createdBy?.name || l.recordedBy?.name, details: l.workCompleted || `${l.percentageCompleted ?? 0}% completed` }));
-    (issues || []).forEach((i: any) => items.push({ date: i.createdAt || i.reportedDate, activity: 'Issue Reported', by: i.reportedBy?.name || i.createdBy?.name, details: i.title || i.description || 'Issue logged' }));
-    (stages || []).forEach((s: any) => items.push({ date: s.completedDate || s.dueDate, activity: s.status === 'COMPLETED' ? 'Stage Completed' : 'Stage Updated', by: undefined, details: s.name }));
-    (documents || []).forEach((d: any) => items.push({ date: d.createdAt || d.uploadedAt, activity: 'Document Added', by: d.uploadedBy?.name, details: d.fileName || d.documentName || 'Document' }));
+  // Activity — the project's own activity log plus events synthesized from its sub-records, newest first.
+  const activityFeed: ActivityItem[] = (() => {
+    const items: ActivityItem[] = [];
+    (data.activityLogs || []).forEach((l: any) => l.description && items.push({ date: l.time, activity: l.description, by: l.user?.name || l.role, kind: activityKindOf(l.description) }));
+    (dailyLogs || []).forEach((l: any) => items.push({ date: l.logDate, activity: 'Daily log', by: l.createdBy?.name || l.recordedBy?.name, details: l.workCompleted || `${l.percentageCompleted ?? 0}% completed`, kind: 'log' }));
+    (issues || []).forEach((i: any) => items.push({ date: i.createdAt || i.reportedDate, activity: 'Issue reported', by: i.reportedBy?.name || i.createdBy?.name, details: i.title || i.description, kind: 'issue' }));
+    (stages || []).forEach((s: any) => s.name && items.push({ date: s.completedDate || s.dueDate, activity: s.status === 'COMPLETED' ? 'Stage completed' : 'Stage updated', details: s.name, kind: 'stage' }));
+    (documents || []).forEach((d: any) => items.push({ date: d.createdAt || d.uploadedAt, activity: 'Document added', by: d.uploadedBy?.name, details: d.fileName || d.documentName || 'Document', kind: 'document' }));
     return items
-      .filter((x) => x.details)
-      .sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime())
-      .slice(0, 6);
+      .filter((x) => x.date)
+      .sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
   })();
 
   return (
@@ -804,7 +852,7 @@ export default function ProjectCommandCenter() {
       <div onScroll={(e) => setScrolled((e.target as HTMLDivElement).scrollTop > 120)} className="flex-1 overflow-y-auto scroll-smooth">
 
       {/* Breadcrumb */}
-      <div className="bg-white px-4 sm:px-6 lg:px-8 pt-2.5 shrink-0 z-10">
+      <div className="px-4 sm:px-6 lg:px-8 pt-3 shrink-0 z-10">
         <div className="flex items-center gap-1.5 text-sm text-slate-400">
           <Link to="/" className="hover:text-emerald-600 flex items-center gap-1"><Home className="w-3.5 h-3.5" /></Link>
           <ChevronRight className="w-3.5 h-3.5" />
@@ -815,29 +863,37 @@ export default function ProjectCommandCenter() {
       </div>
 
       {/* Premium header band */}
-      <div className="bg-white px-4 sm:px-6 lg:px-8 pt-2 shrink-0 z-10">
-        <div className="relative overflow-hidden rounded-2xl border border-emerald-100/70 bg-gradient-to-r from-emerald-50/60 via-white to-amber-50/40 px-4 sm:px-5 py-3">
-          {/* Decorative watermark — faint, centered, wide screens only so it never sits under the cards */}
-          <div className="pointer-events-none absolute inset-y-0 left-1/2 hidden -translate-x-1/2 items-center 2xl:flex">
-            <p className="font-serif italic text-xl leading-tight text-emerald-900/[0.07] text-center select-none whitespace-nowrap">
-              From Concept to Completion<br/>Beautifully Together
-            </p>
-          </div>
-
+      <div className="px-4 sm:px-6 lg:px-8 pt-2 shrink-0 z-10">
+        <div className="relative overflow-hidden rounded-2xl border border-slate-100 bg-gradient-to-br from-white via-white to-emerald-50/60 px-4 sm:px-5 py-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
           <div className="relative flex flex-wrap items-start justify-between gap-4">
-            <div className="flex items-start gap-2 sm:gap-3 min-w-0">
-              <Button variant="ghost" size="icon" onClick={goBack} title="Back" className="mt-1 h-8 w-8 rounded-full bg-white/70 text-slate-500 hover:text-slate-700 shrink-0 shadow-sm"><ArrowLeft className="h-4 w-4" /></Button>
+            <div className="flex items-start gap-3 min-w-0">
+              <button type="button" onClick={goBack} title="Back"
+                className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm hover:text-slate-900 hover:border-slate-300">
+                <ArrowLeft className="h-4 w-4" />
+              </button>
               <div className="min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h1 className="text-lg sm:text-xl lg:text-2xl font-bold tracking-tight text-slate-800 truncate">{summary.customerName || project.customer?.name || project.projectName}</h1>
-                  <span className={`px-2.5 py-0.5 text-[11px] rounded-full font-semibold uppercase tracking-wide ${
-                    project.status === 'RUNNING' || project.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-700' :
-                    'bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100'
-                  }`}>
-                    {project.status.replace(/_/g, ' ')}
-                  </span>
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <h1 className="text-xl sm:text-2xl lg:text-[28px] font-bold tracking-tight text-slate-900 truncate">{summary.customerName || project.customer?.name || project.projectName}</h1>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button type="button" className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ring-1 ${STATUS_PILL[project.status] || STATUS_PILL.PLANNING}`}>
+                        <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                        {project.status.replace(/_/g, ' ')}
+                        <ChevronDown className="h-3 w-3" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start">
+                      {['PLANNING', 'PENDING', 'APPROVED'].includes(project.status) && (
+                        <DropdownMenuItem onSelect={handleStartExecution}><Play className="w-4 h-4 mr-2"/> Start Execution</DropdownMenuItem>
+                      )}
+                      {project.status !== 'COMPLETED' && (
+                        <DropdownMenuItem onSelect={handleCompleteProject}><CheckCircle2 className="w-4 h-4 mr-2"/> Mark Completed</DropdownMenuItem>
+                      )}
+                      <DropdownMenuItem onSelect={() => setActiveTab('handover')}><Flag className="w-4 h-4 mr-2"/> Open Handover</DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                   {(stats?.health === 'WARNING' || stats?.health === 'CRITICAL') && (
-                    <span className={`px-2.5 py-0.5 text-[11px] rounded-full font-semibold uppercase tracking-wide ${
+                    <span className={`px-2.5 py-1 text-[11px] rounded-full font-bold uppercase tracking-wide ${
                       stats.health === 'CRITICAL' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'
                     }`}>
                       {stats.health === 'CRITICAL' ? 'Critical' : 'Warning'}
@@ -848,19 +904,19 @@ export default function ProjectCommandCenter() {
               </div>
             </div>
 
-            <div className="flex flex-col items-end gap-2">
-              <div className="flex items-center gap-2 shrink-0">
-                <Button variant="outline" className="rounded-xl border-slate-200 text-slate-600 bg-white" onClick={() => { setActiveTab('overview'); startEdit('overview'); }}>
+            <div className="flex flex-col items-stretch sm:items-end gap-3 w-full sm:w-auto">
+              <div className="flex items-center gap-2 shrink-0 sm:justify-end">
+                <Button variant="outline" className="h-11 rounded-xl border-slate-200 bg-white px-4 text-slate-700 font-semibold" onClick={() => { setActiveTab('overview'); startEdit('overview'); }}>
                   <Pencil className="w-4 h-4 mr-2" /> Edit Project
                 </Button>
                 {project.status !== 'COMPLETED' && (
-                  <Button onClick={handleCompleteProject} className="bg-emerald-500 hover:bg-emerald-600 rounded-xl">
+                  <Button onClick={handleCompleteProject} className="h-11 flex-1 sm:flex-none rounded-xl bg-emerald-800 hover:bg-emerald-900 px-5 font-semibold text-white">
                     <CheckCircle2 className="w-4 h-4 mr-2"/> Mark Completed
                   </Button>
                 )}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="icon" className="rounded-xl border-slate-200 text-slate-500 bg-white"><MoreHorizontal className="h-4 w-4" /></Button>
+                    <Button variant="outline" size="icon" className="h-11 w-11 shrink-0 rounded-xl border-slate-200 text-slate-600 bg-white"><MoreHorizontal className="h-4 w-4" /></Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     {['PLANNING', 'PENDING', 'APPROVED'].includes(project.status) && (
@@ -878,30 +934,28 @@ export default function ProjectCommandCenter() {
                 </DropdownMenu>
               </div>
 
-              {/* Date cards */}
-              <div className="flex items-stretch gap-2">
-                <div className="flex items-center gap-2 rounded-xl bg-white border border-slate-200 px-3 py-2 shadow-sm">
-                  <Calendar className="w-5 h-5 text-emerald-500 shrink-0" />
+              {/* Date card — start date | days remaining */}
+              <div className="flex items-stretch rounded-2xl bg-white border border-slate-100 shadow-sm divide-x divide-slate-100">
+                <div className="flex items-center gap-3 px-4 py-2.5 flex-1">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-50 text-emerald-700 shrink-0"><Calendar className="w-5 h-5" /></span>
                   <div>
-                    <div className="text-[10px] font-semibold uppercase text-slate-400">Start Date</div>
-                    <div className="text-sm font-bold text-slate-700 whitespace-nowrap">{shortDate(project.startDate)}</div>
+                    <div className="text-[11px] font-medium text-slate-400">Start Date</div>
+                    <div className="text-sm font-bold text-slate-800 whitespace-nowrap">{shortDate(project.startDate)}</div>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 rounded-xl bg-white border border-slate-200 px-3 py-2 shadow-sm">
-                  <Clock className={`w-5 h-5 shrink-0 ${daysRemaining !== null && daysRemaining < 0 ? 'text-rose-500' : 'text-amber-500'}`} />
+                <div className="flex items-center gap-3 px-4 py-2.5 flex-1">
+                  <span className={`flex h-10 w-10 items-center justify-center rounded-full shrink-0 ${daysRemaining !== null && daysRemaining < 0 ? 'bg-rose-50 text-rose-600' : 'bg-amber-50 text-amber-500'}`}><Clock className="w-5 h-5" /></span>
                   <div>
-                    <div className="text-[10px] font-semibold uppercase text-slate-400">Days Remaining</div>
-                    <div className={`text-sm font-bold whitespace-nowrap ${daysRemaining !== null && daysRemaining < 0 ? 'text-rose-600' : 'text-slate-700'}`}>{daysRemainingText}</div>
+                    <div className="text-[11px] font-medium text-slate-400">Days Remaining</div>
+                    <div className={`text-sm font-bold whitespace-nowrap ${daysRemaining !== null && daysRemaining < 0 ? 'text-rose-600' : 'text-slate-800'}`}>{daysRemainingText}</div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
-
-          <div className="relative">
-            <ProjectJourneyBar stages={summary.journey || []} onOpen={() => setActiveTab('handover')} />
-          </div>
         </div>
+
+        <ProjectJourneyBar stages={summary.journey || []} onOpen={() => setActiveTab('handover')} />
       </div>
       <TrackingLinkDialog projectId={Number(projectId)} open={trackingOpen} onOpenChange={setTrackingOpen} />
 
@@ -923,12 +977,12 @@ export default function ProjectCommandCenter() {
                     <span className="px-2 py-0.5 text-[10px] rounded-full font-semibold uppercase bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100 shrink-0">{project.status.replace(/_/g, ' ')}</span>
                   </div>
                   {project.status !== 'COMPLETED' && (
-                    <Button size="sm" onClick={handleCompleteProject} className="bg-emerald-500 hover:bg-emerald-600 rounded-lg h-8 shrink-0"><CheckCircle2 className="w-4 h-4 mr-1.5"/> Mark Completed</Button>
+                    <Button size="sm" onClick={handleCompleteProject} className="bg-emerald-800 hover:bg-emerald-900 rounded-lg h-8 shrink-0"><CheckCircle2 className="w-4 h-4 mr-1.5"/> Mark Completed</Button>
                   )}
                 </div>
                 {/* Primary strip — the areas of work + Generate Report */}
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="bg-white p-1 border border-slate-100 shadow-[0_1px_2px_rgba(0,0,0,0.03)] rounded-2xl flex flex-wrap gap-1 justify-start">
+                  <div className="bg-white p-1.5 border border-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] rounded-2xl flex flex-wrap gap-1 justify-start">
                     {TAB_GROUPS.filter((g) => g.id !== "service" || project.status === "COMPLETED").map((g) => {
                       const isActive = g.id === active.id;
                       const Icon = g.icon;
@@ -937,7 +991,7 @@ export default function ProjectCommandCenter() {
                           key={g.id}
                           type="button"
                           onClick={() => setActiveTab(g.sections[0][0])}
-                          className={`rounded-xl px-3.5 py-2 text-sm font-medium transition flex items-center gap-2 shrink-0 ${isActive ? "bg-emerald-500 text-white shadow-sm" : "text-slate-500 hover:bg-slate-50 hover:text-slate-700"}`}
+                          className={`rounded-xl px-4 py-2.5 text-sm font-medium transition flex items-center gap-2 shrink-0 ${isActive ? "bg-emerald-800 text-white shadow-sm" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}
                         >
                           <Icon className="w-4 h-4" />
                           {g.label}
@@ -950,8 +1004,8 @@ export default function ProjectCommandCenter() {
                   </div>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="outline" className="rounded-xl border-slate-200 text-slate-600 bg-white shrink-0">
-                        <FileBarChart className="w-4 h-4 mr-2 text-emerald-600" /> Generate Report <ChevronDown className="w-4 h-4 ml-2" />
+                      <Button variant="outline" className="h-12 rounded-2xl border-slate-100 text-emerald-800 font-semibold bg-white shrink-0 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+                        <FileBarChart className="w-4 h-4 mr-2 text-emerald-700" /> Generate Report <ChevronDown className="w-4 h-4 ml-2" />
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
@@ -990,268 +1044,241 @@ export default function ProjectCommandCenter() {
             
             {/* OVERVIEW TAB */}
             <TabsContent value="overview" className="space-y-3 mt-0 h-full outline-none">
-              {/* Overview band — facts/progress + team/activity stacked in the main column, beside a sidebar */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-start">
-
-                {/* Column 1 — Overview + Project Team (independent stack, no cross-column gaps) */}
-                <div className="lg:col-span-5 space-y-3">
+              {/* Row 1 — Project Overview · Project Progress · Financial Summary */}
+              <div className="grid grid-cols-1 lg:grid-cols-[1.15fr_1fr_1.15fr] gap-3 items-stretch">
 
                 {/* Project Overview — key facts (inline editable) */}
-                <div className="bg-white rounded-2xl border border-slate-100 p-3 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
-                  <div className="mb-2 flex items-center justify-between">
-                    <h3 className="text-sm font-bold text-slate-700 flex items-center"><ClipboardCheck className="w-4 h-4 mr-2 text-emerald-600"/> Project Overview</h3>
+                <div className={CARD}>
+                  <div className="mb-3 flex items-center justify-between">
+                    <h3 className={CARD_TITLE}><ClipboardCheck className="w-5 h-5 text-emerald-700"/> Project Overview</h3>
                     {!editingOverview ? (
-                      <button type="button" onClick={() => startEdit('overview')} className="text-slate-400 hover:text-emerald-600" title="Edit"><Pencil className="w-4 h-4" /></button>
+                      <button type="button" onClick={() => startEdit('overview')} className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-emerald-700"><Pencil className="w-3.5 h-3.5" /> Edit</button>
                     ) : (
-                      <div className="flex items-center gap-2">
-                        <button type="button" onClick={saveOverview} disabled={savingProject} className="text-emerald-600 hover:text-emerald-700 disabled:opacity-50" title="Save"><Check className="w-4 h-4" /></button>
-                        <button type="button" onClick={() => setEditingOverview(false)} className="text-slate-400 hover:text-rose-500" title="Cancel"><X className="w-4 h-4" /></button>
+                      <div className="flex items-center gap-1.5">
+                        <Button size="sm" onClick={saveOverview} disabled={savingProject} className="h-7 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-xs"><Check className="w-3.5 h-3.5 mr-1" /> Save</Button>
+                        <Button size="sm" variant="outline" onClick={() => setEditingOverview(false)} className="h-7 rounded-lg text-xs">Cancel</Button>
                       </div>
                     )}
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5">
-                    <EditRow label={<><FileText className="w-3.5 h-3.5 text-slate-300"/> Project Type</>} editing={editingOverview} view={project.projectType || '—'}>
-                      <BaseInput className={cellInput} value={pform.projectType} onChange={e => setPform({ ...pform, projectType: e.target.value })} placeholder="Residential, Commercial…" />
-                    </EditRow>
-                    <EditRow label={<><Building2 className="w-3.5 h-3.5 text-slate-300"/> Property Type</>} editing={editingOverview} view={project.projectCategory || '—'}>
-                      <BaseInput className={cellInput} value={pform.projectCategory} onChange={e => setPform({ ...pform, projectCategory: e.target.value })} placeholder="Apartment, Villa…" />
-                    </EditRow>
-                    <EditRow label={<><Flag className="w-3.5 h-3.5 text-slate-300"/> Priority</>} editing={editingOverview}
-                      view={project.priority ? <span className="px-2 py-0.5 rounded-md bg-amber-100 text-amber-700 text-[11px] font-bold uppercase">{project.priority}</span> : '—'}>
-                      <select className={cellInput} value={pform.priority} onChange={e => setPform({ ...pform, priority: e.target.value })}>
-                        {['LOW', 'MEDIUM', 'HIGH', 'URGENT'].map(p => <option key={p} value={p}>{p}</option>)}
-                      </select>
-                    </EditRow>
-                    <EditRow label={<><User className="w-3.5 h-3.5 text-slate-300"/> Project Manager</>} editing={editingOverview} view={project.projectManager?.name || '—'} />
-                    <EditRow label={<><Calendar className="w-3.5 h-3.5 text-slate-300"/> Start Date</>} editing={editingOverview} view={shortDate(project.startDate)}>
-                      <BaseInput type="date" className={cellInput} value={pform.startDate} onChange={e => setPform({ ...pform, startDate: e.target.value })} />
-                    </EditRow>
-                    <EditRow label={<><Flag className="w-3.5 h-3.5 text-slate-300"/> Target Completion</>} editing={editingOverview} view={shortDate(project.endDate)}>
-                      <BaseInput type="date" className={cellInput} value={pform.endDate} onChange={e => setPform({ ...pform, endDate: e.target.value })} />
-                    </EditRow>
-                    <EditRow label={<><Clock className="w-3.5 h-3.5 text-slate-300"/> Days Remaining</>} editing={editingOverview}
-                      view={<span className={`px-2 py-0.5 rounded-md text-[11px] font-bold ${daysRemaining !== null && daysRemaining < 0 ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}`}>{daysRemainingText}</span>} />
-                    <EditRow label={<><IndianRupee className="w-3.5 h-3.5 text-slate-300"/> Project Value</>} editing={editingOverview} view={project.estimatedCost ? inr(project.estimatedCost) : (project.budget ? inr(project.budget) : '—')}>
-                      <BaseInput type="number" min={0} className={cellInput} value={pform.estimatedCost} onChange={e => setPform({ ...pform, estimatedCost: e.target.value })} placeholder="Estimated value" />
-                    </EditRow>
-                  </div>
-
-                  {/* Description (+ address & requirements when editing) */}
-                  <div className="mt-2.5 pt-2 border-t border-slate-100">
-                    <div className="text-[11px] font-semibold text-slate-400 mb-1 uppercase tracking-wider flex items-center gap-1.5"><FileText className="w-3.5 h-3.5"/> Description</div>
-                    {editingOverview
-                      ? <textarea className="w-full min-h-[60px] rounded-md border border-input bg-background px-3 py-2 text-sm" value={pform.projectDescription} onChange={e => setPform({ ...pform, projectDescription: e.target.value })} placeholder="Scope / description of the project" />
-                      : <div className="text-sm font-medium text-slate-700 whitespace-pre-line">{project.projectDescription || <span className="text-slate-400 font-normal">No description added yet. Click edit to add project details.</span>}</div>}
+                  <div className="grid grid-cols-2 divide-x divide-slate-100">
+                    {([
+                      { k: 'projectType', icon: FileText, label: 'Project Type', view: project.projectType || '—',
+                        edit: <BaseInput className={cellInput} value={pform.projectType} onChange={e => setPform({ ...pform, projectType: e.target.value })} placeholder="Residential, Commercial…" /> },
+                      { k: 'projectCategory', icon: Building2, label: 'Property Type', view: project.projectCategory || '—',
+                        edit: <BaseInput className={cellInput} value={pform.projectCategory} onChange={e => setPform({ ...pform, projectCategory: e.target.value })} placeholder="Apartment, Villa…" /> },
+                      { k: 'priority', icon: Flag, label: 'Priority',
+                        view: project.priority ? <span className="inline-block px-3 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[11px] font-bold uppercase">{project.priority}</span> : '—',
+                        edit: <select className={cellInput} value={pform.priority} onChange={e => setPform({ ...pform, priority: e.target.value })}>{['LOW', 'MEDIUM', 'HIGH', 'URGENT'].map(p => <option key={p} value={p}>{p}</option>)}</select> },
+                      { k: 'pm', icon: User, label: 'Project Manager', view: project.projectManager?.name ? <span className="text-emerald-800">{project.projectManager.name}</span> : '—' },
+                      { k: 'endDate', icon: Calendar, label: 'Target Completion', view: shortDate(project.endDate),
+                        edit: <BaseInput type="date" className={cellInput} value={pform.endDate} onChange={e => setPform({ ...pform, endDate: e.target.value })} /> },
+                      { k: 'value', icon: IndianRupee, label: 'Project Value', view: project.estimatedCost ? inr(project.estimatedCost) : (project.budget ? inr(project.budget) : '—'),
+                        edit: <BaseInput type="number" min={0} className={cellInput} value={pform.estimatedCost} onChange={e => setPform({ ...pform, estimatedCost: e.target.value })} placeholder="Estimated value" /> },
+                    ] as { k: string; icon: React.ComponentType<{ className?: string }>; label: string; view: React.ReactNode; edit?: React.ReactNode }[]).map((f, i) => (
+                      <div key={f.k} className={`py-2.5 ${i % 2 === 0 ? 'pr-4' : 'pl-4'} ${i >= 2 ? 'border-t border-slate-100' : ''}`}>
+                        <div className="flex items-center gap-1.5 text-xs text-slate-400"><f.icon className="w-3.5 h-3.5" /> {f.label}</div>
+                        <div className="mt-1 text-sm font-semibold text-slate-800 break-words">{editingOverview && f.edit ? f.edit : f.view}</div>
+                      </div>
+                    ))}
                   </div>
                   {editingOverview && (
-                    <div className="mt-3 space-y-3">
+                    <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-3 border-t border-slate-100 pt-3">
                       <div>
-                        <div className="text-[11px] font-semibold text-slate-400 mb-1 uppercase tracking-wider">Property Address</div>
-                        <textarea className="w-full min-h-[48px] rounded-md border border-input bg-background px-3 py-2 text-sm" value={pform.propertyAddress} onChange={e => setPform({ ...pform, propertyAddress: e.target.value })} placeholder="Site / property address" />
+                        <div className="text-[11px] font-semibold text-slate-400 mb-1">Start Date</div>
+                        <BaseInput type="date" className={cellInput} value={pform.startDate} onChange={e => setPform({ ...pform, startDate: e.target.value })} />
                       </div>
                       <div>
-                        <div className="text-[11px] font-semibold text-slate-400 mb-1 uppercase tracking-wider">Customer Requirements</div>
-                        <textarea className="w-full min-h-[48px] rounded-md border border-input bg-background px-3 py-2 text-sm" value={pform.customerNotes} onChange={e => setPform({ ...pform, customerNotes: e.target.value })} placeholder="What the customer asked for" />
+                        <div className="text-[11px] font-semibold text-slate-400 mb-1">Budget</div>
+                        <BaseInput type="number" min={0} className={cellInput} value={pform.budget} onChange={e => setPform({ ...pform, budget: e.target.value })} />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <div className="text-[11px] font-semibold text-slate-400 mb-1">Property Address</div>
+                        <textarea className="w-full min-h-[44px] rounded-md border border-input bg-background px-3 py-2 text-sm" value={pform.propertyAddress} onChange={e => setPform({ ...pform, propertyAddress: e.target.value })} placeholder="Site / property address" />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <div className="text-[11px] font-semibold text-slate-400 mb-1">Description</div>
+                        <textarea className="w-full min-h-[52px] rounded-md border border-input bg-background px-3 py-2 text-sm" value={pform.projectDescription} onChange={e => setPform({ ...pform, projectDescription: e.target.value })} placeholder="Scope / description of the project" />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <div className="text-[11px] font-semibold text-slate-400 mb-1">Customer Requirements</div>
+                        <textarea className="w-full min-h-[44px] rounded-md border border-input bg-background px-3 py-2 text-sm" value={pform.customerNotes} onChange={e => setPform({ ...pform, customerNotes: e.target.value })} placeholder="What the customer asked for" />
                       </div>
                     </div>
                   )}
+                  {!editingOverview && project.projectDescription && (
+                    <p className="mt-2 border-t border-slate-100 pt-2 text-xs text-slate-500 whitespace-pre-line line-clamp-3">{project.projectDescription}</p>
+                  )}
                 </div>
 
-                {/* Notes & Comments */}
-                <div className="bg-white rounded-2xl border border-slate-100 p-3 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-sm font-bold text-slate-700 flex items-center"><StickyNote className="w-4 h-4 mr-2 text-emerald-600"/> Notes &amp; Comments</h3>
-                    <button type="button" onClick={() => toast.success('Notes & comments are coming soon.')} className="text-[11px] font-semibold text-emerald-600 hover:text-emerald-700">Add Note</button>
-                  </div>
-                  <div className="py-5 text-center">
-                    <span className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-300"><MessageCircle className="w-5 h-5" /></span>
-                    <div className="text-sm font-semibold text-slate-500 mt-2">No notes yet</div>
-                    <div className="text-xs text-slate-400 mt-0.5">Add notes, updates or comments about this project.</div>
-                  </div>
-                </div>
-
-                {/* Quote banner — left column */}
-                <div className="relative overflow-hidden rounded-2xl border border-emerald-100/70 bg-gradient-to-r from-emerald-50/70 via-white to-amber-50/50 px-4 py-3">
-                  <div className="flex items-center gap-3">
-                    <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-100 text-emerald-600 shrink-0"><Building2 className="w-4 h-4" /></span>
-                    <p className="font-serif italic text-sm text-emerald-900/70">“Well Planned Projects Turn Houses into Homes.”</p>
-                  </div>
-                </div>
-
-                </div>
-
-                {/* Column 2 — Progress + Recent Activity + Notes */}
-                <div className="lg:col-span-4 space-y-3">
-                {/* Project Progress — donut + legend + planning tip */}
-                <div className="bg-white rounded-2xl border border-slate-100 p-3 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
-                  <h3 className="text-sm font-bold text-slate-700 mb-2 flex items-center"><Activity className="w-4 h-4 mr-2 text-emerald-600"/> Project Progress</h3>
-                  <div className="flex items-center gap-4">
-                    <div className="relative h-24 w-24 shrink-0">
+                {/* Project Progress — donut + legend */}
+                <div className={CARD}>
+                  <h3 className={`${CARD_TITLE} mb-3`}><Activity className="w-5 h-5 text-emerald-700"/> Project Progress</h3>
+                  <div className="flex items-center gap-5">
+                    <div className="relative h-32 w-32 shrink-0">
                       <svg viewBox="0 0 100 100" className="h-full w-full -rotate-90">
-                        <circle cx="50" cy="50" r="42" fill="none" stroke="currentColor" strokeWidth="10" className="text-slate-100" />
-                        <circle cx="50" cy="50" r="42" fill="none" strokeWidth="10" strokeLinecap="round"
-                          className={(project.progress || 0) >= 100 ? 'text-emerald-500' : 'text-emerald-600'}
-                          stroke="currentColor"
-                          strokeDasharray={2 * Math.PI * 42}
-                          strokeDashoffset={2 * Math.PI * 42 * (1 - Math.min(100, project.progress || 0) / 100)} />
+                        <circle cx="50" cy="50" r="40" fill="none" stroke="currentColor" strokeWidth="11" className="text-slate-200" />
+                        <circle cx="50" cy="50" r="40" fill="none" strokeWidth="11" strokeLinecap="round"
+                          className="text-emerald-600" stroke="currentColor"
+                          strokeDasharray={2 * Math.PI * 40}
+                          strokeDashoffset={2 * Math.PI * 40 * (1 - Math.min(100, project.progress || 0) / 100)} />
                       </svg>
                       <div className="absolute inset-0 flex flex-col items-center justify-center">
-                        <span className="text-xl font-black text-slate-800 leading-none">{project.progress || 0}%</span>
-                        <span className="text-[9px] font-semibold uppercase text-slate-400 mt-0.5">Complete</span>
+                        <span className="text-2xl font-bold text-slate-900 leading-none">{project.progress || 0}%</span>
+                        <span className="text-[11px] text-slate-400 mt-1">Complete</span>
                       </div>
                     </div>
-                    <div className="min-w-0 flex-1 space-y-1.5 text-sm">
-                      <div className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-slate-300 shrink-0"/><span className="font-bold text-slate-700">{project.progress || 0}%</span><span className="text-slate-400">Execution</span></div>
-                      <div className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-sky-500 shrink-0"/><span className="font-bold text-slate-700">{stats?.tasks?.completed ?? 0} of {stats?.tasks?.total ?? 0}</span><span className="text-slate-400">Tasks Completed</span></div>
-                      <div className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-amber-500 shrink-0"/><span className="font-bold text-slate-700">{stats?.tasks?.delayed ?? 0}</span><span className="text-slate-400">Delayed Tasks</span></div>
-                      <div className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-rose-500 shrink-0"/><span className="font-bold text-slate-700">{stats?.issues?.open ?? 0}</span><span className="text-slate-400">Open Issues</span></div>
+                    <div className="min-w-0 flex-1 space-y-2.5 text-sm">
+                      <div className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-slate-300 shrink-0"/><span className="font-bold text-slate-800">{project.progress || 0}%</span><span className="text-slate-500">Execution</span></div>
+                      <div className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-sky-600 shrink-0"/><span className="font-bold text-slate-800">{stats?.tasks?.completed ?? 0} of {stats?.tasks?.total ?? 0}</span><span className="text-slate-500">Tasks Completed</span></div>
+                      <div className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-amber-500 shrink-0"/><span className="font-bold text-slate-800">{stats?.tasks?.delayed ?? 0}</span><span className="text-slate-500">Delayed Tasks</span></div>
+                      <div className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-sky-300 shrink-0"/><span className="font-bold text-slate-800">{stats?.tasks?.total ?? 0}</span><span className="text-slate-500">Total Tasks</span></div>
                     </div>
                   </div>
-                  {(project.status === 'PLANNING' || (project.progress || 0) === 0) && (
-                    <div className="mt-2.5 flex items-start gap-2 rounded-xl bg-sky-50 border border-sky-100 p-2.5 text-[11px] text-sky-800">
-                      <Sparkles className="w-4 h-4 shrink-0 text-sky-500 mt-0.5" />
-                      <span>Project is in planning stage. Start adding tasks, resources and documents to track progress effectively.</span>
-                    </div>
-                  )}
+                  <div className="mt-3 text-right">
+                    <button type="button" onClick={() => setActiveTab('fieldProgress')} className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 hover:text-emerald-900">View Tasks <ArrowRight className="w-3.5 h-3.5" /></button>
+                  </div>
                 </div>
 
-                {/* Recent Activity — timeline, scroll-capped */}
-                <div className="bg-white rounded-2xl border border-slate-100 p-3 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+                {/* Financial Summary — estimate · spent · remaining */}
+                <div className={CARD}>
                   <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-sm font-bold text-slate-700 flex items-center"><History className="w-4 h-4 mr-2 text-emerald-600"/> Recent Activity</h3>
-                    <button type="button" onClick={() => setActiveTab('execution')} className="text-[11px] font-semibold text-emerald-600 hover:text-emerald-700">View All</button>
+                    <h3 className={CARD_TITLE}><Wallet className="w-5 h-5 text-emerald-700"/> Financial Summary</h3>
+                    <button type="button" onClick={() => setActiveTab('payments')} className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 hover:text-emerald-900">View Details <ArrowRight className="w-3.5 h-3.5" /></button>
                   </div>
-                  {activityFeed.length > 0 ? (
-                    <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
-                      {activityFeed.map((a, i) => (
-                        <div key={i} className="flex gap-3">
-                          <div className="flex flex-col items-center">
-                            <span className={`h-2.5 w-2.5 rounded-full shrink-0 mt-1 ${i === 0 ? 'bg-emerald-500' : 'bg-sky-500'}`} />
-                            {i < activityFeed.length - 1 && <span className="w-px flex-1 bg-slate-100 my-1" />}
-                          </div>
-                          <div className="min-w-0 flex-1 -mt-0.5 pb-1">
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="text-sm font-semibold text-slate-700">{a.activity}</div>
-                              {a.date && <div className="text-[10px] text-slate-400 text-right whitespace-nowrap leading-tight">{format(new Date(a.date), 'dd MMM yyyy')}<br/>{format(new Date(a.date), 'hh:mm a')}</div>}
-                            </div>
-                            {(a.details || a.by) && <div className="text-xs text-slate-400 truncate" title={a.details}>{a.details}{a.by ? ` · ${a.by}` : ''}</div>}
-                          </div>
-                        </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {([
+                      { label: 'Estimate Budget', value: inr(boqEstimate), icon: Wallet, tone: 'bg-emerald-50 text-emerald-700', valueTone: 'text-slate-900',
+                        onClick: () => approvedBoqId ? navigate(`/boq/${approvedBoqId}`) : setActiveTab('phases'), title: approvedBoqId ? 'Open the BOQ' : 'No BOQ linked yet' },
+                      { label: 'Amount Spent', value: inr(spentAmount), icon: BarChart3, tone: 'bg-sky-50 text-sky-600', valueTone: 'text-slate-900',
+                        onClick: () => setActiveTab('payments'), title: 'View payments & expenses' },
+                      { label: 'Remaining', value: inr(profitOrLoss), icon: Percent, tone: profitOrLoss < 0 ? 'bg-rose-50 text-rose-600' : 'bg-amber-50 text-amber-600', valueTone: profitOrLoss < 0 ? 'text-rose-700' : 'text-slate-900',
+                        onClick: () => setActiveTab('payments'), title: `${utilizationPct}% of the estimate used` },
+                    ]).map((t) => (
+                      <button key={t.label} type="button" onClick={t.onClick} title={t.title}
+                        className={`text-left rounded-xl p-3 transition hover:brightness-[0.97] min-w-0 ${t.tone.split(' ')[0]}`}>
+                        <t.icon className={`w-5 h-5 ${t.tone.split(' ')[1]}`} />
+                        <div className={`mt-3 text-base xl:text-lg font-bold leading-tight truncate ${t.valueTone}`}>{t.value}</div>
+                        <div className={`mt-1 text-[11px] font-medium ${t.tone.split(' ')[1]}`}>{t.label}</div>
+                      </button>
+                    ))}
+                  </div>
+                  <div className="mt-3">
+                    <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                      <div className={`h-1.5 rounded-full transition-all ${profitOrLoss < 0 ? 'bg-rose-500' : 'bg-emerald-600'}`} style={{ width: `${Math.min(100, utilizationPct)}%` }} />
+                    </div>
+                    <div className="mt-1 text-right text-[11px] font-medium text-slate-400">{utilizationPct}% utilised</div>
+                  </div>
+                  {!boqEstimate && (
+                    <div className="mt-2 flex items-start gap-1.5 rounded-lg bg-slate-50 p-2 text-[11px] text-slate-400"><IndianRupee className="w-3.5 h-3.5 shrink-0 mt-0.5"/> Create or link a BOQ to set the estimate budget and track profitability.</div>
+                  )}
+                </div>
+              </div>
+
+              {/* Row 2 — Recent Activity · (Quick Actions + Key Information + Team) */}
+              <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.4fr] gap-3 items-start">
+                <div className={CARD}>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className={CARD_TITLE}><History className="w-5 h-5 text-emerald-700"/> Recent Activity</h3>
+                    <button type="button" onClick={() => setActiveTab('activity')} className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 hover:text-emerald-900">View All <ArrowRight className="w-3.5 h-3.5" /></button>
+                  </div>
+                  <ActivityList items={activityFeed.slice(0, 6)} />
+                </div>
+
+                <div className="space-y-3">
+                  {/* Quick Actions */}
+                  <div className={CARD}>
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className={CARD_TITLE}><Zap className="w-5 h-5 text-amber-500"/> Quick Actions</h3>
+                      <button type="button" onClick={() => { setQuickActionView('menu'); setQuickActionOpen(true); }} className="text-xs font-semibold text-slate-500 hover:text-emerald-700">More</button>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      {([
+                        { label: 'Add Task', icon: ClipboardList, cls: 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100', onClick: () => { setQuickActionView('create_task'); setQuickActionOpen(true); } },
+                        { label: 'Upload Document', icon: FileText, cls: 'bg-sky-50 text-sky-700 hover:bg-sky-100', onClick: () => setActiveTab('media') },
+                        { label: 'Add Expense', icon: Wallet, cls: 'bg-amber-50 text-amber-800 hover:bg-amber-100', onClick: () => setActiveTab('payments') },
+                        { label: 'Create Invoice', icon: FileBarChart, cls: 'bg-rose-50 text-rose-700 hover:bg-rose-100', onClick: () => setActiveTab('payments') },
+                      ]).map((a) => (
+                        <button key={a.label} type="button" onClick={a.onClick}
+                          className={`flex items-center justify-center gap-2 rounded-xl px-3 py-3 text-sm font-medium transition-colors ${a.cls}`}>
+                          <a.icon className="w-4 h-4 shrink-0" /> <span className="truncate">{a.label}</span>
+                        </button>
                       ))}
                     </div>
-                  ) : (
-                    <div className="py-8 text-center text-sm text-slate-400">No recent activity yet.</div>
-                  )}
-                </div>
-
-                {/* Project Team */}
-                <div className="bg-white rounded-2xl border border-slate-100 p-3 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-sm font-bold text-slate-700 flex items-center"><Users className="w-4 h-4 mr-2 text-emerald-600"/> Project Team</h3>
-                    <button type="button" onClick={openAssignTeam} className="text-[11px] font-semibold text-emerald-600 hover:text-emerald-700">Assign Team</button>
                   </div>
-                  {(() => {
-                    const team = ([['Project Manager', project.projectManager], ['Assistant Manager', project.assistantManager], ['Sales', project.salesExecutive], ['Designer', project.designer], ['Site Engineer', project.siteEngineer]] as [string, any][]).filter(([, u]) => u);
-                    return team.length > 0 ? (
-                      <div className="space-y-2">
-                        {team.map(([role, u]) => (
-                          <div key={role} className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50/60 px-3 py-2">
-                            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 text-sm font-bold shrink-0">{(u.name || '?').charAt(0).toUpperCase()}</span>
+
+                  {/* Key Information */}
+                  <div className={CARD}>
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className={CARD_TITLE}><Info className="w-5 h-5 text-slate-500"/> Key Information</h3>
+                      {project.customer?.id && (
+                        <Link to={`/customers/${project.customer.id}`} className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-emerald-700"><Pencil className="w-3.5 h-3.5" /> Edit</Link>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-y-3 sm:divide-x divide-slate-100">
+                      {([
+                        { icon: User, label: 'Customer', value: summary.customerName || project.customer?.name, href: project.customer?.id ? `/customers/${project.customer.id}` : undefined, internal: true },
+                        { icon: Phone, label: 'Phone', value: summary.phone, href: summary.phone ? `tel:${summary.phone}` : undefined },
+                        { icon: MessageCircle, label: 'WhatsApp', value: summary.whatsapp, href: summary.whatsapp ? waLink(summary.whatsapp) : undefined, external: true },
+                        { icon: MapPin, label: 'City', value: summary.city },
+                        { icon: Navigation, label: 'Site Address', value: summary.address, href: summary.mapUrl, external: true },
+                        { icon: UserCheck, label: 'Lead by', value: summary.leadBy },
+                      ] as { icon: React.ComponentType<{ className?: string }>; label: string; value?: string; href?: string; internal?: boolean; external?: boolean }[]).map((f, i) => {
+                        const val = f.value || '—';
+                        const valueEl = f.href && f.value
+                          ? (f.internal
+                            ? <Link to={f.href} className="text-emerald-800 hover:underline">{val}</Link>
+                            : <a href={f.href} target={f.external ? '_blank' : undefined} rel="noreferrer" className="text-emerald-800 hover:underline">{val}</a>)
+                          : <span className="text-slate-800">{val}</span>;
+                        return (
+                          <div key={f.label} className={`flex items-start gap-3 min-w-0 ${i % 3 === 0 ? 'sm:pr-4' : 'sm:px-4'}`}>
+                            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-50 text-slate-500 shrink-0"><f.icon className="w-4 h-4" /></span>
                             <div className="min-w-0">
-                              <div className="text-sm font-semibold text-slate-700 truncate">{u.name}</div>
-                              <div className="text-[11px] text-slate-400">{role}</div>
+                              <div className="text-[11px] text-slate-400">{f.label}</div>
+                              <div className="text-sm font-semibold truncate" title={f.value}>{valueEl}</div>
                             </div>
                           </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="py-3 text-center">
-                        <span className="mx-auto flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-300"><Users className="w-4 h-4" /></span>
-                        <div className="text-xs font-semibold text-slate-600 mt-1.5">No team members assigned yet</div>
-                        <Button onClick={openAssignTeam} size="sm" className="mt-2 h-7 bg-emerald-500 hover:bg-emerald-600 rounded-lg text-xs">
-                          <Plus className="w-3.5 h-3.5 mr-1"/> Assign Team
-                        </Button>
-                      </div>
-                    );
-                  })()}
-                </div>
-                </div>
-
-                {/* Column 3 — Financial Summary + Quick Actions */}
-                <div className="lg:col-span-3 space-y-3">
-                  {/* Financial Summary */}
-                  <div className="bg-white rounded-2xl border border-slate-100 p-3 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-sm font-bold text-slate-700 flex items-center"><Wallet className="w-4 h-4 mr-2 text-emerald-600"/> Financial Summary</h3>
-                      <button type="button" onClick={() => setActiveTab('payments')} className="text-[11px] font-semibold text-emerald-600 hover:text-emerald-700">View Details</button>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => approvedBoqId ? navigate(`/boq/${approvedBoqId}`) : setActiveTab('phases')}
-                        title={approvedBoqId ? "Open the BOQ" : "No BOQ linked yet"}
-                        className="text-left rounded-xl bg-emerald-50/70 border border-emerald-100 p-3 transition-colors hover:bg-emerald-100/70 hover:border-emerald-200"
-                      >
-                        <div className="flex items-center justify-between">
-                          <Wallet className="w-4 h-4 text-emerald-600 mb-1.5" />
-                          <ChevronRight className="w-3.5 h-3.5 text-emerald-400" />
-                        </div>
-                        <div className="text-lg font-black text-slate-800 leading-tight truncate">{inr(boqEstimate)}</div>
-                        <div className="text-[10px] font-medium text-slate-400 mt-0.5">Estimate Budget · from BOQ</div>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setActiveTab('payments')}
-                        title="View payments & expenses"
-                        className="text-left rounded-xl bg-violet-50/70 border border-violet-100 p-3 transition-colors hover:bg-violet-100/70 hover:border-violet-200"
-                      >
-                        <div className="flex items-center justify-between">
-                          <BarChart3 className="w-4 h-4 text-violet-600 mb-1.5" />
-                          <ChevronRight className="w-3.5 h-3.5 text-violet-400" />
-                        </div>
-                        <div className="text-lg font-black text-slate-800 leading-tight truncate">{inr(spentAmount)}</div>
-                        <div className="text-[10px] font-medium text-slate-400 mt-0.5">Amount Spent</div>
-                      </button>
-                    </div>
-                    <div className="mt-3">
-                      <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-                        <div className={`h-2 rounded-full transition-all ${profitOrLoss < 0 ? 'bg-rose-500' : 'bg-emerald-500'}`} style={{ width: `${Math.min(100, utilizationPct)}%` }} />
-                      </div>
-                      <div className="mt-1 text-right text-[11px] font-semibold text-slate-500">{utilizationPct}% Utilization</div>
-                    </div>
-                    {!boqEstimate && (
-                      <div className="mt-2 flex items-start gap-1.5 rounded-lg bg-slate-50 p-2 text-[11px] text-slate-400"><IndianRupee className="w-3.5 h-3.5 shrink-0 mt-0.5"/> Create or link a BOQ to set the estimate budget and track profitability.</div>
-                    )}
-                  </div>
-
-                  {/* Quick Actions */}
-                  <div className="bg-white rounded-2xl border border-slate-100 p-3 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
-                    <h3 className="text-sm font-bold text-slate-700 mb-2.5 flex items-center"><Sparkles className="w-4 h-4 mr-2 text-slate-400"/> Quick Actions</h3>
-                    <div className="grid grid-cols-4 gap-1.5">
-                      {([
-                        { label: 'Add Task', icon: CheckSquare, color: 'text-emerald-500', onClick: () => { setQuickActionView('create_task'); setQuickActionOpen(true); } },
-                        { label: 'Issue', icon: AlertTriangle, color: 'text-amber-500', onClick: () => { setQuickActionView('report_issue'); setQuickActionOpen(true); } },
-                        { label: 'Assign', icon: Users, color: 'text-amber-500', onClick: () => { setQuickActionView('assign_employee'); setQuickActionOpen(true); } },
-                        { label: 'Site Visit', icon: MapPin, color: 'text-violet-500', onClick: () => setActiveTab('execution') },
-                        { label: 'Call', icon: Phone, color: 'text-slate-500', href: project.customer?.phone ? `tel:${project.customer.phone}` : undefined },
-                        { label: 'WhatsApp', icon: MessageCircle, color: 'text-emerald-500', href: project.customer?.phone ? `https://wa.me/${String(project.customer.phone).replace(/\D/g, '')}` : undefined },
-                        { label: 'Purchase', icon: ShoppingCart, color: 'text-violet-500', onClick: () => { setQuickActionView('purchase_request'); setQuickActionOpen(true); } },
-                        { label: 'More', icon: MoreHorizontal, color: 'text-slate-500', onClick: () => { setQuickActionView('menu'); setQuickActionOpen(true); } },
-                      ] as const).map((a) => {
-                        const cls = "flex flex-col items-center gap-1 rounded-lg border border-slate-100 bg-slate-50 hover:bg-slate-100 px-1 py-2 text-[10px] font-semibold text-slate-600 text-center transition-colors";
-                        return ('href' in a)
-                          ? <a key={a.label} href={(a as any).href} target={a.label === 'WhatsApp' ? '_blank' : undefined} rel="noreferrer" className={cls}><a.icon className={`w-4 h-4 ${a.color}`} /><span className="truncate w-full">{a.label}</span></a>
-                          : <button key={a.label} type="button" onClick={(a as any).onClick} className={cls}><a.icon className={`w-4 h-4 ${a.color}`} /><span className="truncate w-full">{a.label}</span></button>;
+                        );
                       })}
                     </div>
                   </div>
 
-                  {/* Brand mark — right column */}
-                  <div className="rounded-2xl border border-emerald-100/70 bg-gradient-to-r from-emerald-50/70 via-white to-amber-50/50 px-4 py-3 text-right">
-                    <div className="text-sm font-black tracking-tight text-emerald-800">JB DECOR</div>
-                    <div className="text-[11px] text-slate-400">Crafted for Better Living</div>
+                  {/* Project Team */}
+                  <div className={CARD}>
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className={CARD_TITLE}><Users className="w-5 h-5 text-emerald-700"/> Project Team</h3>
+                      <button type="button" onClick={openAssignTeam} className="text-xs font-semibold text-emerald-700 hover:text-emerald-900">Assign Team</button>
+                    </div>
+                    {(() => {
+                      const team = ([['Project Manager', project.projectManager], ['Assistant Manager', project.assistantManager], ['Sales', project.salesExecutive], ['Designer', project.designer], ['Site Engineer', project.siteEngineer]] as [string, any][]).filter(([, u]) => u);
+                      return team.length > 0 ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {team.map(([role, u]) => (
+                            <div key={role} className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50/60 px-3 py-2">
+                              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100 text-emerald-800 text-sm font-bold shrink-0">{(u.name || '?').charAt(0).toUpperCase()}</span>
+                              <div className="min-w-0">
+                                <div className="text-sm font-semibold text-slate-800 truncate">{u.name}</div>
+                                <div className="text-[11px] text-slate-400">{role}</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2.5">
+                          <span className="text-xs text-slate-500">No team members assigned yet</span>
+                          <Button onClick={openAssignTeam} size="sm" className="h-7 bg-emerald-700 hover:bg-emerald-800 rounded-lg text-xs"><Plus className="w-3.5 h-3.5 mr-1"/> Assign</Button>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
+              </div>
+            </TabsContent>
+
+            {/* ACTIVITY TAB — the full feed */}
+            <TabsContent value="activity" className="mt-0 h-full outline-none">
+              <div className={CARD}>
+                <h3 className={`${CARD_TITLE} mb-3`}><History className="w-5 h-5 text-emerald-700"/> All Activity</h3>
+                <ActivityList items={activityFeed} />
               </div>
             </TabsContent>
 
