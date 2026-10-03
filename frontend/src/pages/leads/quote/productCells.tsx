@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Camera, ImageIcon, ImagePlus, Loader2, Plus, Search, Trash2, X } from "lucide-react";
+import { Camera, Crop, ImageIcon, ImagePlus, Loader2, Plus, Search, Trash2, X } from "lucide-react";
 import api from "@/lib/api";
 import { resolveFileUrl, uploadFile } from "@/lib/uploadFile";
 import { compressImageFile } from "@/lib/imageProcessing";
 import { inventoryApi } from "@/api/inventoryApi";
+import ImageEditor from "@/components/ImageEditor";
 import { toast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -413,8 +414,9 @@ export function ImageCell({ url, options, disabled, onChange, module = "QUOTATIO
   const galleryRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState(false);
-  const upload = async (file?: File) => {
-    if (!file) return;
+  // A photo waiting in the crop/rotate editor (new pick, or the current photo being re-edited).
+  const [editing, setEditing] = useState<File | null>(null);
+  const upload = async (file: File) => {
     setBusy(true);
     try {
       const small = await compressImageFile(file, { maxDimension: 1200, quality: 0.8 });
@@ -425,7 +427,26 @@ export function ImageCell({ url, options, disabled, onChange, module = "QUOTATIO
       setBusy(false);
     }
   };
-  const onFile = (e: React.ChangeEvent<HTMLInputElement>) => { upload(e.target.files?.[0]); e.target.value = ""; };
+  const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (file) setEditing(file);
+  };
+  // Pull the current photo back from storage so it can be cropped / rotated and re-uploaded.
+  const editCurrent = async () => {
+    if (!url) return;
+    setBusy(true);
+    try {
+      const r = await fetch(resolveFileUrl(url));
+      if (!r.ok) throw new Error("fetch failed");
+      const blob = await r.blob();
+      setEditing(new File([blob], "photo", { type: blob.type || "image/jpeg" }));
+    } catch {
+      toast.error("Couldn't open this photo for editing.");
+    } finally {
+      setBusy(false);
+    }
+  };
   if (disabled) return <Thumb url={url} />;
   return (
     <>
@@ -468,12 +489,28 @@ export function ImageCell({ url, options, disabled, onChange, module = "QUOTATIO
             </>
           )}
           {url && (
+            <Button size="sm" variant="outline" className="w-full" onClick={() => { setOpen(false); editCurrent(); }}>
+              <Crop className="h-3.5 w-3.5 mr-1" /> Crop / edit photo
+            </Button>
+          )}
+          {url && (
             <Button size="sm" variant="ghost" className="w-full text-destructive" onClick={() => { setOpen(false); onChange(null); }}>
               <Trash2 className="h-3.5 w-3.5 mr-1" /> Remove photo
             </Button>
           )}
         </DropdownMenuContent>
       </DropdownMenu>
+      {editing && (
+        <ImageEditor
+          file={editing}
+          fileName={editing.name}
+          open
+          onCancel={() => setEditing(null)}
+          onSave={(f) => { setEditing(null); upload(f); }}
+          defaultMaxDimension={1200}
+          defaultQuality={0.8}
+        />
+      )}
     </>
   );
 }
