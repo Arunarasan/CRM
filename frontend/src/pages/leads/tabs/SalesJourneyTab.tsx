@@ -59,7 +59,7 @@ export default function SalesJourneyTab({
               <p className="text-xs text-muted-foreground mt-0.5">{step.summary}</p>
             </div>
           </div>
-          <div className="px-3 pb-3 sm:pl-[52px] space-y-4">
+          <div className={`px-3 pb-3 space-y-4 ${step.id === "quote" ? "" : "sm:pl-[52px]"}`}>
             {renderStage(step.id)}
           </div>
         </div>

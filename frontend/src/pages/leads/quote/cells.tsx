@@ -81,7 +81,7 @@ export function NumCell({
 }
 
 export function TextCell({
-  value, onCommit, disabled, col, className = "", placeholder, list,
+  value, onCommit, disabled, col, className = "", placeholder, list, title,
 }: {
   value?: string | null;
   onCommit: (v: string) => void;
@@ -91,6 +91,7 @@ export function TextCell({
   placeholder?: string;
   /** Optional <datalist> id for suggestions. */
   list?: string;
+  title?: string;
 }) {
   const shown = value ?? "";
   const [draft, setDraft] = useState(shown);
@@ -104,6 +105,7 @@ export function TextCell({
     <input
       data-col={col}
       list={list}
+      title={title}
       disabled={disabled}
       placeholder={placeholder}
       className={`${cellBase} ${className}`}

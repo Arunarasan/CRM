@@ -210,3 +210,39 @@
     color: hsl(var(--foreground));
   }
 }
+
+/* Quote workspace: sheet + summary side by side once there's room for both (container width, so it
+   works the same with the app sidebar open or collapsed, and inside the project page). */
+.quote-layout { container-type: inline-size; }
+@container (min-width: 1140px) {
+  .quote-layout .quote-grid { grid-template-columns: minmax(0, 1fr) 280px; }
+  .quote-layout .quote-aside { position: sticky; top: 1rem; }
+  .quote-layout .quote-aside-stack { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Quote workspace: a calm, neutral B2B palette scoped to this screen (slate surfaces, charcoal text,
+   blue focus, green kept for approval). The rest of the app keeps its own theme. */
+.quote-neutral {
+  --background: 210 40% 98%;          /* #F8FAFC */
+  --foreground: 215 28% 17%;          /* #1F2937 */
+  --card: 0 0% 100%;
+  --card-foreground: 215 28% 17%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 215 28% 17%;
+  --primary: 215 28% 17%;             /* charcoal — structure & primary buttons */
+  --primary-foreground: 0 0% 100%;
+  --secondary: 210 40% 96%;
+  --secondary-foreground: 215 28% 17%;
+  --muted: 210 40% 96%;               /* #F1F5F9 */
+  --muted-foreground: 215 16% 47%;    /* #64748B */
+  --accent: 210 40% 96%;
+  --accent-foreground: 215 28% 17%;
+  --border: 214 32% 91%;              /* #E2E8F0 */
+  --input: 214 32% 91%;
+  --ring: 221 83% 53%;                /* #2563EB focus */
+  --gold: 215 28% 17%;                /* default Button → charcoal, not gold */
+  --gold-foreground: 0 0% 100%;
+  --destructive: 0 72% 51%;           /* #DC2626 */
+  color: hsl(var(--foreground));
+}
+.quote-neutral .shadow-gold { box-shadow: 0 1px 2px rgb(15 23 42 / 0.06); }

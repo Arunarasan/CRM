@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  CheckCircle2, FileText, FileOutput, History, Loader2, Lock, Pencil, Printer, RotateCcw, Ruler, Wand2,
+  CalendarDays, Calculator, Check, CheckCircle2, ChevronRight, Eye, FileOutput, Hash, History, Image as ImageIcon,
+  Layers, Loader2, Lock, MapPin, MoreHorizontal, Pencil, Printer, Receipt, RotateCcw, Share2, UserRound, Wand2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BaseInput } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "@/components/ui/toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -71,6 +72,16 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
   const [convertCfg, setConvertCfg] = useState<{ advanceAmount: string; advanceMethod: string } | null>(null);
   const [projectQuote, setProjectQuote] = useState<ProjectQuoteStatus | null>(null);
   const [changeResult, setChangeResult] = useState<ProjectChangeResult | null>(null);
+  // Items (what the customer sees) vs Cost Breakdown (material / labour behind each price).
+  const [view, setView] = useState<"items" | "cost" | "photos" | "history">(() => {
+    try { return localStorage.getItem("quoteShowBreakdown") === "1" ? "cost" : "items"; } catch { return "items"; }
+  });
+  useEffect(() => {
+    if (view !== "items" && view !== "cost") return;
+    try { localStorage.setItem("quoteShowBreakdown", view === "cost" ? "1" : "0"); } catch { /* ignore */ }
+  }, [view]);
+  // Autosave state reported by the sheet, shown in the header.
+  const [saveState, setSaveState] = useState<{ pending: number; lastSaved: number | null }>({ pending: 0, lastSaved: null });
 
   const load = useCallback(async () => {
     const [m, b, q, pq] = await Promise.all([
@@ -126,6 +137,8 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
   const changeInProgress = projectMode && !!projectQuote?.changeOpen;
   const editable = canPrice && !locked && !sheetProject && (!projectMode || canChangeProject);
   const inQuote = (boq?.items || []).filter((i) => i.isActive !== false);
+  const customerName: string = boq?.customer?.name || measurement?.customer?.name || measurement?.customerName || "—";
+  const customerId: string = measurement?.customerCode || (boq?.customer?.id ? `#${boq.customer.id}` : "—");
 
   // ---------------- Actions ----------------
 
@@ -170,6 +183,20 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
   const openPrint = async () => {
     setBusy("print");
     try { setPrintId((await currentQuotation()).id as number); } catch (e) { toast.error(errMsg(e, "Could not prepare the quotation.")); } finally { setBusy(null); }
+  };
+
+  /** Share a short summary (number, customer, total) — phone share sheet, or WhatsApp on desktop. */
+  const shareQuote = async () => {
+    setBusy("share");
+    try {
+      const q = await currentQuotation();
+      const who = customerName !== "—" ? ` for ${customerName}` : "";
+      const text = `Quotation ${q.quotationNumber}${who}: ${inQuote.length} item${inQuote.length === 1 ? "" : "s"}, total ${inr(q.grandTotal ?? boq?.grandTotal)}.`;
+      if (navigator.share) await navigator.share({ title: `Quotation ${q.quotationNumber}`, text });
+      else window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank", "noopener");
+    } catch (e: any) {
+      if (e?.name !== "AbortError") toast.error(errMsg(e, "Could not share the quotation."));
+    } finally { setBusy(null); }
   };
 
   const confirmApproval = async () => {
@@ -267,51 +294,83 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
   // ---------------- Render ----------------
 
   return (
-    <section className="rounded-xl border bg-card">
-      {/* ---- One header line: what this quote is and where it stands ---- */}
-      <header className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b text-xs text-muted-foreground">
-        <span className="flex flex-wrap items-center gap-2 min-w-0">
-          <QuoteStatus quote={quote} locked={locked} />
-          <span className="flex items-center gap-1.5">
-            <Ruler className="h-3.5 w-3.5 shrink-0" />
-            {measurement ? (
-              <span className="truncate">
-                {measurement.measurementNumber || `Measurement #${measurement.id}`}
-                {measurement.totalArea ? ` · ${measurement.totalArea} sq.ft` : ""}
-              </span>
-            ) : <span>No measurement yet</span>}
-          </span>
-        </span>
-        <span className="flex flex-wrap items-center gap-3">
-          {measurement && !fieldMode && leadId && (
-            // Drawings & photos live in this lead's Documents tab.
-            <Link to={`/leads/${leadId}?tab=documents`}
-              className="hover:text-primary flex items-center gap-1">
-              <FileText className="h-3 w-3" /> Drawings & photos
-            </Link>
+    <section className="quote-layout quote-neutral space-y-3">
+      {/* ---- Compact sticky header: where you are, the quote's state, the next actions ---- */}
+      <div className="sticky top-0 z-20 -mx-1 px-1 py-2 bg-card/95 backdrop-blur border-b flex flex-wrap items-center gap-x-3 gap-y-2">
+        <div className="min-w-0 flex-1">
+          {!fieldMode && (
+            <nav aria-label="Breadcrumb" className="hidden sm:flex items-center gap-1 text-xs text-muted-foreground">
+              {projectMode ? (
+                <><Link to="/projects" className="hover:text-foreground">Projects</Link><ChevronRight className="h-3 w-3" />
+                  <Link to={`/projects/${projectId}`} className="hover:text-foreground">{projectQuote?.quotationNumber ? "Project" : `Project #${projectId}`}</Link></>
+              ) : (
+                <><Link to="/leads" className="hover:text-foreground">Leads</Link><ChevronRight className="h-3 w-3" />
+                  <Link to={`/leads/${leadId}`} className="hover:text-foreground">Lead #{leadId}</Link></>
+              )}
+              <ChevronRight className="h-3 w-3" /><span className="text-foreground">Measurement & Quotation</span>
+            </nav>
           )}
-          {history.length > 0 && <HistoryMenu quotes={history} onOpen={(id) => setPrintId(id)} />}
-        </span>
-      </header>
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-base font-semibold"><span className="sm:hidden">Quotation</span><span className="hidden sm:inline">Measurement & Quotation</span></h3>
+            <QuoteStatus quote={quote} locked={locked} />
+            {sentToOffice && <span className="rounded-full bg-[#EFF6FF] px-2 py-0.5 text-xs font-medium text-[#1D4ED8]">Sent to office</span>}
+          </div>
+        </div>
+        {boq && (
+          <div className="flex items-center gap-2">
+            {editable && <span className="hidden sm:flex"><AutosaveState {...saveState} /></span>}
+            <Button variant="outline" size="sm" disabled={!!busy || inQuote.length === 0} onClick={openPrint} title="See the quotation as the customer will">
+              {busy === "print" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />} Preview
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="px-2" aria-label="More actions"><MoreHorizontal className="h-4 w-4" /></Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="quote-neutral w-56">
+                <DropdownMenuItem disabled={inQuote.length === 0} onClick={openPrint}><Printer className="h-4 w-4 mr-2" /> Print</DropdownMenuItem>
+                <DropdownMenuItem disabled={inQuote.length === 0} onClick={shareQuote}><Share2 className="h-4 w-4 mr-2" /> Share quote</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                {!fieldMode && <DropdownMenuItem onClick={() => setView("photos")}><ImageIcon className="h-4 w-4 mr-2" /> Photos & drawings</DropdownMenuItem>}
+                <DropdownMenuItem onClick={() => setView("history")}><History className="h-4 w-4 mr-2" /> Quote history ({history.length})</DropdownMenuItem>
+                {locked && canPrice && !converted && !sheetProject && (!projectMode || (canChangeProject && projectQuote?.canChange)) && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => setChangeOpen(true)}><Pencil className="h-4 w-4 mr-2" /> Make changes</DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        )}
+      </div>
 
-      <div className="p-3 sm:p-4 space-y-4">
+      {/* ---- Quotation information: one quiet strip, no cards ---- */}
+      <dl className="flex flex-wrap gap-x-8 gap-y-3 rounded-lg border bg-card px-4 py-3">
+        <Fact icon={UserRound} label="Customer" value={customerName} />
+        <Fact icon={Hash} label="Customer ID" value={customerId} />
+        <Fact icon={MapPin} label="Site / Project"
+          value={measurement?.siteAddress || measurement?.measurementNumber || (measurement ? `Measurement #${measurement.id}` : "No measurement yet")}
+          sub={[measurement?.siteAddress ? measurement.measurementNumber : "", measurement?.totalArea ? `${measurement.totalArea} sq.ft` : ""].filter(Boolean).join(" · ") || undefined} />
+        <Fact icon={CalendarDays} label="Date" value={formatDate(quote?.quotationDate || quote?.createdAt || boq?.createdAt) || "—"} />
+        <Fact icon={Receipt} label="Quote total" value={inr(boq?.grandTotal)} strong />
+      </dl>
+
+      <div className="space-y-4">
         {!boq ? (
           // ---- Nothing yet: visit/measure, then one click opens the sheet ----
-          <div className="space-y-3">
-            <div className="rounded-lg border border-dashed p-4 flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="font-medium text-sm">Start the quote</p>
-                <p className="text-xs text-muted-foreground">
-                  One sheet for categories, products, colours, prices and the customer's choices — price as you go.
-                </p>
-              </div>
-              {canPrice && (
-                <Button size="sm" disabled={busy === "start"} onClick={startPricing}>
-                  {busy === "start" ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Wand2 className="h-4 w-4 mr-2" />}
-                  Start
-                </Button>
-              )}
+          <div className="rounded-lg border border-dashed bg-card p-5 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="font-medium text-sm">Start the quote</p>
+              <p className="text-xs text-muted-foreground">
+                One sheet for categories, products, colours, prices and the customer's choices — price as you go.
+              </p>
             </div>
+            {canPrice && (
+              <Button size="sm" disabled={busy === "start"} onClick={startPricing}>
+                {busy === "start" ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Wand2 className="h-4 w-4 mr-2" />}
+                Start
+              </Button>
+            )}
           </div>
         ) : (
           <>
@@ -363,7 +422,7 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
             {/* ---- Approved / locked banner ---- */}
             {locked && !projectMode && !sheetProject && (
               <div className={`rounded-lg border p-3 text-sm flex flex-wrap items-center justify-between gap-2 ${approved
-                ? "border-green-300 bg-green-50 text-green-900" : "border-amber-300 bg-amber-50 text-amber-900"}`}>
+                ? "border-[#A7F3D0] bg-[#ECFDF5] text-[#14532D]" : "border-[#FDE68A] bg-[#FFFBEB] text-[#78350F]"}`}>
                 <span className="flex items-center gap-2">
                   {approved ? <CheckCircle2 className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
                   {converted
@@ -383,49 +442,80 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
               </div>
             )}
 
-            <BoqSheet boq={boq} canEdit={editable} onBoqChanged={setBoq} />
-            <TotalsPanel boq={boq} editable={editable} onSave={saveTotals} />
+            <div className="quote-grid grid gap-4">
+              {/* ---- Left: the sheet ---- */}
+              <div className="min-w-0 rounded-lg border bg-card">
+                <div role="tablist" aria-label="Quote view" className="flex items-center overflow-x-auto overflow-y-hidden border-b px-2">
+                  <ViewTab active={view === "items"} icon={Layers} onClick={() => setView("items")}>Items</ViewTab>
+                  <ViewTab active={view === "cost"} icon={Calculator} onClick={() => setView("cost")}>Cost Breakdown</ViewTab>
+                  <ViewTab active={view === "photos"} icon={ImageIcon} onClick={() => setView("photos")}>Photos & Drawings</ViewTab>
+                  <ViewTab active={view === "history"} icon={History} onClick={() => setView("history")}>
+                    History{history.length > 0 && <span className="ml-1 rounded-full bg-muted px-1.5 text-[11px] tabular-nums">{history.length}</span>}
+                  </ViewTab>
+                </div>
 
-            {/* ---- One action bar ---- */}
-            <div className="sticky bottom-0 z-10 -mx-3 sm:-mx-4 -mb-3 sm:-mb-4 rounded-b-xl border-t bg-card/95 backdrop-blur px-3 sm:px-4 py-3 flex flex-wrap items-center justify-between gap-2">
-              <div className="text-sm">
-                <span className="text-muted-foreground">{inQuote.length} item{inQuote.length === 1 ? "" : "s"} · </span>
-                <span className="font-bold tabular-nums text-primary">{inr(boq.grandTotal)}</span>
+                <div className="p-3">
+                  {(view === "items" || view === "cost") && (
+                    <BoqSheet boq={boq} canEdit={editable} onBoqChanged={setBoq} showBreakdown={view === "cost"}
+                      onSaveState={(pending, lastSaved) => setSaveState({ pending, lastSaved })} />
+                  )}
+                  {view === "photos" && (
+                    <PhotosPanel measurement={measurement} leadId={leadId} fieldMode={fieldMode} />
+                  )}
+                  {view === "history" && <HistoryPanel quotes={history} onOpen={(id) => setPrintId(id)} />}
+                </div>
+
+                {/* ---- One action bar ---- */}
+                <div className="sticky bottom-16 md:bottom-0 z-10 rounded-b-lg border-t bg-card/95 backdrop-blur px-3 py-2.5 flex flex-wrap items-center justify-between gap-2">
+                  <div className="text-sm">
+                    <span className="text-muted-foreground">{inQuote.length} item{inQuote.length === 1 ? "" : "s"}<span className="hidden sm:inline"> in quote</span> · </span>
+                    <span className="font-semibold tabular-nums">{inr(boq.grandTotal)}</span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button variant="outline" size="sm" disabled={!!busy || inQuote.length === 0} onClick={openPrint} aria-label="Print">
+                      {busy === "print" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}<span className="hidden sm:inline">Print</span>
+                    </Button>
+                    <Button variant="outline" size="sm" disabled={!!busy || inQuote.length === 0} onClick={shareQuote} aria-label="Share"
+                      title="Send the quote number and total — share sheet on phones, WhatsApp on desktop">
+                      {busy === "share" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Share2 className="h-4 w-4" />}<span className="hidden sm:inline">Share</span>
+                    </Button>
+                    {fieldMode && !approved && !sheetProject && (
+                      <Button variant="outline" size="sm" disabled={!!busy || inQuote.length === 0 || sentToOffice} onClick={sendToOffice}>
+                        {busy === "send" && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                        {sentToOffice ? "Sent to office" : "Send to office"}
+                      </Button>
+                    )}
+                    {fieldMode && !converted && !sheetProject && onCreateProject && (
+                      <Button size="sm" className="bg-[#16805C] hover:bg-[#126B4C] text-white" disabled={!!busy || inQuote.length === 0}
+                        onClick={onCreateProject}>
+                        <FileOutput className="h-4 w-4 mr-2" /> {approved ? "Create Project" : "Customer agreed · Create Project"}
+                      </Button>
+                    )}
+                    {projectMode && changeInProgress && canChangeProject && (
+                      <Button size="sm" className="bg-[#16805C] hover:bg-[#126B4C] text-white" disabled={!!busy || inQuote.length === 0}
+                        onClick={() => setApproveOpen(true)}>
+                        <CheckCircle2 className="h-4 w-4 mr-2" /> Customer approved change
+                      </Button>
+                    )}
+                    {!projectMode && !sheetProject && !fieldMode && !approved && canApprove && (
+                      <Button size="sm" className="bg-[#16805C] hover:bg-[#126B4C] text-white" disabled={!!busy || inQuote.length === 0}
+                        onClick={() => setApproveOpen(true)}>
+                        <CheckCircle2 className="h-4 w-4 mr-2" /> Customer approved
+                      </Button>
+                    )}
+                    {!projectMode && !sheetProject && !fieldMode && approved && !converted && canConvert && (
+                      <Button size="sm" disabled={!!busy} onClick={() => setConvertCfg({ advanceAmount: "", advanceMethod: "Cash" })}>
+                        <FileOutput className="h-4 w-4 mr-2" /> Create Project
+                      </Button>
+                    )}
+                  </div>
+                </div>
               </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <Button variant="outline" size="sm" disabled={!!busy || inQuote.length === 0} onClick={openPrint}>
-                  {busy === "print" ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Printer className="h-4 w-4 mr-2" />} Print
-                </Button>
-                {fieldMode && !approved && !sheetProject && (
-                  <Button variant="outline" size="sm" disabled={!!busy || inQuote.length === 0 || sentToOffice} onClick={sendToOffice}>
-                    {busy === "send" && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                    {sentToOffice ? "Sent to office" : "Send to office"}
-                  </Button>
-                )}
-                {fieldMode && !converted && !sheetProject && onCreateProject && (
-                  <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" disabled={!!busy || inQuote.length === 0}
-                    onClick={onCreateProject}>
-                    <FileOutput className="h-4 w-4 mr-2" /> {approved ? "Create Project" : "Customer agreed · Create Project"}
-                  </Button>
-                )}
-                {projectMode && changeInProgress && canChangeProject && (
-                  <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" disabled={!!busy || inQuote.length === 0}
-                    onClick={() => setApproveOpen(true)}>
-                    <CheckCircle2 className="h-4 w-4 mr-2" /> Customer approved change
-                  </Button>
-                )}
-                {!projectMode && !sheetProject && !fieldMode && !approved && canApprove && (
-                  <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" disabled={!!busy || inQuote.length === 0}
-                    onClick={() => setApproveOpen(true)}>
-                    <CheckCircle2 className="h-4 w-4 mr-2" /> Customer approved
-                  </Button>
-                )}
-                {!projectMode && !sheetProject && !fieldMode && approved && !converted && canConvert && (
-                  <Button size="sm" disabled={!!busy} onClick={() => setConvertCfg({ advanceAmount: "", advanceMethod: "Cash" })}>
-                    <FileOutput className="h-4 w-4 mr-2" /> Create Project
-                  </Button>
-                )}
-              </div>
+
+              {/* ---- Right: summary, charges and the final price ---- */}
+              <aside className="quote-aside self-start">
+                <TotalsPanel boq={boq} editable={editable} onSave={saveTotals} />
+              </aside>
             </div>
           </>
         )}
@@ -449,7 +539,7 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setApproveOpen(false)}>Cancel</Button>
-            <Button className="bg-green-600 hover:bg-green-700 text-white" disabled={busy === "approve"} onClick={confirmProjectChange}>
+            <Button className="bg-[#16805C] hover:bg-[#126B4C] text-white" disabled={busy === "approve"} onClick={confirmProjectChange}>
               {busy === "approve" && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Update the project
             </Button>
           </DialogFooter>
@@ -496,7 +586,7 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setApproveOpen(false)}>Cancel</Button>
-            <Button className="bg-green-600 hover:bg-green-700 text-white" disabled={busy === "approve"} onClick={confirmApproval}>
+            <Button className="bg-[#16805C] hover:bg-[#126B4C] text-white" disabled={busy === "approve"} onClick={confirmApproval}>
               {busy === "approve" && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Confirm
             </Button>
           </DialogFooter>
@@ -547,7 +637,7 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
             </div>
             <div className="flex justify-end gap-2 border-t pt-3">
               <Button variant="outline" onClick={() => setConvertCfg(null)} disabled={busy === "convert"}>Cancel</Button>
-              <Button onClick={doConvert} disabled={busy === "convert"} className="bg-green-600 hover:bg-green-700 text-white">
+              <Button onClick={doConvert} disabled={busy === "convert"} className="bg-[#16805C] hover:bg-[#126B4C] text-white">
                 {busy === "convert" ? "Creating…" : convertCfg?.advanceAmount ? `Create Project + Record ₹${convertCfg.advanceAmount}` : "Create Project"}
               </Button>
             </div>
@@ -563,36 +653,12 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
 /** "Not sent yet" / "QT-… · Draft" / "Approved" / "Project created" — one chip in the header. */
 function QuoteStatus({ quote, locked }: { quote?: any; locked: boolean }) {
   if (!quote) {
-    return <span className="rounded-full bg-muted px-2 py-0.5 font-medium text-muted-foreground">{locked ? "Locked" : "Quote not shared yet"}</span>;
+    return <span className="whitespace-nowrap rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">{locked ? "Locked" : "Draft — not shared yet"}</span>;
   }
   return (
-    <span className={`rounded-full px-2 py-0.5 font-medium ${QUOTATION_STATUS_STYLES[quote.status] || "bg-muted text-muted-foreground"}`}>
+    <span className={`max-w-[14rem] truncate whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${QUOTATION_STATUS_STYLES[quote.status] || "bg-muted text-muted-foreground"}`}>
       {quote.quotationNumber} · {QUOTATION_STATUS_LABELS[quote.status] || quote.status}
     </span>
-  );
-}
-
-/** Earlier quotations of this lead — opened read-only (print view), nothing to edit there. */
-function HistoryMenu({ quotes, onOpen }: { quotes: any[]; onOpen: (id: number) => void }) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button type="button" className="flex items-center gap-1 hover:text-primary">
-          <History className="h-3 w-3" /> History ({quotes.length})
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-72">
-        {quotes.map((q) => (
-          <DropdownMenuItem key={q.id} onClick={() => onOpen(q.id)} className="flex items-center justify-between gap-2">
-            <span className="truncate">
-              {q.quotationNumber}
-              <span className="ml-1.5 text-[11px] text-muted-foreground">{QUOTATION_STATUS_LABELS[q.status] || q.status}</span>
-            </span>
-            <span className="tabular-nums text-xs">{inr(q.grandTotal ?? q.totalAmount)}</span>
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
   );
 }
 
@@ -619,7 +685,7 @@ function TotalsPanel({ boq, editable, onSave }: { boq: Boq; editable: boolean; o
   const lineDiscounts = Number(boq.lineDiscountTotal ?? 0);
   // Labour and shipping are added after the discount (never discounted) and before GST.
   const charges = Number(boq.labourCharge ?? 0) + Number(boq.shippingCharge ?? 0);
-  const f = editable ? "h-9 !border-border !bg-background" : "h-9";
+  const f = editable ? "h-8 !border-border !bg-background focus:!border-ring" : "h-8";
 
   /** Final price → flat discount that lands on it (final = (subtotal − discount + charges) × (1 + GST%)). */
   const setFinal = (target: number | null) => {
@@ -639,20 +705,18 @@ function TotalsPanel({ boq, editable, onSave }: { boq: Boq; editable: boolean; o
   };
 
   return (
-    <div className="grid gap-3 md:grid-cols-2">
-      {/* Cost card */}
-      <div className="rounded-xl border p-4 space-y-2 text-sm">
-        <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Items total</h4>
-        <Row label="Products" value={inr(subtotal + lineDiscounts)} />
-        {lineDiscounts > 0 && <Row label="Line discounts" value={`− ${inr(lineDiscounts)}`} />}
-        <div className="flex items-center justify-between border-t pt-2">
-          <span className="font-medium">Products total</span>
-          <span className="text-lg font-bold tabular-nums">{inr(subtotal)}</span>
-        </div>
+    <div className="rounded-lg border bg-card text-sm">
+      <h4 className="flex items-center gap-2 border-b px-4 py-3 font-semibold">
+        <Calculator className="h-4 w-4 text-muted-foreground" /> Quotation summary
+      </h4>
+      <div className="space-y-2 px-4 py-3">
+        <Row label="Products total" value={inr(subtotal + lineDiscounts)} />
+        <Row label="Line discounts" value={lineDiscounts > 0 ? `− ${inr(lineDiscounts)}` : inr(0)} />
+        <Row label="Products net total" value={inr(subtotal)} strong />
         {manual && (
-          <div className="rounded-lg border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 space-y-1.5">
+          <div className="rounded-md border border-[#FDE68A] bg-[#FFFBEB] p-2 text-xs text-[#78350F] space-y-1.5">
             <p>
-              A manual total is set, so this subtotal doesn't match the items
+              A manual total is set, so this doesn't match the items
               (items add up to <span className="font-semibold">{inr(itemsMaterial + itemsLabour)}</span>).
             </p>
             {editable && (
@@ -665,44 +729,49 @@ function TotalsPanel({ boq, editable, onSave }: { boq: Boq; editable: boolean; o
         )}
       </div>
 
-      {/* Customer price card */}
-      <div className="rounded-xl border border-primary/30 bg-primary/[0.02] p-4 space-y-3 text-sm">
-        <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Customer price</h4>
-        <div className="grid grid-cols-[1fr_auto] items-center gap-x-3 gap-y-2">
-          <label className="text-muted-foreground">Discount</label>
-          <div className="flex items-center gap-1.5">
-            <div className="inline-flex rounded-md border bg-background p-0.5 text-xs">
-              {(["PERCENT", "FLAT"] as const).map((m) => (
-                <button key={m} type="button" disabled={!editable}
-                  onClick={() => (m === "FLAT") !== flat && onSave({ discountType: m, discount: 0 })}
-                  className={`px-2 py-1 rounded ${(m === "FLAT") === flat ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}>
-                  {m === "PERCENT" ? "%" : "₹"}
-                </button>
-              ))}
-            </div>
-            <div className="w-24"><NumCell value={boq.discount ?? 0} disabled={!editable} className={f} onCommit={(v) => onSave({ discount: v ?? 0 })} /></div>
+      <div className="grid grid-cols-[1fr_auto] items-center gap-x-3 gap-y-2 border-t px-4 py-3">
+        <label className="text-muted-foreground" title="On products only — labour and shipping are added after it">Discount</label>
+        <div className="flex items-center gap-1.5">
+          <div className="inline-flex rounded-md border bg-background p-0.5 text-xs" role="group" aria-label="Discount type">
+            {(["PERCENT", "FLAT"] as const).map((m) => (
+              <button key={m} type="button" disabled={!editable} aria-pressed={(m === "FLAT") === flat}
+                onClick={() => (m === "FLAT") !== flat && onSave({ discountType: m, discount: 0 })}
+                className={`px-2 py-0.5 rounded ${(m === "FLAT") === flat ? "bg-foreground text-background" : "text-muted-foreground"}`}>
+                {m === "PERCENT" ? "%" : "₹"}
+              </button>
+            ))}
           </div>
+          <div className="w-20"><NumCell value={boq.discount ?? 0} disabled={!editable} className={f} onCommit={(v) => onSave({ discount: v ?? 0 })} /></div>
+        </div>
+        {Number(boq.discountAmount ?? 0) > 0 && (
           <span className="col-span-2 -mt-1 text-right text-xs text-muted-foreground tabular-nums">− {inr(boq.discountAmount)}</span>
+        )}
 
-          <ChargeRow label="Labour" amount={boq.labourCharge} note={boq.labourNote} notePlaceholder="e.g. Installation, 2 days"
-            editable={editable} f={f} onSave={(amount, note) => onSave({ labourCharge: amount, labourNote: note })} />
-          <ChargeRow label="Shipping" amount={boq.shippingCharge} note={boq.shippingNote} notePlaceholder="e.g. Transport to site"
-            editable={editable} f={f} onSave={(amount, note) => onSave({ shippingCharge: amount, shippingNote: note })} />
+        <ChargeRow label="Labour" amount={boq.labourCharge} note={boq.labourNote} notePlaceholder="e.g. Installation, 2 days"
+          editable={editable} f={f} onSave={(amount, note) => onSave({ labourCharge: amount, labourNote: note })} />
+        <ChargeRow label="Shipping" amount={boq.shippingCharge} note={boq.shippingNote} notePlaceholder="e.g. Transport to site"
+          editable={editable} f={f} onSave={(amount, note) => onSave({ shippingCharge: amount, shippingNote: note })} />
 
-          <label className="text-muted-foreground">GST %</label>
-          <div className="w-24 justify-self-end"><NumCell value={boq.taxPercent ?? 0} disabled={!editable} className={f} onCommit={(v) => onSave({ taxPercent: v ?? 0 })} /></div>
+        <label className="text-muted-foreground">GST %</label>
+        <div className="w-20 justify-self-end"><NumCell value={boq.taxPercent ?? 0} disabled={!editable} className={f} onCommit={(v) => onSave({ taxPercent: v ?? 0 })} /></div>
+        {Number(boq.taxAmount ?? 0) > 0 && (
           <span className="col-span-2 -mt-1 text-right text-xs text-muted-foreground tabular-nums">+ {inr(boq.taxAmount)}</span>
-        </div>
+        )}
+      </div>
 
-        <div className="border-t pt-3">
-          <label className="block text-xs font-medium text-muted-foreground mb-1">
-            Final price{editable && <span className="font-normal opacity-70"> · type a price — the discount is worked out</span>}
+      <div className="border-t bg-muted/40 px-4 py-3 rounded-b-lg">
+        <div className="flex items-center justify-between gap-3">
+          <label htmlFor="quote-final-price" className="font-semibold"
+            title="Discount is on products only; labour and shipping are added after it; GST is on everything.">
+            Final price
           </label>
-          <NumCell value={boq.grandTotal} disabled={!editable}
-            className={`h-11 text-xl font-bold text-primary ${editable ? "!border-primary/40 !bg-background" : ""}`}
-            onCommit={setFinal} />
+          <div className="w-36">
+            <NumCell value={boq.grandTotal} disabled={!editable}
+              className={`h-10 !text-xl font-semibold ${editable ? "!border-border !bg-background" : ""}`}
+              onCommit={setFinal} />
+          </div>
         </div>
-        <p className="text-[11px] text-muted-foreground">Discount applies to products only. Labour and shipping are added after it; GST is on everything.</p>
+        {editable && <p className="mt-1.5 text-[11px] leading-snug text-muted-foreground">Type a final price and the discount is worked out for you.</p>}
       </div>
     </div>
   );
@@ -719,7 +788,7 @@ function ChargeRow({ label, amount, note, notePlaceholder, editable, f, onSave }
   return (
     <>
       <label className="text-muted-foreground">{label} ₹</label>
-      <div className="w-24 justify-self-end">
+      <div className="w-20 justify-self-end">
         <NumCell value={has ? amount : null} placeholder="0" disabled={!editable} className={f}
           onCommit={(v) => onSave(v && v > 0 ? v : null, v && v > 0 ? note ?? null : null)} />
       </div>
@@ -741,6 +810,92 @@ function Row({ label, value, strong }: { label: string; value: string; strong?: 
     <div className="flex items-center justify-between">
       <span className={strong ? "font-medium" : "text-muted-foreground"}>{label}</span>
       <span className={`tabular-nums ${strong ? "font-semibold" : ""}`}>{value}</span>
+    </div>
+  );
+}
+
+/** One fact in the information strip: small icon · label · value. */
+function Fact({ icon: Icon, label, value, sub, strong }: {
+  icon: React.ComponentType<{ className?: string }>; label: string; value: string; sub?: string; strong?: boolean;
+}) {
+  return (
+    <div className="flex min-w-0 items-start gap-2">
+      <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+      <div className="min-w-0">
+        <dt className="text-[11px] text-muted-foreground">{label}</dt>
+        <dd className={`max-w-[16rem] truncate ${strong ? "text-sm font-semibold tabular-nums" : "text-sm"}`} title={value}>{value}</dd>
+        {sub && <dd className="max-w-[16rem] truncate text-[11px] text-muted-foreground">{sub}</dd>}
+      </div>
+    </div>
+  );
+}
+
+/** Underlined tab — clear when active, quiet otherwise. */
+function ViewTab({ active, icon: Icon, onClick, children }: {
+  active: boolean; icon: React.ComponentType<{ className?: string }>; onClick: () => void; children: React.ReactNode;
+}) {
+  return (
+    <button type="button" role="tab" aria-selected={active} onClick={onClick}
+      className={`-mb-px flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 rounded-t ${active
+        ? "border-foreground font-medium text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
+      <Icon className="h-4 w-4" /> {children}
+    </button>
+  );
+}
+
+/** "Saving…" / "Saved" — the sheet saves every edit by itself, so there's no Save button to press. */
+function AutosaveState({ pending, lastSaved }: { pending: number; lastSaved: number | null }) {
+  if (pending > 0) return <span className="flex items-center gap-1 text-xs text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Saving…</span>;
+  return (
+    <span className="flex items-center gap-1 text-xs text-muted-foreground" title="Every change saves automatically">
+      <Check className="h-3.5 w-3.5 text-[#16805C]" /> {lastSaved ? "All changes saved" : "Autosave on"}
+    </span>
+  );
+}
+
+/** Drawings & photos are kept with the lead — this points there instead of copying them. */
+function PhotosPanel({ measurement, leadId, fieldMode }: { measurement?: any; leadId: string; fieldMode?: boolean }) {
+  return (
+    <div className="rounded-lg border border-dashed p-6 text-center text-sm">
+      <ImageIcon className="mx-auto mb-2 h-6 w-6 text-muted-foreground" />
+      <p className="font-medium">Photos & drawings</p>
+      <p className="mt-1 text-muted-foreground">
+        {measurement
+          ? `Site photos and drawings for ${measurement.measurementNumber || "this measurement"} are kept in the lead's Documents.`
+          : "No measurement yet — photos and drawings added to the lead show up in its Documents."}
+      </p>
+      {!fieldMode && (
+        <Link to={`/leads/${leadId}?tab=documents`}>
+          <Button variant="outline" size="sm" className="mt-3">Open Documents</Button>
+        </Link>
+      )}
+    </div>
+  );
+}
+
+/** Earlier quotations — opened read-only (print view). */
+function HistoryPanel({ quotes, onOpen }: { quotes: any[]; onOpen: (id: number) => void }) {
+  if (quotes.length === 0) {
+    return (
+      <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+        <History className="mx-auto mb-2 h-6 w-6" />
+        No earlier quotations — when a quote is changed after approval, the old one is kept here.
+      </div>
+    );
+  }
+  return (
+    <div className="divide-y rounded-lg border">
+      {quotes.map((q) => (
+        <div key={q.id} className="flex flex-wrap items-center gap-3 px-3 py-2.5 text-sm">
+          <span className="font-medium">{q.quotationNumber}</span>
+          <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${QUOTATION_STATUS_STYLES[q.status] || "bg-muted text-muted-foreground"}`}>
+            {QUOTATION_STATUS_LABELS[q.status] || q.status}
+          </span>
+          <span className="text-xs text-muted-foreground">{formatDate(q.quotationDate || q.createdAt)}</span>
+          <span className="ml-auto tabular-nums">{inr(q.grandTotal ?? q.totalAmount)}</span>
+          <Button variant="outline" size="sm" className="h-7" onClick={() => onOpen(q.id)}><Eye className="h-3.5 w-3.5" /> Open</Button>
+        </div>
+      ))}
     </div>
   );
 }

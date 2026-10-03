@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronDown, ChevronRight, Copy, Hammer, Loader2, MapPin, MoreVertical, Package, Pencil, Plus, Trash2 } from "lucide-react";
+import { AlignLeft, Check, ChevronDown, ChevronRight, Copy, FolderOpen, Hammer, Loader2, MapPin, MoreVertical, Package, Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -97,11 +97,15 @@ function materialPayload(m: BoqItemMaterial, patch: Partial<BoqItemMaterial>): P
 type Group = { category: string; items: BoqItem[] };
 
 export default function BoqSheet({
-  boq, canEdit, onBoqChanged,
+  boq, canEdit, onBoqChanged, showBreakdown, onSaveState,
 }: {
   boq: Boq;
   canEdit: boolean;
   onBoqChanged: (b: Boq) => void;
+  /** Set by the page's Items / Cost Breakdown tabs; left out, the sheet shows its own toggle. */
+  showBreakdown?: boolean;
+  /** The page shows the autosave state itself (header); left out, the sheet's toolbar shows it. */
+  onSaveState?: (pending: number, lastSaved: number | null) => void;
 }) {
   const boqId = boq.id as number;
   const latest = useRef(boq);
@@ -112,6 +116,9 @@ export default function BoqSheet({
   const queue = useRef<Promise<unknown>>(Promise.resolve());
   const [pending, setPending] = useState(0);
   const [lastSaved, setLastSaved] = useState<number | null>(null);
+  const reportSave = useRef(onSaveState);
+  reportSave.current = onSaveState;
+  useEffect(() => { reportSave.current?.(pending, lastSaved); }, [pending, lastSaved]);
 
   const save = (label: string, job: (cur: Boq) => Promise<unknown>) => {
     setPending((n) => n + 1);
@@ -274,24 +281,42 @@ export default function BoqSheet({
   );
   const { products, remember: rememberProduct } = useLineProducts(productIds);
 
-  const addProduct = (category: string, p: Product) => {
-    rememberProduct(p);
-    const color = colorsOf(p)[0];
-    addPricedItem({
-      category, itemName: p.name, productId: p.id, description: productSummary(p),
-      imageUrl: color?.imageUrl || photosOf(p)[0] || undefined, color: color?.name,
-      quantity: 1, unit: p.unit || "Nos",
-    }, priceOf(p));
+  /** The table's empty last row: whatever was typed (catalogue product or custom name) becomes a line. */
+  const addRow = (category: string, d: NewRowDraft) => {
+    const p = d.product;
+    if (p) rememberProduct(p);
+    const color = p ? colorsOf(p)[0] : undefined;
+    return addPricedItem({
+      category, itemName: d.name.trim(), productId: p?.id,
+      description: p ? productSummary(p) : undefined,
+      imageUrl: p ? color?.imageUrl || photosOf(p)[0] || undefined : undefined, color: color?.name,
+      quantity: d.qty > 0 ? d.qty : 1, unit: d.unit || "Nos",
+    }, d.rate);
   };
-  const addCustomProduct = (category: string, name: string) =>
-    addPricedItem({ category, itemName: name, quantity: 1, unit: "Nos" }, 0);
 
   const pickColor = (item: BoqItem, name: string | null, c?: ProductColor) =>
     updateItem(item.id as number, c?.imageUrl ? { color: name, imageUrl: c.imageUrl } : { color: name });
 
+  // Rows removed on screen but not yet on the server: the toast's Undo brings them back.
+  const [hidden, setHidden] = useState<Set<number>>(new Set());
+  const deleteWithUndo = (item: BoqItem) => {
+    const id = item.id as number;
+    setHidden((h) => new Set(h).add(id));
+    let undone = false;
+    const unhide = () => setHidden((h) => { const n = new Set(h); n.delete(id); return n; });
+    toast.withAction(`Removed "${item.itemName}"`, { label: "Undo", onClick: () => { undone = true; unhide(); } });
+    window.setTimeout(() => {
+      if (undone) return;
+      save("delete the product", () => boqApi.deleteItem(boqId, id)).then(unhide);
+    }, 8000);
+  };
+
   // ---------------- Derived view data ----------------
 
-  const items = useMemo(() => [...(boq.items || [])].sort(compareItems), [boq.items]);
+  const items = useMemo(
+    () => [...(boq.items || [])].filter((i) => !hidden.has(i.id as number)).sort(compareItems),
+    [boq.items, hidden],
+  );
 
   // Categories added on this screen that have no product yet.
   const [extraCategories, setExtraCategories] = useState<string[]>([]);
@@ -321,10 +346,18 @@ export default function BoqSheet({
   const rateFor = (workType: string) => labourRates[workType.trim().toLowerCase()]?.rate;
 
   // Cost breakdown (material / labour lines) is for whoever prices the work — hidden by default.
-  const [showLines, setShowLines] = useState(() => {
+  const [ownShowLines, setShowLines] = useState(() => {
     try { return localStorage.getItem("quoteShowBreakdown") === "1"; } catch { return false; }
   });
-  useEffect(() => { try { localStorage.setItem("quoteShowBreakdown", showLines ? "1" : "0"); } catch { /* ignore */ } }, [showLines]);
+  useEffect(() => { try { localStorage.setItem("quoteShowBreakdown", ownShowLines ? "1" : "0"); } catch { /* ignore */ } }, [ownShowLines]);
+  const showLines = showBreakdown ?? ownShowLines;
+  // Categories folded shut (header only) — a view preference, not saved.
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const toggleCollapsed = (c: string) => setCollapsed((cur) => {
+    const next = new Set(cur);
+    if (next.has(c)) next.delete(c); else next.add(c);
+    return next;
+  });
   const [bulk, setBulk] = useState<null | { mode: "labour" } | { mode: "copy"; targets: number[] }>(null);
 
   // The tick on each item is the customer's choice: ticked items are in the quote and its total.
@@ -359,18 +392,20 @@ export default function BoqSheet({
   // ---------------- Render ----------------
 
   return (
-    <div className="space-y-3">
+    // A container: the item table switches to its desktop columns by the room it actually has
+    // (sidebar open, summary panel beside it, project page…), not by the screen width.
+    <div className="@container space-y-3">
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2 justify-between">
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          {canEdit ? <SaveState pending={pending} lastSaved={lastSaved} /> : <span>Locked — view only</span>}
+          {!canEdit ? <span>Locked — view only</span> : !onSaveState && <SaveState pending={pending} lastSaved={lastSaved} />}
         </div>
         <div className="flex flex-wrap items-center gap-3">
           {items.length > 0 && (
             <span className="text-xs font-medium text-muted-foreground">
               {includedCount} of {items.length} in quote
               {canEdit && includedCount < items.length && (
-                <button type="button" className="ml-1.5 text-primary hover:underline" onClick={() => setIncluded(items, true)}>tick all</button>
+                <button type="button" className="ml-1.5 text-[#2563EB] hover:underline" onClick={() => setIncluded(items, true)}>tick all</button>
               )}
             </span>
           )}
@@ -379,10 +414,12 @@ export default function BoqSheet({
               <Hammer className="h-3.5 w-3.5 mr-1" /> Add labour to items…
             </Button>
           )}
-          <label className="flex items-center gap-1.5 text-xs font-medium cursor-pointer select-none">
-            <input type="checkbox" className="h-3.5 w-3.5 accent-primary" checked={showLines} onChange={(e) => setShowLines(e.target.checked)} />
-            Show cost breakdown
-          </label>
+          {showBreakdown === undefined && (
+            <label className="flex items-center gap-1.5 text-xs font-medium cursor-pointer select-none">
+              <input type="checkbox" className="h-3.5 w-3.5 accent-primary" checked={showLines} onChange={(e) => setShowLines(e.target.checked)} />
+              Show cost breakdown
+            </label>
+          )}
         </div>
       </div>
 
@@ -399,11 +436,17 @@ export default function BoqSheet({
       {groups.map((g) => {
         const on = g.items.filter((i) => i.isActive !== false).length;
         const saved = categoryByName.get(g.category.trim().toLowerCase());
+        const folded = collapsed.has(g.category);
         return (
           // No overflow-hidden here: the product picker's dropdown must be able to spill out.
-          <div key={g.category} className="rounded-xl border">
+          <div key={g.category} className="rounded-lg border bg-card">
             {/* Category header */}
-            <div className="flex items-center gap-2 rounded-t-xl bg-primary/[0.06] px-3 py-2">
+            <div className={`flex items-center gap-2 bg-muted/60 px-3 py-2 ${folded ? "rounded-lg" : "rounded-t-lg"}`}>
+              <button type="button" onClick={() => toggleCollapsed(g.category)}
+                aria-label={folded ? `Show ${g.category}` : `Hide ${g.category}`} aria-expanded={!folded}
+                className="h-6 w-6 -ml-1 rounded-md hover:bg-primary/10 flex items-center justify-center text-muted-foreground">
+                {folded ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              </button>
               <input type="checkbox" className="h-4 w-4 accent-primary" disabled={!canEdit || g.items.length === 0}
                 title="Whole category in the quote" aria-label={`${g.category} in quote`}
                 ref={(el) => { if (el) el.indeterminate = on > 0 && on < g.items.length; }}
@@ -412,7 +455,8 @@ export default function BoqSheet({
                 <CategoryNameInput value={g.category}
                   onCommit={(v) => renameCategory(g, v)} onCancel={() => setRenaming(null)} />
               ) : (
-                <span className="flex-1 min-w-0 truncate text-sm font-bold uppercase tracking-wide text-primary">
+                <span className="flex-1 min-w-0 truncate text-sm font-semibold uppercase tracking-wide">
+                  <FolderOpen className="inline h-4 w-4 mr-1.5 -mt-0.5 text-muted-foreground" aria-hidden />
                   <span
                     className={canEdit ? "cursor-text rounded px-0.5 -mx-0.5 hover:bg-primary/10" : ""}
                     title={canEdit ? "Double-click to rename" : undefined}
@@ -424,7 +468,8 @@ export default function BoqSheet({
                   </span>
                 </span>
               )}
-              <span className="text-sm font-bold tabular-nums">{inr(groupTotal(g.items))}</span>
+              <span className="hidden sm:inline text-xs text-muted-foreground">Category total</span>
+              <span className="text-sm font-semibold tabular-nums">{inr(groupTotal(g.items))}</span>
               {canEdit && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -441,11 +486,11 @@ export default function BoqSheet({
               )}
             </div>
 
-            {g.items.length > 0 && (
-              <div className={`hidden md:grid ${ROW} items-center border-t bg-muted/40 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground`}>
-                <span title="In the quote">✓</span>
-                <span />
-                <span>Product</span>
+            {!folded && (g.items.length > 0 || canEdit) && (
+              <div className={`hidden @[820px]:grid ${ROW} items-center border-t bg-muted/20 px-3 py-2 text-xs font-medium text-muted-foreground`}>
+                <span title="In the quote" className="text-center">✓</span>
+                <span className="col-span-2">Product</span>
+                <span className="hidden @[1100px]:block">Description</span>
                 <span className="text-right">Qty</span>
                 <span>Unit</span>
                 <span className="text-right">Rate ₹</span>
@@ -455,7 +500,7 @@ export default function BoqSheet({
               </div>
             )}
 
-            <div className="divide-y border-t">
+            {!folded && <div className="divide-y border-t">
               {g.items.map((item) => (
                 <ItemRow
                   key={item.id}
@@ -477,25 +522,15 @@ export default function BoqSheet({
                   onDeleteLabour={(lid) => save("remove the labour", () => boqApi.deleteLabour(boqId, item.id as number, lid))}
                   onAddMaterial={(m) => save("add the material", () => boqApi.addMaterial(boqId, item.id as number, m))}
                   onAddLabour={(l) => { rememberRate(l.workType, l.rate); return save("add the labour", () => boqApi.addLabour(boqId, item.id as number, l)); }}
-                  onDelete={() => {
-                    if (!window.confirm(`Remove "${item.itemName}"?`)) return;
-                    save("delete the product", () => boqApi.deleteItem(boqId, item.id as number));
-                  }}
+                  onDelete={() => deleteWithUndo(item)}
                   onToggleActive={() => save("update the quote", () => boqApi.toggleItemActive(boqId, item.id as number, item.isActive === false))}
                   onCopyFrom={() => setBulk({ mode: "copy", targets: [item.id as number] })}
                 />
               ))}
-            </div>
-            {canEdit && (
-              <div className="flex items-center gap-2 rounded-b-xl px-3 py-2 border-t bg-muted/10">
-                <Plus className="h-4 w-4 text-muted-foreground shrink-0" />
-                <ProductPicker
-                  categoryId={saved?.id}
-                  categoryName={g.category}
-                  onPick={(p) => addProduct(g.category, p)}
-                  onCustom={(name) => addCustomProduct(g.category, name)}
-                />
-              </div>
+            </div>}
+            {!folded && canEdit && (
+              <NewItemRow categoryId={saved?.id} categoryName={g.category} first={g.items.length === 0}
+                onAdd={(d) => addRow(g.category, d)} />
             )}
           </div>
         );
@@ -572,7 +607,7 @@ function CategoryNameInput({ value, onCommit, onCancel }: {
       value={draft}
       maxLength={CATEGORY_MAX}
       aria-label="Category name"
-      className="flex-1 min-w-0 h-7 rounded-md border border-primary bg-background px-2 text-sm font-bold uppercase tracking-wide text-primary outline-none ring-2 ring-primary/20"
+      className="flex-1 min-w-0 h-7 rounded-md border border-ring bg-background px-2 text-sm font-semibold uppercase tracking-wide outline-none ring-2 ring-ring/20"
       onChange={(e) => setDraft(e.target.value)}
       onBlur={() => finish(true)}
       onKeyDown={(e) => {
@@ -596,10 +631,16 @@ function SaveState({ pending, lastSaved }: { pending: number; lastSaved: number 
 // ---------------------------------------------------------------------------
 
 /** Desktop column layout shared by the header and every product row. */
-const ROW = "md:grid md:grid-cols-[28px_48px_minmax(0,1fr)_72px_88px_100px_104px_112px_64px] md:gap-2";
+const ROW = "@[820px]:grid @[820px]:grid-cols-[24px_40px_minmax(0,1fr)_60px_76px_88px_84px_104px_56px] "
+  + "@[1100px]:grid-cols-[24px_40px_minmax(0,1.1fr)_minmax(0,1fr)_60px_76px_88px_84px_104px_56px] @[820px]:gap-x-2 @[820px]:gap-y-0";
 
 /** Visible input styling for editable cells (the bare spreadsheet cells only show a border on hover). */
 const FIELD = "!border-border !bg-background";
+/**
+ * Item-row cells read like a table: plain values in the wide layout that outline when the row is
+ * hovered (and highlight on focus); in the narrow layout (phones — no hover) they're always boxes.
+ */
+const CELL = "!border-border !bg-background focus:!border-ring @[820px]:!border-transparent @[820px]:!bg-transparent @[820px]:group-hover:!border-border @[820px]:focus:!border-ring @[820px]:focus:!bg-background";
 
 function ItemRow({
   item, product, categories, canEdit, showLines, onUpdate, onQty, onSize, onSetGross, onSetAmount, onColor,
@@ -631,6 +672,7 @@ function ItemRow({
   const inactive = item.isActive === false;
   const [open, setOpen] = useState(false);
   const [adding, setAdding] = useState<null | "material" | "labour">(null);
+  const [descOpen, setDescOpen] = useState(false);
   // A typed-in price is already the row's Rate/Amount — don't repeat it as a breakdown line.
   const priceLine = priceLineOf(item);
   const materials = (item.materials || []).filter((m) => m !== priceLine);
@@ -638,7 +680,7 @@ function ItemRow({
   const qty = Number(item.quantity ?? 0);
   const gross = grossOf(item);
   const rate = qty > 0 ? Math.round((gross / qty) * 100) / 100 : gross;
-  const f = canEdit ? FIELD : "";
+  const f = canEdit ? CELL : "";
   // "Show cost breakdown" opens items that have a breakdown; a plain-priced item stays one row
   // (its chevron still opens size / category / build-up).
   const detailsOpen = open || (showLines && lineCount > 0);
@@ -647,12 +689,19 @@ function ItemRow({
     return [...new Set(all)];
   }, [product, item.imageUrl]);
 
+  const showDesc = !!item.description || descOpen;
+  const editName = (v: string) => {
+    if (!v) return;
+    onUpdate({ itemName: v });
+    if (priceLine) onUpdateMaterial(priceLine.id as number, { materialName: v });
+  };
+
   return (
-    <div className={inactive ? "bg-muted/40" : ""}>
-      <div className={`grid grid-cols-[28px_48px_minmax(0,1fr)_auto] gap-x-2 gap-y-1.5 items-start px-3 py-2.5 ${ROW} md:items-start`}>
+    <div className={`group transition-colors ${inactive ? "bg-muted/30" : "hover:bg-muted/20"}`}>
+      <div className={`grid grid-cols-[24px_40px_minmax(0,1fr)_auto] gap-x-2 gap-y-2 items-start px-3 py-2.5 ${ROW}`}>
         {/* ✓ in quote */}
         <input type="checkbox" aria-label={`${item.itemName} in quote`} title="In the quote (customer's choice)"
-          className="mt-3.5 h-4 w-4 accent-primary justify-self-center" disabled={!canEdit}
+          className="mt-2.5 h-4 w-4 accent-primary justify-self-center" disabled={!canEdit}
           checked={!inactive} onChange={onToggleActive} />
 
         {/* Photo */}
@@ -660,38 +709,47 @@ function ItemRow({
           <ImageCell url={item.imageUrl} options={photos} disabled={!canEdit} onChange={(url) => onUpdate({ imageUrl: url })} />
         </div>
 
-        {/* Product: name · colour · location · description */}
+        {/* Product: name, then one quiet line of details — empty ones are links, not boxes */}
         <div className={`min-w-0 ${inactive ? "opacity-60" : ""}`}>
-          <div className="flex items-center gap-1.5">
-            <TextCell value={item.itemName} col="itemName" disabled={!canEdit} className={`font-medium ${f}`}
-              onCommit={(v) => {
-                if (!v) return;
-                onUpdate({ itemName: v });
-                if (priceLine) onUpdateMaterial(priceLine.id as number, { materialName: v });
-              }} />
-            {inactive && <span className="shrink-0 text-[10px] uppercase px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">Not in quote</span>}
-            {item.productId == null && canEdit && (
-              <span className="shrink-0 text-[10px] uppercase px-1.5 py-0.5 rounded bg-muted text-muted-foreground" title="Not from the catalogue">Custom</span>
+          <TextCell value={item.itemName} col="itemName" disabled={!canEdit} className={`font-medium ${f}`} onCommit={editName}
+            title={item.productId == null ? "Custom product — not from the catalogue" : undefined} />
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 px-1 text-xs text-muted-foreground">
+            {inactive && <span className="shrink-0 text-[10px] font-medium uppercase px-1.5 py-px rounded bg-[#FFFBEB] text-[#B7791F]">Not in quote</span>}
+            {item.productId == null ? (
+              <span className="shrink-0 text-[10px] font-medium uppercase px-1.5 py-px rounded bg-[#EFF6FF] text-[#1D4ED8]" title="Typed in — not from the inventory catalogue">Custom</span>
+            ) : (
+              <span className="shrink-0 text-[10px] font-medium uppercase px-1.5 py-px rounded bg-muted text-muted-foreground" title="From the inventory catalogue">Inventory</span>
             )}
-          </div>
-          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 px-1">
             <ColorCell value={item.color} colors={colorsOf(product)} disabled={!canEdit} onChange={onColor} />
             <LocationBox value={item.location} fallback={item.roomName} disabled={!canEdit}
               onCommit={(v) => onUpdate({ location: v || null })} />
+            {canEdit && !showDesc && (
+              <button type="button" onClick={() => setDescOpen(true)} title="Add a description (shows on the quotation)"
+                className="@[1100px]:hidden h-6 rounded px-1 hover:bg-muted hover:text-foreground flex items-center gap-1">
+                <AlignLeft className="h-3.5 w-3.5" /><span className="@[820px]:hidden">Description</span>
+              </button>
+            )}
           </div>
-          <DescriptionBox value={item.description} disabled={!canEdit}
-            onCommit={(v) => onUpdate({ description: v || undefined })} />
         </div>
 
-        {/* Actions (mobile: top-right) */}
-        <div className="row-start-1 col-start-4 md:hidden flex items-center">
+        {/* Description — under the name, or its own column when the table is wide enough */}
+        <div className={`col-start-3 col-span-2 min-w-0 @[820px]:row-start-2 @[820px]:col-start-3 @[820px]:col-span-1 @[1100px]:row-start-1 @[1100px]:col-start-4 ${showDesc ? "" : "hidden @[1100px]:block"} ${inactive ? "opacity-60" : ""}`}>
+          {(showDesc || canEdit) && (
+            <DescriptionBox value={item.description} disabled={!canEdit} autoFocus={descOpen && !item.description}
+              onDone={() => setDescOpen(false)}
+              onCommit={(v) => onUpdate({ description: v || undefined })} />
+          )}
+        </div>
+
+        {/* Actions (phone: top-right) */}
+        <div className="row-start-1 col-start-4 @[820px]:hidden flex items-center">
           <RowActions canEdit={canEdit} open={detailsOpen} lineCount={lineCount} onToggle={() => setOpen((v) => !v)}
             onAddMaterial={() => { setOpen(true); setAdding("material"); }} onAddLabour={() => { setOpen(true); setAdding("labour"); }}
             onCopyFrom={onCopyFrom} onDelete={onDelete} />
         </div>
 
-        {/* Numbers — a labelled grid on phones, table cells on desktop */}
-        <div className="col-span-4 col-start-1 md:col-span-1 md:col-start-auto grid grid-cols-2 gap-2 md:contents pl-[36px] md:pl-0">
+        {/* Numbers — one labelled strip on phones (Qty · Unit · Rate · Amount), table cells on desktop */}
+        <div className="col-span-4 col-start-1 @[820px]:col-span-1 @[820px]:col-start-auto grid grid-cols-2 @[420px]:grid-cols-[60px_76px_minmax(0,1fr)_minmax(0,1fr)] gap-x-2 gap-y-1.5 @[820px]:contents rounded-lg bg-muted/40 p-2 @[820px]:p-0">
           <Cell label="Qty">
             <NumCell value={item.quantity} col="qty" disabled={!canEdit} className={f} onCommit={onQty} />
           </Cell>
@@ -702,18 +760,18 @@ function ItemRow({
             <NumCell value={rate} col="rate" disabled={!canEdit} className={f}
               onCommit={(v) => v != null && onSetGross(Math.round(v * (qty > 0 ? qty : 1) * 100) / 100)} />
           </Cell>
-          <Cell label="Discount">
+          <Cell label={Number(item.discountValue ?? 0) > 0 ? "Discount" : ""} className="order-last col-span-2 @[420px]:col-span-4 -mt-1 @[820px]:mt-0 @[820px]:order-none @[820px]:col-span-1">
             <DiscountCell type={item.discountType} value={item.discountValue} amount={item.discountAmount} disabled={!canEdit}
               onChange={(type, value) => onUpdate({ discountType: type, discountValue: value })} />
           </Cell>
-          <Cell label="Amount ₹" className="col-span-2 md:col-span-1">
+          <Cell label="Amount ₹">
             <NumCell value={item.amount} col="amount" disabled={!canEdit}
-              className={`font-semibold ${canEdit ? "!border-primary/40 !bg-primary/[0.04]" : ""}`}
+              className={`font-semibold text-foreground ${f}`}
               onCommit={(v) => v != null && onSetAmount(v)} />
           </Cell>
         </div>
 
-        <div className="hidden md:flex items-center justify-end pt-1.5">
+        <div className="hidden @[820px]:flex items-center justify-end">
           <RowActions canEdit={canEdit} open={detailsOpen} lineCount={lineCount} onToggle={() => setOpen((v) => !v)}
             onAddMaterial={() => { setOpen(true); setAdding("material"); }} onAddLabour={() => { setOpen(true); setAdding("labour"); }}
             onCopyFrom={onCopyFrom} onDelete={onDelete} />
@@ -722,19 +780,22 @@ function ItemRow({
 
       {/* ---- Details: size, category, and the material / labour behind the price ---- */}
       {detailsOpen && (
-        <div className="mx-3 mb-3 md:ml-[92px] rounded-lg border border-dashed bg-muted/30 p-2 space-y-1.5">
+        <div className="mx-3 mb-3 @[820px]:ml-[92px] rounded-lg border bg-muted/40 p-2 space-y-1.5">
+          <p className="px-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            Cost breakdown <span className="normal-case tracking-normal font-normal">· qty × rate + waste % = line total · lines add up to the item amount</span>
+          </p>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-1 text-xs text-muted-foreground">
-            <span className="flex items-center gap-1.5">Size
+            <span className="flex items-center gap-1.5 whitespace-nowrap">Size
               <span className="w-14"><NumCell value={item.length} col="length" placeholder="L" disabled={!canEdit} className={`h-7 text-center text-xs ${f}`} onCommit={(v) => onSize("length", v)} /></span>
               ×
               <span className="w-14"><NumCell value={item.width} col="width" placeholder="W" disabled={!canEdit} className={`h-7 text-center text-xs ${f}`} onCommit={(v) => onSize("width", v)} /></span>
             </span>
-            <span className="flex items-center gap-1.5">Move to
+            <span className="flex items-center gap-1.5 whitespace-nowrap">Move to
               <SelectCell value={item.category} options={categories} disabled={!canEdit}
                 className="h-7 w-auto rounded-full bg-background px-2 text-[11px]" onCommit={(v) => onUpdate({ category: v })} />
             </span>
             {canEdit && !adding && (
-              <span className="flex flex-wrap items-center gap-2 md:ml-auto">
+              <span className="flex flex-wrap items-center gap-2 @[820px]:ml-auto">
                 {lineCount === 0 && <span title="Optional — only if you want the price built up from parts">Build price from</span>}
                 <button type="button" onClick={() => setAdding("material")}
                   className="text-xs font-medium text-sky-700 border border-sky-200 bg-background hover:bg-sky-50 rounded-full px-3 py-1 flex items-center gap-1">
@@ -783,6 +844,94 @@ function ItemRow({
   );
 }
 
+type NewRowDraft = { name: string; product?: Product; qty: number; unit: string; rate: number };
+const EMPTY_ROW: NewRowDraft = { name: "", qty: 1, unit: "Nos", rate: 0 };
+
+/**
+ * The empty last row of a category table — new products are typed straight into the table:
+ * Product (pick from the catalogue or type any name) → Qty → Unit → Rate, Enter adds the line and
+ * the row clears for the next one.
+ */
+function NewItemRow({ categoryId, categoryName, first, onAdd }: {
+  categoryId?: number; categoryName: string; first: boolean;
+  onAdd: (d: NewRowDraft) => Promise<unknown>;
+}) {
+  const [d, setD] = useState<NewRowDraft>(EMPTY_ROW);
+  const [busy, setBusy] = useState(false);
+  const nameRef = useRef<HTMLInputElement>(null);
+  const qtyRef = useRef<HTMLInputElement>(null);
+  const ready = d.name.trim().length > 0;
+  const amount = Math.round(d.qty * d.rate * 100) / 100;
+  const box = "h-8 w-full rounded-md border border-border bg-background px-2 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/20";
+  const num = (v: string) => { const n = Number(v.replace(/,/g, "")); return Number.isFinite(n) ? n : 0; };
+
+  const add = async () => {
+    if (!ready || busy) return;
+    setBusy(true);
+    try {
+      await onAdd(d);
+      setD(EMPTY_ROW);
+      nameRef.current?.focus();
+    } finally { setBusy(false); }
+  };
+  const enterAdds = (e: React.KeyboardEvent) => { if (e.key === "Enter") { e.preventDefault(); add(); } };
+
+  return (
+    <div className={`grid grid-cols-[24px_minmax(0,1fr)] gap-x-2 gap-y-2 items-center px-3 py-2 border-t rounded-b-lg ${ROW}`}>
+      <Plus className="h-4 w-4 text-muted-foreground justify-self-center" aria-hidden />
+      {/* Product — spans the photo + name columns */}
+      <div className="min-w-0 @[820px]:col-span-2">
+        <ProductPicker
+          categoryId={categoryId}
+          categoryName={categoryName}
+          value={d.name}
+          onValueChange={(v) => setD((x) => ({ ...x, name: v, product: x.product && v === x.product.name ? x.product : undefined }))}
+          onPick={(p) => {
+            setD((x) => ({ ...x, name: p.name, product: p, unit: p.unit || x.unit, rate: priceOf(p) || x.rate }));
+            setTimeout(() => { qtyRef.current?.focus(); qtyRef.current?.select(); }, 0);
+          }}
+          onCustom={() => setTimeout(() => { qtyRef.current?.focus(); qtyRef.current?.select(); }, 0)}
+          placeholder={first ? `Add the first product to ${categoryName}…` : "Add product — name or code…"}
+          inputClassName={`${box} pl-8`}
+          inputRef={nameRef}
+        />
+      </div>
+
+      {/* Numbers — a strip on phones, table cells on desktop */}
+      <div className="col-span-2 col-start-1 @[820px]:col-span-1 @[820px]:col-start-auto grid grid-cols-2 @[420px]:grid-cols-[60px_76px_minmax(0,1fr)_minmax(0,1fr)] gap-x-2 @[820px]:contents">
+        <span className="hidden @[1100px]:block" />
+        <Cell label="Qty">
+          <input ref={qtyRef} inputMode="decimal" aria-label="Quantity" className={`${box} text-right tabular-nums`}
+            value={d.qty || ""} placeholder="1" onFocus={(e) => e.currentTarget.select()}
+            onChange={(e) => setD((x) => ({ ...x, qty: num(e.target.value) }))} onKeyDown={enterAdds} />
+        </Cell>
+        <Cell label="Unit">
+          <select aria-label="Unit" className={`${box} pr-1`} value={d.unit}
+            onChange={(e) => setD((x) => ({ ...x, unit: e.target.value }))}>
+            {(BOQ_UNITS.includes(d.unit) ? BOQ_UNITS : [d.unit, ...BOQ_UNITS]).map((u) => <option key={u} value={u}>{u}</option>)}
+          </select>
+        </Cell>
+        <Cell label="Rate ₹">
+          <input inputMode="decimal" aria-label="Rate" className={`${box} text-right tabular-nums`}
+            value={d.rate || ""} placeholder="0" onFocus={(e) => e.currentTarget.select()}
+            onChange={(e) => setD((x) => ({ ...x, rate: num(e.target.value) }))} onKeyDown={enterAdds} />
+        </Cell>
+        <span className="hidden @[820px]:block" />
+        <Cell label="Amount ₹">
+          <span className="flex h-8 items-center justify-end px-2 text-sm font-semibold tabular-nums text-muted-foreground">
+            {amount > 0 ? inr(amount) : "—"}
+          </span>
+        </Cell>
+      </div>
+
+      <Button size="sm" variant="outline" className="col-span-2 @[820px]:col-span-1 h-8" disabled={!ready || busy} onClick={add}
+        title="Add this product (Enter)">
+        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Plus className="h-4 w-4 @[820px]:mr-0 mr-1" /><span className="@[820px]:hidden">Add product</span></>}
+      </Button>
+    </div>
+  );
+}
+
 /** Optional "where it goes" note. Older room-based lines show their room as the hint. */
 function LocationBox({ value, fallback, disabled, onCommit }: {
   value?: string | null; fallback?: string | null; disabled: boolean; onCommit: (v: string) => void;
@@ -796,9 +945,9 @@ function LocationBox({ value, fallback, disabled, onCommit }: {
   return (
     <span className="inline-flex items-center gap-0.5">
       <MapPin className="h-3 w-3 text-muted-foreground" />
-      <input value={draft} placeholder={fallback || "Location (optional)"} aria-label="Location"
+      <input value={draft} placeholder={fallback || "Location"} aria-label="Location"
         title="Where it goes, e.g. Hall window — shows on the quotation"
-        className="h-7 w-40 rounded-md border border-transparent bg-transparent px-1.5 text-xs outline-none hover:border-border focus:border-primary focus:bg-background"
+        className="h-6 w-16 focus:w-40 transition-[width] rounded-md border border-transparent bg-transparent px-1.5 text-xs outline-none hover:border-border focus:border-primary focus:bg-background"
         onChange={(e) => setDraft(e.target.value)}
         onBlur={() => draft.trim() !== (value ?? "").trim() && onCommit(draft.trim())}
         onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") { setDraft(value ?? ""); e.currentTarget.blur(); } }} />
@@ -842,15 +991,16 @@ function RowActions({ canEdit, open, lineCount, onToggle, onAddMaterial, onAddLa
 function Cell({ label, className = "", children }: { label: string; className?: string; children: React.ReactNode }) {
   return (
     <div className={`min-w-0 ${className}`}>
-      <span className="md:hidden block text-[10px] font-medium uppercase text-muted-foreground mb-0.5">{label}</span>
+      {label && <span className="@[820px]:hidden block text-[10px] font-medium uppercase text-muted-foreground mb-0.5">{label}</span>}
       {children}
     </div>
   );
 }
 
 /** Item description under the name: quiet until you click it; grows with its text; saves on blur. */
-function DescriptionBox({ value, disabled, onCommit }: {
+function DescriptionBox({ value, disabled, onCommit, autoFocus, onDone }: {
   value?: string | null; disabled: boolean; onCommit: (v: string) => void;
+  autoFocus?: boolean; onDone?: () => void;
 }) {
   const [draft, setDraft] = useState(value ?? "");
   useEffect(() => { setDraft(value ?? ""); }, [value]);
@@ -868,13 +1018,13 @@ function DescriptionBox({ value, disabled, onCommit }: {
   }, [draft]);
   if (disabled && !value) return null;
   return (
-    <textarea ref={ref} rows={1} value={draft} disabled={disabled}
-      placeholder="+ Add description"
+    <textarea ref={ref} rows={1} value={draft} disabled={disabled} autoFocus={autoFocus}
+      placeholder="Add description…"
       title="Shows on the quotation, print and PDF"
       onChange={(e) => setDraft(e.target.value)}
-      onBlur={() => draft.trim() !== (value ?? "").trim() && onCommit(draft.trim())}
+      onBlur={() => { if (draft.trim() !== (value ?? "").trim()) onCommit(draft.trim()); onDone?.(); }}
       onKeyDown={(e) => { if (e.key === "Escape") { setDraft(value ?? ""); e.currentTarget.blur(); } }}
-      className="mt-0.5 w-full resize-none overflow-hidden rounded-md border border-transparent bg-transparent px-2 py-1 text-xs leading-snug text-muted-foreground outline-none hover:border-border focus:border-primary focus:bg-background focus:text-foreground focus:ring-2 focus:ring-primary/20 placeholder:text-muted-foreground/70 disabled:hover:border-transparent" />
+      className="w-full min-h-8 resize-none overflow-hidden rounded-md border border-transparent bg-transparent px-2 py-1.5 text-xs leading-snug text-muted-foreground outline-none group-hover:border-border focus:border-ring focus:bg-background focus:text-foreground focus:ring-2 focus:ring-ring/20 placeholder:text-muted-foreground/60 disabled:group-hover:border-transparent" />
   );
 }
 

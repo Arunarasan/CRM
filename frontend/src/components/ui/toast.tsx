@@ -23,6 +23,8 @@ export interface ToastItem {
   message: string;
   variant: ToastVariant;
   duration: number;
+  /** Optional inline action, e.g. "Undo". Clicking it runs the callback and closes the toast. */
+  action?: { label: string; onClick: () => void };
 }
 
 interface ToastStore {
@@ -39,10 +41,10 @@ const useToastStore = create<ToastStore>((set) => ({
 
 let counter = 0;
 
-function show(message: string, variant: ToastVariant, duration = 4000) {
+function show(message: string, variant: ToastVariant, duration = 4000, action?: ToastItem["action"]) {
   const id = ++counter;
   const { add, dismiss } = useToastStore.getState();
-  add({ id, message, variant, duration });
+  add({ id, message, variant, duration, action });
   if (duration > 0) {
     window.setTimeout(() => dismiss(id), duration);
   }
@@ -53,6 +55,9 @@ export const toast = {
   success: (message: string, duration?: number) => show(message, "success", duration),
   error: (message: string, duration?: number) => show(message, "error", duration ?? 6000),
   info: (message: string, duration?: number) => show(message, "info", duration),
+  /** "Removed X · Undo" — the caller does the real work when the toast times out without an undo. */
+  withAction: (message: string, action: { label: string; onClick: () => void }, duration = 8000) =>
+    show(message, "info", duration, action),
   dismiss: (id: number) => useToastStore.getState().dismiss(id),
 };
 
@@ -73,6 +78,14 @@ function ToastCard({ item }: { item: ToastItem }) {
     >
       <Icon className={`h-5 w-5 shrink-0 mt-0.5 ${iconColor}`} />
       <p className="text-sm leading-snug flex-1 min-w-0 break-words">{item.message}</p>
+      {item.action && (
+        <button
+          onClick={() => { item.action!.onClick(); dismiss(item.id); }}
+          className="shrink-0 -my-0.5 rounded-md px-2 py-0.5 text-sm font-semibold text-primary hover:bg-accent"
+        >
+          {item.action.label}
+        </button>
+      )}
       <button
         onClick={() => dismiss(item.id)}
         aria-label="Dismiss notification"

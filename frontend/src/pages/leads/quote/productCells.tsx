@@ -174,13 +174,24 @@ export function AddCategoryBar({ categories, used, onAdd, onSaveCategory }: {
 // Add a product to a category: catalogue search (that category first), or a custom product
 // ---------------------------------------------------------------------------
 
-export function ProductPicker({ categoryId, categoryName, onPick, onCustom }: {
+export function ProductPicker({
+  categoryId, categoryName, onPick, onCustom, value, onValueChange, placeholder, inputClassName, inputRef, hideIcon,
+}: {
   categoryId?: number;
   categoryName: string;
   onPick: (p: Product) => void;
   onCustom: (name: string) => void;
+  /** Controlled text (the table's new-item row keeps the picked name in the box). */
+  value?: string;
+  onValueChange?: (v: string) => void;
+  placeholder?: string;
+  inputClassName?: string;
+  inputRef?: React.Ref<HTMLInputElement>;
+  hideIcon?: boolean;
 }) {
-  const [q, setQ] = useState("");
+  const [ownQ, setOwnQ] = useState("");
+  const q = value ?? ownQ;
+  const setQ = (v: string) => { if (onValueChange) onValueChange(v); else setOwnQ(v); };
   const [open, setOpen] = useState(false);
   const [results, setResults] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
@@ -211,24 +222,26 @@ export function ProductPicker({ categoryId, categoryName, onPick, onCustom }: {
     return () => document.removeEventListener("mousedown", close);
   }, [open]);
 
-  const pick = (p: Product) => { onPick(p); setQ(""); setOpen(false); };
-  const custom = () => { if (q.trim()) { onCustom(q.trim()); setQ(""); setOpen(false); } };
+  // Controlled: the parent decides what the box shows after a pick; uncontrolled: it clears.
+  const pick = (p: Product) => { onPick(p); if (value === undefined) setQ(""); setOpen(false); };
+  const custom = () => { if (q.trim()) { onCustom(q.trim()); if (value === undefined) setQ(""); setOpen(false); } };
 
   return (
     <div ref={boxRef} className="relative flex-1 min-w-0">
       <div className="relative">
-        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        {!hideIcon && <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />}
         <Input
-          className="h-9 pl-8"
-          placeholder={`Add a product to ${categoryName} — search, or type a custom name and press Enter`}
+          ref={inputRef}
+          className={inputClassName ?? "h-9 pl-8"}
+          placeholder={placeholder ?? `Add a product to ${categoryName} — search, or type a custom name and press Enter`}
           value={q}
           onFocus={() => setOpen(true)}
           onChange={(e) => { setQ(e.target.value); setOpen(true); }}
           onKeyDown={(e) => {
             if (e.key === "ArrowDown") { e.preventDefault(); setActive((a) => Math.min(a + 1, results.length - 1)); }
             else if (e.key === "ArrowUp") { e.preventDefault(); setActive((a) => Math.max(a - 1, -1)); }
-            else if (e.key === "Enter") {
-              e.preventDefault();
+            else if (e.key === "Enter" || (e.key === "Tab" && !e.shiftKey && open && (active >= 0 || q.trim()))) {
+              if (e.key === "Enter") e.preventDefault();
               if (active >= 0 && results[active]) pick(results[active]); else custom();
             } else if (e.key === "Escape") setOpen(false);
           }}
@@ -393,13 +406,13 @@ export function ColorCell({ value, colors, disabled, onChange }: {
       <span className="inline-flex items-center gap-1">
         {swatch && <Swatch hex={swatch} />}
         <select value={known?.name ?? ""} aria-label="Colour"
-          className="h-7 rounded-md border border-border bg-background px-1.5 text-xs max-w-[10rem]"
+          className="h-6 max-w-[6.5rem] rounded-md border border-transparent bg-transparent px-1 text-xs text-muted-foreground outline-none cursor-pointer hover:border-border hover:text-foreground focus:border-primary"
           onChange={(e) => {
             if (e.target.value === "__custom") { setCustom(true); return; }
             const c = colors.find((x) => x.name === e.target.value);
             onChange(c?.name ?? null, c);
           }}>
-          <option value="">Colour…</option>
+          <option value="">+ Colour</option>
           {colors.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
           <option value="__custom">Other colour…</option>
         </select>
@@ -409,8 +422,8 @@ export function ColorCell({ value, colors, disabled, onChange }: {
 
   return (
     <span className="inline-flex items-center gap-1">
-      <input value={draft} placeholder="Colour" aria-label="Colour"
-        className="h-7 w-32 rounded-md border border-border bg-background px-2 text-xs outline-none focus:border-primary"
+      <input value={draft} placeholder="+ Colour" aria-label="Colour"
+        className="h-6 w-[4.5rem] focus:w-32 transition-[width] rounded-md border border-transparent bg-transparent px-1 text-xs outline-none placeholder:text-muted-foreground hover:border-border focus:border-primary focus:bg-background"
         autoFocus={custom}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={() => { setCustom(false); if (draft.trim() !== (value ?? "")) onChange(draft.trim() || null); }}
@@ -442,13 +455,17 @@ export function DiscountCell({ type, value, amount, disabled, onChange }: {
     return has ? <span className="block text-right text-xs text-emerald-700 tabular-nums">−{inr(amount)}{!flat && ` (${value}%)`}</span> : <span className="block text-right text-xs text-muted-foreground">—</span>;
   }
   if (!has && !editing) {
+    // Wide table: a quiet "—" that offers "+ Discount" when the row is hovered. Narrow: the link, always.
     return (
-      <button type="button" onClick={() => setEditing(true)}
-        className="w-full h-8 text-right text-xs text-muted-foreground hover:text-primary">+ Discount</button>
+      <button type="button" onClick={() => setEditing(true)} aria-label="Add discount"
+        className="h-6 @[820px]:h-8 w-full text-left @[820px]:text-right text-xs text-muted-foreground hover:text-primary">
+        <span className="hidden @[820px]:inline @[820px]:group-hover:hidden">—</span>
+        <span className="@[820px]:hidden @[820px]:group-hover:inline">+ Discount</span>
+      </button>
     );
   }
   return (
-    <div className="space-y-0.5">
+    <div className="space-y-0.5 max-w-[10rem] @[820px]:max-w-none">
       <div className="flex items-center gap-1">
         <button type="button" title="Switch % / ₹"
           onClick={() => onChange(flat ? "PERCENT" : "FLAT", has ? value ?? null : null)}
