@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import {
-  Plus, Trash2, FileText, Wallet, Receipt, Loader2, IndianRupee, AlertCircle,
+  Plus, Trash2, FileText, Loader2, IndianRupee, AlertCircle,
   CheckCircle2, RotateCcw, Printer, Ban, Clock, User as UserIcon,
 } from "lucide-react";
 import { financeApi } from "@/api/financeApi";
@@ -36,12 +36,16 @@ function paidLabel(status: string): { text: string; cls: string } {
 
 interface LineItem { description: string; quantity: number; unitPrice: number; }
 
+export type CommercialMode = "billing" | "payments" | "profit";
+
 /**
- * Project-scoped billing panel: budget vs invoiced vs paid vs due, the project's invoices with
- * inline Paid / Unpaid / Print actions, and an invoice maker. Payment is marked directly on the
- * invoice (methods combinable) — there is no separate payments component. Reuses /api/finance.
+ * Project money, one Commercial section at a time (the shared stats row lives on the page):
+ *  - billing:  payment schedule / auto-billing tracker + invoices (maker, issue, paid/unpaid, print)
+ *  - payments: money received, as a timeline, with pending field collections to approve
+ *  - profit:   cash vs accrual profit + project expenses
+ * Reuses /api/finance.
  */
-export default function ProjectPaymentsTab({ project, onChanged }: { project: any; onChanged?: () => void }) {
+export default function ProjectPaymentsTab({ project, onChanged, mode = "billing" }: { project: any; onChanged?: () => void; mode?: CommercialMode }) {
   const { hasAuthority, hasAnyAuthority } = useAuth();
   const canRead = hasAuthority("FINANCE_READ");
   const canWrite = hasAuthority("FINANCE_WRITE");
@@ -55,7 +59,6 @@ export default function ProjectPaymentsTab({ project, onChanged }: { project: an
   const [denied, setDenied] = useState(false);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [tick, setTick] = useState(0); // bumps so the billing tracker re-fetches after invoice changes
-  const [view, setView] = useState<"invoices" | "payments">("invoices");
 
   const load = () => {
     if (!projectId) return;
@@ -70,14 +73,6 @@ export default function ProjectPaymentsTab({ project, onChanged }: { project: an
 
   // Reload invoices AND signal the billing tracker to refresh (payment % moved).
   const reloadAll = () => { load(); setTick((t) => t + 1); };
-
-  const summary = useMemo(() => {
-    const billable = invoices.filter((i) => i.status !== "DRAFT" && i.status !== "CANCELLED");
-    const invoiced = billable.reduce((s, i) => s + (i.totalAmount || 0), 0);
-    const paid = invoices.filter((i) => i.status !== "CANCELLED").reduce((s, i) => s + (i.amountPaid || 0), 0);
-    const due = billable.reduce((s, i) => s + (i.balanceDue || 0), 0);
-    return { budget: project?.budget || 0, invoiced, paid, due };
-  }, [invoices, project]);
 
   const [makerOpen, setMakerOpen] = useState(false);
   const [payFor, setPayFor] = useState<Invoice | null>(null);
@@ -118,42 +113,34 @@ export default function ProjectPaymentsTab({ project, onChanged }: { project: an
     }
   };
 
-  return (
-    <div className="space-y-6">
-      {/* Summary cards */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-        <SummaryCard label="Total Budget" value={inr(summary.budget)} icon={<Wallet className="h-5 w-5" />} tint="text-slate-700" />
-        <SummaryCard label="Invoiced" value={inr(summary.invoiced)} icon={<FileText className="h-5 w-5" />} tint="text-emerald-600" />
-        <SummaryCard label="Paid" value={inr(summary.paid)} icon={<IndianRupee className="h-5 w-5" />} tint="text-emerald-600" />
-        <SummaryCard label="Balance Due" value={inr(summary.due)} icon={<Receipt className="h-5 w-5" />} tint={summary.due > 0 ? "text-red-600" : "text-emerald-600"} />
-      </div>
+  if (mode === "payments") {
+    return <PaymentsSection projectId={projectId} customerId={customerId} canWrite={canWrite} canCollect={canCollect} onChanged={() => { reloadAll(); onChanged?.(); }} />;
+  }
+  if (mode === "profit") {
+    return <ProjectProfitPanel project={project} refreshSignal={tick} />;
+  }
 
-      {/* Combined completion + billing tracker (work % + payments, auto-billing milestones) */}
+  return (
+    <div className="space-y-3">
+      {/* Payment schedule — work % milestones that auto-raise invoices */}
       <CompletionBillingTracker project={project} refreshSignal={tick} onChanged={reloadAll} />
 
-      {/* Profit & margin — cash basis vs accrual, plus quick-add other expenses */}
-      <ProjectProfitPanel project={project} refreshSignal={tick} />
-
-      {/* Invoices vs Payments — two clearly separated views */}
-      <div className="inline-flex rounded-xl border bg-white p-1 shadow-sm">
-        <ViewTab active={view === "invoices"} onClick={() => setView("invoices")} icon={<FileText className="h-4 w-4" />} label="Invoices" hint="What you bill" />
-        <ViewTab active={view === "payments"} onClick={() => setView("payments")} icon={<IndianRupee className="h-4 w-4" />} label="Payments" hint="Money received" />
-      </div>
-
-      {view === "payments" ? (
-        <PaymentsSection projectId={projectId} customerId={customerId} canWrite={canWrite} canCollect={canCollect} onChanged={reloadAll} />
-      ) : loading ? (
+      {loading ? (
         <div className="flex justify-center py-10 text-slate-400"><Loader2 className="h-6 w-6 animate-spin" /></div>
       ) : denied ? (
         <div className="rounded-xl border border-slate-100 bg-white p-6 text-slate-500">Billing data is restricted for your role.</div>
       ) : (
-        <section className="rounded-2xl border border-slate-100 bg-white p-6 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
-          <div className="mb-4 flex items-center justify-between">
-            <h3 className="flex items-center gap-2 text-lg font-bold text-slate-800"><FileText className="h-5 w-5 text-emerald-600" /> Invoices</h3>
+        <section className="rounded-2xl border border-slate-100 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+          <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2"><FileText className="h-5 w-5 text-emerald-700" /> Invoices</h3>
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-500">{invoices.length}</span>
+            </div>
             {canWrite && customerId && (
-              <Button size="sm" onClick={() => setMakerOpen(true)}><Plus className="h-4 w-4" /> New Invoice</Button>
+              <Button size="sm" onClick={() => setMakerOpen(true)} className="h-9 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white"><Plus className="h-4 w-4 mr-1" /> New Invoice</Button>
             )}
           </div>
+          <div className="p-4">
           {!customerId && (
             <p className="mb-3 text-sm text-amber-600">This project has no linked customer, so invoices can't be raised yet.</p>
           )}
@@ -213,6 +200,7 @@ export default function ProjectPaymentsTab({ project, onChanged }: { project: an
               </table>
             </div>
           )}
+          </div>
         </section>
       )}
 
@@ -248,29 +236,17 @@ function ActionBtn({ children, onClick, tone, title }: { children: React.ReactNo
   );
 }
 
-function ViewTab({ active, onClick, icon, label, hint }: {
-  active: boolean; onClick: () => void; icon: React.ReactNode; label: string; hint: string;
-}) {
-  return (
-    <button type="button" onClick={onClick}
-      className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
-        active ? "bg-emerald-500 text-white shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>
-      {icon} {label}
-      <span className={`hidden sm:inline text-[10px] font-normal ${active ? "text-white/70" : "text-slate-400"}`}>· {hint}</span>
-    </button>
-  );
-}
-
-const PAY_STATUS: Record<string, { text: string; cls: string; icon: React.ReactNode }> = {
-  CONFIRMED: { text: "Confirmed", cls: "bg-emerald-100 text-emerald-700", icon: <CheckCircle2 className="h-3.5 w-3.5" /> },
-  PENDING_APPROVAL: { text: "Pending approval", cls: "bg-amber-100 text-amber-700", icon: <Clock className="h-3.5 w-3.5" /> },
-  REJECTED: { text: "Rejected", cls: "bg-rose-100 text-rose-600", icon: <Ban className="h-3.5 w-3.5" /> },
+const PAY_STATUS: Record<string, { text: string; cls: string; dot: string; icon: React.ReactNode }> = {
+  CONFIRMED: { text: "Confirmed", cls: "bg-emerald-100 text-emerald-800", dot: "bg-emerald-600", icon: <CheckCircle2 className="h-3.5 w-3.5" /> },
+  PENDING_APPROVAL: { text: "Pending approval", cls: "bg-amber-100 text-amber-800", dot: "bg-amber-500", icon: <Clock className="h-3.5 w-3.5" /> },
+  REJECTED: { text: "Rejected", cls: "bg-rose-100 text-rose-700", dot: "bg-rose-400", icon: <Ban className="h-3.5 w-3.5" /> },
 };
+const methodLabel = (m?: string) => (m || "—").replace(/_/g, " ");
 
 /**
- * Money actually received on this project — separate from invoices. Lists every customer payment
- * (including cash collected on site by field staff, which arrives PENDING_APPROVAL from their daily
- * report), with approve/reject for pending ones and a "Record Payment" for office-collected money.
+ * Money actually received on this project, as a timeline grouped by month. Cash field staff
+ * collected on site (from their daily report) arrives PENDING_APPROVAL and is pinned on top with
+ * Approve / Reject; office-collected money is added with "Record Payment" (confirmed immediately).
  */
 function PaymentsSection({ projectId, customerId, canWrite, canCollect, onChanged }: {
   projectId: number; customerId?: number; canWrite: boolean; canCollect: boolean; onChanged: () => void;
@@ -283,14 +259,27 @@ function PaymentsSection({ projectId, customerId, canWrite, canCollect, onChange
   const load = () => {
     setLoading(true);
     financeApi.getPayments({ projectId, size: 100 })
-      .then((r) => setRows(r.content || []))
+      .then((r) => setRows([...(r.content || [])].sort((a, b) => String(b.paymentDate).localeCompare(String(a.paymentDate)))))
       .catch(() => setRows([]))
       .finally(() => setLoading(false));
   };
   useEffect(load, [projectId]);
 
+  const pending = rows.filter((p) => p.status === "PENDING_APPROVAL");
+  const history = rows.filter((p) => p.status !== "PENDING_APPROVAL");
   const confirmedTotal = rows.filter((p) => p.status === "CONFIRMED").reduce((s, p) => s + (p.amount || 0), 0);
-  const pendingTotal = rows.filter((p) => p.status === "PENDING_APPROVAL").reduce((s, p) => s + (p.amount || 0), 0);
+  const pendingTotal = pending.reduce((s, p) => s + (p.amount || 0), 0);
+
+  // Month buckets for the timeline, newest first.
+  const months = useMemo(() => {
+    const m = new Map<string, CustomerPayment[]>();
+    history.forEach((p) => {
+      const k = p.paymentDate ? format(new Date(p.paymentDate), "MMMM yyyy") : "Undated";
+      if (!m.has(k)) m.set(k, []);
+      m.get(k)!.push(p);
+    });
+    return [...m.entries()];
+  }, [history]);
 
   const approve = (id: number) => {
     setBusyId(id);
@@ -298,70 +287,119 @@ function PaymentsSection({ projectId, customerId, canWrite, canCollect, onChange
       .catch((e) => toast.error(e?.response?.data?.message || "Approve failed")).finally(() => setBusyId(null));
   };
   const reject = (id: number) => {
-    if (!confirm("Reject this payment?")) return;
+    if (!confirm("Reject this payment? It won't count as received.")) return;
     setBusyId(id);
     financeApi.rejectPayment(id).then(() => { load(); onChanged(); toast.success("Payment rejected"); })
       .catch((e) => toast.error(e?.response?.data?.message || "Reject failed")).finally(() => setBusyId(null));
   };
 
   return (
-    <section className="rounded-2xl border border-slate-100 bg-white p-6 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
-      <div className="mb-4 flex items-center justify-between">
+    <section className="rounded-2xl border border-slate-100 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)] @container">
+      <div className="px-4 py-3 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="flex items-center gap-2 text-lg font-bold text-slate-800"><IndianRupee className="h-5 w-5 text-emerald-600" /> Payments Received</h3>
+          <h3 className="text-base font-bold text-slate-900 flex items-center gap-2"><IndianRupee className="h-5 w-5 text-emerald-700" /> Payments Received</h3>
           <p className="text-xs text-slate-400 mt-0.5">
-            {inr(confirmedTotal)} confirmed{pendingTotal > 0 ? ` · ${inr(pendingTotal)} awaiting approval` : ""}
+            <span className="font-semibold text-emerald-700">{inr(confirmedTotal)}</span> confirmed
+            {pendingTotal > 0 && <> · <span className="font-semibold text-amber-700">{inr(pendingTotal)}</span> awaiting approval</>}
           </p>
         </div>
         {canCollect && customerId && (
-          <Button size="sm" onClick={() => setRecordOpen(true)}><Plus className="h-4 w-4" /> Record Payment</Button>
+          <Button size="sm" onClick={() => setRecordOpen(true)} className="h-9 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white">
+            <Plus className="h-4 w-4 mr-1" /> Record Payment
+          </Button>
         )}
       </div>
 
       {loading ? (
         <div className="flex justify-center py-10 text-slate-400"><Loader2 className="h-6 w-6 animate-spin" /></div>
       ) : rows.length === 0 ? (
-        <p className="py-6 text-center text-sm text-slate-400">No payments recorded yet. Field staff can also log cash collected in their daily report.</p>
+        <div className="py-10 text-center">
+          <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-slate-400"><IndianRupee className="h-5 w-5" /></span>
+          <div className="mt-2 text-sm font-semibold text-slate-600">No payments yet</div>
+          <div className="text-xs text-slate-400">Record money received here. Field staff can also log cash collected in their daily report.</div>
+        </div>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b text-left text-xs uppercase tracking-wider text-slate-400">
-                <th className="py-2 pr-4">Payment #</th><th className="py-2 pr-4">Date</th><th className="py-2 pr-4">Method</th>
-                <th className="py-2 pr-4">Collected by</th><th className="py-2 pr-4 text-right">Amount</th>
-                <th className="py-2 pr-4">Status</th><th className="py-2 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((p) => {
-                const st = PAY_STATUS[p.status] || PAY_STATUS.CONFIRMED;
-                const busy = busyId === p.id;
-                return (
-                  <tr key={p.id} className="border-b last:border-0">
-                    <td className="py-2 pr-4 font-medium text-slate-700">{p.paymentNumber}</td>
-                    <td className="py-2 pr-4 text-slate-500">{p.paymentDate ? format(new Date(p.paymentDate), "dd MMM yyyy") : "-"}</td>
-                    <td className="py-2 pr-4 text-slate-500">{(p.paymentMethod || "").replace(/_/g, " ")}</td>
-                    <td className="py-2 pr-4 text-slate-500">
-                      <span className="inline-flex items-center gap-1">{p.collectedBy?.name ? <><UserIcon className="h-3 w-3" /> {p.collectedBy.name}</> : "—"}</span>
-                    </td>
-                    <td className="py-2 pr-4 text-right font-semibold text-slate-800">{inr(p.amount)}</td>
-                    <td className="py-2 pr-4"><span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${st.cls}`}>{st.icon} {st.text}</span></td>
-                    <td className="py-2">
-                      <div className="flex items-center justify-end gap-1.5">
-                        {busy && <Loader2 className="h-4 w-4 animate-spin text-slate-400" />}
-                        {canWrite && p.status === "PENDING_APPROVAL" && !busy && (
-                          <>
-                            <ActionBtn onClick={() => approve(p.id)} tone="green" title="Approve"><CheckCircle2 className="h-3.5 w-3.5" /> Approve</ActionBtn>
-                            <ActionBtn onClick={() => reject(p.id)} tone="red" title="Reject"><Ban className="h-3.5 w-3.5" /> Reject</ActionBtn>
-                          </>
-                        )}
+        <div className="p-3 space-y-4">
+          {/* Waiting for approval — pinned on top */}
+          {pending.length > 0 && (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50/60 p-3">
+              <div className="mb-2 flex items-center gap-2 text-sm font-bold text-amber-900">
+                <Clock className="h-4 w-4" /> Waiting for approval
+                <span className="rounded-full bg-amber-200/70 px-2 py-0.5 text-[11px]">{pending.length}</span>
+              </div>
+              <div className="space-y-2">
+                {pending.map((p) => {
+                  const busy = busyId === p.id;
+                  return (
+                    <div key={p.id} className="flex flex-col @xl:flex-row @xl:items-center gap-2 rounded-xl bg-white px-3 py-2.5 ring-1 ring-amber-100">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-lg font-bold text-slate-900">{inr(p.amount)}</span>
+                          <span className="text-xs text-slate-500">{methodLabel(p.paymentMethod)}</span>
+                        </div>
+                        <div className="text-[11px] text-slate-400 truncate">
+                          {p.paymentDate ? format(new Date(p.paymentDate), "dd MMM yyyy") : "—"}
+                          {p.collectedBy?.name && <> · collected by <span className="font-semibold text-slate-600">{p.collectedBy.name}</span></>}
+                          {p.referenceNumber && <> · Ref {p.referenceNumber}</>}
+                        </div>
                       </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                      {canWrite ? (
+                        <div className="flex items-center gap-2 shrink-0">
+                          {busy && <Loader2 className="h-4 w-4 animate-spin text-slate-400" />}
+                          <Button size="sm" variant="outline" disabled={busy} onClick={() => reject(p.id)} className="h-8 rounded-xl border-rose-200 text-rose-600 hover:bg-rose-50">
+                            <Ban className="h-3.5 w-3.5 mr-1" /> Reject
+                          </Button>
+                          <Button size="sm" disabled={busy} onClick={() => approve(p.id)} className="h-8 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white">
+                            <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Approve
+                          </Button>
+                        </div>
+                      ) : (
+                        <span className="text-[11px] text-amber-700 shrink-0">Finance will approve</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Timeline */}
+          {months.map(([month, list]) => {
+            const monthTotal = list.filter((p) => p.status === "CONFIRMED").reduce((s, p) => s + (p.amount || 0), 0);
+            return (
+              <div key={month}>
+                <div className="mb-2 flex items-center justify-between px-1">
+                  <span className="text-xs font-bold uppercase tracking-wide text-slate-500">{month}</span>
+                  <span className="text-xs font-semibold text-emerald-700">{inr(monthTotal)}</span>
+                </div>
+                <ol className="relative space-y-2 before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-px before:bg-slate-200">
+                  {list.map((p) => {
+                    const st = PAY_STATUS[p.status] || PAY_STATUS.CONFIRMED;
+                    const rejected = p.status === "REJECTED";
+                    return (
+                      <li key={p.id} className="relative flex gap-3">
+                        <span className={`relative z-10 mt-3 h-[9px] w-[9px] shrink-0 translate-x-[7px] rounded-full ring-4 ring-white ${st.dot}`} />
+                        <div className={`ml-2 min-w-0 flex-1 rounded-xl border border-slate-100 px-3 py-2.5 transition-shadow hover:shadow-sm ${rejected ? "opacity-60" : ""}`}>
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                            <span className={`text-base font-bold ${rejected ? "line-through text-slate-400" : "text-slate-900"}`}>{inr(p.amount)}</span>
+                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">{methodLabel(p.paymentMethod)}</span>
+                            <span className={`ml-auto inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${st.cls}`}>{st.icon} {st.text}</span>
+                          </div>
+                          <div className="mt-1 text-[11px] text-slate-400 flex flex-wrap gap-x-2">
+                            <span>{p.paymentDate ? format(new Date(p.paymentDate), "EEE, dd MMM") : "—"}</span>
+                            {p.paymentNumber && <span>· {p.paymentNumber}</span>}
+                            {p.invoice?.invoiceNumber && <span>· for {p.invoice.invoiceNumber}</span>}
+                            {p.collectedBy?.name && <span className="inline-flex items-center gap-1">· <UserIcon className="h-3 w-3" /> {p.collectedBy.name}</span>}
+                            {p.referenceNumber && <span>· Ref {p.referenceNumber}</span>}
+                          </div>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ol>
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -436,16 +474,6 @@ function RecordPaymentDialog({ projectId, customerId, onClose, onSaved }: {
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
-}
-
-function SummaryCard({ label, value, icon, tint }: { label: string; value: string; icon: React.ReactNode; tint: string }) {
-  return (
-    <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
-      <div className={`mb-2 ${tint}`}>{icon}</div>
-      <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">{label}</div>
-      <div className={`text-2xl font-black ${tint}`}>{value}</div>
-    </div>
   );
 }
 
