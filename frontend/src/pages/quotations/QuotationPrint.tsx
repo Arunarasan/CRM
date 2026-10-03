@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
-  CalendarDays, Check, FileText, Globe, Landmark, Loader2, Mail, MapPin, Package, Pencil, Percent, Phone, Plus, Printer,
+  CalendarDays, Check, CreditCard, FileText, Globe, Landmark, Loader2, Mail, MapPin, Package, Pencil, Percent, Phone, Plus, Printer,
   Receipt, Tag, Truck, User, Users, X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,7 @@ import {
 } from "@/types/quotation";
 import { resolveFileUrl } from "@/lib/uploadFile";
 import { colorsOf, useLineProducts } from "@/pages/leads/quote/productCells";
-import { fetchCompanyProfile, type CompanyProfile } from "@/lib/companyProfile";
+import { fetchBankDetails, fetchCompanyProfile, type BankDetails, type CompanyProfile } from "@/lib/companyProfile";
 import { lineTotal, pricingPatch, quoteTotals, readPricing, type QuotePricing } from "./quotationPricing";
 
 /**
@@ -61,7 +61,8 @@ export function QuotationPrintView({ quotationId, onClose, onSaved, readOnly }: 
   };
 
   const [company, setCompany] = useState<CompanyProfile>({ name: "JB Decor" });
-  useEffect(() => { fetchCompanyProfile().then(setCompany); }, []);
+  const [bank, setBank] = useState<BankDetails>({});
+  useEffect(() => { fetchCompanyProfile().then(setCompany); fetchBankDetails().then(setBank); }, []);
 
   useEffect(() => {
     quotationApi.get(quotationId).then(adopt).catch(console.error).finally(() => setLoading(false));
@@ -145,6 +146,12 @@ export function QuotationPrintView({ quotationId, onClose, onSaved, readOnly }: 
   const terms = (quotation.termsAndConditions || "").split(/\r?\n/)
     .map((t) => t.replace(/^\s*(\d+[.)]|[-•*])\s*/, "").trim()).filter(Boolean);
   let rowNo = 0;
+  const hasBank = !!(bank.accountNumber || bank.upiId);
+  const grandDue = Math.round(Number(shown.grand ?? 0) * 100) / 100;
+  const upiLink = bank.upiId
+    ? `upi://pay?pa=${encodeURIComponent(bank.upiId)}&pn=${encodeURIComponent(bank.accountName || company.name)}`
+      + (grandDue > 0 ? `&am=${grandDue.toFixed(2)}` : "") + `&cu=INR&tn=${encodeURIComponent(quotation.quotationNumber || "Quotation")}`
+    : null;
 
   return (
     <div className="qp-overlay fixed inset-0 z-50 overflow-auto bg-neutral-200">
@@ -327,6 +334,7 @@ export function QuotationPrintView({ quotationId, onClose, onSaved, readOnly }: 
 
             {/* Terms + summary */}
             <div className="qp-bottom">
+              <div className="qp-left-col">
               <div className={editing || terms.length > 0 ? "qp-terms qp-terms-box" : "qp-terms"}>
                 {(editing || terms.length > 0) && (
                   <>
@@ -340,6 +348,28 @@ export function QuotationPrintView({ quotationId, onClose, onSaved, readOnly }: 
                     )}
                   </>
                 )}
+              </div>
+              {hasBank && (
+                <div className="qp-bank">
+                  <div className="qp-bank-info">
+                    <h3><CreditCard className="qp-terms-ico" /> Bank Details</h3>
+                    <dl>
+                      {bank.accountName && <><dt>Account Name</dt><dd>{bank.accountName}</dd></>}
+                      {bank.bankName && <><dt>Bank</dt><dd>{bank.bankName}</dd></>}
+                      {bank.accountNumber && <><dt>A/C No.</dt><dd className="qp-mono">{bank.accountNumber}</dd></>}
+                      {bank.ifsc && <><dt>IFSC</dt><dd className="qp-mono">{bank.ifsc}</dd></>}
+                      {bank.branch && <><dt>Branch</dt><dd>{bank.branch}</dd></>}
+                      {bank.upiId && <><dt>UPI ID</dt><dd>{bank.upiId}</dd></>}
+                    </dl>
+                  </div>
+                  {upiLink && (
+                    <div className="qp-bank-qr">
+                      <QRCodeSVG value={upiLink} size={92} level="M" />
+                      <span>Scan to pay via UPI</span>
+                    </div>
+                  )}
+                </div>
+              )}
               </div>
 
               <div className="qp-summary">
@@ -533,8 +563,19 @@ const QP_CSS = `
 .qp-amt { font-weight:600; }
 .qp-gap td { padding:4px 0; border:0; }
 .qp-bottom { display:flex; gap:22px; margin-top:10px; align-items:flex-start; break-inside:avoid; page-break-inside:avoid; }
-.qp-terms { flex:1; min-width:0; }
-.qp-terms-box { border:1px solid var(--line); border-radius:14px; padding:16px 20px; min-height:150px; }
+.qp-left-col { flex:1; min-width:0; display:flex; flex-direction:column; gap:14px; }
+.qp-terms { min-width:0; }
+.qp-terms:empty { display:none; }
+.qp-bank { display:flex; gap:16px; align-items:center; border:1px solid var(--line); border-radius:14px; padding:16px 20px; background:linear-gradient(135deg,#fffdf8,#fbf6ea); }
+.qp-bank-info { flex:1; min-width:0; }
+.qp-bank h3 { display:flex; align-items:center; gap:10px; font-size:15px; font-weight:600; margin:0 0 10px; }
+.qp-bank dl { display:grid; grid-template-columns: auto 1fr; gap:5px 14px; margin:0; font-size:12.5px; }
+.qp-bank dt { color:var(--muted); }
+.qp-bank dd { margin:0; color:var(--ink); font-weight:600; overflow-wrap:anywhere; }
+.qp-mono { letter-spacing:.6px; }
+.qp-bank-qr { display:flex; flex-direction:column; align-items:center; gap:6px; padding:8px; background:#fff; border:1px solid var(--line); border-radius:10px; }
+.qp-bank-qr span { font-size:10.5px; color:var(--muted); text-align:center; }
+.qp-terms-box { border:1px solid var(--line); border-radius:14px; padding:16px 20px; }
 .qp-terms h3 { display:flex; align-items:center; gap:10px; font-size:15px; font-weight:600; margin:0 0 8px; }
 .qp-terms-ico { width:30px; height:30px; padding:5px; background:#fbf3e2; border-radius:8px; color:#123f4d; stroke-width:1.6; }
 .qp-terms ol { margin:0; padding-left:20px; list-style:decimal; font-size:12.5px; color:#3d4a56; line-height:1.75; }

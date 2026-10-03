@@ -39,3 +39,26 @@ export function fetchCompanyProfile(): Promise<CompanyProfile> {
     .finally(() => { inflight = null; });
   return inflight;
 }
+
+/** Bank / UPI details printed on quotations (Settings › Company). Signed-in users only. */
+export interface BankDetails {
+  accountName?: string;
+  bankName?: string;
+  accountNumber?: string;
+  ifsc?: string;
+  branch?: string;
+  upiId?: string;
+}
+
+export function fetchBankDetails(): Promise<BankDetails> {
+  return api.get<Record<string, string>>("/website/bank-details")
+    .then((r) => {
+      const m = (r.data ?? {}) as Record<string, string>;
+      const v = (k: string) => m[k]?.trim() || undefined;
+      return {
+        accountName: v("bank.account_name"), bankName: v("bank.name"), accountNumber: v("bank.account_number"),
+        ifsc: v("bank.ifsc"), branch: v("bank.branch"), upiId: v("bank.upi_id"),
+      };
+    })
+    .catch(() => ({}));
+}

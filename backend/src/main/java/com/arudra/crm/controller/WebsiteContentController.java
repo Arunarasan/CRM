@@ -34,6 +34,12 @@ public class WebsiteContentController {
         return ResponseEntity.ok(ApiResponse.success(svc.listSettings()));
     }
 
+    /** Bank / UPI details for printed quotations — any signed-in user (kept off the public settings). */
+    @GetMapping("/bank-details") @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApiResponse<java.util.Map<String, String>>> bankDetails() {
+        return ResponseEntity.ok(ApiResponse.success(svc.bankDetails()));
+    }
+
     @PutMapping("/settings") @PreAuthorize(WRITE)
     public ResponseEntity<ApiResponse<List<SettingDto>>> saveSettings(@RequestBody SettingsSaveRequest body) {
         return ResponseEntity.ok(ApiResponse.success(svc.saveSettings(body.settings()), "Settings saved."));

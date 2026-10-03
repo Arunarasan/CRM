@@ -114,6 +114,12 @@ const COMPANY_KEYS = {
   gst: 'company.gst',
   serviceWarrantyMonths: 'warranty.service_months',
   productWarrantyMonths: 'warranty.product_months',
+  bankAccountName: 'bank.account_name',
+  bankName: 'bank.name',
+  bankAccountNumber: 'bank.account_number',
+  bankIfsc: 'bank.ifsc',
+  bankBranch: 'bank.branch',
+  bankUpiId: 'bank.upi_id',
 } as const;
 
 function CompanyTab() {
@@ -160,6 +166,16 @@ function CompanyTab() {
         <TextField label={t('settings.company.gst')} value={values[COMPANY_KEYS.gst] ?? ''} onChange={(v) => set(COMPANY_KEYS.gst, v)} />
         <TextField label="Default service warranty (months)" type="number" value={values[COMPANY_KEYS.serviceWarrantyMonths] ?? ''} onChange={(v) => set(COMPANY_KEYS.serviceWarrantyMonths, v)} />
         <TextField label="Default product warranty (months)" type="number" value={values[COMPANY_KEYS.productWarrantyMonths] ?? ''} onChange={(v) => set(COMPANY_KEYS.productWarrantyMonths, v)} />
+        <div className="sm:col-span-2 border-t border-border pt-4">
+          <p className="text-sm font-medium text-foreground">Bank details</p>
+          <p className="text-xs text-muted-foreground">Printed on quotations so customers can pay by bank transfer or UPI.</p>
+        </div>
+        <TextField label="Account holder name" value={values[COMPANY_KEYS.bankAccountName] ?? ''} onChange={(v) => set(COMPANY_KEYS.bankAccountName, v)} />
+        <TextField label="Bank name" value={values[COMPANY_KEYS.bankName] ?? ''} onChange={(v) => set(COMPANY_KEYS.bankName, v)} />
+        <TextField label="Account number" value={values[COMPANY_KEYS.bankAccountNumber] ?? ''} onChange={(v) => set(COMPANY_KEYS.bankAccountNumber, v)} />
+        <TextField label="IFSC code" value={values[COMPANY_KEYS.bankIfsc] ?? ''} onChange={(v) => set(COMPANY_KEYS.bankIfsc, v.toUpperCase())} />
+        <TextField label="Branch" value={values[COMPANY_KEYS.bankBranch] ?? ''} onChange={(v) => set(COMPANY_KEYS.bankBranch, v)} />
+        <TextField label="UPI ID" value={values[COMPANY_KEYS.bankUpiId] ?? ''} onChange={(v) => set(COMPANY_KEYS.bankUpiId, v.trim())} />
         <div className="sm:col-span-2">
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-muted-foreground">{t('settings.company.address')}</span>

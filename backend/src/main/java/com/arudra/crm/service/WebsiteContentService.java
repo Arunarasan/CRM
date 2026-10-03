@@ -27,6 +27,8 @@ public class WebsiteContentService {
     private final SiteSettingRepository settingRepo;
     private final ContentBlockRepository contentRepo;
 
+    private static final String BANK_PREFIX = "bank.";
+
     public WebsiteContentService(SiteSettingRepository settingRepo, ContentBlockRepository contentRepo) {
         this.settingRepo = settingRepo;
         this.contentRepo = contentRepo;
@@ -50,7 +52,19 @@ public class WebsiteContentService {
     public Map<String, String> publicSettings() {
         Map<String, String> map = new LinkedHashMap<>();
         for (SiteSetting s : settingRepo.findByIsDeletedFalseOrderByDisplayOrderAscIdAsc()) {
+            // Bank details are for printed quotations/invoices only — never on the public endpoint.
+            if (s.getSettingKey().startsWith(BANK_PREFIX)) continue;
             map.put(s.getSettingKey(), s.getSettingValue());
+        }
+        return map;
+    }
+
+    /** Company bank / UPI details ({@code bank.*} settings) for printed documents; signed-in users only. */
+    @Transactional(readOnly = true)
+    public Map<String, String> bankDetails() {
+        Map<String, String> map = new LinkedHashMap<>();
+        for (SiteSetting s : settingRepo.findByIsDeletedFalseOrderByDisplayOrderAscIdAsc()) {
+            if (s.getSettingKey().startsWith(BANK_PREFIX)) map.put(s.getSettingKey(), s.getSettingValue());
         }
         return map;
     }
