@@ -43,36 +43,36 @@ export const waLink = (n: string) => {
 
 /** Customer contact / lead / location / scope rows shown under the project name. */
 export function ProjectInfoRow({ summary }: { summary: ProjectHeaderSummary }) {
-  const chip = "inline-flex items-center gap-2 rounded-xl bg-white border border-slate-200 px-3 py-1.5 text-sm text-slate-700 shadow-sm";
+  const chip = "inline-flex min-w-0 items-center gap-2 rounded-xl bg-white border border-slate-200 px-2.5 @lg:px-3 py-1.5 text-[13px] @lg:text-sm text-slate-700 shadow-sm whitespace-nowrap [&>svg]:shrink-0";
   const link = `${chip} hover:border-emerald-300 hover:text-emerald-800 transition-colors`;
   const products = summary.products || [];
   const shownProducts = products.slice(0, 5);
   return (
     <div className="mt-3 space-y-2.5">
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="grid grid-cols-2 @xl:flex @xl:flex-wrap items-center gap-2">
         {summary.phone && (
           <a href={`tel:${summary.phone}`} className={link} title="Call">
-            <Phone className="h-4 w-4 text-emerald-700" /> <span className="font-semibold">{summary.phone}</span>
+            <Phone className="h-4 w-4 text-emerald-700" /> <span className="font-semibold truncate">{summary.phone}</span>
           </a>
         )}
         {summary.whatsapp && (
           <a href={waLink(summary.whatsapp)} target="_blank" rel="noreferrer" className={link} title="Open WhatsApp chat">
             <MessageCircle className="h-4 w-4 text-emerald-600" />
             {summary.whatsappSameAsPhone
-              ? <span>WhatsApp <span className="text-slate-400">(same number)</span></span>
-              : <span className="font-semibold">{summary.whatsapp}</span>}
+              ? <span className="truncate">WhatsApp <span className="text-slate-400 hidden @xl:inline">(same number)</span></span>
+              : <span className="font-semibold truncate">{summary.whatsapp}</span>}
           </a>
         )}
         <span className={chip} title="Employee who got this lead">
           <UserCheck className="h-4 w-4 text-amber-500" />
-          <span className="text-slate-400">Lead by</span> <span className="font-semibold">{summary.leadBy || "—"}</span>
+          <span className="text-slate-400 hidden @md:inline">Lead by</span> <span className="font-semibold truncate">{summary.leadBy || "—"}</span>
         </span>
         {summary.city && (
-          <span className={chip}><MapPin className="h-4 w-4 text-emerald-700" /> {summary.city}</span>
+          <span className={chip}><MapPin className="h-4 w-4 text-emerald-700" /> <span className="truncate">{summary.city}</span></span>
         )}
         {summary.mapUrl && (
           <a href={summary.mapUrl} target="_blank" rel="noreferrer" title={summary.address || "Open in Google Maps"}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-800 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-900">
+            className="col-span-2 inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-800 px-3 py-2 @xl:py-1.5 text-[13px] @lg:text-sm font-semibold text-white whitespace-nowrap shadow-[0_4px_12px_-4px_rgba(0,53,34,0.45)] transition hover:-translate-y-px hover:bg-emerald-900">
             <Navigation className="h-4 w-4" /> Navigate
           </a>
         )}
@@ -104,7 +104,7 @@ export function ProjectJourneyBar({ stages, onOpen }: { stages: JourneyStage[]; 
   // The "current" stage is the first one not yet complete.
   const currentIdx = stages.findIndex((s) => s.status !== "COMPLETED");
   return (
-    <div className="mt-3 flex flex-col md:flex-row md:items-stretch gap-2">
+    <div className="mt-3 grid grid-cols-1 @3xl:grid-cols-3 @6xl:flex @6xl:items-stretch gap-2.5">
       {stages.map((s, i) => {
         const done = s.status === "COMPLETED";
         const current = i === currentIdx;
@@ -116,29 +116,27 @@ export function ProjectJourneyBar({ stages, onOpen }: { stages: JourneyStage[]; 
         return (
           <Fragment key={s.number}>
             {i > 0 && (
-              <div className="hidden md:flex items-center text-slate-300"><ArrowRight className="h-4 w-4" /></div>
+              <div className="hidden @6xl:flex items-center text-slate-300 shrink-0"><ArrowRight className="h-4 w-4" /></div>
             )}
             <button type="button" onClick={onOpen}
-              className={`flex-1 min-w-0 text-left rounded-2xl border px-4 py-3 shadow-[0_1px_3px_rgba(0,0,0,0.04)] transition hover:shadow-md ${box}`}>
-              <div className="flex items-center gap-3">
-                <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-base font-bold ${circle}`}>
+              className={`flex-1 min-w-0 text-left rounded-2xl border px-3.5 py-3 shadow-[0_1px_3px_rgba(0,0,0,0.04)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_8px_24px_-10px_rgba(0,0,0,0.18)] ${box}`}>
+              <div className="flex items-start gap-3">
+                <span className={`flex h-9 w-9 @6xl:h-10 @6xl:w-10 shrink-0 items-center justify-center rounded-full text-base font-bold ${circle}`}>
                   {done ? <CheckCircle2 className="h-5 w-5" /> : s.number}
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-2">
-                    <div className="text-[15px] font-bold text-slate-900 truncate">{s.name}</div>
-                    <span className="text-lg font-bold text-slate-900">{s.progress}%</span>
+                    <div className="text-sm @6xl:text-[15px] font-bold text-slate-900 truncate" title={s.name}>{s.name}</div>
+                    <span className="text-base @6xl:text-lg font-bold text-slate-900 shrink-0">{s.progress}%</span>
                   </div>
                   <div className="mt-1 flex flex-wrap items-center gap-1">
                     {s.works.length === 0 ? (
-                      s.number === 1
-                        ? <span className="text-xs text-slate-500">{STAGE_HINT[1].join(" · ")}</span>
-                        : STAGE_HINT[s.number]?.map((h) => (
-                          <span key={h} className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">{h}</span>
-                        ))
+                      STAGE_HINT[s.number]?.map((h) => (
+                        <span key={h} className="rounded-full bg-white/80 ring-1 ring-slate-200/70 px-2 py-0.5 text-[11px] text-slate-500 whitespace-nowrap">{h}</span>
+                      ))
                     ) : s.works.map((w, wi) => (
                       <span key={`${w.name}-${wi}`}
-                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${w.progress >= 100 ? "bg-emerald-100 text-emerald-800" : w.progress > 0 ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-600"}`}>
+                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium whitespace-nowrap ${w.progress >= 100 ? "bg-emerald-100 text-emerald-800" : w.progress > 0 ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-600"}`}>
                         {w.progress >= 100 && <CheckCircle2 className="h-3 w-3" />}
                         {w.name}{w.progress > 0 && w.progress < 100 ? ` ${w.progress}%` : ""}
                       </span>

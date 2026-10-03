@@ -129,7 +129,7 @@ function StatStrip({ items, className = 'grid grid-cols-2 md:grid-cols-4 gap-2.5
 }
 
 // Overview card chrome, matching the premium mockup.
-const CARD = "bg-white rounded-2xl border border-slate-100 p-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)]";
+const CARD = "bg-white rounded-2xl border border-slate-100 p-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)] transition-shadow duration-200 hover:shadow-[0_6px_20px_-8px_rgba(0,0,0,0.12)]";
 const CARD_TITLE = "text-base font-bold text-slate-900 flex items-center gap-2";
 
 const STATUS_PILL: Record<string, string> = {
@@ -849,7 +849,7 @@ export default function ProjectCommandCenter() {
   return (
     <div className="flex flex-col h-full bg-slate-50/50 relative overflow-hidden">
       {/* Single smooth-scroll surface: the whole top scrolls away, only the tab bar pins. */}
-      <div onScroll={(e) => setScrolled((e.target as HTMLDivElement).scrollTop > 120)} className="flex-1 overflow-y-auto scroll-smooth">
+      <div onScroll={(e) => setScrolled((e.target as HTMLDivElement).scrollTop > 120)} className="flex-1 overflow-y-auto scroll-smooth @container">
 
       {/* Breadcrumb */}
       <div className="px-4 sm:px-6 lg:px-8 pt-3 shrink-0 z-10">
@@ -865,15 +865,15 @@ export default function ProjectCommandCenter() {
       {/* Premium header band */}
       <div className="px-4 sm:px-6 lg:px-8 pt-2 shrink-0 z-10">
         <div className="relative overflow-hidden rounded-2xl border border-slate-100 bg-gradient-to-br from-white via-white to-emerald-50/60 px-4 sm:px-5 py-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-          <div className="relative flex flex-wrap items-start justify-between gap-4">
+          <div className="relative grid grid-cols-1 @4xl:grid-cols-[minmax(0,1fr)_auto] items-start gap-4">
             <div className="flex items-start gap-3 min-w-0">
               <button type="button" onClick={goBack} title="Back"
                 className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm hover:text-slate-900 hover:border-slate-300">
                 <ArrowLeft className="h-4 w-4" />
               </button>
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2.5 flex-wrap">
-                  <h1 className="text-xl sm:text-2xl lg:text-[28px] font-bold tracking-tight text-slate-900 truncate">{summary.customerName || project.customer?.name || project.projectName}</h1>
+                  <h1 className="min-w-0 max-w-full text-xl sm:text-2xl lg:text-[28px] font-bold tracking-tight text-slate-900 truncate">{summary.customerName || project.customer?.name || project.projectName}</h1>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <button type="button" className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ring-1 ${STATUS_PILL[project.status] || STATUS_PILL.PLANNING}`}>
@@ -900,17 +900,17 @@ export default function ProjectCommandCenter() {
                     </span>
                   )}
                 </div>
-                <ProjectInfoRow summary={summary} />
+                <div className="-ml-[52px] mt-3 @xl:ml-0 @xl:mt-0"><ProjectInfoRow summary={summary} /></div>
               </div>
             </div>
 
-            <div className="flex flex-col items-stretch sm:items-end gap-3 w-full sm:w-auto">
-              <div className="flex items-center gap-2 shrink-0 sm:justify-end">
-                <Button variant="outline" className="h-11 rounded-xl border-slate-200 bg-white px-4 text-slate-700 font-semibold" onClick={() => { setActiveTab('overview'); startEdit('overview'); }}>
-                  <Pencil className="w-4 h-4 mr-2" /> Edit Project
+            <div className="flex flex-col @2xl:flex-row @2xl:flex-wrap @4xl:flex-col items-stretch @2xl:items-center @4xl:items-end gap-3 min-w-0">
+              <div className="flex items-center gap-2 @2xl:order-2 @4xl:order-none @2xl:ml-auto @4xl:ml-0">
+                <Button variant="outline" title="Edit Project" className="h-11 shrink-0 rounded-xl border-slate-200 bg-white px-3.5 @lg:px-4 text-slate-700 font-semibold transition hover:-translate-y-px hover:shadow-sm" onClick={() => { setActiveTab('overview'); startEdit('overview'); }}>
+                  <Pencil className="w-4 h-4 @lg:mr-2" /> <span className="hidden @lg:inline">Edit Project</span>
                 </Button>
                 {project.status !== 'COMPLETED' && (
-                  <Button onClick={handleCompleteProject} className="h-11 flex-1 sm:flex-none rounded-xl bg-emerald-800 hover:bg-emerald-900 px-5 font-semibold text-white">
+                  <Button onClick={handleCompleteProject} className="h-11 flex-1 @2xl:flex-none whitespace-nowrap rounded-xl bg-emerald-800 hover:bg-emerald-900 px-5 font-semibold text-white shadow-[0_4px_14px_-4px_rgba(0,53,34,0.45)] transition hover:-translate-y-px">
                     <CheckCircle2 className="w-4 h-4 mr-2"/> Mark Completed
                   </Button>
                 )}
@@ -935,18 +935,18 @@ export default function ProjectCommandCenter() {
               </div>
 
               {/* Date card — start date | days remaining */}
-              <div className="flex items-stretch rounded-2xl bg-white border border-slate-100 shadow-sm divide-x divide-slate-100">
-                <div className="flex items-center gap-3 px-4 py-2.5 flex-1">
+              <div className="flex items-stretch rounded-2xl bg-white border border-slate-100 shadow-sm divide-x divide-slate-100 @2xl:order-1 @4xl:order-none">
+                <div className="flex items-center gap-3 px-3 @lg:px-4 py-2.5 flex-1 min-w-0">
                   <span className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-50 text-emerald-700 shrink-0"><Calendar className="w-5 h-5" /></span>
                   <div>
-                    <div className="text-[11px] font-medium text-slate-400">Start Date</div>
+                    <div className="text-[11px] font-medium text-slate-400 whitespace-nowrap">Start Date</div>
                     <div className="text-sm font-bold text-slate-800 whitespace-nowrap">{shortDate(project.startDate)}</div>
                   </div>
                 </div>
-                <div className="flex items-center gap-3 px-4 py-2.5 flex-1">
+                <div className="flex items-center gap-3 px-3 @lg:px-4 py-2.5 flex-1 min-w-0">
                   <span className={`flex h-10 w-10 items-center justify-center rounded-full shrink-0 ${daysRemaining !== null && daysRemaining < 0 ? 'bg-rose-50 text-rose-600' : 'bg-amber-50 text-amber-500'}`}><Clock className="w-5 h-5" /></span>
                   <div>
-                    <div className="text-[11px] font-medium text-slate-400">Days Remaining</div>
+                    <div className="text-[11px] font-medium text-slate-400 whitespace-nowrap">Days Remaining</div>
                     <div className={`text-sm font-bold whitespace-nowrap ${daysRemaining !== null && daysRemaining < 0 ? 'text-rose-600' : 'text-slate-800'}`}>{daysRemainingText}</div>
                   </div>
                 </div>
@@ -981,8 +981,8 @@ export default function ProjectCommandCenter() {
                   )}
                 </div>
                 {/* Primary strip — the areas of work + Generate Report */}
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="bg-white p-1.5 border border-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] rounded-2xl flex flex-wrap gap-1 justify-start">
+                <div className="flex items-center gap-2">
+                  <div className="min-w-0 flex-1 bg-white p-1.5 border border-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] rounded-2xl flex gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                     {TAB_GROUPS.filter((g) => g.id !== "service" || project.status === "COMPLETED").map((g) => {
                       const isActive = g.id === active.id;
                       const Icon = g.icon;
@@ -991,7 +991,7 @@ export default function ProjectCommandCenter() {
                           key={g.id}
                           type="button"
                           onClick={() => setActiveTab(g.sections[0][0])}
-                          className={`rounded-xl px-4 py-2.5 text-sm font-medium transition flex items-center gap-2 shrink-0 ${isActive ? "bg-emerald-800 text-white shadow-sm" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}
+                          className={`rounded-xl px-3 sm:px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-all duration-200 flex items-center gap-2 shrink-0 ${isActive ? "bg-emerald-800 text-white shadow-sm" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}
                         >
                           <Icon className="w-4 h-4" />
                           {g.label}
@@ -1004,8 +1004,8 @@ export default function ProjectCommandCenter() {
                   </div>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="outline" className="h-12 rounded-2xl border-slate-100 text-emerald-800 font-semibold bg-white shrink-0 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-                        <FileBarChart className="w-4 h-4 mr-2 text-emerald-700" /> Generate Report <ChevronDown className="w-4 h-4 ml-2" />
+                      <Button variant="outline" title="Generate Report" className="h-[54px] px-3.5 @5xl:px-4 rounded-2xl border-slate-100 text-emerald-800 font-semibold bg-white shrink-0 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+                        <FileBarChart className="w-4 h-4 @5xl:mr-2 text-emerald-700" /> <span className="hidden @5xl:inline">Generate Report</span> <ChevronDown className="w-4 h-4 ml-1 @5xl:ml-2" />
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
@@ -1045,7 +1045,7 @@ export default function ProjectCommandCenter() {
             {/* OVERVIEW TAB */}
             <TabsContent value="overview" className="space-y-3 mt-0 h-full outline-none">
               {/* Row 1 — Project Overview · Project Progress · Financial Summary */}
-              <div className="grid grid-cols-1 lg:grid-cols-[1.15fr_1fr_1.15fr] gap-3 items-stretch">
+              <div className="grid grid-cols-1 @3xl:grid-cols-2 @6xl:grid-cols-[1.15fr_1fr_1.15fr] gap-3 items-stretch">
 
                 {/* Project Overview — key facts (inline editable) */}
                 <div className={CARD}>
@@ -1113,8 +1113,8 @@ export default function ProjectCommandCenter() {
                 {/* Project Progress — donut + legend */}
                 <div className={CARD}>
                   <h3 className={`${CARD_TITLE} mb-3`}><Activity className="w-5 h-5 text-emerald-700"/> Project Progress</h3>
-                  <div className="flex items-center gap-5">
-                    <div className="relative h-32 w-32 shrink-0">
+                  <div className="flex items-center gap-4 @xl:gap-5">
+                    <div className="relative h-28 w-28 @xl:h-32 @xl:w-32 shrink-0">
                       <svg viewBox="0 0 100 100" className="h-full w-full -rotate-90">
                         <circle cx="50" cy="50" r="40" fill="none" stroke="currentColor" strokeWidth="11" className="text-slate-200" />
                         <circle cx="50" cy="50" r="40" fill="none" strokeWidth="11" strokeLinecap="round"
@@ -1127,7 +1127,7 @@ export default function ProjectCommandCenter() {
                         <span className="text-[11px] text-slate-400 mt-1">Complete</span>
                       </div>
                     </div>
-                    <div className="min-w-0 flex-1 space-y-2.5 text-sm">
+                    <div className="min-w-0 flex-1 space-y-2.5 text-[13px] @xl:text-sm [&>div]:whitespace-nowrap">
                       <div className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-slate-300 shrink-0"/><span className="font-bold text-slate-800">{project.progress || 0}%</span><span className="text-slate-500">Execution</span></div>
                       <div className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-sky-600 shrink-0"/><span className="font-bold text-slate-800">{stats?.tasks?.completed ?? 0} of {stats?.tasks?.total ?? 0}</span><span className="text-slate-500">Tasks Completed</span></div>
                       <div className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-amber-500 shrink-0"/><span className="font-bold text-slate-800">{stats?.tasks?.delayed ?? 0}</span><span className="text-slate-500">Delayed Tasks</span></div>
@@ -1140,7 +1140,7 @@ export default function ProjectCommandCenter() {
                 </div>
 
                 {/* Financial Summary — estimate · spent · remaining */}
-                <div className={CARD}>
+                <div className={`${CARD} @3xl:col-span-2 @6xl:col-span-1`}>
                   <div className="flex items-center justify-between mb-3">
                     <h3 className={CARD_TITLE}><Wallet className="w-5 h-5 text-emerald-700"/> Financial Summary</h3>
                     <button type="button" onClick={() => setActiveTab('payments')} className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 hover:text-emerald-900">View Details <ArrowRight className="w-3.5 h-3.5" /></button>
@@ -1158,7 +1158,7 @@ export default function ProjectCommandCenter() {
                         className={`text-left rounded-xl p-3 transition hover:brightness-[0.97] min-w-0 ${t.tone.split(' ')[0]}`}>
                         <t.icon className={`w-5 h-5 ${t.tone.split(' ')[1]}`} />
                         <div className={`mt-3 text-base xl:text-lg font-bold leading-tight truncate ${t.valueTone}`}>{t.value}</div>
-                        <div className={`mt-1 text-[11px] font-medium ${t.tone.split(' ')[1]}`}>{t.label}</div>
+                        <div className={`mt-1 text-[11px] font-medium truncate ${t.tone.split(' ')[1]}`} title={t.label}>{t.label}</div>
                       </button>
                     ))}
                   </div>
@@ -1175,7 +1175,7 @@ export default function ProjectCommandCenter() {
               </div>
 
               {/* Row 2 — Recent Activity · (Quick Actions + Key Information + Team) */}
-              <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.4fr] gap-3 items-start">
+              <div className="grid grid-cols-1 @6xl:grid-cols-[1fr_1.4fr] gap-3 items-start">
                 <div className={CARD}>
                   <div className="flex items-center justify-between mb-3">
                     <h3 className={CARD_TITLE}><History className="w-5 h-5 text-emerald-700"/> Recent Activity</h3>
@@ -1186,12 +1186,12 @@ export default function ProjectCommandCenter() {
 
                 <div className="space-y-3">
                   {/* Quick Actions */}
-                  <div className={CARD}>
+                  <div className={`${CARD} @container`}>
                     <div className="flex items-center justify-between mb-3">
                       <h3 className={CARD_TITLE}><Zap className="w-5 h-5 text-amber-500"/> Quick Actions</h3>
                       <button type="button" onClick={() => { setQuickActionView('menu'); setQuickActionOpen(true); }} className="text-xs font-semibold text-slate-500 hover:text-emerald-700">More</button>
                     </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <div className="grid grid-cols-2 @2xl:grid-cols-4 gap-2">
                       {([
                         { label: 'Add Task', icon: ClipboardList, cls: 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100', onClick: () => { setQuickActionView('create_task'); setQuickActionOpen(true); } },
                         { label: 'Upload Document', icon: FileText, cls: 'bg-sky-50 text-sky-700 hover:bg-sky-100', onClick: () => setActiveTab('media') },
@@ -1199,22 +1199,22 @@ export default function ProjectCommandCenter() {
                         { label: 'Create Invoice', icon: FileBarChart, cls: 'bg-rose-50 text-rose-700 hover:bg-rose-100', onClick: () => setActiveTab('payments') },
                       ]).map((a) => (
                         <button key={a.label} type="button" onClick={a.onClick}
-                          className={`flex items-center justify-center gap-2 rounded-xl px-3 py-3 text-sm font-medium transition-colors ${a.cls}`}>
-                          <a.icon className="w-4 h-4 shrink-0" /> <span className="truncate">{a.label}</span>
+                          className={`flex items-center justify-center gap-2 rounded-xl px-2.5 py-3 text-[13px] font-medium leading-tight text-center transition-all duration-200 hover:-translate-y-px ${a.cls}`}>
+                          <a.icon className="w-4 h-4 shrink-0" /> <span>{a.label}</span>
                         </button>
                       ))}
                     </div>
                   </div>
 
                   {/* Key Information */}
-                  <div className={CARD}>
+                  <div className={`${CARD} @container`}>
                     <div className="flex items-center justify-between mb-3">
                       <h3 className={CARD_TITLE}><Info className="w-5 h-5 text-slate-500"/> Key Information</h3>
                       {project.customer?.id && (
                         <Link to={`/customers/${project.customer.id}`} className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-emerald-700"><Pencil className="w-3.5 h-3.5" /> Edit</Link>
                       )}
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-y-3 sm:divide-x divide-slate-100">
+                    <div className="grid grid-cols-2 @2xl:grid-cols-3 gap-3 @2xl:gap-x-0">
                       {([
                         { icon: User, label: 'Customer', value: summary.customerName || project.customer?.name, href: project.customer?.id ? `/customers/${project.customer.id}` : undefined, internal: true },
                         { icon: Phone, label: 'Phone', value: summary.phone, href: summary.phone ? `tel:${summary.phone}` : undefined },
@@ -1230,7 +1230,7 @@ export default function ProjectCommandCenter() {
                             : <a href={f.href} target={f.external ? '_blank' : undefined} rel="noreferrer" className="text-emerald-800 hover:underline">{val}</a>)
                           : <span className="text-slate-800">{val}</span>;
                         return (
-                          <div key={f.label} className={`flex items-start gap-3 min-w-0 ${i % 3 === 0 ? 'sm:pr-4' : 'sm:px-4'}`}>
+                          <div key={f.label} className={`flex items-start gap-3 min-w-0 @2xl:px-4 @2xl:border-l @2xl:border-slate-100 ${i % 3 === 0 ? '@2xl:!pl-0 @2xl:!border-l-0' : ''}`}>
                             <span className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-50 text-slate-500 shrink-0"><f.icon className="w-4 h-4" /></span>
                             <div className="min-w-0">
                               <div className="text-[11px] text-slate-400">{f.label}</div>
