@@ -257,6 +257,52 @@ public class ProjectQuoteChangeService {
         return out;
     }
 
+    /**
+     * An admin turns down a field employee's request to apply this lead quote to the project: the request
+     * is marked rejected, the sheet re-opens as a new revision (so the quote can be fixed and sent again),
+     * and the employee who asked is told why. The project itself was never touched.
+     */
+    @Transactional
+    public Map<String, Object> rejectLeadUpdate(Long boqId, String reason, User user) {
+        Boq sheet = boqService.getBoqById(boqId);
+        Quotation requested = quotationRepository.findByBoq_IdOrderByIdDesc(boqId).stream()
+                .filter(q -> EmployeeTaskService.PROJECT_UPDATE_REQUESTED.equals(q.getInternalApprovalStatus()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("There is no pending project update on this quote."));
+        Project project = findLeadProject(sheet);
+        String why = reason == null || reason.isBlank() ? null : reason.trim();
+
+        requested.setInternalApprovalStatus("PROJECT_UPDATE_REJECTED");
+        quotationRepository.save(requested);
+        Boq revision = quoteWorkspaceService.reopen(boqId, user);
+
+        // Who asked: the employee on the request's activity entry (no separate request record).
+        User requester = null;
+        if (project != null) {
+            requester = activityLogRepository.findByProjectIdOrderByTimeDesc(project.getId()).stream()
+                    .filter(l -> l.getDescription() != null && l.getUser() != null
+                            && l.getDescription().contains("asked to update this project to quote " + requested.getQuotationNumber()))
+                    .map(ProjectActivityLog::getUser)
+                    .findFirst().orElse(null);
+            log(project, user, "Update to quote " + requested.getQuotationNumber() + " was rejected"
+                    + (why != null ? ": " + why : "") + ". The project stays on "
+                    + (project.getQuotation() != null ? project.getQuotation().getQuotationNumber() : "its current quote") + ".");
+        }
+        if (requester != null && (user == null || !requester.getId().equals(user.getId()))) {
+            Long leadId = sheet.getLead() != null ? sheet.getLead().getId() : null;
+            notificationService.dispatch("Project update rejected",
+                    "Your update to " + (project != null ? project.getProjectCode() : "the project") + " with quote "
+                            + requested.getQuotationNumber() + " was rejected" + (why != null ? ": " + why : "")
+                            + ". The quote is open again — fix it and send it again.",
+                    "PROJECT", requester.getId(), leadId != null ? "/employee/quote/new?leadId=" + leadId : "/employee/tasks");
+        }
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("rejectedQuotationNumber", requested.getQuotationNumber());
+        out.put("newBoqId", revision.getId());
+        out.put("notified", requester != null ? requester.getName() : null);
+        return out;
+    }
+
     private Project findLeadProject(Boq sheet) {
         Long leadId = sheet.getLead() != null ? sheet.getLead().getId() : null;
         if (leadId == null) return null;

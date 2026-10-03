@@ -191,6 +191,8 @@ export const quoteWorkspaceApi = {
   leadProject: (boqId: number) =>
     api.get<Partial<LeadProjectStatus>>(`/quote-workspace/boq/${boqId}/lead-project`).then((r) => r.data),
   /** Applies this lead sheet's approved quote to the lead's existing project (same project, new quote no.). */
+  rejectProjectUpdate: (boqId: number, reason: string) =>
+    api.post<{ rejectedQuotationNumber?: string; notified?: string | null }>(`/quote-workspace/boq/${boqId}/reject-project-update`, { reason }).then((r) => r.data),
   applyToProject: (boqId: number) =>
     api.post<ProjectChangeResult & { unchanged?: boolean; projectCode?: string }>(`/quote-workspace/boq/${boqId}/apply-to-project`).then((r) => r.data),
 };

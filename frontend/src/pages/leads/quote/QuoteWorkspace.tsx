@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import {
   AlertTriangle, BadgePercent, Building2, CalendarDays, Calculator, CheckCircle2, ChevronDown, Eye, FileOutput,
   FileText, History, Image as ImageIcon, Info, Layers, Loader2, Lock, Pencil, RotateCcw,
-  Save, Send, Share2, Users, Wand2,
+  Save, Send, Share2, Users, Wand2, XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BaseInput } from "@/components/ui/input";
@@ -79,6 +79,7 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
   // Seen from the lead: the lead's project made from an earlier quote — a newly approved quote updates it.
   const [leadProject, setLeadProject] = useState<LeadProjectStatus | null>(null);
   const [applyOpen, setApplyOpen] = useState(false);
+  const [rejectReason, setRejectReason] = useState<string | null>(null);
   // Items (what the customer sees) vs Cost Breakdown (material / labour behind each price).
   const [view, setView] = useState<"items" | "cost" | "photos" | "history">(() => {
     try { return localStorage.getItem("quoteShowBreakdown") === "1" ? "cost" : "items"; } catch { return "items"; }
@@ -319,6 +320,19 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
     } finally { setBusy(null); }
   };
 
+  const doRejectUpdate = async () => {
+    if (!boq?.id || rejectReason == null) return;
+    setBusy("reject");
+    try {
+      const res = await quoteWorkspaceApi.rejectProjectUpdate(boq.id, rejectReason);
+      setRejectReason(null);
+      toast.success(res.notified ? `Update rejected — ${res.notified} was told` : "Update rejected — the quote is open again");
+      await refreshAll();
+    } catch (e) {
+      toast.error(errMsg(e, "Could not reject the update."));
+    } finally { setBusy(null); }
+  };
+
   if (loading) return <ListSkeleton rows={5} />;
 
   const GREEN = "bg-[#1F5C3F] hover:bg-[#184A33] text-white";
@@ -461,9 +475,17 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
                   {!leadProject.canChange && <> The project is closed, so its quote can't be changed.</>}
                 </span>
                 {!fieldMode && (
-                  <Link to={`/projects/${leadProject.projectId}?tab=quote`} className="shrink-0">
-                    <Button size="sm" variant="outline" className="bg-background">Open project</Button>
-                  </Link>
+                  <div className="flex shrink-0 gap-2">
+                    {updateRequested && canChangeProject && (
+                      <Button size="sm" variant="outline" className="bg-background text-red-700 border-red-300 hover:bg-red-50"
+                        disabled={!!busy} onClick={() => setRejectReason("")}>
+                        <XCircle className="h-4 w-4 mr-2" /> Reject
+                      </Button>
+                    )}
+                    <Link to={`/projects/${leadProject.projectId}?tab=quote`}>
+                      <Button size="sm" variant="outline" className="bg-background">Open project</Button>
+                    </Link>
+                  </div>
                 )}
               </div>
             )}
@@ -701,6 +723,31 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
             <Button variant="outline" onClick={() => setApplyOpen(false)} disabled={busy === "apply"}>Cancel</Button>
             <Button onClick={doApplyToProject} disabled={busy === "apply"} className="bg-[#16805C] hover:bg-[#126B4C] text-white">
               {busy === "apply" && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Update Project
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ---- Reject a field employee's project update ---- */}
+      <Dialog open={rejectReason != null} onOpenChange={(o) => !o && busy !== "reject" && setRejectReason(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Reject project update?</DialogTitle></DialogHeader>
+          <div className="text-sm space-y-3">
+            <p className="text-muted-foreground">
+              Project {leadProject?.projectCode} stays on {leadProject?.quotationNumber}. This quote opens again so it can be
+              fixed and sent again, and the employee who asked is notified. A pending advance stays on Payments for finance to decide.
+            </p>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Reason (sent to the employee)</label>
+              <textarea value={rejectReason ?? ""} onChange={(e) => setRejectReason(e.target.value)} rows={3}
+                placeholder="e.g. Rates for the curtain rods are wrong — recheck with the customer"
+                className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRejectReason(null)} disabled={busy === "reject"}>Cancel</Button>
+            <Button onClick={doRejectUpdate} disabled={busy === "reject"} className="bg-red-600 hover:bg-red-700 text-white">
+              {busy === "reject" && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Reject
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -76,6 +76,15 @@ public class QuoteWorkspaceController {
         return ResponseEntity.ok(projectChanges.applyLeadSheet(boqId, currentUserService.getCurrentUser()));
     }
 
+    /** Rejects a field employee's pending request to apply this quote to the lead's project. */
+    @PostMapping("/boq/{boqId}/reject-project-update")
+    @PreAuthorize(PROJECT_CHANGE)
+    public ResponseEntity<Map<String, Object>> rejectProjectUpdate(@PathVariable Long boqId,
+            @RequestBody(required = false) Map<String, String> body) {
+        return ResponseEntity.ok(projectChanges.rejectLeadUpdate(boqId, body != null ? body.get("reason") : null,
+                currentUserService.getCurrentUser()));
+    }
+
     /** Opens the pricing sheet for a lead, creating the measurement and BOQ when missing. */
     @PostMapping("/lead/{leadId}/start-pricing")
     @PreAuthorize(WRITE)
