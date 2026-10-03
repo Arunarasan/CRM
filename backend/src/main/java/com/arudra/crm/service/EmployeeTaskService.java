@@ -97,6 +97,11 @@ public class EmployeeTaskService {
     @org.springframework.context.annotation.Lazy
     private FinanceService financeService;
     @Autowired
+    @org.springframework.context.annotation.Lazy
+    private ProjectQuoteChangeService projectQuoteChangeService;
+    @Autowired
+    private ProjectActivityLogRepository projectActivityLogRepository;
+    @Autowired
     private com.arudra.crm.repository.BundleRepository bundleRepository;
     @Autowired
     private com.arudra.crm.repository.BundleEventRepository bundleEventRepository;
@@ -1168,6 +1173,22 @@ public class EmployeeTaskService {
         if (quote == null || quote.getId() == null) {
             throw new IllegalStateException("No quotation found for this lead. Create the quotation first.");
         }
+        // The lead already runs a project (made from an earlier quote): this quote updates that SAME project
+        // as a quote change instead of creating a second one. Admins / project managers apply it straight
+        // away; a field employee's update waits for an admin to approve it on the lead's Quote step.
+        Map<String, Object> leadProject = sheetId != null && quote.getProject() == null && !"CONVERTED".equals(quote.getStatus())
+                ? projectQuoteChangeService.leadProject(sheetId) : Map.of();
+        if (!leadProject.isEmpty()) {
+            Project project = projectService.getProjectById(((Number) leadProject.get("projectId")).longValue());
+            if (canChangeProjectQuote(employee)) {
+                Map<String, Object> applied = projectQuoteChangeService.applyLeadSheet(sheetId, employee);
+                Long newQuoteId = applied.get("newQuotationId") instanceof Number n ? n.longValue()
+                        : project.getQuotation() != null ? project.getQuotation().getId() : null;
+                financeService.recordConversionAdvance(newQuoteId, project, advanceAmount, advanceMethod, employee);
+                return List.of(project);
+            }
+            return List.of(requestProjectUpdate(leadId, quote, project, employee, advanceAmount, advanceMethod));
+        }
         // Employee/admin approval: promote the header to APPROVED so conversion's guard passes
         // (convertToProject also normalizes item-level statuses).
         if (!"APPROVED".equals(quote.getStatus()) && !"CONVERTED".equals(quote.getStatus())) {
@@ -1176,6 +1197,58 @@ public class EmployeeTaskService {
         }
         return quotationService.convertToProjectWithAdvance(quote.getId(), null, employee, advanceAmount, advanceMethod);
     }
+
+    /** Admins and project managers may change a running project's quote (same rule as the project tab). */
+    private static boolean canChangeProjectQuote(User user) {
+        return user != null && user.getRoles() != null && user.getRoles().stream()
+                .anyMatch(r -> "ROLE_ADMIN".equals(r.getName()) || "ROLE_PROJECT_MANAGER".equals(r.getName()));
+    }
+
+    /**
+     * A field employee's "Update Project": the customer-approved quote is marked as waiting for an admin
+     * (who applies it with "Update Project" on the lead's Quote step), the advance is recorded on the
+     * project as a PENDING_APPROVAL payment, and admins are notified. Nothing on the project changes yet.
+     */
+    private Project requestProjectUpdate(Long leadId, Quotation quote, Project project, User employee,
+                                         BigDecimal advanceAmount, String advanceMethod) {
+        quote.setInternalApprovalStatus(PROJECT_UPDATE_REQUESTED);
+        quotationRepository.save(quote);
+
+        String advanceNote = "";
+        if (advanceAmount != null && advanceAmount.signum() > 0 && project.getCustomer() != null) {
+            CustomerPayment payment = new CustomerPayment();
+            payment.setCustomer(project.getCustomer());
+            payment.setProject(project);
+            payment.setAmount(advanceAmount);
+            payment.setPaymentType("PARTIAL");
+            payment.setStatus("PENDING_APPROVAL");
+            payment.setPaymentDate(LocalDate.now());
+            payment.setPaymentMethod(advanceMethod != null ? advanceMethod : "Cash");
+            payment.setCollectedBy(employee);
+            payment.setRemarks("Advance collected with quote " + quote.getQuotationNumber() + " by " + employee.getName());
+            financeService.recordPayment(payment, employee);
+            advanceNote = " Advance of ₹" + advanceAmount.toPlainString() + " recorded, waiting for approval on Payments.";
+        }
+
+        String who = employee.getName() != null ? employee.getName() : "An employee";
+        ProjectActivityLog log = new ProjectActivityLog();
+        log.setProject(project);
+        log.setUser(employee);
+        log.setRole("Quote change");
+        log.setDescription(who + " asked to update this project to quote " + quote.getQuotationNumber()
+                + " (₹" + (quote.getGrandTotal() != null ? quote.getGrandTotal().toPlainString() : "0")
+                + ") — waiting for admin approval." + advanceNote);
+        projectActivityLogRepository.save(log);
+
+        notificationService.dispatchToAdmins("Project update needs approval",
+                who + " wants to update project " + project.getProjectCode() + " to quote " + quote.getQuotationNumber()
+                        + ". Review it on the lead's Quote step and press Update Project." + advanceNote,
+                "PROJECT", "/leads/" + leadId + "?tab=journey", employee.getId());
+        return project;
+    }
+
+    /** Quotation.internalApprovalStatus while a field employee's project update waits for an admin. */
+    public static final String PROJECT_UPDATE_REQUESTED = "PROJECT_UPDATE_REQUESTED";
 
     private boolean allActiveAssignmentsCompleted(Task task) {
         List<TaskAssignment> active = assignmentRepository.findByTaskId(task.getId()).stream()

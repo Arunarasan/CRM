@@ -51,8 +51,11 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
   onChanged: () => void;
   /** Field employee's phone view: no desktop links; "Send to office" + employee Create Project. */
   fieldMode?: boolean;
-  /** Field mode: open the employee Create Project sheet (it records the customer's approval too). */
-  onCreateProject?: () => void;
+  /**
+   * Field mode: open the employee Create Project sheet (it records the customer's approval too). When the
+   * lead already has a project it is passed along — the sheet then updates that project instead.
+   */
+  onCreateProject?: (leadProject: LeadProjectStatus | null) => void;
 }) {
   const { hasAuthority, isAdmin } = useAuth();
   const canPrice = hasAuthority("BOQ_WRITE") || isAdmin;
@@ -142,6 +145,8 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
   );
   const approved = !!quote && QUOTE_DONE.has(quote.status);
   const converted = quote?.status === "CONVERTED";
+  // A field employee asked to apply this quote to the lead's project — waits for an admin / PM.
+  const updateRequested = (quote as any)?.internalApprovalStatus === "PROJECT_UPDATE_REQUESTED";
   // Locked = the customer approved it (or the older flow approved the sheet before quoting).
   const locked = boq?.status === "APPROVED";
   // A change to the running project is open (sheet unlocked, customer hasn't approved it yet).
@@ -331,7 +336,14 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
         : !projectMode && !sheetProject && !fieldMode && approved && !converted && canConvert
           ? { label: "Create Project", icon: FileOutput, onClick: () => setConvertCfg({ advanceAmount: "", advanceMethod: "Cash" }), disabled: !!busy }
           : fieldMode && !converted && !sheetProject && onCreateProject
-            ? { label: approved ? "Create Project" : "Customer Agreed · Create Project", icon: FileOutput, onClick: onCreateProject, disabled: !!busy || noItems }
+            ? {
+                label: leadProject
+                  ? (updateRequested && !canChangeProject ? "Sent to admin for approval"
+                    : approved ? "Update Project" : "Customer Agreed · Update Project")
+                  : (approved ? "Create Project" : "Customer Agreed · Create Project"),
+                icon: FileOutput, onClick: () => onCreateProject(leadProject),
+                disabled: !!busy || noItems || (!!leadProject && (!leadProject.canChange || (updateRequested && !canChangeProject))),
+              }
             : null;
   /** Less common steps, under the primary button's ▾. */
   const secondary: { label: string; icon: typeof CheckCircle2; onClick: () => void; disabled?: boolean }[] = [
@@ -433,7 +445,15 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
                 <span className="flex-1">
                   <span className="font-semibold">This lead already has project {leadProject.projectCode}</span>{" "}
                   ({leadProject.quotationNumber} · {inr(leadProject.contractValue)}). A new project won't be created —{" "}
-                  {approved
+                  {updateRequested
+                    ? canChangeProject
+                      ? <>A field employee asked to apply this quote to it — review the quote and press "Update Project" to approve.</>
+                      : <>Your update was sent to an admin. The project changes once it is approved.</>
+                    : fieldMode
+                    ? canChangeProject
+                      ? <>when the customer agrees, press "Update Project" to apply this quote to it.</>
+                      : <>when the customer agrees, press "Update Project" — an admin approves it before the project changes.</>
+                    : approved
                     ? canChangeProject
                       ? <>press "Update Project" to apply this quote to it.</>
                       : <>an admin or project manager can apply this quote to it.</>

@@ -7,6 +7,7 @@ import { uploadFile } from '@/lib/uploadFile';
 import { leadApi } from '../leads/leadApi';
 import { PortalHeader } from '../employeePortal/_shared';
 import QuoteWorkspace from '../leads/quote/QuoteWorkspace';
+import type { LeadProjectStatus } from '@/api/boqApi';
 import ConvertProjectSheet from './components/ConvertProjectSheet';
 import { CARD, LeadContext } from './components/moduleUi';
 
@@ -23,6 +24,8 @@ export default function EmployeeQuote() {
   const navigate = useNavigate();
   const [lead, setLead] = useState<any>(null);
   const [convertOpen, setConvertOpen] = useState(false);
+  // The lead's existing project (from an earlier quote): the sheet then updates it instead of creating one.
+  const [leadProject, setLeadProject] = useState<LeadProjectStatus | null>(null);
 
   useEffect(() => {
     if (leadId) api.get(`/leads/${leadId}`).then((r) => setLead(r.data)).catch(() => {});
@@ -36,9 +39,9 @@ export default function EmployeeQuote() {
       <div className="flex flex-col gap-3 p-3">
         <LeadContext name={lead?.name} sub={[lead?.city, lead?.phone].filter(Boolean).join(' · ') || undefined} />
         <SiteVisitCard leadId={leadId} agreedDate={lead?.siteVisitDate} />
-        <QuoteWorkspace leadId={String(leadId)} fieldMode onChanged={() => {}} onCreateProject={() => setConvertOpen(true)} />
+        <QuoteWorkspace leadId={String(leadId)} fieldMode onChanged={() => {}} onCreateProject={(lp) => { setLeadProject(lp); setConvertOpen(true); }} />
       </div>
-      <ConvertProjectSheet leadId={leadId} open={convertOpen} onOpenChange={setConvertOpen}
+      <ConvertProjectSheet leadId={leadId} leadProject={leadProject} open={convertOpen} onOpenChange={setConvertOpen}
         onDone={() => navigate('/employee/tasks')} />
     </div>
   );
