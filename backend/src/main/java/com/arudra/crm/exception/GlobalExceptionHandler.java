@@ -165,6 +165,12 @@ public class GlobalExceptionHandler {
         return new ResponseEntity<>(apiError, HttpStatus.BAD_REQUEST);
     }
 
+    /** A missing static file (e.g. an /uploads photo no longer on disk) is a 404, not a server error. */
+    @ExceptionHandler(org.springframework.web.servlet.resource.NoResourceFoundException.class)
+    public ResponseEntity<Void> handleNoResource() {
+        return ResponseEntity.notFound().build();
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiError> handleGlobalException(
             Exception ex, HttpServletRequest request) {

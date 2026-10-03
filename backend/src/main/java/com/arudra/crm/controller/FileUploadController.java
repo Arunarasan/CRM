@@ -49,6 +49,13 @@ public class FileUploadController {
     @org.springframework.beans.factory.annotation.Value("${app.storage.s3.public-base-url:}")
     private String publicBaseUrl;
 
+    /**
+     * Extra image hosts the proxy may read from besides {@code publicBaseUrl} — e.g. the R2 bucket the
+     * product catalog photos were loaded into directly (those links aren't produced by our uploads).
+     */
+    @org.springframework.beans.factory.annotation.Value("${app.storage.image-proxy-hosts:pub-a71206d0d22147c19f60595314aec002.r2.dev}")
+    private java.util.List<String> imageProxyHosts;
+
     @org.springframework.beans.factory.annotation.Value("${app.upload.dir:./uploads}")
     private String uploadDir;
 
@@ -75,7 +82,7 @@ public class FileUploadController {
                 || (at > 0 && url.substring(0, at).matches("https?://[^/]+"));
         byte[] bytes;
         String contentType;
-        if (StringUtils.hasText(publicBaseUrl) && url.startsWith(publicBaseUrl.replaceAll("/+$", "") + "/")) {
+        if (isTrustedRemote(url)) {
             java.net.http.HttpResponse<byte[]> res;
             try {
                 res = http.send(
@@ -105,6 +112,26 @@ public class FileUploadController {
                 .contentType(org.springframework.http.MediaType.parseMediaType(contentType))
                 .cacheControl(org.springframework.http.CacheControl.maxAge(java.time.Duration.ofHours(1)).cachePrivate())
                 .body(bytes);
+    }
+
+    /** True for an https/http link on our public storage origin or one of the extra trusted image hosts. */
+    private boolean isTrustedRemote(String url) {
+        java.net.URI uri;
+        try {
+            uri = java.net.URI.create(url.replace(" ", "%20"));
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+        String host = uri.getHost();
+        if (host == null || !("https".equalsIgnoreCase(uri.getScheme()) || "http".equalsIgnoreCase(uri.getScheme()))) {
+            return false;
+        }
+        if (StringUtils.hasText(publicBaseUrl)) {
+            String base = publicBaseUrl.trim();
+            String baseHost = java.net.URI.create(base.contains("://") ? base : "https://" + base).getHost();
+            if (host.equalsIgnoreCase(baseHost)) return true;
+        }
+        return imageProxyHosts.stream().map(String::trim).anyMatch(host::equalsIgnoreCase);
     }
 
     @PostMapping
