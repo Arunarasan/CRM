@@ -765,7 +765,7 @@ public class PurchaseService {
     // =====================================================================
 
     public List<PurchaseOrderShipment> getShipments(Long poId) {
-        return shipmentRepository.findByPurchaseOrderIdAndIsDeletedFalseOrderByIdAsc(poId);
+        return shipmentRepository.findActiveForOrder(poId);
     }
 
     @Transactional

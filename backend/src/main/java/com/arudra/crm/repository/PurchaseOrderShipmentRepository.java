@@ -10,7 +10,9 @@ import java.util.List;
 
 @Repository
 public interface PurchaseOrderShipmentRepository extends JpaRepository<PurchaseOrderShipment, Long> {
-    List<PurchaseOrderShipment> findByPurchaseOrderIdAndIsDeletedFalseOrderByIdAsc(Long purchaseOrderId);
+    // Explicit query: a derived name would clash with PurchaseOrderShipment#getPurchaseOrderId().
+    @Query("SELECT s FROM PurchaseOrderShipment s WHERE s.isDeleted = false AND s.purchaseOrder.id = :poId ORDER BY s.id ASC")
+    List<PurchaseOrderShipment> findActiveForOrder(@Param("poId") Long poId);
 
     /** Shipments with this shipping ID (case-insensitive) on the given project's purchase orders. */
     @Query("SELECT s FROM PurchaseOrderShipment s WHERE s.isDeleted = false " +
