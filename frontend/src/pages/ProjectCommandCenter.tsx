@@ -52,7 +52,6 @@ import LabourTab from "@/pages/projectCommandCenter/tabs/LabourTab";
 import ServiceWarrantyTab from "@/pages/projectCommandCenter/tabs/ServiceWarrantyTab";
 import ProjectReportsTab from "@/pages/projectCommandCenter/tabs/ProjectReportsTab";
 import WorkCategoriesTab from "@/pages/projectCommandCenter/tabs/WorkCategoriesTab";
-import { dailyReportApi } from "@/api/dailyReportApi";
 import TrackingLinkDialog from "@/components/projects/TrackingLinkDialog";
 import { ProjectInfoRow, ProjectJourneyBar, ProjectHeaderSummary, waLink } from "@/pages/projectCommandCenter/ProjectJourneyHeader";
 import ResourceSelect, { ResourceSelection } from "@/components/workforce/ResourceSelect";
@@ -259,11 +258,6 @@ export default function ProjectCommandCenter() {
   const [bulkOpen, setBulkOpen] = useState(false); // "Update Work" batch sheet
   const [trackingOpen, setTrackingOpen] = useState(false);
   const [quoteOpen, setQuoteOpen] = useState(false); // full measurement & quotation workspace
-  const [reportsPending, setReportsPending] = useState(0);
-  const loadReportsPending = () => {
-    dailyReportApi.list({ projectId: Number(id), status: 'SUBMITTED' }).then((r) => setReportsPending(r.length)).catch(() => {});
-  };
-  useEffect(loadReportsPending, [id]);
   const [scrolled, setScrolled] = useState(false); // collapses the big header into a compact sticky bar
 
   // "Build from approved quotation" picker (replaces the old blind "Generate from BOQ" button)
@@ -2137,7 +2131,7 @@ export default function ProjectCommandCenter() {
             </TabsContent>
 
             <TabsContent value="reports" className="mt-0 h-full outline-none">
-              <ProjectReportsTab projectId={projectId} onCountsChanged={loadReportsPending} />
+              <ProjectReportsTab projectId={projectId} onCountsChanged={() => {}} />
             </TabsContent>
 
             {/* EXECUTION & INSTALLATION — Category → Product steps, installation checklists, daily log, team chat */}
