@@ -39,6 +39,8 @@ public final class CallMetadataExtractor {
     // Samsung yyMMdd_HHmmss
     private static final Pattern YYMMDD = Pattern.compile(
             "(?<!\\d)(\\d{2})(\\d{2})(\\d{2})[_\\-](\\d{2})(\\d{2})(\\d{2})(?!\\d)");
+    // 10 digits with no separators: ddMMyyHHmm (Realme / OPPO / OnePlus "number-2009261923") or yyMMddHHmm
+    private static final Pattern TEN = Pattern.compile("(?<!\\d)(\\d{2})(\\d{2})(\\d{2})(\\d{2})(\\d{2})(?!\\d)");
     // Date only, no time
     private static final Pattern DATE_ONLY = Pattern.compile("(?<!\\d)(20\\d{2})[-_.]?(\\d{2})[-_.]?(\\d{2})(?!\\d)");
 
@@ -62,6 +64,20 @@ public final class CallMetadataExtractor {
                 }
             }
             if (when != null) break;
+        }
+        if (when == null) {
+            Matcher m = TEN.matcher(rest);
+            while (m.find()) {
+                // Both readings can be valid dates — take the more recent one (calls are recent).
+                LocalDateTime dmy = safe(2000 + i(m, 3), i(m, 2), i(m, 1), i(m, 4), i(m, 5), 0);
+                LocalDateTime ymd = safe(2000 + i(m, 1), i(m, 2), i(m, 3), i(m, 4), i(m, 5), 0);
+                LocalDateTime t = dmy == null ? ymd : ymd == null ? dmy : (dmy.isAfter(ymd) ? dmy : ymd);
+                if (t != null) {
+                    when = t;
+                    rest = rest.substring(0, m.start()) + " " + rest.substring(m.end());
+                    break;
+                }
+            }
         }
         if (when == null) {
             Matcher m = DATE_ONLY.matcher(rest);

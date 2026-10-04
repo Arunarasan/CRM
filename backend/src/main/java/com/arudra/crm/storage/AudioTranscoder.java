@@ -34,13 +34,29 @@ public class AudioTranscoder {
 
     public record Result(byte[] bytes, String contentType, String fileName) {}
 
-    /** True when this upload should be converted (an audio file in a non-universal format). */
-    public boolean needsTranscode(String contentType, String fileName) {
+    /** Audio codecs every browser decodes — a file already in one of these is stored untouched. */
+    private static final Set<String> PLAYABLE_CODECS = Set.of("aac", "mp3");
+
+    /**
+     * True when this upload should be converted. Decided by the audio actually inside the file, not
+     * its name: Android call recorders often save AMR audio in a file named ".m4a", which no browser
+     * plays. When the codec can't be read (no ffprobe), falls back to the file extension.
+     */
+    public boolean needsTranscode(String contentType, String fileName, byte[] bytes) {
         String ext = extension(fileName);
         boolean audio = (contentType != null && contentType.startsWith("audio/"))
-                || Set.of("amr", "3gp", "3ga", "awb", "wma", "wav", "ogg", "oga", "opus", "webm", "flac", "aiff", "caf")
-                        .contains(ext);
-        return audio && !PLAYABLE.contains(ext);
+                || Set.of("amr", "3gp", "3ga", "awb", "wma", "wav", "ogg", "oga", "opus", "webm", "flac", "aiff", "caf",
+                        "m4a", "aac", "mp3").contains(ext);
+        if (!audio) return false;
+        String codec = probeCodec(bytes, fileName);
+        if (codec != null) return !PLAYABLE_CODECS.contains(codec);
+        return !PLAYABLE.contains(ext);
+    }
+
+    /** Codec name of the first audio stream (e.g. "aac", "mp3", "amr_nb") via ffprobe; null if unknown. */
+    public String probeCodec(byte[] input, String fileName) {
+        String out = ffprobe(input, fileName, "-select_streams", "a:0", "-show_entries", "stream=codec_name");
+        return out == null || out.isBlank() ? null : out.lines().findFirst().orElse("").trim().toLowerCase(Locale.ROOT);
     }
 
     /** Converts to mono AAC .m4a; returns null (keep the original) when ffmpeg is missing or fails. */
@@ -83,20 +99,31 @@ public class AudioTranscoder {
 
     /** Length of an audio file in whole seconds via {@code ffprobe}; null when it can't be read. */
     public Integer probeDurationSec(byte[] input, String fileName) {
+        String out = ffprobe(input, fileName, "-show_entries", "format=duration");
+        if (out == null) return null;
+        try {
+            double sec = Double.parseDouble(out.lines().findFirst().orElse("").trim());
+            return sec > 0 ? (int) Math.round(sec) : null;
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    /** Runs ffprobe on the bytes with the given query args; its plain output, or null on any failure. */
+    private String ffprobe(byte[] input, String fileName, String... query) {
         Path in = null;
         try {
             String ext = extension(fileName);
             in = Files.createTempFile("aud-probe-", ext.isEmpty() ? ".bin" : "." + ext);
             Files.write(in, input);
-            Process p = new ProcessBuilder(ffprobePath, "-v", "error", "-show_entries", "format=duration",
-                    "-of", "default=noprint_wrappers=1:nokey=1", in.toString())
-                    .redirectErrorStream(true)
-                    .start();
+            java.util.List<String> cmd = new java.util.ArrayList<>(java.util.List.of(ffprobePath, "-v", "error"));
+            cmd.addAll(java.util.List.of(query));
+            cmd.addAll(java.util.List.of("-of", "default=noprint_wrappers=1:nokey=1", in.toString()));
+            Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
             String output = new String(p.getInputStream().readAllBytes()).trim();
             if (!p.waitFor(30, TimeUnit.SECONDS) || p.exitValue() != 0) return null;
-            double sec = Double.parseDouble(output.lines().findFirst().orElse(""));
-            return sec > 0 ? (int) Math.round(sec) : null;
-        } catch (java.io.IOException | NumberFormatException e) {
+            return output;
+        } catch (java.io.IOException e) {
             return null;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();

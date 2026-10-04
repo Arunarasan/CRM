@@ -165,7 +165,7 @@ public class FileUploadController {
         String storedName = originalName;
         // Phone call recordings (.amr/.3gp…) and browser webm clips don't play (or show no length) in
         // every browser — store a universal .m4a instead when ffmpeg can convert it.
-        if (audioTranscoder.needsTranscode(contentType, originalName)) {
+        if (audioTranscoder.needsTranscode(contentType, originalName, bytes)) {
             com.arudra.crm.storage.AudioTranscoder.Result converted = audioTranscoder.toM4a(bytes, originalName);
             if (converted != null) {
                 bytes = converted.bytes();

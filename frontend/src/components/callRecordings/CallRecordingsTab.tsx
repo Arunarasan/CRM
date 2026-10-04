@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   UploadCloud, Loader2, Trash2, ListPlus, AlertTriangle, CheckCircle2, Ban, ChevronDown, ChevronUp,
-  Phone, CalendarClock, User, StickyNote, X, RefreshCw, ExternalLink, FileAudio,
+  Phone, CalendarClock, User, StickyNote, X, RefreshCw, ExternalLink, FileAudio, Wand2,
 } from "lucide-react";
 import AudioPlayer from "@/components/AudioPlayer";
 import ResourceSelect, { type ResourceSelection } from "@/components/workforce/ResourceSelect";
@@ -267,6 +267,21 @@ function CallRow({ r, selected, onToggle, onSave, onDiscard, onCreateTask, onCha
     setName(r.contactName || ""); setNote(r.note || "");
   }, [r.phoneNumber, r.calledAt, r.contactName, r.note]);
 
+  const [fixing, setFixing] = useState(false);
+  const fixPlayback = async () => {
+    setFixing(true);
+    try {
+      const updated = await callRecordingApi.makePlayable(r.id);
+      if (updated.fileUrl === r.fileUrl) toast.info("This recording is already in a playable format.");
+      else toast.success("Recording converted — it plays now");
+      onChanged(updated);
+    } catch (e) {
+      toast.error(errMsg(e, "Could not convert this recording."));
+    } finally {
+      setFixing(false);
+    }
+  };
+
   const commit = (key: "phoneNumber" | "calledAt" | "contactName" | "note", value: string, current: string) => {
     if (value.trim() === current.trim()) return;
     onSave({ [key]: value.trim() || null } as Partial<CallRecording>);
@@ -283,7 +298,13 @@ function CallRow({ r, selected, onToggle, onSave, onDiscard, onCreateTask, onCha
         ) : <span className="w-4 shrink-0" />}
         <div className="min-w-0 flex-1 space-y-3">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <AudioPlayer src={resolveFileUrl(r.fileUrl)} fileName={r.fileName} className="min-w-[220px] flex-1" />
+            <AudioPlayer key={r.fileUrl} src={resolveFileUrl(r.fileUrl)} fileName={r.fileName} className="min-w-[220px] flex-1"
+              failedAction={
+                <button onClick={fixPlayback} disabled={fixing}
+                  className="flex shrink-0 items-center gap-1 rounded-md bg-amber-600 px-2 py-1 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-60">
+                  {fixing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5" />} Make playable
+                </button>
+              } />
             <span className="text-xs tabular-nums text-muted-foreground">{fmtDuration(r.durationSec)}</span>
             <StatusChip r={r} />
           </div>

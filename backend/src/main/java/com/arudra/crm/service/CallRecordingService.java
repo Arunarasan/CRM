@@ -49,6 +49,10 @@ public class CallRecordingService {
     private final EmployeeTaskService employeeTaskService;
     private final EmployeePortalService employeePortalService;
     private final LeadService leadService;
+    private final LeadDocumentRepository leadDocumentRepository;
+
+    @org.springframework.beans.factory.annotation.Value("${app.upload.dir:./uploads}")
+    private String uploadDir;
 
     // ------------------------------------------------------------------ upload & list
 
@@ -72,7 +76,7 @@ public class CallRecordingService {
         byte[] bytes = file.getBytes();
         String storedName = originalName;
         String storedType = contentType;
-        if (audioTranscoder.needsTranscode(contentType, originalName)) {
+        if (audioTranscoder.needsTranscode(contentType, originalName, bytes)) {
             AudioTranscoder.Result converted = audioTranscoder.toM4a(bytes, originalName);
             if (converted != null) {
                 bytes = converted.bytes();
@@ -101,6 +105,62 @@ public class CallRecordingService {
         rec.setUploadedById(me != null ? me.getId() : null);
         rec.setMatchedLeadId(matchLeadId(rec.getPhoneNumber()));
         return toDto(repository.save(rec));
+    }
+
+    /**
+     * Re-checks a recording that was stored before its audio could be converted (e.g. AMR audio in a
+     * ".m4a" file) and, when the browser can't play it, converts it to AAC .m4a and points the call,
+     * its task attachment and any lead document at the new file. A no-op when it already plays.
+     */
+    @Transactional
+    public Map<String, Object> makePlayable(Long id) throws IOException {
+        CallRecording rec = get(id);
+        byte[] bytes = readStored(rec.getFileUrl());
+        if (!audioTranscoder.needsTranscode("audio/unknown", rec.getFileName(), bytes)) {
+            if (audioTranscoder.probeCodec(bytes, rec.getFileName()) == null) {
+                throw new IllegalStateException("The server can't read this recording's audio.");
+            }
+            return toDto(rec); // already AAC / MP3
+        }
+        AudioTranscoder.Result converted = audioTranscoder.toM4a(bytes, rec.getFileName());
+        if (converted == null) throw new IllegalStateException("This recording couldn't be converted.");
+        StoredFile stored = storageService.store(converted.bytes(), converted.contentType(), "CALL_RECORDING", converted.fileName());
+        String oldUrl = rec.getFileUrl();
+        rec.setFileUrl(stored.fileUrl());
+        rec.setSizeBytes((long) converted.bytes().length);
+        if (rec.getDurationSec() == null) rec.setDurationSec(audioTranscoder.probeDurationSec(converted.bytes(), converted.fileName()));
+        for (TaskAttachment a : attachmentRepository.findByFileUrl(oldUrl)) {
+            a.setFileUrl(stored.fileUrl());
+            attachmentRepository.save(a);
+        }
+        for (LeadDocument d : leadDocumentRepository.findByFileUrl(oldUrl)) {
+            d.setFileUrl(stored.fileUrl());
+            leadDocumentRepository.save(d);
+        }
+        return toDto(repository.save(rec));
+    }
+
+    /** Bytes of a file this app stored: a public storage URL, or a local "/uploads/..." path. */
+    private byte[] readStored(String url) throws IOException {
+        if (url.startsWith("/uploads/")) { // LocalStorageService (dev)
+            java.nio.file.Path root = java.nio.file.Path.of(uploadDir).toAbsolutePath().normalize();
+            java.nio.file.Path file = root.resolve(url.substring("/uploads/".length()).split("[?#]")[0]).normalize();
+            if (!file.startsWith(root)) throw new IllegalStateException("Bad file path.");
+            return java.nio.file.Files.readAllBytes(file);
+        }
+        try {
+            var res = java.net.http.HttpClient.newBuilder()
+                    .connectTimeout(java.time.Duration.ofSeconds(10))
+                    .followRedirects(java.net.http.HttpClient.Redirect.NORMAL).build()
+                    .send(java.net.http.HttpRequest.newBuilder(java.net.URI.create(url.replace(" ", "%20")))
+                                    .timeout(java.time.Duration.ofSeconds(60)).GET().build(),
+                            java.net.http.HttpResponse.BodyHandlers.ofByteArray());
+            if (res.statusCode() != 200) throw new IllegalStateException("Couldn't fetch the recording (" + res.statusCode() + ").");
+            return res.body();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException(e);
+        }
     }
 
     @Transactional(readOnly = true)

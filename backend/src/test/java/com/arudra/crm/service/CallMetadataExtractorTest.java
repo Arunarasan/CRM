@@ -50,6 +50,14 @@ class CallMetadataExtractorTest {
     }
 
     @Test
+    void realmeStyleNumberDashTenDigitTime() {
+        var m = p("+919344693633-2009261923.m4a");
+        assertEquals("+919344693633", m.phoneNumber());
+        assertEquals(LocalDateTime.of(2026, 9, 20, 19, 23, 0), m.calledAt());
+        assertNull(m.contactName());
+    }
+
+    @Test
     void directionFromName() {
         assertEquals("IN", p("incoming_9876543210_20261004_143022.mp3").direction());
         assertEquals("OUT", p("outgoing_9876543210_20261004_143022.mp3").direction());

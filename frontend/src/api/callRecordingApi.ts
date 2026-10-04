@@ -61,6 +61,8 @@ export const callRecordingApi = {
   update: (id: number, body: Partial<Pick<CallRecording, "phoneNumber" | "calledAt" | "contactName" | "note">>) =>
     api.put<CallRecording>(`${BASE}/${id}`, body).then((r) => r.data),
 
+  makePlayable: (id: number) => api.post<CallRecording>(`${BASE}/${id}/make-playable`).then((r) => r.data),
+
   discard: (id: number) => api.delete(`${BASE}/${id}`),
 
   createTasks: (body: CallTaskRequest) => api.post<CallRecording[]>(`${BASE}/tasks`, body).then((r) => r.data),

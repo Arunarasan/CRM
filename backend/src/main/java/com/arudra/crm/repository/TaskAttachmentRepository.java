@@ -9,4 +9,6 @@ import java.util.List;
 @Repository
 public interface TaskAttachmentRepository extends JpaRepository<TaskAttachment, Long> {
     List<TaskAttachment> findByTaskId(Long taskId);
+
+    java.util.List<TaskAttachment> findByFileUrl(String fileUrl);
 }

@@ -52,6 +52,12 @@ public class CallRecordingController {
         return ResponseEntity.ok(ApiResponse.success(service.update(id, body)));
     }
 
+    @PostMapping("/{id}/make-playable")
+    @PreAuthorize(MANAGE)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> makePlayable(@PathVariable Long id) throws IOException {
+        return ResponseEntity.ok(ApiResponse.success(service.makePlayable(id), "Recording converted."));
+    }
+
     @DeleteMapping("/{id}")
     @PreAuthorize(MANAGE)
     public ResponseEntity<ApiResponse<Void>> discard(@PathVariable Long id) {

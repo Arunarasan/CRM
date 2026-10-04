@@ -9,12 +9,14 @@ import { Play, Pause, Download, AlertTriangle, Loader2 } from "lucide-react";
  * file can't play it says so and offers a download instead of a broken bar.
  */
 export default function AudioPlayer({
-  src, fileName, autoPlay, className = "",
+  src, fileName, autoPlay, className = "", failedAction,
 }: {
   src: string;
   fileName?: string;
   autoPlay?: boolean;
   className?: string;
+  /** Extra button shown next to Download when the file can't play (e.g. "Make playable"). */
+  failedAction?: React.ReactNode;
 }) {
   const ref = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
@@ -57,7 +59,12 @@ export default function AudioPlayer({
     const a = ref.current;
     if (!a) return;
     if (a.paused) {
-      try { await a.play(); } catch { setFailed(true); }
+      try {
+        await a.play();
+      } catch (e: any) {
+        // Only an unsupported source means the file can't play; an interrupted/blocked play can be retried.
+        if (e?.name === "NotSupportedError") setFailed(true);
+      }
     } else {
       a.pause();
     }
@@ -80,21 +87,26 @@ export default function AudioPlayer({
 
   if (failed) {
     return (
-      <div className={`flex min-w-0 items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-2 text-amber-900 ${className}`}>
-        <AlertTriangle className="h-4 w-4 shrink-0" />
-        <div className="min-w-0 flex-1">
-          {fileName && <p className="truncate text-xs font-medium">{fileName}</p>}
-          <p className="text-xs">This audio format can't play in the browser.</p>
+      <div className={`flex min-w-0 flex-wrap items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-2 text-amber-900 ${className}`}>
+        <div className="flex min-w-[160px] flex-1 items-center gap-2">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          <div className="min-w-0 flex-1">
+            {fileName && <p className="truncate text-xs font-medium">{fileName}</p>}
+            <p className="text-xs">This audio format can't play in the browser.</p>
+          </div>
         </div>
-        <a
-          href={src}
-          target="_blank"
-          rel="noreferrer"
-          download
-          className="flex shrink-0 items-center gap-1 rounded-md border border-amber-300 bg-white px-2 py-1 text-xs font-medium hover:bg-amber-100"
-        >
-          <Download className="h-3.5 w-3.5" /> Download
-        </a>
+        <div className="flex shrink-0 items-center gap-1.5">
+          {failedAction}
+          <a
+            href={src}
+            target="_blank"
+            rel="noreferrer"
+            download
+            className="flex shrink-0 items-center gap-1 rounded-md border border-amber-300 bg-white px-2 py-1 text-xs font-medium hover:bg-amber-100"
+          >
+            <Download className="h-3.5 w-3.5" /> Download
+          </a>
+        </div>
       </div>
     );
   }

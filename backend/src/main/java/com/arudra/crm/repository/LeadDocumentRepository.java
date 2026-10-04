@@ -9,4 +9,6 @@ import java.util.List;
 @Repository
 public interface LeadDocumentRepository extends JpaRepository<LeadDocument, Long> {
     List<LeadDocument> findByLeadId(Long leadId);
+
+    java.util.List<com.arudra.crm.entity.LeadDocument> findByFileUrl(String fileUrl);
 }
