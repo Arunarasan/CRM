@@ -194,18 +194,9 @@ export function QuotationPrintView({ quotationId, onClose, onSaved, readOnly }: 
 
       <div className="qp-scroll">
         <div id="quotation-print" className="qp">
-          {/* Brand banner */}
+          {/* Letterhead: brand, address & contact, services (frontend/public/quote-header.jpg) */}
           <header className="qp-banner">
-            <div className="qp-banner-brand">
-              <img src={`${import.meta.env.BASE_URL}jb-decor-logo-md.png`} alt={company.name} className="qp-logo" />
-            </div>
-            <div className="qp-banner-photo">
-              <img src={BANNER_PHOTO} alt="" onError={(e) => { e.currentTarget.style.display = "none"; }} />
-            </div>
-            <div className="qp-banner-tag">
-              <p>Beautiful<br />Spaces<br />Better Living</p>
-              <span />
-            </div>
+            <img src={QUOTE_HEADER} alt={`${company.name} — Interior & Decor Solutions`} />
           </header>
 
           <div className="qp-body">
@@ -461,8 +452,8 @@ function SumRow({ icon, label, value, strong }: { icon: ReactNode; label: ReactN
 }
 
 const WEBSITE = "https://jbdecorcdm.com";
-/** Optional banner photo — put an interior image at frontend/public/quote-banner.jpg; hidden when absent. */
-const BANNER_PHOTO = `${import.meta.env.BASE_URL}quote-banner.jpg`;
+/** The letterhead banner at the top of the quotation (also used by the PDF and the customer link page). */
+const QUOTE_HEADER = `${import.meta.env.BASE_URL}quote-header.jpg`;
 /** Category header tints, cycled. */
 const TONES = [
   { bg: "#fbf3e2", bar: "#c99a3e" },
@@ -517,18 +508,8 @@ const QP_CSS = `
   box-shadow: 0 10px 40px rgba(15,42,51,.15); border-radius: 4px; overflow: hidden;
   -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 .qp * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-.qp-banner { display:flex; height:118px; background:#f3f1ec; position:relative; }
-.qp-banner-brand { flex: 0 0 44%; background: linear-gradient(135deg,#0b2a35 0%,#123f4d 100%); display:flex; align-items:center;
-  padding: 0 28px; clip-path: polygon(0 0,100% 0,88% 100%,0 100%); position:relative; z-index:2; }
-.qp-banner-brand::after { content:""; position:absolute; top:0; right:0; width:10px; height:100%;
-  background: linear-gradient(180deg,#e6c27a,#b8862f); clip-path: polygon(60% 0,100% 0,40% 100%,0 100%); }
-.qp-logo { height: 66px; width:auto; }
-.qp-banner-photo { flex:1; margin-left:-60px; background: linear-gradient(120deg,#e9dfcf,#f6efe3 60%,#efe6d6); overflow:hidden; }
-.qp-banner-photo img { width:100%; height:100%; object-fit:cover; }
-.qp-banner-tag { flex:0 0 24%; display:flex; flex-direction:column; justify-content:center; padding: 0 22px;
-  background: linear-gradient(90deg,rgba(247,246,242,0),#f7f6f2 30%); }
-.qp-banner-tag p { font-family:"Playfair Display",Georgia,serif; font-size:21px; line-height:1.15; color:#123f4d; margin:0; }
-.qp-banner-tag span { display:block; width:56px; height:2px; background:var(--gold); margin-top:10px; }
+.qp-banner { display:block; line-height:0; background:#fff; }
+.qp-banner img { display:block; width:100%; height:auto; }
 .qp-body { padding: 26px 30px 26px; flex:1; display:flex; flex-direction:column; }
 .qp-head { display:flex; gap:12px; align-items:stretch; margin-bottom: 18px; }
 .qp-title { flex: 0 0 auto; padding-right: 4px; }
@@ -619,7 +600,7 @@ const QP_CSS = `
   .qp { width:auto; min-height:0; zoom:1; }
   .qp-head, .qp-bottom, .qp-foot { flex-wrap:wrap; }
   .qp-meta { flex-wrap:wrap; flex-basis:100%; } .qp-summary { flex-basis:100%; }
-  .qp-banner-tag { display:none; } .qp-banner-brand { flex-basis:70%; } .qp-title h1 { font-size:34px; }
+  .qp-title h1 { font-size:34px; }
   .qp-table { font-size:12px; } .qp-scroll { padding: 12px 0; }
 }
 @media print {

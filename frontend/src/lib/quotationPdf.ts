@@ -99,7 +99,8 @@ export function quotationPdfUrl(quotation: Quotation, sel: PdfSelection = {}): s
 export async function loadPdfImages(quotation: Quotation): Promise<Record<string, string>> {
   const urls = [...new Set((quotation.items || []).map((i) => i.imageUrl).filter((u): u is string => !!u))];
   const out: Record<string, string> = {};
-  await Promise.all(urls.map(async (url) => {
+  const header = loadHeader().then((h) => { if (h) out[HEADER_KEY] = h; });
+  await Promise.all([header, ...urls.map(async (url) => {
     try {
       // Our own stored photos come through the API (the storage bucket sends no CORS headers, so
       // a canvas can't read them directly); other links are tried as-is.
@@ -128,8 +129,30 @@ export async function loadPdfImages(quotation: Quotation): Promise<Record<string
       ctx.drawImage(img, (img.naturalWidth - s) / 2, (img.naturalHeight - s) / 2, s, s, 0, 0, size, size);
       out[url] = canvas.toDataURL("image/jpeg", 0.8);
     } catch { /* leave this photo out */ }
-  }));
+  })]);
   return out;
+}
+
+/** The letterhead banner (frontend/public/quote-header.jpg), carried in the images map under this key. */
+const HEADER_KEY = "__quote_header__";
+const HEADER_URL = `${import.meta.env.BASE_URL}quote-header.jpg`;
+/** Banner width : height (1536 × 434). */
+const HEADER_RATIO = 434 / 1536;
+
+async function loadHeader(): Promise<string | null> {
+  try {
+    const res = await fetch(HEADER_URL);
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    return await new Promise<string>((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(String(r.result));
+      r.onerror = reject;
+      r.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -156,7 +179,15 @@ export function buildQuotationPdf(quotation: Quotation, sel: PdfSelection = {}):
     if (y + needed > bottom) { doc.addPage(); y = 18; }
   };
 
-  // --- Header ---
+  // --- Letterhead banner (full width), then the title block ---
+  const header = images[HEADER_KEY];
+  if (header) {
+    const h = pageW * HEADER_RATIO;
+    try {
+      doc.addImage(header, "JPEG", 0, 0, pageW, h);
+      y = h + 9;
+    } catch { /* banner unreadable — plain header */ }
+  }
   doc.setFont("helvetica", "bold").setFontSize(18).setTextColor(15, 23, 42);
   doc.text("QUOTATION", marginX, y);
   doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(100, 116, 139);
@@ -172,7 +203,7 @@ export function buildQuotationPdf(quotation: Quotation, sel: PdfSelection = {}):
   if (quotation.expiryDate) { doc.text(`Valid until: ${quotation.expiryDate}`, rx, ry, { align: "right" }); }
   doc.setTextColor(0, 0, 0);
   y += 10;
-  doc.setDrawColor(30, 41, 59).setLineWidth(0.5);
+  doc.setDrawColor(201, 154, 62).setLineWidth(0.5);
   doc.line(marginX, y, rx, y);
   y += 6;
   if (totals.isPartial) {
@@ -187,7 +218,7 @@ export function buildQuotationPdf(quotation: Quotation, sel: PdfSelection = {}):
   const PHOTO = 14; // mm
   for (const block of blocks) {
     ensure(24);
-    doc.setFillColor(30, 41, 59);
+    doc.setFillColor(14, 61, 56);
     doc.rect(marginX, y, pageW - 2 * marginX, 7, "F");
     doc.setFont("helvetica", "bold").setFontSize(10).setTextColor(255, 255, 255);
     doc.text(block.category.toUpperCase(), marginX + 2, y + 4.8);
@@ -265,7 +296,7 @@ export function buildQuotationPdf(quotation: Quotation, sel: PdfSelection = {}):
     charges.forEach((c) => line(c.note ? `${c.label} (${c.note})` : c.label, `+ ${money(c.amount)}`));
   }
   if (totals.gst > 0) line("GST", `+ ${money(totals.gst)}`);
-  doc.setDrawColor(30, 41, 59).setLineWidth(0.4);
+  doc.setDrawColor(201, 154, 62).setLineWidth(0.4);
   doc.line(gLabelX, y - 1, rx, y - 1);
   y += 3;
   line("Grand Total", money(totals.grandTotal), { bold: true });

@@ -90,14 +90,12 @@ type Site = ReturnType<typeof useSite>
 function Shell({ site, children }: { site: Site; children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-ivory print:bg-white">
-      <header className="border-b border-forest/10 bg-forest print:border-0 print:bg-white">
-        <div className="mx-auto flex max-w-4xl items-center gap-3 px-4 py-3">
-          <img src="/jb-decor-logo-sm.png" alt={site.name} className="h-9 w-auto rounded bg-white/95 p-0.5" />
-          <span className="sr-only">{site.name}</span>
-          <span className="ml-auto text-xs uppercase tracking-widest text-gold">Quotation</span>
-        </div>
+      {/* Letterhead banner — the same one at the top of the printed quotation and the PDF */}
+      <header className="mx-auto max-w-4xl px-4 pt-4 print:px-0 print:pt-0">
+        <img src="/quote-header.jpg" alt={`${site.name} — Interior & Decor Solutions`}
+          className="block h-auto w-full rounded-xl shadow-sm print:rounded-none print:shadow-none" />
       </header>
-      <main className="px-4 pt-5 print:px-0 print:pt-3">{children}</main>
+      <main className="px-4 pt-4 print:px-0 print:pt-3">{children}</main>
     </div>
   )
 }
