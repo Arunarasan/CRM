@@ -37,7 +37,7 @@ function handleKeys(e: React.KeyboardEvent<HTMLInputElement>, revert: () => void
 }
 
 export function NumCell({
-  value, onCommit, disabled, col, className = "", placeholder, onDraft,
+  value, onCommit, disabled, col, className = "", placeholder, onDraft, format,
 }: {
   value?: number | null;
   onCommit: (v: number | null) => void;
@@ -48,10 +48,13 @@ export function NumCell({
   placeholder?: string;
   /** Live draft value while typing (for instant line totals); undefined once the edit ends. */
   onDraft?: (v: number | null | undefined) => void;
+  /** Display format while the cell isn't being edited (e.g. 1500 → 1,500). */
+  format?: (v: number) => string;
 }) {
   const shown = value == null ? "" : String(value);
   const [draft, setDraft] = useState(shown);
   const focused = useRef(false);
+  const [editing, setEditing] = useState(false);
   // Only a value the user actually typed is saved. Until they type, a focused cell keeps following
   // the server — e.g. tabbing from Rate into Amount must show the new amount, not save the old one.
   const typed = useRef(false);
@@ -64,11 +67,12 @@ export function NumCell({
       disabled={disabled}
       placeholder={placeholder}
       className={`${cellBase} text-right tabular-nums ${className}`}
-      value={draft}
-      onFocus={(e) => { focused.current = true; typed.current = false; e.currentTarget.select(); }}
+      value={!editing && format && value != null && draft === shown ? format(value) : draft}
+      onFocus={(e) => { focused.current = true; typed.current = false; setEditing(true); const el = e.currentTarget; requestAnimationFrame(() => el.select()); }}
       onChange={(e) => { typed.current = true; setDraft(e.target.value); onDraft?.(toNum(e.target.value)); }}
       onBlur={() => {
         focused.current = false;
+        setEditing(false);
         const n = toNum(draft);
         if (typed.current && n !== (value ?? null)) onCommit(n);
         else setDraft(shown);

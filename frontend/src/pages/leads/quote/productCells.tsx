@@ -402,8 +402,10 @@ export function Thumb({ url, size = "h-11 w-11" }: { url?: string | null; size?:
  * The line's photo, chosen while making the quote: take one with the camera, pick one from the
  * gallery, use one of the product's own photos, or remove it. Photos are shrunk before upload.
  */
-export function ImageCell({ url, options, disabled, onChange, module = "QUOTATION" }: {
+export function ImageCell({ url, options, disabled, onChange, module = "QUOTATION", size }: {
   url?: string | null;
+  /** Thumbnail size classes (default 44px). */
+  size?: string;
   options: string[];
   disabled: boolean;
   onChange: (url: string | null) => void;
@@ -455,7 +457,7 @@ export function ImageCell({ url, options, disabled, onChange, module = "QUOTATIO
       setBusy(false);
     }
   };
-  if (disabled) return <Thumb url={url} />;
+  if (disabled) return <Thumb url={url} size={size} />;
   return (
     <>
       {/* capture opens the rear camera straight away on phones; the other input opens the gallery */}
@@ -465,7 +467,7 @@ export function ImageCell({ url, options, disabled, onChange, module = "QUOTATIO
         <DropdownMenuTrigger asChild>
           <button type="button" className="relative rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30"
             title={url ? "Change photo" : "Add photo"} aria-label={url ? "Change photo" : "Add photo"}>
-            <Thumb url={url} />
+            <Thumb url={url} size={size} />
             {!url && !busy && (
               <span className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full bg-primary text-primary-foreground flex items-center justify-center">
                 <Plus className="h-3 w-3" />
@@ -524,23 +526,25 @@ export function ImageCell({ url, options, disabled, onChange, module = "QUOTATIO
 }
 
 /** Colour as a table input box: type anything, or pick one of the product's colours. */
-export function ColourBox({ value, colors, disabled, onChange, className = "" }: {
+export function ColourBox({ value, colors, disabled, onChange, className = "", inputClassName = "" }: {
   value?: string | null;
   colors: ProductColor[];
   disabled: boolean;
   onChange: (name: string | null, color?: ProductColor) => void;
   className?: string;
+  /** Extra classes for the input (e.g. a borderless table look). */
+  inputClassName?: string;
 }) {
   const [draft, setDraft] = useState(value ?? "");
   useEffect(() => setDraft(value ?? ""), [value]);
   const listId = useMemo(() => `colours-${Math.random().toString(36).slice(2)}`, []);
   const known = colors.find((c) => norm(c.name) === norm(draft));
-  if (disabled) return <span className="block truncate px-2 text-sm">{value || "—"}</span>;
+  if (disabled) return <span className={`block truncate px-2 text-sm ${className}`}>{value || "—"}</span>;
   return (
     <span className={`relative block ${className}`}>
       {known?.hex && <span className="pointer-events-none absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 rounded-full border" style={{ background: known.hex }} />}
       <input value={draft} list={colors.length ? listId : undefined} placeholder="Colour" aria-label="Colour"
-        className={`h-8 w-full rounded-md border border-border bg-background ${known?.hex ? "pl-6" : "pl-2"} pr-2 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/20`}
+        className={`h-8 w-full rounded-md border border-border bg-background ${known?.hex ? "pl-6" : "pl-2"} pr-2 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/20 ${inputClassName}`}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={() => {
           const t = draft.trim();
@@ -616,7 +620,9 @@ const Swatch = ({ hex }: { hex: string }) => (
 );
 
 /** Optional line discount: hidden behind "+ Discount" until used; % or ₹. */
-export function DiscountCell({ type, value, amount, disabled, onChange }: {
+export function DiscountCell({ type, value, amount, disabled, onChange, selectClassName = "" }: {
+  /** Extra classes for the dropdown (e.g. a borderless table look). */
+  selectClassName?: string;
   type?: "PERCENT" | "FLAT" | null;
   value?: number | null;
   amount?: number | null;
@@ -652,7 +658,7 @@ export function DiscountCell({ type, value, amount, disabled, onChange }: {
   const label = (o: string) => (o.startsWith("F") ? inr(Number(o.slice(1))) : `${o.slice(1)}%`);
   return (
     <select value={current} aria-label="Discount" title={has ? `− ${inr(amount)}` : "No discount"}
-      className="h-8 w-full rounded-md border border-border bg-background px-2 text-sm tabular-nums outline-none focus:border-ring focus:ring-2 focus:ring-ring/20"
+      className={`h-8 w-full rounded-md border border-border bg-background px-2 text-sm tabular-nums outline-none focus:border-ring focus:ring-2 focus:ring-ring/20 ${selectClassName}`}
       onChange={(e) => {
         const o = e.target.value;
         if (o === "other") { setCustom(true); return; }
