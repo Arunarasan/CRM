@@ -37,6 +37,9 @@ public class ProjectController {
     @Autowired
     private com.arudra.crm.service.SupplyInstallService supplyInstallService;
 
+    @Autowired
+    private com.arudra.crm.service.ProjectFilesService projectFilesService;
+
     @GetMapping
     @PreAuthorize(READ)
     public ResponseEntity<Page<Project>> getAllProjects(
@@ -146,7 +149,7 @@ public class ProjectController {
     @PostMapping("/{id}/documents")
     @PreAuthorize(WRITE)
     public ResponseEntity<ProjectDocument> addDocument(@PathVariable Long id, @RequestBody ProjectDocument document) {
-        return ResponseEntity.ok(projectService.addDocument(id, document, null));
+        return ResponseEntity.ok(projectService.addDocument(id, document, currentUserService.getCurrentUser()));
     }
 
     /** Pull this project's lead documents + linked measurement drawings/media into its Documents tab. */
@@ -155,6 +158,27 @@ public class ProjectController {
     public ResponseEntity<Map<String, Integer>> importLeadAssets(@PathVariable Long id) {
         int imported = quotationService.importPreSalesAssets(id, currentUserService.getCurrentUser());
         return ResponseEntity.ok(Map.of("imported", imported));
+    }
+
+    /** Every file on the project — uploads plus lead, measurement, quotation, invoices, tasks, chat, logs, GRNs… */
+    @GetMapping("/{id}/files")
+    @PreAuthorize(READ)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getFiles(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.success(projectFilesService.listFiles(id)));
+    }
+
+    /** Rename / re-type / describe an uploaded document: {fileName?, documentType?, remarks?}. */
+    @PutMapping("/documents/{docId}")
+    @PreAuthorize(WRITE)
+    public ResponseEntity<ProjectDocument> updateDocument(@PathVariable Long docId, @RequestBody Map<String, String> body) {
+        return ResponseEntity.ok(projectService.updateDocumentDetails(docId, body.get("fileName"), body.get("documentType"), body.get("remarks")));
+    }
+
+    @DeleteMapping("/documents/{docId}")
+    @PreAuthorize(WRITE)
+    public ResponseEntity<Void> deleteDocument(@PathVariable Long docId) {
+        projectService.deleteDocument(docId);
+        return ResponseEntity.ok().build();
     }
 
     /** Replace a document's file (e.g. after an admin edits the image in the in-app viewer). */

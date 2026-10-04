@@ -2193,7 +2193,7 @@ export default function ProjectCommandCenter() {
               onCompleted={async () => { await fetchProjectData(); fetchCore(); }} />
 
             <TabsContent value="media" className="mt-0 h-full outline-none">
-              <DocumentsTab projectId={projectId} documents={documents} onChanged={fetchCore} />
+              <DocumentsTab projectId={projectId} onChanged={fetchCore} />
             </TabsContent>
 
             {/* SERVICE & WARRANTY TAB (completed projects) */}

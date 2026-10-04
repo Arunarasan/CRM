@@ -714,6 +714,27 @@ public class ProjectService {
         return documentRepository.save(doc);
     }
 
+    /** Rename / re-type / describe a directly uploaded project document. */
+    public ProjectDocument updateDocumentDetails(Long docId, String fileName, String documentType, String remarks) {
+        ProjectDocument doc = documentRepository.findById(docId)
+                .orElseThrow(() -> new RuntimeException("Document not found"));
+        if (fileName != null && !fileName.isBlank()) {
+            doc.setFileName(fileName.length() > 200 ? fileName.substring(0, 200) : fileName.trim());
+        }
+        if (documentType != null && !documentType.isBlank()) doc.setDocumentType(documentType.trim());
+        if (remarks != null) doc.setRemarks(remarks.isBlank() ? null : remarks.trim());
+        return documentRepository.save(doc);
+    }
+
+    /** Remove a directly uploaded project document (soft delete; files from other modules aren't touched). */
+    public void deleteDocument(Long docId) {
+        ProjectDocument doc = documentRepository.findById(docId)
+                .orElseThrow(() -> new RuntimeException("Document not found"));
+        doc.setIsDeleted(true);
+        doc.setDeletedAt(java.time.LocalDateTime.now());
+        documentRepository.save(doc);
+    }
+
     public ProjectPayment addPayment(Long projectId, ProjectPayment payment, User user) {
         Project project = getProjectById(projectId);
         payment.setProject(project);
