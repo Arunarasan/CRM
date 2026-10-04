@@ -82,6 +82,12 @@ public class CallRecordingController {
         return ResponseEntity.ok(ApiResponse.success(service.forTask(taskId, currentUserService.getCurrentUser())));
     }
 
+    @GetMapping("/by-lead/{leadId}")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN') or hasAuthority('LEAD_READ') or hasAuthority('PROJECT_READ')")
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> forLead(@PathVariable Long leadId) {
+        return ResponseEntity.ok(ApiResponse.success(service.forLead(leadId)));
+    }
+
     @PostMapping("/{id}/lead")
     public ResponseEntity<ApiResponse<Map<String, Object>>> createLead(@PathVariable Long id, @RequestBody Map<String, Object> body) {
         return ResponseEntity.ok(ApiResponse.success(

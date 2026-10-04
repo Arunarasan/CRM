@@ -13,4 +13,6 @@ public interface CallRecordingRepository extends JpaRepository<CallRecording, Lo
     List<CallRecording> findByIsDeletedFalseOrderByIdDesc();
 
     Optional<CallRecording> findFirstByTaskIdAndIsDeletedFalse(Long taskId);
+
+    List<CallRecording> findByLeadIdAndIsDeletedFalseOrderByIdDesc(Long leadId);
 }

@@ -26,6 +26,7 @@ public class ProjectFilesService {
     @Autowired private ProjectRepository projectRepository;
     @Autowired private ProjectDocumentRepository documentRepository;
     @Autowired private LeadDocumentRepository leadDocumentRepository;
+    @Autowired private CallRecordingService callRecordingService;
     @Autowired private MeasurementRepository measurementRepository;
     @Autowired private MeasurementDrawingRepository drawingRepository;
     @Autowired private MeasurementMediaRepository measurementMediaRepository;
@@ -90,6 +91,23 @@ public class ProjectFilesService {
         Sink sink = new Sink();
         Long leadId = project.getLead() != null ? project.getLead().getId() : null;
         String projectLink = "/projects/" + projectId;
+
+        // 0. Call recordings that became / were added to the lead — listed first so the plain lead-document
+        //    copy of the same file is dropped and the entry keeps its call details (number, time, length…).
+        if (leadId != null) {
+            for (Map<String, Object> c : callRecordingService.forLead(leadId)) {
+                LocalDateTime calledAt = (LocalDateTime) c.get("calledAt");
+                Map<String, Object> m = sink.add("CALL-" + c.get("id"), "CALL", "Call recording", "Call recording",
+                        (String) c.get("fileName"), (String) c.get("fileUrl"), callSummary(c),
+                        (String) c.get("uploadedBy"), calledAt != null ? calledAt : (LocalDateTime) c.get("createdAt"),
+                        "/leads/" + leadId);
+                if (m != null) {
+                    m.put("kind", "audio");
+                    m.put("category", "AUDIO");
+                    m.put("call", c);
+                }
+            }
+        }
 
         // 1. Lead — always live (no import needed). Listed before project uploads so the lead copies
         //    made at conversion show as "From lead".
@@ -349,6 +367,18 @@ public class ProjectFilesService {
         if (!"DELIVERY".equals(s.getStepType()) || s.getDeliveryStage() == null) return null;
         String stage = s.getDeliveryStage().replace('_', ' ').toLowerCase(Locale.ROOT);
         return ("PICKUP".equals(s.getDeliveryRoute()) ? "Pickup · " : "Direct · ") + stage;
+    }
+
+    /** "+919812345678 · Ravi · 3:42 · Lead created" — the one-line call summary shown on the tile. */
+    private static String callSummary(Map<String, Object> c) {
+        Integer sec = (Integer) c.get("durationSec");
+        String length = sec == null ? null : sec / 60 + ":" + String.format("%02d", sec % 60);
+        String outcome = c.get("outcome") == null ? null : switch ((String) c.get("outcome")) {
+            case "LEAD_CREATED" -> "Lead created";
+            case "ADDED_TO_LEAD" -> "Added to lead";
+            default -> "Not a lead";
+        };
+        return join(" · ", (String) c.get("phoneNumber"), (String) c.get("contactName"), length, outcome);
     }
 
     private static String name(User u) {

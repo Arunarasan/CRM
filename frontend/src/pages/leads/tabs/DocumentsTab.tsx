@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { FolderOpen, Plus, Trash2, FileIcon, Ruler } from "lucide-react";
+import { FolderOpen, Plus, Trash2, FileIcon, Ruler, PhoneCall } from "lucide-react";
 import { measurementApi } from "@/api/measurementApi";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,6 +14,8 @@ import ImageCaptureField from "@/components/ImageCaptureField";
 import AudioCaptureField, { type CapturedAudio } from "@/components/AudioCaptureField";
 import { resolveFileUrl } from "@/lib/uploadFile";
 import AudioPlayer from "@/components/AudioPlayer";
+import CallDetails from "@/components/callRecordings/CallDetails";
+import { callRecordingApi, fmtCallTime, type CallRecording } from "@/api/callRecordingApi";
 
 const EMPTY = { fileName: "", fileUrl: "", category: "Property Images", documentType: "", description: "" };
 
@@ -26,7 +28,14 @@ const isImageDoc = (doc: any) => doc.documentType === "Image" || IMAGE_EXT.inclu
 const isAudioDoc = (doc: any) => doc.documentType === "Audio" || AUDIO_EXT.includes(extOf(doc));
 
 export default function DocumentsTab({ leadId }: { leadId: string }) {
-  const { items, loading, reload } = useLeadList<any>(() => leadApi.getDocuments(leadId), [leadId]);
+  const { items: allItems, loading, reload } = useLeadList<any>(() => leadApi.getDocuments(leadId), [leadId]);
+  const [calls, setCalls] = useState<CallRecording[]>([]);
+  useEffect(() => {
+    callRecordingApi.forLead(Number(leadId)).then(setCalls).catch(() => setCalls([]));
+  }, [leadId]);
+  // A call's recording is also stored as a lead document — show it once, in Call recordings, with its details.
+  const callUrls = new Set(calls.map((c) => c.fileUrl));
+  const items = allItems.filter((d: any) => !callUrls.has(d.fileUrl));
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<any>({ ...EMPTY });
   const [saving, setSaving] = useState(false);
@@ -56,6 +65,7 @@ export default function DocumentsTab({ leadId }: { leadId: string }) {
   return (
     <div className="space-y-4">
     <MeasurementFiles leadId={leadId} />
+    {calls.length > 0 && <CallRecordingsCard calls={calls} />}
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle>Documents</CardTitle>
@@ -205,6 +215,27 @@ export default function DocumentsTab({ leadId }: { leadId: string }) {
       </Dialog>
     </Card>
     </div>
+  );
+}
+
+/** Call recordings that created this lead or were added to it, each with its call details. */
+function CallRecordingsCard({ calls }: { calls: CallRecording[] }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2"><PhoneCall className="h-4 w-4" /> Call recordings</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          {calls.map((c) => (
+            <div key={c.id} className="space-y-3 rounded-lg border bg-muted/30 p-3">
+              <AudioPlayer src={resolveFileUrl(c.fileUrl)} fileName={c.calledAt ? `Call · ${fmtCallTime(c.calledAt)}` : c.fileName} />
+              <CallDetails call={c} />
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

@@ -44,7 +44,7 @@ const sourceTone: Record<string, string> = {
   SITE_VISIT: 'bg-sky-50 text-sky-700', QUOTATION: 'bg-amber-50 text-amber-700', INVOICE: 'bg-amber-50 text-amber-700',
   TASK: 'bg-slate-100 text-slate-600', CHAT: 'bg-teal-50 text-teal-700', DAILY_LOG: 'bg-lime-50 text-lime-700',
   DAILY_REPORT: 'bg-lime-50 text-lime-700', WORK_STEP: 'bg-orange-50 text-orange-700', GRN: 'bg-cyan-50 text-cyan-700',
-  HANDOVER: 'bg-emerald-50 text-emerald-700', CONTRACTOR: 'bg-rose-50 text-rose-700',
+  HANDOVER: 'bg-emerald-50 text-emerald-700', CONTRACTOR: 'bg-rose-50 text-rose-700', CALL: 'bg-sky-50 text-sky-700',
 };
 
 export function SourceChip({ file }: { file: ProjectFile }) {

@@ -8,6 +8,7 @@ import { toast } from '@/components/ui/toast';
 import { FileThumb, SourceChip } from './FileTile';
 import { ProjectFile, SOURCES, UPLOAD_TYPES, fmtWhen, projectFilesApi } from './fileTypes';
 import AudioPlayer from "@/components/AudioPlayer";
+import CallDetails from "@/components/callRecordings/CallDetails";
 
 /**
  * Full-screen viewer: the file itself (photo / PDF / video / voice) with prev-next, and a details panel —
@@ -173,10 +174,16 @@ export default function FileViewer({ files, index, onIndex, onClose, onChanged, 
             </div>
           ) : (
             <dl className="flex flex-col gap-3 p-4 text-[13px]">
-              <div>
+              {file.call && (
+                <div className="rounded-xl border border-sky-100 bg-sky-50/40 p-3">
+                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-sky-700">Call details</p>
+                  <CallDetails call={file.call} />
+                </div>
+              )}
+              {!file.call && <div>
                 <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">About</dt>
                 <dd className="mt-0.5 whitespace-pre-wrap text-slate-700">{file.description || <span className="text-slate-400">No description</span>}</dd>
-              </div>
+              </div>}
               <div>
                 <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">From</dt>
                 <dd className="mt-1 flex flex-wrap items-center gap-2">

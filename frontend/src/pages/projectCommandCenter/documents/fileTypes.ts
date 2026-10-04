@@ -1,4 +1,5 @@
 import api from '@/lib/api';
+import type { CallRecording } from '@/api/callRecordingApi';
 
 // One file on a project, from any source — see GET /api/projects/{id}/files (ProjectFilesService).
 export type FileKind = 'image' | 'pdf' | 'video' | 'audio' | 'cad' | 'sheet' | 'doc' | 'file';
@@ -20,6 +21,8 @@ export interface ProjectFile {
   editable: boolean;
   generated: boolean;
   docId?: number;
+  /** Set for a call recording — number, call time, length, outcome… */
+  call?: CallRecording;
 }
 
 export interface ProjectFilesResponse {
@@ -54,6 +57,7 @@ export const CATEGORIES: { id: FileCategory; label: string }[] = [
 export const SOURCES: Record<string, string> = {
   PROJECT: 'Uploaded here',
   LEAD: 'Lead',
+  CALL: 'Call recordings',
   MEASUREMENT: 'Measurement',
   SITE_VISIT: 'Site visit',
   QUOTATION: 'Quotation',

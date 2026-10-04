@@ -65,6 +65,8 @@ export const callRecordingApi = {
 
   createTasks: (body: CallTaskRequest) => api.post<CallRecording[]>(`${BASE}/tasks`, body).then((r) => r.data),
 
+  forLead: (leadId: number) => api.get<CallRecording[]>(`${BASE}/by-lead/${leadId}`).then((r) => r.data),
+
   forTask: (taskId: number) => api.get<CallRecording | null>(`${BASE}/by-task/${taskId}`).then((r) => r.data),
 
   createLead: (id: number, body: LeadCreateBody) => api.post<CallRecording>(`${BASE}/${id}/lead`, body).then((r) => r.data),

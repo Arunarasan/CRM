@@ -198,6 +198,12 @@ public class CallRecordingService {
         return toDto(rec);
     }
 
+    /** Every call that ended up on this lead (created it, or was added to it), newest first. */
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> forLead(Long leadId) {
+        return repository.findByLeadIdAndIsDeletedFalseOrderByIdDesc(leadId).stream().map(this::toDto).toList();
+    }
+
     // ------------------------------------------------------------------ outcomes
 
     /**
