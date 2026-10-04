@@ -6,6 +6,7 @@ import com.arudra.crm.entity.Quotation;
 import com.arudra.crm.security.CurrentUserService;
 import com.arudra.crm.service.ProjectService;
 import com.arudra.crm.service.QuotationService;
+import com.arudra.crm.service.QuotationShareService;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -29,12 +30,46 @@ public class QuotationController {
     private final QuotationService quotationService;
     private final CurrentUserService currentUserService;
     private final ProjectService projectService;
+    private final QuotationShareService shareService;
 
     public QuotationController(QuotationService quotationService, CurrentUserService currentUserService,
-                              ProjectService projectService) {
+                              ProjectService projectService, QuotationShareService shareService) {
         this.quotationService = quotationService;
         this.currentUserService = currentUserService;
         this.projectService = projectService;
+        this.shareService = shareService;
+    }
+
+    // ---- Customer link (/q/{token}) sent by "Share Quote" ----
+
+    @GetMapping("/{id}/share")
+    @PreAuthorize(READ)
+    public ResponseEntity<Map<String, Object>> shareState(@PathVariable Long id) {
+        return ResponseEntity.ok(shareService.state(id));
+    }
+
+    /** Make (or keep) the quotation's customer link, remembering the PDF sent with it. */
+    @PostMapping("/{id}/share")
+    @PreAuthorize(READ)
+    public ResponseEntity<Map<String, Object>> share(@PathVariable Long id, @RequestBody(required = false) Map<String, Object> body) {
+        Object pdf = body == null ? null : body.get("pdfUrl");
+        Map<String, Object> res = new java.util.LinkedHashMap<>(shareService.share(id, pdf == null ? null : pdf.toString()));
+        // The signature line of the message that goes with the link.
+        var me = currentUserService.getCurrentUser();
+        res.put("staffName", me != null ? me.getName() : null);
+        return ResponseEntity.ok(res);
+    }
+
+    @PostMapping("/{id}/share/regenerate")
+    @PreAuthorize(WRITE)
+    public ResponseEntity<Map<String, Object>> regenerateShare(@PathVariable Long id) {
+        return ResponseEntity.ok(shareService.regenerate(id));
+    }
+
+    @PutMapping("/{id}/share")
+    @PreAuthorize(WRITE)
+    public ResponseEntity<Map<String, Object>> setShareEnabled(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+        return ResponseEntity.ok(shareService.setEnabled(id, Boolean.TRUE.equals(body.get("enabled"))));
     }
 
     @GetMapping

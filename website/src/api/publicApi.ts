@@ -53,6 +53,12 @@ export const publicApi = {
   trackSubmitReview: (token: string, payload: Record<string, unknown>) =>
     api.post(`/public/track/${token}/reviews`, payload).then((r) => r.data),
 
+  // Public, no-login quotation link (/q/:token) sent with the PDF by "Share Quote"
+  quote: (token: string) =>
+    api.get<SharedQuote>(`/public/quote/${token}`).then((r) => r.data),
+  acceptQuote: (token: string, payload: { name: string; note?: string }) =>
+    api.post<SharedQuote>(`/public/quote/${token}/accept`, payload).then((r) => r.data),
+
   // Public, no-login employee review (personal QR link → capture + Google redirect)
   employeeReviewInfo: (token: string) =>
     api.get<EmployeeReviewInfo>(`/public/employee-review/${token}`).then((r) => r.data),
@@ -65,6 +71,45 @@ export interface EmployeeReviewInfo {
   designation?: string
   photoUrl?: string
   googleReviewUrl: string | null
+}
+
+export interface SharedQuoteItem {
+  category: string
+  name: string
+  description?: string | null
+  color?: string | null
+  location?: string | null
+  imageUrl?: string | null
+  unit?: string | null
+  quantity?: number | null
+  rate?: number | null
+  discountPercent?: number | null
+  discount?: number | null
+  amount?: number | null
+}
+
+export interface SharedQuote {
+  quotationNumber: string
+  quotationDate?: string | null
+  expiryDate?: string | null
+  /** OPEN · ACCEPTED · APPROVED · REPLACED · CLOSED */
+  state: 'OPEN' | 'ACCEPTED' | 'APPROVED' | 'REPLACED' | 'CLOSED'
+  customerName?: string | null
+  city?: string | null
+  preparedBy?: string | null
+  items: SharedQuoteItem[]
+  charges: { label: string; note?: string | null; amount: number }[]
+  productsTotal: number
+  lineDiscount: number
+  productsNet: number
+  discount: number
+  gst: number
+  gstPercent?: number | null
+  grandTotal: number
+  terms: string[]
+  pdfUrl?: string | null
+  acceptedAt?: string | null
+  acceptedName?: string | null
 }
 
 export interface TrackingStep {

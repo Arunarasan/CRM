@@ -25,6 +25,13 @@ export const quotationApi = {
   createRevision: (id: number) => api.post<Quotation>(`${BASE}/${id}/revise`).then((r) => r.data),
   getRevisionFamily: (id: number) => api.get<Quotation[]>(`${BASE}/${id}/revisions`).then((r) => r.data),
 
+  /** The customer link (/q/{token}) sent by "Share Quote", remembering the PDF sent with it. */
+  share: (id: number, pdfUrl?: string) =>
+    api.post<QuoteShareState>(`${BASE}/${id}/share`, { pdfUrl }).then((r) => r.data),
+  regenerateShare: (id: number) => api.post<QuoteShareState>(`${BASE}/${id}/share/regenerate`).then((r) => r.data),
+  setShareEnabled: (id: number, enabled: boolean) =>
+    api.put<QuoteShareState>(`${BASE}/${id}/share`, { enabled }).then((r) => r.data),
+
   updateApprovalStatus: (id: number, status: string) =>
     api.put<Quotation>(`${BASE}/${id}/approval?status=${encodeURIComponent(status)}`).then((r) => r.data),
 
@@ -53,3 +60,14 @@ export const boqQuotationApi = {
     api.post<Quotation>(`/boq/${boqId}/generate-quotation`, payload).then((r) => r.data),
   getBoq: (boqId: number) => api.get<Boq>(`/boq/${boqId}`).then((r) => r.data),
 };
+
+export interface QuoteShareState {
+  shareToken: string;
+  shareEnabled: boolean;
+  sharePdfUrl?: string | null;
+  sharedAt?: string | null;
+  customerAcceptedAt?: string | null;
+  customerAcceptedName?: string | null;
+  /** Signed-in staff member (for the message signature); only on POST /share. */
+  staffName?: string | null;
+}

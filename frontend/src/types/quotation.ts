@@ -90,6 +90,12 @@ export interface Quotation {
   customerSignatureBase64?: string;
   internalApprovalStatus?: string;
   preparedBy?: EntityRef;
+  /** Customer link (/q/{token}) sent by "Share Quote"; customerAccepted* = customer pressed Accept on it. */
+  shareToken?: string | null;
+  shareEnabled?: boolean;
+  customerAcceptedAt?: string | null;
+  customerAcceptedName?: string | null;
+  customerAcceptNote?: string | null;
   approvedBy?: EntityRef;
   approvedDate?: string;
   createdAt?: string;

@@ -153,4 +153,29 @@ public class Quotation extends BaseEntity {
 
     @Column(name = "approved_date")
     private LocalDateTime approvedDate;
+
+    /** Unguessable token behind the public, no-login quotation link (/q/{token}); set on first share. */
+    @Column(name = "share_token", unique = true, length = 64)
+    private String shareToken;
+
+    /** When false, the public quotation link shows "not available" even if the token is known. */
+    @Column(name = "share_enabled", nullable = false)
+    private boolean shareEnabled = true;
+
+    /** The PDF sent with the link (uploaded by "Share Quote"), offered for download on the link's page. */
+    @Column(name = "share_pdf_url", length = 1000)
+    private String sharePdfUrl;
+
+    @Column(name = "shared_at")
+    private LocalDateTime sharedAt;
+
+    /** The customer pressed "Accept" on the link's page — staff confirm the approval in the CRM. */
+    @Column(name = "customer_accepted_at")
+    private LocalDateTime customerAcceptedAt;
+
+    @Column(name = "customer_accepted_name", length = 150)
+    private String customerAcceptedName;
+
+    @Column(name = "customer_accept_note", columnDefinition = "TEXT")
+    private String customerAcceptNote;
 }

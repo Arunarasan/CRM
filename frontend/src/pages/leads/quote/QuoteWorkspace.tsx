@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  AlertTriangle, BadgePercent, Building2, CalendarDays, Calculator, CheckCircle2, ChevronDown, Eye, FileOutput,
+  AlertTriangle, BadgeCheck, BadgePercent, Building2, CalendarDays, Calculator, CheckCircle2, ChevronDown, Eye, FileOutput,
   FileText, History, Image as ImageIcon, Info, Layers, Loader2, Lock, Pencil, RotateCcw,
   Save, Send, Share2, Users, Wand2, XCircle,
 } from "lucide-react";
@@ -22,6 +22,10 @@ import { formatDate } from "../constants";
 import { ListSkeleton } from "../tabs/shared";
 import { QuotationPrintView } from "@/pages/quotations/QuotationPrint";
 import BoqSheet from "./BoqSheet";
+import ShareQuoteDialog, { type PreparedShare } from "./ShareQuoteDialog";
+import { buildQuotationPdf, loadPdfImages } from "@/lib/quotationPdf";
+import { fetchCompanyProfile } from "@/lib/companyProfile";
+import { uploadFile } from "@/lib/uploadFile";
 import { NumCell } from "./cells";
 
 /**
@@ -71,6 +75,7 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
   const [boq, setBoq] = useState<Boq | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [printId, setPrintId] = useState<number | null>(null);
+  const [shareOpen, setShareOpen] = useState<PreparedShare | null>(null);
   const [approveOpen, setApproveOpen] = useState(false);
   const [changeOpen, setChangeOpen] = useState(false);
   const [convertCfg, setConvertCfg] = useState<{ advanceAmount: string; advanceMethod: string } | null>(null);
@@ -202,17 +207,26 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
     try { setPrintId((await currentQuotation()).id as number); } catch (e) { toast.error(errMsg(e, "Could not prepare the quotation.")); } finally { setBusy(null); }
   };
 
-  /** Share a short summary (number, customer, total) — phone share sheet, or WhatsApp on desktop. */
+  /**
+   * Share: the quotation's PDF (also stored, so the customer can download it from the link) + its
+   * customer-only link + a formal message — sent from the Share dialog.
+   */
   const shareQuote = async () => {
     setBusy("share");
     try {
       const q = await currentQuotation();
-      const who = customerName !== "—" ? ` for ${customerName}` : "";
-      const text = `Quotation ${q.quotationNumber}${who}: ${inQuote.length} item${inQuote.length === 1 ? "" : "s"}, total ${inr(q.grandTotal ?? boq?.grandTotal)}.`;
-      if (navigator.share) await navigator.share({ title: `Quotation ${q.quotationNumber}`, text });
-      else window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank", "noopener");
+      const [images, company] = await Promise.all([
+        loadPdfImages(q).catch(() => ({})),
+        fetchCompanyProfile().catch(() => ({ name: "" })),
+      ]);
+      const blob = buildQuotationPdf(q, { images }).output("blob");
+      const pdf = new File([blob], `Quotation-${q.quotationNumber || q.id}.pdf`, { type: "application/pdf" });
+      // The link still works if the PDF can't be stored — the customer page then offers Print / Save PDF.
+      const pdfUrl = await uploadFile(pdf, "QUOTATION").then((u) => u.fileUrl).catch(() => undefined);
+      const share = await quotationApi.share(q.id as number, pdfUrl);
+      setShareOpen({ quotation: q, pdf, share, company, itemCount: (q.items || []).filter((i) => i.status !== "REJECTED").length || inQuote.length });
     } catch (e: any) {
-      if (e?.name !== "AbortError") toast.error(errMsg(e, "Could not share the quotation."));
+      toast.error(errMsg(e, "Could not prepare the quotation to share."));
     } finally { setBusy(null); }
   };
 
@@ -417,6 +431,23 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
         <InfoTile icon={CalendarDays} label="Date" value={formatDate(quote?.quotationDate || quote?.createdAt || boq?.createdAt) || "—"} />
         <InfoTile icon={FileText} label="Quote Total" value={inr(boq?.grandTotal)} tone="amber" strong />
       </dl>
+
+      {/* Customer pressed "Accept" on the shared link — the approval itself is still ours to confirm. */}
+      {quote?.customerAcceptedAt && !approved && (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+          <BadgeCheck className="h-5 w-5 shrink-0 text-emerald-600" />
+          <span className="min-w-0 flex-1">
+            <b>{quote.customerAcceptedName}</b> accepted {quote.quotationNumber} online on {formatDate(quote.customerAcceptedAt)}
+            {quote.customerAcceptNote ? <> — “{quote.customerAcceptNote}”</> : null}.
+            {primary?.label === "Customer Approved" ? " Confirm it with Customer Approved." : ""}
+          </span>
+          {primary?.label === "Customer Approved" && (
+            <Button size="sm" className={GREEN} disabled={primary.disabled} onClick={primary.onClick}>
+              <CheckCircle2 className="h-4 w-4 mr-1.5" /> Customer Approved
+            </Button>
+          )}
+        </div>
+      )}
 
       <div className="space-y-4">
         {!boq ? (
@@ -786,6 +817,7 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
       </Dialog>
 
       {printId && <QuotationPrintView quotationId={printId} readOnly onClose={() => setPrintId(null)} />}
+      <ShareQuoteDialog prepared={shareOpen} onClose={() => { setShareOpen(null); load(); }} />
     </section>
   );
 }

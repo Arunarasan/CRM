@@ -25,6 +25,8 @@ public interface QuotationRepository extends JpaRepository<Quotation, Long>, Jpa
 
     List<Quotation> findByBoq_IdOrderByIdDesc(Long boqId);
 
+    java.util.Optional<Quotation> findByShareToken(String shareToken);
+
     Page<Quotation> findByCustomerId(Long customerId, Pageable pageable);
 
     @Query("SELECT q FROM Quotation q WHERE " +

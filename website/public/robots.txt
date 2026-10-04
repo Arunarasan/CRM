@@ -12,5 +12,7 @@ Disallow: /cart
 Disallow: /crm
 # Per-project tracking links are private (shared directly with each client) — never index them
 Disallow: /track
+# Quotation links are private too (sent to one customer with their PDF)
+Disallow: /q/
 
 Sitemap: https://jbdecorcdm.com/sitemap.xml

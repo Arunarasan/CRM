@@ -22,6 +22,9 @@ const ProductDetail = lazy(() => import('@/pages/ProductDetail'))
 // Public, no-login project tracking (link-only). Replaces the old login-based customer portal.
 const TrackProject = lazy(() => import('@/pages/TrackProject'))
 
+// Public, no-login quotation link sent with the PDF by the CRM's "Share Quote" (link-only).
+const ViewQuote = lazy(() => import('@/pages/ViewQuote'))
+
 // Public, no-login employee review (personal QR link → capture + Google redirect).
 const ReviewEmployee = lazy(() => import('@/pages/ReviewEmployee'))
 
@@ -54,6 +57,9 @@ export default function App() {
       <Routes>
         {/* Public, no-login project tracking (standalone, own chrome) */}
         <Route path="track/:token" element={<TrackProject />} />
+
+        {/* Public, no-login quotation link (standalone, own chrome) */}
+        <Route path="q/:token" element={<ViewQuote />} />
 
         {/* Public, no-login employee review via personal QR (standalone, own chrome) */}
         <Route path="r/:token" element={<ReviewEmployee />} />
