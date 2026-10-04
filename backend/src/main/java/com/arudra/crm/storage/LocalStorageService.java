@@ -28,4 +28,12 @@ public class LocalStorageService implements StorageService {
         Files.write(target, bytes);
         return new StoredFile("/uploads/" + key, StorageKeys.cleanOriginalName(originalFilename));
     }
+
+    @Override
+    public byte[] read(String key) throws IOException {
+        Path root = Path.of(uploadDir).toAbsolutePath().normalize();
+        Path file = root.resolve(key).normalize();
+        if (!file.startsWith(root)) throw new java.nio.file.NoSuchFileException(key);
+        return Files.readAllBytes(file);
+    }
 }
