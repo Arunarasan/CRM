@@ -7,6 +7,8 @@ import { measurementApi } from '@/api/measurementApi';
 import { employeeTaskApi } from '@/api/employeeTaskApi';
 import { uploadFile } from '@/lib/uploadFile';
 import { PortalHeader } from '../employeePortal/_shared';
+import { UnitOptions } from "@/components/UnitOptions";
+import { areaUnitFor } from "@/lib/units";
 
 /**
  * Compact, in-portal "Site Visit & Measurement" capture for the TT_VISIT_MEASURE lead task. Replaces
@@ -17,12 +19,11 @@ import { PortalHeader } from '../employeePortal/_shared';
 
 const SITE_CONDITIONS = ['Ready to Move', 'Under Construction', 'Bare Shell', 'Renovation', 'Occupied'];
 const ITEM_TYPES = ['Wall', 'Floor', 'Ceiling', 'Wardrobe', 'Kitchen', 'Window', 'Door', 'Loft', 'Other'];
-const UNITS = ['sqft', 'ft', 'running ft', 'nos'];
 const today = () => new Date().toISOString().slice(0, 10);
 
 interface ItemDraft { itemType: string; length: string; width: string; height: string; quantity: string; unit: string }
 interface RoomDraft { name: string; floor: string; open: boolean; items: ItemDraft[] }
-const emptyItem = (): ItemDraft => ({ itemType: '', length: '', width: '', height: '', quantity: '1', unit: 'sqft' });
+const emptyItem = (): ItemDraft => ({ itemType: '', length: '', width: '', height: '', quantity: '1', unit: 'Sqft' });
 const emptyRoom = (): RoomDraft => ({ name: '', floor: '', open: true, items: [emptyItem()] });
 const num = (s: string) => { const n = parseFloat(s); return isNaN(n) ? undefined : n; };
 const areaOf = (it: ItemDraft) => { const l = num(it.length), w = num(it.width); return l != null && w != null ? (l * w).toFixed(2) : null; };
@@ -122,7 +123,7 @@ export default function EmployeeVisitMeasure() {
           await measurementApi.addItem(mid, room.id!, {
             itemType: it.itemType.trim(),
             length: num(it.length), width: num(it.width), height: num(it.height),
-            quantity: num(it.quantity) ?? 1, unit: it.unit || 'sqft',
+            quantity: num(it.quantity) ?? 1, unit: it.unit || 'Sqft',
           } as any);
         }
       }
@@ -217,7 +218,7 @@ export default function EmployeeVisitMeasure() {
                       <div className="flex items-center gap-2">
                         <BaseInput list="vm-item-types" value={it.itemType} onChange={(e) => patchItem(ri, ii, { itemType: e.target.value })} placeholder="Item (Wall, Wardrobe…)" className="min-w-0 flex-1 rounded-md border bg-background px-2 py-1.5 text-sm" />
                         <select value={it.unit} onChange={(e) => patchItem(ri, ii, { unit: e.target.value })} className="w-24 rounded-md border bg-background px-1.5 py-1.5 text-sm">
-                          {UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+                          <UnitOptions value={it.unit} />
                         </select>
                         {r.items.length > 1 && <button type="button" onClick={() => removeItem(ri, ii)} className="p-1 text-destructive"><Trash2 className="h-3.5 w-3.5" /></button>}
                       </div>
@@ -227,7 +228,7 @@ export default function EmployeeVisitMeasure() {
                         <NumIn label="H" value={it.height} onChange={(x) => patchItem(ri, ii, { height: x })} />
                         <NumIn label="Qty" value={it.quantity} onChange={(x) => patchItem(ri, ii, { quantity: x })} />
                       </div>
-                      {areaOf(it) && <p className="mt-1 text-[11px] text-muted-foreground">Area ≈ <span className="font-medium text-foreground">{areaOf(it)}</span> sqft (L×W)</p>}
+                      {areaOf(it) && <p className="mt-1 text-[11px] text-muted-foreground">Area ≈ <span className="font-medium text-foreground">{areaOf(it)}</span> {areaUnitFor(it.unit).toLowerCase()} (L×W)</p>}
                     </div>
                   ))}
                 </div>

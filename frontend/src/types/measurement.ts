@@ -1,3 +1,4 @@
+import { ALL_UNITS } from "@/lib/units";
 // Central types + constants for the Measurement Management module.
 // Mirrors backend com.arudra.crm.util.MeasurementWorkflow and the Measurement* entities.
 
@@ -280,7 +281,8 @@ export const ITEM_TYPES = [
 ];
 
 // Units a measured item can be quantified in; mirrors BoqService.DEFAULT_UNITS values.
-export const MEASUREMENT_UNITS = ["Sqft", "Rft", "Nos", "Lot", "Sqm", "Kg"];
+/** Every unit (1D/2D/3D/count/weight…) — see lib/units.ts. */
+export const MEASUREMENT_UNITS = ALL_UNITS;
 
 // Mirrors MeasurementWorkflow.FLOOR_LEVELS — keeps BoqItem.floorName grouping consistent.
 export const FLOOR_LEVELS = [

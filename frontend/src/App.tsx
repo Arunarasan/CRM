@@ -5,6 +5,7 @@ import { DesktopGuard, EmployeeGuard, RedirectToSignIn } from "./components/Rout
 import LegacyQuoteGuard from "./components/LegacyQuoteGuard";
 import ImageViewerProvider from "./components/ImageViewerProvider";
 import { Toaster } from "./components/ui/toast";
+import { UnitDatalist } from "./components/UnitOptions";
 
 // Lazy loading all pages
 const Dashboard = lazy(() => import("./pages/Dashboard"));
@@ -159,6 +160,7 @@ function App() {
     <Router basename={import.meta.env.BASE_URL}>
       <ImageViewerProvider>
       <Toaster />
+      <UnitDatalist />
       <Suspense fallback={<PageLoader />}>
         <Routes>
           {/* Single sign-in lives on the public website — /crm/login just hands off to it. */}

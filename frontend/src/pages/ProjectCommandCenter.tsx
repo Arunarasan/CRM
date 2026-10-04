@@ -60,6 +60,7 @@ import { useGoBack } from "@/hooks/useGoBack";
 import { toast } from "@/components/ui/toast";
 import SearchableSelect from "@/components/ui/searchable-select";
 import QuoteWorkspace from "@/pages/leads/quote/QuoteWorkspace";
+import { UNIT_DATALIST_ID } from "@/components/UnitOptions";
 
 const ITEM_STATUS_STYLES: Record<string, string> = {
   PENDING: 'bg-slate-100 text-slate-600',
@@ -1797,7 +1798,7 @@ export default function ProjectCommandCenter() {
                           />
                         </div>
                         <div className="space-y-2"><Label>Required Quantity</Label><Input type="number" value={newMaterial.requiredQty} onChange={e => setNewMaterial({ ...newMaterial, requiredQty: Number(e.target.value) })} /></div>
-                        <div className="space-y-2"><Label>Unit</Label><Input value={newMaterial.unit} onChange={e => setNewMaterial({ ...newMaterial, unit: e.target.value })} placeholder="e.g. pcs, kg, sqft" /></div>
+                        <div className="space-y-2"><Label>Unit</Label><Input list={UNIT_DATALIST_ID} value={newMaterial.unit} onChange={e => setNewMaterial({ ...newMaterial, unit: e.target.value })} placeholder="e.g. Nos, Kg, Sqft, Mtr" /></div>
                         <Button className="w-full" onClick={handleAddMaterial}>Save</Button>
                       </div>
                     </DialogContent>
@@ -2026,7 +2027,7 @@ export default function ProjectCommandCenter() {
                   <div className="space-y-4 pt-4">
                     <div className="space-y-2"><Label>Name *</Label><Input value={newProduct.name} onChange={e => setNewProduct(s => ({ ...s, name: e.target.value }))} placeholder="e.g. Birla White Cement 40kg" /></div>
                     <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-2"><Label>Unit</Label><Input value={newProduct.unit} onChange={e => setNewProduct(s => ({ ...s, unit: e.target.value }))} placeholder="pcs, kg, bag" /></div>
+                      <div className="space-y-2"><Label>Unit</Label><Input list={UNIT_DATALIST_ID} value={newProduct.unit} onChange={e => setNewProduct(s => ({ ...s, unit: e.target.value }))} placeholder="Nos, Kg, Mtr, Sqft" /></div>
                       <div className="space-y-2"><Label>Brand</Label><Input value={newProduct.brand} onChange={e => setNewProduct(s => ({ ...s, brand: e.target.value }))} /></div>
                     </div>
                     <div className="grid grid-cols-2 gap-3">

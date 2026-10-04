@@ -7,7 +7,7 @@ import { toast } from "@/components/ui/toast";
 import SearchableSelect from "@/components/ui/searchable-select";
 import type { InventoryCategory, Product, Warehouse } from "@/types/inventory";
 import {
-  INVENTORY_UNITS, PRODUCT_TYPES, FABRIC_WIDTHS, FABRIC_PATTERNS, COLOR_FAMILIES,
+  PRODUCT_TYPES, FABRIC_WIDTHS, FABRIC_PATTERNS, COLOR_FAMILIES,
   CURTAIN_SIZES, WINDOW_TYPES, MOUNTING_TYPES, OPACITY_LEVELS, ROOM_TYPES, DESIGN_STYLES,
 } from "@/types/inventory";
 import { Button } from "@/components/ui/button";
@@ -23,8 +23,9 @@ import ImageCaptureField from "@/components/ImageCaptureField";
 import MultiImageCaptureField from "@/components/MultiImageCaptureField";
 import ProductColorsEditor from "./ProductColorsEditor";
 import { resolveFileUrl } from "@/lib/uploadFile";
+import { UnitOptions } from "@/components/UnitOptions";
 
-const emptyForm: Partial<Product> = { unit: INVENTORY_UNITS[0], status: "ACTIVE", minStockLevel: 10 };
+const emptyForm: Partial<Product> = { unit: "Nos", status: "ACTIVE", minStockLevel: 10 };
 
 function Barcode({ value }: { value: string }) {
   const ref = (el: SVGSVGElement | null) => {
@@ -360,7 +361,7 @@ export default function MaterialMaster() {
               <Label>Unit</Label>
               <select className="w-full border rounded-md h-9 px-2 text-sm bg-white" value={form.unit || ""}
                 onChange={(e) => setForm({ ...form, unit: e.target.value })}>
-                {INVENTORY_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+                <UnitOptions value={form.unit} />
               </select>
             </div>
             <div className="space-y-1">

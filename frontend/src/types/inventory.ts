@@ -1,3 +1,4 @@
+import { ALL_UNITS } from "@/lib/units";
 // Central types for the Enterprise Inventory Management module.
 // Mirrors backend com.arudra.crm.entity.{Product,Warehouse,InventoryCategory,InventoryItem,
 // InventoryTransaction,StockTransfer,MaterialRequest,DamageEntry,PurchaseRequest,ProductSupplier}.
@@ -228,10 +229,8 @@ export interface ProductSupplier {
 
 export const STOCK_ENTRY_TYPES = ["OPENING", "PURCHASE", "ADJUSTMENT", "PROJECT_RETURN", "SUPPLIER_RETURN", "CONSUMPTION", "TRANSFER"] as const;
 
-export const INVENTORY_UNITS = [
-  "Nos", "Piece", "Meter", "Running Feet", "Square Feet", "Square Meter",
-  "Box", "Kg", "Gram", "Litre", "Bag", "Roll", "Sheet", "Bundle",
-] as const;
+/** Every unit (1D/2D/3D/count/weight…) — see lib/units.ts. */
+export const INVENTORY_UNITS = ALL_UNITS;
 
 // ---- Curtain / blind / fabric catalogue option sets (Material Master form) ----
 

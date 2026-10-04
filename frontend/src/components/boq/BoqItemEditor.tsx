@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { ChevronDown, Trash2, Plus, Package, HardHat } from 'lucide-react';
 import { boqApi } from '@/api/boqApi';
 import type { BoqItem } from '@/types/boq';
+import { UnitOptions } from "@/components/UnitOptions";
 
 /**
  * One BOQ line with its FULL detail — materials (with wastage %) and labour (with contractor) — the
@@ -11,7 +12,6 @@ import type { BoqItem } from '@/types/boq';
  */
 
 const inr = (n?: number) => `₹${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
-const UNITS = ['sqft', 'nos', 'running ft', 'kg', 'litre', 'set'];
 
 export default function BoqItemEditor({ boqId, item, editable, onChanged }: {
   boqId: number; item: BoqItem; editable: boolean; onChanged: () => Promise<void> | void;
@@ -87,7 +87,7 @@ export default function BoqItemEditor({ boqId, item, editable, onChanged }: {
                   <Num label="Qty" v={mat.quantity} on={(x) => setMat({ ...mat, quantity: x })} />
                   <div>
                     <span className="block text-center text-[9px] text-muted-foreground">Unit</span>
-                    <select value={mat.unit} onChange={(e) => setMat({ ...mat, unit: e.target.value })} className="w-full rounded-md border bg-background px-1 py-1 text-center text-xs">{UNITS.map((u) => <option key={u} value={u}>{u}</option>)}</select>
+                    <select value={mat.unit} onChange={(e) => setMat({ ...mat, unit: e.target.value })} className="w-full rounded-md border bg-background px-1 py-1 text-center text-xs"><UnitOptions value={mat.unit} /></select>
                   </div>
                   <Num label="Waste %" v={mat.wastePercent} on={(x) => setMat({ ...mat, wastePercent: x })} />
                   <Num label="Rate ₹" v={mat.sellingRate} on={(x) => setMat({ ...mat, sellingRate: x })} />

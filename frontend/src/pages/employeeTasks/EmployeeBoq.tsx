@@ -9,6 +9,7 @@ import type { Boq, BoqItem } from '@/types/boq';
 import { PortalHeader } from '../employeePortal/_shared';
 import BoqItemEditor from '@/components/boq/BoqItemEditor';
 import { inr, CARD, PRIMARY_BTN, DocStatus, LeadContext, Totals, BottomBar } from './components/moduleUi';
+import { UNIT_DATALIST_ID } from "@/components/UnitOptions";
 
 /**
  * Compact in-portal BOQ for the TT_PREPARE_BOQ lead task. Auto-generates the BOQ from the lead's
@@ -135,7 +136,7 @@ export default function EmployeeBoq() {
                 </div>
                 <div className="flex gap-2">
                   <BaseInput inputMode="decimal" value={newItem.quantity} onChange={(e) => setNewItem({ ...newItem, quantity: e.target.value })} placeholder="Qty" className={`${fieldCls} w-20`} />
-                  <BaseInput value={newItem.unit} onChange={(e) => setNewItem({ ...newItem, unit: e.target.value })} placeholder="Unit" className={`${fieldCls} w-24`} />
+                  <BaseInput list={UNIT_DATALIST_ID} value={newItem.unit} onChange={(e) => setNewItem({ ...newItem, unit: e.target.value })} placeholder="Unit" className={`${fieldCls} w-24`} />
                   <button type="button" onClick={addItem} disabled={busy || !newItem.itemName.trim()} className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-[#E7F2EC] text-sm font-semibold text-[#0A573B] active:scale-[0.99] disabled:opacity-50"><Plus className="h-4 w-4" /> Add</button>
                 </div>
               </div>

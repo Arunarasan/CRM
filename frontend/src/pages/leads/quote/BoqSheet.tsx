@@ -10,15 +10,16 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { toast } from "@/components/ui/toast";
 import { boqApi } from "@/api/boqApi";
 import {
-  BOQ_UNITS,
   type Boq, type BoqItem, type BoqItemLabour, type BoqItemMaterial, type ProductRef,
 } from "@/types/boq";
 import type { Product, ProductColor } from "@/types/inventory";
-import { NumCell, ProductSearch, SelectCell, TextCell } from "./cells";
+import { NumCell, ProductSearch, SelectCell, TextCell, UnitCell } from "./cells";
 import {
   AddCategoryBar, ColourBox, DiscountCell, ImageCell, ProductPicker, type WebsiteProduct,
   colorsOf, photosOf, priceOf, productSummary, useCategories, useLineProducts, websiteUnit,
 } from "./productCells";
+import { UnitOptions } from "@/components/UnitOptions";
+import { isAreaUnit, isLengthUnit, normalizeUnit, sizeUnitOf } from "@/lib/units";
 
 // The quote sheet, organised Category → Product. Every line is edited in place, saved on blur, and
 // the sheet is re-fetched after each save so server-calculated totals stay authoritative.
@@ -30,7 +31,6 @@ const grouped = (v: number) => v.toLocaleString("en-IN", { maximumFractionDigits
 const errMsg = (e: any, fallback: string) =>
   e?.response?.data?.message || (typeof e?.response?.data === "string" ? e.response.data : "") || fallback;
 
-const AREA_UNITS = ["Sqft", "Sqm"];
 const LABOUR_RATES_KEY = "boqLabourRates";
 const LABOUR_TYPES_LIST = "boq-labour-types";
 /** Lines saved without a category land here. */
@@ -153,20 +153,26 @@ export default function BoqSheet({
       return it ? boqApi.updateItem(boqId, id, itemPayload(it, patch)) : Promise.resolve();
     });
 
-  /** Size edit: keep area in step, and carry it into qty when qty was tracking the area. */
+  /**
+   * Size edit: keep area in step, and carry it into qty when qty was tracking the size —
+   * L × W for an area (2D) unit, L alone for a length (1D) unit. Sizes are entered in the
+   * unit's own length (Sqm → metres, Sq Cm → cm, Sqft/Rft → feet).
+   */
   const updateSize = (item: BoqItem, field: "length" | "width", v: number | null) => {
     const L = field === "length" ? v : item.length ?? null;
     const W = field === "width" ? v : item.width ?? null;
     const patch: Partial<BoqItem> = { [field]: v ?? undefined };
+    const q = item.quantity ?? 0;
+    const near = (x?: number | null) => x != null && Math.abs(q - x) < 0.01;
+    const tracking = item.quantity == null || item.quantity === 0 || near(item.area)
+      || near(item.length != null && item.width != null ? item.length * item.width : null)
+      || near(item.length);
     if (L != null && W != null) {
       const area = Math.round(L * W * 100) / 100;
-      const oldArea = item.length != null && item.width != null ? item.length * item.width : null;
-      const qtyTracksArea = item.quantity == null || item.quantity === 0
-        || (oldArea != null && Math.abs((item.quantity ?? 0) - oldArea) < 0.01)
-        || (item.area != null && Math.abs((item.quantity ?? 0) - item.area) < 0.01);
       patch.area = area;
-      if (AREA_UNITS.includes(item.unit || "") && qtyTracksArea) patch.quantity = area;
+      if (isAreaUnit(item.unit) && tracking) patch.quantity = area;
     }
+    if (L != null && isLengthUnit(item.unit) && tracking) patch.quantity = Math.round(L * 100) / 100;
     const res = updateItem(item.id as number, patch);
     if (patch.quantity != null && patch.quantity !== item.quantity) followQty(item, Number(item.quantity ?? 0), patch.quantity);
     return res;
@@ -608,7 +614,7 @@ export default function BoqSheet({
         categoryId={(c) => categoryByName.get(c.trim().toLowerCase())?.id}
         onClose={() => setInventoryOpen(false)}
         onPick={(category, prod) => {
-          addRow(category, { name: prod.name, product: prod, qty: 1, unit: prod.unit || "Nos", rate: priceOf(prod) });
+          addRow(category, { name: prod.name, product: prod, qty: 1, unit: normalizeUnit(prod.unit) || "Nos", rate: priceOf(prod) });
           toast.success(`${prod.name} added to ${category}`);
         }}
         onPickWebsite={(category, web) => {
@@ -839,7 +845,7 @@ function ItemRow({
             <NumCell value={item.quantity} col="qty" disabled={!canEdit} className={f} onCommit={onQty} />
           </Cell>
           <Cell label="Unit">
-            <SelectCell value={item.unit} options={BOQ_UNITS} disabled={!canEdit} className={f} onCommit={(v) => onUpdate({ unit: v })} />
+            <UnitCell value={item.unit} disabled={!canEdit} className={f} onCommit={(v) => onUpdate({ unit: v })} />
           </Cell>
           <Cell label="Rate ₹">
             <NumCell value={rate} col="rate" disabled={!canEdit} className={f} format={grouped}
@@ -876,6 +882,7 @@ function ItemRow({
               <span className="w-14"><NumCell value={item.length} col="length" placeholder="L" disabled={!canEdit} className={`h-7 text-center text-xs ${f}`} onCommit={(v) => onSize("length", v)} /></span>
               ×
               <span className="w-14"><NumCell value={item.width} col="width" placeholder="W" disabled={!canEdit} className={`h-7 text-center text-xs ${f}`} onCommit={(v) => onSize("width", v)} /></span>
+              {sizeUnitOf(item.unit) && <span title={`Enter the size in ${sizeUnitOf(item.unit)} for ${item.unit}`}>{sizeUnitOf(item.unit)}</span>}
             </span>
             <span className="flex items-center gap-1.5 whitespace-nowrap">Move to
               <SelectCell value={item.category} options={categories} disabled={!canEdit}
@@ -914,7 +921,7 @@ function ItemRow({
                 onCancel={() => setAdding(null)}
                 onPick={(p: ProductRef) => onAddMaterial({
                   product: { id: p.id }, materialName: p.name || "Material",
-                  quantity: item.quantity ?? 1, unit: p.unit || item.unit, wastePercent: 0,
+                  quantity: item.quantity ?? 1, unit: normalizeUnit(p.unit) || item.unit, wastePercent: 0,
                   sellingRate: p.sellingPrice ?? p.price ?? 0,
                 })}
                 onCustom={(name) => onAddMaterial({ materialName: name, quantity: item.quantity ?? 1, unit: item.unit, wastePercent: 0, sellingRate: 0 })}
@@ -978,7 +985,7 @@ function NewItemRow({ categoryId, categoryName, first, onAdd }: {
             web: x.web && v === x.web.name ? x.web : undefined,
           }))}
           onPick={(p) => {
-            setD((x) => ({ ...x, name: p.name, product: p, web: undefined, unit: p.unit || x.unit, rate: priceOf(p) || x.rate }));
+            setD((x) => ({ ...x, name: p.name, product: p, web: undefined, unit: normalizeUnit(p.unit) || x.unit, rate: priceOf(p) || x.rate }));
             setTimeout(() => { qtyRef.current?.focus(); qtyRef.current?.select(); }, 0);
           }}
           onPickWebsite={(p) => {
@@ -1003,7 +1010,7 @@ function NewItemRow({ categoryId, categoryName, first, onAdd }: {
         <Cell label="Unit">
           <select aria-label="Unit" className={`${box} pr-1`} value={d.unit}
             onChange={(e) => setD((x) => ({ ...x, unit: e.target.value }))}>
-            {(BOQ_UNITS.includes(d.unit) ? BOQ_UNITS : [d.unit, ...BOQ_UNITS]).map((u) => <option key={u} value={u}>{u}</option>)}
+            <UnitOptions value={d.unit} />
           </select>
         </Cell>
         <Cell label="Rate ₹">
@@ -1160,7 +1167,7 @@ function MaterialLine({ m, canEdit, onUpdate, onDelete }: {
       </span>
       <span className="flex flex-wrap items-center gap-1.5 ml-auto">
         <span className="w-20"><NumCell value={m.quantity} col="matQty" placeholder="qty" disabled={!canEdit} className={f} onDraft={setQtyDraft} onCommit={(v) => onUpdate({ quantity: v ?? 0 })} /></span>
-        <span className="w-24"><SelectCell value={m.unit} options={BOQ_UNITS} disabled={!canEdit} className={f} onCommit={(v) => onUpdate({ unit: v })} /></span>
+        <span className="w-24"><UnitCell value={m.unit} disabled={!canEdit} className={f} onCommit={(v) => onUpdate({ unit: v })} /></span>
         <Op>× ₹</Op>
         <span className="w-24"><NumCell value={m.sellingRate} col="matRate" placeholder="rate" disabled={!canEdit} className={f} onDraft={setRateDraft} onCommit={(v) => onUpdate({ sellingRate: v ?? 0 })} /></span>
         <Op>+</Op>
@@ -1329,7 +1336,6 @@ function CategoryLineDialog({ state, rateFor, onClose, onAdd }: {
   const labour = state?.kind === "labour";
   const amount = (Number(qty) || 0) * (Number(rate) || 0);
   const submit = () => name.trim() && onAdd(name.trim(), Number(qty) || 1, unit, Number(rate) || 0);
-  const units = BOQ_UNITS.includes(unit) ? BOQ_UNITS : [unit, ...BOQ_UNITS];
 
   return (
     <Dialog open={!!state} onOpenChange={(v) => !v && onClose()}>
@@ -1354,7 +1360,7 @@ function CategoryLineDialog({ state, rateFor, onClose, onAdd }: {
             </label>
             <label className="text-xs text-muted-foreground">Unit
               <select className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm text-foreground" value={unit} onChange={(e) => setUnit(e.target.value)}>
-                {units.map((u) => <option key={u} value={u}>{u}</option>)}
+                <UnitOptions value={unit} />
               </select>
             </label>
             <label className="text-xs text-muted-foreground">Rate ₹

@@ -17,6 +17,7 @@ import { resolveFileUrl } from "@/lib/uploadFile";
 import { colorsOf, useLineProducts } from "@/pages/leads/quote/productCells";
 import { fetchBankDetails, fetchCompanyProfile, type BankDetails, type CompanyProfile } from "@/lib/companyProfile";
 import { lineTotal, pricingPatch, quoteTotals, readPricing, type QuotePricing } from "./quotationPricing";
+import { unitDef } from "@/lib/units";
 
 /**
  * Print-optimised, branded quotation (JB Decor banner, meta cards, Category → Product table with photo,
@@ -488,8 +489,8 @@ function daysBetween(a?: string | null, b?: string | null) {
 
 function unitLabel(u?: string) {
   if (!u) return "—";
-  const l = u.toLowerCase();
-  if (l === "sqft" || l === "sft") return "Sqft";
+  const known = unitDef(u)?.code;
+  if (known) return known;
   return u.charAt(0).toUpperCase() + u.slice(1);
 }
 

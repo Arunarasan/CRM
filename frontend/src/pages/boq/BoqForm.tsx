@@ -5,13 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import api from "@/lib/api";
 import { boqApi } from "@/api/boqApi";
-import { BOQ_CATEGORIES, BOQ_UNITS, type Boq, type BoqItem } from "@/types/boq";
+import { BOQ_CATEGORIES, type Boq, type BoqItem } from "@/types/boq";
 import { Field, SectionTitle, TextAreaField, selectClass } from "../leads/fields";
+import { UnitOptions } from "@/components/UnitOptions";
 
 interface PickerOption { id: number; label: string }
 
 const EMPTY_ITEM: BoqItem = {
-  itemName: "", category: BOQ_CATEGORIES[0], unit: BOQ_UNITS[0], quantity: 1,
+  itemName: "", category: BOQ_CATEGORIES[0], unit: "Sqft", quantity: 1,
   floorName: "", roomName: "",
 };
 
@@ -263,7 +264,7 @@ export default function BoqForm() {
                   <td className="p-1.5"><Input type="number" className="text-right" value={it.quantity ?? 1} onChange={(e) => setItem(i, { quantity: num(e.target.value) })} /></td>
                   <td className="p-1.5">
                     <select className={selectClass} value={it.unit ?? ""} onChange={(e) => setItem(i, { unit: e.target.value })}>
-                      {BOQ_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+                      <UnitOptions value={it.unit} />
                     </select>
                   </td>
                   <td className="p-1.5 text-center">

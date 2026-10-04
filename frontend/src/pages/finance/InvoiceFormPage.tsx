@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import SearchableSelect from "@/components/ui/searchable-select";
 import { currency } from "./helpers";
 import { ArrowLeft, Plus, Trash2, Save } from "lucide-react";
+import { UNIT_DATALIST_ID } from "@/components/UnitOptions";
 
 interface CustomerLite { id: number; name: string }
 interface ProjectLite { id: number; projectName?: string }
@@ -157,7 +158,7 @@ export default function InvoiceFormPage() {
               <div className="md:col-span-4"><Input placeholder="Item / work description" value={l.description} onChange={(e) => setLine(l.key, { description: e.target.value })} /></div>
               <div className="md:col-span-2 flex gap-1">
                 <Input placeholder="HSN" value={l.hsnCode} onChange={(e) => setLine(l.key, { hsnCode: e.target.value })} />
-                <Input placeholder="Unit" value={l.unit} onChange={(e) => setLine(l.key, { unit: e.target.value })} />
+                <Input placeholder="Unit" list={UNIT_DATALIST_ID} value={l.unit} onChange={(e) => setLine(l.key, { unit: e.target.value })} />
               </div>
               <div className="md:col-span-1"><Input type="number" min={0} value={l.quantity} onChange={(e) => setLine(l.key, { quantity: Number(e.target.value) })} /></div>
               <div className="md:col-span-2"><Input type="number" min={0} value={l.unitPrice} onChange={(e) => setLine(l.key, { unitPrice: Number(e.target.value) })} /></div>

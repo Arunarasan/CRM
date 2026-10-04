@@ -1,3 +1,4 @@
+import { ALL_UNITS } from "@/lib/units";
 // Central types + constants for the BOQ (Bill of Quantities) module.
 // Mirrors backend com.arudra.crm.service.BoqService constants and the Boq*/entities.
 
@@ -279,7 +280,8 @@ export const BOQ_CATEGORIES = [
   "Electrical", "Plumbing", "Flooring", "Glass", "Hardware", "Furniture", "Others",
 ];
 
-export const BOQ_UNITS = ["Sqft", "Sqm", "Rft", "Cum", "Nos", "Kg", "Ltr", "Set", "Lump Sum"];
+/** Every unit (1D/2D/3D/count/weight…) — see lib/units.ts. */
+export const BOQ_UNITS = ALL_UNITS;
 
 export const BOQ_STATUSES = ["DRAFT", "REVIEW", "APPROVED", "REJECTED"];
 

@@ -5,9 +5,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { measurementCatalogApi, CatalogItem } from '@/api/measurementCatalogApi';
 import { useGoBack } from '@/hooks/useGoBack';
+import { UnitOptions } from "@/components/UnitOptions";
 
-const UNITS = ['sqft', 'rft', 'nos', 'lot'];
-const EMPTY: CatalogItem = { name: '', itemType: '', defaultUnit: 'sqft', defaultMaterial: '', active: true, orderIndex: 0 };
+const EMPTY: CatalogItem = { name: '', itemType: '', defaultUnit: 'Sqft', defaultMaterial: '', active: true, orderIndex: 0 };
 
 /**
  * Admin-only master for standard measurement items. Employees pick from these when capturing a site
@@ -77,7 +77,7 @@ export default function MeasurementItemCatalog() {
             <div>
               <label className="text-xs font-medium">Default unit</label>
               <select value={form.defaultUnit ?? ''} onChange={(e) => set('defaultUnit', e.target.value)} className="w-full rounded-md border px-3 py-2 text-sm">
-                {UNITS.map((u) => <option key={u}>{u}</option>)}
+                <UnitOptions value={form.defaultUnit} />
               </select>
             </div>
             <div>

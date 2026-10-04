@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { measurementApi } from "@/api/measurementApi";
 import {
-  FLOOR_LEVELS, ITEM_TYPES, MEASUREMENT_UNITS, ROOM_TYPES, type MeasurementDrawing,
+  FLOOR_LEVELS, ITEM_TYPES, ROOM_TYPES, type MeasurementDrawing,
   type MeasurementItem, type MeasurementMedia, type MeasurementRoom,
 } from "@/types/measurement";
 import { CheckboxField, Field, SelectField, TextAreaField, TextField, selectClass } from "../../leads/fields";
@@ -15,6 +15,8 @@ import { ListSkeleton } from "../../leads/tabs/shared";
 import EmptyState from "../../customer360/components/EmptyState";
 import CatalogItemSelect from "../CatalogItemSelect";
 import { useMeasurementSubResource } from "../helpers";
+import { UnitOptions } from "@/components/UnitOptions";
+import { areaUnitFor } from "@/lib/units";
 
 const SCOPE_FLAGS: { key: keyof MeasurementRoom; label: string }[] = [
   { key: "falseCeilingRequired", label: "False Ceiling" },
@@ -359,7 +361,7 @@ function MeasuredItemsPanel({ measurementId, rooms, items, loading, canWrite, fo
                       {[item.length, item.width, item.height].filter((v) => v != null).join(" × ") || "—"}
                     </td>
                     <td className="px-3 py-2 text-right">{item.quantity ?? 1}{item.unit ? ` ${item.unit}` : ""}</td>
-                    <td className="px-3 py-2 text-right font-medium">{item.area ? `${item.area} sqft` : "—"}</td>
+                    <td className="px-3 py-2 text-right font-medium">{item.area ? `${item.area} ${areaUnitFor(item.unit)}` : "—"}</td>
                     {canWrite && (
                       <td className="px-3 py-2 text-right">
                         <button type="button" onClick={(e) => { e.stopPropagation(); remove(item); }}
@@ -401,7 +403,7 @@ function MeasuredItemsPanel({ measurementId, rooms, items, loading, canWrite, fo
             <Field label="Unit">
               <select className={selectClass} value={form.unit ?? ""} onChange={(e) => set("unit")(e.target.value || undefined)}>
                 <option value="">Auto</option>
-                {MEASUREMENT_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+                <UnitOptions value={form.unit} />
               </select>
             </Field>
             <TextField label="Length" type="number" value={form.length} onChange={(v) => set("length")(v === "" ? undefined : Number(v))} />
@@ -608,7 +610,7 @@ function RoomDetailDialog({ measurementId, room, canWrite, autoAddItem, onClose,
                           {[item.length, item.width, item.height].filter((v) => v != null).join(" × ") || "—"}
                         </td>
                         <td className="px-3 py-2 text-right">{item.quantity ?? 1}{item.unit ? ` ${item.unit}` : ""}</td>
-                        <td className="px-3 py-2 text-right font-medium">{item.area ? `${item.area} sqft` : "—"}</td>
+                        <td className="px-3 py-2 text-right font-medium">{item.area ? `${item.area} ${areaUnitFor(item.unit)}` : "—"}</td>
                         {canWrite && (
                           <td className="px-3 py-2 text-right">
                             <button type="button" onClick={(e) => { e.stopPropagation(); removeItem(item); }} className="text-destructive hover:opacity-70">
@@ -641,7 +643,7 @@ function RoomDetailDialog({ measurementId, room, canWrite, autoAddItem, onClose,
                 <Field label="Unit">
                   <select className={selectClass} value={itemForm.unit ?? ""} onChange={(e) => setItemForm((f) => ({ ...f, unit: e.target.value || undefined }))}>
                     <option value="">Auto</option>
-                    {MEASUREMENT_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+                    <UnitOptions value={itemForm.unit} />
                   </select>
                 </Field>
                 <TextField label="Length" type="number" value={itemForm.length} onChange={(v) => setItemForm((f) => ({ ...f, length: v === "" ? undefined : Number(v) }))} />
@@ -953,7 +955,7 @@ function ItemFirstView({
                         <div className="text-xs text-muted-foreground mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
                           <span>{[item.length, item.width, item.height].filter((v) => v != null).join(" × ") || "no dims"}</span>
                           <span>Qty {item.quantity ?? 1}{item.unit ? ` ${item.unit}` : ""}</span>
-                          <span className="font-medium text-foreground">{item.area ? `${item.area} sqft` : "—"}</span>
+                          <span className="font-medium text-foreground">{item.area ? `${item.area} ${areaUnitFor(item.unit)}` : "—"}</span>
                         </div>
                         {item.material && <div className="text-xs text-muted-foreground mt-0.5">{item.material}</div>}
                         {item.notes && <div className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{item.notes}</div>}
@@ -1035,7 +1037,7 @@ function ItemFirstView({
                         {[item.length, item.width, item.height].filter((v) => v != null).join(" × ") || "—"}
                       </td>
                       <td className="px-3 py-2 text-right">{item.quantity ?? 1}{item.unit ? ` ${item.unit}` : ""}</td>
-                      <td className="px-3 py-2 text-right font-medium">{item.area ? `${item.area} sqft` : "—"}</td>
+                      <td className="px-3 py-2 text-right font-medium">{item.area ? `${item.area} ${areaUnitFor(item.unit)}` : "—"}</td>
                       {canWrite && (
                         <td className="px-3 py-2 text-right">
                           <button type="button" onClick={(e) => { e.stopPropagation(); remove(item); }} className="text-destructive hover:opacity-70">
@@ -1077,7 +1079,7 @@ function ItemFirstView({
               <Field label="Unit">
                 <select className={selectClass} value={form.unit ?? ""} onChange={(e) => set("unit")(e.target.value || undefined)}>
                   <option value="">Auto</option>
-                  {MEASUREMENT_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+                  <UnitOptions value={form.unit} />
                 </select>
               </Field>
               <TextField label="Length" type="number" value={form.length} onChange={(v) => set("length")(v === "" ? undefined : Number(v))} />

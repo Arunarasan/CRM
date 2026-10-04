@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import api from "@/lib/api";
+import { UnitOptions } from "@/components/UnitOptions";
 import type { ProductRef } from "@/types/boq";
 
 // Spreadsheet-style cells for the combined Measurement & Quotation workspace. Each cell keeps its
@@ -147,6 +148,27 @@ export function SelectCell({
     >
       {!value && <option value="">—</option>}
       {opts.map((o) => <option key={o} value={o}>{o}</option>)}
+    </select>
+  );
+}
+
+/** Unit picker for sheet cells: every unit, grouped Length (1D) / Area (2D) / Volume (3D) / Count… */
+export function UnitCell({
+  value, onCommit, disabled, className = "",
+}: {
+  value?: string | null;
+  onCommit: (v: string) => void;
+  disabled?: boolean;
+  className?: string;
+}) {
+  return (
+    <select
+      disabled={disabled}
+      className={`${cellBase} pr-1 ${className}`}
+      value={value ?? ""}
+      onChange={(e) => onCommit(e.target.value)}
+    >
+      <UnitOptions value={value} allowEmpty={!value} />
     </select>
   );
 }

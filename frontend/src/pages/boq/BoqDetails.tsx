@@ -11,12 +11,13 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/useAuth";
 import { boqApi } from "@/api/boqApi";
 import {
-  BOQ_STATUS_LABELS, BOQ_STATUS_STYLES, BOQ_CATEGORIES, BOQ_UNITS, QUOTATION_MODE_LABELS,
+  BOQ_STATUS_LABELS, BOQ_STATUS_STYLES, BOQ_CATEGORIES, QUOTATION_MODE_LABELS,
   type Boq, type BoqActivityLogEntry, type BoqChangeLogEntry, type BoqDiff, type BoqItem, type BoqPhase,
   type BoqReorderEntry,
 } from "@/types/boq";
 import BoqTree from "./components/BoqTree";
 import MaterialPicker from "./components/MaterialPicker";
+import { UnitOptions } from "@/components/UnitOptions";
 
 function formatDate(value?: string) {
   if (!value) return "—";
@@ -104,7 +105,7 @@ export default function BoqDetails() {
   const [actionBusy, setActionBusy] = useState(false);
 
   const [addItemTarget, setAddItemTarget] = useState<{ floor: string; room: string } | null>(null);
-  const [newItem, setNewItem] = useState<Partial<BoqItem>>({ category: BOQ_CATEGORIES[0], unit: BOQ_UNITS[0], quantity: 1 });
+  const [newItem, setNewItem] = useState<Partial<BoqItem>>({ category: BOQ_CATEGORIES[0], unit: "Sqft", quantity: 1 });
   const [materialTarget, setMaterialTarget] = useState<BoqItem | null>(null);
   const [labourTarget, setLabourTarget] = useState<BoqItem | null>(null);
   const [newLabour, setNewLabour] = useState<{ workType: string; quantity: number; rate: number }>({ workType: "", quantity: 1, rate: 0 });
@@ -192,7 +193,7 @@ export default function BoqDetails() {
   const handleAddItem = () => {
     if (!addItemTarget || !newItem.itemName) return;
     boqApi.addItem(boqId, { ...newItem, floorName: addItemTarget.floor, roomName: addItemTarget.room })
-      .then(() => { setAddItemTarget(null); setNewItem({ category: BOQ_CATEGORIES[0], unit: BOQ_UNITS[0], quantity: 1 }); refreshAll(); })
+      .then(() => { setAddItemTarget(null); setNewItem({ category: BOQ_CATEGORIES[0], unit: "Sqft", quantity: 1 }); refreshAll(); })
       .catch(console.error);
   };
 
@@ -729,7 +730,7 @@ export default function BoqDetails() {
               </select>
               <Input type="number" placeholder="Qty" value={newItem.quantity ?? 1} onChange={(e) => setNewItem((it) => ({ ...it, quantity: Number(e.target.value) }))} />
               <select className="border rounded-md p-2 text-sm" value={newItem.unit} onChange={(e) => setNewItem((it) => ({ ...it, unit: e.target.value }))}>
-                {BOQ_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+                <UnitOptions value={newItem.unit} />
               </select>
             </div>
           </div>

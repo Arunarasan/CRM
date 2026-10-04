@@ -13,6 +13,7 @@ import { BaseInput } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import SearchableSelect from "@/components/ui/searchable-select";
 import { toast } from "@/components/ui/toast";
+import { UNIT_DATALIST_ID } from "@/components/UnitOptions";
 
 const STAGES: { key: SupplyStage; label: string; tone: string }[] = [
   { key: "TO_BUY", label: "To Buy", tone: "bg-rose-100 text-rose-700" },
@@ -464,7 +465,7 @@ export default function SupplyInstallTab({ projectId, onChanged }: { projectId: 
                 <BaseInput type="number" min={0} value={newItem.qty} onChange={(e) => setNewItem((n) => ({ ...n, qty: e.target.value }))} />
               </label>
               <label className="text-xs text-slate-500">Unit
-                <BaseInput value={newItem.unit} onChange={(e) => setNewItem((n) => ({ ...n, unit: e.target.value }))} placeholder="m, pcs…" />
+                <BaseInput list={UNIT_DATALIST_ID} value={newItem.unit} onChange={(e) => setNewItem((n) => ({ ...n, unit: e.target.value }))} placeholder="m, pcs…" />
               </label>
             </div>
           </div>

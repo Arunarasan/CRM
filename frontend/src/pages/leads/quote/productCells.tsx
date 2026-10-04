@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import type { InventoryCategory, Product, ProductColor } from "@/types/inventory";
 import { NumCell } from "./cells";
+import { unitDef } from "@/lib/units";
 
 // Building blocks for the Category → Product quote sheet: the category picker, the catalogue product
 // picker, and the per-line photo / colour / discount cells.
@@ -86,7 +87,7 @@ const WEB_UNITS: Record<string, string> = {
 };
 export function websiteUnit(p: WebsiteProduct) {
   const v = p.specifications?.find((s) => norm(s.label) === "sold by")?.value;
-  return (v && WEB_UNITS[norm(v)]) || "Nos";
+  return (v && (WEB_UNITS[norm(v)] || unitDef(v)?.code)) || "Nos";
 }
 
 /** The catalogue products behind the sheet's lines — for their colour options and photos. */

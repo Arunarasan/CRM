@@ -3,7 +3,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import api from "@/lib/api";
-import { BOQ_UNITS, type BoqItemMaterial, type ProductRef } from "@/types/boq";
+import { type BoqItemMaterial, type ProductRef } from "@/types/boq";
+import { UnitOptions } from "@/components/UnitOptions";
 
 interface Availability {
   currentStock: number;
@@ -33,14 +34,14 @@ export default function MaterialPicker({ open, onClose, onSave }: MaterialPicker
   const [customName, setCustomName] = useState("");
   const [quantity, setQuantity] = useState(1);
   const [wastePercent, setWastePercent] = useState(0);
-  const [unit, setUnit] = useState(BOQ_UNITS[0]);
+  const [unit, setUnit] = useState("Nos");
   const [sellingRate, setSellingRate] = useState(0);
 
   useEffect(() => {
     if (!open) return;
     setMode("inventory");
     setSearch(""); setSelected(null); setAvailability(null);
-    setCustomName(""); setQuantity(1); setWastePercent(0); setUnit(BOQ_UNITS[0]); setSellingRate(0);
+    setCustomName(""); setQuantity(1); setWastePercent(0); setUnit("Nos"); setSellingRate(0);
   }, [open]);
 
   useEffect(() => {
@@ -55,7 +56,7 @@ export default function MaterialPicker({ open, onClose, onSave }: MaterialPicker
 
   const pickProduct = (p: ProductRef) => {
     setSelected(p);
-    setUnit(p.unit || BOQ_UNITS[0]);
+    setUnit(p.unit || "Nos");
     setSellingRate(p.sellingPrice ?? p.price ?? 0);
     api.get(`/inventory/products/${p.id}/availability`).then((res) => setAvailability(res.data)).catch(console.error);
   };
@@ -184,7 +185,7 @@ export default function MaterialPicker({ open, onClose, onSave }: MaterialPicker
                   value={unit}
                   onChange={(e) => setUnit(e.target.value)}
                 >
-                  {BOQ_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+                  <UnitOptions value={unit} />
                 </select>
               </div>
               {amountFields}
