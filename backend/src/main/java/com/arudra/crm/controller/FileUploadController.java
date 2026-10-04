@@ -58,9 +58,6 @@ public class FileUploadController {
     @org.springframework.beans.factory.annotation.Value("${app.storage.image-proxy-hosts:pub-a71206d0d22147c19f60595314aec002.r2.dev}")
     private java.util.List<String> imageProxyHosts;
 
-    @org.springframework.beans.factory.annotation.Value("${app.upload.dir:./uploads}")
-    private String uploadDir;
-
     private final java.net.http.HttpClient http = java.net.http.HttpClient.newBuilder()
             .connectTimeout(java.time.Duration.ofSeconds(10))
             .followRedirects(java.net.http.HttpClient.Redirect.NEVER)
@@ -100,11 +97,13 @@ public class FileUploadController {
             contentType = res.headers().firstValue("Content-Type").orElse("");
         } else if (local) {
             String key = url.substring(at < 0 ? 0 : at).substring(localPrefix.length()).split("[?#]")[0];
-            java.nio.file.Path root = java.nio.file.Path.of(uploadDir).toAbsolutePath().normalize();
-            java.nio.file.Path file = root.resolve(key).normalize();
-            if (!file.startsWith(root) || !java.nio.file.Files.isRegularFile(file)) return ResponseEntity.notFound().build();
-            bytes = java.nio.file.Files.readAllBytes(file);
-            contentType = java.nio.file.Files.probeContentType(file);
+            try {
+                bytes = storageService.read(key); // local disk, or S3/R2 when no public bucket URL is set
+            } catch (java.nio.file.NoSuchFileException e) {
+                return ResponseEntity.notFound().build();
+            }
+            contentType = org.springframework.http.MediaTypeFactory.getMediaType(key)
+                    .map(org.springframework.http.MediaType::toString).orElse(null);
         } else {
             return ResponseEntity.badRequest().build();
         }

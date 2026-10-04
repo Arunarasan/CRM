@@ -11,6 +11,10 @@ import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3Configuration;
+import software.amazon.awssdk.core.ResponseInputStream;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectResponse;
+import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 import java.net.URI;
@@ -66,5 +70,29 @@ public class S3StorageService implements StorageService {
                 ? base.replaceAll("/+$", "") + "/" + key
                 : "/uploads/" + key; // no public origin configured: fall back to a relative path
         return new StoredFile(fileUrl, StorageKeys.cleanOriginalName(originalFilename));
+    }
+
+    @Override
+    public byte[] read(String key) throws java.io.IOException {
+        try (ResponseInputStream<GetObjectResponse> in = open(key, null)) {
+            return in.readAllBytes();
+        }
+    }
+
+    /**
+     * Streams an object, optionally only a byte range (an HTTP {@code Range} header value such as
+     * "bytes=0-"), for {@link com.arudra.crm.controller.UploadsController}. Throws
+     * {@link java.nio.file.NoSuchFileException} when the bucket has no such key.
+     */
+    public ResponseInputStream<GetObjectResponse> open(String key, String range) throws java.nio.file.NoSuchFileException {
+        try {
+            return s3.getObject(GetObjectRequest.builder()
+                    .bucket(props.getBucket())
+                    .key(key)
+                    .range(StringUtils.hasText(range) ? range : null)
+                    .build());
+        } catch (NoSuchKeyException e) {
+            throw new java.nio.file.NoSuchFileException(key);
+        }
     }
 }

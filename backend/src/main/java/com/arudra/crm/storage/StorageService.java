@@ -18,4 +18,10 @@ public interface StorageService {
      * @param originalFilename name as picked on the device (used for extension + display)
      */
     StoredFile store(byte[] bytes, String contentType, String module, String originalFilename) throws IOException;
+
+    /**
+     * Bytes of a file stored earlier, by its object key (the part of a "/uploads/..." link after
+     * "/uploads/"). Throws {@link java.nio.file.NoSuchFileException} when there is no such file.
+     */
+    byte[] read(String key) throws IOException;
 }

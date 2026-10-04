@@ -51,9 +51,6 @@ public class CallRecordingService {
     private final LeadService leadService;
     private final LeadDocumentRepository leadDocumentRepository;
 
-    @org.springframework.beans.factory.annotation.Value("${app.upload.dir:./uploads}")
-    private String uploadDir;
-
     // ------------------------------------------------------------------ upload & list
 
     /**
@@ -142,11 +139,12 @@ public class CallRecordingService {
 
     /** Bytes of a file this app stored: a public storage URL, or a local "/uploads/..." path. */
     private byte[] readStored(String url) throws IOException {
-        if (url.startsWith("/uploads/")) { // LocalStorageService (dev)
-            java.nio.file.Path root = java.nio.file.Path.of(uploadDir).toAbsolutePath().normalize();
-            java.nio.file.Path file = root.resolve(url.substring("/uploads/".length()).split("[?#]")[0]).normalize();
-            if (!file.startsWith(root)) throw new IllegalStateException("Bad file path.");
-            return java.nio.file.Files.readAllBytes(file);
+        if (url.startsWith("/uploads/")) { // local disk, or S3/R2 with no public bucket URL
+            try {
+                return storageService.read(url.substring("/uploads/".length()).split("[?#]")[0]);
+            } catch (java.nio.file.NoSuchFileException e) {
+                throw new IllegalStateException("This recording's file is missing from storage — upload it again.");
+            }
         }
         try {
             var res = java.net.http.HttpClient.newBuilder()
