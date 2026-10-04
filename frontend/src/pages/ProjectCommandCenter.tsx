@@ -197,10 +197,7 @@ function ActivityList({ items }: { items: ActivityItem[] }) {
 // own content block untouched — this is purely how they're navigated.
 const TAB_GROUPS: { id: string; label: string; icon: React.ComponentType<{ className?: string }>; sections: [string, string][] }[] = [
   { id: "overview", label: "Overview", icon: ClipboardList, sections: [["overview", "Overview"]] },
-  { id: "execution", label: "Execution", icon: Layers, sections: [
-    ["workProgress", "Execution & Installation"], ["fieldProgress", "Tasks"], ["workCategories", "Work Categories"], ["execution", "Daily Logs"],
-    ["reports", "Reports"], ["quality", "Quality & Issues"], ["phases", "Floors & Rooms"],
-  ] },
+  { id: "execution", label: "Execution", icon: Layers, sections: [["workProgress", "Execution & Installation"]] },
   { id: "commercial", label: "Commercial", icon: Wallet, sections: [
     ["payments", "Billing & Payments"], ["received", "Payments"], ["profit", "Expenses & Profit"],
     ["quote", "Quotation"], ["approvals", "Approvals & Changes"], ["changeRequests", "Change Requests"],
@@ -222,6 +219,9 @@ const RETIRED_SECTIONS: Record<string, string> = {
   supplyInstall: "purchaseOrders", materials: "purchaseOrders", contractors: "purchaseOrders", labour: "purchaseOrders",
   // Handover moved into the Mark Completed dialog.
   handover: "overview",
+  // Execution is just "Execution & Installation" now (products, installation, daily log, chat, history).
+  fieldProgress: "workProgress", workCategories: "workProgress", execution: "workProgress",
+  reports: "workProgress", quality: "workProgress", phases: "workProgress",
 };
 const groupOf = (section: string) =>
   TAB_GROUPS.find((g) => g.sections.some(([v]) => v === section)) || TAB_GROUPS[0];
@@ -953,7 +953,7 @@ export default function ProjectCommandCenter() {
           </div>
         </div>
 
-        <ProjectJourneyBar stages={summary.journey || []} onOpen={() => setActiveTab('fieldProgress')} />
+        <ProjectJourneyBar stages={summary.journey || []} onOpen={() => setActiveTab('workProgress')} />
       </div>
       <TrackingLinkDialog projectId={Number(projectId)} open={trackingOpen} onOpenChange={setTrackingOpen} />
 
@@ -993,9 +993,6 @@ export default function ProjectCommandCenter() {
                         >
                           <Icon className="w-4 h-4" />
                           {g.label}
-                          {g.id === "execution" && issueCount > 0 && (
-                            <span className={`px-1.5 rounded-full text-[10px] font-bold ${isActive ? "bg-white/25 text-white" : "bg-red-100 text-red-600"}`}>{issueCount}</span>
-                          )}
                         </button>
                       );
                     })}
@@ -1036,20 +1033,6 @@ export default function ProjectCommandCenter() {
                 )}
               </div>
             );
-          })()}
-
-          {groupOf(activeTab).id === 'execution' && (() => {
-            const t = fieldTasks || [];
-            const done = t.filter((x: any) => x.status === 'COMPLETED').length;
-            const weekAgo = Date.now() - 7 * 86400000;
-            const logsWeek = (dailyLogs || []).filter((l: any) => l.logDate && new Date(l.logDate).getTime() >= weekAgo).length;
-            const delayed = stats?.tasks?.delayed ?? 0;
-            return <StatStrip className="grid grid-cols-2 @4xl:grid-cols-4 gap-2.5 mb-3" items={[
-              { label: 'Tasks Done', value: `${done}/${t.length}`, sub: t.length ? `${Math.round((done / t.length) * 100)}% complete` : 'no tasks yet', icon: CheckCircle2, tone: 'emerald' },
-              { label: 'Delayed', value: delayed, sub: delayed ? 'past due date' : 'on schedule', icon: Clock, tone: delayed ? 'rose' : 'sky' },
-              { label: 'Logs This Week', value: logsWeek, sub: `${(dailyLogs || []).length} in total`, icon: ClipboardList, tone: 'violet' },
-              { label: 'Reports Pending', value: reportsPending, sub: reportsPending ? 'waiting for approval' : 'all reviewed', icon: FileText, tone: reportsPending ? 'amber' : 'emerald' },
-            ]} />;
           })()}
 
           {groupOf(activeTab).id === 'commercial' && (() => {
@@ -1199,7 +1182,7 @@ export default function ProjectCommandCenter() {
                     </div>
                   </div>
                   <div className="mt-3 text-right">
-                    <button type="button" onClick={() => setActiveTab('fieldProgress')} className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 hover:text-emerald-900">View Tasks <ArrowRight className="w-3.5 h-3.5" /></button>
+                    <button type="button" onClick={() => setActiveTab('workProgress')} className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 hover:text-emerald-900">View Tasks <ArrowRight className="w-3.5 h-3.5" /></button>
                   </div>
                 </div>
 
@@ -1212,7 +1195,7 @@ export default function ProjectCommandCenter() {
                   <div className="grid grid-cols-3 gap-2">
                     {([
                       { label: 'Estimate Budget', value: inr(boqEstimate), icon: Wallet, tone: 'bg-emerald-50 text-emerald-700', valueTone: 'text-slate-900',
-                        onClick: () => approvedBoqId ? navigate(`/boq/${approvedBoqId}`) : setActiveTab('phases'), title: approvedBoqId ? 'Open the BOQ' : 'No BOQ linked yet' },
+                        onClick: () => approvedBoqId ? navigate(`/boq/${approvedBoqId}`) : setActiveTab('workProgress'), title: approvedBoqId ? 'Open the BOQ' : 'No BOQ linked yet' },
                       { label: 'Amount Spent', value: inr(spentAmount), icon: BarChart3, tone: 'bg-sky-50 text-sky-600', valueTone: 'text-slate-900',
                         onClick: () => setActiveTab('profit'), title: 'View expenses & profit' },
                       { label: 'Remaining', value: inr(profitOrLoss), icon: Percent, tone: profitOrLoss < 0 ? 'bg-rose-50 text-rose-600' : 'bg-amber-50 text-amber-600', valueTone: profitOrLoss < 0 ? 'text-rose-700' : 'text-slate-900',

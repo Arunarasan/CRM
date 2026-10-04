@@ -10,16 +10,11 @@ import ExecutionBoard from '@/components/projectWork/ExecutionBoard';
 import InstallationBoard from '@/components/projectWork/InstallationBoard';
 import DailyLogPanel from '@/components/projectWork/DailyLogPanel';
 import TeamChat, { ChatTag } from '@/components/projectWork/TeamChat';
-import { Bar, CARD, GHOST, PRIMARY, Thumbs, errMsg, fmtWhen, pctTone } from '@/components/projectWork/workUi';
+import { CARD, GHOST, PRIMARY, Thumbs, errMsg, fmtWhen } from '@/components/projectWork/workUi';
 import { useAuth } from '@/hooks/useAuth';
 import CategoryDefaultsDialog from '@/components/projectWork/CategoryDefaultsDialog';
 
 type View = 'execution' | 'installation' | 'log' | 'chat' | 'history';
-
-const STATUS_LABEL: Record<string, string> = {
-  AVAILABLE: 'Waiting for the team', ASSIGNED: 'Assigned', ACCEPTED: 'Accepted', IN_PROGRESS: 'In progress',
-  PAUSED: 'Paused', WAITING_APPROVAL: 'Waiting for your approval', COMPLETED: 'Completed', REWORK: 'Rework', PENDING: 'Pending',
-};
 
 /**
  * Project page → Execution → "Execution & Installation": the office view of the two shared project tasks —
@@ -86,6 +81,10 @@ export default function WorkProgressTab({ projectId, onChanged }: { projectId: n
     );
   }
 
+  // The printable report follows what's on screen: Installation view → its task, else Execution.
+  const reportTask = view === 'installation' || ((view === 'log' || view === 'chat') && chatTask === 'installation')
+    ? board.installationTask : board.executionTask;
+
   const views: { id: View; label: string; icon: typeof Hammer }[] = [
     { id: 'execution', label: 'Execution', icon: Hammer },
     { id: 'installation', label: 'Installation', icon: Wrench },
@@ -96,20 +95,6 @@ export default function WorkProgressTab({ projectId, onChanged }: { projectId: n
 
   return (
     <div className="flex flex-col gap-3">
-      {/* Two task cards + overall */}
-      <div className="grid grid-cols-1 gap-3 @3xl:grid-cols-3">
-        <div className={`${CARD} p-4`}>
-          <p className="text-[12px] font-semibold uppercase tracking-wide text-[#9B6B32]">Overall</p>
-          <p className={`mt-1 text-[26px] font-bold ${pctTone(board.overallPercent)}`}>{board.overallPercent}%</p>
-          <Bar value={board.overallPercent} className="mt-1 h-2.5" />
-          <p className="mt-2 text-[12px] text-[#6B7169]">{board.atSiteCount}/{board.productCount} products at site</p>
-        </div>
-        <TaskCard title="Project Execution" pct={board.executionPercent} task={board.executionTask}
-          onOpen={(id) => navigate(`/projects/${projectId}/tasks/${id}`)} />
-        <TaskCard title="Installation" pct={board.installationPercent} task={board.installationTask} gold
-          onOpen={(id) => navigate(`/projects/${projectId}/tasks/${id}`)} />
-      </div>
-
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex gap-1 overflow-x-auto rounded-2xl bg-[#EFEBE0] p-1">
           {views.map((v) => (
@@ -120,16 +105,21 @@ export default function WorkProgressTab({ projectId, onChanged }: { projectId: n
             </button>
           ))}
         </div>
-        {canManage && (
-          <div className="ml-auto flex gap-2">
+        <div className="ml-auto flex gap-2">
+          {reportTask && (
+            <button onClick={() => navigate(`/projects/${projectId}/tasks/${reportTask.id}`)} className={GHOST}>
+              <ExternalLink className="h-4 w-4" /> {reportTask === board.installationTask ? 'Installation report' : 'Execution report'}
+            </button>
+          )}
+          {canManage && (<>
             <button onClick={() => setDefaultsOpen(true)} className={GHOST}>
               <Settings2 className="h-4 w-4" /> Category defaults
             </button>
             <button onClick={syncQuote} disabled={busy} className={GHOST}>
               <RefreshCw className="h-4 w-4" /> Refresh from quotation
             </button>
-          </div>
-        )}
+          </>)}
+        </div>
         <CategoryDefaultsDialog open={defaultsOpen} onOpenChange={setDefaultsOpen}
           suggest={board.categories.map((c) => c.category)} />
       </div>
@@ -174,28 +164,6 @@ export default function WorkProgressTab({ projectId, onChanged }: { projectId: n
         )}
         {view === 'history' && <HistoryList events={events} />}
       </div>
-    </div>
-  );
-}
-
-function TaskCard({ title, pct, task, gold, onOpen }: {
-  title: string; pct: number; task: WorkTaskInfo | null; gold?: boolean; onOpen: (id: number) => void;
-}) {
-  return (
-    <div className={`${CARD} p-4`}>
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-[12px] font-semibold uppercase tracking-wide text-[#9B6B32]">{title}</p>
-        {task && (
-          <button onClick={() => onOpen(task.id)} className="inline-flex items-center gap-1 text-[11.5px] font-medium text-[#0A573B]">
-            Report <ExternalLink className="h-3 w-3" />
-          </button>
-        )}
-      </div>
-      <p className={`mt-1 text-[22px] font-bold ${pctTone(pct)}`}>{pct}%</p>
-      <Bar value={pct} className="mt-1 h-2" tone={gold ? 'gold' : undefined} />
-      <p className="mt-2 text-[12px] text-[#6B7169]">
-        {task ? (STATUS_LABEL[task.status] || task.status) : 'Not created'}
-      </p>
     </div>
   );
 }
