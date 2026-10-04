@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
-  CalendarDays, Check, CreditCard, FileText, Globe, Landmark, Loader2, Mail, MapPin, Package, Pencil, Percent, Phone, Plus, Printer,
+  CalendarDays, Check, CreditCard, Globe, Landmark, Loader2, Mail, MapPin, Package, Pencil, Percent, Phone, Plus, Printer,
   Receipt, Tag, Truck, User, Users, X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -139,6 +139,8 @@ export function QuotationPrintView({ quotationId, onClose, onSaved, readOnly }: 
   const lead: any = quotation.lead || {};
   const cust: any = quotation.customer || {};
   const clientCode = cust.customerCode;
+  // Under the customer's name: their area / city (falls back to the customer code).
+  const clientArea = [lead.area || cust.area, lead.city || cust.city].filter(Boolean)[0] as string | undefined;
   const meas: any = quotation.measurement || {};
   const site = quotation.project?.projectName || meas.siteAddress || lead.siteAddress || cust.siteAddress
     || (quotation.siteVisit as any)?.locationAddress || lead.address || cust.address || lead.city || cust.city;
@@ -205,74 +207,66 @@ export function QuotationPrintView({ quotationId, onClose, onSaved, readOnly }: 
             <div className="qp-head">
               <div className="qp-title">
                 <h1>QUOTATION</h1>
-                <p>INTERIOR &amp; DECOR SOLUTIONS</p>
+                <p className="qp-no">{quotation.quotationNumber}{quotation.revisionNumber ? ` · v${quotation.revisionNumber}` : ""}</p>
               </div>
-              <div className="qp-meta">
-                <div className="qp-meta-cell">
-                  <FileText className="qp-ico" />
-                  <div>
-                    <small>Quote No.</small>
-                    <b>{quotation.quotationNumber}{quotation.revisionNumber ? ` · v${quotation.revisionNumber}` : ""}</b>
-                    {editing ? (
-                      <input type="date" className="qp-input" value={fields.quotationDate}
-                        onChange={(e) => setFields((f) => ({ ...f, quotationDate: e.target.value }))} />
-                    ) : <span>{fmtDate(qDate)}</span>}
-                  </div>
-                </div>
-                <div className="qp-meta-cell">
-                  <User className="qp-ico" />
-                  <div>
-                    <small>Customer</small>
-                    <b>{client || "—"}</b>
-                    {clientCode && <span>{clientCode}</span>}
-                  </div>
-                </div>
-                <div className="qp-meta-cell">
-                  <MapPin className="qp-ico" />
-                  <div>
-                    <small>Site / Project</small>
-                    <span className="qp-site">{site || "—"}</span>
-                  </div>
-                </div>
-              </div>
-              <div className="qp-valid">
+              <div className="qp-card">
                 <CalendarDays className="qp-ico" />
                 <div>
-                  <small>Valid Till</small>
+                  <small>Date</small>
                   {editing ? (
-                    <input type="date" className="qp-input" value={fields.expiryDate}
-                      onChange={(e) => setFields((f) => ({ ...f, expiryDate: e.target.value }))} />
-                  ) : <b>{fmtDate(xDate)}</b>}
-                  {validDays != null && validDays >= 0 && <span>{validDays} days</span>}
+                    <input type="date" className="qp-input" value={fields.quotationDate}
+                      onChange={(e) => setFields((f) => ({ ...f, quotationDate: e.target.value }))} />
+                  ) : <b>{fmtDate(qDate)}</b>}
+                  {editing ? (
+                    <span className="flex items-center gap-1">Valid till
+                      <input type="date" className="qp-input" value={fields.expiryDate}
+                        onChange={(e) => setFields((f) => ({ ...f, expiryDate: e.target.value }))} />
+                    </span>
+                  ) : validDays != null && validDays >= 0
+                    ? <span title={`Valid till ${fmtDate(xDate)}`}>Valid for {validDays} day{validDays === 1 ? "" : "s"}</span>
+                    : xDate ? <span>Valid till {fmtDate(xDate)}</span> : null}
+                </div>
+              </div>
+              <div className="qp-card">
+                <User className="qp-ico" />
+                <div className="min-w-0">
+                  <small>Customer</small>
+                  <b>{client || "—"}</b>
+                  {(clientArea || clientCode) && <span>{clientArea || clientCode}</span>}
+                </div>
+              </div>
+              <div className="qp-card qp-card-wide">
+                <MapPin className="qp-ico" />
+                <div className="min-w-0">
+                  <small>Site / Project</small>
+                  <span className="qp-site">{site || "—"}</span>
                 </div>
               </div>
             </div>
 
-            {/* Items, grouped by category */}
+            {/* Items, grouped by category: header · column titles · products · category total */}
             <table className="qp-table">
               <colgroup>
-                <col style={{ width: "6%" }} /><col /><col style={{ width: "8%" }} /><col style={{ width: "8%" }} />
+                <col style={{ width: "5%" }} /><col /><col style={{ width: "8%" }} /><col style={{ width: "8%" }} />
                 <col style={{ width: "11%" }} /><col style={{ width: "9%" }} /><col style={{ width: "13%" }} />
               </colgroup>
-              <thead>
-                <tr>
-                  <th>#</th><th className="qp-left">Description</th><th>Qty</th><th>Unit</th>
-                  <th>Rate (₹)</th><th>Disc. (%)</th><th className="qp-right">Amount (₹)</th>
-                </tr>
-              </thead>
               {blocks.map((block, bi) => {
                 const tone = TONES[bi % TONES.length];
+                const count = `${block.items.length} item${block.items.length === 1 ? "" : "s"}`;
                 return (
-                  <tbody key={block.category} className="qp-block">
+                  <tbody key={block.category} className="qp-block" style={{ ["--tone-bg" as any]: tone.bg, ["--tone-bar" as any]: tone.bar }}>
                     <tr className="qp-cat">
                       <td colSpan={7}>
-                        <div className="qp-cat-row" style={{ background: tone.bg, borderLeftColor: tone.bar }}>
-                          <Package className="qp-cat-ico" style={{ color: tone.bar }} />
+                        <div className="qp-cat-row">
+                          <Package className="qp-cat-ico" />
                           <span className="qp-cat-name">{block.category.toUpperCase()}</span>
-                          <span className="qp-cat-count">{block.items.length} item{block.items.length === 1 ? "" : "s"}</span>
-                          <span className="qp-cat-total"><small>Category Total</small>{fmtMoney(block.total)}</span>
+                          <span className="qp-cat-count">{count}</span>
                         </div>
                       </td>
+                    </tr>
+                    <tr className="qp-colhead">
+                      <th>#</th><th className="qp-left">Description</th><th>Qty</th><th>Unit</th>
+                      <th>Rate (₹)</th><th>Disc. (%)</th><th className="qp-right">Amount (₹)</th>
                     </tr>
                     {block.items.map((it) => {
                       rowNo += 1;
@@ -287,7 +281,7 @@ export function QuotationPrintView({ quotationId, onClose, onSaved, readOnly }: 
                                 {it.imageUrl ? (
                                   <img src={resolveFileUrl(it.imageUrl)} alt=""
                                     onError={(e) => { e.currentTarget.style.visibility = "hidden"; }} />
-                                ) : <Package className="h-6 w-6" />}
+                                ) : <Package className="h-4 w-4" />}
                               </div>
                               <div className="min-w-0">
                                 <p className="qp-name">
@@ -320,6 +314,16 @@ export function QuotationPrintView({ quotationId, onClose, onSaved, readOnly }: 
                         </tr>
                       );
                     })}
+                    <tr className="qp-cat-foot">
+                      <td colSpan={7}>
+                        <div className="qp-cat-sum">
+                          <Package className="qp-cat-ico" />
+                          <span className="qp-cat-sum-label">Category Total</span>
+                          <span className="qp-cat-count">({count})</span>
+                          <span className="qp-cat-sum-val">{fmtMoney(block.total)}</span>
+                        </div>
+                      </td>
+                    </tr>
                     <tr className="qp-gap"><td colSpan={7} /></tr>
                   </tbody>
                 );
@@ -457,10 +461,10 @@ const WEBSITE = "https://jbdecorcdm.com";
 const QUOTE_HEADER = `${import.meta.env.BASE_URL}quote-header.jpg`;
 /** Category header tints, cycled. */
 const TONES = [
+  { bg: "#e9f6ef", bar: "#3f9b6e" },
+  { bg: "#fcebee", bar: "#d0607a" },
   { bg: "#fbf3e2", bar: "#c99a3e" },
   { bg: "#eaf1fb", bar: "#5b8bd0" },
-  { bg: "#e8f4ee", bar: "#3f8f68" },
-  { bg: "#f8ecef", bar: "#b8607a" },
 ];
 
 const fmtNum = (v?: number | null) =>
@@ -512,48 +516,58 @@ const QP_CSS = `
 .qp-banner { display:block; line-height:0; background:#fff; }
 .qp-banner img { display:block; width:100%; height:auto; }
 .qp-body { padding: 26px 30px 26px; flex:1; display:flex; flex-direction:column; }
-.qp-head { display:flex; gap:12px; align-items:stretch; margin-bottom: 18px; }
-.qp-title { flex: 0 0 auto; padding-right: 4px; }
-.qp-title h1 { font-family:"Playfair Display",Georgia,serif; font-weight:700; font-size:38px; line-height:1; color:#0b1f3a; margin:6px 0 10px; letter-spacing:.3px; }
-.qp-title p { font-size:10.5px; letter-spacing:2.6px; color:#4a5866; margin:0; }
-.qp-meta { flex:1; display:flex; background: var(--soft); border:1px solid var(--line); border-radius:12px; min-width:0; }
-.qp-meta-cell { flex:1 1 auto; display:flex; gap:7px; padding:11px 10px; align-items:flex-start; min-width:0; }
-.qp-meta-cell + .qp-meta-cell { border-left:1px solid var(--line); }
-.qp-meta small, .qp-valid small { display:block; font-size:11.5px; color:var(--muted); }
-.qp-meta b, .qp-valid b { display:block; font-size:14px; font-weight:600; color:var(--ink); margin:2px 0; white-space:nowrap; }
-.qp-meta span, .qp-valid span { display:block; font-size:12px; color:var(--muted); white-space:nowrap; }
-.qp-meta .qp-site { white-space:normal; }
-.qp-meta .qp-site { color: var(--ink); font-size:13px; margin-top:3px; overflow-wrap:anywhere; }
-.qp-ico { width:20px; height:20px; color:#123f4d; flex-shrink:0; margin-top:4px; stroke-width:1.6; }
-.qp-valid { flex: 0 0 auto; display:flex; gap:10px; padding:12px 14px; background:#fbf3e2; border-radius:12px; }
-.qp-table { width:100%; border-collapse:separate; border-spacing:0; font-size:13px; }
-.qp-table thead th { background:var(--soft); border-top:1px solid var(--line); border-bottom:1px solid var(--line); padding:10px 8px; font-weight:600; text-align:center; color:var(--ink); }
-.qp-table thead th:first-child { border-left:1px solid var(--line); border-radius:10px 0 0 10px; }
-.qp-table thead th:last-child { border-right:1px solid var(--line); border-radius:0 10px 10px 0; }
-.qp-table td { padding:8px; text-align:center; vertical-align:middle; }
+.qp-head { display:flex; gap:10px; align-items:stretch; margin-bottom: 16px; }
+.qp-title { flex: 0 0 auto; padding: 4px 14px 4px 2px; display:flex; flex-direction:column; justify-content:center; }
+.qp-title h1 { font-family:"Playfair Display",Georgia,serif; font-weight:700; font-size:38px; line-height:1; color:#0b1f3a; margin:0 0 6px; letter-spacing:.3px; }
+.qp-title .qp-no { font-size:17px; font-weight:600; color:var(--ink); margin:0; letter-spacing:.2px; }
+.qp-card { flex:1 1 0; display:flex; gap:10px; padding:11px 14px; align-items:flex-start; min-width:0;
+  background:#fff; border:1px solid var(--line); border-radius:10px; }
+.qp-card-wide { flex-grow:1.25; }
+.qp-card small { display:block; font-size:12px; color:var(--muted); }
+.qp-card b { display:block; font-size:15px; font-weight:600; color:var(--ink); margin:2px 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.qp-card span { display:block; font-size:12.5px; color:var(--muted); }
+.qp-card .qp-site { color: var(--ink); font-size:14px; margin-top:3px; overflow-wrap:anywhere; }
+.qp-ico { width:22px; height:22px; color:#123f4d; flex-shrink:0; margin-top:4px; stroke-width:1.6; }
+.qp-table { width:100%; border-collapse:separate; border-spacing:0; font-size:12.5px; }
+.qp-table td { padding:5px 8px; text-align:center; vertical-align:middle; }
 .qp-table .qp-left { text-align:left; }
-.qp-table .qp-right { text-align:right; padding-right:18px; }
+.qp-table .qp-right { text-align:right; padding-right:16px; }
 .qp-block { break-inside: avoid; page-break-inside: avoid; }
-.qp-cat td { padding: 8px 0 0; }
-.qp-cat-row { display:flex; align-items:center; gap:12px; border-left:4px solid; border-radius:8px; padding:9px 18px 9px 16px; }
-.qp-cat-ico { width:22px; height:22px; stroke-width:1.6; }
-.qp-cat-name { font-family:"Playfair Display",Georgia,serif; font-weight:700; font-size:18px; letter-spacing:.3px; }
+/* Category header: tinted, outlined in the category colour */
+.qp-cat td { padding:0; }
+.qp-cat-row { display:flex; align-items:center; gap:12px; background:var(--tone-bg); border:1px solid var(--tone-bar);
+  border-bottom-color: color-mix(in srgb, var(--tone-bar) 35%, transparent); border-radius:8px 8px 0 0; padding:8px 16px; }
+.qp-cat-ico { width:20px; height:20px; stroke-width:1.6; color:var(--tone-bar); flex-shrink:0; }
+.qp-cat-name { font-family:"Playfair Display",Georgia,serif; font-weight:700; font-size:17px; letter-spacing:.3px; color:#0b1f3a; }
 .qp-cat-count { font-size:12.5px; color:var(--muted); }
-.qp-cat-total { margin-left:auto; font-weight:700; font-size:16px; white-space:nowrap; }
-.qp-cat-total small { font-weight:400; font-size:12.5px; color:var(--muted); margin-right:8px; }
-.qp-row td { border-bottom:1px solid var(--line); border-left:1px solid var(--line); }
+/* Column titles, repeated under each category */
+.qp-colhead th { font-size:12px; font-weight:600; color:var(--ink); padding:5px 8px; text-align:center; background:#fbfcfd;
+  border-bottom:1px solid var(--line); border-left:1px solid var(--line); }
+.qp-colhead th:first-child { border-left:1px solid var(--line); }
+.qp-colhead th:last-child { border-right:1px solid var(--line); }
+.qp-colhead th.qp-left { text-align:left; } .qp-colhead th.qp-right { text-align:right; padding-right:16px; }
+.qp-row td { border-bottom:1px solid var(--line); }
+.qp-row td:first-child { border-left:1px solid var(--line); color:var(--muted); }
 .qp-row td:last-child { border-right:1px solid var(--line); }
-.qp-item { display:flex; align-items:center; gap:14px; }
-.qp-thumb { width:56px; height:50px; border-radius:6px; background:#f1efe9; display:flex; align-items:center; justify-content:center;
-  color:#b7ad9a; overflow:hidden; flex-shrink:0; border:1px solid var(--line); }
+.qp-row td + td:not(:nth-child(2)) { border-left:1px solid #eef1f4; }
+.qp-item { display:flex; align-items:center; gap:10px; }
+.qp-thumb { width:40px; height:34px; border-radius:4px; background:#f1efe9; display:flex; align-items:center; justify-content:center;
+  overflow:hidden; color:#b9b3a6; flex-shrink:0; }
 .qp-thumb img { width:100%; height:100%; object-fit:cover; }
-.qp-name { font-weight:600; font-size:14.5px; margin:0; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
-.qp-badge { font-size:10.5px; font-weight:600; letter-spacing:.4px; padding:2px 7px; border-radius:4px; background:#e6effc; color:#2f63b5; }
+.qp-name { font-weight:600; font-size:13px; margin:0; display:flex; align-items:center; gap:7px; flex-wrap:wrap; color:#0b1f3a; }
+.qp-badge { font-size:9.5px; font-weight:600; letter-spacing:.4px; padding:1px 6px; border-radius:3px; background:#e6effc; color:#2f63b5; }
 .qp-badge-inv { background:#e3f4e8; color:#25804a; }
-.qp-sub { margin:3px 0 0; font-size:12px; color:var(--muted); display:flex; align-items:center; gap:5px; white-space:pre-wrap; }
+.qp-sub { margin:2px 0 0; font-size:11px; color:var(--muted); display:flex; align-items:center; gap:5px; white-space:pre-wrap; }
 .qp-swatch { display:inline-block; width:10px; height:10px; border-radius:50%; border:1px solid #cfd6dd; }
-.qp-amt { font-weight:600; }
-.qp-gap td { padding:4px 0; border:0; }
+.qp-amt { font-weight:700; color:#0b1f3a; }
+/* Category total: tinted bar closing the category */
+.qp-cat-foot td { padding:0; }
+.qp-cat-sum { display:flex; align-items:center; gap:10px; background:var(--tone-bg); border:1px solid var(--tone-bar);
+  border-radius:0 0 8px 8px; padding:7px 16px; }
+.qp-cat-sum-label { font-weight:600; font-size:14.5px; color:#0b1f3a; }
+.qp-cat-sum-val { margin-left:auto; padding-left:18px; border-left:1px solid color-mix(in srgb, var(--tone-bar) 40%, transparent);
+  font-weight:700; font-size:19px; color:#0b1f3a; white-space:nowrap; }
+.qp-gap td { padding:6px 0; border:0; }
 .qp-bottom { display:flex; gap:22px; margin-top:10px; align-items:flex-start; break-inside:avoid; page-break-inside:avoid; }
 .qp-left-col { flex:1; min-width:0; display:flex; flex-direction:column; gap:14px; }
 .qp-terms { min-width:0; }
@@ -600,7 +614,7 @@ const QP_CSS = `
 @media screen and (max-width: 820px) {
   .qp { width:auto; min-height:0; zoom:1; }
   .qp-head, .qp-bottom, .qp-foot { flex-wrap:wrap; }
-  .qp-meta { flex-wrap:wrap; flex-basis:100%; } .qp-summary { flex-basis:100%; }
+  .qp-card { flex-basis:45%; } .qp-summary { flex-basis:100%; }
   .qp-title h1 { font-size:34px; }
   .qp-table { font-size:12px; } .qp-scroll { padding: 12px 0; }
 }
