@@ -1,0 +1,43 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  html, body { margin:0; padding:0; }
+  .b { position:relative; width:1536px; height:434px; overflow:hidden; background:url(base.jpg) 0 0 / 1536px 434px no-repeat; }
+  /* Left panel: hide the banner's placeholder logo + tagline, then the real logo */
+  .wipe { position:absolute; left:18px; top:58px; width:648px; height:226px;
+    background: linear-gradient(180deg,#133d40 0%,#0b3235 35%,#06272b 70%,#03201f 100%);
+    -webkit-mask-image: linear-gradient(90deg,transparent 0,#000 26px,#000 calc(100% - 40px),transparent 100%),
+                        linear-gradient(180deg,transparent 0,#000 22px,#000 calc(100% - 22px),transparent 100%);
+    -webkit-mask-composite: source-in;
+            mask-image: linear-gradient(90deg,transparent 0,#000 26px,#000 calc(100% - 40px),transparent 100%),
+                        linear-gradient(180deg,transparent 0,#000 22px,#000 calc(100% - 22px),transparent 100%);
+            mask-composite: intersect; }
+  .logo { position:absolute; left:56px; top:86px; width:540px; height:auto; }
+  /* Right panel: the address / contact text, re-typed from details.json */
+  .t { position:absolute; font-family:Poppins, sans-serif; color:#1d2a2c; white-space:nowrap; }
+  .patch { position:absolute; background:#f9f9f8; border-radius:8px; box-shadow:0 0 6px 4px #f9f9f8; }
+  .addr { left:871px; top:140px; font-size:21.5px; line-height:31px; letter-spacing:.1px; }
+  .small { top:243px; font-size:16.5px; line-height:24px; }
+</style></head>
+<body><div class="b" id="b">
+  <div class="wipe"></div>
+  <img class="logo" src="logo.png" alt="">
+  <div class="patch" style="left:864px;top:138px;width:500px;height:68px"></div>
+  <div class="patch" style="left:858px;top:240px;width:150px;height:30px"></div>
+  <div class="patch" style="left:1086px;top:240px;width:196px;height:30px"></div>
+  <div class="patch" style="left:1357px;top:242px;width:122px;height:26px"></div>
+  <div class="t addr" id="addr"></div>
+  <div class="t small" id="phone" style="left:863px"></div>
+  <div class="t small" id="email" style="left:1091px"></div>
+  <div class="t small" id="web" style="left:1361px"></div>
+</div>
+<script>
+  window.render = (d) => {
+    document.getElementById('addr').innerHTML = d.address.map((l) => l.replace(/&/g,'&amp;').replace(/</g,'&lt;')).join('<br>');
+    document.getElementById('phone').textContent = d.phone;
+    document.getElementById('email').textContent = d.email;
+    document.getElementById('web').textContent = d.website;
+  };
+</script>
+</body></html>
