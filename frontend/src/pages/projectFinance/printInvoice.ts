@@ -1,12 +1,12 @@
 import type { Invoice, InvoiceItem } from "@/types/finance";
-import type { CompanyProfile } from "@/lib/companyProfile";
+import { COMPANY_FALLBACK, type CompanyProfile } from "@/lib/companyProfile";
 
 /**
  * Opens a print-ready window with a formatted tax invoice and triggers the browser print dialog.
  * Self-contained (inline styles) so it prints cleanly without the app's chrome.
  */
 export function printInvoice(invoice: Invoice, items: InvoiceItem[], project?: any, company?: CompanyProfile) {
-  const co = company ?? { name: "ARUDRA", tagline: "Commercial Services" };
+  const co = company ?? COMPANY_FALLBACK;
   const inr = (n?: number | null) =>
     "₹" + Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const esc = (s: unknown) =>

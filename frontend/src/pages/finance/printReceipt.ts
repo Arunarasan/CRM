@@ -1,5 +1,5 @@
 import type { Invoice, InvoiceItem } from "@/types/finance";
-import type { CompanyProfile } from "@/lib/companyProfile";
+import { COMPANY_FALLBACK, type CompanyProfile } from "@/lib/companyProfile";
 
 /**
  * Opens a print-ready window with a compact 80mm POS-style receipt and triggers the
@@ -7,7 +7,7 @@ import type { CompanyProfile } from "@/lib/companyProfile";
  * Self-contained (inline styles) so it prints without the app's chrome.
  */
 export function printReceipt(invoice: Invoice, items: InvoiceItem[], company?: CompanyProfile) {
-  const co = company ?? { name: "ARUDRA", tagline: "Commercial Services" };
+  const co = company ?? COMPANY_FALLBACK;
   const inr = (n?: number | null) =>
     "₹" + Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const esc = (s: unknown) =>

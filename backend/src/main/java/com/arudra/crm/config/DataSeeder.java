@@ -699,10 +699,10 @@ public class DataSeeder {
                 i = seedSetting(settingRepo, "Brand", "brand.name", "Brand name", "JB Decor", "text", i);
                 i = seedSetting(settingRepo, "Brand", "brand.tagline", "Tagline", "Premium Interior Design & Décor", "text", i);
                 i = seedSetting(settingRepo, "Brand", "brand.positioning", "Positioning line", "Crafting Spaces. Defining Luxury.", "text", i);
-                i = seedSetting(settingRepo, "Contact", "contact.phone", "Phone", "+91 90000 00000", "tel", i);
-                i = seedSetting(settingRepo, "Contact", "contact.email", "Email", "hello@jbdecor.com", "email", i);
-                i = seedSetting(settingRepo, "Contact", "contact.whatsapp", "WhatsApp number", "919000000000", "tel", i);
-                i = seedSetting(settingRepo, "Contact", "contact.address", "Address", "JB Decor Studio, Bengaluru, India", "textarea", i);
+                i = seedSetting(settingRepo, "Contact", "contact.phone", "Phone", "+91 95248 66006", "tel", i);
+                i = seedSetting(settingRepo, "Contact", "contact.email", "Email", "jbdecorcdm@gmail.com", "email", i);
+                i = seedSetting(settingRepo, "Contact", "contact.whatsapp", "WhatsApp number", "919524866006", "tel", i);
+                i = seedSetting(settingRepo, "Contact", "contact.address", "Address", "JB Decor, 64/82, North Car Street, Chidambaram, Cuddalore - 608 001", "textarea", i);
                 i = seedSetting(settingRepo, "Contact", "contact.businessHours", "Business hours", "Mon – Sat · 10:00 AM – 7:00 PM", "text", i);
                 i = seedSetting(settingRepo, "Social", "social.instagram", "Instagram URL", "https://instagram.com", "url", i);
                 i = seedSetting(settingRepo, "Social", "social.facebook", "Facebook URL", "https://facebook.com", "url", i);
@@ -710,9 +710,9 @@ public class DataSeeder {
                 i = seedSetting(settingRepo, "Social", "social.linkedin", "LinkedIn URL", "https://linkedin.com", "url", i);
                 i = seedSetting(settingRepo, "Portal", "portal.enabled", "Customer portal enabled", "true", "text", i);
                 // Structured location — powers Google local-search signals (LocalBusiness schema) on the website.
-                i = seedSetting(settingRepo, "Location", "contact.city", "City", "", "text", i);
-                i = seedSetting(settingRepo, "Location", "contact.region", "State", "", "text", i);
-                i = seedSetting(settingRepo, "Location", "contact.postalCode", "PIN code", "", "text", i);
+                i = seedSetting(settingRepo, "Location", "contact.city", "City", "Chidambaram", "text", i);
+                i = seedSetting(settingRepo, "Location", "contact.region", "State", "Tamil Nadu", "text", i);
+                i = seedSetting(settingRepo, "Location", "contact.postalCode", "PIN code", "608001", "text", i);
                 i = seedSetting(settingRepo, "Location", "contact.country", "Country code", "IN", "text", i);
                 i = seedSetting(settingRepo, "Location", "contact.geoLat", "Map latitude", "", "text", i);
                 seedSetting(settingRepo, "Location", "contact.geoLng", "Map longitude", "", "text", i);

@@ -10,7 +10,14 @@ export interface CompanyProfile {
   email?: string;
 }
 
-const FALLBACK: CompanyProfile = { name: "ARUDRA", tagline: "Commercial Services" };
+/** JB Decor's own details — used when the settings can't be loaded or a field is blank there. */
+export const COMPANY_FALLBACK: CompanyProfile = {
+  name: "JB Decor",
+  tagline: "Crafted for Quality. Styled for You.",
+  address: "JB Decor, 64/82, North Car Street, Chidambaram, Cuddalore - 608 001",
+  phone: "+91 95248 66006",
+  email: "jbdecorcdm@gmail.com",
+};
 
 let cache: CompanyProfile | null = null;
 let inflight: Promise<CompanyProfile> | null = null;
@@ -26,16 +33,16 @@ export function fetchCompanyProfile(): Promise<CompanyProfile> {
     .then((r) => {
       const m = (r.data ?? {}) as Record<string, string>;
       cache = {
-        name: m["brand.name"]?.trim() || FALLBACK.name,
-        tagline: m["brand.tagline"]?.trim() || FALLBACK.tagline,
-        address: m["contact.address"]?.trim() || "",
+        name: m["brand.name"]?.trim() || COMPANY_FALLBACK.name,
+        tagline: m["brand.tagline"]?.trim() || COMPANY_FALLBACK.tagline,
+        address: m["contact.address"]?.trim() || COMPANY_FALLBACK.address,
         gstin: m["company.gst"]?.trim() || "",
-        phone: m["contact.phone"]?.trim() || "",
-        email: m["contact.email"]?.trim() || "",
+        phone: m["contact.phone"]?.trim() || COMPANY_FALLBACK.phone,
+        email: m["contact.email"]?.trim() || COMPANY_FALLBACK.email,
       };
       return cache;
     })
-    .catch(() => (cache = { ...FALLBACK }))
+    .catch(() => (cache = { ...COMPANY_FALLBACK }))
     .finally(() => { inflight = null; });
   return inflight;
 }
