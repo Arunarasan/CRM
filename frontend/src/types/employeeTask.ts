@@ -102,6 +102,10 @@ export interface CommentSummary {
   id: number;
   content: string;
   audioUrl?: string | null;
+  imageUrl?: string | null;
+  workLineId?: number | null;
+  tagLabel?: string | null;
+  authorId?: number | null;
   authorName: string | null;
   role: string | null;
   createdAt: string;
@@ -281,6 +285,15 @@ export interface TaskDetail extends TaskCard {
   leadId?: number | null;
   lead?: LeadInfo | null;
   projectExecution?: boolean;
+  /** The project's shared "Installation" task (category checklists + daily log). */
+  projectInstallation?: boolean;
+  /** Project tracked by Category → Product work lines (see /api/project-work). */
+  workTracking?: boolean;
+  projectId?: number | null;
+  /** Admin approval of this task closes the project (Installation, or Execution on older projects). */
+  closingTask?: boolean;
+  /** The signed-in user's id — tells "my" chat messages apart. */
+  viewerId?: number | null;
   projectInfo?: ProjectExecutionInfo | null;
   moduleDriven?: boolean;
   moduleLink?: string | null;

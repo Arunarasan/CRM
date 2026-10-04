@@ -28,6 +28,7 @@ public class ProjectQuoteChangeService {
 
     private final ProjectRepository projectRepository;
     private final ProjectService projectService;
+    private final ProjectWorkService projectWorkService;
     private final BoqService boqService;
     private final QuoteWorkspaceService quoteWorkspaceService;
     private final QuotationService quotationService;
@@ -44,6 +45,7 @@ public class ProjectQuoteChangeService {
     private final WorkPackageService workPackageService;
 
     public ProjectQuoteChangeService(ProjectRepository projectRepository, ProjectService projectService,
+                                     ProjectWorkService projectWorkService,
                                      BoqService boqService, QuoteWorkspaceService quoteWorkspaceService,
                                      QuotationService quotationService, QuotationRepository quotationRepository,
                                      ProjectMaterialRequirementRepository requirementRepository,
@@ -56,6 +58,7 @@ public class ProjectQuoteChangeService {
                                      NotificationService notificationService, WorkPackageService workPackageService) {
         this.projectRepository = projectRepository;
         this.projectService = projectService;
+        this.projectWorkService = projectWorkService;
         this.boqService = boqService;
         this.quoteWorkspaceService = quoteWorkspaceService;
         this.quotationService = quotationService;
@@ -153,6 +156,7 @@ public class ProjectQuoteChangeService {
                 .forEach(r -> requiredBefore.put(String.valueOf(r.getId()), nz(r.getRequiredQty())));
         Map<String, Object> structure = projectService.reconcileProjectWithBoq(projectId, user, false);
         projectService.seedExecutionChecklist(projectId, true);
+        if (projectWorkService.hasWorkLines(projectId)) projectWorkService.syncFromQuote(projectId);
 
         // 3. Supply & Install list: quote-linked products follow the new quote; bought-but-dropped flagged.
         Map<Long, BigDecimal> newLinked = quoteLinkedPlan(newQuote.getItems());

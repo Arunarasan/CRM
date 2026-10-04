@@ -44,6 +44,7 @@ import ProjectContractorsTab from "@/pages/contractors/ProjectContractorsTab";
 import DecisionsTab from "@/pages/projectCommandCenter/tabs/DecisionsTab";
 import DailyLogsTab from "@/pages/projectCommandCenter/tabs/DailyLogsTab";
 import FieldProgressTab from "@/pages/projectCommandCenter/tabs/FieldProgressTab";
+import WorkProgressTab from "@/pages/projectCommandCenter/tabs/WorkProgressTab";
 import QualityTab from "@/pages/projectCommandCenter/tabs/QualityTab";
 import IssuesRisksTab from "@/pages/projectCommandCenter/tabs/IssuesRisksTab";
 import DocumentsTab from "@/pages/projectCommandCenter/tabs/DocumentsTab";
@@ -197,7 +198,7 @@ function ActivityList({ items }: { items: ActivityItem[] }) {
 const TAB_GROUPS: { id: string; label: string; icon: React.ComponentType<{ className?: string }>; sections: [string, string][] }[] = [
   { id: "overview", label: "Overview", icon: ClipboardList, sections: [["overview", "Overview"]] },
   { id: "execution", label: "Execution", icon: Layers, sections: [
-    ["fieldProgress", "Tasks"], ["workCategories", "Work Categories"], ["execution", "Daily Logs"],
+    ["workProgress", "Execution & Installation"], ["fieldProgress", "Tasks"], ["workCategories", "Work Categories"], ["execution", "Daily Logs"],
     ["reports", "Reports"], ["quality", "Quality & Issues"], ["phases", "Floors & Rooms"],
   ] },
   { id: "commercial", label: "Commercial", icon: Wallet, sections: [
@@ -2154,6 +2155,11 @@ export default function ProjectCommandCenter() {
 
             <TabsContent value="reports" className="mt-0 h-full outline-none">
               <ProjectReportsTab projectId={projectId} onCountsChanged={loadReportsPending} />
+            </TabsContent>
+
+            {/* EXECUTION & INSTALLATION — Category → Product steps, installation checklists, daily log, team chat */}
+            <TabsContent value="workProgress" className="mt-0 h-full outline-none">
+              {activeTab === "workProgress" && <WorkProgressTab projectId={projectId} onChanged={fetchProjectData} />}
             </TabsContent>
 
             <TabsContent value="workCategories" className="mt-0 h-full outline-none">

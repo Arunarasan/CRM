@@ -29,6 +29,7 @@ public class WorkflowTriggerService {
     @Autowired private WorkflowInstanceRepository instanceRepository;
     @Autowired private WorkflowPhaseInstanceRepository phaseInstanceRepository;
     @Autowired private ProjectService projectService;
+    @Autowired private ProjectWorkService projectWorkService;
 
     /** A new lead was created — spin up its LEAD workflow and generate the first task(s). */
     @Transactional
@@ -143,10 +144,13 @@ public class WorkflowTriggerService {
             if (generateProjectStructure && project.getBoq() != null) {
                 projectService.reconcileProjectWithBoq(project.getId(), null, false);
             }
-            // Start the PROJECT workflow → materializes the one AVAILABLE "Project Execution" task
-            // (PROJECT_MAIN now holds a single TEAM template), then seed its checklist from the BOQ.
-            workflowService.startProjectWorkflow(project.getId())
-                    .ifPresent(instance -> projectService.seedExecutionChecklist(project.getId()));
+            // Start the PROJECT workflow → materializes the shared "Project Execution" and "Installation"
+            // tasks, then build the Category → Product work lines (and installation checklists) from the
+            // approved quote. Projects without a quote fall back to the BOQ "Work Items" checklist.
+            workflowService.startProjectWorkflow(project.getId()).ifPresent(instance -> {
+                projectWorkService.syncFromQuote(project.getId());
+                projectService.seedExecutionChecklist(project.getId());
+            });
         } catch (Exception e) {
             log.error("Workflow setup failed for project {} created from quotation", project.getId(), e);
         }

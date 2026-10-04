@@ -27,6 +27,15 @@ public class TaskComment extends BaseEntity {
     @Column(name = "audio_url", length = 500)
     private String audioUrl; // uploaded voice-note clip when the remark is (also) recorded
 
+    @Column(name = "image_url", length = 500)
+    private String imageUrl; // photo posted to the team chat
+
+    @Column(name = "work_line_id")
+    private Long workLineId; // project work line (product) the message is about, if tagged
+
+    @Column(name = "tag_label", length = 255)
+    private String tagLabel; // human label of that tag — product or installation category
+
     @Column(name = "has_attachments")
     private Boolean hasAttachments = false;
 

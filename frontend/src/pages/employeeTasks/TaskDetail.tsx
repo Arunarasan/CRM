@@ -4,7 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft, Camera, AlertTriangle, Package, Play, Pause, CheckCircle2, ThumbsUp,
   Navigation, ChevronDown, UserPlus, ClipboardList, MapPin, Image as ImageIcon,
-  Users, MessageSquare, Phone, MessageCircle, Star, Home, Wallet, FileText, UserCircle, Mic,
+  Users, MessageSquare, Phone, MessageCircle, Star, Home, Wallet, FileText, UserCircle, Mic, CalendarDays,
 } from 'lucide-react';
 import api from '@/lib/api';
 import { employeeTaskApi } from '@/api/employeeTaskApi';
@@ -21,6 +21,7 @@ import LeadTaskFormSheet from './components/LeadTaskFormSheet';
 import RequirementFormSheet from './components/RequirementFormSheet';
 import RequirementSummaryCard from './components/RequirementSummaryCard';
 import ProjectExecutionCard from './components/ProjectExecutionCard';
+import ProjectWorkTaskView, { WorkTab } from '@/components/projectWork/ProjectWorkTaskView';
 import CompleteSheet from './components/CompleteSheet';
 import CollectPaymentSheet from './components/CollectPaymentSheet';
 import TimeTracker from './components/TimeTracker';
@@ -329,6 +330,7 @@ export default function TaskDetail() {
   const [formOpen, setFormOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [actionErr, setActionErr] = useState('');
+  const [workTab, setWorkTab] = useState<WorkTab>('work');
 
   const load = useCallback(() => {
     employeeTaskApi.detail(taskId).then(setTask).catch(() => {});
@@ -398,6 +400,11 @@ export default function TaskDetail() {
   const isLeadForm = !!task.formType;
   // The one shared project execution task: progress + checklist + activity log + team messages only.
   const isProjectExec = !!task.projectExecution;
+  // Category → Product tracked project tasks (Execution / Installation): board + daily log + team chat.
+  const isProjectTask = isProjectExec || !!task.projectInstallation;
+  const workTracking = isProjectTask && !!task.workTracking;
+  // The task whose approval closes the project collects the customer's payment and submits for approval.
+  const closing = !!task.closingTask;
   const canSubmitForm = isLeadForm && !locked
     && ['ASSIGNED', 'ACCEPTED', 'IN_PROGRESS', 'PAUSED'].includes(mine ?? '');
   // Module-driven tasks (Measurement/BOQ) are done in a dedicated module and close automatically —
@@ -480,7 +487,14 @@ export default function TaskDetail() {
         {task.lead && <LeadDetailsCard lead={task.lead} />}
 
         {/* Shared project execution task — the full project picture (customer, items, materials, sizes). */}
-        {isProjectExec && task.projectInfo && <ProjectExecutionCard info={task.projectInfo} />}
+        {isProjectTask && task.projectInfo && <ProjectExecutionCard info={task.projectInfo} />}
+
+        {/* Category → Product work: products & steps (Execution) or category checklists (Installation),
+            the daily log and the team chat. Replaces the generic checklist / progress / remarks. */}
+        {workTracking && (
+          <ProjectWorkTaskView task={task} editable={!locked && !!mine} locked={locked} onReload={load}
+            tab={workTab} onTab={setWorkTab} />
+        )}
 
         {/* Data-entry hold countdown — turns into an "extend time" alert in the last 2 minutes. */}
         {task.holdExpiresAt && <HoldTimer expiresAt={task.holdExpiresAt} onExtend={extendHold} />}
@@ -566,13 +580,15 @@ export default function TaskDetail() {
         {mine && <TimeTracker taskId={taskId} disabled={locked} />}
 
         {/* Site check-in is for single field visits — not the long-running shared project task. */}
-        {!isProjectExec && <CheckInBar taskId={taskId} checkins={task.checkins} onChanged={load} locked={locked} />}
+        {!isProjectTask && <CheckInBar taskId={taskId} checkins={task.checkins} onChanged={load} locked={locked} />}
 
-        <ChecklistPanel taskId={taskId} checklist={task.checklist} onChanged={load} locked={locked}
-          title={isProjectExec ? 'Work Items' : 'Work to Complete'} />
+        {!workTracking && (
+          <ChecklistPanel taskId={taskId} checklist={task.checklist} onChanged={load} locked={locked}
+            title={isProjectExec ? 'Work Items' : 'Work to Complete'} />
+        )}
 
-        {/* One-tap progress while the work is live. */}
-        {showQuickProgress && (
+        {/* One-tap progress while the work is live (tracked project tasks compute their own %). */}
+        {showQuickProgress && !workTracking && (
           <div className="rounded-2xl border border-[#EDE6D8] bg-white p-4 shadow-[0_2px_10px_rgba(80,55,20,0.05)]">
             <div className="mb-2.5 flex items-center justify-between">
               <h3 className="text-[14px] font-semibold text-[#1A211E]">Progress</h3>
@@ -654,8 +670,8 @@ export default function TaskDetail() {
         </div>
         </>)}
 
-        {/* Remarks — shown for every task type (including lead forms). */}
-        <div className="overflow-hidden rounded-2xl border border-[#EDE6D8] bg-white shadow-[0_2px_10px_rgba(80,55,20,0.05)]">
+        {/* Remarks — shown for every task type (including lead forms); tracked project tasks use Team chat. */}
+        {!workTracking && <div className="overflow-hidden rounded-2xl border border-[#EDE6D8] bg-white shadow-[0_2px_10px_rgba(80,55,20,0.05)]">
           <Disclosure title="Remarks" count={task.comments.length} icon={<MessageSquare className="h-4 w-4" />}>
             <ul className="mb-2.5 flex flex-col gap-2">
               {task.comments.length === 0 && <li className="text-[13px] text-[#9A9E96]">No remarks yet.</li>}
@@ -687,7 +703,7 @@ export default function TaskDetail() {
               </>
             )}
           </Disclosure>
-        </div>
+        </div>}
       </div>
 
       {/* Bottom action bar with field-work buttons — hidden for lead forms (their CTA card is at top). */}
@@ -722,23 +738,32 @@ export default function TaskDetail() {
               </button>
             ) : null}
             {actionErr && <p className="mb-2 rounded-lg bg-[#FBE7E4] p-2.5 text-[12px] text-[#B94B45]">{actionErr}</p>}
-            <div className={`grid gap-2 ${isProjectExec ? 'grid-cols-2' : 'grid-cols-3'}`}>
-              <button onClick={() => setSheet('progress')} className="flex flex-col items-center gap-1 rounded-xl border border-[#E4DECF] bg-white py-2.5 text-[11px] font-medium text-[#4B524E] active:scale-95">
-                <Camera className="h-[18px] w-[18px] text-[#0A573B]" /> Progress
-              </button>
-              {/* Shared project task: record what the customer paid (pending admin verification). */}
-              {isProjectExec && (
+            <div className={`grid gap-2 ${workTracking ? (closing ? 'grid-cols-3' : 'grid-cols-2') : isProjectExec ? 'grid-cols-2' : 'grid-cols-3'}`}>
+              {workTracking ? (<>
+                <button onClick={() => { setWorkTab('log'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="flex flex-col items-center gap-1 rounded-xl border border-[#E4DECF] bg-white py-2.5 text-[11px] font-medium text-[#4B524E] active:scale-95">
+                  <CalendarDays className="h-[18px] w-[18px] text-[#0A573B]" /> Today's update
+                </button>
+                <button onClick={() => { setWorkTab('chat'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="flex flex-col items-center gap-1 rounded-xl border border-[#E4DECF] bg-white py-2.5 text-[11px] font-medium text-[#4B524E] active:scale-95">
+                  <MessageSquare className="h-[18px] w-[18px] text-[#0A573B]" /> Team chat
+                </button>
+              </>) : (
+                <button onClick={() => setSheet('progress')} className="flex flex-col items-center gap-1 rounded-xl border border-[#E4DECF] bg-white py-2.5 text-[11px] font-medium text-[#4B524E] active:scale-95">
+                  <Camera className="h-[18px] w-[18px] text-[#0A573B]" /> Progress
+                </button>
+              )}
+              {/* The project's closing task: record what the customer paid (pending admin verification). */}
+              {(workTracking ? closing : isProjectExec) && (
                 <button onClick={() => setSheet('payment')} className="flex flex-col items-center gap-1 rounded-xl border border-[#E4DECF] bg-white py-2.5 text-[11px] font-medium text-[#4B524E] active:scale-95">
                   <Wallet className="h-[18px] w-[18px] text-[#9B6B32]" /> Payment
                 </button>
               )}
-              {/* Issue / material logging is per-item field work — hidden on the shared project task. */}
-              {!isProjectExec && (
+              {/* Issue / material logging is per-item field work — hidden on the shared project tasks. */}
+              {!isProjectTask && (
                 <button onClick={() => setSheet('issue')} className="flex flex-col items-center gap-1 rounded-xl border border-[#E4DECF] bg-white py-2.5 text-[11px] font-medium text-[#4B524E] active:scale-95">
                   <AlertTriangle className="h-[18px] w-[18px] text-[#B27A12]" /> Report issue
                 </button>
               )}
-              {!isProjectExec && (
+              {!isProjectTask && (
                 <button onClick={() => setSheet('material')} className="flex flex-col items-center gap-1 rounded-xl border border-[#E4DECF] bg-white py-2.5 text-[11px] font-medium text-[#4B524E] active:scale-95">
                   <Package className="h-[18px] w-[18px] text-[#9B6B32]" /> Material
                 </button>
@@ -752,7 +777,7 @@ export default function TaskDetail() {
       <ProgressSheet taskId={taskId} open={sheet === 'progress'} onOpenChange={(o) => setSheet(o ? 'progress' : null)} onSaved={load} />
       <IssueReportSheet taskId={taskId} open={sheet === 'issue'} onOpenChange={(o) => setSheet(o ? 'issue' : null)} onSaved={load} />
       <MaterialUsageSheet taskId={taskId} open={sheet === 'material'} onOpenChange={(o) => setSheet(o ? 'material' : null)} onSaved={load} />
-      <CompleteSheet taskId={taskId} execution={isProjectExec} open={sheet === 'complete'} onOpenChange={(o) => setSheet(o ? 'complete' : null)}
+      <CompleteSheet taskId={taskId} execution={workTracking ? closing : isProjectExec} open={sheet === 'complete'} onOpenChange={(o) => setSheet(o ? 'complete' : null)}
         onDone={() => { load(); navigate('/employee/tasks'); }} />
       <CollectPaymentSheet taskId={taskId} open={sheet === 'payment'} onOpenChange={(o) => setSheet(o ? 'payment' : null)} onSaved={load} />
       {isLeadForm && task.formType === 'REQUIREMENT' ? (

@@ -29,6 +29,9 @@ import java.util.stream.Collectors;
 public class EmployeeTaskService {
 
     @Autowired
+    private ProjectWorkService projectWorkService;
+
+    @Autowired
     private TaskRepository taskRepository;
     @Autowired
     private TaskAssignmentRepository assignmentRepository;
@@ -646,8 +649,16 @@ public class EmployeeTaskService {
         // carry the full project picture (customer, lead, BOQ items/sizes/locations, materials,
         // measurements) so the whole team has the context on the task itself.
         boolean projectExecution = ProjectService.EXECUTION_TEMPLATE_CODE.equals(templateCode);
+        boolean projectInstallation = ProjectWorkService.INSTALLATION_TEMPLATE_CODE.equals(templateCode);
         detail.put("projectExecution", projectExecution);
-        if (projectExecution && task.getProject() != null) {
+        detail.put("projectInstallation", projectInstallation);
+        // Category → Product tracking (work lines + installation checklists) lives at /api/project-work.
+        detail.put("workTracking", (projectExecution || projectInstallation) && task.getProject() != null
+                && projectWorkService.hasWorkLines(task.getProject().getId()));
+        detail.put("projectId", task.getProject() != null ? task.getProject().getId() : null);
+        detail.put("closingTask", projectWorkService.isClosingTask(task));
+        detail.put("viewerId", employee != null ? employee.getId() : null); // lets the chat tell "my" messages apart
+        if ((projectExecution || projectInstallation) && task.getProject() != null) {
             if (!detail.containsKey("lead") && task.getProject().getLead() != null) {
                 detail.put("lead", toLeadInfo(task.getProject().getLead()));
             }
@@ -1029,11 +1040,22 @@ public class EmployeeTaskService {
             throw new IllegalStateException("This task is completed automatically when its work is finalized "
                     + "in its dedicated module — it can't be marked done here.");
         }
-        // The shared project execution task can only be closed once all its work items are ticked off.
-        if (guard.getTaskTemplate() != null
-                && ProjectService.EXECUTION_TEMPLATE_CODE.equals(guard.getTaskTemplate().getCode())
-                && !checklistItemsAllDone(taskId)) {
-            throw new IllegalStateException("Tick off every work item in the checklist before completing the project execution.");
+        // The shared project tasks close only when their work is done: product-tracked projects need
+        // every product at site (Execution) / every category installed (Installation); older projects
+        // need every BOQ work item ticked.
+        Long guardProjectId = guard.getProject() != null ? guard.getProject().getId() : null;
+        boolean tracked = projectWorkService.hasWorkLines(guardProjectId);
+        if (ProjectWorkService.isExecutionTask(guard)) {
+            if (tracked && projectWorkService.executionPercent(guardProjectId) < 100) {
+                throw new IllegalStateException("Finish every product's steps (material, making, delivery to site) before completing the project execution.");
+            }
+            if (!tracked && !checklistItemsAllDone(taskId)) {
+                throw new IllegalStateException("Tick off every work item in the checklist before completing the project execution.");
+            }
+        }
+        if (ProjectWorkService.isInstallationTask(guard) && tracked
+                && projectWorkService.installationPercent(guardProjectId) < 100) {
+            throw new IllegalStateException("Every category's installation must reach 100% before completing the installation.");
         }
         TaskAssignment a = getAssignment(taskId, employee.getId());
         a.setStatus("COMPLETED");
@@ -1352,6 +1374,8 @@ public class EmployeeTaskService {
      */
     private void syncProjectExecutionProgress(Task task, Integer pct) {
         if (pct == null || task.getProject() == null || !isExecutionTask(task)) return;
+        // Product-tracked projects compute their % from the work lines instead of the slider.
+        if (projectWorkService.hasWorkLines(task.getProject().getId())) return;
         Project p = task.getProject();
         p.setProgress(Math.max(0, Math.min(99, pct)));
         projectRepository.save(p);
@@ -1360,7 +1384,7 @@ public class EmployeeTaskService {
 
     /** Submitting the execution task for approval parks the project at 99% (pending admin sign-off). */
     private void markProjectPendingApproval(Task task) {
-        if (task.getProject() == null || !isExecutionTask(task)) return;
+        if (task.getProject() == null || !projectWorkService.isClosingTask(task)) return;
         Project p = task.getProject();
         p.setProgress(99);
         projectRepository.save(p);
@@ -1369,7 +1393,7 @@ public class EmployeeTaskService {
 
     /** Admin approval of the execution task marks the project 100% complete. */
     private void completeProjectForExecutionTask(Task task) {
-        if (task.getProject() == null || !isExecutionTask(task)) return;
+        if (task.getProject() == null || !projectWorkService.isClosingTask(task)) return;
         Project p = task.getProject();
         p.setProgress(100);
         if (!"CANCELLED".equalsIgnoreCase(p.getStatus()) && !"CLOSED".equalsIgnoreCase(p.getStatus())) {
@@ -1780,6 +1804,10 @@ public class EmployeeTaskService {
         m.put("id", c.getId());
         m.put("content", c.getContent());
         m.put("audioUrl", c.getAudioUrl());
+        m.put("imageUrl", c.getImageUrl());
+        m.put("workLineId", c.getWorkLineId());
+        m.put("tagLabel", c.getTagLabel());
+        m.put("authorId", c.getAuthor() != null ? c.getAuthor().getId() : null);
         m.put("authorName", c.getAuthor() != null ? c.getAuthor().getName() : null);
         m.put("role", c.getRole());
         m.put("createdAt", c.getCreatedAt());

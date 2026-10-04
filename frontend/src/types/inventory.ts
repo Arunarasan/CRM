@@ -15,6 +15,10 @@ export interface InventoryCategory {
   description?: string;
   code?: string;
   parent?: { id: number; name?: string } | null;
+  /** Default project work steps for its products, e.g. "MATERIAL,STITCHING,DELIVERY". */
+  workSteps?: string | null;
+  /** Installation checklist template, one step per line. */
+  installSteps?: string | null;
 }
 
 export interface Warehouse {

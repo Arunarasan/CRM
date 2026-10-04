@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import api from "@/lib/api";
-import { ArrowLeft, MapPin, User } from "lucide-react";
+import { ArrowLeft, MapPin, Printer, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useGoBack } from "@/hooks/useGoBack";
 import TaskExecutionReport from "@/components/projects/TaskExecutionReport";
+import WorkReport from "@/components/projectWork/WorkReport";
 
 /**
  * Full-page task execution report — the "what really happened" detail for one field task, opened
@@ -75,8 +76,25 @@ export default function TaskReportPage() {
           ) : error ? (
             <div className="text-rose-600 py-12 text-center">{error}</div>
           ) : (
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_1px_2px_rgba(0,0,0,0.03)] p-5 sm:p-7">
-              <TaskExecutionReport task={detail} detail={detail} assignments={assignments} />
+            <div className="space-y-4">
+              {/* Project Execution / Installation: the Category → Product work, day by day. */}
+              {detail?.workTracking && projectId && (
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_1px_2px_rgba(0,0,0,0.03)] p-5 sm:p-7">
+                  <div className="mb-4 flex items-center justify-between gap-2">
+                    <h2 className="text-base font-semibold text-slate-800">
+                      {detail.projectInstallation ? 'Installation report' : 'Execution report'}
+                    </h2>
+                    <Button variant="outline" size="sm" onClick={() => window.print()} className="print:hidden">
+                      <Printer className="mr-1.5 h-4 w-4" /> Print / PDF
+                    </Button>
+                  </div>
+                  <WorkReport projectId={Number(projectId)} taskId={Number(taskId)}
+                    kind={detail.projectInstallation ? 'installation' : 'execution'} />
+                </div>
+              )}
+              <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_1px_2px_rgba(0,0,0,0.03)] p-5 sm:p-7">
+                <TaskExecutionReport task={detail} detail={detail} assignments={assignments} />
+              </div>
             </div>
           )}
         </div>

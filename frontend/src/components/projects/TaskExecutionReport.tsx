@@ -304,7 +304,14 @@ export default function TaskExecutionReport({ task, detail, assignments }: { tas
               <div key={c.id} className="text-sm">
                 <span className="font-medium text-slate-700">{c.authorName || 'User'}</span>
                 <span className="text-slate-400 text-xs"> · {fmtDateTime(c.createdAt)}</span>
-                <p className="text-slate-600">{c.content}</p>
+                {c.tagLabel && <span className="ml-1.5 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] text-emerald-700">{c.tagLabel}</span>}
+                {!['🎤 Voice note', '📷 Photo'].includes(c.content) && <p className="text-slate-600">{c.content}</p>}
+                {c.imageUrl && (
+                  <a href={resolveFileUrl(c.imageUrl)} target="_blank" rel="noopener noreferrer">
+                    <img src={resolveFileUrl(c.imageUrl)} alt="" className="mt-1 h-24 rounded-lg object-cover" />
+                  </a>
+                )}
+                {c.audioUrl && <audio controls src={resolveFileUrl(c.audioUrl)} className="mt-1 h-8 print:hidden" />}
               </div>
             ))}
           </div>

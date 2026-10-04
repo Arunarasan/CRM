@@ -38,6 +38,9 @@ public class InventoryCategoryService {
         category.setDescription(details.getDescription());
         category.setCode(details.getCode());
         category.setParent(details.getParent());
+        // Project work defaults: only touched when sent, so older edit forms don't wipe them.
+        if (details.getWorkSteps() != null) category.setWorkSteps(details.getWorkSteps().isBlank() ? null : details.getWorkSteps());
+        if (details.getInstallSteps() != null) category.setInstallSteps(details.getInstallSteps().isBlank() ? null : details.getInstallSteps());
         return categoryRepository.save(category);
     }
 

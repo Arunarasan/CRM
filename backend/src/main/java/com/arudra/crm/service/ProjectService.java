@@ -17,6 +17,9 @@ import java.util.Map;
 @Service
 public class ProjectService {
 
+    @Autowired private com.arudra.crm.repository.ProjectWorkLineRepository workLineRepository;
+    @Autowired @org.springframework.context.annotation.Lazy private ProjectWorkService projectWorkService;
+
     @Autowired
     private ProjectRepository projectRepository;
 
@@ -457,8 +460,13 @@ public class ProjectService {
                 .filter(t -> t.getStage() != null && !Boolean.TRUE.equals(t.getIsDeleted()))
                 .toList();
         List<Map<String, Object>> journey = new java.util.ArrayList<>();
-        journey.add(stageSummary(1, "Production", stageTasks.stream().filter(t -> !isInstallStage(t.getStage())).toList()));
-        journey.add(stageSummary(2, "Installation & Fitting", stageTasks.stream().filter(t -> isInstallStage(t.getStage())).toList()));
+        if (projectWorkService.hasWorkLines(project.getId())) {
+            // Category → Product tracked projects: Production = execution by category, Installation = install checklists.
+            journey.addAll(workJourney(projectWorkService.getBoard(project.getId())));
+        } else {
+            journey.add(stageSummary(1, "Production", stageTasks.stream().filter(t -> !isInstallStage(t.getStage())).toList()));
+            journey.add(stageSummary(2, "Installation & Fitting", stageTasks.stream().filter(t -> isInstallStage(t.getStage())).toList()));
+        }
 
         List<ProjectReview> reviews = projectReviewRepository.findByProjectIdAndIsDeletedFalseOrderByCreatedAtDesc(project.getId());
         boolean handedOver = project.getHandoverDate() != null || "COMPLETED".equalsIgnoreCase(project.getStatus());
@@ -479,6 +487,33 @@ public class ProjectService {
         journey.add(s3);
         s.put("journey", journey);
         return s;
+    }
+
+    /** Journey stages 1–2 from the project work board (categories → execution / installation %). */
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> workJourney(Map<String, Object> board) {
+        List<Map<String, Object>> out = new java.util.ArrayList<>();
+        Object[][] stages = {
+                {1, "Production", board.get("categories"), "category", board.get("executionPercent")},
+                {2, "Installation & Fitting", board.get("install"), "category", board.get("installationPercent")}};
+        for (Object[] st : stages) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("number", st[0]);
+            m.put("name", st[1]);
+            List<Map<String, Object>> works = new java.util.ArrayList<>();
+            for (Map<String, Object> c : (List<Map<String, Object>>) st[2]) {
+                Map<String, Object> w = new LinkedHashMap<>();
+                w.put("name", c.get(st[3]));
+                w.put("progress", c.get("percent"));
+                works.add(w);
+            }
+            int pct = st[4] instanceof Number n ? n.intValue() : 0;
+            m.put("works", works);
+            m.put("progress", pct);
+            m.put("status", !works.isEmpty() && pct >= 100 ? "COMPLETED" : pct > 0 ? "IN_PROGRESS" : "PENDING");
+            out.add(m);
+        }
+        return out;
     }
 
     private Map<String, Object> stageSummary(int number, String name, List<Task> tasks) {
@@ -2124,6 +2159,8 @@ public class ProjectService {
     /** {@code refresh=true} (a quote change) updates an existing checklist instead of leaving it alone. */
     @Transactional
     public void seedExecutionChecklist(Long projectId, boolean refresh) {
+        // Projects tracked by Category → Product work lines don't use the old BOQ "Work Items" checklist.
+        if (workLineRepository.existsByProjectIdAndIsDeletedFalse(projectId)) return;
         Task exec = findExecutionTask(projectId);
         if (exec == null) return;
         Boq boq = exec.getProject() != null ? exec.getProject().getBoq() : null;

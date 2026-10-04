@@ -24,4 +24,12 @@ public class InventoryCategory extends BaseEntity {
 
     @Column(length = 30)
     private String code;
+
+    /** Default project work steps for products in this category, e.g. "MATERIAL,STITCHING,DELIVERY". */
+    @Column(name = "work_steps", length = 100)
+    private String workSteps;
+
+    /** Installation checklist template for this category, one line per step. */
+    @Column(name = "install_steps", columnDefinition = "TEXT")
+    private String installSteps;
 }
