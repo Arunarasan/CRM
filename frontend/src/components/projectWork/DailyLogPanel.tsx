@@ -6,6 +6,7 @@ import { resolveFileUrl } from '@/lib/uploadFile';
 import { toast } from '@/components/ui/toast';
 import { DailyLog, WorkBoard } from '@/types/projectWork';
 import { CARD, INPUT, PRIMARY, PhotoPicker, Thumbs, errMsg, fmtDay } from './workUi';
+import AudioPlayer from "@/components/AudioPlayer";
 
 /**
  * Day-by-day log on a project task: what was done today, the plan for tomorrow, photos and a voice note.
@@ -127,7 +128,7 @@ export default function DailyLogPanel({ taskId, board, installation, editable, o
               {l.audioUrl && (
                 <div className="mt-2 flex items-center gap-2">
                   <Mic className="h-4 w-4 shrink-0 text-[#9B6B32]" />
-                  <audio controls src={resolveFileUrl(l.audioUrl)} className="h-8 w-full max-w-[260px]" />
+                  <AudioPlayer src={resolveFileUrl(l.audioUrl)} className="w-full max-w-[260px]" />
                 </div>
               )}
               <p className="mt-1.5 text-[11px] text-[#9A9E96]">{l.authorName}</p>

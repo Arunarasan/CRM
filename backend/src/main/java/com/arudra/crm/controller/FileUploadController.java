@@ -38,12 +38,14 @@ public class FileUploadController {
     );
     // Fallback allow-list by extension for files browsers report with an unhelpful content type.
     private static final Set<String> ALLOWED_EXTENSIONS = Set.of(
-            "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "csv", "zip", "dwg", "dxf");
+            "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "csv", "zip", "dwg", "dxf",
+            "mp3", "m4a", "aac", "amr", "3gp", "3ga", "awb", "wav", "ogg", "opus", "webm", "wma", "flac");
     private static final long MAX_SIZE_BYTES = 25L * 1024 * 1024;
 
     private static final long MAX_IMAGE_PROXY_BYTES = 10L * 1024 * 1024;
 
     private final StorageService storageService;
+    private final com.arudra.crm.storage.AudioTranscoder audioTranscoder;
 
     /** Public origin of stored files on S3 / R2 (blank when files are stored on local disk). */
     @org.springframework.beans.factory.annotation.Value("${app.storage.s3.public-base-url:}")
@@ -64,8 +66,9 @@ public class FileUploadController {
             .followRedirects(java.net.http.HttpClient.Redirect.NEVER)
             .build();
 
-    public FileUploadController(StorageService storageService) {
+    public FileUploadController(StorageService storageService, com.arudra.crm.storage.AudioTranscoder audioTranscoder) {
         this.storageService = storageService;
+        this.audioTranscoder = audioTranscoder;
     }
 
     /**
@@ -157,7 +160,21 @@ public class FileUploadController {
             return ResponseEntity.badRequest().body(ApiResponse.error("Unsupported file type: " + contentType));
         }
 
-        StoredFile stored = storageService.store(file.getBytes(), contentType, module, originalName);
+        byte[] bytes = file.getBytes();
+        String storedType = contentType;
+        String storedName = originalName;
+        // Phone call recordings (.amr/.3gp…) and browser webm clips don't play (or show no length) in
+        // every browser — store a universal .m4a instead when ffmpeg can convert it.
+        if (audioTranscoder.needsTranscode(contentType, originalName)) {
+            com.arudra.crm.storage.AudioTranscoder.Result converted = audioTranscoder.toM4a(bytes, originalName);
+            if (converted != null) {
+                bytes = converted.bytes();
+                storedType = converted.contentType();
+                storedName = converted.fileName();
+            }
+        }
+
+        StoredFile stored = storageService.store(bytes, storedType, module, storedName);
         return ResponseEntity.ok(ApiResponse.success(Map.of(
                 "fileUrl", stored.fileUrl(),
                 "fileName", stored.fileName()

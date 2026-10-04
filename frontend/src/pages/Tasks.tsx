@@ -22,6 +22,9 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { AttendanceAdmin } from "@/pages/hr/HrAttendancePage";
+import CallRecordingsTab from "@/components/callRecordings/CallRecordingsTab";
+import CallLeadPanel from "@/components/callRecordings/CallLeadPanel";
+import { callRecordingApi, type CallRecording } from "@/api/callRecordingApi";
 
 // ============================================================ shared helpers
 
@@ -97,16 +100,18 @@ const CATEGORIES: { id: TaskCategory; label: string; hint: string; badge: string
   { id: "STITCHING",    label: "Stitching",    hint: "Stickered stitching / making bundles",        badge: "bg-indigo-100 text-indigo-700 border-indigo-200" },
   { id: "INSTALLATION", label: "Installation", hint: "Walk-in / counter-sale installs",             badge: "bg-amber-100 text-amber-700 border-amber-200" },
   { id: "ENQUIRY",      label: "Enquiry",      hint: "Website enquiries & customer service requests", badge: "bg-rose-100 text-rose-700 border-rose-200" },
+  { id: "CALL",         label: "Call Follow-up", hint: "Uploaded call recordings to turn into leads",   badge: "bg-sky-100 text-sky-700 border-sky-200" },
   { id: "OTHER",        label: "Other",        hint: "Ad-hoc / manually created",                   badge: "bg-slate-100 text-slate-600 border-slate-200" },
 ];
 const CATEGORY_BADGE: Record<string, string> = Object.fromEntries(CATEGORIES.map(c => [c.id, c.badge]));
 
-type MainTab = "tasks" | "employees" | "attendance" | "approvals" | "risk" | "templates";
+type MainTab = "tasks" | "employees" | "calls" | "attendance" | "approvals" | "risk" | "templates";
 
 // ============================================================ page
 
 export default function Tasks() {
-  const { isAdmin } = useAuth();
+  const { isAdmin, hasAnyAuthority } = useAuth();
+  const canManageCalls = hasAnyAuthority(["ROLE_MANAGER", "ROLE_PROJECT_MANAGER", "TASK_ASSIGN"]);
   const navigate = useNavigate();
 
   const [tab, setTab] = useState<MainTab>("tasks");
@@ -142,6 +147,7 @@ export default function Tasks() {
   const [applyingChecklist, setApplyingChecklist] = useState(false);
   const [assignPick, setAssignPick] = useState<ResourceSelection | null>(null);
   const [assigning, setAssigning] = useState(false);
+  const [taskCall, setTaskCall] = useState<CallRecording | null>(null);
 
   const openTask = (id: number) => {
     const t = fullTasks[id];
@@ -149,6 +155,8 @@ export default function Tasks() {
     setAssignments([]); setAssignPick(null); setChecklists([]); setNewChecklistItem("");
     setIsDialogOpen(true);
     loadAssignments(id); loadChecklist(id);
+    setTaskCall(null);
+    if (t?.source === "CALL_RECORDING" || !t) callRecordingApi.forTask(id).then(setTaskCall).catch(() => {});
   };
   const openNew = () => {
     setCurrentTask({ status: "PENDING", priority: "MEDIUM" });
@@ -210,6 +218,7 @@ export default function Tasks() {
   const tabs: { id: MainTab; label: string; admin?: boolean; badge?: number }[] = [
     { id: "tasks", label: "Tasks" },
     { id: "employees", label: "Employees" },
+    { id: "calls", label: "Call Recordings", admin: !canManageCalls },
     { id: "attendance", label: "Attendance", admin: true },
     { id: "approvals", label: "Time Approvals", admin: true },
     { id: "risk", label: "Projects at Risk", admin: true },
@@ -267,6 +276,7 @@ export default function Tasks() {
 
       {tab === "tasks" && <TasksTab board={board} counts={counts} filter={taskBucket} onFilterChange={setTaskBucket} onEdit={openTask} onChanged={loadBoard} navigate={navigate} />}
       {tab === "employees" && <EmployeesTab roster={roster} board={board} isAdmin={isAdmin} onChanged={loadBoard} />}
+      {tab === "calls" && (isAdmin || canManageCalls) && <CallRecordingsTab onOpenTask={openTask} onTasksChanged={loadBoard} />}
       {tab === "attendance" && isAdmin && <AttendanceAdmin />}
       {tab === "approvals" && isAdmin && <ApprovalsTab />}
       {tab === "risk" && isAdmin && <RiskTab navigate={navigate} />}
@@ -292,6 +302,15 @@ export default function Tasks() {
                   </button>
                 )}
               </div>
+            )}
+            {taskCall && (
+              <CallLeadPanel call={taskCall} canOpenLead onChanged={(c) => {
+                setTaskCall(c);
+                // Closing the call completed the task server-side — keep the open form in step so a
+                // later "Save Task" doesn't send the old status back.
+                if (c.outcome) setCurrentTask((t: any) => ({ ...t, status: "COMPLETED", leadId: c.lead?.id ?? t.leadId }));
+                loadBoard();
+              }} />
             )}
             <div className="space-y-2">
               <Label>Task Title</Label>

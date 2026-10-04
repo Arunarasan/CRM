@@ -1035,6 +1035,11 @@ public class EmployeeTaskService {
         // when the real work is finalized in their module. Manual completion would falsely advance the
         // workflow (e.g. generate the BOQ task with no measurement recorded).
         Task guard = getTask(taskId);
+        // A call follow-up closes through its outcome (lead created / added to a lead / not a lead).
+        if ("CALL_RECORDING".equals(guard.getSource())) {
+            throw new IllegalStateException("Finish this call from its Lead section — create the lead, add the call "
+                    + "to an existing lead, or mark it Not a lead.");
+        }
         if (guard.getTaskTemplate() != null
                 && com.arudra.crm.util.LeadTaskForms.isModuleDriven(guard.getTaskTemplate().getCode())) {
             throw new IllegalStateException("This task is completed automatically when its work is finalized "
@@ -1101,6 +1106,14 @@ public class EmployeeTaskService {
     }
 
     /** Finalize a task as COMPLETED, close its assignments, notify, and drive the workflow forward. */
+    /** Closes a call follow-up task once its outcome has been recorded on the call recording. */
+    @Transactional
+    public Task closeCallFollowUp(Long taskId, User by) {
+        Task task = getTask(taskId);
+        if ("COMPLETED".equals(task.getStatus())) return task;
+        return finalizeTaskCompletion(task, by);
+    }
+
     private Task finalizeTaskCompletion(Task task, User byEmployee) {
         task.setStatus("COMPLETED");
         task.setCompletedDate(LocalDate.now());
@@ -1757,6 +1770,7 @@ public class EmployeeTaskService {
         if ("BUNDLE".equals(source)) return new String[]{"STITCHING", "Stitching"};
         if (t.getInvoiceId() != null) return new String[]{"INSTALLATION", "Installation"};
         if ("ENQUIRY".equals(source) || "SERVICE_REQUEST".equals(source)) return new String[]{"ENQUIRY", "Enquiry"};
+        if ("CALL_RECORDING".equals(source))                     return new String[]{"CALL", "Call Follow-up"};
         if (t.getLeadId() != null) return new String[]{"LEAD", "Lead"};
         if (t.getGeneratedFromBoqItemId() != null) return new String[]{"FIELD_WORK", "Field Work"};
         if (t.getProject() != null) return new String[]{"PROJECT", "Project"};

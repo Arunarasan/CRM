@@ -7,6 +7,7 @@ import { useImageViewer } from '@/components/ImageViewerProvider';
 import { toast } from '@/components/ui/toast';
 import { FileThumb, SourceChip } from './FileTile';
 import { ProjectFile, SOURCES, UPLOAD_TYPES, fmtWhen, projectFilesApi } from './fileTypes';
+import AudioPlayer from "@/components/AudioPlayer";
 
 /**
  * Full-screen viewer: the file itself (photo / PDF / video / voice) with prev-next, and a details panel —
@@ -96,7 +97,7 @@ export default function FileViewer({ files, index, onIndex, onClose, onChanged, 
           ) : file.kind === 'audio' ? (
             <div className="flex w-full max-w-md flex-col items-center gap-4 p-6">
               <div className="h-40 w-40 overflow-hidden rounded-3xl"><FileThumb kind="audio" /></div>
-              <audio src={url} controls className="w-full" autoPlay />
+              <AudioPlayer src={url} className="w-full" autoPlay />
             </div>
           ) : (
             <div className="flex flex-col items-center gap-4 p-6 text-center">

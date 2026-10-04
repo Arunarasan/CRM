@@ -1,6 +1,7 @@
 import { format } from "date-fns";
 import { resolveFileUrl } from "@/lib/uploadFile";
 import { CheckCircle2, Clock, MapPin, Paperclip } from "lucide-react";
+import AudioPlayer from "@/components/AudioPlayer";
 
 // -------------------------------------------------------------- small helpers
 const dt = (iso?: string | null) => { if (!iso) return null; const d = new Date(iso); return isNaN(d.getTime()) ? null : d; };
@@ -311,7 +312,7 @@ export default function TaskExecutionReport({ task, detail, assignments }: { tas
                     <img src={resolveFileUrl(c.imageUrl)} alt="" className="mt-1 h-24 rounded-lg object-cover" />
                   </a>
                 )}
-                {c.audioUrl && <audio controls src={resolveFileUrl(c.audioUrl)} className="mt-1 h-8 print:hidden" />}
+                {c.audioUrl && <AudioPlayer src={resolveFileUrl(c.audioUrl)} className="mt-1 w-60 max-w-full print:hidden" />}
               </div>
             ))}
           </div>

@@ -4,6 +4,7 @@ import { projectWorkApi } from '@/api/projectWorkApi';
 import { resolveFileUrl } from '@/lib/uploadFile';
 import { DailyLog, EVENT_LABELS, WorkBoard, WorkEvent, WorkStep, WorkStepType } from '@/types/projectWork';
 import { stepSummary } from './ExecutionBoard';
+import AudioPlayer from "@/components/AudioPlayer";
 
 const fmt = (s?: string | null) =>
   s ? new Date(s).toLocaleString(undefined, { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—';
@@ -172,7 +173,7 @@ export default function WorkReport({ projectId, taskId, kind }: {
                 )}
                 {l.audioUrl && (
                   <p className="mt-1 flex items-center gap-1.5 print:hidden">
-                    <Mic className="h-3.5 w-3.5 text-amber-700" /><audio controls src={resolveFileUrl(l.audioUrl)} className="h-8" />
+                    <Mic className="h-3.5 w-3.5 text-amber-700" /><AudioPlayer src={resolveFileUrl(l.audioUrl)} className="w-60 max-w-full" />
                   </p>
                 )}
               </li>

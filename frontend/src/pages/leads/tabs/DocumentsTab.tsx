@@ -13,6 +13,7 @@ import FileUploadField from "@/components/FileUploadField";
 import ImageCaptureField from "@/components/ImageCaptureField";
 import AudioCaptureField, { type CapturedAudio } from "@/components/AudioCaptureField";
 import { resolveFileUrl } from "@/lib/uploadFile";
+import AudioPlayer from "@/components/AudioPlayer";
 
 const EMPTY = { fileName: "", fileUrl: "", category: "Property Images", documentType: "", description: "" };
 
@@ -109,7 +110,7 @@ export default function DocumentsTab({ leadId }: { leadId: string }) {
                               <Trash2 className="h-4 w-4" />
                             </Button>
                           </div>
-                          <audio controls src={url} className="h-9 w-full" />
+                          <AudioPlayer src={url} className="w-full" />
                         </div>
                       );
                     }

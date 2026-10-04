@@ -94,7 +94,7 @@ export interface TaskBoardRow {
 }
 
 export type TaskCategory =
-  | 'LEAD' | 'PROJECT' | 'FIELD_WORK' | 'STITCHING' | 'INSTALLATION' | 'ENQUIRY' | 'OTHER';
+  | 'LEAD' | 'PROJECT' | 'FIELD_WORK' | 'STITCHING' | 'INSTALLATION' | 'ENQUIRY' | 'CALL' | 'OTHER';
 
 export interface RosterRow {
   employeeId: number;

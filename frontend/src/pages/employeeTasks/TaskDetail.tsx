@@ -23,11 +23,14 @@ import RequirementSummaryCard from './components/RequirementSummaryCard';
 import ProjectExecutionCard from './components/ProjectExecutionCard';
 import ProjectWorkTaskView, { WorkTab } from '@/components/projectWork/ProjectWorkTaskView';
 import CompleteSheet from './components/CompleteSheet';
+import CallLeadPanel from '@/components/callRecordings/CallLeadPanel';
+import { callRecordingApi, type CallRecording } from '@/api/callRecordingApi';
 import CollectPaymentSheet from './components/CollectPaymentSheet';
 import TimeTracker from './components/TimeTracker';
 import HoldTimer from './components/HoldTimer';
 import { formatTime } from '@/pages/leads/constants';
 import { humanizeDue, dueToneClass, priorityMeta, statusMeta } from './taskUtils';
+import AudioPlayer from "@/components/AudioPlayer";
 
 /** A quiet disclosure row — keeps history/team/notes tucked away until wanted. Designed to sit
  *  inside a grouped card with `divide-y`, so it carries no border of its own (spec §6). */
@@ -245,7 +248,7 @@ function LeadDetailsCard({ lead }: { lead: LeadInfo }) {
                 {audios.map((m, i) => (
                   <div key={i} className="flex items-center gap-2 rounded-lg bg-white px-2.5 py-2 ring-1 ring-[#E4DECF]">
                     <Mic className="h-4 w-4 shrink-0 text-[#9B6B32]" />
-                    <audio src={resolveFileUrl(m.fileUrl)} controls className="h-9 w-full" />
+                    <AudioPlayer src={resolveFileUrl(m.fileUrl)} className="w-full" />
                   </div>
                 ))}
               </div>
@@ -331,12 +334,19 @@ export default function TaskDetail() {
   const [busy, setBusy] = useState(false);
   const [actionErr, setActionErr] = useState('');
   const [workTab, setWorkTab] = useState<WorkTab>('work');
+  const [call, setCall] = useState<CallRecording | null>(null);
 
   const load = useCallback(() => {
     employeeTaskApi.detail(taskId).then(setTask).catch(() => {});
   }, [taskId]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Call follow-up tasks carry the recording + the lead form instead of field-work tools.
+  const isCallTask = task?.category === 'CALL';
+  useEffect(() => {
+    if (isCallTask) callRecordingApi.forTask(taskId).then(setCall).catch(() => {});
+  }, [isCallTask, taskId]);
 
   if (!task) return <div className="p-6 text-center text-sm text-muted-foreground">Loading…</div>;
 
@@ -517,6 +527,25 @@ export default function TaskDetail() {
           </div>
         )}
 
+        {isCallTask && (
+          <div className="overflow-hidden rounded-2xl border border-[#EDE6D8] bg-white p-4 shadow-[0_4px_16px_rgba(80,55,20,0.06)]">
+            <div className="mb-3 flex items-center gap-2.5">
+              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#E4F1F7] text-[#1F6F8B]">
+                <Phone className="h-4 w-4" />
+              </span>
+              <div>
+                <p className="text-[15px] font-semibold text-[#22271F]">Call follow-up</p>
+                <p className="text-[12px] text-[#7A7F76]">Listen, call back, then create the lead — that completes this task.</p>
+              </div>
+            </div>
+            {call ? (
+              <CallLeadPanel call={call} onChanged={(c) => { setCall(c); load(); }} />
+            ) : (
+              <p className="py-4 text-center text-sm text-muted-foreground">Loading the call…</p>
+            )}
+          </div>
+        )}
+
         {/* Lead-workflow "collect info" tasks are form-first: take the task, then fill the form that
             writes straight onto the lead — no field-work tools (check-in / checklist / progress). */}
         {isLeadForm && (
@@ -576,7 +605,7 @@ export default function TaskDetail() {
         )}
 
         {/* Field-execution tools — only for real field/site tasks, not lead "collect info" forms. */}
-        {!isLeadForm && (<>
+        {!isLeadForm && !isCallTask && (<>
         {mine && <TimeTracker taskId={taskId} disabled={locked} />}
 
         {/* Site check-in is for single field visits — not the long-running shared project task. */}
@@ -681,7 +710,7 @@ export default function TaskDetail() {
                   <li key={c.id} className="text-[13px] text-[#33392F]">
                     <span className="font-medium">{c.authorName}:</span>{!isVoiceOnly && ` ${c.content}`}
                     {c.audioUrl && (
-                      <audio controls src={resolveFileUrl(c.audioUrl)} className="mt-1 h-8 w-full max-w-[240px]" />
+                      <AudioPlayer src={resolveFileUrl(c.audioUrl)} className="mt-1 w-full max-w-[240px]" />
                     )}
                   </li>
                 );
@@ -707,7 +736,7 @@ export default function TaskDetail() {
       </div>
 
       {/* Bottom action bar with field-work buttons — hidden for lead forms (their CTA card is at top). */}
-      {!isLeadForm && (
+      {!isLeadForm && !isCallTask && (
       <div className="fixed bottom-16 left-1/2 z-20 w-full max-w-md -translate-x-1/2 border-t border-[#EEE7DA] bg-[#FDFCF9]/95 px-3.5 pb-3 pt-2.5 backdrop-blur shadow-[0_-4px_16px_rgba(80,55,20,0.07)]">
         {locked ? (
           <p className="flex items-center justify-center gap-1.5 py-2 text-[12px] font-medium text-[#8A8F86]">

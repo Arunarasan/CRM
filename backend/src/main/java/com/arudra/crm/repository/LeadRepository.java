@@ -112,4 +112,15 @@ public interface LeadRepository extends JpaRepository<Lead, Long>, JpaSpecificat
     @Query("SELECT COALESCE(l.stage, 'New Lead'), COUNT(l) FROM Lead l WHERE l.isDeleted = false " +
            "GROUP BY COALESCE(l.stage, 'New Lead')")
     java.util.List<Object[]> countLeadsByStage();
+
+    /**
+     * Newest live lead whose mobile / alternate / WhatsApp number ends in the given 10 digits —
+     * numbers are stored in every format (+91…, spaces, dashes), so only the digits are compared.
+     */
+    @Query(value = "SELECT * FROM leads WHERE is_deleted = 0 AND ("
+            + "RIGHT(REGEXP_REPLACE(COALESCE(mobile_number, ''), '[^0-9]', ''), 10) = :digits "
+            + "OR RIGHT(REGEXP_REPLACE(COALESCE(alternate_mobile, ''), '[^0-9]', ''), 10) = :digits "
+            + "OR RIGHT(REGEXP_REPLACE(COALESCE(whatsapp_number, ''), '[^0-9]', ''), 10) = :digits) "
+            + "ORDER BY id DESC LIMIT 1", nativeQuery = true)
+    java.util.Optional<Lead> findLatestByPhoneDigits(@Param("digits") String digits);
 }

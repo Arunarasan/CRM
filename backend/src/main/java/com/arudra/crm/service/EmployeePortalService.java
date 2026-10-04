@@ -718,6 +718,16 @@ public class EmployeePortalService {
     @Transactional
     public Map<String, Object> createLead(User currentUser, Map<String, Object> body) {
         requireEmployee(currentUser);
+        return leadSummary(createLeadFromForm(currentUser, body, "Employee"));
+    }
+
+    /**
+     * Builds and saves a lead from the mobile Add Lead form body (the safe field subset), owned by
+     * {@code currentUser}, and attaches any photos / voice notes in {@code documents}. Shared by the
+     * portal's own Add Lead and the call-recording follow-up task.
+     */
+    @Transactional
+    public Lead createLeadFromForm(User currentUser, Map<String, Object> body, String leadSource) {
         String name = trimToNull((String) body.get("name"));
         if (name == null) {
             throw new IllegalArgumentException("Customer / lead name is required.");
@@ -743,7 +753,7 @@ public class EmployeePortalService {
             lead.setSiteVisitRequired(true);
         }
         lead.setStatus("New");
-        lead.setLeadSource("Employee");
+        lead.setLeadSource(leadSource);
         lead.setLeadOwner(currentUser);
         Lead saved = leadService.createLead(lead, currentUser);
         // Attach any photos / voice notes captured on the form as LeadDocuments, so they travel
@@ -767,7 +777,7 @@ public class EmployeePortalService {
                 }
             }
         }
-        return leadSummary(saved);
+        return saved;
     }
 
     private Map<String, Object> leadSummary(Lead l) {

@@ -14,9 +14,9 @@ RUN mvn clean package -DskipTests -B
 FROM eclipse-temurin:17-jre-jammy
 WORKDIR /app
 
-# Install curl for health checks & create non-root user
+# Install curl for health checks, ffmpeg to convert phone-call audio (.amr/.3gp) to .m4a, and create non-root user
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends curl && \
+    apt-get install -y --no-install-recommends curl ffmpeg && \
     rm -rf /var/lib/apt/lists/* && \
     groupadd -r spring && useradd -r -g spring spring
 

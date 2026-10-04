@@ -710,6 +710,7 @@ public class SmartAssignmentService {
         if ("BUNDLE".equals(source))                             return new String[]{"STITCHING", "Stitching"};
         if (t.getInvoiceId() != null)                            return new String[]{"INSTALLATION", "Installation"};
         if ("ENQUIRY".equals(source) || "SERVICE_REQUEST".equals(source)) return new String[]{"ENQUIRY", "Enquiry"};
+        if ("CALL_RECORDING".equals(source))                     return new String[]{"CALL", "Call Follow-up"};
         if (t.getLeadId() != null)                               return new String[]{"LEAD", "Lead"};
         if (t.getGeneratedFromBoqItemId() != null)   return new String[]{"FIELD_WORK", "Field Work"};
         if (t.getProject() != null)                  return new String[]{"PROJECT", "Project"};

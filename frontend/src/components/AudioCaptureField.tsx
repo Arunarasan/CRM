@@ -1,6 +1,7 @@
 import { BaseInput } from '@/components/ui/input';
 import { useEffect, useRef, useState } from "react";
-import { Mic, Square, Upload, X, Loader2, Play } from "lucide-react";
+import { Mic, Square, Upload, X, Loader2 } from "lucide-react";
+import AudioPlayer from "@/components/AudioPlayer";
 import { uploadFile } from "@/lib/uploadFile";
 import { resolveFileUrl } from "@/lib/uploadFile";
 
@@ -101,8 +102,7 @@ export default function AudioCaptureField({
         <div className="space-y-2">
           {value.map((clip, i) => (
             <div key={i} className="flex items-center gap-2 rounded-md border bg-muted/30 px-2.5 py-2">
-              <Play className="h-4 w-4 shrink-0 text-primary" />
-              <audio controls src={resolveFileUrl(clip.url)} className="h-8 min-w-0 flex-1" />
+              <AudioPlayer src={resolveFileUrl(clip.url)} fileName={clip.fileName} className="flex-1" />
               {!disabled && (
                 <button
                   type="button"

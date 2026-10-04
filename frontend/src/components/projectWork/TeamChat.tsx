@@ -6,6 +6,7 @@ import { resolveFileUrl } from '@/lib/uploadFile';
 import { toast } from '@/components/ui/toast';
 import { CommentSummary } from '@/types/employeeTask';
 import { INPUT, PhotoPicker, errMsg, fmtWhen } from './workUi';
+import AudioPlayer from "@/components/AudioPlayer";
 
 export interface ChatTag { workLineId?: number | null; label: string }
 
@@ -98,7 +99,7 @@ export default function TeamChat({ taskId, comments, onPosted, locked, tag, onCl
                     <img src={resolveFileUrl(c.imageUrl)} alt="" className="mt-1 max-h-56 w-full rounded-xl object-cover" />
                   </a>
                 )}
-                {c.audioUrl && <audio controls src={resolveFileUrl(c.audioUrl)} className="mt-1 h-8 w-56 max-w-full" />}
+                {c.audioUrl && <AudioPlayer src={resolveFileUrl(c.audioUrl)} className="mt-1 w-56 max-w-full" />}
                 {!hideText && <p className="whitespace-pre-wrap text-[13.5px] leading-snug">{c.content}</p>}
                 <p className={`mt-0.5 text-right text-[10px] ${mine ? 'text-[#BFD8C8]' : 'text-[#A6A99E]'}`}>{fmtWhen(c.createdAt)}</p>
               </div>
