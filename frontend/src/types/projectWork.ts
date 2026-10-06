@@ -1,4 +1,5 @@
-// Category → Product work tracking behind a project's "Project Execution" and "Installation" tasks.
+// Category → Product work tracking behind a project's "Execution & Installation" task (older projects may
+// still have a separate Installation task).
 
 export type WorkStepType = 'MATERIAL' | 'MANUFACTURE' | 'STITCHING' | 'DELIVERY';
 export type DeliveryRoute = 'DIRECT' | 'PICKUP';
@@ -88,7 +89,10 @@ export interface WorkBoard {
   projectId: number;
   hasLines: boolean;
   executionTask: WorkTaskInfo | null;
+  /** Only on older projects that still have their own open Installation task. */
   installationTask: WorkTaskInfo | null;
+  /** True when the Execution task carries installation too (no separate Installation task). */
+  combined: boolean;
   executionPercent: number;
   installationPercent: number;
   overallPercent: number;

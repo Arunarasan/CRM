@@ -240,7 +240,30 @@ export interface LeadInfo {
   referrerContact?: string | null;
   referralNotes?: string | null;
   remarks?: string | null;
+  /** Who brought the lead in / handles it. */
+  leadOwnerName?: string | null;
+  salesExecutiveName?: string | null;
+  referredByEmployeeName?: string | null;
+  capturedByName?: string | null;
+  capturedAt?: string | null;
   media?: LeadMediaItem[];
+}
+
+/** The customer behind any task (project, field work, service, walk-in install) and how to reach them. */
+export interface TaskContact {
+  customerId?: number | null;
+  name?: string | null;
+  phone?: string | null;
+  alternatePhone?: string | null;
+  whatsappNumber?: string | null;
+  email?: string | null;
+  address?: string | null;
+  city?: string | null;
+  pincode?: string | null;
+  mapUrl?: string | null;
+  /** The project's sales executive — who got the job. */
+  salesExecutiveName?: string | null;
+  projectManagerName?: string | null;
 }
 
 /** A photo / voice note / video / file attached to the lead at capture. */
@@ -251,7 +274,7 @@ export interface LeadMediaItem {
   kind: 'IMAGE' | 'AUDIO' | 'VIDEO' | 'FILE';
 }
 
-/** Rich read-only context shown on the shared "Project Execution" task. */
+/** Rich read-only context shown on the shared "Execution & Installation" task. */
 export interface ProjectExecutionInfo {
   projectCode?: string | null;
   projectName?: string | null;
@@ -275,6 +298,10 @@ export interface ProjectExecutionInfo {
   }>;
   collectedPending?: number | string | null;
   collectedConfirmed?: number | string | null;
+  /** Order value: the approved quote's total, else the project budget. */
+  contractValue?: number | string | null;
+  /** Order value minus confirmed payments. */
+  balanceDue?: number | string | null;
 }
 
 export interface TaskDetail extends TaskCard {
@@ -285,7 +312,7 @@ export interface TaskDetail extends TaskCard {
   leadId?: number | null;
   lead?: LeadInfo | null;
   projectExecution?: boolean;
-  /** The project's shared "Installation" task (category checklists + daily log). */
+  /** An older project's separate "Installation" task (newer projects carry it inside Execution). */
   projectInstallation?: boolean;
   /** Project tracked by Category → Product work lines (see /api/project-work). */
   workTracking?: boolean;
@@ -301,6 +328,7 @@ export interface TaskDetail extends TaskCard {
   customer: string | null;
   location: string | null;
   mapUrl?: string | null;
+  contact?: TaskContact | null;
   estimatedHours: number | null;
   actualHours: number | null;
   startDate: string | null;

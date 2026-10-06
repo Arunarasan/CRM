@@ -16,9 +16,10 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * Project work tracking by Category → Product, behind the project's two shared tasks.
+ * Project work tracking by Category → Product, behind the project's one shared "Execution & Installation"
+ * task (older projects may still carry a separate Installation task — it keeps working until it closes).
  *
- * <p><b>Project Execution</b> — every quoted product line goes through its own steps until it is at site:
+ * <p><b>Execution</b> — every quoted product line goes through its own steps until it is at site:
  * MATERIAL (read from the project's purchase orders when one covers the product, otherwise a manual tick),
  * MANUFACTURE / STITCHING (checklist + %), and DELIVERY (DIRECT: supplier dispatches → at site, or PICKUP:
  * team picks up → on the way → at site). Execution % = average of every step.
@@ -27,7 +28,8 @@ import java.util.stream.Collectors;
  * Category % = max(ticked share, manual %), Installation % = average of categories. The team posts a daily
  * "done today / plan for tomorrow" log that can move the bars.
  *
- * <p>Project % = half execution + half installation, held at 99% until the closing task is approved.
+ * <p>Project % = half execution + half installation, held at 99% until the closing task is approved. The
+ * combined task's own % is that same overall figure; it can be submitted only once both halves reach 100%.
  */
 @Service
 public class ProjectWorkService {
@@ -105,12 +107,20 @@ public class ProjectWorkService {
     }
 
     /**
-     * Make sure the project has both shared tasks — creates the missing one(s) through the PROJECT workflow
-     * (idempotent: existing tasks are skipped). Used for projects created before Installation existed.
+     * True when the project's Execution task also carries installation — every project except older ones
+     * that still have their own open Installation task.
+     */
+    public boolean isCombined(Long projectId) {
+        return projectId != null && findInstallationTask(projectId) == null;
+    }
+
+    /**
+     * Make sure the project has its shared "Execution & Installation" task — created through the PROJECT
+     * workflow when missing (idempotent: an existing task is left alone).
      */
     @Transactional
     public void ensureTasks(Long projectId) {
-        if (findExecutionTask(projectId) != null && findInstallationTask(projectId) != null) return;
+        if (findExecutionTask(projectId) != null) return;
         Optional<WorkflowInstance> active =
                 workflowInstanceRepository.findFirstByScopeAndProjectIdAndStatus("PROJECT", projectId, "ACTIVE");
         if (active.isEmpty()) {
@@ -330,7 +340,9 @@ public class ProjectWorkService {
         out.put("projectId", projectId);
         out.put("hasLines", !calc.lines.isEmpty());
         out.put("executionTask", taskInfo(findExecutionTask(projectId)));
-        out.put("installationTask", taskInfo(findInstallationTask(projectId)));
+        Task legacyInstall = findInstallationTask(projectId);
+        out.put("installationTask", taskInfo(legacyInstall));
+        out.put("combined", legacyInstall == null);
         out.put("executionPercent", calc.executionPercent);
         out.put("installationPercent", calc.installationPercent);
         out.put("overallPercent", overall(calc));
@@ -618,19 +630,20 @@ public class ProjectWorkService {
     }
 
     /**
-     * Push the computed bars onto the two tasks and the project (project held at 99% until the closing
-     * task is approved). No-op for projects without work lines.
+     * Push the computed bars onto the task(s) and the project (project held at 99% until the closing
+     * task is approved). The combined task carries the overall %. No-op for projects without work lines.
      */
     @Transactional
     public void recompute(Long projectId) {
         if (!hasWorkLines(projectId)) return;
         Calc c = calculate(projectId);
+        Task inst = findInstallationTask(projectId);
         Task exec = findExecutionTask(projectId);
-        if (exec != null && !Objects.equals(exec.getProgress(), c.executionPercent)) {
-            exec.setProgress(c.executionPercent);
+        int execPct = inst == null ? overall(c) : c.executionPercent;
+        if (exec != null && !Objects.equals(exec.getProgress(), execPct)) {
+            exec.setProgress(execPct);
             taskRepository.save(exec);
         }
-        Task inst = findInstallationTask(projectId);
         if (inst != null && !Objects.equals(inst.getProgress(), c.installationPercent)) {
             inst.setProgress(c.installationPercent);
             taskRepository.save(inst);
@@ -654,6 +667,12 @@ public class ProjectWorkService {
     @Transactional(readOnly = true)
     public int installationPercent(Long projectId) {
         return calculate(projectId).installationPercent;
+    }
+
+    /** Execution + installation together — what the combined task must reach before it can be submitted. */
+    @Transactional(readOnly = true)
+    public int overallPercent(Long projectId) {
+        return overall(calculate(projectId));
     }
 
     // ------------------------------------------------------------------ execution edits
@@ -905,8 +924,9 @@ public class ProjectWorkService {
         if (workDone == null && plan == null) throw new IllegalArgumentException("Write what was done today or the plan for tomorrow");
 
         boolean install = isInstallationTask(task);
+        boolean combined = isExecutionTask(task) && isCombined(projectId);
         Calc before = calculate(projectId);
-        int pctBefore = install ? before.installationPercent : before.executionPercent;
+        int pctBefore = install ? before.installationPercent : combined ? overall(before) : before.executionPercent;
 
         if (body.get("categoryPercents") instanceof Map<?, ?> cp) {
             for (Map.Entry<?, ?> e : cp.entrySet()) {
@@ -928,7 +948,7 @@ public class ProjectWorkService {
         log.setWorkDone(workDone);
         log.setTomorrowPlan(plan);
         log.setPercentBefore(pctBefore);
-        log.setPercentAfter(install ? after.installationPercent : after.executionPercent);
+        log.setPercentAfter(install ? after.installationPercent : combined ? overall(after) : after.executionPercent);
         if (body.get("photos") instanceof List<?> photos) {
             log.setPhotos(photos.stream().filter(Objects::nonNull).map(String::valueOf).filter(s -> !s.isBlank()).toList());
         }

@@ -1,8 +1,8 @@
-import { Building2, User, Package, Ruler, Layers, Phone, MessageCircle, Wallet, Clock } from 'lucide-react';
+import { Building2, User, Package, Ruler, Layers, Phone, MessageCircle } from 'lucide-react';
 import { ProjectExecutionInfo } from '@/types/employeeTask';
 
 /**
- * The project picture shown on the shared "Project Execution" task — customer, the BOQ items with
+ * The project picture shown on the shared "Execution & Installation" task — customer, the BOQ items with
  * their sizes and locations, the planned materials, and the site measurements — so the whole team
  * has everything in one place. Read-only; empty groups are hidden.
  */
@@ -11,16 +11,12 @@ const has = (v: unknown) => v != null && String(v).trim() !== '';
 const telHref = (s?: string | null) => 'tel:' + (s || '').replace(/[^\d+]/g, '');
 const waHref = (s?: string | null) => 'https://wa.me/' + (s || '').replace(/[^\d]/g, '');
 const num = (v: unknown) => (v == null || v === '' ? null : Number(v));
-const money = (v: unknown) => '₹' + Number(v || 0).toLocaleString('en-IN');
 
 export default function ProjectExecutionCard({ info }: { info: ProjectExecutionInfo }) {
   const c = info.customer;
   const rooms = (info.rooms || []).filter((r) => (r.items || []).length > 0);
   const materials = (info.materials || []).filter((m) => has(m.product));
   const measurements = (info.measurements || []).filter((m) => has(m.room) || m.length || m.width);
-  const payments = (info.payments || []).filter((p) => p.amount != null);
-  const pending = Number(info.collectedPending || 0);
-  const confirmed = Number(info.collectedConfirmed || 0);
 
   return (
     <div className="overflow-hidden rounded-2xl border border-[#EDE6D8] bg-white shadow-[0_4px_16px_rgba(80,55,20,0.06)]">
@@ -129,40 +125,6 @@ export default function ProjectExecutionCard({ info }: { info: ProjectExecutionI
           </div>
         )}
 
-        {/* Payments collected — pending ones await admin verification. */}
-        {(payments.length > 0 || pending > 0 || confirmed > 0) && (
-          <div className="mt-3 rounded-xl border border-[#EFE9DC] bg-[#FBFAF6] p-3.5">
-            <p className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#9B6B32]">
-              <Wallet className="h-3.5 w-3.5" /> Payments collected
-            </p>
-            <div className="mb-2 grid grid-cols-2 gap-2">
-              <div className="rounded-lg bg-white px-2.5 py-1.5 ring-1 ring-[#E4DECF]">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-[#A6A99E]">Verified</p>
-                <p className="text-[14px] font-bold text-[#2C7050]">{money(confirmed)}</p>
-              </div>
-              <div className="rounded-lg bg-white px-2.5 py-1.5 ring-1 ring-[#E4DECF]">
-                <p className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-[#A6A99E]"><Clock className="h-2.5 w-2.5" /> Awaiting</p>
-                <p className="text-[14px] font-bold text-[#9B6B32]">{money(pending)}</p>
-              </div>
-            </div>
-            <ul className="flex flex-col gap-1">
-              {payments.map((p, pi) => {
-                const isPending = String(p.status).toUpperCase() === 'PENDING_APPROVAL';
-                return (
-                  <li key={pi} className="flex items-center justify-between gap-2 text-[13px] text-[#33392F]">
-                    <span className="min-w-0">
-                      <span className="font-semibold">{money(p.amount)}</span>
-                      <span className="text-[#7A8078]">{has(p.method) ? ` · ${p.method}` : ''}{has(p.collectedBy) ? ` · ${p.collectedBy}` : ''}</span>
-                    </span>
-                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-medium ${isPending ? 'bg-[#FBEFE0] text-[#9B6B32]' : 'bg-[#E7F2EC] text-[#2C7050]'}`}>
-                      {isPending ? 'Awaiting verification' : 'Verified'}
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        )}
       </div>
     </div>
   );

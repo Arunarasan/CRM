@@ -107,6 +107,10 @@ public class EmployeeTaskService {
     @Autowired
     private com.arudra.crm.repository.BundleRepository bundleRepository;
     @Autowired
+    private com.arudra.crm.repository.CustomerRepository customerRepository;
+    @Autowired
+    private com.arudra.crm.repository.InvoiceRepository invoiceRepository;
+    @Autowired
     private com.arudra.crm.repository.BundleEventRepository bundleEventRepository;
 
     private static final List<String> ACTIVE_ASSIGNMENT_STATUSES =
@@ -671,6 +675,9 @@ public class EmployeeTaskService {
         // the "Navigate to site" button reliably takes a field employee to the right place.
         detail.put("location", siteAddressText(task.getProject()));
         detail.put("mapUrl", siteMapUrl(task.getProject()));
+        // Who to meet and how to reach them, for every kind of task (project, field work, service,
+        // walk-in install…) — the lead card covers lead-linked tasks in more depth.
+        detail.put("contact", toContactInfo(task));
         detail.put("floor", task.getRoom() != null ? task.getRoom().getFloorName() : null);
         detail.put("estimatedHours", task.getEstimatedHours());
         detail.put("actualHours", task.getActualHours());
@@ -782,6 +789,12 @@ public class EmployeeTaskService {
         m.put("referrerContact", l.getReferrerContact());
         m.put("referralNotes", l.getReferralNotes());
         m.put("remarks", l.getRemarks());
+        // Who brought the lead in and who handles it.
+        m.put("leadOwnerName", userName(l.getLeadOwner()));
+        m.put("salesExecutiveName", userName(l.getAssignedSalesExecutive()));
+        m.put("referredByEmployeeName", userName(l.getReferredByEmployee()));
+        m.put("capturedByName", auditorName(l.getCreatedBy()));
+        m.put("capturedAt", l.getCreatedAt());
         // Media captured with the lead — the photos and voice notes the office/employee attached at
         // capture. Each classified into a coarse kind so the app can render a thumbnail, an audio
         // player, a video, or a file link.
@@ -851,6 +864,53 @@ public class EmployeeTaskService {
         }
         String address = siteAddressText(project);
         return isNotBlank(address) ? mapsQuery(address) : null;
+    }
+
+    /**
+     * The customer behind a task — from its project, its own customer link, or the walk-in invoice — with
+     * phone, address and a maps link, plus the project's sales executive (who got the job). Null when the
+     * task isn't tied to a customer.
+     */
+    private Map<String, Object> toContactInfo(Task task) {
+        com.arudra.crm.entity.Project project = task.getProject();
+        com.arudra.crm.entity.Customer c = project != null ? project.getCustomer() : null;
+        if (c == null && task.getCustomerId() != null) c = customerRepository.findById(task.getCustomerId()).orElse(null);
+        if (c == null && task.getInvoiceId() != null) {
+            c = invoiceRepository.findById(task.getInvoiceId()).map(i -> i.getCustomer()).orElse(null);
+        }
+        if (c == null) return null;
+        Map<String, Object> m = new java.util.LinkedHashMap<>();
+        m.put("customerId", c.getId());
+        m.put("name", c.getName());
+        m.put("phone", c.getPhone());
+        m.put("alternatePhone", c.getAlternatePhone());
+        m.put("whatsappNumber", c.getWhatsappNumber());
+        m.put("email", c.getEmail());
+        String address = project != null ? siteAddressText(project)
+                : (isNotBlank(c.getSiteAddress()) ? c.getSiteAddress() : c.getBillingAddress());
+        m.put("address", address);
+        m.put("city", c.getCity());
+        m.put("pincode", c.getPincode());
+        String map = project != null ? siteMapUrl(project) : null;
+        if (map == null && isNotBlank(c.getGoogleMapLocation())) {
+            String g = c.getGoogleMapLocation().trim();
+            map = g.startsWith("http://") || g.startsWith("https://") ? g : mapsQuery(g);
+        }
+        if (map == null && isNotBlank(address)) map = mapsQuery(address + (isNotBlank(c.getCity()) ? ", " + c.getCity() : ""));
+        m.put("mapUrl", map);
+        m.put("salesExecutiveName", project != null ? userName(project.getSalesExecutive()) : null);
+        m.put("projectManagerName", project != null ? userName(project.getProjectManager()) : null);
+        return m;
+    }
+
+    private String userName(User u) {
+        return u != null ? u.getName() : null;
+    }
+
+    /** created_by holds the login (email) — show the person's name when we can find them. */
+    private String auditorName(String login) {
+        if (!isNotBlank(login) || "system".equalsIgnoreCase(login)) return null;
+        return userRepository.findByEmail(login).map(User::getName).orElse(login);
     }
 
     private String mapsQuery(String query) {
@@ -1051,7 +1111,11 @@ public class EmployeeTaskService {
         Long guardProjectId = guard.getProject() != null ? guard.getProject().getId() : null;
         boolean tracked = projectWorkService.hasWorkLines(guardProjectId);
         if (ProjectWorkService.isExecutionTask(guard)) {
-            if (tracked && projectWorkService.executionPercent(guardProjectId) < 100) {
+            boolean combined = projectWorkService.isCombined(guardProjectId);
+            if (tracked && combined && projectWorkService.overallPercent(guardProjectId) < 100) {
+                throw new IllegalStateException("Get every product to site and every category's installation to 100% before submitting Execution & Installation.");
+            }
+            if (tracked && !combined && projectWorkService.executionPercent(guardProjectId) < 100) {
                 throw new IllegalStateException("Finish every product's steps (material, making, delivery to site) before completing the project execution.");
             }
             if (!tracked && !checklistItemsAllDone(taskId)) {

@@ -2306,6 +2306,13 @@ public class ProjectService {
         info.put("payments", payments);
         info.put("collectedPending", collectedPending);
         info.put("collectedConfirmed", collectedConfirmed);
+        // Order value (approved quote, else the project budget) and what's still to collect after the
+        // confirmed payments — so the team knows how much to ask the customer for.
+        java.math.BigDecimal contractValue = project.getQuotation() != null && project.getQuotation().getGrandTotal() != null
+                && project.getQuotation().getGrandTotal().signum() > 0
+                ? project.getQuotation().getGrandTotal() : project.getBudget();
+        info.put("contractValue", contractValue);
+        info.put("balanceDue", contractValue != null ? contractValue.subtract(collectedConfirmed).max(java.math.BigDecimal.ZERO) : null);
         return info;
     }
 

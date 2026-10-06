@@ -26,6 +26,8 @@ import CompleteSheet from './components/CompleteSheet';
 import CallLeadPanel from '@/components/callRecordings/CallLeadPanel';
 import { callRecordingApi, type CallRecording } from '@/api/callRecordingApi';
 import CollectPaymentSheet from './components/CollectPaymentSheet';
+import PaymentBox from './components/PaymentBox';
+import CustomerContactCard from './components/CustomerContactCard';
 import TimeTracker from './components/TimeTracker';
 import HoldTimer from './components/HoldTimer';
 import { formatTime } from '@/pages/leads/constants';
@@ -137,6 +139,22 @@ function LeadDetailsCard({ lead }: { lead: LeadInfo }) {
             {has(lead.priority) && <Pill>{lead.priority} priority</Pill>}
             {has(lead.leadType) && <Pill>{lead.leadType}</Pill>}
             {has(lead.leadSource) && <Pill>via {lead.leadSource}</Pill>}
+          </div>
+        )}
+
+        {/* Who got the lead and who handles it */}
+        {(has(lead.leadOwnerName) || has(lead.capturedByName) || has(lead.salesExecutiveName) || has(lead.referredByEmployeeName)) && (
+          <div className="mt-2.5 flex flex-col gap-0.5 rounded-xl bg-[#FBFAF6] px-3 py-2 text-[12.5px] text-[#5E655D] ring-1 ring-[#EFE9DC]">
+            {has(lead.leadOwnerName || lead.capturedByName) && (
+              <span><span className="font-semibold text-[#33392F]">Lead by:</span> {lead.leadOwnerName || lead.capturedByName}
+                {fmtDate(lead.capturedAt) ? ` · ${fmtDate(lead.capturedAt)}` : ''}</span>
+            )}
+            {has(lead.referredByEmployeeName) && (
+              <span><span className="font-semibold text-[#33392F]">Referred by:</span> {lead.referredByEmployeeName}</span>
+            )}
+            {has(lead.salesExecutiveName) && lead.salesExecutiveName !== (lead.leadOwnerName || lead.capturedByName) && (
+              <span><span className="font-semibold text-[#33392F]">Sales:</span> {lead.salesExecutiveName}</span>
+            )}
           </div>
         )}
 
@@ -415,6 +433,7 @@ export default function TaskDetail() {
   const workTracking = isProjectTask && !!task.workTracking;
   // The task whose approval closes the project collects the customer's payment and submits for approval.
   const closing = !!task.closingTask;
+  const canRecordPayment = !locked && !!mine && (workTracking ? closing : isProjectExec);
   const canSubmitForm = isLeadForm && !locked
     && ['ASSIGNED', 'ACCEPTED', 'IN_PROGRESS', 'PAUSED'].includes(mine ?? '');
   // Module-driven tasks (Measurement/BOQ) are done in a dedicated module and close automatically —
@@ -494,10 +513,22 @@ export default function TaskDetail() {
 
         {/* The original lead picture — who the customer is and what they asked for at capture. Shown for
             any task tied to a lead so the field employee has full context before collecting/confirming. */}
-        {task.lead && <LeadDetailsCard lead={task.lead} />}
+        {task.lead ? <LeadDetailsCard lead={task.lead} />
+          : task.contact && !isCallTask && (
+            <CustomerContactCard contact={task.contact}
+              requirement={task.category === 'ENQUIRY' || task.category === 'INSTALLATION' ? task.description : null} />
+          )}
 
-        {/* Shared project execution task — the full project picture (customer, items, materials, sizes). */}
+        {/* Shared project task — the full project picture (customer, items, materials, sizes). */}
         {isProjectTask && task.projectInfo && <ProjectExecutionCard info={task.projectInfo} />}
+
+        {/* Payments: order value, received, awaiting check, balance — record one or request it on WhatsApp. */}
+        {isProjectTask && task.projectInfo && (
+          <PaymentBox info={task.projectInfo}
+            phone={task.lead?.whatsappNumber || task.lead?.mobileNumber || task.contact?.whatsappNumber
+              || task.contact?.phone || task.projectInfo.customer?.phone}
+            canRecord={canRecordPayment} onRecord={() => setSheet('payment')} />
+        )}
 
         {/* Category → Product work: products & steps (Execution) or category checklists (Installation),
             the daily log and the team chat. Replaces the generic checklist / progress / remarks. */}
@@ -767,7 +798,7 @@ export default function TaskDetail() {
               </button>
             ) : null}
             {actionErr && <p className="mb-2 rounded-lg bg-[#FBE7E4] p-2.5 text-[12px] text-[#B94B45]">{actionErr}</p>}
-            <div className={`grid gap-2 ${workTracking ? (closing ? 'grid-cols-3' : 'grid-cols-2') : isProjectExec ? 'grid-cols-2' : 'grid-cols-3'}`}>
+            <div className={`grid gap-2 ${workTracking ? 'grid-cols-2' : isProjectExec ? 'grid-cols-1' : 'grid-cols-3'}`}>
               {workTracking ? (<>
                 <button onClick={() => { setWorkTab('log'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="flex flex-col items-center gap-1 rounded-xl border border-[#E4DECF] bg-white py-2.5 text-[11px] font-medium text-[#4B524E] active:scale-95">
                   <CalendarDays className="h-[18px] w-[18px] text-[#0A573B]" /> Today's update
@@ -778,12 +809,6 @@ export default function TaskDetail() {
               </>) : (
                 <button onClick={() => setSheet('progress')} className="flex flex-col items-center gap-1 rounded-xl border border-[#E4DECF] bg-white py-2.5 text-[11px] font-medium text-[#4B524E] active:scale-95">
                   <Camera className="h-[18px] w-[18px] text-[#0A573B]" /> Progress
-                </button>
-              )}
-              {/* The project's closing task: record what the customer paid (pending admin verification). */}
-              {(workTracking ? closing : isProjectExec) && (
-                <button onClick={() => setSheet('payment')} className="flex flex-col items-center gap-1 rounded-xl border border-[#E4DECF] bg-white py-2.5 text-[11px] font-medium text-[#4B524E] active:scale-95">
-                  <Wallet className="h-[18px] w-[18px] text-[#9B6B32]" /> Payment
                 </button>
               )}
               {/* Issue / material logging is per-item field work — hidden on the shared project tasks. */}

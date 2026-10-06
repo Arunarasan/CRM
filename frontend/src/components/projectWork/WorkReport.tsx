@@ -25,11 +25,12 @@ function Block({ title, note, children }: { title: string; note?: string; childr
 const pctCls = (p: number) => (p >= 100 ? 'text-emerald-700' : p > 0 ? 'text-amber-700' : 'text-slate-400');
 
 /**
- * Printable report for a project's Execution or Installation task: product steps (with PO, delivery
- * route, who / when and photos) or category installation checklists, the day-by-day log and history.
+ * Printable report for a project's work task: product steps (with PO, delivery route, who / when and
+ * photos), category installation checklists, the day-by-day log and history. 'combined' (Execution &
+ * Installation) shows both halves; older projects' separate tasks show their own half.
  */
 export default function WorkReport({ projectId, taskId, kind }: {
-  projectId: number; taskId: number; kind: 'execution' | 'installation';
+  projectId: number; taskId: number; kind: 'execution' | 'installation' | 'combined';
 }) {
   const [board, setBoard] = useState<WorkBoard | null>(null);
   const [logs, setLogs] = useState<DailyLog[]>([]);
@@ -44,7 +45,11 @@ export default function WorkReport({ projectId, taskId, kind }: {
   if (!board) return <p className="py-6 text-center text-sm text-slate-400">Loading the work report…</p>;
 
   const installation = kind === 'installation';
-  const relevant = events.filter((e) => (installation ? e.stepType === 'INSTALL' : e.stepType !== 'INSTALL'));
+  const combined = kind === 'combined';
+  const showProducts = !installation;
+  const showInstall = installation || combined;
+  const relevant = combined ? events
+    : events.filter((e) => (installation ? e.stepType === 'INSTALL' : e.stepType !== 'INSTALL'));
   const columns: WorkStepType[] = ['MATERIAL', 'MANUFACTURE', 'STITCHING', 'DELIVERY'];
   const usedCols = columns.filter((c) => board.categories.some((cat) => cat.lines.some((l) => l.steps.some((s) => s.stepType === c))));
   const colLabel: Record<WorkStepType, string> = { MATERIAL: 'Material', MANUFACTURE: 'Manufacture', STITCHING: 'Stitching', DELIVERY: 'Delivery' };
@@ -54,8 +59,10 @@ export default function WorkReport({ projectId, taskId, kind }: {
       {/* Summary */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
-          { label: installation ? 'Installation' : 'Execution', value: `${installation ? board.installationPercent : board.executionPercent}%` },
-          { label: 'Overall project', value: `${board.overallPercent}%` },
+          ...(combined
+            ? [{ label: 'Execution', value: `${board.executionPercent}%` }, { label: 'Installation', value: `${board.installationPercent}%` }]
+            : [{ label: installation ? 'Installation' : 'Execution', value: `${installation ? board.installationPercent : board.executionPercent}%` },
+               { label: 'Overall project', value: `${board.overallPercent}%` }]),
           { label: 'Products at site', value: `${board.atSiteCount}/${board.productCount}` },
           { label: 'Categories installed', value: `${board.install.filter((c) => c.percent >= 100).length}/${board.install.length}` },
         ].map((k) => (
@@ -66,7 +73,7 @@ export default function WorkReport({ projectId, taskId, kind }: {
         ))}
       </div>
 
-      {!installation && (
+      {showProducts && (
         <Block title="Products" note={`${board.productCount} products in ${board.categories.length} categories`}>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[560px] text-left text-[13px]">
@@ -123,7 +130,7 @@ export default function WorkReport({ projectId, taskId, kind }: {
         </Block>
       )}
 
-      {installation && (
+      {showInstall && (
         <Block title="Installation by category">
           <div className="space-y-4">
             {board.install.map((c) => (

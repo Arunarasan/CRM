@@ -17,8 +17,10 @@ import CategoryDefaultsDialog from '@/components/projectWork/CategoryDefaultsDia
 type View = 'execution' | 'installation' | 'log' | 'chat' | 'history';
 
 /**
- * Project page → Execution → "Execution & Installation": the office view of the two shared project tasks —
- * Category → Product steps, category installation checklists, the daily log, the team chat and history.
+ * Project page → Execution → "Execution & Installation": the office view of the project's shared
+ * "Execution & Installation" task — Category → Product steps, category installation checklists, the daily
+ * log, the team chat and history. Older projects may still have a separate Installation task; the log and
+ * chat then switch between the two.
  */
 export default function WorkProgressTab({ projectId, onChanged }: { projectId: number; onChanged?: () => void }) {
   const navigate = useNavigate();
@@ -41,7 +43,7 @@ export default function WorkProgressTab({ projectId, onChanged }: { projectId: n
   const onBoard = (b: WorkBoard) => { setBoard(b); onChanged?.(); };
 
   const activeTask: WorkTaskInfo | null =
-    board ? (chatTask === 'installation' ? board.installationTask : board.executionTask) : null;
+    board ? (chatTask === 'installation' && board.installationTask ? board.installationTask : board.executionTask) : null;
 
   const loadTaskDetail = useCallback(() => {
     if (activeTask) employeeTaskApi.detail(activeTask.id).then(setTaskDetail).catch(() => setTaskDetail(null));
@@ -70,7 +72,7 @@ export default function WorkProgressTab({ projectId, onChanged }: { projectId: n
         <ClipboardCheck className="mx-auto h-8 w-8 text-[#9B6B32]" />
         <p className="mt-2 text-[15px] font-semibold text-[#1A211E]">Track this project by category &amp; product</p>
         <p className="mt-1 text-[13px] text-[#6B7169]">
-          Creates the Project Execution and Installation tasks and lists every quoted product with its steps — material
+          Creates the Execution &amp; Installation task and lists every quoted product with its steps — material
           (from purchase orders when they exist), stitching / manufacturing and delivery to site — plus an installation
           checklist per category.
         </p>
@@ -81,8 +83,10 @@ export default function WorkProgressTab({ projectId, onChanged }: { projectId: n
     );
   }
 
-  // The printable report follows what's on screen: Installation view → its task, else Execution.
-  const reportTask = view === 'installation' || ((view === 'log' || view === 'chat') && chatTask === 'installation')
+  // The printable report follows what's on screen: an older project's Installation view → its task,
+  // else the Execution (& Installation) task.
+  const split = !!board.installationTask;
+  const reportTask = split && (view === 'installation' || ((view === 'log' || view === 'chat') && chatTask === 'installation'))
     ? board.installationTask : board.executionTask;
 
   const views: { id: View; label: string; icon: typeof Hammer }[] = [
@@ -108,7 +112,7 @@ export default function WorkProgressTab({ projectId, onChanged }: { projectId: n
         <div className="ml-auto flex gap-2">
           {reportTask && (
             <button onClick={() => navigate(`/projects/${projectId}/tasks/${reportTask.id}`)} className={GHOST}>
-              <ExternalLink className="h-4 w-4" /> {reportTask === board.installationTask ? 'Installation report' : 'Execution report'}
+              <ExternalLink className="h-4 w-4" /> {!split ? 'Work report' : reportTask === board.installationTask ? 'Installation report' : 'Execution report'}
             </button>
           )}
           {canManage && (<>
@@ -124,7 +128,7 @@ export default function WorkProgressTab({ projectId, onChanged }: { projectId: n
           suggest={board.categories.map((c) => c.category)} />
       </div>
 
-      {(view === 'log' || view === 'chat') && (
+      {split && (view === 'log' || view === 'chat') && (
         <div className="flex gap-1.5">
           {(['execution', 'installation'] as const).map((t) => (
             <button key={t} onClick={() => setChatTask(t)}
@@ -146,7 +150,7 @@ export default function WorkProgressTab({ projectId, onChanged }: { projectId: n
             onChat={(c) => { setChatTask('installation'); setChatTag({ label: c.category }); setView('chat'); }} />
         )}
         {view === 'log' && activeTask && (
-          <DailyLogPanel key={activeTask.id} taskId={activeTask.id} board={board} installation={chatTask === 'installation'}
+          <DailyLogPanel key={activeTask.id} taskId={activeTask.id} board={board} installation={!split || chatTask === 'installation'}
             editable onSaved={load} />
         )}
         {view === 'chat' && activeTask && (
@@ -154,9 +158,12 @@ export default function WorkProgressTab({ projectId, onChanged }: { projectId: n
             <TeamChat taskId={activeTask.id} comments={taskDetail.comments} onPosted={loadTaskDetail}
               locked={['COMPLETED', 'CANCELLED'].includes(taskDetail.status)} myId={taskDetail.viewerId}
               tag={chatTag} onClearTag={() => setChatTag(null)}
-              tagOptions={chatTask === 'installation'
+              tagOptions={split && chatTask === 'installation'
                 ? board.install.map((c) => ({ label: c.category }))
-                : board.categories.flatMap((c) => c.lines.map((l) => ({ workLineId: l.id, label: l.itemName })))} />
+                : [
+                    ...board.categories.flatMap((c) => c.lines.map((l) => ({ workLineId: l.id, label: l.itemName }))),
+                    ...(split ? [] : board.install.map((c) => ({ label: c.category }))),
+                  ]} />
           ) : <p className="p-4 text-center text-[13px] text-[#9A9E96]">Loading…</p>
         )}
         {(view === 'log' || view === 'chat') && !activeTask && (
