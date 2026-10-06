@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { format } from "date-fns";
 import { purchaseApi } from "@/api/purchaseApi";
 import type { Supplier, SupplierProfile } from "@/types/purchase";
-import { PO_STATUS_TONE } from "@/types/purchase";
+import { PoStatusBadge } from "@/components/purchases/po-ui";
 import { useGoBack } from "@/hooks/useGoBack";
 import { toast } from "@/components/ui/toast";
 import { apiError } from "@/lib/apiError";
@@ -243,7 +243,7 @@ export default function SupplierProfilePage() {
                     <span className="text-slate-400 text-xs ml-2">{fmtDate(po.date)}</span>
                   </div>
                   <div className="flex items-center gap-3">
-                    <Badge className={PO_STATUS_TONE[po.status]}>{po.status}</Badge>
+                    <PoStatusBadge status={po.status} />
                     <span className="font-bold text-slate-800">{currency(po.totalAmount)}</span>
                   </div>
                 </Link>

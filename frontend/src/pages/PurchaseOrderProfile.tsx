@@ -1,13 +1,11 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { useParams } from "react-router-dom";
-import { format } from "date-fns";
+import { Link, useParams } from "react-router-dom";
 import { purchaseApi } from "@/api/purchaseApi";
 import { inventoryApi } from "@/api/inventoryApi";
 import type {
   PurchaseOrder, PurchaseOrderItem, GoodsReceiptNote, PurchasePayment, PurchaseReturn,
 } from "@/types/purchase";
 import type { Warehouse } from "@/types/inventory";
-import { PO_STATUS_TONE } from "@/types/purchase";
 import { useGoBack } from "@/hooks/useGoBack";
 import { apiError } from "@/lib/apiError";
 import { toast } from "@/components/ui/toast";
@@ -19,10 +17,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import SearchableSelect from "@/components/ui/searchable-select";
 import ImageCaptureField from "@/components/ImageCaptureField";
 import { resolveFileUrl } from "@/lib/uploadFile";
-import { ArrowLeft, PackageCheck, Wallet, Undo2, Plus, Receipt } from "lucide-react";
+import { ArrowLeft, PackageCheck, Wallet, Undo2, Plus, Receipt, Truck, FolderKanban } from "lucide-react";
+import { PoStatusBadge, PoShipmentsPanel, ReceivedBar, poMoney, poDate } from "@/components/purchases/po-ui";
 
-const currency = (n?: number) => `₹${(n ?? 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const fmtDate = (d?: string) => (d ? format(new Date(d), "MMM d, yyyy") : "—");
+// Same money / date format as every other purchase-order screen (components/purchases/po-ui).
+const currency = (n?: number) => poMoney(n);
+const fmtDate = (d?: string) => poDate(d);
 
 const PAYMENT_METHODS = ["BANK_TRANSFER", "CASH", "UPI", "CHEQUE", "CARD"];
 const RETURN_REASONS = [
@@ -83,6 +83,7 @@ export default function PurchaseOrderProfile() {
   const [receiveOpen, setReceiveOpen] = useState(false);
   const [payOpen, setPayOpen] = useState(false);
   const [returnOpen, setReturnOpen] = useState(false);
+  const [shipSignal, setShipSignal] = useState(0);
 
   // receive form
   const [recvWarehouseId, setRecvWarehouseId] = useState("");
@@ -243,6 +244,15 @@ export default function PurchaseOrderProfile() {
 
   const actions = TRANSITIONS[po.status] ?? [];
   const received = grns.length > 0;
+  const qtyOrdered = items.reduce((s, it) => s + (it.quantity || 0), 0);
+  const qtyReceived = items.reduce((s, it) => s + Math.min(it.receivedQuantity || 0, it.quantity || 0), 0);
+  const receivedPct = qtyOrdered ? (qtyReceived / qtyOrdered) * 100 : 0;
+  const addresses = (po.deliveryAddresses?.length ? po.deliveryAddresses : po.deliveryAddress ? [po.deliveryAddress] : []).filter(Boolean) as string[];
+  const live = !["CANCELLED", "REJECTED", "DRAFT"].includes(po.status);
+  const openShipments = () => {
+    setShipSignal((n) => n + 1);
+    document.getElementById("po-shipments")?.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
 
   return (
     <div className="p-4 md:p-8 max-w-5xl mx-auto space-y-6">
@@ -251,11 +261,17 @@ export default function PurchaseOrderProfile() {
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" onClick={goBack}><ArrowLeft className="w-5 h-5" /></Button>
           <div>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <h1 className="text-2xl font-bold tracking-tight text-slate-900">{po.poNumber}</h1>
-              <Badge className={PO_STATUS_TONE[po.status]}>{po.status}</Badge>
+              <PoStatusBadge status={po.status} size="md" />
             </div>
-            <p className="text-sm text-muted-foreground">{po.supplier?.name} · raised {fmtDate(po.date)}</p>
+            <p className="text-sm text-muted-foreground">
+              {po.supplier?.name} · raised {fmtDate(po.date)}
+              {po.project?.id && (
+                <> · <Link to={`/projects/${po.project.id}?tab=purchaseOrders`} className="inline-flex items-center gap-1 font-semibold text-emerald-700 hover:underline">
+                  <FolderKanban className="h-3.5 w-3.5" />{po.project.projectName || `Project #${po.project.id}`}</Link></>
+              )}
+            </p>
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -267,16 +283,22 @@ export default function PurchaseOrderProfile() {
         </div>
       </div>
 
-      {/* Money summary — Total / Paid / Pending */}
-      <div className="grid grid-cols-3 gap-3">
+      {/* Money + delivery summary — the same four figures on every PO screen */}
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <SummaryCard label="Order total" value={currency(total)} tone="text-slate-900" />
-        <SummaryCard label="Paid" value={currency(paid)} tone="text-sky-700" />
-        <SummaryCard label="Pending" value={currency(pending)} tone={pending > 0 ? "text-red-600" : "text-emerald-600"} />
+        <SummaryCard label="Paid" value={currency(paid)} tone="text-emerald-700" />
+        <SummaryCard label="Balance" value={currency(pending)} tone={pending > 0 ? "text-rose-600" : "text-slate-400"} />
+        <div className="rounded-2xl border bg-white p-4 shadow-sm">
+          <div className="text-xl font-black tabular-nums text-slate-900">{qtyReceived}<span className="text-sm font-semibold text-slate-400"> / {qtyOrdered}</span></div>
+          <div className="mt-0.5 text-xs font-semibold text-slate-500">Received</div>
+          <ReceivedBar pct={receivedPct} className="mt-2" />
+        </div>
       </div>
 
       {/* Quick actions */}
       <div className="flex flex-wrap gap-2">
         <Button size="sm" onClick={openReceive}><PackageCheck className="w-4 h-4 mr-2" /> Receive Goods</Button>
+        <Button size="sm" variant="outline" onClick={openShipments} disabled={!live}><Truck className="w-4 h-4 mr-2" /> Add Shipping ID</Button>
         <Button size="sm" variant="outline" onClick={openPay}><Wallet className="w-4 h-4 mr-2" /> Record Payment</Button>
         <Button size="sm" variant="outline" onClick={openReturn} disabled={!received}><Undo2 className="w-4 h-4 mr-2" /> Return Items</Button>
       </div>
@@ -301,19 +323,21 @@ export default function PurchaseOrderProfile() {
               <tr>
                 <th className="px-4 py-3">Material</th>
                 <th className="px-4 py-3 text-right">Qty</th>
+                <th className="px-4 py-3 text-right">Rate</th>
+                <th className="px-4 py-3 text-right">Amount</th>
                 <th className="px-4 py-3 text-right">Received</th>
-                <th className="px-4 py-3 text-right">Unit Price</th>
-                <th className="px-4 py-3 text-right">Total</th>
               </tr>
             </thead>
             <tbody className="divide-y">
               {items.map((it) => (
                 <tr key={it.id}>
                   <td className="px-4 py-3 font-medium text-slate-800">{it.product?.name}</td>
-                  <td className="px-4 py-3 text-right">{it.quantity}</td>
-                  <td className="px-4 py-3 text-right text-slate-500">{it.receivedQuantity ?? 0}</td>
-                  <td className="px-4 py-3 text-right">{currency(it.unitPrice)}</td>
-                  <td className="px-4 py-3 text-right font-semibold">{currency(it.totalPrice)}</td>
+                  <td className="px-4 py-3 text-right tabular-nums">{it.quantity} {it.product?.unit || ""}</td>
+                  <td className="px-4 py-3 text-right tabular-nums">{currency(it.unitPrice)}</td>
+                  <td className="px-4 py-3 text-right font-semibold tabular-nums">{currency(it.totalPrice)}</td>
+                  <td className={`px-4 py-3 text-right font-semibold tabular-nums ${(it.receivedQuantity ?? 0) >= it.quantity ? "text-emerald-700" : "text-slate-500"}`}>
+                    {it.receivedQuantity ?? 0}/{it.quantity}
+                  </td>
                 </tr>
               ))}
               {items.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500">No line items.</td></tr>}
@@ -333,6 +357,15 @@ export default function PurchaseOrderProfile() {
         </div>
       </Section>
 
+      {/* Shipments — each shipping ID, where it's going and whether it arrived */}
+      <div id="po-shipments">
+        <Section title="Shipments">
+          <div className="p-5">
+            <PoShipmentsPanel poId={poId} addresses={addresses} canShip={live} openSignal={shipSignal} />
+          </div>
+        </Section>
+      </div>
+
       {/* Goods received */}
       <Section title="Goods Received">
         {grns.length === 0 ? (
@@ -346,8 +379,8 @@ export default function PurchaseOrderProfile() {
                   <span className="text-slate-400"> · {fmtDate(g.date)}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  {g.qcStatus && g.qcStatus !== "PENDING" && <Badge variant="secondary">{g.qcStatus}</Badge>}
-                  <Badge className={g.status === "APPROVED" ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"}>{g.status}</Badge>
+                  {g.qcStatus && g.qcStatus !== "PENDING" && <Badge variant="secondary">QC {g.qcStatus.replaceAll("_", " ").toLowerCase()}</Badge>}
+                  <Badge className={g.status === "APPROVED" ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"}>{g.status === "APPROVED" ? "Added to stock" : g.status.replaceAll("_", " ").toLowerCase().replace(/^\w/, (c) => c.toUpperCase())}</Badge>
                 </div>
               </li>
             ))}
@@ -383,7 +416,7 @@ export default function PurchaseOrderProfile() {
               ))}
             </ul>
             <div className="flex items-center justify-between gap-4 border-t bg-slate-50 px-5 py-3 text-sm">
-              <span className="font-semibold text-slate-600">Total paid <b className="text-sky-700">{currency(paid)}</b></span>
+              <span className="font-semibold text-slate-600">Total paid <b className="text-emerald-700">{currency(paid)}</b></span>
               <span className="font-semibold text-slate-600">Pending <b className={pending > 0 ? "text-red-600" : "text-emerald-600"}>{currency(pending)}</b></span>
             </div>
           </>
@@ -398,7 +431,7 @@ export default function PurchaseOrderProfile() {
               <li key={r.id} className="flex items-center justify-between px-5 py-3">
                 <div><span className="font-semibold text-slate-800">{r.returnNumber}</span>
                   <span className="text-slate-400"> · {r.reasonType?.replaceAll("_", " ")}</span></div>
-                <Badge className={r.status === "CONFIRMED" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}>{r.status}</Badge>
+                <Badge className={r.status === "CONFIRMED" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}>{r.status.replaceAll("_", " ").toLowerCase().replace(/^\w/, (c) => c.toUpperCase())}</Badge>
               </li>
             ))}
           </ul>
@@ -468,7 +501,7 @@ export default function PurchaseOrderProfile() {
             {/* Breakdown queue: total → paid → balance */}
             <div className="rounded-lg border divide-y text-sm">
               <div className="flex justify-between px-3 py-2"><span className="text-slate-500">Order total</span><span className="font-semibold text-slate-800">{currency(total)}</span></div>
-              <div className="flex justify-between px-3 py-2"><span className="text-slate-500">Already paid</span><span className="font-semibold text-sky-700">− {currency(paid)}</span></div>
+              <div className="flex justify-between px-3 py-2"><span className="text-slate-500">Already paid</span><span className="font-semibold text-emerald-700">− {currency(paid)}</span></div>
               <div className="flex justify-between px-3 py-2 bg-slate-50"><span className="font-semibold text-slate-700">Balance to pay</span><span className="font-black text-red-600">{currency(pending)}</span></div>
             </div>
 
@@ -590,7 +623,7 @@ export default function PurchaseOrderProfile() {
 function SummaryCard({ label, value, tone }: { label: string; value: string; tone: string }) {
   return (
     <div className="bg-white border rounded-2xl shadow-sm p-4">
-      <div className={`text-xl font-black ${tone}`}>{value}</div>
+      <div className={`text-xl font-black tabular-nums ${tone}`}>{value}</div>
       <div className="text-xs font-semibold text-slate-500 mt-0.5">{label}</div>
     </div>
   );

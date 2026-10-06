@@ -3,19 +3,15 @@ import { Link } from "react-router-dom";
 import { format } from "date-fns";
 import { purchaseApi } from "@/api/purchaseApi";
 import type { PurchaseOrder, Supplier } from "@/types/purchase";
-import { PO_STATUSES, PO_STATUS_TONE } from "@/types/purchase";
+import { PO_STATUSES } from "@/types/purchase";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import SearchableSelect from "@/components/ui/searchable-select";
 import { useHoverInfo, InfoRow } from "@/components/ui/hover-info";
-import { Plus, ArrowRight, Search } from "lucide-react";
+import { Plus, Search } from "lucide-react";
+import { PoListTable, PoStatusBadge, poMoney, poStatusDot, poStatusLabel } from "@/components/purchases/po-ui";
 
-const currency = (n?: number) => `₹${(n ?? 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
-
-const humanizeStatus = (s: string) =>
-  s.split("_").map((w) => w.charAt(0) + w.slice(1).toLowerCase()).join(" ");
+const currency = (n?: number) => poMoney(n);
 
 // The clickable filter tiles: "All" plus every PO status, each with a live count.
 const TILE_STATUSES = ["", ...PO_STATUSES];
@@ -26,7 +22,7 @@ function POInfo({ po }: { po: PurchaseOrder }) {
     <div>
       <div className="mb-2 flex items-center justify-between gap-2">
         <span className="font-bold text-slate-800">{po.poNumber}</span>
-        <Badge className={PO_STATUS_TONE[po.status]}>{humanizeStatus(po.status)}</Badge>
+        <PoStatusBadge status={po.status} />
       </div>
       <div className="divide-y divide-slate-100">
         <div className="pb-1.5">
@@ -64,6 +60,7 @@ export default function PurchaseOrdersPage() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [counts, setCounts] = useState<Record<string, number>>({});
   const info = useHoverInfo();
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => { purchaseApi.getSuppliers().then(setSuppliers).catch(console.error); }, []);
 
@@ -85,7 +82,8 @@ export default function PurchaseOrdersPage() {
         status: status || undefined,
         supplierId: supplierId ? Number(supplierId) : undefined,
         search: search || undefined,
-      }).then((res) => { setOrders(res.content || []); setTotalPages(res.totalPages || 0); }).catch(console.error);
+      }).then((res) => { setOrders(res.content || []); setTotalPages(res.totalPages || 0); }).catch(console.error)
+        .finally(() => setLoading(false));
     }, 250);
     return () => clearTimeout(t);
   }, [page, status, supplierId, search]);
@@ -96,8 +94,8 @@ export default function PurchaseOrdersPage() {
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
         {TILE_STATUSES.map((s) => {
           const active = status === s;
-          const label = s === "" ? "All Orders" : humanizeStatus(s);
-          const dot = s === "" ? "bg-slate-400" : ((PO_STATUS_TONE[s]?.split(" ")[0] || "bg-slate-300").replace("-100", "-500").replace("-200", "-500"));
+          const label = s === "" ? "All Orders" : poStatusLabel(s);
+          const dot = s === "" ? "bg-slate-400" : poStatusDot(s);
           return (
             <button
               key={s || "all"}
@@ -135,52 +133,22 @@ export default function PurchaseOrdersPage() {
         </Link>
       </div>
 
-      <div className="bg-white border rounded-2xl shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-slate-50">
-                <TableHead>PO Number</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Supplier</TableHead>
-                <TableHead className="hidden md:table-cell">Project</TableHead>
-                <TableHead className="hidden md:table-cell">Expected</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Total</TableHead>
-                <TableHead className="w-10"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {orders.map((po) => (
-                <TableRow key={po.id} {...info.bind(<POInfo po={po} />)}>
-                  <TableCell className="font-bold text-slate-800">{po.poNumber}</TableCell>
-                  <TableCell className="text-slate-500">{po.date ? format(new Date(po.date), "MMM d, yyyy") : "—"}</TableCell>
-                  <TableCell className="font-semibold text-slate-700">{po.supplier?.name}</TableCell>
-                  <TableCell className="hidden md:table-cell text-slate-500">{po.project?.projectName || "—"}</TableCell>
-                  <TableCell className="hidden md:table-cell text-slate-500">{po.expectedDeliveryDate || "—"}</TableCell>
-                  <TableCell><Badge className={PO_STATUS_TONE[po.status]}>{po.status}</Badge></TableCell>
-                  <TableCell className="text-right font-black text-slate-800">{currency(po.totalAmount)}</TableCell>
-                  <TableCell>
-                    <Link to={`/purchases/orders/${po.id}`}>
-                      <Button variant="ghost" size="icon"><ArrowRight className="w-4 h-4" /></Button>
-                    </Link>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {orders.length === 0 && (
-                <TableRow><TableCell colSpan={8} className="text-center py-12 text-slate-500">No purchase orders found.</TableCell></TableRow>
-              )}
-            </TableBody>
-          </Table>
+      <PoListTable
+        loading={loading}
+        rows={orders.map((po) => ({
+          id: po.id, poNumber: po.poNumber, date: po.date, supplierName: po.supplier?.name,
+          projectName: po.project?.projectName, expectedDeliveryDate: po.expectedDeliveryDate,
+          status: po.status, totalAmount: po.totalAmount,
+        }))}
+        onHover={(r) => { const po = orders.find((o) => o.id === r.id); return po ? info.bind(<POInfo po={po} />) : {}; }}
+        empty="No purchase orders found." />
+      {totalPages > 1 && (
+        <div className="flex items-center justify-end gap-2">
+          <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage(page - 1)}>Previous</Button>
+          <span className="text-xs text-slate-500">Page {page + 1} of {totalPages}</span>
+          <Button variant="outline" size="sm" disabled={page >= totalPages - 1} onClick={() => setPage(page + 1)}>Next</Button>
         </div>
-        {totalPages > 1 && (
-          <div className="flex items-center justify-end gap-2 p-3 border-t">
-            <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage(page - 1)}>Previous</Button>
-            <span className="text-xs text-slate-500">Page {page + 1} of {totalPages}</span>
-            <Button variant="outline" size="sm" disabled={page >= totalPages - 1} onClick={() => setPage(page + 1)}>Next</Button>
-          </div>
-        )}
-      </div>
+      )}
       {info.portal}
     </div>
   );
