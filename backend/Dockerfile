@@ -8,7 +8,11 @@ RUN mvn dependency:go-offline -B
 
 # Copy source code and package application
 COPY src ./src
-RUN mvn clean package -DskipTests -B
+# Build against a Maven cache that survives between deploys (seeded from the layer above), so only
+# new dependencies are downloaded — re-fetching them every time made deploys hit the 10-minute limit.
+RUN --mount=type=cache,target=/m2cache \
+    cp -rn /root/.m2/repository/. /m2cache/ 2>/dev/null || true; \
+    mvn -Dmaven.repo.local=/m2cache clean package -DskipTests -B
 
 # Runtime stage
 FROM eclipse-temurin:17-jre-jammy
