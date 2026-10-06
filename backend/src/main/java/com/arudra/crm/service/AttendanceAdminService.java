@@ -28,6 +28,7 @@ public class AttendanceAdminService {
     @Autowired private AttendanceLocationRepository locationRepository;
     @Autowired private AttendanceSessionRepository sessionRepository;
     @Autowired private EmployeeRepository employeeRepository;
+    @Autowired private com.arudra.crm.repository.BranchRepository branchRepository;
 
     // --- office geofences --------------------------------------------------
 
@@ -49,6 +50,11 @@ public class AttendanceAdminService {
         loc.setRadiusMeters(Math.max(20, Math.min(2000, radius)));
         loc.setAddress(body.getAddress());
         loc.setActive(body.getActive() == null ? Boolean.TRUE : body.getActive());
+        // Branch (V122): body carries {"branch": {"id": n}} or null to clear.
+        Long branchId = body.getBranch() == null ? null : body.getBranch().getId();
+        loc.setBranch(branchId == null ? null : branchRepository.findById(branchId)
+                .filter(b -> !Boolean.TRUE.equals(b.getIsDeleted()))
+                .orElseThrow(() -> new IllegalArgumentException("Branch not found.")));
         return locationRepository.save(loc);
     }
 

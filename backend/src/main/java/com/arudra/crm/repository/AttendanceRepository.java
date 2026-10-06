@@ -13,4 +13,7 @@ public interface AttendanceRepository extends JpaRepository<Attendance, Long> {
     List<Attendance> findByDate(LocalDate date);
     List<Attendance> findByEmployeeIdAndDateBetween(Long employeeId, LocalDate from, LocalDate to);
     java.util.Optional<Attendance> findFirstByEmployeeIdAndDateOrderByIdDesc(Long employeeId, LocalDate date);
+
+    /** All day rows in a range (dashboard / reports); callers filter soft-deleted rows. */
+    List<Attendance> findByDateBetween(LocalDate from, LocalDate to);
 }

@@ -23,4 +23,16 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
 
     /** Employees who have a pending self-service attendance-method switch awaiting admin approval. */
     List<Employee> findByAttendanceMethodRequestedIsNotNullAndIsDeletedFalse();
+
+    /** Serialises concurrent punches for one employee (terminal + offline sync racing each other). */
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @org.springframework.data.jpa.repository.Query("select e from Employee e where e.id = :id")
+    java.util.Optional<Employee> findByIdForUpdate(@org.springframework.data.repository.query.Param("id") Long id);
+
+    java.util.Optional<Employee> findFirstByEmployeeCodeIgnoreCaseAndIsDeletedFalse(String employeeCode);
+
+    /** Active (non-terminated, non-deleted) employees, for the attendance dashboard and terminal lookups. */
+    @org.springframework.data.jpa.repository.Query("select e from Employee e where e.isDeleted = false "
+            + "and (e.status is null or e.status <> 'TERMINATED') order by e.firstName, e.lastName")
+    List<Employee> findActiveForAttendance();
 }

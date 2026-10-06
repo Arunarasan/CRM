@@ -1,5 +1,6 @@
 package com.arudra.crm.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -34,4 +35,10 @@ public class AttendanceLocation extends BaseEntity {
 
     @Column(nullable = false)
     private Boolean active = true;
+
+    /** Branch this location belongs to (V122). */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "branch_id")
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
+    private Branch branch;
 }

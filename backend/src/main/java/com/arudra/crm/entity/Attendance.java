@@ -1,5 +1,6 @@
 package com.arudra.crm.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -22,7 +23,7 @@ public class Attendance extends BaseEntity {
     private LocalDate date;
 
     @Column(nullable = false, length = 20)
-    private String status; // PRESENT, ABSENT, HALF_DAY, LEAVE
+    private String status; // PRESENT, LATE, ABSENT, HALF_DAY, LEAVE, HOLIDAY, WEEK_OFF, ON_DUTY, WORK_FROM_HOME
 
     @Column(name = "check_in_time")
     private LocalTime checkInTime;
@@ -68,4 +69,53 @@ public class Attendance extends BaseEntity {
     // Additional notes or reasons for late/early out
     @Column(columnDefinition = "TEXT")
     private String remarks;
+
+    // --- Biometric terminal / shift figures (V122) ----------------------------
+    /** Day type: WORKING_DAY | WEEK_OFF | HOLIDAY. */
+    @Column(name = "attendance_type", length = 20)
+    private String attendanceType;
+
+    /** Terminal that recorded the (first) punch, when recorded on an attendance device. */
+    @JsonIgnore
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "device_id")
+    private AttendanceDevice device;
+
+    @JsonIgnore
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "branch_id")
+    private Branch branch;
+
+    @JsonIgnore
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "location_id")
+    private AttendanceLocation location;
+
+    @JsonIgnore
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "shift_id")
+    private AttendanceShift shift;
+
+    @Column(name = "biometric_verified", nullable = false)
+    private Boolean biometricVerified = false;
+
+    /** BIOMETRIC_DEVICE | SELF_SERVICE | MANUAL. */
+    @Column(name = "check_in_method", length = 30)
+    private String checkInMethod;
+
+    @Column(name = "check_out_method", length = 30)
+    private String checkOutMethod;
+
+    /** Gross minutes between check-in and check-out. */
+    @Column(name = "working_minutes")
+    private Integer workingMinutes;
+
+    @Column(name = "overtime_minutes")
+    private Integer overtimeMinutes;
+
+    @Column(name = "late_minutes")
+    private Integer lateMinutes;
+
+    @Column(name = "early_departure_minutes")
+    private Integer earlyDepartureMinutes;
 }

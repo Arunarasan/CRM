@@ -282,7 +282,11 @@ public class HrService {
         for (Attendance a : attendance) {
             String s = a.getStatus() == null ? "" : a.getStatus().toUpperCase();
             switch (s) {
-                case "PRESENT":  present++;  countable++; credited += 1.0; break;
+                case "PRESENT":
+                case "LATE":            // biometric terminal: present, arrived after grace
+                case "ON_DUTY":
+                case "WORK_FROM_HOME":
+                                 present++;  countable++; credited += 1.0; break;
                 case "HALF_DAY": halfDay++;  countable++; credited += 0.5; break;
                 case "ABSENT":   absent++;   countable++;                  break;
                 case "LEAVE":    leave++;                                  break; // approved leave excluded

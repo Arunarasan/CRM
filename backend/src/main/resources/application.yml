@@ -75,6 +75,25 @@ app:
     rp-id: ${WEBAUTHN_RP_ID:localhost}
     rp-name: ${WEBAUTHN_RP_NAME:${APP_NAME:Arudra CRM}}
     origin: ${WEBAUTHN_ORIGIN:http://localhost:5173}
+  # Biometric attendance terminals (HR → Attendance → Devices).
+  attendance:
+    device:
+      # Signing key for short-lived terminal tokens; defaults to (a domain-separated derivative of) jwt.secret.
+      token-secret: ${ATTENDANCE_DEVICE_TOKEN_SECRET:${jwt.secret}}
+      token-ttl-seconds: ${ATTENDANCE_DEVICE_TOKEN_TTL:900}
+      heartbeat-interval-seconds: ${ATTENDANCE_DEVICE_HEARTBEAT_SECONDS:60}
+      # A terminal with no heartbeat for this long is shown OFFLINE and admins are alerted once.
+      offline-after-seconds: ${ATTENDANCE_DEVICE_OFFLINE_AFTER:300}
+      # A second scan within this many minutes of check-in answers "Already checked in" (no check-out).
+      min-checkout-gap-minutes: ${ATTENDANCE_MIN_CHECKOUT_GAP:15}
+      # Offline punches older than this are rejected on sync.
+      max-offline-hours: ${ATTENDANCE_MAX_OFFLINE_HOURS:72}
+      success-screen-seconds: 4
+      # Reject punches for employees assigned to a different branch than the terminal.
+      enforce-branch: ${ATTENDANCE_ENFORCE_BRANCH:true}
+      code-prefix: ${ATTENDANCE_DEVICE_CODE_PREFIX:ARUDRA-ATT}
+      pairing-ttl-hours: 24
+      enrollment-ttl-minutes: 10
   mail:
     # From address on OTP emails. Defaults to the SMTP username when blank.
     from: ${MAIL_FROM:${MAIL_USERNAME:no-reply@arudra.com}}

@@ -367,8 +367,14 @@ public class EmployeeTimeService {
     private static long payableMinutes(LocalTime in, LocalTime out, LocalTime openBreakStart, Integer breakMinutes, LocalTime asOf) {
         if (in == null) return 0;
         LocalTime end = out != null ? out : asOf;
-        if (end.isBefore(in)) end = in;
-        long gross = Duration.between(in, end).toMinutes();
+        long gross;
+        if (out != null && out.isBefore(in)) {
+            // A closed session that ran past midnight (overnight shift on a biometric terminal).
+            gross = Duration.between(in, out).toMinutes() + 24 * 60;
+        } else {
+            if (end.isBefore(in)) end = in;
+            gross = Duration.between(in, end).toMinutes();
+        }
         int brk = breakMinutes == null ? 0 : breakMinutes;
         if (out == null && openBreakStart != null) {
             brk += Math.max(0, Duration.between(openBreakStart, end).toMinutes());

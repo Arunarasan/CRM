@@ -29,6 +29,9 @@ public class SecurityConfig {
     @Autowired
     private CustomUserDetailsService customUserDetailsService;
 
+    @Autowired
+    private com.arudra.crm.security.DeviceAuthenticationFilter deviceAuthenticationFilter;
+
     @org.springframework.beans.factory.annotation.Value("${app.cors.allowed-origins:http://localhost:5173}")
     private java.util.List<String> allowedOrigins;
 
@@ -44,6 +47,10 @@ public class SecurityConfig {
                         .requestMatchers("/uploads/**").permitAll()
                         .requestMatchers("/health", "/api/health").permitAll()
                         .requestMatchers("/actuator/**").permitAll()
+                        // Attendance terminals: registration + credential exchange are open (approval-gated
+                        // and rate-limited); every other terminal call needs a valid device token.
+                        .requestMatchers("/api/device/register", "/api/device/register/**", "/api/device/auth/token").permitAll()
+                        .requestMatchers("/api/device/**").hasAuthority(com.arudra.crm.security.DevicePrincipal.AUTHORITY)
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(sess -> sess.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -52,6 +59,7 @@ public class SecurityConfig {
                 }))
                 .authenticationProvider(authenticationProvider())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(deviceAuthenticationFilter, com.arudra.crm.security.JwtAuthenticationFilter.class)
                 .build();
     }
 

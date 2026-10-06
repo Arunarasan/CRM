@@ -69,6 +69,18 @@ public class Employee extends BaseEntity {
     @Column(length = 50)
     private String shift;
 
+    /** Office/branch the employee belongs to (V122). */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "branch_id")
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
+    private Branch branch;
+
+    /** Shift used for late/overtime calculation; null ⇒ the default shift (V122). */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "attendance_shift_id")
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
+    private AttendanceShift attendanceShift;
+
     @Column(name = "attendance_required", nullable = false)
     private Boolean attendanceRequired = true;
 

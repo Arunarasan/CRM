@@ -32,6 +32,14 @@ public class GlobalExceptionHandler {
         return new ResponseEntity<>(apiError, HttpStatus.NOT_FOUND);
     }
 
+    /** Attendance-terminal access failures keep their status and machine-readable code. */
+    @ExceptionHandler(DeviceAccessException.class)
+    public ResponseEntity<ApiError> handleDeviceAccess(DeviceAccessException ex, HttpServletRequest request) {
+        log.warn("Device access denied on {}: {} {}", request.getRequestURI(), ex.getCode(), ex.getMessage());
+        ApiError apiError = new ApiError(ex.getStatus(), ex.getCode(), ex.getMessage(), request.getRequestURI());
+        return new ResponseEntity<>(apiError, HttpStatus.valueOf(ex.getStatus()));
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiError> handleValidationExceptions(
             MethodArgumentNotValidException ex, HttpServletRequest request) {
