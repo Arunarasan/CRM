@@ -12,16 +12,21 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import SearchableSelect from "@/components/ui/searchable-select";
 import ProductSearchSelect from "@/pages/inventory/components/ProductSearchSelect";
-import { ArrowLeft, Plus, Trash2, Save, PackageSearch, UserPlus } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Save, PackageSearch, UserPlus, ChevronDown, AlertTriangle, PackagePlus } from "lucide-react";
+import { UnitOptions } from "@/components/UnitOptions";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface ProjectLite { id: number; projectName?: string }
-interface Line { key: number; product: Product | null; quantity: number; unitPrice: number }
+/** `text` = what is typed in the material search before a material is picked. */
+interface Line { key: number; product: Product | null; quantity: number; unitPrice: number; text: string }
 
 const currency = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 let keySeed = 1;
-const blankLine = (): Line => ({ key: keySeed++, product: null, quantity: 1, unitPrice: 0 });
+const blankLine = (): Line => ({ key: keySeed++, product: null, quantity: 1, unitPrice: 0, text: "" });
+const lineAmount = (l: Line) => (l.quantity || 0) * (l.unitPrice || 0);
+/** A line the user started (typed a name or a rate) but that has no material picked — it would be dropped. */
+const isUnlinked = (l: Line) => !l.product && (l.text.trim() !== "" || (l.unitPrice || 0) > 0);
 
 export default function PurchaseOrderBuilder() {
   const navigate = useNavigate();
@@ -48,6 +53,10 @@ export default function PurchaseOrderBuilder() {
   const [lines, setLines] = useState<Line[]>([blankLine()]);
   const [saving, setSaving] = useState(false);
   const [newSupplierOpen, setNewSupplierOpen] = useState(false);
+  // "Add as new material" from a line's search: which line, and the typed name.
+  const [newMaterial, setNewMaterial] = useState<{ lineKey: number; name: string } | null>(null);
+  // Inline errors show after the first Create attempt.
+  const [tried, setTried] = useState(false);
 
   const [lowStock, setLowStock] = useState<BuyNowRow[]>([]);
   const [showLowStock, setShowLowStock] = useState(true);
@@ -66,7 +75,7 @@ export default function PurchaseOrderBuilder() {
     const need = Math.max((row.reorderLevel || 0) - (row.currentStock || 0), 1);
     setLines((ls) => {
       const withoutBlank = ls.filter((l) => l.product);
-      return [...withoutBlank, { key: keySeed++, product, quantity: need, unitPrice: 0 }];
+      return [...withoutBlank, { key: keySeed++, product, quantity: need, unitPrice: 0, text: "" }];
     });
     if (!supplierId && row.suggestedSupplierId) setSupplierId(String(row.suggestedSupplierId));
   };
@@ -76,7 +85,7 @@ export default function PurchaseOrderBuilder() {
   const removeLine = (key: number) => setLines((ls) => (ls.length > 1 ? ls.filter((l) => l.key !== key) : ls));
 
   const totals = useMemo(() => {
-    const subtotal = lines.reduce((s, l) => s + (l.product ? l.quantity * l.unitPrice : 0), 0);
+    const subtotal = lines.reduce((s, l) => s + (l.product ? lineAmount(l) : 0), 0);
     const tax = subtotal * (Number(taxPercent) || 0) / 100;
     const discount = Number(discountAmount) || 0;
     const transport = Number(transportationCost) || 0;
@@ -85,9 +94,17 @@ export default function PurchaseOrderBuilder() {
   }, [lines, taxPercent, discountAmount, transportationCost]);
 
   const validItems = lines.filter((l) => l.product && l.quantity > 0);
+  const unlinked = lines.filter(isUnlinked);
+  const zeroQty = lines.filter((l) => l.product && !(l.quantity > 0));
 
   const save = async () => {
+    setTried(true);
     if (!supplierId) { toast.error("Please choose a supplier."); return; }
+    if (unlinked.length > 0) {
+      toast.error(`${unlinked.length} material line${unlinked.length === 1 ? " isn't" : "s aren't"} picked yet — choose from the list or add it as a new material.`);
+      return;
+    }
+    if (zeroQty.length > 0) { toast.error("Enter a quantity for every material."); return; }
     if (validItems.length === 0) { toast.error("Add at least one material with a quantity."); return; }
     setSaving(true);
     try {
@@ -119,7 +136,7 @@ export default function PurchaseOrderBuilder() {
 
   return (
     <div>
-      <div className="p-4 md:p-8 max-w-5xl mx-auto space-y-6">
+      <div className="p-4 md:p-8 pb-28 md:pb-28 max-w-5xl mx-auto space-y-6">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" onClick={goBack}><ArrowLeft className="w-5 h-5" /></Button>
           <div>
@@ -140,9 +157,10 @@ export default function PurchaseOrderBuilder() {
                   <UserPlus className="h-3.5 w-3.5" /> New supplier
                 </button>
               </div>
-              <div className="mt-1">
+              <div className={`mt-1 ${tried && !supplierId ? "rounded-md ring-2 ring-red-300" : ""}`}>
                 <SearchableSelect value={supplierId} onChange={setSupplierId} options={supplierOptions} placeholder="Search supplier…" />
               </div>
+              {tried && !supplierId && <p className="mt-1 text-xs text-red-600">Choose who you're buying from.</p>}
             </div>
             <Field label="Deliver to warehouse">
               <SearchableSelect value={warehouseId} onChange={setWarehouseId} options={warehouseOptions} placeholder="Search warehouse…" clearLabel="— none —" />
@@ -193,7 +211,8 @@ export default function PurchaseOrderBuilder() {
             <div className="rounded-xl border border-red-200 bg-red-50/50 p-3">
               <button type="button" onClick={() => setShowLowStock((v) => !v)}
                 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-red-600">
-                <PackageSearch className="w-4 h-4" /> Low stock — tap to add ({lowStock.length}) {showLowStock ? "▾" : "▸"}
+                <PackageSearch className="w-4 h-4" /> Low stock — tap to add ({lowStock.length})
+                <ChevronDown className={`w-4 h-4 transition-transform ${showLowStock ? "" : "-rotate-90"}`} />
               </button>
               {showLowStock && (
                 <div className="mt-2 flex flex-wrap gap-2">
@@ -216,30 +235,79 @@ export default function PurchaseOrderBuilder() {
             </div>
           )}
 
-          {lines.map((l) => (
-            <div key={l.key} className="grid grid-cols-1 md:grid-cols-12 gap-2 items-center border-b pb-3 last:border-0 last:pb-0">
-              <div className="md:col-span-6">
-                <ProductSearchSelect value={l.product} onChange={(p) => setLine(l.key, {
-                  product: p, unitPrice: l.unitPrice || p?.purchasePrice || p?.costPrice || 0,
-                })} />
+          {/* Column headings (desktop) */}
+          <div className="hidden md:grid md:grid-cols-12 gap-2 border-b pb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            <div className="md:col-span-5">Material</div>
+            <div className="md:col-span-2">Qty</div>
+            <div className="md:col-span-2">Rate ₹</div>
+            <div className="md:col-span-2 text-right">Amount</div>
+            <div className="md:col-span-1" />
+          </div>
+
+          {lines.map((l) => {
+            const pending = isUnlinked(l);
+            const showPending = pending && (tried || l.text.trim() !== "");
+            return (
+              <div key={l.key} className="border-b pb-3 last:border-0 last:pb-0">
+                <div className="grid grid-cols-2 md:grid-cols-12 gap-2 items-start">
+                  <div className="col-span-2 md:col-span-5">
+                    <ProductSearchSelect value={l.product} invalid={showPending}
+                      onTextChange={(text) => setLine(l.key, { text })}
+                      onCreateNew={(name) => setNewMaterial({ lineKey: l.key, name })}
+                      onChange={(p) => setLine(l.key, {
+                        product: p, text: "", unitPrice: l.unitPrice || p?.purchasePrice || p?.costPrice || 0,
+                      })} />
+                  </div>
+                  <label className="md:col-span-2">
+                    <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-400 md:hidden">Qty</span>
+                    <div className="relative">
+                      <Input type="number" min={0} step="any" inputMode="decimal" placeholder="Qty"
+                        value={l.quantity || ""} className={l.product?.unit ? "pr-12" : undefined}
+                        onChange={(e) => setLine(l.key, { quantity: Math.max(0, Number(e.target.value)) })} />
+                      {l.product?.unit && (
+                        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">{l.product.unit}</span>
+                      )}
+                    </div>
+                    {tried && l.product && !(l.quantity > 0) && <span className="mt-1 block text-xs text-red-600">Enter a quantity</span>}
+                  </label>
+                  <label className="md:col-span-2">
+                    <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-400 md:hidden">Rate ₹</span>
+                    <Input type="number" min={0} step="any" inputMode="decimal" placeholder="0"
+                      value={l.unitPrice || ""} onChange={(e) => setLine(l.key, { unitPrice: Math.max(0, Number(e.target.value)) })} />
+                  </label>
+                  <div className="col-span-1 md:col-span-2 self-center text-left md:text-right">
+                    <span className="md:hidden text-[11px] font-semibold uppercase tracking-wide text-slate-400">Amount </span>
+                    <span className={`text-sm font-semibold tabular-nums ${l.product ? "text-slate-800" : "text-slate-400 line-through decoration-slate-300"}`}>
+                      {currency(lineAmount(l))}
+                    </span>
+                  </div>
+                  <div className="col-span-1 md:col-span-1 self-center text-right">
+                    <Button variant="ghost" size="icon" aria-label="Remove line" onClick={() => removeLine(l.key)} disabled={lines.length === 1}>
+                      <Trash2 className="w-4 h-4 text-slate-400" />
+                    </Button>
+                  </div>
+                </div>
+                {showPending && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                    <span>
+                      {l.text.trim() ? <>“{l.text.trim()}” isn't picked yet — </> : <>No material picked — </>}
+                      choose it from the list, or add it as a new material. It isn't counted until then.
+                    </span>
+                    {l.text.trim() && (
+                      <button type="button" onClick={() => setNewMaterial({ lineKey: l.key, name: l.text.trim() })}
+                        className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-white px-2 py-0.5 font-semibold text-amber-900 hover:bg-amber-100">
+                        <PackagePlus className="h-3.5 w-3.5" /> Add as new material
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
-              <div className="md:col-span-2">
-                <Input type="number" min={0} placeholder="Qty" value={l.quantity} onChange={(e) => setLine(l.key, { quantity: Number(e.target.value) })} />
-              </div>
-              <div className="md:col-span-2">
-                <Input type="number" min={0} placeholder="Unit ₹" value={l.unitPrice} onChange={(e) => setLine(l.key, { unitPrice: Number(e.target.value) })} />
-              </div>
-              <div className="md:col-span-1 text-right text-sm font-semibold text-slate-700">{currency(l.product ? l.quantity * l.unitPrice : 0)}</div>
-              <div className="md:col-span-1 text-right">
-                <Button variant="ghost" size="icon" onClick={() => removeLine(l.key)} disabled={lines.length === 1}>
-                  <Trash2 className="w-4 h-4 text-slate-400" />
-                </Button>
-              </div>
-            </div>
-          ))}
-          {validItems.length === 0 && (
+            );
+          })}
+          {validItems.length === 0 && unlinked.length === 0 && (
             <div className="flex items-center gap-2 text-sm text-slate-400 pt-1">
-              <PackageSearch className="w-4 h-4" /> Search a material above to start the order.
+              <PackageSearch className="w-4 h-4" /> Search a material above and pick it from the list to start the order.
             </div>
           )}
         </section>
@@ -263,15 +331,26 @@ export default function PurchaseOrderBuilder() {
 
         {/* Action bar — sticks to the bottom of the content column (not over the sidebar or the items) */}
         <div className="sticky bottom-3 z-20 flex items-center justify-between gap-3 rounded-2xl border bg-white/95 px-4 py-3 shadow-[0_8px_24px_-12px_rgba(0,0,0,0.25)] backdrop-blur">
-          <span className="text-sm text-muted-foreground hidden sm:block">
-            {validItems.length} item{validItems.length === 1 ? "" : "s"} · <span className="font-semibold text-slate-800">{currency(totals.grand)}</span>
+          <span className="text-sm text-muted-foreground hidden sm:flex items-center gap-2">
+            <span>
+              {validItems.length} item{validItems.length === 1 ? "" : "s"} · <span className="font-semibold text-slate-800 tabular-nums">{currency(totals.grand)}</span>
+            </span>
+            {unlinked.length > 0 && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+                <AlertTriangle className="h-3 w-3" /> {unlinked.length} line{unlinked.length === 1 ? "" : "s"} not picked
+              </span>
+            )}
           </span>
           <div className="flex gap-2 ml-auto">
             <Button variant="outline" onClick={goBack}>Cancel</Button>
-            <Button onClick={save} disabled={saving}><Save className="w-4 h-4 mr-2" /> {saving ? "Saving…" : "Create Purchase Order"}</Button>
+            <Button onClick={save} disabled={saving} className="active:scale-[0.98]"><Save className="w-4 h-4 mr-2" /> {saving ? "Saving…" : "Create Purchase Order"}</Button>
           </div>
         </div>
       </div>
+
+      <QuickMaterialDialog draft={newMaterial} rate={lines.find((l) => l.key === newMaterial?.lineKey)?.unitPrice || 0}
+        onClose={() => setNewMaterial(null)}
+        onCreated={(p) => { if (newMaterial) setLine(newMaterial.lineKey, { product: p, text: "", unitPrice: (lines.find((l) => l.key === newMaterial.lineKey)?.unitPrice || p.purchasePrice || 0) }); }} />
 
       <QuickSupplierDialog open={newSupplierOpen} onClose={() => setNewSupplierOpen(false)}
         onCreated={(sup) => { setSuppliers((list) => [...list, sup]); setSupplierId(String(sup.id)); }} />
@@ -337,6 +416,59 @@ function QuickSupplierDialog({ open, onClose, onCreated }: { open: boolean; onCl
         <div className="flex justify-end gap-2 border-t pt-3">
           <Button variant="outline" disabled={saving} onClick={onClose}>Cancel</Button>
           <Button disabled={saving} onClick={save}><Save className="w-4 h-4 mr-2" /> {saving ? "Saving…" : "Add supplier"}</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** Add a material to the catalogue from the order line — just a name, unit and buying rate; the rest later. */
+function QuickMaterialDialog({ draft, rate, onClose, onCreated }: {
+  draft: { lineKey: number; name: string } | null; rate: number; onClose: () => void; onCreated: (p: Product) => void;
+}) {
+  const [name, setName] = useState("");
+  const [unit, setUnit] = useState("Nos");
+  const [price, setPrice] = useState("");
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    if (draft) { setName(draft.name); setUnit("Nos"); setPrice(rate ? String(rate) : ""); }
+  }, [draft]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const save = async () => {
+    if (!name.trim()) { toast.error("Enter the material name."); return; }
+    setSaving(true);
+    try {
+      const created = await inventoryApi.createProduct({
+        name: name.trim(), unit, purchasePrice: Number(price) || undefined,
+      } as Partial<Product>);
+      toast.success(`${created.name} added to materials.`);
+      onCreated(created);
+      onClose();
+    } catch (e) {
+      toast.error(apiError(e, "Could not add the material."));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={!!draft} onOpenChange={(v) => !v && !saving && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader><DialogTitle className="flex items-center gap-2"><PackagePlus className="h-5 w-5 text-emerald-600" /> New material</DialogTitle></DialogHeader>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="col-span-2"><Field label="Name" required><Input autoFocus value={name} onChange={(e) => setName(e.target.value)} /></Field></div>
+          <Field label="Unit">
+            <select value={unit} onChange={(e) => setUnit(e.target.value)}
+              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
+              <UnitOptions value={unit} />
+            </select>
+          </Field>
+          <Field label="Buying rate ₹"><Input type="number" min={0} step="any" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Optional" /></Field>
+        </div>
+        <p className="text-xs text-slate-400">Saved to Inventory › Materials. Add category, code and stock levels there later.</p>
+        <div className="flex justify-end gap-2 border-t pt-3">
+          <Button variant="outline" disabled={saving} onClick={onClose}>Cancel</Button>
+          <Button disabled={saving} onClick={save}><Save className="w-4 h-4 mr-2" /> {saving ? "Saving…" : "Add material"}</Button>
         </div>
       </DialogContent>
     </Dialog>
