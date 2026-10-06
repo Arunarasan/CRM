@@ -634,7 +634,9 @@ public class EmployeeTaskService {
         // Lead-workflow tasks may carry a structured completion form (Contact/Requirement/Qualify/…),
         // or be module-driven (Measurement/BOQ) — done in a dedicated module, not by the generic button.
         String templateCode = task.getTaskTemplate() != null ? task.getTaskTemplate().getCode() : null;
-        detail.put("formType", com.arudra.crm.util.LeadTaskForms.formTypeFor(templateCode));
+        // An open call task (no lead yet) carries the Collect Requirement form — submitting it creates the lead.
+        detail.put("formType", LeadTaskFormService.isOpenCallTask(task) ? "REQUIREMENT"
+                : com.arudra.crm.util.LeadTaskForms.formTypeFor(templateCode));
         detail.put("leadId", task.getLeadId());
         boolean moduleDriven = com.arudra.crm.util.LeadTaskForms.isModuleDriven(templateCode);
         detail.put("moduleDriven", moduleDriven);

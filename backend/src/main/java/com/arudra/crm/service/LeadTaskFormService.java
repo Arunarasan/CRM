@@ -36,11 +36,23 @@ public class LeadTaskFormService {
     @Autowired private TaskGenerationService taskGenerationService;
     @Autowired private UserRepository userRepository;
     @Autowired private ObjectMapper objectMapper;
+    @Autowired @org.springframework.context.annotation.Lazy private CallRecordingService callRecordingService;
 
-    /** Template-code → form type. Tasks with no mapping have no structured form (generic complete). */
+    /**
+     * Template-code → form type. Tasks with no mapping have no structured form (generic complete). An open
+     * call-recording task with no lead yet carries the Collect Requirement form — submitting it creates the lead.
+     */
     public String formTypeFor(Task task) {
-        if (task == null || task.getTaskTemplate() == null) return null;
+        if (task == null) return null;
+        if (isOpenCallTask(task)) return "REQUIREMENT";
+        if (task.getTaskTemplate() == null) return null;
         return com.arudra.crm.util.LeadTaskForms.formTypeFor(task.getTaskTemplate().getCode());
+    }
+
+    /** A call-recording task whose call hasn't produced (or been added to) a lead yet. */
+    public static boolean isOpenCallTask(Task task) {
+        return task != null && CallRecordingService.TASK_SOURCE.equals(task.getSource()) && task.getLeadId() == null
+                && !"COMPLETED".equals(task.getStatus()) && !"CANCELLED".equals(task.getStatus());
     }
 
     /**
@@ -55,13 +67,22 @@ public class LeadTaskFormService {
         if (formType == null) {
             throw new IllegalStateException("This task has no data form to submit.");
         }
+        payload = payload == null ? Map.of() : payload;
+        if (isOpenCallTask(task)) {
+            // A call's requirement form: create the lead now, then save the form on the lead's own
+            // Collect Requirement task (handed to this employee) so the lead moves on as usual.
+            @SuppressWarnings("unchecked")
+            Map<String, Object> callData = payload.get("data") instanceof Map
+                    ? (Map<String, Object>) payload.get("data") : new HashMap<>();
+            task = callRecordingService.startLeadFromRequirement(task, callData, employee);
+            taskId = task.getId();
+        }
         if (task.getLeadId() == null) {
             throw new IllegalStateException("This task isn't linked to a lead.");
         }
         Lead lead = leadRepository.findById(task.getLeadId())
                 .orElseThrow(() -> new RuntimeException("Lead not found for task"));
 
-        payload = payload == null ? Map.of() : payload;
         String outcome = str(payload.get("outcome"));
         String notes = str(payload.get("notes"));
         LocalDate nextFollowUp = date(payload.get("nextFollowUpDate"));

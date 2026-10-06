@@ -25,12 +25,15 @@ export function displayPhone(phone?: string | null) {
  * (employee + admin) and on the Call Recordings tab.
  */
 export default function CallLeadPanel({
-  call, onChanged, canOpenLead = false, showPlayer = true,
+  call, onChanged, canOpenLead = false, showPlayer = true, onCreateLead, createLabel,
 }: {
   call: CallRecording;
   onChanged: (c: CallRecording) => void;
   canOpenLead?: boolean;
   showPlayer?: boolean;
+  /** Replaces the quick lead sheet — e.g. the employee task opens the full requirement form instead. */
+  onCreateLead?: () => void;
+  createLabel?: string;
 }) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [reasonOpen, setReasonOpen] = useState(false);
@@ -134,9 +137,9 @@ export default function CallLeadPanel({
               </button>
             </div>
           )}
-          <button onClick={() => setSheetOpen(true)} disabled={busy !== null}
+          <button onClick={() => (onCreateLead ? onCreateLead() : setSheetOpen(true))} disabled={busy !== null}
             className={`flex w-full items-center justify-center gap-1.5 rounded-lg py-2.5 text-sm font-semibold active:scale-[0.99] disabled:opacity-60 ${call.matchedLead ? "border bg-background" : "bg-primary text-primary-foreground"}`}>
-            <UserPlus className="h-4 w-4" /> {call.matchedLead ? "Create a new lead anyway" : "Create Lead"}
+            <UserPlus className="h-4 w-4" /> {call.matchedLead ? "Create a new lead anyway" : (createLabel || "Create Lead")}
           </button>
 
           {!reasonOpen ? (

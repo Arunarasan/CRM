@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   UserCircle, CalendarDays, Plane, Wallet, FolderKanban, FileText, Bell, LogOut, ChevronRight,
-  Clock, Settings as SettingsIcon, ListTodo, QrCode,
+  Clock, Settings as SettingsIcon, ListTodo, QrCode, PhoneCall,
 } from 'lucide-react';
 import { employeePortalApi } from '@/api/employeePortalApi';
 import { EmployeeProfile } from '@/types/employeePortal';
@@ -12,6 +12,7 @@ const ITEMS = [
   { to: '/employee/profile', labelKey: 'portal.more.myProfile', icon: UserCircle, color: 'text-primary' },
   { to: '/employee/attendance', labelKey: 'portal.more.attendance', icon: CalendarDays, color: 'text-emerald-600' },
   { to: '/employee/timesheet', labelKey: 'portal.more.timesheet', icon: Clock, color: 'text-teal-600' },
+  { to: '/employee/calls', labelKey: 'portal.more.myCalls', icon: PhoneCall, color: 'text-sky-600' },
   { to: '/employee/task-management', labelKey: 'portal.more.taskManagement', icon: ListTodo, color: 'text-fuchsia-600' },
   { to: '/employee/leave', labelKey: 'portal.more.leave', icon: Plane, color: 'text-emerald-600' },
   { to: '/employee/salary', labelKey: 'portal.more.salary', icon: Wallet, color: 'text-amber-600' },

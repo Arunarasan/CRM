@@ -2,10 +2,11 @@ import { BaseInput } from '@/components/ui/input';
 import { useEffect, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { X, ChevronDown, User, Phone, MapPin, Home, ListChecks, FileText, Camera, Check, Wallet, CalendarClock } from 'lucide-react';
+import { X, ChevronDown, User, Phone, MapPin, Home, ListChecks, FileText, Camera, Check, Wallet, CalendarClock, Mic } from 'lucide-react';
 import api from '@/lib/api';
 import { employeeTaskApi } from '@/api/employeeTaskApi';
 import { LeadFormMedia } from '@/types/employeeTask';
+import TaskCallRecordings from './TaskCallRecordings';
 
 /**
  * The redesigned "Collect Requirement" form for the TT_COLLECT_REQUIREMENT task. Captures the WHOLE
@@ -47,8 +48,12 @@ const SECTION_FIELDS: Record<string, string[]> = {
 
 type Values = Record<string, string>;
 
-export default function RequirementFormSheet({ taskId, leadId, open, onOpenChange, onSaved }: {
+export default function RequirementFormSheet({ taskId, leadId, open, onOpenChange, onSaved, initial, fromCall }: {
   taskId: number; leadId?: number | null; open: boolean; onOpenChange: (open: boolean) => void; onSaved: () => void;
+  /** Starting values when there's no lead yet (a call task: the caller's number, name, the office note). */
+  initial?: Record<string, string | null | undefined>;
+  /** A call task with no lead yet — submitting creates the lead (and attaches the call's recording). */
+  fromCall?: boolean;
 }) {
   const [v, setV] = useState<Values>({});
   const [scope, setScope] = useState<Record<string, boolean>>({});
@@ -70,6 +75,7 @@ export default function RequirementFormSheet({ taskId, leadId, open, onOpenChang
     ]).then(([l, draft]: [any, any]) => {
       const next: Values = {};
       const put = (k: string, val: any) => { if (val != null && val !== '') next[k] = String(val); };
+      Object.entries(initial || {}).forEach(([k, val]) => put(k, val));
       Object.values(SECTION_FIELDS).flat().forEach((k) => put(k, l[k]));
       if (!next.projectDescription) put('projectDescription', l.customerRequirements);
       // Draft (accumulated capture) overrides the lead.
@@ -81,7 +87,7 @@ export default function RequirementFormSheet({ taskId, leadId, open, onOpenChang
       if (next.siteVisitDate) setNextStep('VISIT');
       else if (next.followUpDate) setNextStep('FOLLOWUP');
     }).catch(() => {}).finally(() => setLoading(false));
-  }, [open, leadId, taskId]);
+  }, [open, leadId, taskId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const set = (k: string, val: string) => setV((p) => ({ ...p, [k]: val }));
   const toggleScope = (k: string) => setScope((p) => ({ ...p, [k]: !p[k] }));
@@ -104,6 +110,7 @@ export default function RequirementFormSheet({ taskId, leadId, open, onOpenChang
   const SCHED_KEYS = ['siteVisitDate', 'followUpDate', 'followUpTime', 'followUpNotes'];
   const submit = async () => {
     setError('');
+    if (fromCall && !v.name?.trim()) { setError("Enter the customer's name (Lead Summary) — it creates the lead."); return; }
     // Next-step validation drives whether the workflow advances to the site visit or holds for follow-up.
     if (nextStep === 'VISIT') {
       if (!v.siteVisitDate) { setError('Pick the agreed site-visit date.'); return; }
@@ -135,7 +142,12 @@ export default function RequirementFormSheet({ taskId, leadId, open, onOpenChang
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
-        <DialogHeader><DialogTitle>Collect Requirement</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>{fromCall ? 'Collect Requirement · new lead' : 'Collect Requirement'}</DialogTitle></DialogHeader>
+        {fromCall && (
+          <p className="rounded-lg bg-[#EFF5F0] p-2.5 text-xs text-[#2C5C45]">
+            Submitting creates the lead and saves this call's recording on its Documents page.
+          </p>
+        )}
         {loading && <p className="text-xs text-muted-foreground">Loading current details…</p>}
         {error && <p className="rounded-md bg-destructive/15 p-2 text-xs text-destructive">{error}</p>}
 
@@ -257,6 +269,12 @@ export default function RequirementFormSheet({ taskId, leadId, open, onOpenChang
               <Text label="Estimated duration" value={v.estimatedDuration} onChange={(x) => set('estimatedDuration', x)} placeholder="e.g. 2 months" />
             </div>
           </Section>
+
+          {!fromCall && (
+            <Section id="calls" icon={<Mic className="h-4 w-4" />} title="Call Recordings" count={0} openSecs={openSecs} toggle={toggleSec}>
+              <TaskCallRecordings taskId={taskId} />
+            </Section>
+          )}
 
           <Section id="media" icon={<Camera className="h-4 w-4" />} title="Photos & Notes" count={media.length + (v.notes?.trim() ? 1 : 0)} openSecs={openSecs} toggle={toggleSec}>
             <BaseInput type="file" accept="image/*" multiple capture="environment" onChange={(e) => onFiles(e.target.files)} className="w-full text-xs" />

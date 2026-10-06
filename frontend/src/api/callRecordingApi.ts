@@ -41,7 +41,21 @@ export interface CallTaskRequest {
   priority?: string;
 }
 
+/** Recordings around a lead task: calls already on its lead + open calls from the same number. */
+export interface TaskCalls {
+  leadId?: number | null;
+  leadCalls: CallRecording[];
+  suggestions: CallRecording[];
+}
+
 const BASE = "/call-recordings";
+
+const audioForm = (file: File, extra: Record<string, string | number | undefined>) => {
+  const fd = new FormData();
+  fd.append("file", file);
+  Object.entries(extra).forEach(([k, v]) => { if (v != null && v !== "") fd.append(k, String(v)); });
+  return fd;
+};
 
 export const callRecordingApi = {
   list: () => api.get<CallRecording[]>(BASE).then((r) => r.data),
@@ -77,6 +91,23 @@ export const callRecordingApi = {
     api.post<CallRecording>(`${BASE}/${id}/attach-lead`, { leadId, note }).then((r) => r.data),
 
   notALead: (id: number, reason: string) => api.post<CallRecording>(`${BASE}/${id}/not-a-lead`, { reason }).then((r) => r.data),
+
+  // --- employee app ---
+  /** Calls I uploaded or whose task is assigned to me. */
+  mine: () => api.get<CallRecording[]>(`${BASE}/mine`).then((r) => r.data),
+  /** Upload one of my calls — becomes a Collect Requirement task assigned to me. */
+  uploadMine: (file: File, extra: { note?: string }, onProgress?: (pct: number) => void) =>
+    api.post<CallRecording>(`${BASE}/mine`, audioForm(file, { lastModified: file.lastModified, note: extra.note }), {
+      headers: { "Content-Type": "multipart/form-data" },
+      onUploadProgress: (e) => { if (onProgress && e.total) onProgress(Math.round((e.loaded / e.total) * 100)); },
+    }).then((r) => r.data),
+  taskCalls: (taskId: number) => api.get<TaskCalls>(`${BASE}/task/${taskId}/calls`).then((r) => r.data),
+  /** Upload a recording straight onto the task's lead. */
+  uploadForTask: (taskId: number, file: File) =>
+    api.post<CallRecording>(`${BASE}/task/${taskId}/upload`, audioForm(file, { lastModified: file.lastModified }), {
+      headers: { "Content-Type": "multipart/form-data" },
+    }).then((r) => r.data),
+  addToTask: (id: number, taskId: number) => api.post<CallRecording>(`${BASE}/${id}/add-to-task/${taskId}`).then((r) => r.data),
 };
 
 /** "3:42" / "1:02:10" from seconds. */

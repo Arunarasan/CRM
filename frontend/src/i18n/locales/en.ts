@@ -197,6 +197,7 @@ const en = {
       myProjects: 'My Projects',
       documents: 'Documents',
       reviewQr: 'My Review QR',
+      myCalls: 'My Calls',
       notifications: 'Notifications',
       settings: 'Settings',
       signOut: 'Sign Out',

@@ -31,6 +31,23 @@ public class TaskGenerationService {
     @Autowired private WorkflowPhaseInstanceRepository phaseInstanceRepository;
     @Autowired private TaskAssignmentRepository assignmentRepository;
 
+    /** Set while a caller is about to hand the generated task to someone directly (no pool ping). */
+    private static final ThreadLocal<Boolean> QUIET = ThreadLocal.withInitial(() -> false);
+
+    /**
+     * Runs {@code work} without pinging the task pool about tasks it generates — for flows that assign
+     * the new task to a specific person straight away (e.g. a lead created from a call recording).
+     */
+    public <T> T withoutPoolNotifications(java.util.function.Supplier<T> work) {
+        boolean previous = QUIET.get();
+        QUIET.set(true);
+        try {
+            return work.get();
+        } finally {
+            QUIET.set(previous);
+        }
+    }
+
     /**
      * Materialize every task template of the phase (in order), wiring instance-level dependencies so
      * the LOCKED/AVAILABLE gate works, and stamping the workflow subject onto each task.
@@ -66,8 +83,10 @@ public class TaskGenerationService {
 
         // Ping the eligible workforce about every freshly pickable task (AVAILABLE, not LOCKED),
         // so auto-generated pool work is seen immediately rather than only on next app open.
-        for (Task t : created) {
-            taskPoolNotifier.notifyEligibleEmployees(t);
+        if (!QUIET.get()) {
+            for (Task t : created) {
+                taskPoolNotifier.notifyEligibleEmployees(t);
+            }
         }
         return created;
     }

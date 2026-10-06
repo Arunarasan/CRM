@@ -81,7 +81,46 @@ public class CallRecordingController {
                 currentUserService.getCurrentUser())));
     }
 
+    // --- employee app: my own calls ----------------------------------------------------------
+
+    @GetMapping("/mine")
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> mine() {
+        return ResponseEntity.ok(ApiResponse.success(service.mine(currentUserService.getCurrentUser())));
+    }
+
+    /** Upload one of my calls — it becomes a Collect Requirement task assigned to me. */
+    @PostMapping("/mine")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> uploadMine(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "lastModified", required = false) Long lastModified,
+            @RequestParam(value = "durationSec", required = false) Integer durationSec,
+            @RequestParam(value = "note", required = false) String note) throws IOException {
+        return ResponseEntity.ok(ApiResponse.success(service.uploadMine(file, lastModified, durationSec, note,
+                currentUserService.getCurrentUser()), "Call uploaded — a Collect Requirement task was created for you."));
+    }
+
     // --- used from the task screens (manager or the task's assignee) -------------------------
+
+    @GetMapping("/task/{taskId}/calls")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> callsForTask(@PathVariable Long taskId) {
+        return ResponseEntity.ok(ApiResponse.success(service.callsForTask(taskId, currentUserService.getCurrentUser())));
+    }
+
+    @PostMapping("/task/{taskId}/upload")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> uploadForTask(
+            @PathVariable Long taskId,
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "lastModified", required = false) Long lastModified,
+            @RequestParam(value = "durationSec", required = false) Integer durationSec) throws IOException {
+        return ResponseEntity.ok(ApiResponse.success(service.uploadForTask(taskId, file, lastModified, durationSec,
+                currentUserService.getCurrentUser()), "Recording added to the lead."));
+    }
+
+    @PostMapping("/{id}/add-to-task/{taskId}")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> addToTaskLead(@PathVariable Long id, @PathVariable Long taskId) {
+        return ResponseEntity.ok(ApiResponse.success(
+                service.addToTaskLead(id, taskId, currentUserService.getCurrentUser()), "Call added to the lead."));
+    }
 
     @GetMapping("/by-task/{taskId}")
     public ResponseEntity<ApiResponse<Map<String, Object>>> forTask(@PathVariable Long taskId) {

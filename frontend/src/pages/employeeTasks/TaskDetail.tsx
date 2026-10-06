@@ -565,12 +565,13 @@ export default function TaskDetail() {
                 <Phone className="h-4 w-4" />
               </span>
               <div>
-                <p className="text-[15px] font-semibold text-[#22271F]">Call follow-up</p>
-                <p className="text-[12px] text-[#7A7F76]">Listen, call back, then create the lead — that completes this task.</p>
+                <p className="text-[15px] font-semibold text-[#22271F]">Call · Collect Requirement</p>
+                <p className="text-[12px] text-[#7A7F76]">Listen, call back if needed, then fill the requirement form — that creates the lead.</p>
               </div>
             </div>
             {call ? (
-              <CallLeadPanel call={call} onChanged={(c) => { setCall(c); load(); }} />
+              <CallLeadPanel call={call} onChanged={(c) => { setCall(c); load(); }}
+                onCreateLead={locked ? undefined : () => setFormOpen(true)} createLabel="Fill requirement & create lead" />
             ) : (
               <p className="py-4 text-center text-sm text-muted-foreground">Loading the call…</p>
             )}
@@ -579,7 +580,7 @@ export default function TaskDetail() {
 
         {/* Lead-workflow "collect info" tasks are form-first: take the task, then fill the form that
             writes straight onto the lead — no field-work tools (check-in / checklist / progress). */}
-        {isLeadForm && (
+        {isLeadForm && !isCallTask && (
           <div className="overflow-hidden rounded-2xl border border-[#EDE6D8] bg-white shadow-[0_4px_16px_rgba(80,55,20,0.06)]">
             <div className="p-4">
               <div className="flex items-center gap-2.5">
@@ -838,6 +839,13 @@ export default function TaskDetail() {
         <RequirementFormSheet
           taskId={taskId}
           leadId={task.leadId ?? null}
+          fromCall={isCallTask && !task.leadId}
+          initial={isCallTask && call ? {
+            name: call.contactName,
+            mobileNumber: call.phoneNumber,
+            leadSource: 'Phone Call',
+            customerRequirements: call.note,
+          } : undefined}
           open={formOpen}
           onOpenChange={setFormOpen}
           onSaved={() => { setFormOpen(false); load(); navigate('/employee/tasks'); }}
