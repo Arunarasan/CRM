@@ -3,21 +3,15 @@ import { FolderOpen, Plus, Trash2, FileIcon, Ruler, PhoneCall } from "lucide-rea
 import { measurementApi } from "@/api/measurementApi";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import EmptyState from "@/pages/customer360/components/EmptyState";
 import { leadApi } from "../leadApi";
-import { DOCUMENT_CATEGORIES, formatDate } from "../constants";
-import { SelectField, TextAreaField, TextField } from "../fields";
+import { formatDate } from "../constants";
 import { ListSkeleton, useLeadList } from "./shared";
-import FileUploadField from "@/components/FileUploadField";
-import ImageCaptureField from "@/components/ImageCaptureField";
-import AudioCaptureField, { type CapturedAudio } from "@/components/AudioCaptureField";
+import AddDocumentDialog from "./AddDocumentDialog";
 import { resolveFileUrl } from "@/lib/uploadFile";
 import AudioPlayer from "@/components/AudioPlayer";
 import CallDetails from "@/components/callRecordings/CallDetails";
 import { callRecordingApi, fmtCallTime, type CallRecording } from "@/api/callRecordingApi";
-
-const EMPTY = { fileName: "", fileUrl: "", category: "Property Images", documentType: "", description: "" };
 
 // Classify a document so photos render as thumbnails and voice notes as inline players.
 // Prefer the stored documentType (set on capture); fall back to the file extension.
@@ -37,19 +31,6 @@ export default function DocumentsTab({ leadId }: { leadId: string }) {
   const callUrls = new Set(calls.map((c) => c.fileUrl));
   const items = allItems.filter((d: any) => !callUrls.has(d.fileUrl));
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState<any>({ ...EMPTY });
-  const [saving, setSaving] = useState(false);
-
-  const set = (key: string) => (value: any) => setForm((f: any) => ({ ...f, [key]: value }));
-
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setSaving(true);
-    leadApi.addDocument(leadId, form)
-      .then(() => { setOpen(false); setForm({ ...EMPTY }); reload(); })
-      .catch(console.error)
-      .finally(() => setSaving(false));
-  };
 
   const remove = (doc: any) => {
     if (!confirm(`Remove document "${doc.fileName}"?`)) return;
@@ -151,68 +132,7 @@ export default function DocumentsTab({ leadId }: { leadId: string }) {
         )}
       </CardContent>
 
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader><DialogTitle>Add Document</DialogTitle></DialogHeader>
-          <form onSubmit={submit} className="space-y-4">
-            <ImageCaptureField
-              label="Capture / add an image"
-              module="LEAD"
-              value={form.documentType === "Image" ? form.fileUrl : ""}
-              onChange={({ url, fileName }) => setForm((f: any) => ({
-                ...f,
-                fileUrl: url,
-                fileName: f.fileName || fileName || "",
-                category: f.category || "Site Photos",
-                documentType: "Image",
-              }))}
-            />
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span className="h-px flex-1 bg-border" /> or upload a file <span className="h-px flex-1 bg-border" />
-            </div>
-            <FileUploadField
-              label="File"
-              module="LEAD"
-              value={form.documentType !== "Image" ? form.fileUrl : ""}
-              onChange={({ url, fileName }) => setForm((f: any) => ({
-                ...f,
-                fileUrl: url,
-                fileName: f.fileName || fileName || "",
-                documentType: f.documentType && f.documentType !== "Image" ? f.documentType : (fileName ? fileName.split(".").pop()?.toUpperCase() : ""),
-              }))}
-            />
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span className="h-px flex-1 bg-border" /> or record a voice note <span className="h-px flex-1 bg-border" />
-            </div>
-            <AudioCaptureField
-              label="Voice note"
-              module="LEAD"
-              value={form.documentType === "Audio" && form.fileUrl ? [{ url: form.fileUrl, fileName: form.fileName || "voice-note" }] : []}
-              onChange={(clips: CapturedAudio[]) => {
-                const last = clips[clips.length - 1];
-                if (!last) { setForm((f: any) => ({ ...f, fileUrl: "", documentType: f.documentType === "Audio" ? "" : f.documentType })); return; }
-                setForm((f: any) => ({
-                  ...f,
-                  fileUrl: last.url,
-                  fileName: f.fileName || last.fileName || "",
-                  category: f.category || "Voice Notes",
-                  documentType: "Audio",
-                }));
-              }}
-            />
-            <TextField label="File Name" required value={form.fileName} onChange={set("fileName")} />
-            <div className="grid grid-cols-2 gap-4">
-              <SelectField label="Category" value={form.category} onChange={set("category")} options={DOCUMENT_CATEGORIES} allowEmpty={false} />
-              <TextField label="File Type" value={form.documentType} onChange={set("documentType")} placeholder="PDF, Image, Video, CAD..." />
-            </div>
-            <TextAreaField label="Description" value={form.description} onChange={set("description")} />
-            <div className="flex justify-end gap-2 pt-2 border-t">
-              <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-              <Button type="submit" disabled={saving}>{saving ? "Saving..." : "Add"}</Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <AddDocumentDialog leadId={leadId} open={open} onOpenChange={setOpen} onAdded={reload} />
     </Card>
     </div>
   );
