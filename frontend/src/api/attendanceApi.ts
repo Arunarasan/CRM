@@ -11,6 +11,8 @@ export interface AttendanceLocation {
   radiusMeters: number;
   address?: string | null;
   active: boolean;
+  /** Branch this location belongs to (attendance devices are assigned to branch + location). */
+  branch?: { id: number; name?: string } | null;
 }
 
 export interface PendingAttendance {

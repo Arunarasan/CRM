@@ -13,6 +13,7 @@ import LocationMapPicker from '@/components/LocationMapPicker';
 import { toast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import SearchableSelect from '@/components/ui/searchable-select';
+import { attendanceDeviceApi, type Branch } from '@/api/attendanceDeviceApi';
 
 /**
  * The attendance-verification admin body, mounted both as the Workforce → Attendance page and as
@@ -354,6 +355,8 @@ function OfficeLocations() {
   const [locating, setLocating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [locAccuracy, setLocAccuracy] = useState<number | null>(null); // accuracy of the last "use my location" fix
+  const [branches, setBranches] = useState<Branch[]>([]);
+  useEffect(() => { attendanceDeviceApi.branches().then(setBranches).catch(() => setBranches([])); }, []);
 
   const load = () => {
     setLoading(true);
@@ -444,6 +447,14 @@ function OfficeLocations() {
               <BaseInput className={INPUT} type="number" step="0.000001" value={draft.longitude || ''}
                      onChange={(e) => set('longitude', Number(e.target.value))} placeholder="77.594600" />
             </Field>
+            <Field label="Branch" full>
+              <select className={INPUT} value={draft.branch?.id ?? ''}
+                      onChange={(e) => set('branch', e.target.value ? { id: Number(e.target.value) } : null)}>
+                <option value="">No branch</option>
+                {branches.filter((b) => b.active || b.id === draft.branch?.id).map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+              <span className="mt-1 block text-[11px] text-muted-foreground">Attendance devices are installed at a branch location.</span>
+            </Field>
             <Field label="Address (optional)" full>
               <BaseInput className={INPUT} value={draft.address ?? ''} onChange={(e) => set('address', e.target.value)} />
             </Field>
@@ -496,6 +507,7 @@ function OfficeLocations() {
                   {!r.active && <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">Inactive</span>}
                 </div>
                 <p className="mt-0.5 flex flex-wrap items-center gap-x-3 text-xs text-muted-foreground">
+                  {r.branch?.name && <span className="font-medium text-slate-600">{r.branch.name}</span>}
                   <span>{r.latitude}, {r.longitude} · {r.radiusMeters} m radius</span>
                   {r.address && <span className="truncate">{r.address}</span>}
                   <a className="inline-flex items-center gap-1 text-primary hover:underline"

@@ -10,7 +10,7 @@ import { format } from "date-fns";
 import {
   ArrowLeft, Briefcase, FileText, CalendarClock, HandCoins, Award, Plus, Download, Pencil,
   Mail, Phone, Calendar, IdCard, CheckSquare, FolderKanban, ChevronRight, ChevronDown, ListChecks,
-  Target, ClipboardList, Star,
+  Target, ClipboardList, Star, Fingerprint,
 } from "lucide-react";
 import { dailyReportApi, type AdminDailyReport, type EmployeeLeadSummary } from "@/api/dailyReportApi";
 import DailyReportCard from "@/components/hr/DailyReportCard";
@@ -30,6 +30,8 @@ import EmployeeOverviewTab from "./workforce/EmployeeOverviewTab";
 import EmployeeReviewsTab from "./workforce/EmployeeReviewsTab";
 import WageSettingsCard from "@/components/hr/WageSettingsCard";
 import { inr } from "./workforce/WorkforceFinanceTab";
+import EmployeeAttendanceCalendar from "@/components/hr/EmployeeAttendanceCalendar";
+import EmployeeBiometricTab from "@/components/hr/EmployeeBiometricTab";
 
 const DOC_TYPES = ["AADHAAR", "PAN", "OFFER_LETTER", "EXPERIENCE_LETTER", "RESUME", "CERTIFICATE", "CONTRACT", "OTHER"];
 const MONTHS_SEL = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -49,7 +51,7 @@ const tenure = (doj?: string | null) => {
   return [y ? `${y}y` : "", m ? `${m}m` : ""].filter(Boolean).join(" ") || "0m";
 };
 
-const VALID_TABS = ["overview", "attendance", "leads", "reports", "payroll", "documents", "performance", "reviews"];
+const VALID_TABS = ["overview", "attendance", "biometric", "leads", "reports", "payroll", "documents", "performance", "reviews"];
 
 export default function EmployeeProfile() {
   const { id } = useParams();
@@ -129,7 +131,7 @@ export default function EmployeeProfile() {
       .then(res => setDailyLog(res.data)).catch(() => setDailyLog(null));
   }, [id, dlMonth, dlYear]);
 
-  const presentDays = useMemo(() => attendance.filter(a => a.status === "PRESENT").length, [attendance]);
+  const presentDays = useMemo(() => attendance.filter(a => ["PRESENT", "LATE", "ON_DUTY", "WORK_FROM_HOME"].includes(a.status)).length, [attendance]);
 
   const openEdit = () => {
     const wfId = employee?.workforce?.id;
@@ -229,9 +231,10 @@ export default function EmployeeProfile() {
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full flex flex-col">
           <div className="-mx-4 mb-5 shrink-0 overflow-x-auto px-4 md:mx-0 md:px-0">
-          <TabsList className="h-auto w-max gap-0.5 rounded-xl border bg-card p-1 shadow-sm lg:grid lg:w-full lg:grid-cols-8">
+          <TabsList className="h-auto w-max gap-0.5 rounded-xl border bg-card p-1 shadow-sm lg:grid lg:w-full lg:grid-cols-9">
             <TabTrig value="overview" icon={<Briefcase className="w-4 h-4 mr-2" />}>Overview</TabTrig>
-            <TabTrig value="attendance" icon={<CalendarClock className="w-4 h-4 mr-2" />}>Time &amp; Leave</TabTrig>
+            <TabTrig value="attendance" icon={<CalendarClock className="w-4 h-4 mr-2" />}>Attendance</TabTrig>
+            <TabTrig value="biometric" icon={<Fingerprint className="w-4 h-4 mr-2" />}>Biometric</TabTrig>
             <TabTrig value="leads" icon={<Target className="w-4 h-4 mr-2" />}>Leads</TabTrig>
             <TabTrig value="reports" icon={<ClipboardList className="w-4 h-4 mr-2" />}>Reports</TabTrig>
             <TabTrig value="payroll" icon={<HandCoins className="w-4 h-4 mr-2" />}>Payroll</TabTrig>
@@ -262,6 +265,9 @@ export default function EmployeeProfile() {
           {/* ---- Time & Leave ---- */}
           <TabsContent value="attendance">
             <div className="space-y-6">
+              {/* Month summary + calendar (biometric terminal + self-service attendance) */}
+              {employee?.id && <EmployeeAttendanceCalendar employeeId={Number(employee.id)} />}
+
               {/* Daily sheet: real per-day worked hours, task hours & earnings */}
               <div className="bg-white border rounded-2xl shadow-sm overflow-hidden">
                 <div className="p-4 border-b bg-slate-50 flex flex-wrap items-center justify-between gap-3">
@@ -406,6 +412,11 @@ export default function EmployeeProfile() {
           </TabsContent>
 
           {/* ---- Leads raised from the field ---- */}
+          {/* ---- Biometric (attendance device enrollment) ---- */}
+          <TabsContent value="biometric">
+            {employee?.id && <EmployeeBiometricTab employeeId={Number(employee.id)} />}
+          </TabsContent>
+
           <TabsContent value="leads">
             <div className="bg-white border rounded-2xl shadow-sm">
               <div className="p-5 border-b flex items-center gap-2">

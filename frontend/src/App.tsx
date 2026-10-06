@@ -107,6 +107,9 @@ const HrPerformancePage = lazy(() => import("./pages/hr/HrPerformancePage"));
 const HrLeavePage = lazy(() => import("./pages/hr/HrLeavePage"));
 const HrDepartmentsPage = lazy(() => import("./pages/hr/HrDepartmentsPage"));
 const HrAttendancePage = lazy(() => import("./pages/hr/HrAttendancePage"));
+const AttendanceDashboardPage = lazy(() => import("./pages/hr/AttendanceDashboardPage"));
+const AttendanceDevicesPage = lazy(() => import("./pages/hr/AttendanceDevicesPage"));
+const AttendanceShiftsPage = lazy(() => import("./pages/hr/AttendanceShiftsPage"));
 const PayslipPrint = lazy(() => import("./pages/hr/PayslipPrint"));
 const NotificationCenter = lazy(() => import("./pages/NotificationCenter"));
 
@@ -295,6 +298,9 @@ function App() {
               <Route index element={<WorkforceDirectoryPage />} />
               <Route path="payroll" element={<HrFinanceDashboard />} />
               <Route path="cashflow" element={<CashflowPage />} />
+              <Route path="attendance-dashboard" element={<AttendanceDashboardPage />} />
+              <Route path="attendance-devices" element={<AttendanceDevicesPage />} />
+              <Route path="attendance-shifts" element={<AttendanceShiftsPage />} />
               <Route path="attendance" element={<HrAttendancePage />} />
               <Route path="daily-reports" element={<DailyReportsPage />} />
               <Route path="leave" element={<HrLeavePage />} />

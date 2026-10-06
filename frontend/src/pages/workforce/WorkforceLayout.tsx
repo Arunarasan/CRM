@@ -1,7 +1,7 @@
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import {
   Users, BarChart3, HandCoins, CalendarClock, Palmtree, Building, Gauge, TrendingUp, ShieldCheck,
-  ClipboardList, Award, Wallet, Clock3, Network, Star,
+  ClipboardList, Award, Wallet, Clock3, Network, Star, LayoutDashboard, Router, Clock,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -12,7 +12,7 @@ import { useAuth } from "@/hooks/useAuth";
  * (ROLE_ADMIN passes automatically via hasAuthority). UI gating is defense-in-depth only —
  * the backend @PreAuthorize checks remain the enforcement point.
  *
- * Navigation is two-level so eleven sections fit on a phone: a row of groups
+ * Navigation is two-level so every section fits on a phone: a row of groups
  * (People · Time · Pay · Performance · Organisation), then the pages inside the active group.
  */
 type Tab = { to: string; label: string; icon: typeof Users; end?: boolean; hr?: boolean };
@@ -28,7 +28,10 @@ const GROUPS: Group[] = [
   },
   {
     key: "time", label: "Time", icon: Clock3, tabs: [
-      { to: "/workforce/attendance", label: "Attendance", icon: CalendarClock, hr: true },
+      { to: "/workforce/attendance-dashboard", label: "Dashboard", icon: LayoutDashboard, hr: true },
+      { to: "/workforce/attendance-devices", label: "Devices", icon: Router, hr: true },
+      { to: "/workforce/attendance-shifts", label: "Shifts", icon: Clock, hr: true },
+      { to: "/workforce/attendance", label: "Review & locations", icon: CalendarClock, hr: true },
       { to: "/workforce/leave", label: "Leave", icon: Palmtree, hr: true },
     ],
   },
