@@ -10,7 +10,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import BundleWorkEditor, { defaultWorkHeader, type WorkHeader, type WorkLine } from "./BundleWorkEditor";
 import { specToJson } from "./workSpec";
 import { printBundleStickers, getLabelSize, setLabelSize, LABEL_SIZES, type LabelSize } from "./printStickers";
-import { Package, Printer, Plus } from "lucide-react";
+import HandoverDialog from "./HandoverDialog";
+import { useAuth } from "@/hooks/useAuth";
+import { Package, Printer, Plus, HandCoins } from "lucide-react";
 
 /**
  * "Bundles" card on a bill: the stickered work bundles raised for it, a sticker print (size picker),
@@ -18,7 +20,7 @@ import { Package, Printer, Plus } from "lucide-react";
  * work) opens the sticker print once the bundles load.
  */
 export default function InvoiceBundles({
-  invoiceId, items, cancelled, company, autoStickers, onAutoDone,
+  invoiceId, items, cancelled, company, autoStickers, onAutoDone, onChanged, paidKey,
 }: {
   invoiceId: number;
   items: InvoiceItem[];
@@ -26,17 +28,24 @@ export default function InvoiceBundles({
   company?: CompanyProfile;
   autoStickers?: boolean;
   onAutoDone?: () => void;
+  /** After a handover (it may have collected a payment) — lets the bill page reload its totals. */
+  onChanged?: () => void;
+  /** Changes when a payment lands on the bill — reloads so stickers print the current balance. */
+  paidKey?: string;
 }) {
   const [bundles, setBundles] = useState<Bundle[] | null>(null);
   const [size, setSize] = useState<LabelSize>(getLabelSize);
   const [createOpen, setCreateOpen] = useState(false);
   const [blocked, setBlocked] = useState(false);
   const autoDone = useRef(false);
+  const [handoverOpen, setHandoverOpen] = useState(false);
+  const { hasAnyAuthority } = useAuth();
+  const canMove = hasAnyAuthority(["BUNDLE_MOVE", "BUNDLE_WRITE"]);
 
   const load = useCallback(() => {
     bundleApi.forInvoice(invoiceId).then(setBundles).catch(() => setBundles([]));
   }, [invoiceId]);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load, paidKey]);
 
   const print = useCallback((list: Bundle[], quiet = false) => {
     const ok = printBundleStickers(list, size, company);
@@ -70,6 +79,9 @@ export default function InvoiceBundles({
                 className="h-9 rounded-md border bg-white px-2 text-xs" title="Sticker size">
                 {LABEL_SIZES.map((s) => <option key={s.v} value={s.v}>{s.label}</option>)}
               </select>
+              {canMove && bundles.some((b) => b.status === "READY") && (
+                <Button size="sm" variant="outline" onClick={() => setHandoverOpen(true)}><HandCoins className="w-4 h-4 mr-1" /> Hand over</Button>
+              )}
               <Button size="sm" onClick={() => print(bundles)}><Printer className="w-4 h-4 mr-1" /> Print {bundles.length > 1 ? `${bundles.length} stickers` : "sticker"}</Button>
             </>
           )}
@@ -94,6 +106,10 @@ export default function InvoiceBundles({
             </li>
           ))}
         </ul>
+      )}
+      {handoverOpen && (
+        <HandoverDialog bundles={bundles} onClose={() => setHandoverOpen(false)}
+          onDone={() => { setHandoverOpen(false); load(); onChanged?.(); }} />
       )}
       {createOpen && (
         <CreateBundleDialog invoiceId={invoiceId} items={items} onClose={() => setCreateOpen(false)}

@@ -38,6 +38,8 @@ public class CounterSaleRequest {
     // --- payment ---
     public boolean collectNow;
     public String paymentMethod;  // CASH / UPI / CARD / ... (when collectNow)
+    /** Advance: collect only this much now (bill stays PARTIAL). Null/0 or ≥ total = pay in full. */
+    public BigDecimal paidAmount;
 
     public static class Item {
         public Long productId;    // null for a free-text / non-catalogue line

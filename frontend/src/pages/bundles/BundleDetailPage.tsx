@@ -18,6 +18,7 @@ import ResourceSelect from "@/components/workforce/ResourceSelect";
 import type { ResourceType } from "@/types/workforce";
 import { WorkSpecFields, formatSpec, parseSpec, specToJson, type WorkSpec } from "@/components/bundles/workSpec";
 import { printBundleStickers, printJobCard, getLabelSize, setLabelSize, LABEL_SIZES, type LabelSize } from "@/components/bundles/printStickers";
+import HandoverDialog from "@/components/bundles/HandoverDialog";
 import { StatusPill } from "./BundlesPage";
 import {
   ArrowLeft, Phone, Printer, PauseCircle, PlayCircle, Check, Pencil, FileText, ChevronDown, Camera,
@@ -45,7 +46,8 @@ export default function BundleDetailPage() {
   const [note, setNote] = useState("");
   const [photo, setPhoto] = useState("");
   const [showPhoto, setShowPhoto] = useState(false);
-  const [handoverOpen, setHandoverOpen] = useState(false);
+  /** Hand-over candidates (every bundle of the bill); non-null = dialog open. */
+  const [handover, setHandover] = useState<Bundle[] | null>(null);
   const [holdOpen, setHoldOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [specEdit, setSpecEdit] = useState<BundleItem | null>(null);
@@ -83,8 +85,18 @@ export default function BundleDetailPage() {
     }
   };
 
-  const moveTo = (status: string, extra: { deliveredTo?: string } = {}) => b && act(
-    () => bundleApi.move(b.id, { status, note: note.trim() || undefined, photoUrl: photo || undefined, ...extra }),
+  const openHandover = async () => {
+    if (!b) return;
+    let list: Bundle[] = [b];
+    if (b.invoiceId) {
+      try { list = await bundleApi.forInvoice(b.invoiceId); } catch { /* fall back to this bundle */ }
+      if (!list.some((x) => x.id === b.id)) list = [b, ...list];
+    }
+    setHandover(list);
+  };
+
+  const moveTo = (status: string) => b && act(
+    () => bundleApi.move(b.id, { status, note: note.trim() || undefined, photoUrl: photo || undefined }),
     `${b.code} → ${BUNDLE_STATUS_LABELS[status]}`,
   );
 
@@ -196,7 +208,7 @@ export default function BundleDetailPage() {
                 </Button>
               ) : b.nextStatus && (
                 <Button className="h-12 flex-1 sm:flex-none sm:min-w-[220px] text-base" disabled={busy}
-                  onClick={() => (b.nextStatus === "DELIVERED" ? setHandoverOpen(true) : moveTo(b.nextStatus!))}>
+                  onClick={() => (b.nextStatus === "DELIVERED" ? openHandover() : moveTo(b.nextStatus!))}>
                   {BUNDLE_NEXT_ACTION[b.nextStatus] ?? BUNDLE_STATUS_LABELS[b.nextStatus]} →
                 </Button>
               )}
@@ -208,7 +220,7 @@ export default function BundleDetailPage() {
               {canOverride && !onHold && (
                 <div className="relative">
                   <select value="" disabled={busy}
-                    onChange={(e) => { const v = e.target.value; if (!v) return; if (v === "DELIVERED") setHandoverOpen(true); else moveTo(v); }}
+                    onChange={(e) => { const v = e.target.value; if (!v) return; if (v === "DELIVERED") openHandover(); else moveTo(v); }}
                     className="h-12 appearance-none rounded-md border bg-white pl-3 pr-8 text-sm text-slate-700">
                     <option value="">Move to…</option>
                     {BUNDLE_FLOW.filter((s) => s !== b.status).map((s) => <option key={s} value={s}>{BUNDLE_STATUS_LABELS[s]}</option>)}
@@ -270,6 +282,13 @@ export default function BundleDetailPage() {
               {b.customerName || "Walk-in"}
               {b.customerPhone && <a href={`tel:${b.customerPhone}`} className="flex items-center gap-1 text-slate-500 hover:underline"><Phone className="w-3.5 h-3.5" />{b.customerPhone}</a>}
             </Detail>
+            {b.invoiceId && b.status !== "CANCELLED" && (
+              <Detail label="Bill payment">
+                {Number(b.balanceDue ?? 0) > 0
+                  ? <span className="font-semibold text-amber-700">₹{Number(b.balanceDue).toLocaleString("en-IN")} due</span>
+                  : <span className="font-medium text-emerald-700">Paid</span>}
+              </Detail>
+            )}
             <Detail label="Tailor / worker">
               {canWrite && !closed ? (
                 <ResourceSelect
@@ -310,9 +329,9 @@ export default function BundleDetailPage() {
         </ol>
       </div>
 
-      {handoverOpen && (
-        <HandoverDialog bundle={b} busy={busy} onClose={() => setHandoverOpen(false)}
-          onConfirm={async (to) => { if (await moveTo("DELIVERED", { deliveredTo: to })) setHandoverOpen(false); }} />
+      {handover && (
+        <HandoverDialog bundles={handover} focusId={b.id} onClose={() => setHandover(null)}
+          onDone={(updated) => { setHandover(null); setB(updated.find((x) => x.id === b.id) ?? b); load(); }} />
       )}
       {holdOpen && (
         <HoldDialog busy={busy} onClose={() => setHoldOpen(false)}
@@ -343,23 +362,6 @@ function Detail({ label, children }: { label: string; children: React.ReactNode 
       <dt className="text-[11px] uppercase tracking-wide text-slate-400">{label}</dt>
       <dd className="text-slate-800 mt-0.5">{children}</dd>
     </div>
-  );
-}
-
-function HandoverDialog({ bundle, busy, onClose, onConfirm }: { bundle: Bundle; busy: boolean; onClose: () => void; onConfirm: (to: string) => void }) {
-  const [to, setTo] = useState(bundle.customerName && bundle.customerName !== "Walk-in Customer" ? bundle.customerName : "");
-  return (
-    <Dialog open onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-sm">
-        <DialogHeader><DialogTitle>Hand over {bundle.code}</DialogTitle></DialogHeader>
-        <label className="text-sm block"><span className="text-slate-500">{bundle.handoverMode === "DELIVERY" ? "Delivered to" : "Collected by"}</span>
-          <Input value={to} onChange={(e) => setTo(e.target.value)} className="mt-1" placeholder="Name (optional)" autoFocus /></label>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button disabled={busy} onClick={() => onConfirm(to.trim())}>Confirm handover</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }
 

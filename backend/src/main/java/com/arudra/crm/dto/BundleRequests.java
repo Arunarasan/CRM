@@ -46,6 +46,26 @@ public final class BundleRequests {
         public String deliveredTo;     // when moving to DELIVERED
     }
 
+    /**
+     * Hand one or more bundles to the customer, optionally collecting what is still owed on their
+     * bill(s) first. Payments are applied oldest bill first.
+     */
+    public static class Handover {
+        public List<Long> bundleIds;
+        public String deliveredTo;
+        public String note;
+        public String photoUrl;
+        public List<Payment> payments;
+        /** Manager-only: hand over although a balance is still due. Requires {@link #note}. */
+        public boolean allowBalanceDue;
+    }
+
+    public static class Payment {
+        public String method;          // CASH / UPI / CARD / ...
+        public BigDecimal amount;
+        public String referenceNumber;
+    }
+
     public static class Assign {
         public String resourceType;    // null/blank clears the assignment
         public Long resourceId;

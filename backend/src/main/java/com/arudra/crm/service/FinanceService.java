@@ -256,7 +256,10 @@ public class FinanceService {
             BigDecimal balance = saved.getBalanceDue() != null ? saved.getBalanceDue() : saved.getTotalAmount();
             if (balance != null && balance.signum() > 0) {
                 String method = (req.paymentMethod == null || req.paymentMethod.isBlank()) ? "CASH" : req.paymentMethod;
-                markInvoicePaid(saved.getId(), List.of(new InvoicePaymentSplit(method, balance, null)), user);
+                // An advance pays part now; the rest is collected at pickup (bundle handover).
+                BigDecimal pay = req.paidAmount != null && req.paidAmount.signum() > 0 && req.paidAmount.compareTo(balance) < 0
+                        ? req.paidAmount : balance;
+                markInvoicePaid(saved.getId(), List.of(new InvoicePaymentSplit(method, pay, null)), user);
             }
         }
 

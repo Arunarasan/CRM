@@ -54,6 +54,13 @@ function barcodeSvg(value: string) {
   return svg.outerHTML;
 }
 
+/** Money status for the pickup counter: "BAL ₹1,200" while owed, "PAID" once settled, "" without a bill. */
+function payTag(b: Bundle) {
+  if (!b.invoiceId || b.balanceDue == null) return "";
+  const due = Number(b.balanceDue);
+  return due > 0 ? `BAL ₹${due.toLocaleString("en-IN", { maximumFractionDigits: 2 })}` : "PAID";
+}
+
 function itemLines(b: Bundle, max: number) {
   const items = b.items ?? [];
   const rows = items.slice(0, max).map((it) => {
@@ -69,7 +76,7 @@ function smallLabel(b: Bundle) {
     <div class="qr">${qrSvg(bundleScanUrl(b.code))}</div>
     <div class="txt">
       <div class="code">${esc(b.code)}</div>
-      <div class="ln">${esc(b.customerName || "Walk-in")}</div>
+      <div class="ln">${payTag(b) && Number(b.balanceDue) > 0 ? `<b class="bal">BAL</b> ` : ""}${esc(b.customerName || "Walk-in")}</div>
       <div class="ln mut">${b.bundleTotal > 1 ? `${b.bundleNo}/${b.bundleTotal} · ` : ""}${b.itemCount} item${b.itemCount === 1 ? "" : "s"}${b.dueDate ? ` · ${d(b.dueDate)}` : ""}</div>
     </div>
   </div>`;
@@ -78,6 +85,7 @@ function smallLabel(b: Bundle) {
 function largeLabel(b: Bundle, co: CompanyProfile | undefined, cls: string, maxItems: number) {
   return `<div class="lbl ${cls}">
     <div class="top"><span class="shop">${esc(co?.name || "")}</span><span class="wt">${esc(b.workType)}</span></div>
+    ${payTag(b) ? `<div class="pay ${Number(b.balanceDue) > 0 ? "due" : "ok"}">${esc(payTag(b))}</div>` : ""}
     <div class="mid">
       <div class="qr">${qrSvg(bundleScanUrl(b.code))}</div>
       <div class="txt">
@@ -122,6 +130,11 @@ export function printBundleStickers(bundles: Bundle[], size: LabelSize, company?
     .lbl { overflow: hidden; page-break-after: always; break-after: page; }
     .lbl:last-child { page-break-after: auto; break-after: auto; }
     .qr svg { display: block; }
+    .bal { border: 1px solid #000; padding: 0 .6mm; font-weight: 800; }
+    .pay { font-weight: 900; text-align: center; border: 1.5px solid #000; border-radius: 1.5mm; }
+    .pay.due { background: #000; color: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .l .pay { font-size: 15pt; padding: 1mm; }
+    .a .pay { font-size: 11pt; padding: .5mm; }
     /* 50 x 25 mm */
     .s { width: 50mm; height: 25mm; padding: 1.5mm; display: flex; gap: 1.5mm; align-items: center; }
     .s .qr { width: 21mm; height: 21mm; flex: none; }

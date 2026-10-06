@@ -37,6 +37,10 @@ public class BundleView {
     public Long invoiceId;
     public String invoiceNumber;
     public LocalDate invoiceDate;
+    public String invoiceStatus;
+    public BigDecimal invoiceTotal;
+    public BigDecimal amountPaid;
+    public BigDecimal balanceDue;      // live from the bill — what is still owed at handover
     public Long customerId;
     public String customerName;
     public String customerPhone;

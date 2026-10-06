@@ -103,6 +103,11 @@ export interface Bundle {
   invoiceId?: number | null;
   invoiceNumber?: string | null;
   invoiceDate?: string | null;
+  invoiceStatus?: string | null;
+  invoiceTotal?: number | null;
+  amountPaid?: number | null;
+  /** Still owed on the bill (live) — 0 when paid or there is no bill. */
+  balanceDue?: number | null;
   customerId?: number | null;
   customerName?: string | null;
   customerPhone?: string | null;
@@ -146,6 +151,16 @@ export interface CreateBundlesInput {
   bundles: { items: BundleItemSpecInput[] }[];
 }
 
+export interface HandoverInput {
+  bundleIds: number[];
+  deliveredTo?: string;
+  note?: string;
+  photoUrl?: string;
+  payments?: { method: string; amount: number; referenceNumber?: string }[];
+  /** Manager only: hand over although a balance is still due (needs a note). */
+  allowBalanceDue?: boolean;
+}
+
 const qs = (params: Record<string, unknown>) => {
   const query = new URLSearchParams();
   Object.entries(params).forEach(([k, v]) => {
@@ -160,6 +175,9 @@ export const bundleApi = {
     api.get<PageResp<Bundle>>(`/bundles${qs({ page: 0, size: 100, ...p })}`).then((r) => r.data),
   summary: () => api.get<BundleSummary>('/bundles/summary').then((r) => r.data),
   byCode: (code: string) => api.get<Bundle>(`/bundles/code/${encodeURIComponent(code.trim())}`).then((r) => r.data),
+  /** Scan box: bundle code, group code or bill number → matching bundles. */
+  lookup: (q: string) => api.get<Bundle[]>(`/bundles/lookup${qs({ q: q.trim() })}`).then((r) => r.data),
+  handover: (body: HandoverInput) => api.post<Bundle[]>('/bundles/handover', body).then((r) => r.data),
   get: (id: number) => api.get<Bundle>(`/bundles/${id}`).then((r) => r.data),
   forInvoice: (invoiceId: number) => api.get<Bundle[]>(`/bundles/invoice/${invoiceId}`).then((r) => r.data),
   create: (body: CreateBundlesInput) => api.post<Bundle[]>('/bundles', body).then((r) => r.data),

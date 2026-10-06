@@ -30,6 +30,7 @@ public class BundleController {
     private static final String MOVE = "hasAuthority('ROLE_ADMIN') or hasAuthority('BUNDLE_WRITE') or hasAuthority('BUNDLE_MOVE')";
     private static final String WRITE = "hasAuthority('ROLE_ADMIN') or hasAuthority('BUNDLE_WRITE')";
     private static final Set<String> OVERRIDE_ROLES = Set.of("ROLE_ADMIN", "ROLE_MANAGER");
+    private static final Set<String> COLLECT_AUTHORITIES = Set.of("ROLE_ADMIN", "FINANCE_WRITE", "FINANCE_COLLECT");
 
     @Autowired private BundleService bundleService;
     @Autowired private CurrentUserService currentUserService;
@@ -59,6 +60,20 @@ public class BundleController {
     @PreAuthorize(READ)
     public ResponseEntity<BundleView> byCode(@PathVariable String code) {
         return ResponseEntity.ok(bundleService.getByCode(code));
+    }
+
+    /** Scan box: a bundle code, a group code or a bill number → the matching bundle(s). */
+    @GetMapping("/lookup")
+    @PreAuthorize(READ)
+    public ResponseEntity<List<BundleView>> lookup(@RequestParam String q) {
+        return ResponseEntity.ok(bundleService.lookup(q));
+    }
+
+    /** Hand bundles to the customer, collecting what is still owed on the bill first. */
+    @PostMapping("/handover")
+    @PreAuthorize(MOVE)
+    public ResponseEntity<List<BundleView>> handover(@RequestBody BundleRequests.Handover req) {
+        return ResponseEntity.ok(bundleService.handover(req, currentUserService.getCurrentUser(), canOverride(), canCollect()));
     }
 
     @GetMapping("/invoice/{invoiceId}")
@@ -112,5 +127,11 @@ public class BundleController {
     private boolean canOverride() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         return auth != null && auth.getAuthorities().stream().anyMatch(a -> OVERRIDE_ROLES.contains(a.getAuthority()));
+    }
+
+    /** Same rule as the finance mark-paid endpoint. */
+    private boolean canCollect() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        return auth != null && auth.getAuthorities().stream().anyMatch(a -> COLLECT_AUTHORITIES.contains(a.getAuthority()));
     }
 }

@@ -294,7 +294,7 @@ export default function InvoiceDetailPage() {
         </div>
       </div>
 
-      <InvoiceBundles invoiceId={inv.id} items={items} cancelled={inv.status === "CANCELLED"} company={company}
+      <InvoiceBundles invoiceId={inv.id} items={items} cancelled={inv.status === "CANCELLED"} company={company} onChanged={load} paidKey={String(inv.amountPaid ?? "")}
         autoStickers={searchParams.get("stickers") === "1"} onAutoDone={stripStickers} />
 
       {/* Payments */}
