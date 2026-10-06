@@ -13,8 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/components/ui/toast";
-import { printInvoice } from "./printInvoice";
-import { fetchCompanyProfile } from "@/lib/companyProfile";
+import { openInvoicePdf } from "./printInvoice";
 import { MoneySection } from "./MoneySection";
 import { Skeleton } from "@/components/ui/skeleton";
 import ProjectProfitPanel from "./ProjectProfitPanel";
@@ -138,16 +137,12 @@ export default function ProjectPaymentsTab({ project, onChanged, mode = "billing
       .finally(() => setBusyId(null));
   };
 
-  const doPrint = async (inv: Invoice) => {
-    try {
-      const [full, items, company] = await Promise.all([
-        financeApi.getInvoice(inv.id), financeApi.getInvoiceItems(inv.id), fetchCompanyProfile(),
-      ]);
-      printInvoice(full, items, project, company);
-    } catch {
-      toast.error("Could not open the invoice for printing.");
-    }
-  };
+  // Same PDF design as the quotation; the tab opens on the click, the PDF loads into it.
+  const doPrint = (inv: Invoice) =>
+    openInvoicePdf(async () => {
+      const [invoice, items] = await Promise.all([financeApi.getInvoice(inv.id), financeApi.getInvoiceItems(inv.id)]);
+      return { invoice, items, project };
+    }).catch(() => toast.error("Could not open the invoice for printing."));
 
   if (mode === "payments") {
     return <PaymentsSection projectId={projectId} customerId={customerId} canWrite={canWrite} canCollect={canCollect} onChanged={() => { reloadAll(); onChanged?.(); }} />;
@@ -248,7 +243,7 @@ export default function ProjectPaymentsTab({ project, onChanged, mode = "billing
                         <a href={invoiceWhatsApp(i)} target="_blank" rel="noreferrer" title="Send on WhatsApp" aria-label={`Send ${i.invoiceNumber} on WhatsApp`}
                           className="inline-flex items-center rounded-md border border-slate-200 px-1.5 py-1 text-slate-600 hover:bg-slate-50"><MessageCircle className="h-3.5 w-3.5" /></a>
                       )}
-                      {i.status !== "DRAFT" && <ActionBtn onClick={() => doPrint(i)} title={`Print ${i.invoiceNumber}`}><Printer className="h-3.5 w-3.5" /></ActionBtn>}
+                      <ActionBtn onClick={() => doPrint(i)} title={`Print ${i.invoiceNumber}`}><Printer className="h-3.5 w-3.5" /></ActionBtn>
                     </div>
                   </li>
                 );

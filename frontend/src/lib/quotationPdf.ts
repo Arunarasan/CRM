@@ -7,6 +7,7 @@ import {
 import api from "@/lib/api";
 import { resolveFileUrl } from "@/lib/uploadFile";
 import { fetchBankDetails, fetchCompanyProfile, type BankDetails } from "@/lib/companyProfile";
+import type { Invoice, InvoiceItem } from "@/types/finance";
 
 const n = (v?: number | null) => Number(v ?? 0) || 0;
 
@@ -95,14 +96,25 @@ export function quotationPdfUrl(quotation: Quotation, sel: PdfSelection = {}): s
  * (blocked by the image host, missing) are simply left out. Shrunk to thumbnails to keep the PDF small.
  */
 export async function loadPdfImages(quotation: Quotation): Promise<Record<string, string>> {
-  const urls = [...new Set((quotation.items || []).map((i) => i.imageUrl).filter((u): u is string => !!u))];
+  const urls = (quotation.items || []).map((i) => i.imageUrl).filter((u): u is string => !!u);
+  return loadDocAssets(urls, n(quotation.grandTotal), quotation.quotationNumber || "Quotation");
+}
+
+/** Letterhead, fonts and the bank box (UPI QR asking for `upiAmount`) for an invoice PDF. */
+export function loadInvoicePdfAssets(invoice: Invoice): Promise<Record<string, string>> {
+  return loadDocAssets([], n(invoice.balanceDue ?? invoice.totalAmount), invoice.invoiceNumber || "Invoice");
+}
+
+/** Everything a document PDF draws that has to be fetched first: line photos, letterhead, fonts, bank box. */
+async function loadDocAssets(imageUrls: string[], upiAmount: number, upiNote: string): Promise<Record<string, string>> {
+  const urls = [...new Set(imageUrls)];
   const out: Record<string, string> = {};
   const header = loadHeader().then((h) => { if (h) out[HEADER_KEY] = h; });
   const fonts = Promise.all(FONT_FILES.map(async (f) => {
     const b64 = await loadFont(f.file);
     if (b64) out[FONT_KEY + f.file] = b64;
   }));
-  const bank = loadBank(quotation).then((b) => Object.assign(out, b));
+  const bank = loadBank(upiAmount, upiNote).then((b) => Object.assign(out, b));
   await Promise.all([header, fonts, bank, ...urls.map(async (url) => {
     try {
       // Our own stored photos come through the API (the storage bucket sends no CORS headers, so
@@ -187,16 +199,15 @@ async function loadFont(file: string): Promise<string | null> {
 const BANK_KEY = "__bank__";
 const QR_KEY = "__upi_qr__";
 
-async function loadBank(quotation: Quotation): Promise<Record<string, string>> {
+async function loadBank(due: number, note: string): Promise<Record<string, string>> {
   const out: Record<string, string> = {};
   try {
     const [bank, company] = await Promise.all([fetchBankDetails(), fetchCompanyProfile()]);
     if (!bank.accountNumber && !bank.upiId) return out;
     out[BANK_KEY] = JSON.stringify(bank);
     if (bank.upiId) {
-      const due = n(quotation.grandTotal);
       const link = `upi://pay?pa=${encodeURIComponent(bank.upiId)}&pn=${encodeURIComponent(bank.accountName || company.name)}`
-        + (due > 0 ? `&am=${due.toFixed(2)}` : "") + `&cu=INR&tn=${encodeURIComponent(quotation.quotationNumber || "Quotation")}`;
+        + (due > 0 ? `&am=${due.toFixed(2)}` : "") + `&cu=INR&tn=${encodeURIComponent(note)}`;
       const qr = await qrPng(link);
       if (qr) out[QR_KEY] = qr;
     }
@@ -245,8 +256,143 @@ async function qrPng(value: string): Promise<string | null> {
  */
 export function buildQuotationPdf(quotation: Quotation, sel: PdfSelection = {}): jsPDF {
   const totals = selectionTotals(quotation, sel);
-  const blocks = buildCategoryBlocks(totals.items);
-  const assets = sel.images || {};
+  const lead: any = quotation.lead || {};
+  const cust: any = quotation.customer || {};
+  const meas: any = quotation.measurement || {};
+  const client = cust.name || lead.name || "—";
+  const area = lead.area || cust.area || lead.city || cust.city || cust.customerCode || "";
+  const site = quotation.project?.projectName || meas.siteAddress || lead.siteAddress || cust.siteAddress
+    || lead.address || cust.address || lead.city || cust.city || "—";
+  const qDate = quotation.quotationDate;
+  const xDate = quotation.expiryDate || addDays(qDate, 14);
+  const validDays = qDate && xDate ? Math.round((new Date(xDate).getTime() - new Date(qDate).getTime()) / 86400000) : null;
+
+  const charges = (sel.includeExtras ?? true) ? quoteCharges(quotation) : [];
+  const isLabour = (l: string) => /labou?r/i.test(l);
+  const isShipping = (l: string) => /ship|transport|delivery/i.test(l);
+  const gross = totals.items.reduce((s, i) => s + lineGrossOf(i), 0);
+  const lineDisc = totals.items.reduce((s, i) => s + lineDiscountAmount(i), 0);
+  const net = totals.items.reduce((s, i) => s + n(i.totalAmount), 0);
+  const gstPct = ((quotation as any).taxes || []).filter((t: any) => !t.isInclusive).reduce((s: number, t: any) => s + n(t.percentage), 0);
+  const scopeCount = (quotation.items || []).filter((i) => i.status !== "REJECTED").length;
+
+  return renderDocPdf({
+    title: "QUOTATION",
+    number: `${quotation.quotationNumber || ""}${quotation.revisionNumber ? ` · v${quotation.revisionNumber}` : ""}`,
+    cards: [
+      { label: "Date", value: fmtDay(qDate), sub: validDays != null && validDays >= 0 ? `Valid for ${validDays} day${validDays === 1 ? "" : "s"}` : xDate ? `Valid till ${fmtDay(xDate)}` : undefined },
+      { label: "Customer", value: client, sub: area || undefined },
+      { label: "Site / Project", value: site, wrap: true },
+    ],
+    note: totals.isPartial ? `Selected scope: ${totals.items.length} of ${scopeCount} items` : undefined,
+    items: totals.items,
+    tags: true,
+    blockTotalLabel: "Category Total",
+    extraColumn: { header: "Disc. (%)", cell: discText },
+    summary: [
+      { label: "Products Total", amount: gross },
+      ...(lineDisc > 0 ? [{ label: "Line Discount", amount: lineDisc, minus: true }] : []),
+      { label: "Products Net Total", amount: net, strong: true },
+      { label: "Labour", amount: charges.filter((c) => isLabour(c.label)).reduce((s, c) => s + c.amount, 0) },
+      { label: "Shipping", amount: charges.filter((c) => isShipping(c.label)).reduce((s, c) => s + c.amount, 0) },
+      ...charges.filter((c) => !isLabour(c.label) && !isShipping(c.label))
+        .map((c) => ({ label: c.note ? `${c.label} · ${c.note}` : c.label, amount: c.amount })),
+      ...(totals.discount > 0 ? [{ label: "Discount", amount: totals.discount, minus: true }] : []),
+      { label: `GST${gstPct > 0 || totals.gst === 0 ? ` (${pct(gstPct)}%)` : ""}`, amount: totals.gst },
+    ],
+    final: { label: "Final Price", amount: totals.grandTotal },
+    terms: quotation.termsAndConditions || "",
+    footerRef: quotation.quotationNumber || "",
+  }, sel.images || {});
+}
+
+/**
+ * The invoice PDF in the quotation's design — same letterhead, cards, item table, summary and bank /
+ * UPI box — titled TAX INVOICE, with Paid and Balance Due under the total. Invoice lines have no
+ * category, so they print as one block; their GST rate takes the quotation's discount column.
+ */
+export function buildInvoicePdf(invoice: Invoice, lines: InvoiceItem[], project?: any, assets: Record<string, string> = {}): jsPDF {
+  const inv: any = invoice;
+  const cust: any = inv.customer || {};
+  const proj: any = project || inv.project || {};
+  const site = proj.projectName
+    ? `${proj.projectName}${proj.projectCode ? ` (${proj.projectCode})` : ""}`
+    : proj.siteAddress || cust.siteAddress || cust.address || cust.city || "—";
+  const items = (lines || []).map((l, i) => ({
+    id: l.id ?? i,
+    category: invoiceTypeLabel(invoice.invoiceType),
+    itemName: l.description || "Item",
+    description: l.hsnCode ? `HSN ${l.hsnCode}` : undefined,
+    quantity: n(l.quantity),
+    unit: l.unit,
+    rate: n(l.unitPrice),
+    totalAmount: Math.round(n(l.quantity) * n(l.unitPrice) * 100) / 100,
+    gstRate: n(l.gstRate),
+    itemOrder: i,
+  })) as unknown as QuotationItem[];
+  const igst = invoice.gstType === "IGST";
+  const paid = n(invoice.amountPaid);
+  const status = invoice.status === "PAID" ? "Paid" : invoice.status === "PARTIAL" ? "Partly paid"
+    : invoice.status === "DRAFT" ? "Draft" : invoice.status === "CANCELLED" ? "Cancelled" : "Unpaid";
+
+  return renderDocPdf({
+    title: "TAX INVOICE",
+    number: `${invoice.invoiceNumber || ""} · ${status}`,
+    cards: [
+      { label: "Invoice Date", value: fmtDay(invoice.date), sub: invoice.dueDate ? `Due ${fmtDay(invoice.dueDate)}` : undefined },
+      { label: "Bill To", value: cust.name || "—", sub: [cust.city, cust.gstNumber ? `GSTIN ${cust.gstNumber}` : ""].filter(Boolean).join(" · ") || undefined },
+      { label: "Site / Project", value: site, wrap: true },
+    ],
+    items,
+    tags: false,
+    blockTotalLabel: "Items Total",
+    extraColumn: { header: "GST (%)", cell: (it) => `${pct(n((it as any).gstRate))}%` },
+    summary: [
+      { label: "Sub-total", amount: n(invoice.subTotal), strong: true },
+      ...(n(invoice.discountAmount) > 0 ? [{ label: "Discount", amount: n(invoice.discountAmount), minus: true }] : []),
+      ...(igst
+        ? [{ label: "IGST", amount: n(invoice.igstAmount ?? invoice.gstAmount) }]
+        : [{ label: "CGST", amount: n(invoice.cgstAmount) }, { label: "SGST", amount: n(invoice.sgstAmount) }]),
+      ...(n(invoice.roundOff) !== 0 ? [{ label: "Round off", amount: n(invoice.roundOff) }] : []),
+    ],
+    final: { label: "Invoice Total", amount: n(invoice.totalAmount) },
+    after: invoice.status === "DRAFT" || invoice.status === "CANCELLED" ? [] : [
+      { label: "Paid", amount: paid },
+      { label: "Balance Due", amount: n(invoice.balanceDue), due: n(invoice.balanceDue) > 0 },
+    ],
+    terms: [invoice.notes, invoice.terms].filter(Boolean).join("\n"),
+    footerRef: invoice.invoiceNumber || "",
+  }, assets);
+}
+
+type DocCard = { label: string; value: string; sub?: string; wrap?: boolean };
+type DocRow = { label: string; amount: number; minus?: boolean; strong?: boolean; due?: boolean };
+interface DocSpec {
+  /** Big heading, e.g. QUOTATION or TAX INVOICE. */
+  title: string;
+  /** Line under the heading (number, revision or status). */
+  number: string;
+  cards: DocCard[];
+  /** Small line above the items (e.g. a partial selection). */
+  note?: string;
+  items: QuotationItem[];
+  /** CUSTOM / INVENTORY tag beside each product name. */
+  tags: boolean;
+  /** Label of the tinted total under each block. */
+  blockTotalLabel: string;
+  /** The column between Rate and Amount. */
+  extraColumn: { header: string; cell: (it: QuotationItem) => string };
+  summary: DocRow[];
+  final: { label: string; amount: number };
+  /** Rows under the final bar (invoice: Paid / Balance Due). */
+  after?: DocRow[];
+  terms: string;
+  footerRef: string;
+}
+
+/** Draws a document in the shared quotation / invoice design. */
+function renderDocPdf(spec: DocSpec, assets: Record<string, string>): jsPDF {
+  const blocks = buildCategoryBlocks(spec.items);
   const doc = new jsPDF("p", "mm", "a4");
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
@@ -318,30 +464,15 @@ export function buildQuotationPdf(quotation: Quotation, sel: PdfSelection = {}):
     try { doc.addImage(header, "JPEG", 0, 0, pageW, h); y = h + 5; } catch { /* plain header */ }
   }
 
-  // ---- QUOTATION + number · Date / Customer / Site cards ----
-  const lead: any = quotation.lead || {};
-  const cust: any = quotation.customer || {};
-  const meas: any = quotation.measurement || {};
-  const client = cust.name || lead.name || "—";
-  const area = lead.area || cust.area || lead.city || cust.city || cust.customerCode || "";
-  const site = quotation.project?.projectName || meas.siteAddress || lead.siteAddress || cust.siteAddress
-    || lead.address || cust.address || lead.city || cust.city || "—";
-  const qDate = quotation.quotationDate;
-  const xDate = quotation.expiryDate || addDays(qDate, 14);
-  const validDays = qDate && xDate ? Math.round((new Date(xDate).getTime() - new Date(qDate).getTime()) / 86400000) : null;
-
+  // ---- Title + number · info cards ----
   font("serif", 23); color(INK);
-  doc.text("QUOTATION", M + 1, y + 9);
+  doc.text(spec.title, M + 1, y + 9);
   font("semi", 11);
-  doc.text(`${quotation.quotationNumber || ""}${quotation.revisionNumber ? ` · v${quotation.revisionNumber}` : ""}`, M + 1, y + 15.5);
+  doc.text(spec.number, M + 1, y + 15.5);
 
   const cardX = M + 64, gap = 2.5, cardH = 17;
   const cardW = (rx - cardX - 2 * gap) / 3;
-  const cards: { label: string; value: string; sub?: string; wrap?: boolean }[] = [
-    { label: "Date", value: fmtDay(qDate), sub: validDays != null && validDays >= 0 ? `Valid for ${validDays} day${validDays === 1 ? "" : "s"}` : xDate ? `Valid till ${fmtDay(xDate)}` : undefined },
-    { label: "Customer", value: client, sub: area || undefined },
-    { label: "Site / Project", value: site, wrap: true },
-  ];
+  const cards = spec.cards;
   cards.forEach((c, i) => {
     const x = cardX + i * (cardW + gap);
     doc.setDrawColor(...LINE).setLineWidth(0.25).setFillColor(255, 255, 255);
@@ -359,10 +490,9 @@ export function buildQuotationPdf(quotation: Quotation, sel: PdfSelection = {}):
   });
   y += cardH + 6;
 
-  if (totals.isPartial) {
+  if (spec.note) {
     font("sans", 8); color(MUTED);
-    const scopeCount = (quotation.items || []).filter((i) => i.status !== "REJECTED").length;
-    doc.text(`Selected scope: ${totals.items.length} of ${scopeCount} items`, M, y);
+    doc.text(spec.note, M, y);
     y += 5;
   }
 
@@ -397,10 +527,10 @@ export function buildQuotationPdf(quotation: Quotation, sel: PdfSelection = {}):
     autoTable(doc, {
       startY: y,
       head: [["#", { content: "Description", colSpan: 2, styles: { halign: "left" } }, "Qty", "Unit",
-        `Rate (${R.trim()})`, "Disc. (%)", { content: `Amount (${R.trim()})`, styles: { halign: "right" } }]],
+        `Rate (${R.trim()})`, spec.extraColumn.header, { content: `Amount (${R.trim()})`, styles: { halign: "right" } }]],
       body: block.items.map((it) => {
         rowNo += 1;
-        return [String(rowNo), "", "", fmt(it.quantity), unitLabel(it.unit), fmt(it.rate), discText(it), fmt(it.totalAmount)];
+        return [String(rowNo), "", "", fmt(it.quantity), unitLabel(it.unit), fmt(it.rate), spec.extraColumn.cell(it), fmt(it.totalAmount)];
       }),
       theme: "grid",
       margin: { left: M, right: M },
@@ -441,6 +571,7 @@ export function buildQuotationPdf(quotation: Quotation, sel: PdfSelection = {}):
           if (src) {
             try { doc.addImage(src, "JPEG", ix, iy, size, size); return; } catch { /* placeholder */ }
           }
+          if (!spec.tags) return; // invoices carry no photos — leave the cell empty
           doc.setFillColor(241, 239, 233);
           doc.roundedRect(ix, iy, size, size, 0.8, 0.8, "F");
         } else if (d.column.index === 2) {
@@ -452,6 +583,7 @@ export function buildQuotationPdf(quotation: Quotation, sel: PdfSelection = {}):
           doc.text(name, x + 2, ty);
           // CUSTOM / INVENTORY tag
           const inv = it.productId != null;
+          if (spec.tags) {
           const tag = inv ? "INVENTORY" : "CUSTOM";
           const tx = x + 2 + doc.getTextWidth(name) + 2.5;
           font("semi", 5.6);
@@ -461,6 +593,7 @@ export function buildQuotationPdf(quotation: Quotation, sel: PdfSelection = {}):
             doc.roundedRect(tx, ty - 2.75, tw, 3.5, 0.6, 0.6, "F");
             color((inv ? [37, 128, 74] : [47, 99, 181]) as RGB);
             doc.text(tag, tx + 1.3, ty - 0.2);
+          }
           }
           font("sans", 6.8); color(MUTED);
           lines.forEach((l) => { ty += 3; doc.text(l, x + 2, ty); });
@@ -475,8 +608,8 @@ export function buildQuotationPdf(quotation: Quotation, sel: PdfSelection = {}):
     doc.setFillColor(...tone.bg).setDrawColor(...tone.bar).setLineWidth(0.3);
     shape(M, y, W, 9, 1.8, { bl: true, br: true }, "FD");
     font("semi", 9.5); color(INK);
-    doc.text("Category Total", M + 5, y + 5.9);
-    const lw = doc.getTextWidth("Category Total");
+    doc.text(spec.blockTotalLabel, M + 5, y + 5.9);
+    const lw = doc.getTextWidth(spec.blockTotalLabel);
     font("sans", 7.8); color(MUTED);
     doc.text(`(${count})`, M + 5 + lw + 2, y + 5.9);
     doc.setDrawColor(...tone.bar).setLineWidth(0.2);
@@ -487,29 +620,14 @@ export function buildQuotationPdf(quotation: Quotation, sel: PdfSelection = {}):
   });
 
   // ---- Summary (right) beside terms + bank details (left) ----
-  const charges = (sel.includeExtras ?? true) ? quoteCharges(quotation) : [];
-  const isLabour = (l: string) => /labou?r/i.test(l);
-  const isShipping = (l: string) => /ship|transport|delivery/i.test(l);
-  const gross = totals.items.reduce((s, i) => s + lineGrossOf(i), 0);
-  const lineDisc = totals.items.reduce((s, i) => s + lineDiscountAmount(i), 0);
-  const net = totals.items.reduce((s, i) => s + n(i.totalAmount), 0);
-  const gstPct = ((quotation as any).taxes || []).filter((t: any) => !t.isInclusive).reduce((s: number, t: any) => s + n(t.percentage), 0);
-  const rows: { label: string; value: string; strong?: boolean }[] = [
-    { label: "Products Total", value: money(gross) },
-    ...(lineDisc > 0 ? [{ label: "Line Discount", value: `- ${money(lineDisc)}` }] : []),
-    { label: "Products Net Total", value: money(net), strong: true },
-    { label: "Labour", value: money(charges.filter((c) => isLabour(c.label)).reduce((s, c) => s + c.amount, 0)) },
-    { label: "Shipping", value: money(charges.filter((c) => isShipping(c.label)).reduce((s, c) => s + c.amount, 0)) },
-    ...charges.filter((c) => !isLabour(c.label) && !isShipping(c.label))
-      .map((c) => ({ label: c.note ? `${c.label} · ${c.note}` : c.label, value: money(c.amount) })),
-    ...(totals.discount > 0 ? [{ label: "Discount", value: `- ${money(totals.discount)}` }] : []),
-    { label: `GST${gstPct > 0 || totals.gst === 0 ? ` (${fmt(gstPct)}%)` : ""}`, value: money(totals.gst) },
-  ];
+  const signed = (r: DocRow) => `${r.minus || r.amount < 0 ? "- " : ""}${money(Math.abs(r.amount))}`;
+  const rows = spec.summary.map((r) => ({ ...r, value: signed(r) }));
+  const after = (spec.after || []).map((r) => ({ ...r, value: money(r.amount) }));
   const sumW = 74, sumX = rx - sumW, rowH = 5.4;
-  const sumH = rows.length * rowH + 4 + 11;
+  const sumH = rows.length * rowH + 4 + 11 + (after.length ? 2 + after.length * rowH : 0);
 
   const leftW = sumX - M - 5;
-  const terms = (quotation.termsAndConditions || "").split(/\r?\n/).map((t) => t.trim()).filter(Boolean);
+  const terms = (spec.terms || "").split(/\r?\n/).map((t) => t.trim()).filter(Boolean);
   font("sans", 7.6);
   const termLines = terms.flatMap((t, i) => (doc.splitTextToSize(`${i + 1}. ${t}`, leftW - 10) as string[]));
   const termsH = terms.length ? 11 + termLines.length * 3.6 + 3 : 0;
@@ -542,9 +660,17 @@ export function buildQuotationPdf(quotation: Quotation, sel: PdfSelection = {}):
   doc.setFillColor(13, 52, 51);
   doc.roundedRect(sumX, sy, sumW, 11, 2, 2, "F");
   font("semi", 10); doc.setTextColor(255, 255, 255);
-  doc.text("Final Price", sumX + 5, sy + 7.2);
+  doc.text(spec.final.label, sumX + 5, sy + 7.2);
   font("bold", 13);
-  doc.text(money(totals.grandTotal), rx - 4, sy + 7.6, { align: "right" });
+  doc.text(money(spec.final.amount), rx - 4, sy + 7.6, { align: "right" });
+  sy += 11 + 2;
+  after.forEach((r) => {
+    font(r.due ? "semi" : "sans", 8.4); color(r.due ? [155, 70, 68] : [60, 72, 84]);
+    doc.text(r.label, sumX + 4, sy + 3.8);
+    font("bold", 8.8); color(r.due ? [155, 70, 68] : INK);
+    doc.text(r.value, rx - 4, sy + 3.8, { align: "right" });
+    sy += rowH;
+  });
 
   // Terms
   let ly = top;
@@ -591,10 +717,17 @@ export function buildQuotationPdf(quotation: Quotation, sel: PdfSelection = {}):
     doc.setDrawColor(201, 154, 62).setLineWidth(0.3);
     doc.line(M, pageH - 9, rx, pageH - 9);
     font("sans", 7); color(MUTED);
-    doc.text(`${quotation.quotationNumber || ""} · Thank you for your business`, M, pageH - 5);
+    doc.text(`${spec.footerRef} · Thank you for your business`, M, pageH - 5);
     doc.text(`Page ${i} of ${pages}`, rx, pageH - 5, { align: "right" });
   }
   return doc;
+}
+
+const pct = (v: number) => Number(v || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
+
+function invoiceTypeLabel(t?: string) {
+  if (!t) return "Invoice";
+  return t.charAt(0) + t.slice(1).toLowerCase() + " invoice";
 }
 
 function fmtDay(d?: string | null) {
