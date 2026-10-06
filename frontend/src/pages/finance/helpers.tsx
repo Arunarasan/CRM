@@ -18,9 +18,9 @@ export const INVOICE_STATUS_TONE: Record<InvoiceStatus, string> = {
 
 export const INVOICE_STATUS_LABEL: Record<InvoiceStatus, string> = {
   DRAFT: "Draft",
-  GENERATED: "Generated",
+  GENERATED: "Issued",
   SENT: "Sent",
-  PARTIAL: "Partially Paid",
+  PARTIAL: "Partly paid",
   PAID: "Paid",
   OVERDUE: "Overdue",
   CANCELLED: "Cancelled",

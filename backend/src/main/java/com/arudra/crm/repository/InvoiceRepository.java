@@ -36,7 +36,9 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
     long countByStatusIn(List<String> statuses);
 
     @Query("select i from Invoice i where i.isDeleted = false " +
-           "and (:status is null or i.status = :status) " +
+           // UNPAID = every invoice that still has money owed (issued, sent, partly paid or overdue).
+           "and (:status is null or i.status = :status " +
+           "     or (:status = 'UNPAID' and i.status in ('GENERATED', 'SENT', 'PARTIAL', 'OVERDUE'))) " +
            "and (:invoiceType is null or i.invoiceType = :invoiceType) " +
            "and (:customerId is null or i.customer.id = :customerId) " +
            "and (:projectId is null or i.project.id = :projectId) " +
