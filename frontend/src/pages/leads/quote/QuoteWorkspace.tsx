@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   AlertTriangle, BadgeCheck, BadgePercent, Building2, CalendarDays, Calculator, CheckCircle2, ChevronDown, Eye, FileOutput,
@@ -22,6 +22,7 @@ import { formatDate } from "../constants";
 import { ListSkeleton } from "../tabs/shared";
 import { QuotationPrintView } from "@/pages/quotations/QuotationPrint";
 import BoqSheet from "./BoqSheet";
+import { enqueueSave } from "./saveQueue";
 import ShareQuoteDialog, { type PreparedShare } from "./ShareQuoteDialog";
 import { buildQuotationPdf, loadPdfImages } from "@/lib/quotationPdf";
 import { fetchCompanyProfile } from "@/lib/companyProfile";
@@ -176,19 +177,33 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
     } finally { setBusy(null); }
   };
 
-  const saveTotals = async (patch: Parameters<typeof boqApi.updateTotals>[1]) => {
-    if (!boq?.id) return;
-    try {
-      const fresh = await boqApi.updateTotals(boq.id, {
-        discountType: boq.discountType === "FLAT" ? "FLAT" : "PERCENT",
-        discount: boq.discount ?? 0,
-        taxPercent: boq.taxPercent ?? 0,
-        ...patch,
-      });
-      setBoq((b) => (b ? { ...b, ...fresh, items: fresh.items ?? b.items } : fresh));
-    } catch (e) {
-      toast.error(errMsg(e, "Could not update the price."));
-    }
+  // Price-card saves wait their turn behind any sheet save (and vice versa), so neither is lost to a
+  // version conflict on the server. The payload is built when the save runs, from the newest sheet.
+  const boqRef = useRef(boq);
+  boqRef.current = boq;
+  const saveTotals = (patch: TotalsPatch | TotalsPatchFn) => {
+    const id = boq?.id;
+    if (!id) return Promise.resolve();
+    return enqueueSave(id, async () => {
+      try {
+        // A computed patch (final price) needs the sheet as the server has it now, after any save
+        // that was ahead in the queue.
+        const cur = typeof patch === "function" ? await boqApi.get(id) : boqRef.current;
+        const resolved = typeof patch === "function" ? patch(cur!) : patch;
+        if (!resolved) return;
+        const fresh = await boqApi.updateTotals(id, {
+          discountType: cur?.discountType === "FLAT" ? "FLAT" : "PERCENT",
+          discount: cur?.discount ?? 0,
+          taxPercent: cur?.taxPercent ?? 0,
+          ...resolved,
+        });
+        setBoq((b) => (b ? { ...b, ...fresh, items: fresh.items ?? b.items } : fresh));
+      } catch (e) {
+        toast.error(errMsg(e, "Could not update the price."));
+        // Show what the server actually holds rather than the value that failed to save.
+        boqApi.get(id).then(setBoq).catch(() => undefined);
+      }
+    });
   };
 
   /**
@@ -829,39 +844,57 @@ type TotalsPatch = {
   shippingCharge?: number | null; shippingNote?: string | null;
 };
 
+type TotalsPatchFn = (current: Boq) => TotalsPatch | null;
+
+const r2 = (n: number) => Math.round(n * 100) / 100;
+const chargesOf = (b: Boq) => Number(b.labourCharge ?? 0) + Number(b.shippingCharge ?? 0);
+/** Price with no sheet-level discount: (subtotal + charges) plus GST. */
+const fullPriceOf = (b: Boq) => (Number(b.subtotal ?? 0) + chargesOf(b)) * (1 + Number(b.taxPercent ?? 0) / 100);
+
+/** The flat discount that makes the sheet's final price land on `target`; null when it's above full price. */
+function flatDiscountFor(b: Boq, target: number): number | null {
+  const subtotal = Number(b.subtotal ?? 0);
+  const charges = chargesOf(b);
+  const gstPct = Number(b.taxPercent ?? 0);
+  // Same maths as the server (GST rounded to paise), so try the neighbouring paise and keep the
+  // discount that lands exactly on the typed price.
+  const grandFor = (d: number) => r2(subtotal - d + charges + r2((subtotal - d + charges) * gstPct / 100));
+  const guess = r2(subtotal + charges - target / (1 + gstPct / 100));
+  const discount = [guess, r2(guess - 0.01), r2(guess + 0.01), r2(guess - 0.02), r2(guess + 0.02)]
+    .reduce((best, d) => (Math.abs(grandFor(d) - target) < Math.abs(grandFor(best) - target) ? d : best), guess);
+  return discount < 0 ? null : discount;
+}
+
 /**
  * The price cards under the item sheet. Discount, GST and the final price are all editable here —
  * typing a final price works the discount out for you — and all of it carries into the quotation
  * when it's generated.
  */
-function TotalsPanel({ boq, editable, onSave }: { boq: Boq; editable: boolean; onSave: (patch: TotalsPatch) => void }) {
+function TotalsPanel({ boq, editable, onSave }: { boq: Boq; editable: boolean; onSave: (patch: TotalsPatch | TotalsPatchFn) => void }) {
   const flat = boq.discountType === "FLAT";
   const subtotal = Number(boq.subtotal ?? 0);
-  const gstPct = Number(boq.taxPercent ?? 0);
   const active = (boq.items || []).filter((i) => i.isActive !== false);
   const itemsMaterial = active.reduce((s, i) => s + Number(i.materialTotal ?? 0), 0);
   const itemsLabour = active.reduce((s, i) => s + Number(i.labourTotal ?? 0), 0);
   const manual = boq.materialTotalOverride != null || boq.labourTotalOverride != null;
   const lineDiscounts = Number(boq.lineDiscountTotal ?? 0);
-  // Labour and shipping are added after the discount (never discounted) and before GST.
-  const charges = Number(boq.labourCharge ?? 0) + Number(boq.shippingCharge ?? 0);
   const f = editable ? "h-9 !border-border !bg-background focus:!border-ring" : "h-9";
 
-  /** Final price → flat discount that lands on it (final = (subtotal − discount + charges) × (1 + GST%)). */
+  /**
+   * Final price → flat discount that lands on it (final = (subtotal − discount + charges) × (1 + GST%)).
+   * Worked out when the save runs, against the sheet as it is then — a product added a moment before
+   * still counts, so the price lands on what was typed.
+   */
   const setFinal = (target: number | null) => {
     if (target == null) return;
-    const r2 = (n: number) => Math.round(n * 100) / 100;
-    // Same maths as the server (GST rounded to paise), so try the neighbouring paise and keep the
-    // discount that lands exactly on the typed price.
-    const grandFor = (d: number) => r2(subtotal - d + charges + r2((subtotal - d + charges) * gstPct / 100));
-    const guess = r2(subtotal + charges - target / (1 + gstPct / 100));
-    const discount = [guess, r2(guess - 0.01), r2(guess + 0.01), r2(guess - 0.02), r2(guess + 0.02)]
-      .reduce((best, d) => (Math.abs(grandFor(d) - target) < Math.abs(grandFor(best) - target) ? d : best), guess);
-    if (discount < 0) {
-      toast.error(`That's above the full price (${inr((subtotal + charges) * (1 + gstPct / 100))}) — raise item amounts instead.`);
-      return;
-    }
-    onSave({ discountType: "FLAT", discount });
+    onSave((b) => {
+      const discount = flatDiscountFor(b, target);
+      if (discount == null) {
+        toast.error(`That's above the full price (${inr(fullPriceOf(b))}) — raise item amounts instead.`);
+        return null;
+      }
+      return { discountType: "FLAT", discount };
+    });
   };
 
   return (

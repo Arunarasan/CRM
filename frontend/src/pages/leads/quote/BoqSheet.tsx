@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { enqueueSave } from "./saveQueue";
 import { createPortal } from "react-dom";
 import { Check, ChevronDown, ChevronRight, FolderOpen, Hammer, Layers, Loader2, MapPin, MoreVertical, Package, PackageSearch, Pencil, Plus, SlidersHorizontal, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -116,9 +117,9 @@ export default function BoqSheet({
   const latest = useRef(boq);
   useEffect(() => { latest.current = boq; }, [boq]);
 
-  // All saves run one after another: the item/material/labour updates are full-replace, so two
-  // overlapping saves built from the same snapshot would undo each other.
-  const queue = useRef<Promise<unknown>>(Promise.resolve());
+  // All saves run one after another — the item/material/labour updates are full-replace, so two
+  // overlapping saves built from the same snapshot would undo each other. The queue is shared with
+  // the price cards under the sheet (see saveQueue.ts).
   const [pending, setPending] = useState(0);
   const [lastSaved, setLastSaved] = useState<number | null>(null);
   const reportSave = useRef(onSaveState);
@@ -127,8 +128,7 @@ export default function BoqSheet({
 
   const save = (label: string, job: (cur: Boq) => Promise<unknown>) => {
     setPending((n) => n + 1);
-    queue.current = queue.current
-      .then(async () => {
+    return enqueueSave(boqId, async () => {
         try {
           await job(latest.current);
           setLastSaved(Date.now());
@@ -140,9 +140,7 @@ export default function BoqSheet({
           latest.current = fresh;
           onBoqChanged(fresh);
         } catch { /* keep current view; the next save refreshes */ }
-      })
-      .finally(() => setPending((n) => n - 1));
-    return queue.current;
+    }).finally(() => setPending((n) => n - 1));
   };
 
   const findItem = (cur: Boq, id: number) => (cur.items || []).find((i) => i.id === id);
