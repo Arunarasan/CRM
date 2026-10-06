@@ -44,11 +44,22 @@ public class BoqController {
     public ResponseEntity<Map<String, Object>> saveCatalogueItem(@RequestBody Map<String, Object> body) {
         return ResponseEntity.ok(inventoryService.saveQuoteItem(
                 body.get("name") == null ? null : String.valueOf(body.get("name")),
+                body.get("description") == null ? null : String.valueOf(body.get("description")),
                 body.get("unit") == null ? null : String.valueOf(body.get("unit")),
                 decimal(body.get("rate")),
                 body.get("categoryId") == null ? null : Long.valueOf(String.valueOf(body.get("categoryId"))),
                 body.get("hsnCode") == null ? null : String.valueOf(body.get("hsnCode")),
                 decimal(body.get("gstPercent"))));
+    }
+
+    /** A quote line's name / description / unit edit, carried to the item it was saved from. */
+    @PutMapping("/catalogue-items/{productId}")
+    @PreAuthorize(WRITE)
+    public ResponseEntity<Map<String, Object>> updateCatalogueItem(@PathVariable Long productId, @RequestBody Map<String, Object> body) {
+        return ResponseEntity.ok(inventoryService.updateQuoteItem(productId,
+                body.get("name") == null ? null : String.valueOf(body.get("name")),
+                body.get("description") == null ? null : String.valueOf(body.get("description")),
+                body.get("unit") == null ? null : String.valueOf(body.get("unit"))));
     }
 
     private static BigDecimal decimal(Object v) {

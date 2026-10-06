@@ -350,6 +350,11 @@ export default function MaterialMaster() {
               <Label>Material Name</Label>
               <Input value={form.name || ""} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             </div>
+            <div className="col-span-2 space-y-1">
+              <Label>Description</Label>
+              <Input placeholder="Shown under the name on quotes" value={form.description || ""}
+                onChange={(e) => setForm({ ...form, description: e.target.value })} />
+            </div>
             <div className="space-y-1">
               <Label>SKU</Label>
               <Input value={form.sku || ""} onChange={(e) => setForm({ ...form, sku: e.target.value })} />

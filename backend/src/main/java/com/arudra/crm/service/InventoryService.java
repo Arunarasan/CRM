@@ -117,11 +117,9 @@ public class InventoryService {
      * so they never raise low-stock alerts; GST defaults to 18%.
      */
     @Transactional
-    public Map<String, Object> saveQuoteItem(String name, String unit, java.math.BigDecimal rate,
+    public Map<String, Object> saveQuoteItem(String name, String description, String unit, java.math.BigDecimal rate,
                                              Long categoryId, String hsnCode, java.math.BigDecimal gstPercent) {
-        String clean = name == null ? "" : name.trim().replaceAll("\\s+", " ");
-        if (clean.isEmpty()) throw new IllegalArgumentException("Enter the item name.");
-        if (clean.length() > 255) clean = clean.substring(0, 255);
+        String clean = cleanName(name);
 
         Map<String, Object> result = new LinkedHashMap<>();
         List<Product> same = productRepository.findActiveByName(clean);
@@ -133,6 +131,7 @@ public class InventoryService {
 
         Product p = new Product();
         p.setName(clean);
+        p.setDescription(description == null || description.isBlank() ? null : description.trim());
         p.setUnit(unit == null || unit.isBlank() ? "Nos" : unit.trim());
         if (rate != null && rate.signum() > 0) {
             p.setPrice(rate);
@@ -149,9 +148,40 @@ public class InventoryService {
         return result;
     }
 
+    /**
+     * Edits made on a quote line flow back to the item it was saved from: name, description and unit
+     * (only the fields sent). Only items saved from quotes change (updated = true) — stocked inventory
+     * products are edited in Inventory, never renamed from a quote. The saved rate is left as it is.
+     */
+    @Transactional
+    public Map<String, Object> updateQuoteItem(Long id, String name, String description, String unit) {
+        Product p = productRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Saved item not found."));
+        Map<String, Object> result = new LinkedHashMap<>();
+        // Stocked inventory products are left alone — a quote line's own text can differ from them.
+        if (!"QUOTE".equals(p.getSource())) {
+            result.put("product", p);
+            result.put("updated", false);
+            return result;
+        }
+        if (name != null && !name.isBlank()) p.setName(cleanName(name));
+        if (description != null) p.setDescription(description.isBlank() ? null : description.trim());
+        if (unit != null && !unit.isBlank()) p.setUnit(unit.trim());
+        result.put("product", productRepository.save(p));
+        result.put("updated", true);
+        return result;
+    }
+
+    private static String cleanName(String name) {
+        String clean = name == null ? "" : name.trim().replaceAll("\\s+", " ");
+        if (clean.isEmpty()) throw new IllegalArgumentException("Enter the item name.");
+        return clean.length() > 200 ? clean.substring(0, 200) : clean;
+    }
+
     public Product updateProduct(Long id, Product details) {
         Product product = productRepository.findById(id).orElseThrow();
         product.setName(details.getName());
+        if (details.getDescription() != null) product.setDescription(details.getDescription());
         product.setSku(details.getSku());
         product.setBarcode(details.getBarcode() != null ? details.getBarcode() : product.getBarcode());
         product.setQrCode(details.getQrCode() != null ? details.getQrCode() : product.getQrCode());

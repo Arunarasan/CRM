@@ -307,6 +307,16 @@ export default function BoqSheet({
     if (!p && !d.web && d.saveForLater && d.name.trim()) {
       p = await saveToCatalogue(category, d.name, d.unit, d.rate);
     }
+    // Picked a saved item and corrected it: the saved item changes — no second copy.
+    if (p && d.updateSaved && p.source === "QUOTE") {
+      try {
+        const r = await boqApi.updateCatalogueItem(p.id, { name: d.name.trim(), unit: d.unit || undefined });
+        p = r.product;
+        if (r.updated) toast.success(`Saved item "${p.name}" updated for future quotes`);
+      } catch (e) {
+        toast.error(apiError(e, "Couldn't update the saved item."));
+      }
+    }
     if (p) rememberProduct(p);
     const color = p ? colorsOf(p)[0] : undefined;
     const web = d.web;
@@ -319,10 +329,10 @@ export default function BoqSheet({
   };
 
   /** Saves a typed-in line to the catalogue; returns the product, or undefined if it couldn't be saved. */
-  const saveToCatalogue = async (category: string, name: string, unit?: string | null, rate?: number) => {
+  const saveToCatalogue = async (category: string, name: string, unit?: string | null, rate?: number, description?: string | null) => {
     try {
       const r = await boqApi.saveCatalogueItem({
-        name: name.trim(), unit: unit || "Nos", rate: rate && rate > 0 ? rate : undefined,
+        name: name.trim(), description: description?.trim() || undefined, unit: unit || "Nos", rate: rate && rate > 0 ? rate : undefined,
         categoryId: categoryByName.get(category.trim().toLowerCase())?.id,
       });
       toast.success(r.existing ? `"${r.product.name}" is already in the catalogue — linked to it` : `"${r.product.name}" saved for future quotes`);
@@ -337,10 +347,33 @@ export default function BoqSheet({
   const saveLineToCatalogue = async (item: BoqItem) => {
     const qty = Number(item.quantity ?? 0) > 0 ? Number(item.quantity) : 1;
     const p = await saveToCatalogue(item.category || "", item.itemName || "", item.unit,
-      Math.round((grossOf(item) / qty) * 100) / 100);
+      Math.round((grossOf(item) / qty) * 100) / 100, item.description);
     if (!p) return;
     rememberProduct(p);
     updateItem(item.id as number, { productId: p.id });
+  };
+
+  /**
+   * A line linked to an item saved from a quote: changing its name, description or unit changes the
+   * saved item too, so the next quote picks the corrected version (no second copy). Stocked inventory
+   * products are never changed from a quote. The saved rate is left as it is.
+   */
+  const syncSavedItem = (item: BoqItem, patch: Partial<BoqItem>) => {
+    if (item.productId == null) return;
+    const prod = products[item.productId];
+    if (prod && prod.source !== "QUOTE") return;
+    const body: { name?: string; description?: string; unit?: string } = {};
+    const name = patch.itemName?.trim();
+    if (name && name !== (prod?.name ?? item.itemName)) body.name = name;
+    if ("description" in patch && (patch.description ?? "") !== (prod ? prod.description ?? "" : item.description ?? "")) body.description = patch.description ?? "";
+    if (patch.unit && patch.unit !== (prod?.unit ?? item.unit)) body.unit = patch.unit;
+    if (!Object.keys(body).length) return;
+    boqApi.updateCatalogueItem(item.productId, body)
+      .then((r) => {
+        rememberProduct(r.product);
+        if (r.updated) toast.success(`Saved item "${r.product.name}" updated for future quotes`);
+      })
+      .catch((e) => toast.error(apiError(e, "Couldn't update the saved item.")));
   };
 
   const pickColor = (item: BoqItem, name: string | null, c?: ProductColor) =>
@@ -601,7 +634,7 @@ export default function BoqSheet({
                   categories={categoryNames}
                   canEdit={canEdit}
                   showLines={showLines}
-                  onUpdate={(patch) => updateItem(item.id as number, patch)}
+                  onUpdate={(patch) => { updateItem(item.id as number, patch); syncSavedItem(item, patch); }}
                   onQty={(v) => updateQty(item, v)}
                   onSize={(f, v) => updateSize(item, f, v)}
                   onSetGross={(v) => setItemGross(item, v)}
@@ -998,7 +1031,13 @@ function ItemRow({
   );
 }
 
-type NewRowDraft = { name: string; product?: Product; web?: WebsiteProduct; qty: number; unit: string; rate: number; saveForLater?: boolean };
+type NewRowDraft = {
+  name: string; product?: Product; web?: WebsiteProduct; qty: number; unit: string; rate: number;
+  /** Typed-in name: also save it to the catalogue. */
+  saveForLater?: boolean;
+  /** Picked a saved-from-quote item and changed its name / unit: change the saved item too. */
+  updateSaved?: boolean;
+};
 const EMPTY_ROW: NewRowDraft = { name: "", qty: 1, unit: "Nos", rate: 0 };
 
 /**
@@ -1015,6 +1054,10 @@ function NewItemRow({ categoryId, categoryName, first, onAdd }: {
   // "Save for future quotes" — on by default; an untick sticks for the next lines in this table.
   const [saveForLater, setSaveForLater] = useState(true);
   const typedIn = d.name.trim().length > 0 && !d.product && !d.web;
+  // Picked an item saved from a quote, then changed its name or unit.
+  const savedEdited = !!d.product && d.product.source === "QUOTE" && d.name.trim().length > 0
+    && (d.name.trim() !== d.product.name || (!!d.unit && d.unit !== (normalizeUnit(d.product.unit) || d.product.unit)));
+  const [updateSaved, setUpdateSaved] = useState(true);
   const nameRef = useRef<HTMLInputElement>(null);
   const qtyRef = useRef<HTMLInputElement>(null);
   const ready = d.name.trim().length > 0;
@@ -1026,7 +1069,9 @@ function NewItemRow({ categoryId, categoryName, first, onAdd }: {
     if (!ready || busy) return;
     setBusy(true);
     try {
-      await onAdd({ ...d, saveForLater: typedIn && saveForLater });
+      await onAdd(savedEdited && !updateSaved
+        ? { ...d, product: undefined } // "this quote only": a plain typed-in line, the saved item untouched
+        : { ...d, saveForLater: typedIn && saveForLater, updateSaved: savedEdited });
       setD(EMPTY_ROW);
       nameRef.current?.focus();
     } finally { setBusy(false); }
@@ -1044,7 +1089,8 @@ function NewItemRow({ categoryId, categoryName, first, onAdd }: {
           value={d.name}
           onValueChange={(v) => setD((x) => ({
             ...x, name: v,
-            product: x.product && v === x.product.name ? x.product : undefined,
+            // A saved-from-quote item stays picked while its text is corrected — the change goes back to it.
+            product: x.product && (v === x.product.name || (x.product.source === "QUOTE" && v.trim() !== "")) ? x.product : undefined,
             web: x.web && v === x.web.name ? x.web : undefined,
           }))}
           onPick={(p) => {
@@ -1094,6 +1140,16 @@ function NewItemRow({ categoryId, categoryName, first, onAdd }: {
         {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Plus className="h-4 w-4 @[820px]:mr-0 mr-1" /><span className="@[820px]:hidden">Add product</span></>}
       </Button>
 
+      {savedEdited && (
+        <label className="col-span-full flex cursor-pointer select-none items-center gap-2 pb-0.5 pl-7 text-xs text-muted-foreground">
+          <input type="checkbox" className="h-3.5 w-3.5 accent-primary" checked={updateSaved}
+            onChange={(e) => setUpdateSaved(e.target.checked)} />
+          <span>
+            <span className="font-medium text-foreground">Update saved item</span>
+            {" "}· "{d.product!.name}" becomes "{d.name.trim()}"{d.unit && d.unit !== (normalizeUnit(d.product!.unit) || d.product!.unit) ? `, unit ${d.unit}` : ""} — untick to use it in this quote only
+          </span>
+        </label>
+      )}
       {typedIn && (
         <label className="col-span-full flex cursor-pointer select-none items-center gap-2 pb-0.5 pl-7 text-xs text-muted-foreground">
           <input type="checkbox" className="h-3.5 w-3.5 accent-primary" checked={saveForLater}

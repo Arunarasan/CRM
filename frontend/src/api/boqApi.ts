@@ -64,8 +64,11 @@ export const boqApi = {
 
   // Items (floor / room / item)
   /** Save a typed-in quote line to the catalogue (or get the product already there under that name). */
-  saveCatalogueItem: (body: { name: string; unit?: string; rate?: number; categoryId?: number; hsnCode?: string; gstPercent?: number }) =>
+  saveCatalogueItem: (body: { name: string; description?: string; unit?: string; rate?: number; categoryId?: number; hsnCode?: string; gstPercent?: number }) =>
     api.post<{ product: Product; existing: boolean }>(`${BASE}/catalogue-items`, body).then((r) => r.data),
+  /** Carry a quote line's name / description / unit edit to the item it was saved from (saved-from-quote items only). */
+  updateCatalogueItem: (productId: number, body: { name?: string; description?: string; unit?: string }) =>
+    api.put<{ product: Product; updated: boolean }>(`${BASE}/catalogue-items/${productId}`, body).then((r) => r.data),
   addItem: (id: number, item: Partial<BoqItem>) => api.post<BoqItem>(`${BASE}/${id}/items`, item).then((r) => r.data),
   updateItem: (id: number, itemId: number, item: Partial<BoqItem>, reason?: string) =>
     api.put<BoqItem>(`${BASE}/${id}/items/${itemId}${reason ? `?reason=${encodeURIComponent(reason)}` : ''}`, item).then((r) => r.data),

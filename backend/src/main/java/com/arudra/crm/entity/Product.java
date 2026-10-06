@@ -172,4 +172,8 @@ public class Product extends BaseEntity {
     /** Where the product came from: null = added in Inventory, "QUOTE" = saved from a quote line (no stock kept). */
     @Column(length = 20)
     private String source;
+
+    /** Shown under the name on quote lines. */
+    @Column(columnDefinition = "TEXT")
+    private String description;
 }

@@ -122,6 +122,7 @@ export function photosOf(p?: Product): string[] {
 
 /** A short spec line used as the default description of a picked product. */
 export function productSummary(p: Product): string | undefined {
+  if (p.description?.trim()) return p.description.trim();
   const parts = [p.brand, p.fabricComposition, p.pattern, p.fabricWidth && `${p.fabricWidth} wide`].filter(Boolean);
   return parts.length ? parts.join(" · ") : undefined;
 }
