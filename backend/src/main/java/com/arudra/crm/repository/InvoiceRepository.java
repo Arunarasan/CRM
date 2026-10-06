@@ -23,6 +23,8 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
     // --- Finance module ---
     Optional<Invoice> findTopByOrderByIdDesc();
 
+    Optional<Invoice> findFirstByInvoiceNumberIgnoreCase(String invoiceNumber);
+
     List<Invoice> findByQuotationIdAndInvoiceType(Long quotationId, String invoiceType);
 
     List<Invoice> findByQuotationId(Long quotationId);

@@ -76,6 +76,9 @@ export default function CounterSalePage() {
   // payment
   const [collectNow, setCollectNow] = useState(true);
   const [paymentMethod, setPaymentMethod] = useState("CASH");
+  // Advance: take part now, the rest is collected at pickup (bundle handover)
+  const [payMode, setPayMode] = useState<"FULL" | "ADVANCE">("FULL");
+  const [advance, setAdvance] = useState("");
 
   // bill print — auto-opens the chosen format right after checkout
   const [printFormat, setPrintFormat] = useState<"receipt" | "invoice" | "none">("receipt");
@@ -174,6 +177,8 @@ export default function CounterSalePage() {
 
   const itemCount = lines.reduce((s, l) => s + (l.name.trim() ? l.qty : 0), 0);
   // A walk-in needs no name — a nameless sale bills the canonical "Walk-in Customer".
+  const advanceAmt = Math.max(0, Number(advance) || 0);
+  const isAdvance = collectNow && payMode === "ADVANCE" && advanceAmt > 0 && advanceAmt < totals.grand;
   const canSave = lines.some((l) => l.name.trim() && l.qty > 0) || (installOn && Number(installCharge) > 0);
 
   const save = async () => {
@@ -214,8 +219,9 @@ export default function CounterSalePage() {
           scheduledDate: installDate || null, notes: installNotes || null,
         } : { enabled: false },
         collectNow, paymentMethod: collectNow ? paymentMethod : null,
+        paidAmount: isAdvance ? advanceAmt : null,
       });
-      toast.success(`${created.invoiceNumber} saved${collectNow ? " · paid" : ""}.`);
+      toast.success(`${created.invoiceNumber} saved${isAdvance ? ` · advance ${currency(advanceAmt)}, balance ${currency(totals.grand - advanceAmt)}` : collectNow ? " · paid" : ""}.`);
       const q = new URLSearchParams();
       if (printFormat !== "none") q.set("print", printFormat);
       if (workOn) q.set("stickers", "1"); // invoice page offers / opens the bundle stickers
@@ -250,16 +256,17 @@ export default function CounterSalePage() {
 
   const cash = Number(cashGiven) || 0;
   const showCash = collectNow && paymentMethod === "CASH";
-  const change = cash - totals.grand;
+  const payingNow = isAdvance ? advanceAmt : totals.grand; // what the cash has to cover
+  const change = cash - payingNow;
   const blocker = saving ? null
     : !canSave ? "Add an item to charge"
     : workOn && !lines.some((l) => l.name.trim() && workLines[l.key]?.on) ? "Tick the items that need stitching / work"
     : null;
   const quickCash = Array.from(new Set([
-    Math.ceil(totals.grand),
-    Math.ceil(totals.grand / 100) * 100,
-    Math.ceil(totals.grand / 500) * 500,
-    Math.ceil(totals.grand / 2000) * 2000,
+    Math.ceil(payingNow),
+    Math.ceil(payingNow / 100) * 100,
+    Math.ceil(payingNow / 500) * 500,
+    Math.ceil(payingNow / 2000) * 2000,
   ])).filter((v) => v > 0).slice(0, 4);
 
   return (
@@ -481,6 +488,32 @@ export default function CounterSalePage() {
                 Collect payment now
               </label>
               {collectNow && (
+                <div className="mb-2 space-y-2">
+                  <div className="inline-flex rounded-md border overflow-hidden text-xs">
+                    {([["FULL", "Full"], ["ADVANCE", "Advance"]] as const).map(([v, label]) => (
+                      <button key={v} onClick={() => setPayMode(v)}
+                        className={`px-3 py-1 ${payMode === v ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  {payMode === "ADVANCE" && (
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-slate-500 shrink-0">Paying now ₹</span>
+                        <BaseInput type="number" min={0} inputMode="decimal" value={advance} onChange={(e) => setAdvance(e.target.value)}
+                          placeholder="0" className="h-8 w-full rounded-md border px-2 text-sm" />
+                      </div>
+                      {advanceAmt > 0 && advanceAmt < totals.grand ? (
+                        <p className="text-xs font-medium text-amber-700">Balance {currency(totals.grand - advanceAmt)} due at pickup</p>
+                      ) : advanceAmt >= totals.grand && totals.grand > 0 ? (
+                        <p className="text-xs text-slate-500">That covers the full bill — it will be paid in full.</p>
+                      ) : null}
+                    </div>
+                  )}
+                </div>
+              )}
+              {collectNow && (
                 <div className="grid grid-cols-5 gap-1">
                   {PAYMENT_METHODS.map((m) => (
                     <button key={m.v} onClick={() => setPaymentMethod(m.v)}
@@ -536,7 +569,7 @@ export default function CounterSalePage() {
               </div>
             </div>
             <Button className="w-full h-12 text-base active:scale-[0.99]" onClick={save} disabled={saving || !!blocker}>
-              {saving ? "Saving…" : collectNow ? `Charge ${currency(totals.grand)}` : `Save Bill · ${currency(totals.grand)}`}
+              {saving ? "Saving…" : isAdvance ? `Take advance ${currency(advanceAmt)}` : collectNow ? `Charge ${currency(totals.grand)}` : `Save Bill · ${currency(totals.grand)}`}
               {!saving && <span className="ml-2 rounded border border-white/30 px-1.5 py-px text-[10px] font-semibold opacity-80">F9</span>}
             </Button>
             {blocker && <p className="text-center text-[11px] text-slate-400">{blocker}</p>}

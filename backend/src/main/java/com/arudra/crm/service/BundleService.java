@@ -3,6 +3,7 @@ package com.arudra.crm.service;
 import com.arudra.crm.dto.workforce.AssignResourceRequest;
 import com.arudra.crm.dto.BundleRequests;
 import com.arudra.crm.dto.BundleView;
+import com.arudra.crm.dto.InvoicePaymentSplit;
 import com.arudra.crm.entity.*;
 import com.arudra.crm.exception.ResourceNotFoundException;
 import com.arudra.crm.repository.*;
@@ -63,6 +64,7 @@ public class BundleService {
     @Autowired private TaskRepository taskRepository;
     @Autowired private TaskAssignmentRepository assignmentRepository;
     @Lazy @Autowired private EmployeeTaskService employeeTaskService;
+    @Lazy @Autowired private FinanceService financeService;
 
     private static final ObjectMapper JSON = new ObjectMapper();
 
@@ -181,6 +183,23 @@ public class BundleService {
         return toView(b, true);
     }
 
+    /**
+     * What the scan box finds for a typed/scanned value: a bundle code opens that bundle, a group
+     * code (JB-0042) all its bundles, and a bill number every bundle of that bill.
+     */
+    public List<BundleView> lookup(String q) {
+        String c = q == null ? "" : q.trim();
+        if (c.isEmpty()) throw new IllegalArgumentException("Enter a bundle code or bill number");
+        Optional<Bundle> exact = bundleRepository.findFirstByCodeIgnoreCaseAndIsDeletedFalse(c);
+        if (exact.isPresent()) return List.of(toView(exact.get(), true));
+        List<Bundle> group = bundleRepository.findByGroupCodeIgnoreCaseAndIsDeletedFalseOrderByBundleNoAsc(c);
+        if (!group.isEmpty()) return group.stream().map(b -> toView(b, true)).toList();
+        List<BundleView> bill = invoiceRepository.findFirstByInvoiceNumberIgnoreCase(c)
+                .map(inv -> forInvoice(inv.getId())).orElse(List.of());
+        if (!bill.isEmpty()) return bill;
+        throw new ResourceNotFoundException("No bundle found for " + c);
+    }
+
     public BundleView get(Long id) {
         return toView(find(id), true);
     }
@@ -250,6 +269,13 @@ public class BundleService {
         int fromIdx = FLOW.indexOf(from);
         int toIdx = FLOW.indexOf(to);
         boolean nextStep = toIdx == fromIdx + 1;
+        if ("DELIVERED".equals(to) && !canOverride) {
+            BigDecimal due = balanceDue(b.getInvoiceId());
+            if (due.signum() > 0) {
+                throw new IllegalStateException(rupees(due) + " is still due on bill " + invoiceNumber(b.getInvoiceId())
+                        + " — collect it with Hand over, or ask a manager.");
+            }
+        }
         if (!nextStep && !canOverride) {
             throw new IllegalStateException("Next step for " + b.getCode() + " is " + FLOW.get(Math.min(fromIdx + 1, FLOW.size() - 1))
                     + ". Only a manager can skip or go back.");
@@ -375,6 +401,112 @@ public class BundleService {
             }
         }
         return toView(b, true);
+    }
+
+    /**
+     * Hands bundles to the customer in one go: first collects any payments against their bill(s)
+     * (oldest bill first), then marks each bundle DELIVERED. If a balance is still due afterwards,
+     * only a manager may proceed, with {@code allowBalanceDue} and a reason (logged on each bundle).
+     */
+    @Transactional
+    public List<BundleView> handover(BundleRequests.Handover req, User user, boolean canOverride, boolean canCollect) {
+        if (req == null || req.bundleIds == null || req.bundleIds.isEmpty()) {
+            throw new IllegalArgumentException("Pick at least one bundle to hand over");
+        }
+        List<Bundle> bundles = req.bundleIds.stream().distinct().map(this::find).toList();
+        for (Bundle b : bundles) {
+            if (CLOSED.contains(b.getStatus())) throw new IllegalStateException(b.getCode() + " is already " + b.getStatus().toLowerCase());
+            if (ON_HOLD.equals(b.getStatus())) throw new IllegalStateException(b.getCode() + " is on hold — release it first");
+            if (!"READY".equals(b.getStatus()) && !canOverride) {
+                throw new IllegalStateException(b.getCode() + " is not ready yet. Only a manager can hand it over early.");
+            }
+        }
+        List<Long> invoiceIds = bundles.stream().map(Bundle::getInvoiceId).filter(Objects::nonNull)
+                .distinct().sorted().toList();
+
+        // 1. collect what the customer pays now, oldest bill first
+        List<BundleRequests.Payment> tenders = req.payments == null ? List.of() : req.payments.stream()
+                .filter(p -> p != null && p.amount != null && p.amount.signum() > 0).toList();
+        if (!tenders.isEmpty()) {
+            if (!canCollect) throw new IllegalStateException("You are not allowed to collect payments");
+            if (invoiceIds.isEmpty()) throw new IllegalStateException("These bundles have no bill to collect against");
+            BigDecimal owed = totalDue(invoiceIds);
+            BigDecimal paying = tenders.stream().map(p -> p.amount).reduce(BigDecimal.ZERO, BigDecimal::add);
+            if (paying.compareTo(owed) > 0) {
+                throw new IllegalArgumentException("Collecting " + rupees(paying) + " but only " + rupees(owed) + " is due");
+            }
+            Deque<BundleRequests.Payment> left = new ArrayDeque<>();
+            for (BundleRequests.Payment p : tenders) {
+                BundleRequests.Payment copy = new BundleRequests.Payment();
+                copy.method = p.method;
+                copy.amount = p.amount;
+                copy.referenceNumber = p.referenceNumber;
+                left.add(copy);
+            }
+            for (Long invoiceId : invoiceIds) {
+                BigDecimal due = balanceDue(invoiceId);
+                List<InvoicePaymentSplit> splits = new ArrayList<>();
+                while (due.signum() > 0 && !left.isEmpty()) {
+                    BundleRequests.Payment p = left.peek();
+                    BigDecimal take = p.amount.min(due);
+                    String method = p.method == null || p.method.isBlank() ? "CASH" : p.method.trim().toUpperCase();
+                    splits.add(new InvoicePaymentSplit(method, take, blankToNull(p.referenceNumber)));
+                    due = due.subtract(take);
+                    p.amount = p.amount.subtract(take);
+                    if (p.amount.signum() <= 0) left.poll();
+                }
+                if (!splits.isEmpty()) financeService.markInvoicePaid(invoiceId, splits, user);
+            }
+        }
+
+        // 2. anything still owed?
+        BigDecimal stillDue = totalDue(invoiceIds);
+        String note = blankToNull(req.note);
+        if (stillDue.signum() > 0) {
+            if (!canOverride) {
+                throw new IllegalStateException(rupees(stillDue) + " is still due — collect it before handing over, or ask a manager.");
+            }
+            if (!req.allowBalanceDue || note == null) {
+                throw new IllegalStateException(rupees(stillDue) + " is still due — tick \"hand over with balance due\" and give a reason.");
+            }
+            note = "Handed over with " + rupees(stillDue) + " due (manager) — " + note;
+        }
+
+        // 3. deliver (balance already checked above, so the per-bundle gate is satisfied)
+        List<BundleView> out = new ArrayList<>();
+        for (Bundle b : bundles) {
+            BundleRequests.Move mv = new BundleRequests.Move();
+            mv.status = "DELIVERED";
+            mv.note = note;
+            mv.photoUrl = req.photoUrl;
+            mv.deliveredTo = req.deliveredTo;
+            out.add(move(b.getId(), mv, user, canOverride || stillDue.signum() == 0));
+        }
+        return out;
+    }
+
+    private BigDecimal totalDue(List<Long> invoiceIds) {
+        return invoiceIds.stream().map(this::balanceDue).reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    /** What is still owed on a bill (0 for none / draft / cancelled). */
+    private BigDecimal balanceDue(Long invoiceId) {
+        if (invoiceId == null) return BigDecimal.ZERO;
+        return invoiceRepository.findById(invoiceId).map(BundleService::owed).orElse(BigDecimal.ZERO);
+    }
+
+    private static BigDecimal owed(Invoice inv) {
+        if (CANCELLED.equals(inv.getStatus()) || "DRAFT".equals(inv.getStatus())) return BigDecimal.ZERO;
+        BigDecimal due = inv.getBalanceDue() != null ? inv.getBalanceDue() : inv.getTotalAmount();
+        return due == null ? BigDecimal.ZERO : due.max(BigDecimal.ZERO);
+    }
+
+    private String invoiceNumber(Long invoiceId) {
+        return invoiceId == null ? "" : invoiceRepository.findById(invoiceId).map(Invoice::getInvoiceNumber).orElse("");
+    }
+
+    private static String rupees(BigDecimal v) {
+        return "₹" + v.setScale(2, java.math.RoundingMode.HALF_UP).stripTrailingZeros().toPlainString();
     }
 
     /** Called when a bill is cancelled: every open bundle of it is cancelled too. */
@@ -627,6 +759,10 @@ public class BundleService {
         if (invoice != null) {
             v.invoiceNumber = invoice.getInvoiceNumber();
             v.invoiceDate = invoice.getDate();
+            v.invoiceStatus = invoice.getStatus();
+            v.invoiceTotal = invoice.getTotalAmount();
+            v.amountPaid = invoice.getAmountPaid();
+            v.balanceDue = owed(invoice);
         }
         v.customerId = b.getCustomerId();
         if (customer != null) {

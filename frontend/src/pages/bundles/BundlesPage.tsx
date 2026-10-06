@@ -5,12 +5,15 @@ import {
   type Bundle, type BundleSummary,
 } from "@/api/bundleApi";
 import BarcodeScanner from "@/pages/inventory/components/BarcodeScanner";
+import HandoverDialog from "@/components/bundles/HandoverDialog";
+import { printBundleStickers, getLabelSize } from "@/components/bundles/printStickers";
+import { fetchCompanyProfile } from "@/lib/companyProfile";
 import { apiError } from "@/lib/apiError";
 import { toast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
 import { BaseInput, Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/useAuth";
-import { Camera, ScanLine, LayoutGrid, List, AlertTriangle, Search, ChevronRight } from "lucide-react";
+import { Camera, ScanLine, LayoutGrid, List, AlertTriangle, Search, ChevronRight, Printer, X, HandCoins } from "lucide-react";
 
 const VIEW_KEY = "bundles.view";
 const BOARD_COLUMNS = [...BUNDLE_FLOW.filter((s) => s !== "DELIVERED"), "ON_HOLD"];
@@ -32,6 +35,9 @@ export default function BundlesPage() {
   const [looking, setLooking] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
   const scanRef = useRef<HTMLInputElement>(null);
+  /** Several bundles found for a bill number / group code — shown above the board. */
+  const [found, setFound] = useState<Bundle[] | null>(null);
+  const [handover, setHandover] = useState(false);
 
   const [view, setView] = useState<"board" | "list">(readView);
   const [summary, setSummary] = useState<BundleSummary | null>(null);
@@ -73,8 +79,10 @@ export default function BundlesPage() {
     if (!c) return;
     setLooking(true);
     try {
-      const b = await bundleApi.byCode(c);
-      navigate(`/bundles/${b.id}`);
+      const list = await bundleApi.lookup(c);
+      if (list.length === 1) { navigate(`/bundles/${list[0].id}`); return; }
+      setFound(list);
+      setCode("");
     } catch (e) {
       toast.error(apiError(e, `No bundle found for ${c}`));
       setCode("");
@@ -82,6 +90,12 @@ export default function BundlesPage() {
     } finally {
       setLooking(false);
     }
+  };
+
+  const reprintFound = async () => {
+    if (!found) return;
+    const company = await fetchCompanyProfile().catch(() => undefined);
+    if (!printBundleStickers(found, getLabelSize(), company)) toast.error("Allow pop-ups for this site to print stickers.");
   };
 
   const quickMove = async (b: Bundle) => {
@@ -122,7 +136,7 @@ export default function BundlesPage() {
         <div className="flex flex-1 items-center gap-2 px-2">
           <ScanLine className="w-5 h-5 text-slate-400 shrink-0" />
           <BaseInput ref={scanRef} value={code} onChange={(e) => setCode(e.target.value)} disabled={looking}
-            placeholder="Scan sticker or type bundle code (e.g. JB-0042)…" autoComplete="off" spellCheck={false}
+            placeholder="Scan sticker, or type bundle code / bill number…" autoComplete="off" spellCheck={false}
             className="h-11 flex-1 bg-transparent text-lg font-mono uppercase outline-none placeholder:normal-case placeholder:font-sans placeholder:text-base" />
         </div>
         <Button type="button" variant="outline" className="h-11" onClick={() => setCameraOpen(true)} title="Scan with camera">
@@ -131,6 +145,17 @@ export default function BundlesPage() {
         <Button type="submit" className="h-11" disabled={looking || !code.trim()}>{looking ? "Opening…" : "Open"}</Button>
       </form>
       <BarcodeScanner open={cameraOpen} onClose={() => setCameraOpen(false)} onDetect={(t) => openCode(t)} />
+
+      {found && <FoundPanel bundles={found} canMove={canMove} onClose={() => setFound(null)}
+        onReprint={reprintFound} onHandover={() => setHandover(true)} />}
+      {found && handover && (
+        <HandoverDialog bundles={found} onClose={() => setHandover(false)}
+          onDone={(updated) => {
+            setHandover(false);
+            setFound((f) => f && f.map((b) => updated.find((u) => u.id === b.id) ?? b));
+            load();
+          }} />
+      )}
 
       {/* summary */}
       <div className="flex flex-wrap gap-2">
@@ -220,6 +245,53 @@ export default function BundlesPage() {
           {!loading && rows.length === 0 && <p className="text-sm text-slate-500 text-center py-10">No bundles match.</p>}
         </div>
       )}
+    </div>
+  );
+}
+
+/** What a bill number (or group code) found: its bundles, the money still owed, reprint + hand over. */
+function FoundPanel({ bundles, canMove, onClose, onReprint, onHandover }: {
+  bundles: Bundle[]; canMove: boolean; onClose: () => void; onReprint: () => void; onHandover: () => void;
+}) {
+  const first = bundles[0];
+  const due = Number(first?.balanceDue ?? 0);
+  const openCount = bundles.filter((b) => b.status !== "DELIVERED" && b.status !== "CANCELLED").length;
+  const readyCount = bundles.filter((b) => b.status === "READY").length;
+  return (
+    <div className="rounded-2xl border bg-white shadow-sm">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 border-b">
+        <div className="min-w-0">
+          <div className="font-semibold text-slate-800">
+            {first?.invoiceNumber ? <>Bill <Link className="hover:underline" to={`/billing/invoices/${first.invoiceId}`}>{first.invoiceNumber}</Link></> : first?.groupCode}
+            <span className="ml-2 font-normal text-slate-500">{first?.customerName || "Walk-in"}{first?.customerPhone ? ` · ${first.customerPhone}` : ""}</span>
+          </div>
+          <div className="text-xs text-slate-500">
+            {bundles.length} bundle{bundles.length === 1 ? "" : "s"} · {readyCount} ready
+            {first?.invoiceId && (due > 0
+              ? <span className="ml-2 font-semibold text-amber-700">₹{due.toLocaleString("en-IN")} due</span>
+              : <span className="ml-2 font-medium text-emerald-700">Paid</span>)}
+          </div>
+        </div>
+        <div className="ml-auto flex flex-wrap gap-2">
+          <Button size="sm" variant="outline" onClick={onReprint}><Printer className="w-4 h-4 mr-1" /> Reprint {bundles.length > 1 ? "all" : "sticker"}</Button>
+          {canMove && openCount > 0 && <Button size="sm" onClick={onHandover}><HandCoins className="w-4 h-4 mr-1" /> Hand over</Button>}
+          <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-700" title="Close"><X className="w-4 h-4" /></button>
+        </div>
+      </div>
+      <ul className="divide-y text-sm">
+        {bundles.map((b) => (
+          <li key={b.id}>
+            <Link to={`/bundles/${b.id}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 hover:bg-slate-50">
+              <span className="font-mono font-bold text-slate-800">{b.code}</span>
+              <StatusPill status={b.status} />
+              <span className="text-slate-500">{b.itemCount} item{b.itemCount === 1 ? "" : "s"}</span>
+              {b.rackLocation && <span className="text-slate-500">· {b.rackLocation}</span>}
+              {b.dueDate && <span className={b.overdue ? "text-red-600" : "text-slate-500"}>· due {b.dueDate}</span>}
+              <ChevronRight className="ml-auto w-4 h-4 text-slate-300" />
+            </Link>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
