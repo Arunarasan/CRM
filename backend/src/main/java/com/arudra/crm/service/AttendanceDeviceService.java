@@ -135,7 +135,12 @@ public class AttendanceDeviceService {
                         "This device is already registered. Ask an administrator to revoke it before registering again.");
                 case AttendanceDeviceStatus.BLOCKED -> throw DeviceAccessException.forbidden("DEVICE_BLOCKED",
                         "This device has been blocked by an administrator.");
-                default -> { /* PENDING (re-send), REJECTED / REVOKED (new request) */ }
+                // The device id is visible on the terminal screen, so a re-submission must not be able
+                // to replace the pending request's poll token (it would receive the secret on approval).
+                case AttendanceDeviceStatus.PENDING -> throw new DeviceAccessException(409, "REGISTRATION_PENDING",
+                        "A registration request for this device is already waiting for approval. "
+                                + "Ask an administrator to reject it if it must be sent again.");
+                default -> { /* REJECTED / REVOKED: a fresh request that again needs approval */ }
             }
         } else {
             device = new AttendanceDevice();
@@ -145,7 +150,7 @@ public class AttendanceDeviceService {
 
         Branch branch = requireBranch(req.branchId());
         AttendanceLocation location = requireLocation(req.locationId(), branch);
-        boolean resubmission = device.getId() != null && !AttendanceDeviceStatus.PENDING.equals(device.getStatus());
+        boolean resubmission = device.getId() != null;
 
         device.setDeviceName(cleanName(req.deviceName(), device.getDeviceCode()));
         device.setBranch(branch);

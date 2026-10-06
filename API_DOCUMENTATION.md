@@ -711,3 +711,8 @@ All endpoints require a valid JWT; no role restriction; no `ApiResponse` wrappin
 | POST | `/api/tasks/{id}/attachments` | TaskController | JWT | Add attachment |
 
 **Total endpoints documented: 156** across 17 controllers.
+
+
+## Biometric attendance devices
+
+Terminal (`/api/device/**`, device-token auth) and admin (`/api/hr/attendance-devices/**`, `/api/hr/biometric/**`, `/api/hr/attendance/{dashboard,today,history,report,shifts,assignments}`, `/api/hr/branches`) endpoints are documented in [BIOMETRIC_ATTENDANCE.md](BIOMETRIC_ATTENDANCE.md#apis).

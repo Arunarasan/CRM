@@ -1,0 +1,13 @@
+.gradle/
+build/
+local.properties
+*.iml
+.idea/
+captures/
+*.keystore
+*.jks
+keystore.properties
+# Vendor SDKs are licensed per customer and are not committed (see README → Scanner SDK).
+app/libs/**/*.jar
+app/libs/**/*.aar
+app/src/mantra/jniLibs/

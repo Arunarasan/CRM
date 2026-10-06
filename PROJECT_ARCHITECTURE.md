@@ -82,3 +82,4 @@ There is no root `package.json`, no Docker/Docker Compose, no CI configuration (
 - [FRONTEND_STRUCTURE.md](FRONTEND_STRUCTURE.md) — frontend folder layout, routing, state, components
 - [BACKEND_STRUCTURE.md](BACKEND_STRUCTURE.md) — backend package layout, layered architecture, cross-cutting concerns
 - [SECURITY_AUDIT.md](SECURITY_AUDIT.md) — security findings and recommendations
+- [BIOMETRIC_ATTENDANCE.md](BIOMETRIC_ATTENDANCE.md) — biometric attendance terminals (device registration/security, punch rules, shifts, APIs); the Android terminal app lives in `android-attendance/`

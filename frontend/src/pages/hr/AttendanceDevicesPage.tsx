@@ -134,6 +134,9 @@ export default function AttendanceDevicesPage() {
                   <div className="mt-0.5 text-xs text-slate-600">
                     {d.deviceCode} · Branch: <b>{d.branchName ?? '—'}</b> · Location: {d.locationName ?? '—'} · Requested {fmtDate(d.registeredAt)}
                   </div>
+                  <div className="mt-0.5 text-xs text-slate-600">
+                    Terminal shows Device ID <b className="font-mono tracking-wider">{(d.deviceUuid ?? '').slice(0, 8).toUpperCase()}</b> — check it matches before approving.
+                  </div>
                   <div className="mt-0.5 truncate font-mono text-[11px] text-slate-500">
                     {[d.manufacturer, d.model, d.osVersion && `Android ${d.osVersion}`, d.scannerVendor && `${d.scannerVendor} ${d.scannerModel ?? ''}`, d.lastIp].filter(Boolean).join(' · ')}
                   </div>
