@@ -17,6 +17,7 @@ import java.util.Set;
  * active {@link StorageService} (local disk in dev, S3/R2 in prod — selected by
  * {@code app.storage.type}). The response shape is unchanged: {@code { fileUrl, fileName }}.
  */
+@lombok.extern.slf4j.Slf4j
 @RestController
 @RequestMapping("/api/uploads")
 @CrossOrigin(origins = "*")
@@ -173,7 +174,15 @@ public class FileUploadController {
             }
         }
 
-        StoredFile stored = storageService.store(bytes, storedType, module, storedName);
+        StoredFile stored;
+        try {
+            stored = storageService.store(bytes, storedType, module, storedName);
+        } catch (IOException | RuntimeException e) {
+            // Storage (disk / S3 / R2) refused the write — say so instead of a generic 500.
+            log.error("Upload of {} ({} bytes, module {}) could not be stored", storedName, bytes.length, module, e);
+            return ResponseEntity.status(org.springframework.http.HttpStatus.BAD_GATEWAY)
+                    .body(ApiResponse.error("Couldn't save the file to storage: " + e.getMessage()));
+        }
         return ResponseEntity.ok(ApiResponse.success(Map.of(
                 "fileUrl", stored.fileUrl(),
                 "fileName", stored.fileName()

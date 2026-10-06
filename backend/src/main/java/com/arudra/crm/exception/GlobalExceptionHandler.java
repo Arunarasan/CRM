@@ -165,6 +165,18 @@ public class GlobalExceptionHandler {
         return new ResponseEntity<>(apiError, HttpStatus.BAD_REQUEST);
     }
 
+    /** An upload over spring.servlet.multipart.max-file-size is the client's file, not a server fault. */
+    @ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiError> handleMaxUploadSize(HttpServletRequest request) {
+        ApiError apiError = new ApiError(
+                HttpStatus.PAYLOAD_TOO_LARGE.value(),
+                HttpStatus.PAYLOAD_TOO_LARGE.getReasonPhrase(),
+                "File exceeds 25MB limit",
+                request.getRequestURI()
+        );
+        return new ResponseEntity<>(apiError, HttpStatus.PAYLOAD_TOO_LARGE);
+    }
+
     /** A missing static file (e.g. an /uploads photo no longer on disk) is a 404, not a server error. */
     @ExceptionHandler(org.springframework.web.servlet.resource.NoResourceFoundException.class)
     public ResponseEntity<Void> handleNoResource() {

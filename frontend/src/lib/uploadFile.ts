@@ -35,9 +35,17 @@ export async function uploadFile(file: File | Blob, module = "GENERAL"): Promise
   const formData = new FormData();
   formData.append("file", file);
   formData.append("module", module);
-  const res = await api.post<{ fileUrl: string; fileName: string }>("/uploads", formData, {
-    headers: { "Content-Type": "multipart/form-data" },
-  });
+  let res;
+  try {
+    res = await api.post<{ fileUrl: string; fileName: string }>("/uploads", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  } catch (err: any) {
+    // Surface the server's reason (e.g. "File exceeds 25MB limit") instead of axios's "status code 500".
+    const data = err?.response?.data;
+    const reason = typeof data === "string" ? "" : data?.message;
+    throw new Error(reason || err?.message || "Upload failed. Please try again.");
+  }
   const fileName = res.data.fileName || (file instanceof File ? file.name : "file");
   return { fileUrl: resolveFileUrl(res.data.fileUrl), fileName };
 }
