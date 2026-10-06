@@ -46,8 +46,8 @@ export type CommercialMode = "all" | "billing" | "payments" | "profit";
 
 /**
  * Project money (the shared stats row lives on the page):
- *  - all:      one compact screen — invoices on the left; profit, payments received and
- *              expenses on the right (stacks on narrow screens)
+ *  - all:      one compact screen — invoices and expenses on the left; profit and payments received
+ *              on the right (stacks on narrow screens)
  *  - billing:  invoices (maker, issue, paid/unpaid, print)
  *  - payments: money received, as a timeline, with pending field collections to approve
  *  - profit:   cash vs accrual profit + project expenses
@@ -258,6 +258,12 @@ export default function ProjectPaymentsTab({ project, onChanged, mode = "billing
         </MoneySection>
       )}
 
+      {/* Expenses sit under the invoices — money in on top, money out below */}
+      {compact && (
+        <div id="money-expenses" className="scroll-mt-40">
+          <ProjectProfitPanel project={project} refreshSignal={tick} part="expenses" compact onChanged={moneyChanged} />
+        </div>
+      )}
       </div>
 
       {compact && (
@@ -265,9 +271,6 @@ export default function ProjectPaymentsTab({ project, onChanged, mode = "billing
           <ProjectProfitPanel project={project} refreshSignal={tick} part="profit" compact />
           <div id="money-payments" className="scroll-mt-40">
             <PaymentsSection projectId={projectId} customerId={customerId} canWrite={canWrite} canCollect={canCollect} onChanged={moneyChanged} compact />
-          </div>
-          <div id="money-expenses" className="scroll-mt-40">
-            <ProjectProfitPanel project={project} refreshSignal={tick} part="expenses" compact onChanged={moneyChanged} />
           </div>
         </div>
       )}
