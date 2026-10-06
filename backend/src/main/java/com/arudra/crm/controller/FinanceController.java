@@ -339,15 +339,6 @@ public class FinanceController {
         return ResponseEntity.ok(financeService.getBillingProgress(projectId));
     }
 
-    /** Toggle the progress→invoice automation for a project. */
-    @PutMapping("/projects/{projectId}/auto-billing")
-    @PreAuthorize(WRITE)
-    public ResponseEntity<java.util.Map<String, Object>> setAutoBilling(
-            @PathVariable Long projectId, @RequestParam boolean enabled) {
-        financeService.setAutoBilling(projectId, enabled);
-        return ResponseEntity.ok(java.util.Map.of("autoBillingEnabled", enabled));
-    }
-
     // =====================================================================
     // Ledger & outstanding
     // =====================================================================

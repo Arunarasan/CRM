@@ -130,7 +130,7 @@ export interface PaymentSchedule {
   stage: string;
   description?: string;
   percentage?: number;
-  /** Work-progress % at/above which this stage auto-bills; null = not progress-driven. */
+  /** Work-progress % at/above which this stage is ready to bill; null = not progress-driven. */
   triggerPercentage?: number | null;
   autoTriggered?: boolean;
   autoTriggeredDate?: string | null;
@@ -148,7 +148,6 @@ export interface BillingProgress {
   projectStatus: string;
   workPercent: number;
   paymentPercent: number;
-  autoBillingEnabled: boolean;
   scheduledTotal: number;
   invoicedTotal: number;
   collectedTotal: number;

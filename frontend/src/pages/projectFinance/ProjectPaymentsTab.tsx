@@ -16,6 +16,8 @@ import { toast } from "@/components/ui/toast";
 import { printInvoice } from "./printInvoice";
 import { fetchCompanyProfile } from "@/lib/companyProfile";
 import CompletionBillingTracker from "./CompletionBillingTracker";
+import { MoneySection } from "./MoneySection";
+import { Skeleton } from "@/components/ui/skeleton";
 import ProjectProfitPanel from "./ProjectProfitPanel";
 
 const inr = (n?: number | null) =>
@@ -47,7 +49,7 @@ export type CommercialMode = "all" | "billing" | "payments" | "profit";
  * Project money (the shared stats row lives on the page):
  *  - all:      one compact screen — schedule + invoices on the left; profit, payments received and
  *              expenses on the right (stacks on narrow screens)
- *  - billing:  payment schedule / auto-billing tracker + invoices (maker, issue, paid/unpaid, print)
+ *  - billing:  payment schedule + invoices (maker, issue, paid/unpaid, print)
  *  - payments: money received, as a timeline, with pending field collections to approve
  *  - profit:   cash vs accrual profit + project expenses
  * `focus` scrolls the combined screen to the payments or expenses block (old deep links).
@@ -161,174 +163,103 @@ export default function ProjectPaymentsTab({ project, onChanged, mode = "billing
   return (
     <div className={compact ? "grid grid-cols-1 @5xl:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)] gap-3 items-start" : "space-y-3"}>
       <div className="space-y-3 min-w-0">
-      {/* Payment schedule — work % milestones that auto-raise invoices */}
+      {/* Payment schedule — milestones billed by hand once work reaches them */}
       <CompletionBillingTracker project={project} refreshSignal={tick} onChanged={reloadAll} compact={compact} />
 
       {loading ? (
-        <div className="flex justify-center py-10 text-slate-400"><Loader2 className="h-6 w-6 animate-spin" /></div>
+        <MoneySection icon={FileText} title="Invoices">
+          <div className="space-y-2 p-4">{[0, 1, 2].map((k) => <Skeleton key={k} className="h-12 w-full" />)}</div>
+        </MoneySection>
       ) : denied ? (
-        <div className="rounded-xl border border-slate-100 bg-white p-6 text-slate-500">Billing data is restricted for your role.</div>
+        <div className="rounded-2xl border border-slate-200/70 bg-white p-6 text-sm text-slate-500">Billing data is restricted for your role.</div>
       ) : (
-        <section className="rounded-2xl border border-slate-100 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)] @container">
-          <div className="px-4 py-3 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2"><FileText className="h-5 w-5 text-emerald-700" /> Invoices</h3>
-              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-500">{invoices.length}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              {invoices.length > 0 && (
-                <div className="flex gap-1 rounded-xl bg-slate-100 p-1">
-                  {INVOICE_FILTERS.map(([f, label]) => (
-                    <button key={f} type="button" onClick={() => setInvFilter(f)}
-                      className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition ${invFilter === f ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>
-                      {label} <span className="text-slate-400">{invCounts[f] || 0}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-              {canWrite && customerId && (
-                <Button size="sm" onClick={() => setMakerOpen(true)} className="h-9 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white"><Plus className="h-4 w-4 mr-1" /> New Invoice</Button>
-              )}
-            </div>
-          </div>
-          <div className="p-3">
-            {!customerId && (
-              <p className="mb-3 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-700">This project has no linked customer, so invoices can't be raised yet.</p>
+        <MoneySection
+          icon={FileText}
+          title="Invoices"
+          count={invoices.length}
+          actions={<>
+            {invoices.length > 0 && (
+              <div role="tablist" aria-label="Filter invoices" className="flex gap-0.5 rounded-lg bg-slate-100 p-0.5">
+                {INVOICE_FILTERS.map(([f, label]) => (
+                  <button key={f} type="button" role="tab" aria-selected={invFilter === f} onClick={() => setInvFilter(f)}
+                    className={`rounded-md px-2.5 py-1 text-xs font-medium transition ${invFilter === f ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>
+                    {label} <span className="tabular-nums text-slate-400">{invCounts[f] || 0}</span>
+                  </button>
+                ))}
+              </div>
             )}
-            {invoices.length === 0 ? (
-              <div className="py-10 text-center">
-                <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-slate-400"><FileText className="h-5 w-5" /></span>
-                <div className="mt-2 text-sm font-semibold text-slate-600">No invoices yet</div>
-                <div className="text-xs text-slate-400">Raise one from a payment milestone above, or create it with New Invoice.</div>
-              </div>
-            ) : shownInvoices.length === 0 ? (
-              <p className="py-8 text-center text-sm text-slate-400">No invoices in this filter.</p>
-            ) : (
-              compact ? (
-              <div className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-100">
-                {shownInvoices.map((i) => {
-                  const badge = paidLabel(i.status);
-                  const busy = busyId === i.id;
-                  const total = Number(i.totalAmount || 0);
-                  const paid = Number(i.amountPaid || 0);
-                  const pct = total ? Math.min(100, Math.round((paid / total) * 100)) : 0;
-                  const live = i.status !== "CANCELLED" && i.status !== "DRAFT";
-                  const overdue = live && i.dueDate && i.status !== "PAID"
-                    && new Date(i.dueDate).getTime() < new Date(new Date().toDateString()).getTime();
-                  return (
-                    <div key={i.id} className={`flex flex-col @xl:flex-row @xl:items-center gap-2 px-3 py-2.5 hover:bg-slate-50/60 ${i.status === "CANCELLED" ? "opacity-60" : ""}`}>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-bold text-slate-900">{i.invoiceNumber}</span>
-                          <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${overdue ? "bg-rose-100 text-rose-700" : badge.cls}`}>{overdue ? "Overdue" : badge.text}</span>
-                        </div>
-                        <div className="text-[11px] text-slate-400 truncate">
-                          <span className="capitalize">{String(i.invoiceType || "").toLowerCase()}</span> · {i.date ? format(new Date(i.date), "dd MMM") : "—"}
-                          {i.dueDate && live && i.status !== "PAID" && <span className={overdue ? "font-semibold text-rose-600" : ""}> · due {format(new Date(i.dueDate), "dd MMM")}</span>}
-                        </div>
+            {canWrite && customerId && (
+              <Button size="sm" variant="forest" onClick={() => setMakerOpen(true)} className="active:scale-[0.98]"><Plus /> New invoice</Button>
+            )}
+          </>}
+        >
+          {!customerId && (
+            <p className="border-b border-amber-200/70 bg-amber-50/70 px-4 py-2.5 text-sm text-amber-800">This project has no linked customer, so invoices can't be raised yet.</p>
+          )}
+          {invoices.length === 0 ? (
+            <div className="flex flex-col items-start gap-1 px-4 py-8 sm:items-center sm:text-center">
+              <p className="text-sm font-semibold text-slate-800">No invoices yet</p>
+              <p className="max-w-[48ch] text-sm text-slate-500">Raise one from a payment milestone above when it's ready to bill, or write one with New invoice.</p>
+            </div>
+          ) : shownInvoices.length === 0 ? (
+            <p className="px-4 py-8 text-center text-sm text-slate-500">No invoices in this filter.</p>
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {shownInvoices.map((i) => {
+                const badge = paidLabel(i.status);
+                const busy = busyId === i.id;
+                const total = Number(i.totalAmount || 0);
+                const paid = Number(i.amountPaid || 0);
+                const pct = total ? Math.min(100, Math.round((paid / total) * 100)) : 0;
+                const live = i.status !== "CANCELLED" && i.status !== "DRAFT";
+                const overdue = live && i.dueDate && i.status !== "PAID"
+                  && new Date(i.dueDate).getTime() < new Date(new Date().toDateString()).getTime();
+                return (
+                  <li key={i.id} className={`grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 px-4 py-3 transition-colors hover:bg-slate-50/70 @xl:grid-cols-[minmax(0,1fr)_10rem_auto] ${i.status === "CANCELLED" ? "opacity-60" : ""}`}>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="truncate text-sm font-semibold text-slate-900">{i.invoiceNumber}</span>
+                        <span className={`shrink-0 rounded-full px-1.5 py-px text-[11px] font-semibold ${overdue ? "bg-rose-100 text-rose-700" : badge.cls}`}>{overdue ? "Overdue" : badge.text}</span>
                       </div>
-                      <div className="flex items-center gap-3 @xl:w-44 shrink-0">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-baseline justify-between gap-2">
-                            <span className="text-sm font-bold text-slate-900">{inr(total)}</span>
-                            {live && Number(i.balanceDue || 0) > 0 && <span className="text-[10px] font-semibold text-rose-600">{inr(i.balanceDue)} due</span>}
-                          </div>
-                          {live && <div className="mt-1 h-1 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-emerald-600" style={{ width: `${pct}%` }} /></div>}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1 shrink-0 @xl:justify-end">
-                        {busy && <Loader2 className="h-4 w-4 animate-spin text-slate-400" />}
-                        {canWrite && i.status === "DRAFT" && !busy && <ActionBtn onClick={() => issue(i.id)} title="Issue">Issue</ActionBtn>}
-                        {canCollect && live && i.status !== "PAID" && !busy && (
-                          <ActionBtn onClick={() => setPayFor(i)} tone="green" title="Mark paid"><CheckCircle2 className="h-3.5 w-3.5" /> Paid</ActionBtn>
-                        )}
-                        {canWrite && i.status === "PAID" && !busy && (
-                          <ActionBtn onClick={() => markUnpaid(i)} tone="red" title="Mark unpaid"><RotateCcw className="h-3.5 w-3.5" /></ActionBtn>
-                        )}
-                        {live && customerPhone && (
-                          <a href={invoiceWhatsApp(i)} target="_blank" rel="noreferrer" title="Send on WhatsApp"
-                            className="inline-flex items-center rounded-md border border-emerald-200 px-1.5 py-1 text-emerald-700 hover:bg-emerald-50"><MessageCircle className="h-3.5 w-3.5" /></a>
-                        )}
-                        {i.status !== "DRAFT" && <ActionBtn onClick={() => doPrint(i)} title="Print invoice"><Printer className="h-3.5 w-3.5" /></ActionBtn>}
-                      </div>
+                      <p className="mt-0.5 truncate text-xs text-slate-500">
+                        <span className="capitalize">{String(i.invoiceType || "").toLowerCase()}</span> · {i.date ? format(new Date(i.date), "dd MMM yyyy") : "—"}
+                        {i.dueDate && live && i.status !== "PAID" && <span className={overdue ? "font-semibold text-rose-600" : ""}> · due {format(new Date(i.dueDate), "dd MMM")}</span>}
+                      </p>
                     </div>
-                  );
-                })}
-              </div>
-              ) : (
-              <div className="grid grid-cols-1 @2xl:grid-cols-2 @5xl:grid-cols-3 gap-2.5">
-                {shownInvoices.map((i) => {
-                  const badge = paidLabel(i.status);
-                  const busy = busyId === i.id;
-                  const total = Number(i.totalAmount || 0);
-                  const paid = Number(i.amountPaid || 0);
-                  const pct = total ? Math.min(100, Math.round((paid / total) * 100)) : 0;
-                  const overdue = i.dueDate && i.status !== "PAID" && i.status !== "CANCELLED" && i.status !== "DRAFT"
-                    && new Date(i.dueDate).getTime() < new Date(new Date().toDateString()).getTime();
-                  return (
-                    <div key={i.id} className={`rounded-2xl border p-3.5 transition-shadow hover:shadow-md ${i.status === "CANCELLED" ? "border-slate-100 opacity-60" : overdue ? "border-rose-200" : "border-slate-100"}`}>
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <div className="text-sm font-bold text-slate-900 truncate">{i.invoiceNumber}</div>
-                          <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-400">
-                            <span className="rounded-full bg-slate-100 px-1.5 py-0.5 font-semibold text-slate-600 capitalize">{String(i.invoiceType || "").toLowerCase()}</span>
-                            <span>{i.date ? format(new Date(i.date), "dd MMM yyyy") : "—"}</span>
-                            {i.dueDate && <span className={overdue ? "font-semibold text-rose-600" : ""}>· due {format(new Date(i.dueDate), "dd MMM")}</span>}
-                          </div>
-                        </div>
-                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${overdue ? "bg-rose-100 text-rose-700" : badge.cls}`}>{overdue ? "Overdue" : badge.text}</span>
+
+                    <div className="text-right @xl:text-left">
+                      <div className="flex items-baseline justify-end gap-2 @xl:justify-between">
+                        <span className="text-sm font-semibold tabular-nums text-slate-900">{inr(total)}</span>
+                        {live && Number(i.balanceDue || 0) > 0 && <span className="hidden text-[11px] font-medium tabular-nums text-rose-600 @xl:inline">{inr(i.balanceDue)} due</span>}
                       </div>
-                      <div className="mt-3 flex items-end justify-between gap-2">
-                        <div className="text-xl font-bold text-slate-900">{inr(total)}</div>
-                        {i.status !== "CANCELLED" && i.status !== "DRAFT" && (
-                          <div className="text-right text-[11px] text-slate-500">
-                            {Number(i.balanceDue || 0) > 0 ? <>Balance <span className="font-bold text-rose-600">{inr(i.balanceDue)}</span></> : <span className="font-semibold text-emerald-700">Fully paid</span>}
-                          </div>
-                        )}
-                      </div>
-                      {i.status !== "CANCELLED" && i.status !== "DRAFT" && (
-                        <div className="mt-2">
-                          <div className="h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-emerald-600 transition-all" style={{ width: `${pct}%` }} /></div>
-                          <div className="mt-1 text-[11px] text-slate-400">{inr(paid)} received · {pct}%</div>
+                      {live && (
+                        <div className="mt-1 hidden h-1 overflow-hidden rounded-full bg-slate-100 @xl:block" title={`${inr(paid)} received · ${pct}%`}>
+                          <div className="h-full rounded-full bg-emerald-600" style={{ width: `${pct}%` }} />
                         </div>
                       )}
-                      <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-slate-100 pt-2.5">
-                        {busy && <Loader2 className="h-4 w-4 animate-spin text-slate-400" />}
-                        {canWrite && i.status === "DRAFT" && !busy && (
-                          <ActionBtn onClick={() => issue(i.id)} title="Issue">Issue</ActionBtn>
-                        )}
-                        {canCollect && i.status !== "CANCELLED" && i.status !== "PAID" && i.status !== "DRAFT" && !busy && (
-                          <ActionBtn onClick={() => setPayFor(i)} tone="green" title="Record payment against this invoice">
-                            <CheckCircle2 className="h-3.5 w-3.5" /> Mark paid
-                          </ActionBtn>
-                        )}
-                        {canWrite && i.status === "PAID" && !busy && (
-                          <ActionBtn onClick={() => markUnpaid(i)} tone="red" title="Mark unpaid">
-                            <RotateCcw className="h-3.5 w-3.5" /> Unpaid
-                          </ActionBtn>
-                        )}
-                        <span className="ml-auto flex items-center gap-1.5">
-                          {i.status !== "DRAFT" && i.status !== "CANCELLED" && customerPhone && (
-                            <a href={invoiceWhatsApp(i)} target="_blank" rel="noreferrer" title="Send on WhatsApp"
-                              className="inline-flex items-center gap-1 rounded-md border border-emerald-200 px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-50">
-                              <MessageCircle className="h-3.5 w-3.5" /> WhatsApp
-                            </a>
-                          )}
-                          {i.status !== "DRAFT" && (
-                            <ActionBtn onClick={() => doPrint(i)} title="Print invoice">
-                              <Printer className="h-3.5 w-3.5" /> Print
-                            </ActionBtn>
-                          )}
-                        </span>
-                      </div>
                     </div>
-                  );
-                })}
-              </div>
-              )
-            )}
-          </div>
-        </section>
+
+                    <div className="col-span-2 flex items-center justify-end gap-1 @xl:col-span-1">
+                      {busy && <Loader2 className="h-4 w-4 animate-spin text-slate-400" />}
+                      {canWrite && i.status === "DRAFT" && !busy && <ActionBtn onClick={() => issue(i.id)} title="Issue this invoice">Issue</ActionBtn>}
+                      {canCollect && live && i.status !== "PAID" && !busy && (
+                        <ActionBtn onClick={() => setPayFor(i)} tone="green" title="Record payment against this invoice"><CheckCircle2 className="h-3.5 w-3.5" /> Mark paid</ActionBtn>
+                      )}
+                      {canWrite && i.status === "PAID" && !busy && (
+                        <ActionBtn onClick={() => markUnpaid(i)} tone="red" title="Mark unpaid"><RotateCcw className="h-3.5 w-3.5" /></ActionBtn>
+                      )}
+                      {live && customerPhone && (
+                        <a href={invoiceWhatsApp(i)} target="_blank" rel="noreferrer" title="Send on WhatsApp" aria-label={`Send ${i.invoiceNumber} on WhatsApp`}
+                          className="inline-flex items-center rounded-md border border-slate-200 px-1.5 py-1 text-slate-600 hover:bg-slate-50"><MessageCircle className="h-3.5 w-3.5" /></a>
+                      )}
+                      {i.status !== "DRAFT" && <ActionBtn onClick={() => doPrint(i)} title={`Print ${i.invoiceNumber}`}><Printer className="h-3.5 w-3.5" /></ActionBtn>}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </MoneySection>
       )}
 
       </div>
@@ -438,22 +369,19 @@ function PaymentsSection({ projectId, customerId, canWrite, canCollect, onChange
   };
 
   return (
-    <section className="rounded-2xl border border-slate-100 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)] @container">
-      <div className="px-4 py-3 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h3 className="text-base font-bold text-slate-900 flex items-center gap-2"><IndianRupee className="h-5 w-5 text-emerald-700" /> Payments Received</h3>
-          <p className="text-xs text-slate-400 mt-0.5">
-            <span className="font-semibold text-emerald-700">{inr(confirmedTotal)}</span> confirmed
-            {pendingTotal > 0 && <> · <span className="font-semibold text-amber-700">{inr(pendingTotal)}</span> awaiting approval</>}
-          </p>
-        </div>
-        {canCollect && customerId && (
-          <Button size="sm" onClick={() => setRecordOpen(true)} className="h-9 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white">
-            <Plus className="h-4 w-4 mr-1" /> Record Payment
-          </Button>
-        )}
-      </div>
-
+    <MoneySection
+      icon={IndianRupee}
+      title="Payments received"
+      subtitle={<>
+        <span className="font-semibold tabular-nums text-emerald-700">{inr(confirmedTotal)}</span> confirmed
+        {pendingTotal > 0 && <> · <span className="font-semibold tabular-nums text-amber-700">{inr(pendingTotal)}</span> awaiting approval</>}
+      </>}
+      actions={canCollect && customerId ? (
+        <Button size="sm" variant="forest" onClick={() => setRecordOpen(true)} className="active:scale-[0.98]">
+          <Plus /> Record payment
+        </Button>
+      ) : undefined}
+    >
       {loading ? (
         <div className="flex justify-center py-10 text-slate-400"><Loader2 className="h-6 w-6 animate-spin" /></div>
       ) : rows.length === 0 ? (
@@ -463,23 +391,23 @@ function PaymentsSection({ projectId, customerId, canWrite, canCollect, onChange
           <div className="text-xs text-slate-400">Record money received here. Field staff can also log cash collected in their daily report.</div>
         </div>
       ) : (
-        <div className={compact ? "p-3 space-y-2.5" : "p-3 space-y-4"}>
+        <div className={compact ? "space-y-2.5 pb-3" : "space-y-4 pb-3"}>
           {/* Waiting for approval — pinned on top */}
           {pending.length > 0 && (
-            <div className="rounded-2xl border border-amber-200 bg-amber-50/60 p-3">
-              <div className="mb-2 flex items-center gap-2 text-sm font-bold text-amber-900">
-                <Clock className="h-4 w-4" /> Waiting for approval
-                <span className="rounded-full bg-amber-200/70 px-2 py-0.5 text-[11px]">{pending.length}</span>
+            <div className="border-b border-amber-200/70 bg-amber-50/60">
+              <div className="flex items-center gap-2 px-4 pt-3 text-xs font-semibold text-amber-900">
+                <Clock className="h-3.5 w-3.5" /> Waiting for approval
+                <span className="rounded-full bg-amber-200/70 px-1.5 py-px text-[11px] tabular-nums">{pending.length}</span>
               </div>
-              <div className="space-y-2">
+              <div className="divide-y divide-amber-200/60">
                 {pending.map((p) => {
                   const busy = busyId === p.id;
                   return (
-                    <div key={p.id} className="flex flex-col @xl:flex-row @xl:items-center gap-2 rounded-xl bg-white px-3 py-2.5 ring-1 ring-amber-100">
+                    <div key={p.id} className="flex flex-col @xl:flex-row @xl:items-center gap-2 px-4 py-2.5">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-baseline gap-2">
-                          <span className="text-lg font-bold text-slate-900">{inr(p.amount)}</span>
-                          <span className="text-xs text-slate-500">{methodLabel(p.paymentMethod)}</span>
+                          <span className="text-base font-semibold tabular-nums text-slate-900">{inr(p.amount)}</span>
+                          <span className="text-xs capitalize text-slate-500">{methodLabel(p.paymentMethod).toLowerCase()}</span>
                         </div>
                         <div className="text-[11px] text-slate-400 truncate">
                           {p.paymentDate ? format(new Date(p.paymentDate), "dd MMM yyyy") : "—"}
@@ -490,11 +418,11 @@ function PaymentsSection({ projectId, customerId, canWrite, canCollect, onChange
                       {canWrite ? (
                         <div className="flex items-center gap-2 shrink-0">
                           {busy && <Loader2 className="h-4 w-4 animate-spin text-slate-400" />}
-                          <Button size="sm" variant="outline" disabled={busy} onClick={() => reject(p.id)} className="h-8 rounded-xl border-rose-200 text-rose-600 hover:bg-rose-50">
-                            <Ban className="h-3.5 w-3.5 mr-1" /> Reject
+                          <Button size="sm" variant="outline" disabled={busy} onClick={() => reject(p.id)} className="border-rose-200 text-rose-600 hover:bg-rose-50 hover:text-rose-700">
+                            <Ban /> Reject
                           </Button>
-                          <Button size="sm" disabled={busy} onClick={() => approve(p.id)} className="h-8 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white">
-                            <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Approve
+                          <Button size="sm" variant="forest" disabled={busy} onClick={() => approve(p.id)} className="active:scale-[0.98]">
+                            <CheckCircle2 /> Approve
                           </Button>
                         </div>
                       ) : (
@@ -509,28 +437,28 @@ function PaymentsSection({ projectId, customerId, canWrite, canCollect, onChange
 
           {/* Compact: latest payments as a flat list */}
           {compact && !showAll && history.length > 0 && (
-            <div className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-100">
+            <div className="divide-y divide-slate-100 border-b border-slate-100">
               {history.slice(0, 5).map((p) => {
                 const st = PAY_STATUS[p.status] || PAY_STATUS.CONFIRMED;
                 const rejected = p.status === "REJECTED";
                 return (
-                  <div key={p.id} className={`flex items-center gap-2.5 px-3 py-2 ${rejected ? "opacity-60" : ""}`}>
+                  <div key={p.id} className={`flex items-center gap-2.5 px-4 py-2.5 ${rejected ? "opacity-60" : ""}`}>
                     <span className={`h-2 w-2 shrink-0 rounded-full ${st.dot}`} />
                     <div className="min-w-0 flex-1">
-                      <div className="text-[11px] text-slate-400 truncate">
-                        {p.paymentDate ? format(new Date(p.paymentDate), "dd MMM") : "—"} · {methodLabel(p.paymentMethod)}
+                      <div className="text-xs text-slate-500 truncate">
+                        {p.paymentDate ? format(new Date(p.paymentDate), "dd MMM") : "—"} · <span className="capitalize">{methodLabel(p.paymentMethod).toLowerCase()}</span>
                         {p.collectedBy?.name && <> · {p.collectedBy.name}</>}
                         {p.invoice?.invoiceNumber && <> · {p.invoice.invoiceNumber}</>}
                       </div>
                     </div>
-                    <span className={`text-sm font-bold shrink-0 ${rejected ? "line-through text-slate-400" : "text-slate-900"}`}>{inr(p.amount)}</span>
+                    <span className={`text-sm font-semibold tabular-nums shrink-0 ${rejected ? "line-through text-slate-400" : "text-slate-900"}`}>{inr(p.amount)}</span>
                   </div>
                 );
               })}
             </div>
           )}
           {compact && history.length > 5 && (
-            <button type="button" onClick={() => setShowAll((v) => !v)} className="w-full rounded-xl bg-slate-50 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100">
+            <button type="button" onClick={() => setShowAll((v) => !v)} className="mx-4 w-[calc(100%-2rem)] rounded-lg py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50">
               {showAll ? "Show less" : `Show all ${history.length} payments`}
             </button>
           )}
@@ -539,7 +467,7 @@ function PaymentsSection({ projectId, customerId, canWrite, canCollect, onChange
           {(!compact || showAll) && months.map(([month, list]) => {
             const monthTotal = list.filter((p) => p.status === "CONFIRMED").reduce((s, p) => s + (p.amount || 0), 0);
             return (
-              <div key={month}>
+              <div key={month} className="px-4">
                 <div className="mb-2 flex items-center justify-between px-1">
                   <span className="text-xs font-bold uppercase tracking-wide text-slate-500">{month}</span>
                   <span className="text-xs font-semibold text-emerald-700">{inr(monthTotal)}</span>
@@ -579,7 +507,7 @@ function PaymentsSection({ projectId, customerId, canWrite, canCollect, onChange
         <RecordPaymentDialog projectId={projectId} customerId={customerId}
           onClose={() => setRecordOpen(false)} onSaved={() => { setRecordOpen(false); load(); onChanged(); }} />
       )}
-    </section>
+    </MoneySection>
   );
 }
 

@@ -10,7 +10,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
@@ -613,20 +612,9 @@ public class FinanceService {
     }
 
     /**
-     * Auto-generates an advance invoice from an approved quotation (idempotent —
-     * an existing non-cancelled advance invoice for the quotation is returned as-is).
+     * Raises an advance invoice from an approved quotation (idempotent — an existing non-cancelled
+     * advance invoice for the quotation is returned as-is). Only ever called on a user's request.
      */
-    /**
-     * Entry point for automation that must not fail when billing does. Runs in its own transaction:
-     * joining the caller's would mark it rollback-only on failure, so the caller's own work (e.g.
-     * approving the quotation) would then die at commit with UnexpectedRollbackException even though
-     * it caught the exception. Callers still need their own try/catch for the thrown exception.
-     */
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public Invoice generateFromQuotationIndependently(Long quotationId, BigDecimal advancePercent, boolean draft) {
-        return generateFromQuotation(quotationId, advancePercent, draft);
-    }
-
     @Transactional
     public Invoice generateFromQuotation(Long quotationId, BigDecimal advancePercent, boolean draft) {
         Quotation quotation = quotationRepository.findById(quotationId)
@@ -873,11 +861,11 @@ public class FinanceService {
     }
 
     /**
-     * Project conversion: link the quotation's invoices (raised at approval, before the project
-     * existed) to the new project, then record the advance the customer paid as a confirmed customer
-     * payment so it shows on the project's Payments tab, ledger and outstanding. The advance settles
-     * the quotation's open ADVANCE invoice first (auto-issuing a draft); any excess is kept on account
-     * against the project.
+     * Project conversion: link any invoices raised against the quotation (before the project existed)
+     * to the new project, then record the advance the customer paid as a confirmed customer payment so
+     * it shows on the project's Payments tab, ledger and outstanding. If someone raised an ADVANCE
+     * invoice for the quotation, the advance settles it first (issuing it if still a draft); the rest —
+     * or all of it, when there is no such invoice — is kept on account against the project.
      */
     @Transactional
     public List<CustomerPayment> recordConversionAdvance(Long quotationId, Project project, BigDecimal amount,
@@ -1196,14 +1184,6 @@ public class FinanceService {
         return created;
     }
 
-    @Transactional
-    public void setAutoBilling(Long projectId, boolean enabled) {
-        Project project = projectRepository.findById(projectId)
-                .orElseThrow(() -> new RuntimeException("Project not found: " + projectId));
-        project.setAutoBillingEnabled(enabled);
-        projectRepository.save(project);
-    }
-
     /**
      * Combined completion tracker for a project: work progress %, payment collected %, and each
      * payment milestone with its work-progress trigger, whether work has reached it, and its
@@ -1279,7 +1259,6 @@ public class FinanceService {
         d.put("projectStatus", project.getStatus());
         d.put("workPercent", workPercent);
         d.put("paymentPercent", paymentPercent);
-        d.put("autoBillingEnabled", project.isAutoBillingEnabled());
         d.put("scheduledTotal", scheduledTotal);
         d.put("invoicedTotal", invoicedTotal);
         d.put("collectedTotal", collectedTotal);

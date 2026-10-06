@@ -105,8 +105,6 @@ export const financeApi = {
   // Combined completion + billing tracker
   getBillingProgress: (projectId: number) =>
     api.get<BillingProgress>(`${BASE}/projects/${projectId}/billing-progress`).then((r) => r.data),
-  setAutoBilling: (projectId: number, enabled: boolean) =>
-    api.put<{ autoBillingEnabled: boolean }>(`${BASE}/projects/${projectId}/auto-billing?enabled=${enabled}`).then((r) => r.data),
 
   // Ledger & outstanding
   getCustomerLedger: (customerId: number, from?: string, to?: string) =>

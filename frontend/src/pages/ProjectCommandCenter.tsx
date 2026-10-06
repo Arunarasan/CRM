@@ -14,6 +14,7 @@ import { ProjectProfitability } from "@/types/finance";
 import { ProjectPhase, ProjectRoom, ProjectRoomItem, ProjectMaterialRequirement, ProjectProgressDashboard, ProjectItemProgressLog, GenerateFromBoqResult, WORK_ITEM_STATUSES } from "@/types/project";
 import { ProjectChangeRequest } from "@/types/changeRequest";
 import ProjectPaymentsTab from "@/pages/projectFinance/ProjectPaymentsTab";
+import CommercialSummary from "@/pages/projectFinance/CommercialSummary";
 import BulkWorkUpdateDialog from "@/pages/projectCommandCenter/BulkWorkUpdateDialog";
 import CompleteProjectDialog from "@/pages/projectCommandCenter/CompleteProjectDialog";
 import ProjectPurchaseOrdersTab from "@/pages/projectCommandCenter/tabs/ProjectPurchaseOrdersTab";
@@ -1029,57 +1030,9 @@ export default function ProjectCommandCenter() {
             );
           })()}
 
-          {groupOf(activeTab).id === 'commercial' && (() => {
-            const pf = profitability;
-            const contract = Number(pf?.quotationValue ?? project.estimatedCost ?? project.budget ?? 0);
-            const received = Number(pf?.collected ?? 0);
-            const due = Number(pf?.outstanding ?? 0);
-            const collectedPct = contract ? Math.min(100, Math.round((received / contract) * 100)) : 0;
-            const profit = pf ? Number(pf.cashProfit ?? 0) : null;
-            const tiles: { label: string; value: string; sub: string; icon: React.ComponentType<{ className?: string }>; tone: string; valueTone?: string; go: string }[] = [
-              { label: 'Contract Value', value: inr(contract), sub: 'approved quote', icon: FileText, tone: 'bg-emerald-50 text-emerald-700', go: 'quote' },
-              { label: 'Invoiced', value: pf ? inr(pf.revenue) : '—', sub: contract && pf ? `${Math.round((Number(pf.revenue || 0) / contract) * 100)}% of contract` : 'bills raised', icon: FileBarChart, tone: 'bg-sky-50 text-sky-700', go: 'payments' },
-              { label: 'Received', value: pf ? inr(received) : '—', sub: `${collectedPct}% collected`, icon: IndianRupee, tone: 'bg-emerald-50 text-emerald-700', go: 'received' },
-              { label: 'Balance Due', value: pf ? inr(due) : '—', sub: due > 0 ? 'to collect' : 'nothing due', icon: Wallet, tone: due > 0 ? 'bg-rose-50 text-rose-600' : 'bg-slate-50 text-slate-500', valueTone: due > 0 ? 'text-rose-700' : undefined, go: 'payments' },
-              { label: 'Profit', value: profit === null ? '—' : inr(profit), sub: pf ? `${Number(pf.cashMarginPercent ?? 0).toFixed(1)}% margin · cash` : 'finance access needed', icon: Percent, tone: profit !== null && profit < 0 ? 'bg-rose-50 text-rose-600' : 'bg-amber-50 text-amber-700', valueTone: profit !== null && profit < 0 ? 'text-rose-700' : undefined, go: 'profit' },
-            ];
-            return (
-              <div className="mb-3 space-y-2.5">
-                <div className="grid grid-cols-2 @3xl:grid-cols-3 @5xl:grid-cols-5 gap-2.5">
-                  {tiles.map((t, ti) => {
-                    const [bg, fg] = t.tone.split(' ');
-                    return (
-                      <button key={t.label} type="button" onClick={() => setActiveTab(t.go)}
-                        className={`${ti === 0 ? 'col-span-2 @3xl:col-span-1' : ''} min-w-0 text-left rounded-2xl border border-slate-100 bg-white px-3 @lg:px-3.5 py-2.5 @lg:py-3 shadow-[0_1px_3px_rgba(0,0,0,0.04)] transition-all hover:-translate-y-px hover:shadow-md ${activeTab === t.go ? 'ring-2 ring-emerald-200' : ''}`}>
-                        <div className="flex items-center gap-2">
-                          <span className={`flex h-8 w-8 items-center justify-center rounded-xl ${bg} ${fg}`}><t.icon className="h-4 w-4" /></span>
-                          <span className="text-xs font-semibold text-slate-500 truncate">{t.label}</span>
-                        </div>
-                        <div className={`mt-1.5 @lg:mt-2 text-base @lg:text-lg @5xl:text-xl font-bold leading-tight truncate ${t.valueTone || 'text-slate-900'}`}>{t.value}</div>
-                        {t.label === 'Received' ? (
-                          <div className="mt-1.5">
-                            <div className="h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-emerald-600 transition-all" style={{ width: `${collectedPct}%` }} /></div>
-                            <div className="mt-1 text-[11px] text-slate-400">{t.sub}</div>
-                          </div>
-                        ) : (
-                          <div className="mt-0.5 text-[11px] text-slate-400 truncate">{t.sub}</div>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-                {Number(pf?.excessPaid ?? 0) > 0 && (
-                  <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                    <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600 mt-0.5" />
-                    <div>
-                      <div className="font-semibold">Customer has paid {inr(Number(pf?.excessPaid))} more than the contract value</div>
-                      <div className="text-xs text-amber-800/80">Received {inr(received)} against a contract of {inr(Number(pf?.quotationValue ?? 0))} after a quote change. Refund it or adjust it against other work.</div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })()}
+          {groupOf(activeTab).id === 'commercial' && (
+            <CommercialSummary project={project} profitability={profitability} activeSection={activeTab} onOpen={setActiveTab} />
+          )}
 
           <div className="pb-20">
             

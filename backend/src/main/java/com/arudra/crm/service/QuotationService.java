@@ -506,23 +506,7 @@ public class QuotationService {
         }
         Quotation saved = quotationRepository.save(quotation);
         logActivity(saved, "APPROVAL_STATUS", "Internal approval status changed to " + status, user);
-        if ("APPROVED".equals(status)) {
-            autoGenerateAdvanceInvoice(saved);
-        }
         return saved;
-    }
-
-    /** Finance automation: an approved quotation raises a draft advance invoice (idempotent, non-fatal). */
-    private void autoGenerateAdvanceInvoice(Quotation quotation) {
-        try {
-            // REQUIRES_NEW variant — a plain call would join this transaction and, on failure, mark it
-            // rollback-only, so approval would still blow up at commit despite this catch.
-            financeService.generateFromQuotationIndependently(quotation.getId(), null, true);
-        } catch (Exception e) {
-            // billing automation must never block quotation approval
-            System.out.println("Advance invoice auto-generation skipped for quotation "
-                    + quotation.getId() + ": " + e.getMessage());
-        }
     }
 
     // =====================================================================
@@ -575,8 +559,8 @@ public class QuotationService {
      * The customer decision in one step: the given lines are the agreed scope (APPROVED), every other
      * line is dropped (REJECTED, its BOQ item back to PENDING), totals are recalculated for the agreed
      * scope and the quotation becomes APPROVED, ready to convert. Can be repeated until the quotation
-     * is converted, if the customer changes the scope again. The draft advance invoice is raised after
-     * commit so it is computed from the agreed (not the full) total.
+     * is converted, if the customer changes the scope again. No invoice is raised here — billing is
+     * done by hand from the project's Commercial screen.
      */
     @Transactional
     public Quotation customerApprove(Long id, List<Long> inScopeItemIds, User user) {
@@ -617,15 +601,6 @@ public class QuotationService {
         Quotation saved = quotationRepository.save(quotation);
         logActivity(saved, "CUSTOMER_APPROVED", "Customer approved " + approved + " item(s)"
                 + (dropped > 0 ? ", dropped " + dropped : "") + " — total " + saved.getGrandTotal(), user);
-        if (org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive()) {
-            org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
-                    new org.springframework.transaction.support.TransactionSynchronization() {
-                        @Override
-                        public void afterCommit() { autoGenerateAdvanceInvoice(saved); }
-                    });
-        } else {
-            autoGenerateAdvanceInvoice(saved);
-        }
         return saved;
     }
 
@@ -717,8 +692,8 @@ public class QuotationService {
         List<Project> projects = convertToProject(id, splitBy, user);
         if (!projects.isEmpty()) {
             // Recorded in the finance module (not the legacy project_payments table) so the advance shows
-            // on the project's Payments tab, the customer ledger and outstanding. Also links the quotation's
-            // advance invoice, raised at approval before the project existed, to the new project.
+            // on the project's Payments tab, the customer ledger and outstanding. Also links any invoice raised
+            // against the quotation before the project existed to the new project.
             financeService.recordConversionAdvance(id, projects.get(0), advanceAmount, advanceMethod, user);
         }
         return projects;
@@ -1161,7 +1136,6 @@ public class QuotationService {
         quotation.setStatus("APPROVED");
         Quotation saved = quotationRepository.save(quotation);
         logActivity(saved, "SIGNED", "Customer signed the quotation.", user);
-        autoGenerateAdvanceInvoice(saved);
         return saved;
     }
 

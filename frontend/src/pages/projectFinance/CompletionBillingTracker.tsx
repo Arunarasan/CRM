@@ -1,13 +1,12 @@
 import { useEffect, useState } from "react";
-import {
-  Loader2, Zap, CheckCircle2, Clock, CircleDollarSign, Lock, ChevronRight, PartyPopper, FilePlus2,
-} from "lucide-react";
+import { CheckCircle2, CircleDollarSign, FilePlus2, Loader2, Lock, PartyPopper } from "lucide-react";
 import { toast } from "@/components/ui/toast";
 import { financeApi } from "@/api/financeApi";
 import type { BillingProgress, BillingStage } from "@/types/finance";
-import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/useAuth";
+import { MoneySection } from "./MoneySection";
 
 const inr = (n?: number | null) =>
   "₹" + Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
@@ -15,26 +14,42 @@ const inr = (n?: number | null) =>
 const prettyStage = (s: string) =>
   s.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
 
-/** Status pill for a milestone. */
-function stageBadge(status: string): { text: string; cls: string } {
-  switch (status) {
-    case "PAID": return { text: "Paid", cls: "bg-emerald-100 text-emerald-700" };
-    case "PARTIAL": return { text: "Partial", cls: "bg-amber-100 text-amber-700" };
-    case "INVOICED": return { text: "Due", cls: "bg-amber-100 text-amber-800" };
-    case "OVERDUE": return { text: "Overdue", cls: "bg-red-100 text-red-600" };
-    default: return { text: "Pending", cls: "bg-slate-100 text-slate-500" };
+type StageState = "paid" | "partial" | "overdue" | "invoiced" | "ready" | "upcoming";
+
+/** Where a milestone stands, from the user's point of view: billed, ready to bill, or not yet. */
+function stageState(s: BillingStage): StageState {
+  switch (s.status) {
+    case "PAID": return "paid";
+    case "PARTIAL": return "partial";
+    case "OVERDUE": return "overdue";
+    case "INVOICED": return "invoiced";
+    default: return s.progressDriven && !s.reached ? "upcoming" : "ready";
   }
 }
 
+const STATE_LABEL: Record<StageState, { text: string; cls: string }> = {
+  paid: { text: "Paid", cls: "bg-emerald-50 text-emerald-700 ring-emerald-200" },
+  partial: { text: "Part paid", cls: "bg-amber-50 text-amber-800 ring-amber-200" },
+  overdue: { text: "Overdue", cls: "bg-rose-50 text-rose-700 ring-rose-200" },
+  invoiced: { text: "Invoiced", cls: "bg-sky-50 text-sky-700 ring-sky-200" },
+  ready: { text: "Ready to bill", cls: "bg-amber-100 text-amber-900 ring-amber-300" },
+  upcoming: { text: "Upcoming", cls: "bg-slate-50 text-slate-500 ring-slate-200" },
+};
+
 /**
- * Combined completion + billing tracker for a project. Shows the auto-calculated work % and the
- * collected-payment %, plus a milestone timeline: as work crosses each stage's trigger the stage
- * auto-bills (invoice raised, marked Due). Money is never auto-collected — a human still marks paid.
+ * The project's payment plan against work done. Each milestone is billed by hand: once work reaches a
+ * stage's trigger (or straight away for a manual stage) it shows as "Ready to bill" with a Raise
+ * invoice button. Nothing is invoiced or collected automatically.
  */
-export default function CompletionBillingTracker({ project, onChanged, refreshSignal, compact }: { project: any; onChanged?: () => void; refreshSignal?: number; compact?: boolean }) {
+export default function CompletionBillingTracker({ project, onChanged, refreshSignal }: {
+  project: any; onChanged?: () => void; refreshSignal?: number;
+  /** Kept for callers; the schedule has a single compact layout now. */
+  compact?: boolean;
+}) {
   const { hasAuthority } = useAuth();
   const canWrite = hasAuthority("FINANCE_WRITE");
   const projectId = project?.id;
+  const hasCustomer = !!project?.customer?.id;
 
   const [data, setData] = useState<BillingProgress | null>(null);
   const [loading, setLoading] = useState(true);
@@ -52,16 +67,6 @@ export default function CompletionBillingTracker({ project, onChanged, refreshSi
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(load, [projectId, refreshSignal]);
 
-  const toggleAuto = (enabled: boolean) => {
-    if (!data) return;
-    setData({ ...data, autoBillingEnabled: enabled }); // optimistic
-    setBusy(true);
-    financeApi.setAutoBilling(projectId, enabled)
-      .then(() => { load(); onChanged?.(); })
-      .catch(() => load())
-      .finally(() => setBusy(false));
-  };
-
   const generatePlan = () => {
     setBusy(true);
     financeApi.generateDefaultSchedule(projectId)
@@ -70,8 +75,6 @@ export default function CompletionBillingTracker({ project, onChanged, refreshSi
       .finally(() => setBusy(false));
   };
 
-  // Manually raise the invoice for a milestone now (the same invoice auto-billing would create when
-  // work crosses the trigger) — for stages that are due but not yet invoiced, or when auto-bill is off.
   const raiseInvoice = (scheduleId: number) => {
     setRaisingId(scheduleId);
     financeApi.generateStageInvoice(scheduleId)
@@ -80,152 +83,161 @@ export default function CompletionBillingTracker({ project, onChanged, refreshSi
       .finally(() => setRaisingId(null));
   };
 
-  if (loading) {
+  if (loading && !data) {
     return (
-      <div className="flex justify-center rounded-2xl border border-slate-100 bg-white py-8 text-slate-400">
-        <Loader2 className="h-5 w-5 animate-spin" />
-      </div>
+      <MoneySection icon={CircleDollarSign} title="Payment schedule">
+        <div className="space-y-3 p-4">
+          <Skeleton className="h-10 w-full" />
+          {[0, 1, 2].map((i) => <Skeleton key={i} className="h-14 w-full" />)}
+        </div>
+      </MoneySection>
     );
   }
   if (!data) return null;
 
-  // No payment plan yet — offer to seed the standard milestone plan.
   if (!data.hasSchedule) {
     return (
-      <section className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-5 flex flex-col sm:flex-row sm:items-center gap-3">
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700"><CircleDollarSign className="h-5 w-5" /></span>
-        <div className="flex-1">
-          <div className="text-sm font-bold text-slate-900">No payment schedule yet</div>
-          <p className="text-xs text-slate-500">Add milestones (e.g. advance, 50%, 90%, completion) so invoices raise automatically as work progresses.</p>
+      <MoneySection icon={CircleDollarSign} title="Payment schedule">
+        <div className="flex flex-col gap-4 px-4 py-6 sm:flex-row sm:items-center">
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-slate-900">No payment schedule yet</p>
+            <p className="mt-0.5 max-w-[60ch] text-sm text-slate-500">
+              Split the contract into milestones (advance, mid-way, completion) so you can see what to bill as the work moves.
+            </p>
+          </div>
+          {canWrite && (
+            <Button variant="forest" onClick={generatePlan} disabled={busy} className="shrink-0 active:scale-[0.98]">
+              {busy ? <Loader2 className="animate-spin" /> : <CircleDollarSign />} Create standard plan
+            </Button>
+          )}
         </div>
-        {canWrite && (
-          <Button onClick={generatePlan} disabled={busy} className="rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white shrink-0">
-            {busy ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Zap className="h-4 w-4 mr-1" />} Create standard plan
-          </Button>
-        )}
-      </section>
+      </MoneySection>
     );
   }
 
+  const ready = data.stages.filter((s) => stageState(s) === "ready");
+  const readyTotal = ready.reduce((sum, s) => sum + Number(s.amount || 0), 0);
+
   return (
-    <section className="rounded-2xl border border-slate-100 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)] @container">
-      <div className="px-4 py-3 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
-        <h3 className="text-base font-bold text-slate-900 flex items-center gap-2"><CircleDollarSign className="h-5 w-5 text-emerald-700" /> Payment Schedule</h3>
-        <label className="flex items-center gap-2 text-xs text-slate-600">
-          <Zap className={`h-4 w-4 ${data.autoBillingEnabled ? "text-amber-500" : "text-slate-300"}`} />
-          <span className="font-semibold">Auto-bill on progress</span>
-          <Switch checked={data.autoBillingEnabled} disabled={!canWrite || busy} onCheckedChange={(v) => toggleAuto(!!v)} />
-        </label>
+    <MoneySection
+      icon={CircleDollarSign}
+      title="Payment schedule"
+      subtitle={`${inr(data.collectedTotal)} collected of ${inr(data.scheduledTotal)} scheduled`}
+    >
+      {/* Work vs money — the gap between the two bars is what's left to bill or collect. */}
+      <div className="grid grid-cols-1 gap-3 border-b border-slate-100 px-4 py-3 @lg:grid-cols-2 @lg:gap-6">
+        <Meter label="Work done" percent={data.workPercent} barCls="bg-sky-600" />
+        <Meter label="Payment collected" percent={data.paymentPercent} barCls="bg-emerald-600" />
       </div>
 
-      <div className={compact ? "p-3 space-y-3" : "p-4 space-y-4"}>
-        {/* Work vs money, side by side */}
-        <div className={`grid grid-cols-1 @xl:grid-cols-2 ${compact ? "gap-2" : "gap-3"}`}>
-          <Bar label="Work completed" percent={data.workPercent} tone="work" caption={`${data.workPercent}% of the work done`} compact={compact} />
-          <Bar label="Payments collected" percent={data.paymentPercent} tone="money" caption={`${inr(data.collectedTotal)} of ${inr(data.scheduledTotal)}`} compact={compact} />
+      {data.fullySettled ? (
+        <div className="flex items-center gap-2 border-b border-slate-100 bg-emerald-50/60 px-4 py-2.5 text-sm font-medium text-emerald-800">
+          <PartyPopper className="h-4 w-4" /> Work complete and fully paid.
         </div>
+      ) : ready.length > 0 && (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-amber-200/70 bg-amber-50/70 px-4 py-2.5 text-sm text-amber-900">
+          <FilePlus2 className="h-4 w-4 shrink-0 text-amber-700" />
+          <span className="font-semibold">
+            {ready.length === 1 ? "1 milestone is" : `${ready.length} milestones are`} ready to bill
+          </span>
+          <span className="tabular-nums text-amber-800/80">· {inr(readyTotal)}</span>
+          {!hasCustomer && <span className="text-amber-800/80">· link a customer to raise invoices</span>}
+        </div>
+      )}
 
-        {data.fullySettled && (
-          <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-800">
-            <PartyPopper className="h-4 w-4" /> Fully completed and fully paid.
-          </div>
-        )}
-
-        {/* Milestone stepper — a row of steps on wide screens, a list on phones */}
-        <ol className={`grid grid-cols-1 gap-2.5 ${compact
-          ? (data.stages.length >= 4 ? "!grid-cols-2 @3xl:!grid-cols-4" : data.stages.length === 3 ? "!grid-cols-2 @md:!grid-cols-3" : "!grid-cols-2")
-          : (data.stages.length >= 4 ? "@3xl:grid-cols-2 @6xl:grid-cols-4" : data.stages.length === 3 ? "@4xl:grid-cols-3" : "@2xl:grid-cols-2")}`}>
-          {data.stages.map((s, i) => (
-            <MilestoneStep key={s.id} s={s} index={i} workPercent={data.workPercent} compact={compact}
-              canWrite={canWrite} raising={raisingId === s.id} onRaise={() => raiseInvoice(s.id)} />
-          ))}
-        </ol>
-      </div>
-    </section>
+      <ol className="divide-y divide-slate-100">
+        {data.stages.map((s, i) => (
+          <MilestoneRow
+            key={s.id}
+            s={s}
+            index={i}
+            workPercent={data.workPercent}
+            canRaise={canWrite && hasCustomer && !s.invoice && s.status === "PENDING" && Number(s.amount) > 0}
+            raising={raisingId === s.id}
+            onRaise={() => raiseInvoice(s.id)}
+          />
+        ))}
+      </ol>
+    </MoneySection>
   );
 }
 
-function MilestoneStep({ s, index, workPercent, canWrite, raising, onRaise, compact }: { s: BillingStage; index: number; workPercent: number; canWrite: boolean; raising: boolean; onRaise: () => void; compact?: boolean }) {
-  const badge = stageBadge(s.status);
-  const isPaid = s.status === "PAID";
-  // A progress-driven stage that work hasn't reached yet is "locked" (upcoming).
-  const locked = s.progressDriven && !s.reached && s.status === "PENDING";
-  const due = !isPaid && !locked;
-  // Not yet invoiced and there's an amount to bill — a human can raise it now.
-  const canRaise = canWrite && !s.invoice && s.status === "PENDING" && Number(s.amount) > 0;
-  const toGo = locked ? Math.max(0, Number(s.triggerPercentage) - workPercent) : 0;
+function MilestoneRow({ s, index, workPercent, canRaise, raising, onRaise }: {
+  s: BillingStage; index: number; workPercent: number; canRaise: boolean; raising: boolean; onRaise: () => void;
+}) {
+  const state = stageState(s);
+  const label = STATE_LABEL[state];
+  const toGo = Math.max(0, Number(s.triggerPercentage ?? 0) - workPercent);
 
-  const box = isPaid ? "border-emerald-200 bg-emerald-50/50" : s.status === "OVERDUE" ? "border-rose-200 bg-rose-50/40" : due ? "border-amber-200 bg-amber-50/50" : "border-slate-100 bg-white";
-  const circle = isPaid ? "bg-emerald-700 text-white" : s.status === "OVERDUE" ? "bg-rose-600 text-white" : due ? "bg-amber-500 text-white" : "bg-slate-100 text-slate-500";
+  const marker = state === "paid"
+    ? "bg-emerald-700 text-white"
+    : state === "ready"
+      ? "bg-amber-500 text-white"
+      : state === "overdue"
+        ? "bg-rose-600 text-white"
+        : state === "upcoming"
+          ? "bg-slate-100 text-slate-400"
+          : "bg-sky-100 text-sky-700";
+
+  const caption = s.invoice
+    ? <>Invoice <span className="font-medium text-slate-700">{s.invoice.invoiceNumber}</span>
+        {Number(s.invoice.balanceDue || 0) > 0 && state !== "paid" && <> · {inr(s.invoice.balanceDue)} to collect</>}</>
+    : s.progressDriven
+      ? state === "upcoming" ? `Bills at ${Number(s.triggerPercentage)}% work · ${toGo}% to go` : `Work reached ${Number(s.triggerPercentage)}%`
+      : "Bill whenever agreed";
 
   return (
-    <li className={`rounded-2xl border transition-shadow hover:shadow-md ${compact ? "p-2.5" : "p-3"} ${box}`}>
-      <div className="flex items-start gap-2.5">
-        <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${circle}`}>
-          {isPaid ? <CheckCircle2 className="h-4 w-4" /> : locked ? <Lock className="h-3.5 w-3.5" /> : index + 1}
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-2">
-            <span className="text-sm font-bold text-slate-900 leading-tight">{prettyStage(s.stage)}</span>
-            <span className={`shrink-0 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${locked ? "bg-slate-100 text-slate-500" : badge.cls}`}>
-              {s.status === "PENDING" && !locked && <Clock className="h-3 w-3" />}
-              {locked ? "Upcoming" : badge.text}
-            </span>
-          </div>
-          <div className={`mt-1 font-bold text-slate-900 ${compact ? "text-base" : "text-lg"}`}>{inr(s.amount)}</div>
-          <div className="mt-1 flex flex-wrap items-center gap-1">
-            {s.progressDriven ? (
-              <span className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${s.reached ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
-                {locked ? <Lock className="h-2.5 w-2.5" /> : <ChevronRight className="h-2.5 w-2.5" />} at {Number(s.triggerPercentage)}% work
-              </span>
-            ) : (
-              <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500">manual</span>
-            )}
-            {s.autoTriggered && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700"><Zap className="h-2.5 w-2.5" /> auto</span>
-            )}
-          </div>
-          <p className="mt-1.5 text-[11px] text-slate-500">
-            {s.invoice ? <>Invoice <span className="font-semibold text-slate-700">{s.invoice.invoiceNumber}</span></> : locked ? `${toGo}% more work to unlock` : "Not invoiced yet"}
-          </p>
-          {canRaise && (
-            <button type="button" onClick={onRaise} disabled={raising}
-              title={locked ? "Raise this invoice now (before work reaches the trigger)" : "Raise this invoice now"}
-              className="mt-2 inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-emerald-700 transition-colors hover:bg-emerald-50 disabled:opacity-50">
-              {raising ? <Loader2 className="h-3 w-3 animate-spin" /> : <FilePlus2 className="h-3 w-3" />} Raise invoice
-            </button>
-          )}
+    <li className={`grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 px-4 py-3 @xl:grid-cols-[auto_minmax(0,1fr)_7.5rem_9.5rem] ${state === "ready" ? "bg-amber-50/40" : ""}`}>
+      <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold tabular-nums ${marker}`}>
+        {state === "paid" ? <CheckCircle2 className="h-4 w-4" /> : state === "upcoming" ? <Lock className="h-3.5 w-3.5" /> : index + 1}
+      </span>
+
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-semibold text-slate-900">{prettyStage(s.stage)}</span>
+          {s.percentage != null && <span className="text-xs tabular-nums text-slate-400">{Number(s.percentage)}%</span>}
         </div>
+        <p className="mt-0.5 truncate text-xs text-slate-500">{caption}</p>
+      </div>
+
+      <span className="text-right text-sm font-semibold tabular-nums text-slate-900 @xl:text-base">{inr(s.amount)}</span>
+
+      <div className="col-span-3 flex items-center justify-end gap-2 @xl:col-span-1">
+        {canRaise ? (
+          state === "ready" ? (
+            <Button size="sm" onClick={onRaise} disabled={raising} className="w-full @xl:w-auto active:scale-[0.98]">
+              {raising ? <Loader2 className="animate-spin" /> : <FilePlus2 />} Raise invoice
+            </Button>
+          ) : (
+            <button type="button" onClick={onRaise} disabled={raising}
+              title="Raise this invoice before work reaches the trigger"
+              className="inline-flex items-center gap-1 whitespace-nowrap rounded-md px-2 py-1 text-xs font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 disabled:opacity-50">
+              {raising ? <Loader2 className="h-3 w-3 animate-spin" /> : <FilePlus2 className="h-3 w-3" />} Bill early
+            </button>
+          )
+        ) : null}
+        {!(canRaise && state === "ready") && (
+          <span className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset ${label.cls}`}>
+            {label.text}
+          </span>
+        )}
       </div>
     </li>
   );
 }
 
-function Bar({ label, percent, caption, tone, compact }: { label: string; percent: number; caption: string; tone: "work" | "money"; compact?: boolean }) {
-  const barCls = tone === "work" ? "bg-sky-600" : "bg-emerald-600";
-  if (compact) {
-    return (
-      <div className="rounded-xl bg-slate-50/70 px-3 py-2">
-        <div className="flex items-center justify-between text-[11px]">
-          <span className="font-semibold text-slate-500">{label}</span>
-          <span className="text-slate-400">{caption} · <span className="font-bold text-slate-800">{percent}%</span></span>
-        </div>
-        <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
-          <div className={`h-full rounded-full transition-all ${barCls}`} style={{ width: `${Math.min(100, Math.max(0, percent))}%` }} />
-        </div>
-      </div>
-    );
-  }
+function Meter({ label, percent, barCls }: { label: string; percent: number; barCls: string }) {
+  const pct = Math.min(100, Math.max(0, percent));
   return (
-    <div className="rounded-xl border border-slate-100 bg-slate-50/60 px-3.5 py-3">
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-semibold text-slate-500">{label}</span>
-        <span className="text-base font-bold text-slate-900">{percent}%</span>
+    <div>
+      <div className="flex items-baseline justify-between text-xs">
+        <span className="font-medium text-slate-500">{label}</span>
+        <span className="font-semibold tabular-nums text-slate-900">{percent}%</span>
       </div>
-      <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-200">
-        <div className={`h-full rounded-full transition-all ${barCls}`} style={{ width: `${Math.min(100, Math.max(0, percent))}%` }} />
+      <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-100"
+        role="progressbar" aria-label={label} aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
+        <div className={`h-full rounded-full transition-[width] duration-500 ${barCls}`} style={{ width: `${pct}%` }} />
       </div>
-      <p className="mt-1.5 text-[11px] text-slate-500">{caption}</p>
     </div>
   );
 }

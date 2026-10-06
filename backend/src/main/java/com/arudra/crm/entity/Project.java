@@ -155,10 +155,6 @@ public class Project extends BaseEntity {
     @Column(nullable = false)
     private Integer progress = 0; // percentage
 
-    /** When true, crossing a payment stage's trigger_percentage auto-raises that stage's invoice. */
-    @Column(name = "auto_billing_enabled", nullable = false)
-    private boolean autoBillingEnabled = true;
-
     /** One-shot guard so the "fully completed & fully paid" alert is dispatched only once. */
     @Column(name = "settlement_notified", nullable = false)
     private boolean settlementNotified = false;
