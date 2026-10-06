@@ -12,7 +12,7 @@ import SearchableSelect from "@/components/ui/searchable-select";
 import { currency } from "./helpers";
 import BundleWorkEditor, { defaultWorkHeader, type WorkHeader, type WorkLine } from "@/components/bundles/BundleWorkEditor";
 import { specToJson } from "@/components/bundles/workSpec";
-import { Plus, Minus, Search, Trash2, Wrench, Scissors } from "lucide-react";
+import { Plus, Minus, Search, Trash2, Wrench, Scissors, Receipt, RotateCcw, Banknote } from "lucide-react";
 
 interface CustomerLite { id: number; name: string; phone?: string }
 interface ProductLite { id: number; name?: string; sku?: string; materialCode?: string; unit?: string; hsnCode?: string; gstPercent?: number; price?: number; sellingPrice?: number }
@@ -81,6 +81,10 @@ export default function CounterSalePage() {
   const [printFormat, setPrintFormat] = useState<"receipt" | "invoice" | "none">("receipt");
 
   const [saving, setSaving] = useState(false);
+  // Cash handed over → change to give back (shown only; not stored on the bill).
+  const [cashGiven, setCashGiven] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
+  const phoneRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     inventoryApi.getWarehouses().then((w) => {
@@ -173,6 +177,7 @@ export default function CounterSalePage() {
   const canSave = lines.some((l) => l.name.trim() && l.qty > 0) || (installOn && Number(installCharge) > 0);
 
   const save = async () => {
+    if (saving) return;
     const validItems = lines.filter((l) => l.name.trim() && l.qty > 0);
     if (validItems.length === 0 && !(installOn && Number(installCharge) > 0)) { toast.error("Add at least one item."); return; }
     const workItems = workOn ? validItems.filter((l) => workLines[l.key]?.on) : [];
@@ -221,26 +226,71 @@ export default function CounterSalePage() {
     }
   };
 
+  /** Start a fresh bill (keeps the tax, stock and print settings). */
+  const clearBill = () => {
+    setLines([]); setCustName(""); setCustPhone(""); setAdopted(null); setPhoneMatch(null);
+    setDiscountValue("0"); setInstallOn(false); setInstallCharge(""); setInstallEmployeeId(""); setInstallDate(""); setInstallNotes("");
+    setWorkOn(false); setWorkHeader(defaultWorkHeader); setWorkLines({}); setCashGiven("");
+    searchRef.current?.focus();
+  };
+
+  // Keyboard-first billing: F2 product search, F4 customer phone, F9 charge.
+  const saveRef = useRef(save);
+  saveRef.current = save;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "F2") { e.preventDefault(); searchRef.current?.focus(); }
+      else if (e.key === "F4") { e.preventDefault(); phoneRef.current?.focus(); }
+      else if (e.key === "F9") { e.preventDefault(); saveRef.current(); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+  useEffect(() => { searchRef.current?.focus(); }, []);
+
+  const cash = Number(cashGiven) || 0;
+  const showCash = collectNow && paymentMethod === "CASH";
+  const change = cash - totals.grand;
+  const blocker = saving ? null
+    : !canSave ? "Add an item to charge"
+    : workOn && !lines.some((l) => l.name.trim() && workLines[l.key]?.on) ? "Tick the items that need stitching / work"
+    : null;
+  const quickCash = Array.from(new Set([
+    Math.ceil(totals.grand),
+    Math.ceil(totals.grand / 100) * 100,
+    Math.ceil(totals.grand / 500) * 500,
+    Math.ceil(totals.grand / 2000) * 2000,
+  ])).filter((v) => v > 0).slice(0, 4);
+
   return (
     <div className="h-full flex flex-col lg:flex-row bg-white border rounded-xl overflow-hidden">
         {/* LEFT — cart */}
         <div className="flex-1 overflow-y-auto p-3 md:p-4 space-y-3">
-          <ProductAdd onPick={addProduct} onCustom={addCustomLine} />
+          <ProductAdd onPick={addProduct} onCustom={addCustomLine} inputRef={searchRef} />
 
           {lines.length === 0 ? (
-            <div className="border border-dashed rounded-xl bg-white py-16 text-center text-slate-400">
-              <Search className="w-6 h-6 mx-auto mb-2 opacity-60" />
-              <p className="text-sm">Search a product above to start billing.</p>
+            <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 px-6 py-14 text-center">
+              <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-white ring-1 ring-slate-200">
+                <Search className="h-5 w-5 text-slate-400" />
+              </div>
+              <p className="mt-3 text-sm font-semibold text-slate-700">Scan a barcode or search a product to start the bill</p>
+              <p className="mt-1 text-xs text-slate-400">Enter adds the top match · use <span className="font-semibold text-slate-500">Custom</span> for anything not in stock</p>
+              <div className="mt-4 inline-flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[11px] text-slate-500">
+                <span className="inline-flex items-center gap-1"><Kbd>F2</Kbd> Search</span>
+                <span className="inline-flex items-center gap-1"><Kbd>F4</Kbd> Customer</span>
+                <span className="inline-flex items-center gap-1"><Kbd>F9</Kbd> Charge</span>
+              </div>
             </div>
           ) : (
             <div className="bg-white border rounded-xl overflow-hidden">
               {/* header row (desktop) */}
-              <div className="hidden md:grid grid-cols-[1fr_auto_120px_70px_110px_36px] gap-3 px-3 py-2 text-[11px] uppercase tracking-wide text-slate-400 border-b">
-                <span>Item</span><span className="text-center">Qty</span><span className="text-right">Rate</span>
+              <div className="hidden md:grid grid-cols-[28px_1fr_auto_120px_70px_110px_36px] gap-3 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400 border-b bg-slate-50/60">
+                <span>#</span><span>Item</span><span className="text-center">Qty</span><span className="text-right">Rate ₹{taxInclusive ? " (incl.)" : ""}</span>
                 <span className="text-right">GST%</span><span className="text-right">Amount</span><span />
               </div>
-              {lines.map((l) => (
-                <div key={l.key} className="grid grid-cols-2 md:grid-cols-[1fr_auto_120px_70px_110px_36px] gap-2 md:gap-3 items-center px-3 py-2.5 border-b last:border-0">
+              {lines.map((l, idx) => (
+                <div key={l.key} className="grid grid-cols-2 md:grid-cols-[28px_1fr_auto_120px_70px_110px_36px] gap-2 md:gap-3 items-center px-3 py-2.5 border-b last:border-0 hover:bg-slate-50/50">
+                  <span className="hidden md:block text-xs font-semibold tabular-nums text-slate-400">{idx + 1}</span>
                   <div className="col-span-2 md:col-span-1 min-w-0">
                     {l.productId ? (
                       <>
@@ -253,10 +303,10 @@ export default function CounterSalePage() {
                   </div>
                   {/* qty stepper */}
                   <div className="flex items-center justify-center">
-                    <div className="inline-flex items-center rounded-md border">
-                      <button className="px-2 py-1.5 text-slate-500 hover:bg-slate-50" onClick={() => patchLine(l.key, { qty: Math.max(1, l.qty - 1) })}><Minus className="w-3.5 h-3.5" /></button>
-                      <BaseInput value={l.qty} onChange={(e) => patchLine(l.key, { qty: Math.max(1, Number(e.target.value) || 1) })} className="w-10 text-center text-sm outline-none" />
-                      <button className="px-2 py-1.5 text-slate-500 hover:bg-slate-50" onClick={() => patchLine(l.key, { qty: l.qty + 1 })}><Plus className="w-3.5 h-3.5" /></button>
+                    <div className="inline-flex items-center rounded-lg border bg-white">
+                      <button aria-label="Less" className="px-2 py-1.5 text-slate-500 hover:bg-slate-50 active:scale-95" onClick={() => patchLine(l.key, { qty: Math.max(1, l.qty - 1) })}><Minus className="w-3.5 h-3.5" /></button>
+                      <BaseInput inputMode="numeric" value={l.qty} onChange={(e) => patchLine(l.key, { qty: Math.max(1, Number(e.target.value) || 1) })} className="w-10 text-center text-sm font-semibold tabular-nums outline-none" />
+                      <button aria-label="More" className="px-2 py-1.5 text-slate-500 hover:bg-slate-50 active:scale-95" onClick={() => patchLine(l.key, { qty: l.qty + 1 })}><Plus className="w-3.5 h-3.5" /></button>
                     </div>
                   </div>
                   <div className="md:text-right">
@@ -265,8 +315,8 @@ export default function CounterSalePage() {
                   <div className="md:text-right">
                     <Input type="number" min={0} value={l.gst} onChange={(e) => patchLine(l.key, { gst: Number(e.target.value) })} className="h-9 md:text-right" />
                   </div>
-                  <div className="text-right text-sm font-semibold text-slate-800">{currency(l.qty * l.rate)}</div>
-                  <button className="text-slate-300 hover:text-red-500 justify-self-end" onClick={() => removeLine(l.key)}><Trash2 className="w-4 h-4" /></button>
+                  <div className="text-right text-sm font-semibold tabular-nums text-slate-800">{currency(l.qty * l.rate)}</div>
+                  <button aria-label="Remove item" className="text-slate-300 hover:text-red-500 justify-self-end" onClick={() => removeLine(l.key)}><Trash2 className="w-4 h-4" /></button>
                 </div>
               ))}
             </div>
@@ -317,12 +367,36 @@ export default function CounterSalePage() {
 
         {/* RIGHT — bill */}
         <div className="lg:w-[360px] shrink-0 border-t lg:border-t-0 lg:border-l bg-slate-50/60 flex flex-col">
-          <div className="flex items-center justify-between px-4 py-3 border-b bg-white">
-            <span className="text-sm font-bold text-slate-800">Bill</span>
-            <GstModeToggle size="sm" inclusive={taxInclusive} onChange={setTaxInclusive} />
-            <div className="flex items-center rounded-md border bg-slate-50 text-[11px]">
-              <button onClick={() => setGstType("CGST_SGST")} className={`px-2 py-1 rounded-l-md ${gstType === "CGST_SGST" ? "bg-slate-800 text-white" : "text-slate-600"}`}>Same state</button>
-              <button onClick={() => setGstType("IGST")} className={`px-2 py-1 rounded-r-md ${gstType === "IGST" ? "bg-slate-800 text-white" : "text-slate-600"}`}>Other state</button>
+          <div className="border-b bg-white px-4 pt-3 pb-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Receipt className="h-4 w-4 text-emerald-700" />
+                <span className="text-sm font-bold text-slate-800">Current bill</span>
+                {lines.length > 0 && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-slate-600">{lines.length} product{lines.length === 1 ? "" : "s"}</span>}
+              </div>
+              <button type="button" onClick={clearBill} disabled={lines.length === 0 && !custName && !custPhone && !adopted}
+                className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-800 disabled:opacity-40">
+                <RotateCcw className="h-3.5 w-3.5" /> New bill
+              </button>
+            </div>
+            {/* Tax settings — label left, choice right */}
+            <div className="mt-2.5 space-y-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] font-semibold text-slate-500">Prices</span>
+                <GstModeToggle size="sm" inclusive={taxInclusive} onChange={setTaxInclusive} />
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] font-semibold text-slate-500">Customer is in</span>
+                <div role="radiogroup" aria-label="Place of supply" className="inline-flex items-center gap-0.5 rounded-lg bg-slate-100 p-0.5">
+                  {([["CGST_SGST", "Same state"], ["IGST", "Other state"]] as const).map(([v, label]) => (
+                    <button key={v} type="button" role="radio" aria-checked={gstType === v} onClick={() => setGstType(v)}
+                      className={`whitespace-nowrap rounded-md px-2 py-0.5 text-[11px] font-semibold transition active:scale-[0.98] ${
+                        gstType === v ? "bg-white text-emerald-800 shadow-sm ring-1 ring-emerald-200" : "text-slate-500 hover:text-slate-700"}`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -330,6 +404,7 @@ export default function CounterSalePage() {
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Customer</span>
+                <span className="text-[10px] text-slate-400"><Kbd>F4</Kbd></span>
               </div>
               {adopted ? (
                 <div className="flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-2">
@@ -343,7 +418,7 @@ export default function CounterSalePage() {
                 <div className="space-y-1.5">
                   <div className="grid grid-cols-2 gap-2">
                     <Input value={custName} onChange={(e) => setCustName(e.target.value)} placeholder="Name (optional)" className="h-9" />
-                    <Input value={custPhone} onChange={(e) => setCustPhone(e.target.value)} placeholder="Phone (optional)" className="h-9" />
+                    <Input ref={phoneRef} type="tel" inputMode="tel" value={custPhone} onChange={(e) => setCustPhone(e.target.value)} placeholder="Phone (optional)" className="h-9" />
                   </div>
                   {phoneMatch ? (
                     <button type="button" onClick={adoptCustomer}
@@ -356,14 +431,16 @@ export default function CounterSalePage() {
                     </button>
                   ) : phoneChecking ? (
                     <p className="text-[11px] text-slate-400 px-0.5">Checking this number…</p>
-                  ) : null}
+                  ) : (
+                    <p className="text-[11px] text-slate-400 px-0.5">Leave blank for a walk-in. A known number picks up the customer.</p>
+                  )}
                 </div>
               )}
             </div>
 
             {/* totals */}
             <div className="space-y-1.5 text-sm border-t pt-3">
-              <Row label={`Items (${itemCount})`} value={currency(totals.productSub)} />
+              <Row label={`Items (${itemCount} qty)`} value={currency(totals.productSub)} />
               {installOn && totals.install > 0 && <Row label="Installation" value={currency(totals.install)} />}
               {workOn && totals.work > 0 && <Row label="Stitching / work" value={currency(totals.work)} />}
               <div className="flex items-center justify-between gap-2">
@@ -377,11 +454,11 @@ export default function CounterSalePage() {
                 <BaseInput type="number" min={0} value={discountValue} onChange={(e) => setDiscountValue(e.target.value)}
                   className="w-24 h-8 rounded-md border px-2 text-right text-sm" />
               </div>
-              {totals.discount > 0 && <Row label="Discount applied" value={`− ${currency(totals.discount)}`} valueClass="text-red-600" />}
+              {totals.discount >= 0.5 && <Row label="Discount applied" value={`− ${currency(totals.discount)}`} valueClass="text-red-600" />}
               <Row label={taxInclusive ? "GST (included)" : "GST"} value={currency(totals.gst)} />
-              <div className="flex justify-between items-baseline border-t pt-2 mt-1">
-                <span className="font-bold text-slate-800">Total</span>
-                <span className="text-2xl font-black text-slate-900">{currency(totals.grand)}</span>
+              <div className="mt-1 flex items-baseline justify-between rounded-xl bg-emerald-50/70 px-3 py-2.5 ring-1 ring-emerald-100">
+                <span className="text-sm font-bold text-emerald-900">Total</span>
+                <span className="text-[28px] font-black leading-none tabular-nums tracking-tight text-slate-900">{currency(totals.grand)}</span>
               </div>
             </div>
 
@@ -404,13 +481,36 @@ export default function CounterSalePage() {
                 Collect payment now
               </label>
               {collectNow && (
-                <div className="flex flex-wrap gap-1.5">
+                <div className="grid grid-cols-5 gap-1">
                   {PAYMENT_METHODS.map((m) => (
                     <button key={m.v} onClick={() => setPaymentMethod(m.v)}
-                      className={`px-3 py-1.5 rounded-md text-xs font-medium border ${paymentMethod === m.v ? "bg-primary text-white border-primary" : "bg-white text-slate-600 hover:bg-slate-50"}`}>
+                      className={`rounded-lg border py-1.5 text-xs font-semibold transition active:scale-[0.97] ${paymentMethod === m.v ? "bg-primary text-white border-primary" : "bg-white text-slate-600 hover:bg-slate-50"}`}>
                       {m.label}
                     </button>
                   ))}
+                </div>
+              )}
+              {showCash && totals.grand > 0 && (
+                <div className="mt-3 rounded-xl border bg-white p-3">
+                  <label className="flex items-center justify-between gap-2">
+                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600"><Banknote className="h-3.5 w-3.5 text-emerald-700" /> Cash given</span>
+                    <BaseInput type="number" min={0} inputMode="decimal" value={cashGiven} onChange={(e) => setCashGiven(e.target.value)} placeholder="0"
+                      className="h-9 w-28 rounded-md border px-2 text-right text-sm font-semibold tabular-nums" />
+                  </label>
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {quickCash.map((v) => (
+                      <button key={v} type="button" onClick={() => setCashGiven(String(v))}
+                        className="rounded-md border px-2 py-0.5 text-[11px] font-semibold tabular-nums text-slate-600 hover:border-emerald-300 hover:bg-emerald-50 active:scale-95">
+                        {currency(v)}
+                      </button>
+                    ))}
+                  </div>
+                  {cash > 0 && (
+                    <div className={`mt-2 flex items-center justify-between rounded-lg px-2.5 py-1.5 text-sm font-bold ${change >= 0 ? "bg-emerald-50 text-emerald-800" : "bg-red-50 text-red-700"}`}>
+                      <span>{change >= 0 ? "Change to return" : "Short by"}</span>
+                      <span className="tabular-nums">{currency(Math.abs(change))}</span>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -418,6 +518,12 @@ export default function CounterSalePage() {
 
           {/* checkout */}
           <div className="border-t p-3 space-y-2.5">
+            {showCash && cash > 0 && totals.grand > 0 && (
+              <div className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm font-bold ${change >= 0 ? "bg-emerald-50 text-emerald-800" : "bg-red-50 text-red-700"}`}>
+                <span>{change >= 0 ? `Change to return · cash ${currency(cash)}` : `Short by · cash ${currency(cash)}`}</span>
+                <span className="tabular-nums text-base">{currency(Math.abs(change))}</span>
+              </div>
+            )}
             <div className="flex items-center gap-2 text-xs text-slate-600">
               <span className="shrink-0">Print bill</span>
               <div className="ml-auto inline-flex rounded-md border overflow-hidden text-[11px]">
@@ -429,9 +535,11 @@ export default function CounterSalePage() {
                 ))}
               </div>
             </div>
-            <Button className="w-full h-12 text-base" onClick={save} disabled={saving || !canSave}>
+            <Button className="w-full h-12 text-base active:scale-[0.99]" onClick={save} disabled={saving || !!blocker}>
               {saving ? "Saving…" : collectNow ? `Charge ${currency(totals.grand)}` : `Save Bill · ${currency(totals.grand)}`}
+              {!saving && <span className="ml-2 rounded border border-white/30 px-1.5 py-px text-[10px] font-semibold opacity-80">F9</span>}
             </Button>
+            {blocker && <p className="text-center text-[11px] text-slate-400">{blocker}</p>}
           </div>
         </div>
     </div>
@@ -439,7 +547,9 @@ export default function CounterSalePage() {
 }
 
 /** Single search box that appends a product to the cart on select (barcode/name/code). */
-function ProductAdd({ onPick, onCustom }: { onPick: (p: ProductLite) => void; onCustom: () => void }) {
+function ProductAdd({ onPick, onCustom, inputRef }: {
+  onPick: (p: ProductLite) => void; onCustom: () => void; inputRef?: React.Ref<HTMLInputElement>;
+}) {
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<ProductLite[]>([]);
   const [open, setOpen] = useState(false);
@@ -461,14 +571,19 @@ function ProductAdd({ onPick, onCustom }: { onPick: (p: ProductLite) => void; on
         <div className="flex items-center bg-white border rounded-lg px-3 h-11 focus-within:ring-2 focus-within:ring-primary/30">
           <Search className="w-4 h-4 text-slate-400 mr-2 shrink-0" />
           <BaseInput
+            ref={inputRef}
             className="flex-1 outline-none text-sm bg-transparent"
             placeholder="Scan or search product by name, code, barcode…"
             value={search}
             onFocus={() => setOpen(true)}
             onBlur={() => setTimeout(() => setOpen(false), 150)}
             onChange={(e) => { setSearch(e.target.value); setOpen(true); }}
-            onKeyDown={(e) => { if (e.key === "Enter" && results[0]) pick(results[0]); }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && results[0]) pick(results[0]);
+              if (e.key === "Escape") { setSearch(""); setResults([]); }
+            }}
           />
+          <Kbd>F2</Kbd>
         </div>
         {open && results.length > 0 && (
           <div className="absolute z-30 mt-1 w-full max-h-72 overflow-y-auto bg-white border rounded-lg shadow-lg divide-y">
@@ -489,6 +604,10 @@ function ProductAdd({ onPick, onCustom }: { onPick: (p: ProductLite) => void; on
   );
 }
 
+function Kbd({ children }: { children: React.ReactNode }) {
+  return <kbd className="inline-flex min-w-[22px] items-center justify-center rounded border border-slate-200 bg-white px-1 py-px font-sans text-[10px] font-semibold text-slate-500 shadow-[0_1px_0_rgba(15,23,42,0.08)]">{children}</kbd>;
+}
+
 function Row({ label, value, valueClass }: { label: string; value: string; valueClass?: string }) {
-  return <div className="flex justify-between"><span className="text-slate-500">{label}</span><span className={`font-medium ${valueClass ?? ""}`}>{value}</span></div>;
+  return <div className="flex justify-between"><span className="text-slate-500">{label}</span><span className={`font-medium tabular-nums ${valueClass ?? ""}`}>{value}</span></div>;
 }

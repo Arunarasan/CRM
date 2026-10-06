@@ -18,7 +18,7 @@ export default function GstModeToggle({ inclusive, onChange, disabled, size = "m
       aria-checked={inclusive === value}
       disabled={disabled}
       onClick={() => onChange(value)}
-      className={`rounded-md font-semibold transition active:scale-[0.98] disabled:cursor-not-allowed ${pad} ${
+      className={`whitespace-nowrap rounded-md font-semibold transition active:scale-[0.98] disabled:cursor-not-allowed ${pad} ${
         inclusive === value ? "bg-white text-emerald-800 shadow-sm ring-1 ring-emerald-200" : "text-slate-500 hover:text-slate-700"}`}
     >
       {label}
