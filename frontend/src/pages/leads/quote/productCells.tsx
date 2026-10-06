@@ -335,7 +335,12 @@ export function ProductPicker({
               className={`w-full text-left px-2 py-1.5 text-sm flex items-center gap-2.5 hover:bg-muted ${i === active ? "bg-muted" : ""}`}>
               <Thumb url={photosOf(p)[0]} size="h-9 w-9" />
               <span className="min-w-0 flex-1">
-                <span className="block truncate font-medium">{p.name}</span>
+                <span className="flex items-center gap-1.5">
+                  <span className="truncate font-medium">{p.name}</span>
+                  {p.source === "QUOTE" && (
+                    <span className="shrink-0 rounded bg-amber-50 px-1 text-[10px] font-semibold leading-4 text-amber-700" title="Saved from an earlier quote">Saved from quote</span>
+                  )}
+                </span>
                 <span className="block truncate text-xs text-muted-foreground">
                   {[p.brand, colorsOf(p).length > 1 ? `${colorsOf(p).length} colours` : colorsOf(p)[0]?.name].filter(Boolean).join(" · ") || " "}
                 </span>

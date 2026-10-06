@@ -1,4 +1,5 @@
 import api from '../lib/api';
+import type { Product } from '../types/inventory';
 import {
   Boq, BoqItem, BoqItemMaterial, BoqItemLabour, BoqPhase,
   BoqActivityLogEntry, BoqChangeLogEntry, BoqDiff, BoqDashboard, BoqMeta, PageResponse, BoqFilters,
@@ -62,6 +63,9 @@ export const boqApi = {
   getMaster: (id: number) => api.get<Boq>(`${BASE}/${id}/master`).then((r) => r.data),
 
   // Items (floor / room / item)
+  /** Save a typed-in quote line to the catalogue (or get the product already there under that name). */
+  saveCatalogueItem: (body: { name: string; unit?: string; rate?: number; categoryId?: number; hsnCode?: string; gstPercent?: number }) =>
+    api.post<{ product: Product; existing: boolean }>(`${BASE}/catalogue-items`, body).then((r) => r.data),
   addItem: (id: number, item: Partial<BoqItem>) => api.post<BoqItem>(`${BASE}/${id}/items`, item).then((r) => r.data),
   updateItem: (id: number, itemId: number, item: Partial<BoqItem>, reason?: string) =>
     api.put<BoqItem>(`${BASE}/${id}/items/${itemId}${reason ? `?reason=${encodeURIComponent(reason)}` : ''}`, item).then((r) => r.data),

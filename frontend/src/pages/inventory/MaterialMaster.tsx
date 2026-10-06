@@ -132,7 +132,7 @@ function ProductInfo({ p }: { p: Product }) {
   );
 }
 
-type StatusFilter = "" | "ACTIVE" | "INACTIVE";
+type StatusFilter = "" | "ACTIVE" | "INACTIVE" | "QUOTE";
 type StockFilter = "" | "low" | "out";
 
 const STOCK_PILL: Record<Exclude<StockFilter, "">, { label: string; tone: string }> = {
@@ -180,14 +180,17 @@ export default function MaterialMaster() {
   // A product's low-stock threshold: reorder level, else min stock, else 0.
   const threshold = (p: Product) => p.reorderLevel ?? p.minStockLevel ?? 0;
   const onHand = (p: Product) => stockByProduct[p.id] ?? 0;
-  const isOut = (p: Product) => onHand(p) <= 0;
+  // Saved from a quote and never stocked: not tracked, so never "out" or "low".
+  const untracked = (p: Product) => p.source === "QUOTE" && !(p.id in stockByProduct);
+  const isOut = (p: Product) => !untracked(p) && onHand(p) <= 0;
   const isLow = (p: Product) => { const q = onHand(p); return q > 0 && q <= threshold(p); };
 
   // Search + status + stock filtering happen client-side over the loaded set.
   const products = useMemo(() => {
     const q = search.trim().toLowerCase();
     return allProducts.filter((p) => {
-      if (statusFilter && (p.status || "ACTIVE") !== statusFilter) return false;
+      if (statusFilter === "QUOTE") { if (p.source !== "QUOTE") return false; }
+      else if (statusFilter && (p.status || "ACTIVE") !== statusFilter) return false;
       if (stockFilter === "low" && !isLow(p)) return false;
       if (stockFilter === "out" && !isOut(p)) return false;
       if (!q) return true;
@@ -201,6 +204,7 @@ export default function MaterialMaster() {
     "": allProducts.length,
     ACTIVE: allProducts.filter((p) => (p.status || "ACTIVE") === "ACTIVE").length,
     INACTIVE: allProducts.filter((p) => p.status === "INACTIVE").length,
+    QUOTE: allProducts.filter((p) => p.source === "QUOTE").length,
   }), [allProducts]);
 
   const clearStockFilter = () => {
@@ -241,11 +245,12 @@ export default function MaterialMaster() {
       </div>
 
       {/* Status filter tiles */}
-      <div className="grid grid-cols-3 gap-2 sm:max-w-md">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:max-w-2xl">
         {([
           { key: "" as StatusFilter, label: "All Materials", dot: "bg-slate-400" },
           { key: "ACTIVE" as StatusFilter, label: "Active", dot: "bg-emerald-500" },
           { key: "INACTIVE" as StatusFilter, label: "Inactive", dot: "bg-slate-400" },
+          { key: "QUOTE" as StatusFilter, label: "Saved from quotes", dot: "bg-amber-500" },
         ]).map(({ key, label, dot }) => {
           const active = statusFilter === key;
           return (
@@ -305,17 +310,20 @@ export default function MaterialMaster() {
                         ? <img src={resolveFileUrl(p.imageUrl)} alt="" className="h-8 w-8 shrink-0 rounded object-cover border" />
                         : <div className="h-8 w-8 shrink-0 rounded bg-slate-100 border" />}
                       <span>{p.name}</span>
+                      {p.source === "QUOTE" && <span className="rounded bg-amber-50 px-1.5 text-[10px] font-semibold text-amber-700">From quote</span>}
                     </div>
                   </TableCell>
                   <TableCell>{p.category?.name || "—"}</TableCell>
                   <TableCell>{p.brand || "—"}</TableCell>
                   <TableCell>{p.unit}</TableCell>
                   <TableCell className="text-right">
+                    {untracked(p) ? <span className="text-xs text-slate-400">not stocked</span> : <>
                     <span className={`font-semibold tabular-nums ${isOut(p) ? "text-red-600" : isLow(p) ? "text-orange-600" : "text-slate-700"}`}>
                       {onHand(p)}
                     </span>
                     {isOut(p) && <span className="ml-1 text-[10px] font-bold uppercase text-red-500">out</span>}
                     {isLow(p) && <span className="ml-1 text-[10px] font-bold uppercase text-orange-500">low</span>}
+                    </>}
                   </TableCell>
                   <TableCell className="text-right">₹{p.costPrice ?? p.price ?? 0}</TableCell>
                   <TableCell className="text-right">₹{p.sellingPrice ?? p.price ?? 0}</TableCell>

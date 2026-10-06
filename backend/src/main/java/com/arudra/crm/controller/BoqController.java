@@ -25,10 +25,35 @@ public class BoqController {
 
     private final BoqService boqService;
     private final CurrentUserService currentUserService;
+    private final com.arudra.crm.service.InventoryService inventoryService;
 
-    public BoqController(BoqService boqService, CurrentUserService currentUserService) {
+    public BoqController(BoqService boqService, CurrentUserService currentUserService,
+                         com.arudra.crm.service.InventoryService inventoryService) {
         this.boqService = boqService;
         this.currentUserService = currentUserService;
+        this.inventoryService = inventoryService;
+    }
+
+    /**
+     * "Save for future quotes": a line typed into a quote becomes a catalogue product (name, unit, rate,
+     * category). Anyone who can edit quotes may do it. Body { name, unit?, rate?, categoryId?, hsnCode?,
+     * gstPercent? } -> { product, existing } — existing = true when that name was already in the catalogue.
+     */
+    @PostMapping("/catalogue-items")
+    @PreAuthorize(WRITE)
+    public ResponseEntity<Map<String, Object>> saveCatalogueItem(@RequestBody Map<String, Object> body) {
+        return ResponseEntity.ok(inventoryService.saveQuoteItem(
+                body.get("name") == null ? null : String.valueOf(body.get("name")),
+                body.get("unit") == null ? null : String.valueOf(body.get("unit")),
+                decimal(body.get("rate")),
+                body.get("categoryId") == null ? null : Long.valueOf(String.valueOf(body.get("categoryId"))),
+                body.get("hsnCode") == null ? null : String.valueOf(body.get("hsnCode")),
+                decimal(body.get("gstPercent"))));
+    }
+
+    private static BigDecimal decimal(Object v) {
+        if (v == null || String.valueOf(v).isBlank()) return null;
+        try { return new BigDecimal(String.valueOf(v)); } catch (NumberFormatException e) { return null; }
     }
 
     // =====================================================================

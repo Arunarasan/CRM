@@ -168,4 +168,8 @@ public class Product extends BaseEntity {
 
     @Column(nullable = false, length = 20)
     private String status = "ACTIVE"; // ACTIVE, INACTIVE
+
+    /** Where the product came from: null = added in Inventory, "QUOTE" = saved from a quote line (no stock kept). */
+    @Column(length = 20)
+    private String source;
 }

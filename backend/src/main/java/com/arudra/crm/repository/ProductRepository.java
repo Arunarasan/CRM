@@ -29,6 +29,11 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
            "LOWER(p.brand) LIKE LOWER(CONCAT('%', :search, '%')))")
     Page<Product> findInCategory(@Param("categoryId") Long categoryId, @Param("search") String search, Pageable pageable);
 
+    /** Active products with exactly this name (case and outer spaces ignored), oldest first. */
+    @Query("SELECT p FROM Product p WHERE LOWER(TRIM(p.name)) = LOWER(TRIM(:name)) " +
+           "AND (p.status IS NULL OR p.status <> 'INACTIVE') ORDER BY p.id")
+    java.util.List<Product> findActiveByName(@Param("name") String name);
+
     java.util.Optional<Product> findFirstByMaterialCodeIgnoreCaseOrSkuIgnoreCaseOrBarcodeOrQrCode(
             String materialCode, String sku, String barcode, String qrCode);
 }

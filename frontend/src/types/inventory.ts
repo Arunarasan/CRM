@@ -91,6 +91,8 @@ export interface Product {
   designStyle?: string;
   structureNotes?: string;
   status?: "ACTIVE" | "INACTIVE";
+  /** "QUOTE" = saved from a quote line (no stock kept); null = added in Inventory. */
+  source?: string | null;
 }
 
 export interface InventoryItem {

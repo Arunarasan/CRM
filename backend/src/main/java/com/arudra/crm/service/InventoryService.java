@@ -53,6 +53,9 @@ public class InventoryService {
     @Autowired
     private com.arudra.crm.repository.PurchaseRequestRepository purchaseRequestRepository;
 
+    @Autowired
+    private InventoryCategoryRepository categoryRepository;
+
     /** Roles that get inventory alerts (low stock, negative-stock attempts, damage). */
     static final List<String> INVENTORY_ALERT_ROLES =
             List.of("ROLE_ADMIN", "ROLE_MANAGER", "ROLE_INVENTORY_MANAGER");
@@ -105,6 +108,45 @@ public class InventoryService {
             saved = productRepository.save(saved);
         }
         return saved;
+    }
+
+    /**
+     * Saves a line typed into a quote as a catalogue product so the next quote can pick it.
+     * If an active product already has that name, it is returned instead (existing = true) —
+     * no duplicates, and the saved rate stays as it was. New ones keep no stock (min stock 0)
+     * so they never raise low-stock alerts; GST defaults to 18%.
+     */
+    @Transactional
+    public Map<String, Object> saveQuoteItem(String name, String unit, java.math.BigDecimal rate,
+                                             Long categoryId, String hsnCode, java.math.BigDecimal gstPercent) {
+        String clean = name == null ? "" : name.trim().replaceAll("\\s+", " ");
+        if (clean.isEmpty()) throw new IllegalArgumentException("Enter the item name.");
+        if (clean.length() > 255) clean = clean.substring(0, 255);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        List<Product> same = productRepository.findActiveByName(clean);
+        if (!same.isEmpty()) {
+            result.put("product", same.get(0));
+            result.put("existing", true);
+            return result;
+        }
+
+        Product p = new Product();
+        p.setName(clean);
+        p.setUnit(unit == null || unit.isBlank() ? "Nos" : unit.trim());
+        if (rate != null && rate.signum() > 0) {
+            p.setPrice(rate);
+            p.setSellingPrice(rate);
+        }
+        if (categoryId != null) categoryRepository.findById(categoryId).ifPresent(p::setCategory);
+        p.setHsnCode(hsnCode == null || hsnCode.isBlank() ? null : hsnCode.trim());
+        p.setGstPercent(gstPercent != null ? gstPercent : java.math.BigDecimal.valueOf(18));
+        p.setMinStockLevel(0);
+        p.setSource("QUOTE");
+        p.setStatus("ACTIVE");
+        result.put("product", createProduct(p));
+        result.put("existing", false);
+        return result;
     }
 
     public Product updateProduct(Long id, Product details) {

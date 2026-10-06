@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { enqueueSave } from "./saveQueue";
 import { createPortal } from "react-dom";
-import { Check, ChevronDown, ChevronRight, FolderOpen, Hammer, Layers, Loader2, MapPin, MoreVertical, Package, PackageSearch, Pencil, Plus, SlidersHorizontal, Trash2 } from "lucide-react";
+import { BookmarkPlus, Check, ChevronDown, ChevronRight, FolderOpen, Hammer, Layers, Loader2, MapPin, MoreVertical, Package, PackageSearch, Pencil, Plus, SlidersHorizontal, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/toast";
+import { apiError } from "@/lib/apiError";
 import { boqApi } from "@/api/boqApi";
 import {
   type Boq, type BoqItem, type BoqItemLabour, type BoqItemMaterial, type ProductRef,
@@ -299,8 +300,13 @@ export default function BoqSheet({
   const { products, remember: rememberProduct } = useLineProducts(productIds);
 
   /** The table's empty last row: whatever was typed (catalogue product or custom name) becomes a line. */
-  const addRow = (category: string, d: NewRowDraft) => {
-    const p = d.product;
+  const addRow = async (category: string, d: NewRowDraft) => {
+    let p = d.product;
+    // A typed-in name with "Save for future quotes" ticked goes into the catalogue first, so the line
+    // links to it (or to the product already there under that name).
+    if (!p && !d.web && d.saveForLater && d.name.trim()) {
+      p = await saveToCatalogue(category, d.name, d.unit, d.rate);
+    }
     if (p) rememberProduct(p);
     const color = p ? colorsOf(p)[0] : undefined;
     const web = d.web;
@@ -310,6 +316,31 @@ export default function BoqSheet({
       imageUrl: p ? color?.imageUrl || photosOf(p)[0] || undefined : web?.image || undefined, color: color?.name,
       quantity: d.qty > 0 ? d.qty : 1, unit: d.unit || "Nos",
     }, d.rate);
+  };
+
+  /** Saves a typed-in line to the catalogue; returns the product, or undefined if it couldn't be saved. */
+  const saveToCatalogue = async (category: string, name: string, unit?: string | null, rate?: number) => {
+    try {
+      const r = await boqApi.saveCatalogueItem({
+        name: name.trim(), unit: unit || "Nos", rate: rate && rate > 0 ? rate : undefined,
+        categoryId: categoryByName.get(category.trim().toLowerCase())?.id,
+      });
+      toast.success(r.existing ? `"${r.product.name}" is already in the catalogue — linked to it` : `"${r.product.name}" saved for future quotes`);
+      return r.product;
+    } catch (e) {
+      toast.error(apiError(e, "Couldn't save it to the catalogue — added to this quote only."));
+      return undefined;
+    }
+  };
+
+  /** "Save to catalogue" on an existing custom line: save it, then link the line to the product. */
+  const saveLineToCatalogue = async (item: BoqItem) => {
+    const qty = Number(item.quantity ?? 0) > 0 ? Number(item.quantity) : 1;
+    const p = await saveToCatalogue(item.category || "", item.itemName || "", item.unit,
+      Math.round((grossOf(item) / qty) * 100) / 100);
+    if (!p) return;
+    rememberProduct(p);
+    updateItem(item.id as number, { productId: p.id });
   };
 
   const pickColor = (item: BoqItem, name: string | null, c?: ProductColor) =>
@@ -584,6 +615,7 @@ export default function BoqSheet({
                   onAddMaterial={(m) => save("add the material", () => boqApi.addMaterial(boqId, item.id as number, m))}
                   onAddLabour={(l) => { rememberRate(l.workType, l.rate); return save("add the labour", () => boqApi.addLabour(boqId, item.id as number, l)); }}
                   onDelete={() => deleteWithUndo(item)}
+                  onSaveToCatalogue={() => saveLineToCatalogue(item)}
                   onToggleActive={() => save("update the quote", () => boqApi.toggleItemActive(boqId, item.id as number, item.isActive === false))}
                 />
               ))}
@@ -721,7 +753,7 @@ const NAME_CELL = "@[820px]:!border-transparent @[820px]:!bg-transparent @[820px
 function ItemRow({
   index, item, product, categories, canEdit, showLines, onUpdate, onQty, onSize, onSetGross, onSetAmount, onColor,
   onUpdateMaterial, onUpdateLabour, onDeleteMaterial, onDeleteLabour, onAddMaterial, onAddLabour,
-  onDelete, onToggleActive, rateFor,
+  onDelete, onToggleActive, rateFor, onSaveToCatalogue,
 }: {
   index: number;
   item: BoqItem;
@@ -744,8 +776,12 @@ function ItemRow({
   onDelete: () => void;
   onToggleActive: () => void;
   rateFor: (workType: string) => number | undefined;
+  /** Custom line → catalogue product for future quotes. */
+  onSaveToCatalogue: () => Promise<unknown>;
 }) {
   const inactive = item.isActive === false;
+  const [saveMenu, setSaveMenu] = useState(false);
+  const [savingToCatalogue, setSavingToCatalogue] = useState(false);
   const [open, setOpen] = useState(false);
   const [adding, setAdding] = useState<null | "material" | "labour">(null);
   // A typed-in price is already the row's Rate/Amount — don't repeat it as a breakdown line.
@@ -769,8 +805,34 @@ function ItemRow({
     onUpdate({ itemName: v });
     if (priceLine) onUpdateMaterial(priceLine.id as number, { materialName: v });
   };
+  const customCls = "shrink-0 rounded px-1 text-[10px] font-semibold uppercase leading-4 bg-[#EFF6FF] text-[#1D4ED8]";
   const badge = item.productId == null
-    ? <span className="shrink-0 rounded px-1 text-[10px] font-semibold uppercase leading-4 bg-[#EFF6FF] text-[#1D4ED8]" title="Typed in — not from the inventory catalogue">Custom</span>
+    ? (canEdit ? (
+      <span className="relative shrink-0">
+        <button type="button" className={`${customCls} hover:ring-1 hover:ring-[#1D4ED8]/40`}
+          title="Typed in — click to save it for future quotes" aria-expanded={saveMenu}
+          onClick={() => setSaveMenu((v) => !v)}>
+          {savingToCatalogue ? <Loader2 className="inline h-3 w-3 animate-spin" /> : "Custom"}
+        </button>
+        {saveMenu && (
+          <>
+            <span className="fixed inset-0 z-40" onClick={() => setSaveMenu(false)} />
+            <span className="absolute left-0 top-full z-50 mt-1 w-60 rounded-lg border bg-popover p-1 text-left shadow-lg">
+              <button type="button" disabled={savingToCatalogue}
+                className="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-muted active:scale-[0.98]"
+                onClick={async () => {
+                  setSaveMenu(false); setSavingToCatalogue(true);
+                  try { await onSaveToCatalogue(); } finally { setSavingToCatalogue(false); }
+                }}>
+                <BookmarkPlus className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                <span><span className="block font-semibold text-foreground">Save to catalogue</span>
+                  <span className="text-muted-foreground">Pick it from search in future quotes, with this unit and rate</span></span>
+              </button>
+            </span>
+          </>
+        )}
+      </span>
+    ) : <span className={customCls} title="Typed in — not from the inventory catalogue">Custom</span>)
     : <span className="shrink-0 rounded px-1 text-[10px] font-semibold uppercase leading-4 bg-[#ECFDF5] text-[#16805C]" title="From the inventory catalogue">Inventory</span>;
   // Location shows as quiet text under the name; it's edited in Details.
   const meta = item.location || item.roomName || "";
@@ -936,7 +998,7 @@ function ItemRow({
   );
 }
 
-type NewRowDraft = { name: string; product?: Product; web?: WebsiteProduct; qty: number; unit: string; rate: number };
+type NewRowDraft = { name: string; product?: Product; web?: WebsiteProduct; qty: number; unit: string; rate: number; saveForLater?: boolean };
 const EMPTY_ROW: NewRowDraft = { name: "", qty: 1, unit: "Nos", rate: 0 };
 
 /**
@@ -950,6 +1012,9 @@ function NewItemRow({ categoryId, categoryName, first, onAdd }: {
 }) {
   const [d, setD] = useState<NewRowDraft>(EMPTY_ROW);
   const [busy, setBusy] = useState(false);
+  // "Save for future quotes" — on by default; an untick sticks for the next lines in this table.
+  const [saveForLater, setSaveForLater] = useState(true);
+  const typedIn = d.name.trim().length > 0 && !d.product && !d.web;
   const nameRef = useRef<HTMLInputElement>(null);
   const qtyRef = useRef<HTMLInputElement>(null);
   const ready = d.name.trim().length > 0;
@@ -961,7 +1026,7 @@ function NewItemRow({ categoryId, categoryName, first, onAdd }: {
     if (!ready || busy) return;
     setBusy(true);
     try {
-      await onAdd(d);
+      await onAdd({ ...d, saveForLater: typedIn && saveForLater });
       setD(EMPTY_ROW);
       nameRef.current?.focus();
     } finally { setBusy(false); }
@@ -1028,6 +1093,17 @@ function NewItemRow({ categoryId, categoryName, first, onAdd }: {
         title="Add this product (Enter)">
         {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Plus className="h-4 w-4 @[820px]:mr-0 mr-1" /><span className="@[820px]:hidden">Add product</span></>}
       </Button>
+
+      {typedIn && (
+        <label className="col-span-full flex cursor-pointer select-none items-center gap-2 pb-0.5 pl-7 text-xs text-muted-foreground">
+          <input type="checkbox" className="h-3.5 w-3.5 accent-primary" checked={saveForLater}
+            onChange={(e) => setSaveForLater(e.target.checked)} />
+          <span>
+            <span className="font-medium text-foreground">Save for future quotes</span>
+            {" "}· new item{d.rate > 0 ? ` at ${inr(d.rate)}/${d.unit || "Nos"}` : ""} — pick it from search next time
+          </span>
+        </label>
+      )}
     </div>
   );
 }
