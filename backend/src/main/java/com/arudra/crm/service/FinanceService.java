@@ -158,6 +158,7 @@ public class FinanceService {
         invoice.setCustomer(customer);
         invoice.setInvoiceType("COUNTER_SALE");
         invoice.setGstType("IGST".equals(req.gstType) ? "IGST" : "CGST_SGST");
+        invoice.setTaxInclusive(Boolean.TRUE.equals(req.taxInclusive));
         invoice.setDate(LocalDate.now());
         invoice.setPlaceOfSupply(emptyToNull(req.placeOfSupply));
         invoice.setDiscountType(req.discountType);
@@ -393,6 +394,13 @@ public class FinanceService {
     @Transactional
     public Invoice createServiceInvoice(ServiceRequest sr, BigDecimal chargeAmount, BigDecimal gstRate,
                                         String gstType, boolean collectNow, String paymentMethod, User user) {
+        return createServiceInvoice(sr, chargeAmount, gstRate, gstType, false, collectNow, paymentMethod, user);
+    }
+
+    /** {@code taxInclusive} = the charge amount already includes GST. */
+    @Transactional
+    public Invoice createServiceInvoice(ServiceRequest sr, BigDecimal chargeAmount, BigDecimal gstRate,
+                                        String gstType, boolean taxInclusive, boolean collectNow, String paymentMethod, User user) {
         if (sr.getCustomer() == null) {
             throw new RuntimeException("Service work has no customer to bill");
         }
@@ -405,6 +413,7 @@ public class FinanceService {
         if (sr.getProject() != null) invoice.setProject(sr.getProject());
         invoice.setInvoiceType("SERVICE");
         invoice.setGstType("IGST".equals(gstType) ? "IGST" : "CGST_SGST");
+        invoice.setTaxInclusive(taxInclusive);
         invoice.setDate(LocalDate.now());
         invoice.setStatus("GENERATED");
         invoice.setNotes("Post-completion service: " + sr.getSubject());
@@ -455,6 +464,7 @@ public class FinanceService {
         invoice.setDiscountType(changes.getDiscountType());
         invoice.setDiscountValue(changes.getDiscountValue());
         invoice.setGstType(changes.getGstType() != null ? changes.getGstType() : invoice.getGstType());
+        if (changes.getTaxInclusive() != null) invoice.setTaxInclusive(changes.getTaxInclusive());
         invoice.setRetentionPercent(changes.getRetentionPercent());
         invoice.setPlaceOfSupply(changes.getPlaceOfSupply());
         invoice.setNotes(changes.getNotes());
@@ -479,19 +489,37 @@ public class FinanceService {
     }
 
     private void computeTotals(Invoice invoice, List<InvoiceItem> items) {
+        // "Prices include GST": the typed rate (kept in unitPriceIncl) contains GST, so the line's taxable
+        // rate is worked out of it. unitPrice always holds the before-GST rate, so reports stay correct.
+        boolean inclusive = Boolean.TRUE.equals(invoice.getTaxInclusive());
         BigDecimal subTotal = BigDecimal.ZERO;
+        BigDecimal grossIncl = BigDecimal.ZERO;
         for (InvoiceItem item : items) {
             if (item.getGstRate() == null) item.setGstRate(BigDecimal.ZERO);
-            BigDecimal lineTotal = item.getUnitPrice().multiply(BigDecimal.valueOf(item.getQuantity()));
+            BigDecimal qty = BigDecimal.valueOf(item.getQuantity());
+            if (inclusive) {
+                BigDecimal incl = item.getUnitPriceIncl() != null ? item.getUnitPriceIncl() : item.getUnitPrice();
+                item.setUnitPriceIncl(incl.setScale(2, RoundingMode.HALF_UP));
+                item.setUnitPrice(com.arudra.crm.util.GstMath.exclusiveOf(incl, item.getGstRate(), 4));
+                grossIncl = grossIncl.add(item.getUnitPriceIncl().multiply(qty));
+            } else {
+                item.setUnitPriceIncl(null);
+            }
+            BigDecimal lineTotal = item.getUnitPrice().multiply(qty);
             BigDecimal lineGst = lineTotal.multiply(item.getGstRate()).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
-            item.setTotalPrice(lineTotal.add(lineGst));
+            item.setTotalPrice(inclusive ? item.getUnitPriceIncl().multiply(qty).setScale(2, RoundingMode.HALF_UP)
+                    : lineTotal.add(lineGst).setScale(2, RoundingMode.HALF_UP));
             subTotal = subTotal.add(lineTotal);
         }
+        subTotal = subTotal.setScale(2, RoundingMode.HALF_UP);
 
         BigDecimal discount = BigDecimal.ZERO;
         if (invoice.getDiscountValue() != null && invoice.getDiscountValue().signum() > 0) {
             if ("PERCENTAGE".equals(invoice.getDiscountType())) {
                 discount = subTotal.multiply(invoice.getDiscountValue()).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+            } else if (inclusive && grossIncl.signum() > 0) {
+                // A flat discount on GST-inclusive prices comes off the with-GST amount: take its before-GST share.
+                discount = invoice.getDiscountValue().multiply(subTotal).divide(grossIncl, 2, RoundingMode.HALF_UP);
             } else {
                 discount = invoice.getDiscountValue();
             }

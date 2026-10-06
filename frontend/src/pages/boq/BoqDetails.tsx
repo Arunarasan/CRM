@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import GstModeToggle, { gstWithin } from "@/components/ui/gst-mode-toggle";
 import { useNavigate, useParams, useLocation, Link } from "react-router-dom";
 import {
   ArrowLeft, Edit, Send, ThumbsUp, ThumbsDown, Copy, GitBranch, FileOutput, Building2, Plus, BarChart3, History as HistoryIcon, Ruler,
@@ -115,8 +116,8 @@ export default function BoqDetails() {
   const [savingTotals, setSavingTotals] = useState(false);
   const [totalsForm, setTotalsForm] = useState<{
     materialOverride: string; labourOverride: string;
-    discountType: "PERCENT" | "FLAT"; discount: string; taxPercent: string;
-  }>({ materialOverride: "", labourOverride: "", discountType: "PERCENT", discount: "", taxPercent: "" });
+    discountType: "PERCENT" | "FLAT"; discount: string; taxPercent: string; taxInclusive: boolean;
+  }>({ materialOverride: "", labourOverride: "", discountType: "PERCENT", discount: "", taxPercent: "", taxInclusive: false });
 
   const [quoteDialogOpen, setQuoteDialogOpen] = useState(false);
   const [quoteMode, setQuoteMode] = useState<"FULL_HOUSE" | "PARTIAL" | "BUDGET">("FULL_HOUSE");
@@ -232,6 +233,7 @@ export default function BoqDetails() {
       discountType: boq.discountType === "FLAT" ? "FLAT" : "PERCENT",
       discount: boq.discount != null ? String(boq.discount) : "",
       taxPercent: boq.taxPercent != null ? String(boq.taxPercent) : "",
+      taxInclusive: !!boq.taxInclusive,
     });
     setEditingTotals(true);
   };
@@ -243,6 +245,7 @@ export default function BoqDetails() {
       discountType: totalsForm.discountType,
       discount: num(totalsForm.discount) ?? 0,
       taxPercent: num(totalsForm.taxPercent) ?? 0,
+      taxInclusive: totalsForm.taxInclusive,
       materialTotalOverride: num(totalsForm.materialOverride),
       labourTotalOverride: num(totalsForm.labourOverride),
     })
@@ -302,7 +305,11 @@ export default function BoqDetails() {
     const discount = Number(totalsForm.discount || 0);
     const discountAmount = totalsForm.discountType === "FLAT" ? discount : subtotal * discount / 100;
     const afterDiscount = subtotal - discountAmount;
-    const taxAmount = afterDiscount * Number(totalsForm.taxPercent || 0) / 100;
+    const rate = Number(totalsForm.taxPercent || 0);
+    if (totalsForm.taxInclusive) {
+      return { material, labour, subtotal, discountAmount, taxAmount: gstWithin(afterDiscount, rate), grandTotal: afterDiscount };
+    }
+    const taxAmount = afterDiscount * rate / 100;
     return { material, labour, subtotal, discountAmount, taxAmount, grandTotal: afterDiscount + taxAmount };
   })();
 
@@ -625,8 +632,8 @@ export default function BoqDetails() {
                   <span>-{formatCurrency(boq.discountAmount)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Tax{boq.taxPercent ? ` (${boq.taxPercent}%)` : ""}</span>
-                  <span>+{formatCurrency(boq.taxAmount)}</span>
+                  <span className="text-muted-foreground">Tax{boq.taxPercent ? ` (${boq.taxPercent}%)` : ""}{boq.taxInclusive ? " — included" : ""}</span>
+                  <span>{boq.taxInclusive ? "" : "+"}{formatCurrency(boq.taxAmount)}</span>
                 </div>
                 <div className="flex justify-between font-bold text-base border-t pt-1 mt-1"><span>Grand Total</span><span>{formatCurrency(boq.grandTotal)}</span></div>
               </>
@@ -666,12 +673,14 @@ export default function BoqDetails() {
                   <label className="text-xs text-muted-foreground">Tax (%)</label>
                   <Input type="number" min={0} value={totalsForm.taxPercent}
                     onChange={(e) => setTotalsForm((f) => ({ ...f, taxPercent: e.target.value }))} />
+                  <GstModeToggle className="mt-2" size="sm" inclusive={totalsForm.taxInclusive}
+                    onChange={(v) => setTotalsForm((f) => ({ ...f, taxInclusive: v }))} />
                 </div>
 
                 <div className="rounded-lg border bg-muted/30 p-3 space-y-1 text-sm">
                   <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span>{formatCurrency(pv.subtotal)}</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">Discount</span><span>-{formatCurrency(pv.discountAmount)}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">Tax</span><span>+{formatCurrency(pv.taxAmount)}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Tax{totalsForm.taxInclusive ? " (included)" : ""}</span><span>{totalsForm.taxInclusive ? "" : "+"}{formatCurrency(pv.taxAmount)}</span></div>
                   <div className="flex justify-between font-bold text-base border-t pt-1 mt-1"><span>Grand Total</span><span>{formatCurrency(pv.grandTotal)}</span></div>
                 </div>
 

@@ -191,7 +191,7 @@ export default function InvoiceDetailPage() {
                   <td className="px-4 py-3 font-medium text-slate-800">{it.description}</td>
                   <td className="px-4 py-3 text-slate-500">{it.hsnCode || "—"}</td>
                   <td className="px-4 py-3 text-right">{it.quantity} {it.unit || ""}</td>
-                  <td className="px-4 py-3 text-right">{currencyFull(it.unitPrice)}</td>
+                  <td className="px-4 py-3 text-right">{currencyFull(inv.taxInclusive && it.unitPriceIncl != null ? it.unitPriceIncl : it.unitPrice)}</td>
                   <td className="px-4 py-3 text-right text-slate-500">{it.gstRate ?? 0}%</td>
                   <td className="px-4 py-3 text-right font-semibold">{currencyFull(it.totalPrice)}</td>
                 </tr>
@@ -202,11 +202,12 @@ export default function InvoiceDetailPage() {
         </div>
         <div className="border-t p-5 flex justify-end">
           <div className="w-full max-w-xs space-y-1 text-sm">
-            <Row label="Subtotal" value={currencyFull(inv.subTotal)} />
-            {!!inv.discountAmount && <Row label="Discount" value={`− ${currencyFull(inv.discountAmount)}`} />}
+            {inv.taxInclusive && <p className="pb-1 text-xs font-semibold text-emerald-700">Prices include GST</p>}
+            <Row label={inv.taxInclusive ? "Subtotal (before GST)" : "Subtotal"} value={currencyFull(inv.subTotal)} />
+            {!!inv.discountAmount && <Row label={inv.taxInclusive ? "Discount (before GST)" : "Discount"} value={`− ${currencyFull(inv.discountAmount)}`} />}
             {inv.gstType === "IGST"
-              ? <Row label="IGST" value={currencyFull(inv.igstAmount)} />
-              : (<><Row label="CGST" value={currencyFull(inv.cgstAmount)} /><Row label="SGST" value={currencyFull(inv.sgstAmount)} /></>)}
+              ? <Row label={inv.taxInclusive ? "IGST (included)" : "IGST"} value={currencyFull(inv.igstAmount)} />
+              : (<><Row label={inv.taxInclusive ? "CGST (included)" : "CGST"} value={currencyFull(inv.cgstAmount)} /><Row label={inv.taxInclusive ? "SGST (included)" : "SGST"} value={currencyFull(inv.sgstAmount)} /></>)}
             {!!inv.roundOff && <Row label="Round Off" value={currencyFull(inv.roundOff)} />}
             <div className="flex justify-between border-t pt-2 mt-1 text-base font-bold text-slate-900">
               <span>Total</span><span>{currencyFull(inv.totalAmount)}</span>

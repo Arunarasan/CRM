@@ -323,7 +323,7 @@ export default function PurchaseOrderProfile() {
         <div className="border-t p-5 flex justify-end">
           <div className="w-full max-w-xs space-y-1 text-sm">
             <Row label="Subtotal" value={currency(po.subtotal)} />
-            <Row label={`Tax (${po.taxPercent ?? 0}%)`} value={currency(po.taxAmount)} />
+            <Row label={`Tax (${po.taxPercent ?? 0}%)${po.taxInclusive ? " — included in rates" : ""}`} value={currency(po.taxAmount)} />
             {!!po.discountAmount && <Row label="Discount" value={`− ${currency(po.discountAmount)}`} />}
             {!!po.transportationCost && <Row label="Transport" value={currency(po.transportationCost)} />}
             <div className="flex justify-between border-t pt-2 mt-1 text-base font-bold text-slate-900">

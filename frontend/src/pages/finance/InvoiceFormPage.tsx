@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import GstModeToggle from "@/components/ui/gst-mode-toggle";
 import { useNavigate } from "react-router-dom";
 import api from "@/lib/api";
 import { financeApi } from "@/api/financeApi";
@@ -32,6 +33,8 @@ export default function InvoiceFormPage() {
   const [projectId, setProjectId] = useState("");
   const [invoiceType, setInvoiceType] = useState("PROGRESS");
   const [gstType, setGstType] = useState<"CGST_SGST" | "IGST">("CGST_SGST");
+  // Rates typed with GST already in them (GST is worked out, not added).
+  const [taxInclusive, setTaxInclusive] = useState(false);
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [dueDate, setDueDate] = useState("");
   const [placeOfSupply, setPlaceOfSupply] = useState("");
@@ -52,20 +55,26 @@ export default function InvoiceFormPage() {
     setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
   const removeLine = (key: number) => setLines((ls) => (ls.length > 1 ? ls.filter((l) => l.key !== key) : ls));
 
+  // Same maths as the server (FinanceService.computeTotals).
   const totals = useMemo(() => {
-    const subTotal = lines.reduce((s, l) => s + l.quantity * l.unitPrice, 0);
-    let discount = discountType === "PERCENTAGE" ? subTotal * (Number(discountValue) || 0) / 100 : (Number(discountValue) || 0);
+    const exRate = (l: Line) => (taxInclusive ? l.unitPrice / (1 + (l.gstRate || 0) / 100) : l.unitPrice);
+    const gross = lines.reduce((s, l) => s + l.quantity * l.unitPrice, 0); // as typed
+    const subTotal = lines.reduce((s, l) => s + l.quantity * exRate(l), 0); // before GST
+    const flat = Number(discountValue) || 0;
+    let discount = discountType === "PERCENTAGE" ? subTotal * flat / 100
+      : taxInclusive && gross > 0 ? flat * subTotal / gross : flat;
     if (discount > subTotal) discount = subTotal;
     const taxable = subTotal - discount;
     const gst = lines.reduce((s, l) => {
-      const lineTotal = l.quantity * l.unitPrice;
+      const lineTotal = l.quantity * exRate(l);
       const share = subTotal === 0 ? 0 : lineTotal / subTotal;
       return s + taxable * share * (l.gstRate || 0) / 100;
     }, 0);
     const grand = Math.round(taxable + gst);
     const retention = grand * (Number(retentionPercent) || 0) / 100;
-    return { subTotal, discount, gst, grand, retention, balanceDue: grand - retention };
-  }, [lines, discountType, discountValue, retentionPercent]);
+    const discountShown = taxInclusive ? Math.max(0, gross - (taxable + gst)) : discount;
+    return { gross, subTotal, discount: discountShown, taxable, gst, grand, retention, balanceDue: grand - retention };
+  }, [lines, discountType, discountValue, retentionPercent, taxInclusive]);
 
   const validItems = lines.filter((l) => l.description.trim() && l.quantity > 0);
 
@@ -77,7 +86,7 @@ export default function InvoiceFormPage() {
       const invoice: Record<string, unknown> = {
         customer: { id: Number(customerId) },
         project: projectId ? { id: Number(projectId) } : null,
-        invoiceType, gstType, date, dueDate: dueDate || null,
+        invoiceType, gstType, taxInclusive, date, dueDate: dueDate || null,
         placeOfSupply: placeOfSupply || null,
         discountType, discountValue: Number(discountValue) || 0,
         retentionPercent: Number(retentionPercent) || 0,
@@ -86,6 +95,7 @@ export default function InvoiceFormPage() {
       const items = validItems.map((l) => ({
         description: l.description, hsnCode: l.hsnCode || null, unit: l.unit || null,
         quantity: l.quantity, unitPrice: l.unitPrice, gstRate: l.gstRate || 0,
+        unitPriceIncl: taxInclusive ? l.unitPrice : null,
       }));
       const created = await financeApi.createInvoice(invoice, items);
       toast.success(`${created.invoiceNumber} created as a draft.`);
@@ -133,6 +143,9 @@ export default function InvoiceFormPage() {
                 <option value="IGST">IGST (inter-state)</option>
               </select>
             </Field>
+            <Field label="Prices">
+              <GstModeToggle inclusive={taxInclusive} onChange={setTaxInclusive} />
+            </Field>
             <Field label="Place of supply"><Input value={placeOfSupply} onChange={(e) => setPlaceOfSupply(e.target.value)} /></Field>
             <Field label="Retention %"><Input type="number" min={0} value={retentionPercent} onChange={(e) => setRetentionPercent(e.target.value)} /></Field>
           </div>
@@ -148,7 +161,7 @@ export default function InvoiceFormPage() {
             <div className="col-span-4">Description</div>
             <div className="col-span-2">HSN / Unit</div>
             <div className="col-span-1 text-right">Qty</div>
-            <div className="col-span-2 text-right">Rate ₹</div>
+            <div className="col-span-2 text-right">Rate ₹{taxInclusive ? " (incl. GST)" : ""}</div>
             <div className="col-span-1 text-right">GST %</div>
             <div className="col-span-1 text-right">Total</div>
             <div className="col-span-1" />
@@ -187,9 +200,20 @@ export default function InvoiceFormPage() {
             <Field label="Terms"><Input value={terms} onChange={(e) => setTerms(e.target.value)} /></Field>
           </div>
           <div className="bg-white border rounded-2xl shadow-sm p-5 space-y-2 text-sm">
-            <Row label="Subtotal" value={currency(totals.subTotal)} />
-            <Row label="Discount" value={`− ${currency(totals.discount)}`} valueClass="text-red-600" />
-            <Row label="GST" value={currency(totals.gst)} />
+            {taxInclusive ? (
+              <>
+                <Row label="Total (incl. GST)" value={currency(totals.gross)} />
+                <Row label="Discount" value={`− ${currency(totals.discount)}`} valueClass="text-red-600" />
+                <Row label="Taxable value" value={currency(totals.taxable)} />
+                <Row label="GST (included)" value={currency(totals.gst)} />
+              </>
+            ) : (
+              <>
+                <Row label="Subtotal" value={currency(totals.subTotal)} />
+                <Row label="Discount" value={`− ${currency(totals.discount)}`} valueClass="text-red-600" />
+                <Row label="GST" value={currency(totals.gst)} />
+              </>
+            )}
             <div className="flex justify-between border-t pt-2 mt-1 text-base"><span className="font-bold text-slate-800">Grand Total</span><span className="font-black text-slate-900">{currency(totals.grand)}</span></div>
             {totals.retention > 0 && (
               <>

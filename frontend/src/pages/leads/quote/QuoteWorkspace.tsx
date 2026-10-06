@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import GstModeToggle from "@/components/ui/gst-mode-toggle";
 import { Link } from "react-router-dom";
 import {
   AlertTriangle, BadgeCheck, BadgePercent, Building2, CalendarDays, Calculator, CheckCircle2, ChevronDown, Eye, FileOutput,
@@ -195,6 +196,7 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
           discountType: cur?.discountType === "FLAT" ? "FLAT" : "PERCENT",
           discount: cur?.discount ?? 0,
           taxPercent: cur?.taxPercent ?? 0,
+          taxInclusive: !!cur?.taxInclusive,
           ...resolved,
         });
         setBoq((b) => (b ? { ...b, ...fresh, items: fresh.items ?? b.items } : fresh));
@@ -838,7 +840,7 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
 }
 
 type TotalsPatch = {
-  discountType?: "PERCENT" | "FLAT"; discount?: number | null; taxPercent?: number | null;
+  discountType?: "PERCENT" | "FLAT"; discount?: number | null; taxPercent?: number | null; taxInclusive?: boolean;
   materialTotalOverride?: number | null; labourTotalOverride?: number | null;
   labourCharge?: number | null; labourNote?: string | null;
   shippingCharge?: number | null; shippingNote?: string | null;
@@ -848,13 +850,18 @@ type TotalsPatchFn = (current: Boq) => TotalsPatch | null;
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 const chargesOf = (b: Boq) => Number(b.labourCharge ?? 0) + Number(b.shippingCharge ?? 0);
-/** Price with no sheet-level discount: (subtotal + charges) plus GST. */
-const fullPriceOf = (b: Boq) => (Number(b.subtotal ?? 0) + chargesOf(b)) * (1 + Number(b.taxPercent ?? 0) / 100);
+/** Price with no sheet-level discount: (subtotal + charges), plus GST unless the prices already include it. */
+const fullPriceOf = (b: Boq) => (Number(b.subtotal ?? 0) + chargesOf(b)) * (b.taxInclusive ? 1 : 1 + Number(b.taxPercent ?? 0) / 100);
 
 /** The flat discount that makes the sheet's final price land on `target`; null when it's above full price. */
 function flatDiscountFor(b: Boq, target: number): number | null {
   const subtotal = Number(b.subtotal ?? 0);
   const charges = chargesOf(b);
+  if (b.taxInclusive) {
+    // GST is inside the prices, so the final price is simply subtotal − discount + charges.
+    const d = r2(subtotal + charges - target);
+    return d < 0 ? null : d;
+  }
   const gstPct = Number(b.taxPercent ?? 0);
   // Same maths as the server (GST rounded to paise), so try the neighbouring paise and keep the
   // discount that lands exactly on the typed price.
@@ -958,13 +965,19 @@ function TotalsPanel({ boq, editable, onSave }: { boq: Boq; editable: boolean; o
 
           <label className="text-muted-foreground">GST %</label>
           <div className="w-32 justify-self-end"><NumCell value={boq.taxPercent ?? 0} disabled={!editable} className={f} onCommit={(v) => onSave({ taxPercent: v ?? 0 })} /></div>
-          <span className="col-span-2 -mt-1.5 text-right text-xs text-muted-foreground tabular-nums">+ {inr(boq.taxAmount)}</span>
+          <div className="col-span-2 -mt-1 flex items-center justify-between gap-2">
+            <GstModeToggle size="sm" inclusive={!!boq.taxInclusive} disabled={!editable}
+              onChange={(v) => v !== !!boq.taxInclusive && onSave({ taxInclusive: v })} />
+            <span className="text-right text-xs text-muted-foreground tabular-nums">
+              {boq.taxInclusive ? `incl. ${inr(boq.taxAmount)}` : `+ ${inr(boq.taxAmount)}`}
+            </span>
+          </div>
         </div>
 
         <div className="rounded-xl bg-[#ECFDF5] px-4 py-3">
           <div className="flex items-center justify-between gap-3">
             <label className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-base font-bold"
-              title="Discount applies to products only. Labour and shipping are added after it; GST is on everything.">
+              title={boq.taxInclusive ? "Prices include GST, so GST is shown but not added." : "Discount applies to products only. Labour and shipping are added after it; GST is on everything."}>
               Final Price <Info className="h-4 w-4 text-muted-foreground" />
             </label>
             <div className="min-w-0 flex-1">
@@ -978,7 +991,8 @@ function TotalsPanel({ boq, editable, onSave }: { boq: Boq; editable: boolean; o
 
         <p className="rounded-lg bg-muted/60 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
           <span className="font-medium text-foreground/80">Discount applies</span> to products only.{" "}
-          <span className="font-medium text-foreground/80">Labour and shipping</span> are added after it; GST is on everything.
+          <span className="font-medium text-foreground/80">Labour and shipping</span> are added after it;{" "}
+          {boq.taxInclusive ? <>all prices <span className="font-medium text-foreground/80">already include GST</span>.</> : <>GST is on everything.</>}
         </p>
       </div>
     </div>

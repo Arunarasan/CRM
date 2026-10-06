@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import GstModeToggle, { gstWithin } from "@/components/ui/gst-mode-toggle";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { contractorApi } from "@/api/contractorApi";
 import type { PreparedBill } from "@/types/contractor";
@@ -28,6 +29,8 @@ export default function BillFormPage() {
   const [form, setForm] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // The contractor's amounts already include GST — work the GST out instead of adding it.
+  const [taxInclusive, setTaxInclusive] = useState(false);
 
   useEffect(() => {
     if (!workPackageId || !contractorId) return;
@@ -53,13 +56,14 @@ export default function BillFormPage() {
   const totals = useMemo(() => {
     const gross = n("grossAmount");
     const deductions = n("materialDeduction") + n("advanceAdjustment") + n("penaltyAmount") + n("otherDeduction");
-    const taxable = Math.max(0, gross - deductions);
-    const gst = pct(taxable, n("gstPercentage"));
+    const afterDeductions = Math.max(0, gross - deductions);
+    const gst = taxInclusive ? Math.round(gstWithin(afterDeductions, n("gstPercentage")) * 100) / 100 : pct(afterDeductions, n("gstPercentage"));
+    const taxable = taxInclusive ? afterDeductions - gst : afterDeductions;
     const tds = pct(taxable, n("tdsPercentage"));
     const retention = pct(taxable, n("retentionPercentage"));
     return { gross, deductions, taxable, gst, tds, retention, net: Math.max(0, taxable + gst - tds - retention) };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form]);
+  }, [form, taxInclusive]);
 
   const save = async (submit: boolean) => {
     if (!draft) return;
@@ -82,6 +86,7 @@ export default function BillFormPage() {
           otherDeduction: n("otherDeduction"),
           retentionPercentage: n("retentionPercentage"),
           gstPercentage: n("gstPercentage"),
+          taxInclusive,
           tdsPercentage: n("tdsPercentage"),
           measurementNotes: form.measurementNotes,
           remarks: form.remarks,
@@ -233,13 +238,16 @@ export default function BillFormPage() {
                 <Input type="number" value={form.retentionPercentage ?? ""} onChange={(e) => set("retentionPercentage", e.target.value)} />
               </Field>
             </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+              Contractor amounts <GstModeToggle size="sm" inclusive={taxInclusive} onChange={setTaxInclusive} />
+            </div>
           </div>
 
           <div className="pt-3 border-t space-y-1 text-sm">
             <Row label="Gross" value={currency(totals.gross)} />
             <Row label="Total deductions" value={`− ${currency(totals.deductions)}`} minus />
             <Row label="Taxable" value={currency(totals.taxable)} bold />
-            <Row label="GST" value={`+ ${currency(totals.gst)}`} />
+            <Row label={taxInclusive ? "GST (included)" : "GST"} value={`${taxInclusive ? "" : "+ "}${currency(totals.gst)}`} />
             <Row label="TDS" value={`− ${currency(totals.tds)}`} minus />
             <Row label="Retention" value={`− ${currency(totals.retention)}`} minus />
             <div className="border-t pt-2">

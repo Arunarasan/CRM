@@ -127,6 +127,8 @@ export interface PurchaseOrder {
   paymentTerms?: string;
   subtotal?: number;
   taxPercent?: number;
+  /** Rates already include GST (tax shown, not added). */
+  taxInclusive?: boolean;
   taxAmount?: number;
   discountAmount?: number;
   transportationCost?: number;

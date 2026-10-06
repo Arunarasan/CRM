@@ -5,7 +5,8 @@ import type { Quotation, QuotationItem } from "@/types/quotation";
 
 export type DiscountMode = "PERCENT" | "FLAT";
 /** itemsOnly: the discount applies to the products only, never to labour / shipping (the sheet's rule). */
-export interface QuotePricing { mode: DiscountMode; value: number; gst: number; itemsOnly?: boolean }
+/** inclusive: the prices already include GST — GST is shown, not added. */
+export interface QuotePricing { mode: DiscountMode; value: number; gst: number; itemsOnly?: boolean; inclusive?: boolean }
 
 const num = (v: unknown) => Number(v ?? 0) || 0;
 
@@ -24,12 +25,13 @@ export function lineTotal(it: QuotationItem, rate = it.rate) {
 export function readPricing(q: Quotation): QuotePricing {
   const discounts: any[] = (q as any).discounts || [];
   const taxes: any[] = (q as any).taxes || [];
-  const gst = taxes.filter((t) => !t.isInclusive).reduce((s, t) => s + num(t.percentage), 0);
+  const gst = taxes.reduce((s, t) => s + num(t.percentage), 0);
+  const inclusive = taxes.length > 0 && taxes.every((t) => !!t.isInclusive);
   const itemsOnly = discounts.length === 0 || discounts.every((d) => d.discountType === "ITEMS");
   if (discounts.length === 1 && num(discounts[0].percentage) > 0) {
-    return { mode: "PERCENT", value: num(discounts[0].percentage), gst, itemsOnly };
+    return { mode: "PERCENT", value: num(discounts[0].percentage), gst, itemsOnly, inclusive };
   }
-  return num(q.discount) > 0 ? { mode: "FLAT", value: num(q.discount), gst, itemsOnly } : { mode: "PERCENT", value: 0, gst, itemsOnly };
+  return num(q.discount) > 0 ? { mode: "FLAT", value: num(q.discount), gst, itemsOnly, inclusive } : { mode: "PERCENT", value: 0, gst, itemsOnly, inclusive };
 }
 
 /** Update payload for the customer discount + GST (replaces the discount and tax rows). */
@@ -40,7 +42,7 @@ export function pricingPatch(p: QuotePricing) {
       discountType: p.itemsOnly === false ? "OVERALL" : "ITEMS", description: "Customer discount",
       ...(p.mode === "PERCENT" ? { percentage: p.value } : { amount: p.value }),
     }] : [],
-    taxes: p.gst > 0 ? [{ taxType: "GST", percentage: p.gst, isInclusive: false }] : [],
+    taxes: p.gst > 0 ? [{ taxType: "GST", percentage: p.gst, isInclusive: !!p.inclusive }] : [],
   };
 }
 
@@ -62,9 +64,12 @@ export function quoteTotals(
   const subtotal = itemsTotal + labours + charges;
   const base = pricing.itemsOnly === false ? subtotal : itemsTotal;
   const discount = pricing.mode === "PERCENT" ? base * pricing.value / 100 : pricing.value;
-  const gst = (subtotal - discount) * pricing.gst / 100;
+  const net = subtotal - discount;
+  // Prices that include GST: the GST is inside `net`, so it's worked out of it and not added.
+  const gst = pricing.inclusive ? (pricing.gst > 0 ? net - net / (1 + pricing.gst / 100) : 0) : net * pricing.gst / 100;
   return {
-    count: items.length, itemsTotal, charges: labours + charges, subtotal, discount, gst, grand: subtotal - discount + gst,
+    count: items.length, itemsTotal, charges: labours + charges, subtotal, discount, gst,
+    grand: pricing.inclusive ? net : net + gst, inclusive: !!pricing.inclusive,
     material: items.reduce((s, i) => s + num(i.materialCost), 0),
     labour: items.reduce((s, i) => s + num(i.labourCost), 0),
   };

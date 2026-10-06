@@ -220,7 +220,8 @@ public class ProjectServiceWarrantyService {
         boolean collectNow = Boolean.parseBoolean(String.valueOf(body.get("collectNow")));
         String paymentMethod = str(body.get("paymentMethod"));
 
-        Invoice invoice = financeService.createServiceInvoice(sr, amount, gstRate, gstType, collectNow, paymentMethod, user);
+        boolean taxInclusive = Boolean.TRUE.equals(body.get("taxInclusive")) || "true".equals(String.valueOf(body.get("taxInclusive")));
+        Invoice invoice = financeService.createServiceInvoice(sr, amount, gstRate, gstType, taxInclusive, collectNow, paymentMethod, user);
         sr.setInvoice(invoice);
         sr.setChargeAmount(amount);
         ServiceRequest saved = serviceRequestRepository.save(sr);

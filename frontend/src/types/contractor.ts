@@ -327,6 +327,8 @@ export interface ContractorBill {
   retentionAmount: number;
   taxableAmount: number;
   gstPercentage?: number;
+  /** The bill amounts already include GST. */
+  taxInclusive?: boolean;
   gstAmount: number;
   tdsPercentage?: number;
   tdsAmount: number;

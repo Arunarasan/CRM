@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import GstModeToggle from "@/components/ui/gst-mode-toggle";
 import { format } from "date-fns";
 import {
   Plus, Trash2, FileText, Loader2, IndianRupee, AlertCircle,
@@ -673,6 +674,7 @@ function InvoiceMaker({ project, onClose, onSaved }: { project: any; onClose: ()
   const [date, setDate] = useState(today());
   const [dueDate, setDueDate] = useState("");
   const [gstRate, setGstRate] = useState(18);
+  const [taxInclusive, setTaxInclusive] = useState(false);
   const [notes, setNotes] = useState("");
   const [itemized, setItemized] = useState(false);
 
@@ -690,10 +692,13 @@ function InvoiceMaker({ project, onClose, onSaved }: { project: any; onClose: ()
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const subTotal = itemized
+  const entered = itemized
     ? lines.reduce((s, l) => s + (Number(l.quantity) || 0) * (Number(l.unitPrice) || 0), 0)
     : (Number(amount) || 0);
-  const gstAmount = subTotal * (Number(gstRate) || 0) / 100;
+  // With GST-inclusive amounts the GST is worked out of them; otherwise it's added on top.
+  const rate = Number(gstRate) || 0;
+  const subTotal = taxInclusive ? entered / (1 + rate / 100) : entered;
+  const gstAmount = taxInclusive ? entered - subTotal : subTotal * rate / 100;
   const total = subTotal + gstAmount;
 
   const save = async (issue: boolean) => {
@@ -704,6 +709,7 @@ function InvoiceMaker({ project, onClose, onSaved }: { project: any; onClose: ()
             description: l.description.trim(),
             quantity: Number(l.quantity) || 1,
             unitPrice: Number(l.unitPrice) || 0,
+            unitPriceIncl: taxInclusive ? Number(l.unitPrice) || 0 : null,
             gstRate: Number(gstRate) || 0,
             totalPrice: (Number(l.quantity) || 1) * (Number(l.unitPrice) || 0),
           }))
@@ -712,6 +718,7 @@ function InvoiceMaker({ project, onClose, onSaved }: { project: any; onClose: ()
               description: description.trim() || DEFAULT_DESC[invoiceType],
               quantity: 1,
               unitPrice: Number(amount),
+              unitPriceIncl: taxInclusive ? Number(amount) : null,
               gstRate: Number(gstRate) || 0,
               totalPrice: Number(amount),
             }]
@@ -727,6 +734,7 @@ function InvoiceMaker({ project, onClose, onSaved }: { project: any; onClose: ()
         date,
         dueDate: dueDate || undefined,
         gstType: "CGST_SGST",
+        taxInclusive,
         status: "DRAFT",
         notes: notes || undefined,
       };
@@ -814,6 +822,7 @@ function InvoiceMaker({ project, onClose, onSaved }: { project: any; onClose: ()
             <label className="space-y-1 text-sm">
               <span className="font-medium">GST %</span>
               <Input type="number" min={0} max={28} value={gstRate} onChange={(e) => setGstRate(Number(e.target.value))} />
+              <GstModeToggle size="sm" inclusive={taxInclusive} onChange={setTaxInclusive} />
             </label>
           </div>
 
@@ -824,8 +833,8 @@ function InvoiceMaker({ project, onClose, onSaved }: { project: any; onClose: ()
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Optional note shown on the invoice" />
 
           <div className="flex justify-end gap-6 rounded-md bg-slate-50 px-4 py-3 text-sm">
-            <span className="text-slate-500">Sub-total <strong className="ml-1 text-slate-700">{inr(subTotal)}</strong></span>
-            <span className="text-slate-500">GST <strong className="ml-1 text-slate-700">{inr(gstAmount)}</strong></span>
+            <span className="text-slate-500">{taxInclusive ? "Taxable" : "Sub-total"} <strong className="ml-1 text-slate-700">{inr(subTotal)}</strong></span>
+            <span className="text-slate-500">GST{taxInclusive ? " (incl.)" : ""} <strong className="ml-1 text-slate-700">{inr(gstAmount)}</strong></span>
             <span className="text-slate-500">Total <strong className="ml-1 text-slate-900">{inr(total)}</strong></span>
           </div>
 

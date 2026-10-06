@@ -242,6 +242,7 @@ public class ContractorBillingService {
                 : (wp != null && wp.getRetentionPercentage() != null ? wp.getRetentionPercentage()
                         : contractor.getRetentionPercentage()));
         bill.setGstPercentage(payload.getGstPercentage());
+        bill.setTaxInclusive(Boolean.TRUE.equals(payload.getTaxInclusive()));
         bill.setTdsPercentage(payload.getTdsPercentage() != null ? payload.getTdsPercentage()
                 : contractor.getTdsPercentage());
         bill.setMeasurementNotes(payload.getMeasurementNotes());
@@ -286,9 +287,17 @@ public class ContractorBillingService {
                 .add(nz(bill.getPenaltyAmount()))
                 .add(nz(bill.getOtherDeduction()));
         BigDecimal taxable = nz(bill.getGrossAmount()).subtract(deductions).max(BigDecimal.ZERO);
+        BigDecimal gst;
+        if (Boolean.TRUE.equals(bill.getTaxInclusive())) {
+            // The contractor's amounts include GST: work the GST out, then TDS / retention on the rest.
+            BigDecimal withGst = taxable.setScale(2, RoundingMode.HALF_UP);
+            gst = com.arudra.crm.util.GstMath.gstWithin(withGst, bill.getGstPercentage());
+            taxable = withGst.subtract(gst);
+        } else {
+            gst = pct(taxable, bill.getGstPercentage());
+        }
         bill.setTaxableAmount(taxable.setScale(2, RoundingMode.HALF_UP));
 
-        BigDecimal gst = pct(taxable, bill.getGstPercentage());
         BigDecimal tds = pct(taxable, bill.getTdsPercentage());
         BigDecimal retention = pct(taxable, bill.getRetentionPercentage());
         bill.setGstAmount(gst);

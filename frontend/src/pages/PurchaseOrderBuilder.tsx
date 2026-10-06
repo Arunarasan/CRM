@@ -14,6 +14,7 @@ import SearchableSelect from "@/components/ui/searchable-select";
 import ProductSearchSelect from "@/pages/inventory/components/ProductSearchSelect";
 import { ArrowLeft, Plus, Trash2, Save, PackageSearch, UserPlus, ChevronDown, AlertTriangle, PackagePlus } from "lucide-react";
 import { UnitOptions } from "@/components/UnitOptions";
+import GstModeToggle, { gstWithin } from "@/components/ui/gst-mode-toggle";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface ProjectLite { id: number; projectName?: string }
@@ -47,6 +48,8 @@ export default function PurchaseOrderBuilder() {
   // One order can ship to several places (site, godown, transport office) — one per shipment.
   const [deliveryAddresses, setDeliveryAddresses] = useState<string[]>([""]);
   const [taxPercent, setTaxPercent] = useState("18");
+  // Supplier rates that already include GST — the GST is worked out of them, not added.
+  const [taxInclusive, setTaxInclusive] = useState(false);
   const [discountAmount, setDiscountAmount] = useState("0");
   const [transportationCost, setTransportationCost] = useState("0");
   const [notes, setNotes] = useState("");
@@ -86,12 +89,13 @@ export default function PurchaseOrderBuilder() {
 
   const totals = useMemo(() => {
     const subtotal = lines.reduce((s, l) => s + (l.product ? lineAmount(l) : 0), 0);
-    const tax = subtotal * (Number(taxPercent) || 0) / 100;
+    const rate = Number(taxPercent) || 0;
+    const tax = taxInclusive ? gstWithin(subtotal, rate) : subtotal * rate / 100;
     const discount = Number(discountAmount) || 0;
     const transport = Number(transportationCost) || 0;
-    const grand = subtotal + tax - discount + transport;
+    const grand = subtotal + (taxInclusive ? 0 : tax) - discount + transport;
     return { subtotal, tax, discount, transport, grand };
-  }, [lines, taxPercent, discountAmount, transportationCost]);
+  }, [lines, taxPercent, discountAmount, transportationCost, taxInclusive]);
 
   const validItems = lines.filter((l) => l.product && l.quantity > 0);
   const unlinked = lines.filter(isUnlinked);
@@ -116,6 +120,7 @@ export default function PurchaseOrderBuilder() {
         deliveryAddresses: deliveryAddresses.map((a) => a.trim()).filter(Boolean),
         paymentTerms: paymentTerms || null,
         taxPercent: Number(taxPercent) || 0,
+        taxInclusive,
         discountAmount: Number(discountAmount) || 0,
         transportationCost: Number(transportationCost) || 0,
         notes: notes || null,
@@ -318,11 +323,15 @@ export default function PurchaseOrderBuilder() {
             <Field label="Tax %"><Input type="number" min={0} value={taxPercent} onChange={(e) => setTaxPercent(e.target.value)} /></Field>
             <Field label="Discount ₹"><Input type="number" min={0} value={discountAmount} onChange={(e) => setDiscountAmount(e.target.value)} /></Field>
             <Field label="Transport ₹"><Input type="number" min={0} value={transportationCost} onChange={(e) => setTransportationCost(e.target.value)} /></Field>
+            <div className="col-span-3 flex flex-wrap items-center gap-2 text-sm">
+              <span className="font-semibold text-slate-700">Rates</span>
+              <GstModeToggle inclusive={taxInclusive} onChange={setTaxInclusive} />
+            </div>
             <div className="col-span-3"><Field label="Notes"><Input value={notes} onChange={(e) => setNotes(e.target.value)} /></Field></div>
           </div>
           <div className="bg-white border rounded-2xl shadow-sm p-5 space-y-2 text-sm">
             <Row label="Subtotal" value={currency(totals.subtotal)} />
-            <Row label={`Tax (${Number(taxPercent) || 0}%)`} value={currency(totals.tax)} />
+            <Row label={`Tax (${Number(taxPercent) || 0}%)${taxInclusive ? " — included" : ""}`} value={currency(totals.tax)} />
             <Row label="Discount" value={`− ${currency(totals.discount)}`} valueClass="text-red-600" />
             <Row label="Transport" value={currency(totals.transport)} />
             <div className="flex justify-between border-t pt-2 mt-2 text-base"><span className="font-bold text-slate-800">Grand Total</span><span className="font-black text-slate-900">{currency(totals.grand)}</span></div>

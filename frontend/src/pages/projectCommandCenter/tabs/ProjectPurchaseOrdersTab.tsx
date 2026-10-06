@@ -265,7 +265,7 @@ function OrderDetailDialog({ order: o, onClose, onChanged }: { order: ProjectPur
             </div>
             <div className="mt-2 ml-auto max-w-xs space-y-0.5 text-xs">
               <div className="flex justify-between"><span className="text-slate-500">Subtotal</span><span>{money(o.subtotal)}</span></div>
-              {!!o.taxAmount && <div className="flex justify-between"><span className="text-slate-500">GST{o.taxPercent ? ` (${o.taxPercent}%)` : ""}</span><span>{money(o.taxAmount)}</span></div>}
+              {!!o.taxAmount && <div className="flex justify-between"><span className="text-slate-500">GST{o.taxPercent ? ` (${o.taxPercent}%)` : ""}{o.taxInclusive ? " — included" : ""}</span><span>{money(o.taxAmount)}</span></div>}
               {!!o.transportationCost && <div className="flex justify-between"><span className="text-slate-500">Transport</span><span>{money(o.transportationCost)}</span></div>}
               {!!o.discountAmount && <div className="flex justify-between"><span className="text-slate-500">Discount</span><span>−{money(o.discountAmount)}</span></div>}
               <div className="flex justify-between border-t border-slate-100 pt-1 font-bold text-slate-800"><span>Total</span><span>{money(o.totalAmount)}</span></div>

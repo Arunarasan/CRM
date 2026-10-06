@@ -28,8 +28,13 @@ public class InvoiceItem extends BaseEntity {
     @Column(nullable = false)
     private Integer quantity;
 
-    @Column(name = "unit_price", precision = 15, scale = 2, nullable = false)
+    /** The taxable (before-GST) rate — always; GST reports and returns read this. */
+    @Column(name = "unit_price", precision = 15, scale = 4, nullable = false)
     private BigDecimal unitPrice;
+
+    /** The rate as typed when the invoice's prices include GST (null otherwise). */
+    @Column(name = "unit_price_incl", precision = 15, scale = 2)
+    private BigDecimal unitPriceIncl;
 
     @Column(name = "gst_rate", precision = 5, scale = 2)
     private BigDecimal gstRate = BigDecimal.ZERO;

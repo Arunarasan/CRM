@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import GstModeToggle from "@/components/ui/gst-mode-toggle";
 import { useNavigate } from "react-router-dom";
 import api from "@/lib/api";
 import { financeApi } from "@/api/financeApi";
@@ -48,6 +49,8 @@ export default function CounterSalePage() {
 
   // charges / tax
   const [gstType, setGstType] = useState<"CGST_SGST" | "IGST">("CGST_SGST");
+  // Shop prices usually include GST — when on, GST is worked out of the prices instead of added.
+  const [taxInclusive, setTaxInclusive] = useState(false);
   const [discountType, setDiscountType] = useState<"PERCENTAGE" | "FLAT">("FLAT");
   const [discountValue, setDiscountValue] = useState("0");
 
@@ -145,19 +148,25 @@ export default function CounterSalePage() {
     const productSub = lines.reduce((s, l) => s + l.qty * l.rate, 0);
     const install = installOn ? Number(installCharge) || 0 : 0;
     const work = workOn ? Number(workHeader.charge) || 0 : 0;
-    const subTotal = productSub + install + work;
-    let discount = discountType === "PERCENTAGE" ? subTotal * (Number(discountValue) || 0) / 100 : (Number(discountValue) || 0);
+    // Same maths as the server (FinanceService.computeTotals): with GST-inclusive prices each line's
+    // before-GST base is worked out first, and a flat discount comes off the with-GST amount.
+    const gross = productSub + install + work;
+    const taxLines = [
+      ...lines.map((l) => ({ amount: l.qty * l.rate, rate: l.gst || 0 })),
+      ...(install > 0 ? [{ amount: install, rate: 18 }] : []),
+      ...(work > 0 ? [{ amount: work, rate: 5 }] : []),
+    ].map((l) => ({ ...l, base: taxInclusive ? l.amount / (1 + l.rate / 100) : l.amount }));
+    const subTotal = taxLines.reduce((s, l) => s + l.base, 0);
+    const flat = Number(discountValue) || 0;
+    let discount = discountType === "PERCENTAGE" ? subTotal * flat / 100
+      : taxInclusive && gross > 0 ? flat * subTotal / gross : flat;
     if (discount > subTotal) discount = subTotal;
     const taxable = subTotal - discount;
-    const taxLines = [
-      ...lines.map((l) => ({ base: l.qty * l.rate, rate: l.gst })),
-      ...(install > 0 ? [{ base: install, rate: 18 }] : []),
-      ...(work > 0 ? [{ base: work, rate: 5 }] : []),
-    ];
-    const gst = taxLines.reduce((s, l) => (subTotal === 0 ? s : s + (taxable * (l.base / subTotal)) * (l.rate || 0) / 100), 0);
+    const gst = taxLines.reduce((s, l) => (subTotal === 0 ? s : s + (taxable * (l.base / subTotal)) * l.rate / 100), 0);
     const grand = Math.round(taxable + gst);
-    return { productSub, install, work, subTotal, discount, gst, grand };
-  }, [lines, installOn, installCharge, workOn, workHeader.charge, discountType, discountValue]);
+    const discountShown = taxInclusive ? Math.max(0, gross - (taxable + gst)) : discount;
+    return { productSub, install, work, subTotal, discount: discountShown, gst, grand };
+  }, [lines, installOn, installCharge, workOn, workHeader.charge, discountType, discountValue, taxInclusive]);
 
   const itemCount = lines.reduce((s, l) => s + (l.name.trim() ? l.qty : 0), 0);
   // A walk-in needs no name — a nameless sale bills the canonical "Walk-in Customer".
@@ -176,7 +185,7 @@ export default function CounterSalePage() {
         customerId: reuseId,
         customerName: reuseId ? null : custName.trim(),
         customerPhone: reuseId ? null : (custPhone.trim() || null),
-        gstType, discountType, discountValue: Number(discountValue) || 0,
+        gstType, taxInclusive, discountType, discountValue: Number(discountValue) || 0,
         deductStock, warehouseId: deductStock && warehouseId ? Number(warehouseId) : null,
         items: validItems.map((l) => {
           const w = workOn ? workLines[l.key] : undefined;
@@ -310,6 +319,7 @@ export default function CounterSalePage() {
         <div className="lg:w-[360px] shrink-0 border-t lg:border-t-0 lg:border-l bg-slate-50/60 flex flex-col">
           <div className="flex items-center justify-between px-4 py-3 border-b bg-white">
             <span className="text-sm font-bold text-slate-800">Bill</span>
+            <GstModeToggle size="sm" inclusive={taxInclusive} onChange={setTaxInclusive} />
             <div className="flex items-center rounded-md border bg-slate-50 text-[11px]">
               <button onClick={() => setGstType("CGST_SGST")} className={`px-2 py-1 rounded-l-md ${gstType === "CGST_SGST" ? "bg-slate-800 text-white" : "text-slate-600"}`}>Same state</button>
               <button onClick={() => setGstType("IGST")} className={`px-2 py-1 rounded-r-md ${gstType === "IGST" ? "bg-slate-800 text-white" : "text-slate-600"}`}>Other state</button>
@@ -368,7 +378,7 @@ export default function CounterSalePage() {
                   className="w-24 h-8 rounded-md border px-2 text-right text-sm" />
               </div>
               {totals.discount > 0 && <Row label="Discount applied" value={`− ${currency(totals.discount)}`} valueClass="text-red-600" />}
-              <Row label="GST" value={currency(totals.gst)} />
+              <Row label={taxInclusive ? "GST (included)" : "GST"} value={currency(totals.gst)} />
               <div className="flex justify-between items-baseline border-t pt-2 mt-1">
                 <span className="font-bold text-slate-800">Total</span>
                 <span className="text-2xl font-black text-slate-900">{currency(totals.grand)}</span>

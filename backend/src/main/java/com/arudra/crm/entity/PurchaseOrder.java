@@ -106,6 +106,10 @@ public class PurchaseOrder extends BaseEntity {
     @Column(name = "tax_percent", precision = 5, scale = 2)
     private BigDecimal taxPercent;
 
+    /** True when the entered rates already include GST (GST is worked out of them, not added). */
+    @Column(name = "tax_inclusive", nullable = false)
+    private Boolean taxInclusive = false;
+
     @Column(name = "tax_amount", precision = 15, scale = 2)
     private BigDecimal taxAmount;
 

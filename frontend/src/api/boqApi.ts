@@ -41,6 +41,7 @@ export const boqApi = {
       discountType?: "PERCENT" | "FLAT";
       discount?: number | null;
       taxPercent?: number | null;
+      taxInclusive?: boolean;
       materialTotalOverride?: number | null;
       labourTotalOverride?: number | null;
       labourCharge?: number | null;

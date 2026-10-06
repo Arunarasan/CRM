@@ -49,7 +49,9 @@ export function selectionTotals(quotation: Quotation, sel: PdfSelection = {}): S
   const fullGrand = n(quotation.grandTotal);
   const fullGst = n(quotation.gst);
   const fullDiscount = n(quotation.discount);
-  const fullSubtotal = fullGrand - fullGst + fullDiscount; // items + quote-level labour/charges
+  // "Prices include GST": the GST is inside the prices, so it isn't part of the grand total on top.
+  const inclusive = ((quotation as any).taxes || []).some((t: any) => t.isInclusive);
+  const fullSubtotal = fullGrand - (inclusive ? 0 : fullGst) + fullDiscount; // items + quote-level labour/charges
   const extras = Math.max(0, fullSubtotal - allItemsTotal);
 
   const isPartial = items.length !== priced.length || items.some((i) => i.status === "REJECTED")
@@ -65,7 +67,7 @@ export function selectionTotals(quotation: Quotation, sel: PdfSelection = {}): S
 
   const discountRate = fullSubtotal > 0 ? fullDiscount / fullSubtotal : 0;
   const afterFull = fullSubtotal - fullDiscount;
-  const gstRate = afterFull > 0 ? fullGst / afterFull : 0;
+  const gstRate = afterFull > 0 ? fullGst / afterFull : 0; // GST as a share of the after-discount amount
 
   const subtotal = items.reduce((s, i) => s + n(i.totalAmount), 0) + (includeExtras ? extras : 0);
   const discount = subtotal * discountRate;
@@ -76,7 +78,7 @@ export function selectionTotals(quotation: Quotation, sel: PdfSelection = {}): S
     materialTotal: r2(items.reduce((s, i) => s + n(i.materialCost), 0)),
     labourTotal: r2(items.reduce((s, i) => s + n(i.labourCost), 0)),
     additionalCharges: r2(items.reduce((s, i) => s + n(i.additionalCharges), 0) + (includeExtras ? extras : 0)),
-    discount: r2(discount), gst: r2(gst), grandTotal: r2(subtotal - discount + gst),
+    discount: r2(discount), gst: r2(gst), grandTotal: r2(subtotal - discount + (inclusive ? 0 : gst)),
   };
 }
 
@@ -273,7 +275,9 @@ export function buildQuotationPdf(quotation: Quotation, sel: PdfSelection = {}):
   const gross = totals.items.reduce((s, i) => s + lineGrossOf(i), 0);
   const lineDisc = totals.items.reduce((s, i) => s + lineDiscountAmount(i), 0);
   const net = totals.items.reduce((s, i) => s + n(i.totalAmount), 0);
-  const gstPct = ((quotation as any).taxes || []).filter((t: any) => !t.isInclusive).reduce((s: number, t: any) => s + n(t.percentage), 0);
+  const taxRows: any[] = (quotation as any).taxes || [];
+  const gstPct = taxRows.reduce((s: number, t: any) => s + n(t.percentage), 0);
+  const gstIncluded = taxRows.length > 0 && taxRows.every((t: any) => t.isInclusive);
   const scopeCount = (quotation.items || []).filter((i) => i.status !== "REJECTED").length;
 
   return renderDocPdf({
@@ -298,9 +302,9 @@ export function buildQuotationPdf(quotation: Quotation, sel: PdfSelection = {}):
       ...charges.filter((c) => !isLabour(c.label) && !isShipping(c.label))
         .map((c) => ({ label: c.note ? `${c.label} · ${c.note}` : c.label, amount: c.amount })),
       ...(totals.discount > 0 ? [{ label: "Discount", amount: totals.discount, minus: true }] : []),
-      { label: `GST${gstPct > 0 || totals.gst === 0 ? ` (${pct(gstPct)}%)` : ""}`, amount: totals.gst },
+      { label: `GST${gstPct > 0 || totals.gst === 0 ? ` (${pct(gstPct)}%)` : ""}${gstIncluded ? " — included in prices" : ""}`, amount: totals.gst },
     ],
-    final: { label: "Final Price", amount: totals.grandTotal },
+    final: { label: gstIncluded ? "Final Price (incl. GST)" : "Final Price", amount: totals.grandTotal },
     terms: quotation.termsAndConditions || "",
     footerRef: quotation.quotationNumber || "",
   }, sel.images || {});
@@ -318,6 +322,9 @@ export function buildInvoicePdf(invoice: Invoice, lines: InvoiceItem[], project?
   const site = proj.projectName
     ? `${proj.projectName}${proj.projectCode ? ` (${proj.projectCode})` : ""}`
     : proj.siteAddress || cust.siteAddress || cust.address || cust.city || "—";
+  // "Prices include GST": lines print at the rate as typed (with GST); unitPrice is the before-GST rate.
+  const incl = !!(invoice as any).taxInclusive;
+  const rateOf = (l: InvoiceItem) => (incl && (l as any).unitPriceIncl != null ? n((l as any).unitPriceIncl) : n(l.unitPrice));
   const items = (lines || []).map((l, i) => ({
     id: l.id ?? i,
     category: invoiceTypeLabel(invoice.invoiceType),
@@ -325,8 +332,8 @@ export function buildInvoicePdf(invoice: Invoice, lines: InvoiceItem[], project?
     description: l.hsnCode ? `HSN ${l.hsnCode}` : undefined,
     quantity: n(l.quantity),
     unit: l.unit,
-    rate: n(l.unitPrice),
-    totalAmount: Math.round(n(l.quantity) * n(l.unitPrice) * 100) / 100,
+    rate: rateOf(l),
+    totalAmount: Math.round(n(l.quantity) * rateOf(l) * 100) / 100,
     gstRate: n(l.gstRate),
     itemOrder: i,
   })) as unknown as QuotationItem[];
@@ -347,7 +354,22 @@ export function buildInvoicePdf(invoice: Invoice, lines: InvoiceItem[], project?
     tags: false,
     blockTotalLabel: "Items Total",
     extraColumn: { header: "GST (%)", cell: (it) => `${pct(n((it as any).gstRate))}%` },
-    summary: [
+    summary: incl ? (() => {
+      // Prices include GST: show the with-GST total, then the taxable value and the GST inside it.
+      const gross = items.reduce((s, it) => s + n((it as any).totalAmount), 0);
+      const taxable = n(invoice.subTotal) - n(invoice.discountAmount);
+      const gstTotal = n(invoice.gstAmount);
+      const discountIncl = Math.round((gross - (taxable + gstTotal)) * 100) / 100;
+      return [
+        { label: "Total (incl. GST)", amount: gross, strong: true },
+        ...(discountIncl > 0.004 ? [{ label: "Discount", amount: discountIncl, minus: true }] : []),
+        { label: "Taxable value", amount: taxable },
+        ...(igst
+          ? [{ label: "IGST (included)", amount: n(invoice.igstAmount ?? invoice.gstAmount) }]
+          : [{ label: "CGST (included)", amount: n(invoice.cgstAmount) }, { label: "SGST (included)", amount: n(invoice.sgstAmount) }]),
+        ...(n(invoice.roundOff) !== 0 ? [{ label: "Round off", amount: n(invoice.roundOff) }] : []),
+      ];
+    })() : [
       { label: "Sub-total", amount: n(invoice.subTotal), strong: true },
       ...(n(invoice.discountAmount) > 0 ? [{ label: "Discount", amount: n(invoice.discountAmount), minus: true }] : []),
       ...(igst

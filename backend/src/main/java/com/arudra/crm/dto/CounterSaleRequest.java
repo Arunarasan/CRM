@@ -20,6 +20,7 @@ public class CounterSaleRequest {
 
     // --- invoice header ---
     public String gstType;        // CGST_SGST (default) or IGST
+    public Boolean taxInclusive;  // true = the entered prices already include GST
     public String placeOfSupply;
     public String discountType;   // PERCENTAGE or FLAT
     public BigDecimal discountValue;

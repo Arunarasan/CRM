@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import GstModeToggle, { gstWithin } from "@/components/ui/gst-mode-toggle";
 import { Link } from "react-router-dom";
 import {
   ShieldCheck, Wrench, Plus, Loader2, IndianRupee,
@@ -478,8 +479,11 @@ function RaiseInvoiceDialog({ work, suggestedAmount, onClose, onDone }: {
 }) {
   const [form, setForm] = useState({
     chargeAmount: (suggestedAmount ?? work.chargeAmount ?? "") as number | "",
-    gstRate: 18, gstType: "CGST_SGST", collectNow: false, paymentMethod: "CASH",
+    gstRate: 18, gstType: "CGST_SGST", taxInclusive: false, collectNow: false, paymentMethod: "CASH",
   });
+  const amt = Number(form.chargeAmount) || 0;
+  const gstPart = form.taxInclusive ? gstWithin(amt, Number(form.gstRate) || 0) : amt * (Number(form.gstRate) || 0) / 100;
+  const invoiceTotal = form.taxInclusive ? amt : amt + gstPart;
   const [saving, setSaving] = useState(false);
 
   const submit = async () => {
@@ -490,6 +494,7 @@ function RaiseInvoiceDialog({ work, suggestedAmount, onClose, onDone }: {
         chargeAmount: Number(form.chargeAmount),
         gstRate: Number(form.gstRate),
         gstType: form.gstType,
+        taxInclusive: form.taxInclusive,
         collectNow: form.collectNow,
         paymentMethod: form.paymentMethod,
       });
@@ -515,6 +520,12 @@ function RaiseInvoiceDialog({ work, suggestedAmount, onClose, onDone }: {
             <div>
               <Label className="text-xs text-slate-500">GST rate %</Label>
               <Input type="number" min={0} value={form.gstRate} onChange={(e) => setForm((f) => ({ ...f, gstRate: Number(e.target.value) }))} className="mt-1" />
+            </div>
+            <div className="sm:col-span-2 flex flex-wrap items-center justify-between gap-2">
+              <GstModeToggle size="sm" inclusive={form.taxInclusive} onChange={(v) => setForm((f) => ({ ...f, taxInclusive: v }))} />
+              <span className="text-xs text-slate-500 tabular-nums">
+                GST {form.taxInclusive ? "inside" : "+"} ₹{gstPart.toLocaleString("en-IN", { maximumFractionDigits: 2 })} · Invoice ₹{invoiceTotal.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+              </span>
             </div>
             <div>
               <Label className="text-xs text-slate-500">GST type</Label>

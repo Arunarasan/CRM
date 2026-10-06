@@ -445,7 +445,7 @@ public class QuotationService {
             QuotationTax t = new QuotationTax();
             t.setTaxType("GST");
             t.setPercentage(boq.getTaxPercent());
-            t.setIsInclusive(false);
+            t.setIsInclusive(Boolean.TRUE.equals(boq.getTaxInclusive()));
             t.setQuotation(quotation);
             quotation.getTaxes().add(t);
         }
@@ -1452,10 +1452,16 @@ public class QuotationService {
 
         BigDecimal afterDiscount = subTotal.subtract(totalDiscount);
 
-        BigDecimal totalTax = BigDecimal.ZERO;
+        BigDecimal totalTax = BigDecimal.ZERO;   // added on top
+        BigDecimal includedTax = BigDecimal.ZERO; // already inside the prices ("Prices include GST")
         if (quotation.getTaxes() != null) {
             for (QuotationTax t : quotation.getTaxes()) {
-                if (t.getPercentage() != null && t.getPercentage().compareTo(BigDecimal.ZERO) > 0 && !t.getIsInclusive()) {
+                if (t.getPercentage() == null || t.getPercentage().compareTo(BigDecimal.ZERO) <= 0) continue;
+                if (Boolean.TRUE.equals(t.getIsInclusive())) {
+                    BigDecimal tax = com.arudra.crm.util.GstMath.gstWithin(afterDiscount, t.getPercentage());
+                    t.setAmount(tax);
+                    includedTax = includedTax.add(tax);
+                } else {
                     // Rounded to paise like the pricing sheet, so the quote total matches it exactly.
                     BigDecimal tax = afterDiscount.multiply(t.getPercentage().divide(new BigDecimal(100)))
                             .setScale(2, RoundingMode.HALF_UP);
@@ -1464,7 +1470,8 @@ public class QuotationService {
                 }
             }
         }
-        quotation.setGst(totalTax);
+        // gst = the GST in the quote either way; only GST that isn't already in the prices raises the total.
+        quotation.setGst(totalTax.add(includedTax));
 
         quotation.setGrandTotal(afterDiscount.add(totalTax));
     }

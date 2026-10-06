@@ -1,4 +1,5 @@
 import { BaseInput } from '@/components/ui/input';
+import GstModeToggle from "@/components/ui/gst-mode-toggle";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useLocation, Link } from "react-router-dom";
 import {
@@ -95,6 +96,7 @@ export function QuotationWorkbench({
   const [discountMode, setDiscountMode] = useState<DiscountMode>("PERCENT");
   const [discountValue, setDiscountValue] = useState(0);
   const [gstPercent, setGstPercent] = useState(0);
+  const [gstInclusive, setGstInclusive] = useState(false);
   const [terms, setTerms] = useState("");
 
   const canWrite = hasAuthority("QUOTATION_WRITE") || isAdmin;
@@ -106,7 +108,7 @@ export function QuotationWorkbench({
     setQuotation(q);
     setScope(new Set((q.items || []).filter((i) => i.status !== "REJECTED").map((i) => i.id!).filter(Boolean)));
     const p = readPricing(q);
-    setDiscountMode(p.mode); setDiscountValue(p.value); setGstPercent(p.gst);
+    setDiscountMode(p.mode); setDiscountValue(p.value); setGstPercent(p.gst); setGstInclusive(!!p.inclusive);
     setTerms(q.termsAndConditions || "");
     setRateDrafts({});
   }, []);
@@ -141,8 +143,8 @@ export function QuotationWorkbench({
   const totals = useMemo(() => quoteTotals(quotation ?? {}, {
     items: items.filter((i) => i.id != null && scope.has(i.id)),
     rateDrafts,
-    pricing: { mode: discountMode, value: discountValue, gst: gstPercent, itemsOnly },
-  }), [items, scope, rateDrafts, quotation, discountMode, discountValue, gstPercent, itemsOnly]);
+    pricing: { mode: discountMode, value: discountValue, gst: gstPercent, itemsOnly, inclusive: gstInclusive },
+  }), [items, scope, rateDrafts, quotation, discountMode, discountValue, gstPercent, itemsOnly, gstInclusive]);
 
   const serverScope = useMemo(
     () => new Set(items.filter((i) => i.status !== "REJECTED").map((i) => i.id!)), [items]);
@@ -166,8 +168,8 @@ export function QuotationWorkbench({
   const saveRate = (item: QuotationItem, rate: number | null) =>
     save({ items: items.map((i) => (i.id === item.id ? { ...i, rate: rate ?? 0 } : i)) }, "Price");
 
-  const savePricing = (mode: DiscountMode, value: number, gst: number) =>
-    save(pricingPatch({ mode, value, gst, itemsOnly }), "Discount & GST");
+  const savePricing = (mode: DiscountMode, value: number, gst: number, inclusive = gstInclusive) =>
+    save(pricingPatch({ mode, value, gst, itemsOnly, inclusive }), "Discount & GST");
 
   const confirmCustomerApproval = async () => {
     setBusy(true);
@@ -449,8 +451,12 @@ export function QuotationWorkbench({
               <div className="flex items-center gap-2">
                 <div className="w-24"><NumCell value={gstPercent} disabled={!priceEditable || busy} className="h-8 border-border"
                   onCommit={(v) => { setGstPercent(v ?? 0); savePricing(discountMode, discountValue, v ?? 0); }} /></div>
-                <span className="w-24 text-right tabular-nums text-muted-foreground">+ {inr(totals.gst)}</span>
+                <span className="w-24 text-right tabular-nums text-muted-foreground">{gstInclusive ? "incl. " : "+ "}{inr(totals.gst)}</span>
               </div>
+            </div>
+            <div className="flex justify-end">
+              <GstModeToggle size="sm" inclusive={gstInclusive} disabled={!priceEditable || busy}
+                onChange={(v) => { if (v === gstInclusive) return; setGstInclusive(v); savePricing(discountMode, discountValue, gstPercent, v); }} />
             </div>
             <div className="flex items-center justify-between border-t pt-2">
               <span className="font-semibold">Grand total</span>

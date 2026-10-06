@@ -67,6 +67,8 @@ export interface ServiceWorkBody {
 }
 
 export interface RaiseInvoiceBody {
+  /** The charge amount already includes GST. */
+  taxInclusive?: boolean;
   chargeAmount?: number;
   gstRate?: number;
   gstType?: string;

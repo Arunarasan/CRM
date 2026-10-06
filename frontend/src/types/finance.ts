@@ -36,6 +36,8 @@ export interface InvoiceItem {
   unit?: string;
   quantity: number;
   unitPrice: number;
+  /** The rate as typed when the invoice's prices include GST (unitPrice is then the before-GST rate). */
+  unitPriceIncl?: number | null;
   gstRate?: number;
   totalPrice?: number;
 }
@@ -57,6 +59,8 @@ export interface Invoice {
   discountValue?: number;
   discountAmount: number;
   gstType: "CGST_SGST" | "IGST";
+  /** Line rates already include GST. */
+  taxInclusive?: boolean;
   gstAmount: number;
   cgstAmount: number;
   sgstAmount: number;

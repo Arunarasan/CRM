@@ -92,6 +92,10 @@ public class ContractorBill extends BaseEntity {
     @Column(name = "gst_percentage", precision = 5, scale = 2)
     private BigDecimal gstPercentage;
 
+    /** True when the entered rates already include GST (GST is worked out of them, not added). */
+    @Column(name = "tax_inclusive", nullable = false)
+    private Boolean taxInclusive = false;
+
     @Column(name = "gst_amount", nullable = false, precision = 15, scale = 2)
     private BigDecimal gstAmount = BigDecimal.ZERO;
 

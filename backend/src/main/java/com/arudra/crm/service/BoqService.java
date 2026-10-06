@@ -587,6 +587,7 @@ public class BoqService {
         existing.setDiscountType(updatedData.getDiscountType() != null ? updatedData.getDiscountType() : existing.getDiscountType());
         existing.setDiscount(updatedData.getDiscount());
         existing.setTaxPercent(updatedData.getTaxPercent());
+        if (updatedData.getTaxInclusive() != null) existing.setTaxInclusive(updatedData.getTaxInclusive());
 
         existing.getItems().clear();
         if (updatedData.getItems() != null) {
@@ -617,6 +618,10 @@ public class BoqService {
         }
         if (data.containsKey("discount")) {
             existing.setDiscount(toBigDecimal(data.get("discount")));
+        }
+        if (data.containsKey("taxInclusive")) {
+            Object v = data.get("taxInclusive");
+            existing.setTaxInclusive(Boolean.TRUE.equals(v) || "true".equalsIgnoreCase(String.valueOf(v)));
         }
         if (data.containsKey("taxPercent")) {
             existing.setTaxPercent(toBigDecimal(data.get("taxPercent")));
@@ -1372,6 +1377,13 @@ public class BoqService {
         BigDecimal taxable = subtotal.subtract(discountAmount)
                 .add(nz(boq.getLabourCharge())).add(nz(boq.getShippingCharge()));
         BigDecimal taxPercent = boq.getTaxPercent() != null ? boq.getTaxPercent() : BigDecimal.ZERO;
+        if (Boolean.TRUE.equals(boq.getTaxInclusive())) {
+            // Prices include GST: the GST is already inside the amount — show it, don't add it.
+            BigDecimal gross = taxable.setScale(2, RoundingMode.HALF_UP);
+            boq.setTaxAmount(com.arudra.crm.util.GstMath.gstWithin(gross, taxPercent));
+            boq.setGrandTotal(gross);
+            return;
+        }
         BigDecimal taxAmount = taxable.multiply(taxPercent.divide(HUNDRED, 6, RoundingMode.HALF_UP))
                 .setScale(2, RoundingMode.HALF_UP);
         boq.setTaxAmount(taxAmount);
@@ -1409,6 +1421,7 @@ public class BoqService {
         copy.setDiscountType(original.getDiscountType());
         copy.setDiscount(original.getDiscount());
         copy.setTaxPercent(original.getTaxPercent());
+        copy.setTaxInclusive(original.getTaxInclusive());
         copy.setMaterialTotalOverride(original.getMaterialTotalOverride());
         copy.setLabourTotalOverride(original.getLabourTotalOverride());
         copy.setLabourCharge(original.getLabourCharge());
@@ -1482,6 +1495,7 @@ public class BoqService {
         revision.setDiscountType(original.getDiscountType());
         revision.setDiscount(original.getDiscount());
         revision.setTaxPercent(original.getTaxPercent());
+        revision.setTaxInclusive(original.getTaxInclusive());
         revision.setMaterialTotalOverride(original.getMaterialTotalOverride());
         revision.setLabourTotalOverride(original.getLabourTotalOverride());
         revision.setLabourCharge(original.getLabourCharge());
@@ -2240,6 +2254,7 @@ public class BoqService {
         target.setDiscountType(source.getDiscountType());
         target.setDiscount(source.getDiscount());
         target.setTaxPercent(source.getTaxPercent());
+        target.setTaxInclusive(source.getTaxInclusive());
         target.setMaterialTotalOverride(source.getMaterialTotalOverride());
         target.setLabourTotalOverride(source.getLabourTotalOverride());
         target.setLabourCharge(source.getLabourCharge());

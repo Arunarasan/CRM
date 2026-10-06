@@ -147,7 +147,7 @@ export default function EmployeeBoq() {
             rows={[
               { label: 'Subtotal', value: inr(boq.subtotal) },
               ...(boq.discountAmount ? [{ label: 'Discount', value: `- ${inr(boq.discountAmount)}` }] : []),
-              ...(boq.taxAmount ? [{ label: `Tax${boq.taxPercent ? ` (${boq.taxPercent}%)` : ''}`, value: inr(boq.taxAmount) }] : []),
+              ...(boq.taxAmount ? [{ label: `Tax${boq.taxPercent ? ` (${boq.taxPercent}%)` : ''}${boq.taxInclusive ? ' — included' : ''}`, value: inr(boq.taxAmount) }] : []),
             ]}
             grand={boq.grandTotal}
           />

@@ -222,6 +222,8 @@ export interface Boq {
   discount?: number;
   discountAmount?: number;
   taxPercent?: number;
+  /** Prices on the sheet already include GST (GST is shown, not added). */
+  taxInclusive?: boolean;
   taxAmount?: number;
   grandTotal?: number;
   createdAt?: string;

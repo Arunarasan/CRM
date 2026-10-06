@@ -18,6 +18,7 @@ export function printReceipt(invoice: Invoice, items: InvoiceItem[], company?: C
   const paid = Number(invoice.amountPaid || 0);
   const due = Number(invoice.balanceDue || 0);
 
+  const incl = !!invoice.taxInclusive;
   const rows = (items || []).map((it) => {
     const amt = (it as any).totalPrice ?? Number(it.quantity) * Number(it.unitPrice);
     return `
@@ -25,15 +26,15 @@ export function printReceipt(invoice: Invoice, items: InvoiceItem[], company?: C
       <td class="nm" colspan="2">${esc(it.description)}</td>
     </tr>
     <tr class="ln">
-      <td class="qd">${esc(it.quantity)}${it.unit ? " " + esc(it.unit) : ""} × ${inr(it.unitPrice)}${it.gstRate ? ` <span class="mut">(${it.gstRate}% GST)</span>` : ""}</td>
+      <td class="qd">${esc(it.quantity)}${it.unit ? " " + esc(it.unit) : ""} × ${inr(incl && it.unitPriceIncl != null ? it.unitPriceIncl : it.unitPrice)}${it.gstRate ? ` <span class="mut">(${it.gstRate}% GST${incl ? " incl." : ""})</span>` : ""}</td>
       <td class="num">${inr(amt)}</td>
     </tr>`;
   }).join("");
 
   const gstBlock = invoice.gstType === "IGST"
-    ? `<tr><td>IGST</td><td class="num">${inr((invoice as any).igstAmount ?? invoice.gstAmount)}</td></tr>`
-    : `<tr><td>CGST</td><td class="num">${inr(invoice.cgstAmount)}</td></tr>
-       <tr><td>SGST</td><td class="num">${inr(invoice.sgstAmount)}</td></tr>`;
+    ? `<tr><td>IGST${incl ? " (incl.)" : ""}</td><td class="num">${inr((invoice as any).igstAmount ?? invoice.gstAmount)}</td></tr>`
+    : `<tr><td>CGST${incl ? " (incl.)" : ""}</td><td class="num">${inr(invoice.cgstAmount)}</td></tr>
+       <tr><td>SGST${incl ? " (incl.)" : ""}</td><td class="num">${inr(invoice.sgstAmount)}</td></tr>`;
 
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(invoice.invoiceNumber)}</title>
   <style>
@@ -77,7 +78,7 @@ export function printReceipt(invoice: Invoice, items: InvoiceItem[], company?: C
     <table>${rows || `<tr><td class="mut">No items</td></tr>`}</table>
     <div class="hr"></div>
     <table class="tot">
-      <tr><td>Sub-total</td><td class="num">${inr(invoice.subTotal)}</td></tr>
+      <tr><td>${incl ? "Taxable value" : "Sub-total"}</td><td class="num">${inr(invoice.subTotal)}</td></tr>
       ${Number(invoice.discountAmount) ? `<tr><td>Discount</td><td class="num">- ${inr(invoice.discountAmount)}</td></tr>` : ""}
       ${gstBlock}
       ${Number(invoice.roundOff) ? `<tr><td>Round off</td><td class="num">${inr(invoice.roundOff)}</td></tr>` : ""}

@@ -334,6 +334,7 @@ public class PurchaseService {
         po.setDeliveryAddresses(details.getDeliveryAddresses());
         po.setPaymentTerms(details.getPaymentTerms());
         po.setTaxPercent(details.getTaxPercent());
+        if (details.getTaxInclusive() != null) po.setTaxInclusive(details.getTaxInclusive());
         po.setDiscountAmount(details.getDiscountAmount());
         po.setTransportationCost(details.getTransportationCost());
         po.setNotes(details.getNotes());
@@ -365,9 +366,14 @@ public class PurchaseService {
         if (po.getTaxPercent() != null) {
             tax = subtotal.multiply(po.getTaxPercent()).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
         }
+        boolean inclusive = Boolean.TRUE.equals(po.getTaxInclusive());
+        if (inclusive && po.getTaxPercent() != null) {
+            // Rates include GST: the GST is inside the subtotal, so it's shown but not added again.
+            tax = com.arudra.crm.util.GstMath.gstWithin(subtotal, po.getTaxPercent());
+        }
         po.setTaxAmount(tax);
         BigDecimal total = subtotal
-                .add(tax != null ? tax : BigDecimal.ZERO)
+                .add(tax != null && !inclusive ? tax : BigDecimal.ZERO)
                 .add(po.getTransportationCost() != null ? po.getTransportationCost() : BigDecimal.ZERO)
                 .subtract(po.getDiscountAmount() != null ? po.getDiscountAmount() : BigDecimal.ZERO);
         po.setTotalAmount(total);
@@ -900,6 +906,7 @@ public class PurchaseService {
             row.put("notes", po.getNotes());
             row.put("subtotal", po.getSubtotal());
             row.put("taxPercent", po.getTaxPercent());
+            row.put("taxInclusive", Boolean.TRUE.equals(po.getTaxInclusive()));
             row.put("taxAmount", po.getTaxAmount());
             row.put("discountAmount", po.getDiscountAmount());
             row.put("transportationCost", po.getTransportationCost());

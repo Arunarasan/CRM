@@ -203,7 +203,7 @@ export default function BillDetailPage() {
             Number(value) > 0 ? <Row key={label} label={label} value={`− ${currency(Number(value))}`} tone="minus" /> : null)}
           <div className="border-t my-2" />
           <Row label="Taxable amount" value={currency(b.taxableAmount)} bold />
-          {Number(b.gstAmount) > 0 && <Row label={`GST @ ${b.gstPercentage}%`} value={`+ ${currency(b.gstAmount)}`} />}
+          {Number(b.gstAmount) > 0 && <Row label={`GST @ ${b.gstPercentage}%${b.taxInclusive ? " (included)" : ""}`} value={`${b.taxInclusive ? "" : "+ "}${currency(b.gstAmount)}`} />}
           {Number(b.tdsAmount) > 0 && <Row label={`TDS @ ${b.tdsPercentage}%`} value={`− ${currency(b.tdsAmount)}`} tone="minus" />}
           {Number(b.retentionAmount) > 0 && (
             <Row label={`Retention @ ${b.retentionPercentage}%`} value={`− ${currency(b.retentionAmount)}`} tone="minus" />

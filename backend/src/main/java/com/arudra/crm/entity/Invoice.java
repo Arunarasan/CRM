@@ -80,6 +80,10 @@ public class Invoice extends BaseEntity {
     @Column(name = "gst_type", nullable = false, length = 10)
     private String gstType = "CGST_SGST";
 
+    /** True when the entered rates already include GST (GST is worked out of them, not added). */
+    @Column(name = "tax_inclusive", nullable = false)
+    private Boolean taxInclusive = false;
+
     @Column(name = "gst_amount", precision = 15, scale = 2)
     private BigDecimal gstAmount = BigDecimal.ZERO;
 

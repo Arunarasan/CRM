@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import GstModeToggle from "@/components/ui/gst-mode-toggle";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Plus, Trash2, GitBranch, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -43,6 +44,7 @@ function buildPayload(form: Partial<Boq>) {
     discountType: form.discountType ?? "PERCENT",
     discount: form.discount ?? 0,
     taxPercent: form.taxPercent ?? 0,
+    taxInclusive: !!form.taxInclusive,
     items: (form.items || []).map((it: any) => ({
       ...it,
       phase: ref(it.phase),
@@ -297,6 +299,7 @@ export default function BoqForm() {
           </Field>
           <Field label="Tax (%)">
             <Input type="number" value={form.taxPercent ?? 0} onChange={(e) => set("taxPercent")(num(e.target.value))} />
+            <GstModeToggle className="mt-2" size="sm" inclusive={!!form.taxInclusive} onChange={(v) => set("taxInclusive")(v)} />
           </Field>
         </div>
 
