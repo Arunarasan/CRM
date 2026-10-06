@@ -15,7 +15,6 @@ import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/components/ui/toast";
 import { printInvoice } from "./printInvoice";
 import { fetchCompanyProfile } from "@/lib/companyProfile";
-import CompletionBillingTracker from "./CompletionBillingTracker";
 import { MoneySection } from "./MoneySection";
 import { Skeleton } from "@/components/ui/skeleton";
 import ProjectProfitPanel from "./ProjectProfitPanel";
@@ -47,9 +46,9 @@ export type CommercialMode = "all" | "billing" | "payments" | "profit";
 
 /**
  * Project money (the shared stats row lives on the page):
- *  - all:      one compact screen — schedule + invoices on the left; profit, payments received and
+ *  - all:      one compact screen — invoices on the left; profit, payments received and
  *              expenses on the right (stacks on narrow screens)
- *  - billing:  payment schedule + invoices (maker, issue, paid/unpaid, print)
+ *  - billing:  invoices (maker, issue, paid/unpaid, print)
  *  - payments: money received, as a timeline, with pending field collections to approve
  *  - profit:   cash vs accrual profit + project expenses
  * `focus` scrolls the combined screen to the payments or expenses block (old deep links).
@@ -68,7 +67,7 @@ export default function ProjectPaymentsTab({ project, onChanged, mode = "billing
   const [loading, setLoading] = useState(true);
   const [denied, setDenied] = useState(false);
   const [busyId, setBusyId] = useState<number | null>(null);
-  const [tick, setTick] = useState(0); // bumps so the billing tracker re-fetches after invoice changes
+  const [tick, setTick] = useState(0); // bumps so the profit panels re-fetch after invoice changes
 
   const load = () => {
     if (!projectId) return;
@@ -163,9 +162,6 @@ export default function ProjectPaymentsTab({ project, onChanged, mode = "billing
   return (
     <div className={compact ? "grid grid-cols-1 @5xl:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)] gap-3 items-start" : "space-y-3"}>
       <div className="space-y-3 min-w-0">
-      {/* Payment schedule — milestones billed by hand once work reaches them */}
-      <CompletionBillingTracker project={project} refreshSignal={tick} onChanged={reloadAll} compact={compact} />
-
       {loading ? (
         <MoneySection icon={FileText} title="Invoices">
           <div className="space-y-2 p-4">{[0, 1, 2].map((k) => <Skeleton key={k} className="h-12 w-full" />)}</div>
@@ -199,7 +195,7 @@ export default function ProjectPaymentsTab({ project, onChanged, mode = "billing
           {invoices.length === 0 ? (
             <div className="flex flex-col items-start gap-1 px-4 py-8 sm:items-center sm:text-center">
               <p className="text-sm font-semibold text-slate-800">No invoices yet</p>
-              <p className="max-w-[48ch] text-sm text-slate-500">Raise one from a payment milestone above when it's ready to bill, or write one with New invoice.</p>
+              <p className="max-w-[48ch] text-sm text-slate-500">Raise an invoice with New invoice when a payment is due.</p>
             </div>
           ) : shownInvoices.length === 0 ? (
             <p className="px-4 py-8 text-center text-sm text-slate-500">No invoices in this filter.</p>
