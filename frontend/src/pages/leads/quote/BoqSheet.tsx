@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { enqueueSave } from "./saveQueue";
 import { createPortal } from "react-dom";
-import { BookmarkPlus, Check, ChevronDown, ChevronRight, FolderOpen, Hammer, Layers, Loader2, MapPin, MoreVertical, Package, PackageSearch, Pencil, Plus, SlidersHorizontal, Trash2 } from "lucide-react";
+import { BookmarkPlus, Check, ChevronDown, ChevronRight, FolderOpen, FolderPlus, Hammer, Loader2, MapPin, MoreVertical, Package, PackagePlus, Pencil, Plus, SlidersHorizontal, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -17,9 +17,10 @@ import {
 import type { Product, ProductColor } from "@/types/inventory";
 import { NumCell, ProductSearch, SelectCell, TextCell, UnitCell } from "./cells";
 import {
-  AddCategoryBar, ColourBox, DiscountCell, ImageCell, ProductPicker, type WebsiteProduct,
-  colorsOf, photosOf, priceOf, productSummary, useCategories, useLineProducts, websiteUnit,
+  ColourBox, DiscountCell, ImageCell, colorsOf, photosOf, productSummary, useCategories, useLineProducts,
 } from "./productCells";
+import AddProductPanel, { type NewRowDraft } from "./AddProductPanel";
+import { CATEGORY_TONE, PRODUCT_TONE } from "./quoteTones";
 import { UnitOptions } from "@/components/UnitOptions";
 import { isAreaUnit, isLengthUnit, normalizeUnit, sizeUnitOf } from "@/lib/units";
 
@@ -443,18 +444,11 @@ export default function BoqSheet({
   const [bulk, setBulk] = useState<null | { mode: "labour" }>(null);
   // Category ⋮ → Add material / Add labour: a line of its own in that category.
   const [catLine, setCatLine] = useState<null | { category: string; kind: "material" | "labour" }>(null);
-  const [inventoryOpen, setInventoryOpen] = useState(false);
-  const [newCategorySignal, setNewCategorySignal] = useState(0);
-  /** "Add Item": jump to a category's empty last row and put the cursor in it. */
-  const focusNewRow = (category?: string) => {
-    const target = category ?? groups[groups.length - 1]?.category;
-    if (!target) { setNewCategorySignal((n) => n + 1); return; }
-    setCollapsed((cur) => { const n = new Set(cur); n.delete(target); return n; });
-    setTimeout(() => {
-      const row = [...document.querySelectorAll<HTMLElement>("[data-newrow]")].find((el) => el.dataset.newrow === target);
-      row?.scrollIntoView({ block: "center", behavior: "smooth" });
-      row?.querySelector("input")?.focus();
-    }, 50);
+  // The "Add products" panel — the one place products and new categories are added.
+  const [panel, setPanel] = useState<null | { category?: string; newCategory?: boolean }>(null);
+  const openPanel = (category?: string, newCategory?: boolean) => {
+    if (category) setCollapsed((cur) => { const n = new Set(cur); n.delete(category); return n; });
+    setPanel({ category, newCategory });
   };
 
   // The tick on each item is the customer's choice: ticked items are in the quote and its total.
@@ -503,37 +497,26 @@ export default function BoqSheet({
         </div>
       )}
 
-      {/* "Add from Inventory" · "Add Item ▾" — in the page's tab bar when it gives a slot, else here */}
-      {canEdit && (() => {
+      {/* Add product — in the page's tab bar when it gives a slot, else here. New categories are made at
+          the bottom of the sheet (amber), never up here, so the two are never mixed up. */}
+      {canEdit && groups.length > 0 && (() => {
         const actions = (
-          <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" className="h-8" onClick={() => setInventoryOpen(true)}>
-              <PackageSearch className="h-4 w-4" /> Add from Inventory
+          <div className="flex w-full items-center gap-2">
+            <Button size="sm" className={`h-9 flex-1 sm:flex-none ${PRODUCT_TONE.solid}`} onClick={() => openPanel()}>
+              <PackagePlus className="h-4 w-4" /> Add product
             </Button>
-            <div className="inline-flex">
-              <Button size="sm" className="h-8 rounded-r-none bg-[#1F5C3F] hover:bg-[#184A33] text-white" onClick={() => focusNewRow()}>
-                <Plus className="h-4 w-4" /> Add Item
-              </Button>
+            {items.length > 1 && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button size="sm" className="h-8 rounded-l-none border-l border-white/20 px-2 bg-[#1F5C3F] hover:bg-[#184A33] text-white" aria-label="More ways to add">
-                    <ChevronDown className="h-4 w-4" />
+                  <Button size="sm" variant="outline" className="h-9 w-9 shrink-0 px-0" aria-label="More actions">
+                    <MoreVertical className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-60">
-                  {groups.map((g) => (
-                    <DropdownMenuItem key={g.category} onClick={() => focusNewRow(g.category)}>
-                      <Plus className="h-4 w-4 mr-2" /> Add to {g.category}
-                    </DropdownMenuItem>
-                  ))}
-                  {groups.length > 0 && <DropdownMenuSeparator />}
-                  <DropdownMenuItem onClick={() => setNewCategorySignal((n) => n + 1)}><Layers className="h-4 w-4 mr-2" /> New category</DropdownMenuItem>
-                  {items.length > 1 && (
-                    <DropdownMenuItem onClick={() => setBulk({ mode: "labour" })}><Hammer className="h-4 w-4 mr-2" /> Add labour to several products…</DropdownMenuItem>
-                  )}
+                <DropdownMenuContent align="end" className="w-64">
+                  <DropdownMenuItem onClick={() => setBulk({ mode: "labour" })}><Hammer className="h-4 w-4 mr-2" /> Add labour to several products…</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-            </div>
+            )}
           </div>
         );
         return actionsTarget ? createPortal(actions, actionsTarget) : <div className="flex justify-end">{actions}</div>;
@@ -544,20 +527,38 @@ export default function BoqSheet({
       </datalist>
 
       {groups.length === 0 && (
-        <p className="rounded-xl border text-sm text-muted-foreground p-6 text-center">
-          No products yet. {canEdit ? "Add a category, then pick its products." : ""}
-        </p>
+        <div className="rounded-xl border border-dashed px-4 py-8 sm:px-6 sm:py-10 text-center">
+          <p className="text-sm font-semibold">This quote is empty</p>
+          {canEdit ? (
+            <>
+              <ol className="mx-auto mt-4 grid max-w-md gap-2 text-left sm:grid-cols-2">
+                <li className="flex items-start gap-2.5 rounded-lg border-2 border-[#F59E0B]/60 bg-[#FFFBEB] p-3">
+                  <FolderPlus className={`mt-0.5 h-5 w-5 shrink-0 ${CATEGORY_TONE.icon}`} />
+                  <span className="text-xs"><span className="block font-semibold text-[#92400E]">1 · Make a category</span>
+                    <span className="text-muted-foreground">A group, e.g. Curtains, Wallpaper</span></span>
+                </li>
+                <li className="flex items-start gap-2.5 rounded-lg border p-3 opacity-70">
+                  <PackagePlus className="mt-0.5 h-5 w-5 shrink-0 text-[#1F5C3F]" />
+                  <span className="text-xs"><span className="block font-semibold">2 · Add its products</span>
+                    <span className="text-muted-foreground">Search, set qty & rate</span></span>
+                </li>
+              </ol>
+              <Button className={`mt-4 h-10 ${CATEGORY_TONE.solid}`} onClick={() => openPanel(undefined, true)}>
+                <FolderPlus className="h-4 w-4" /> Make first category
+              </Button>
+            </>
+          ) : <p className="mt-1 text-xs text-muted-foreground">Nothing has been priced here.</p>}
+        </div>
       )}
 
       {groups.map((g) => {
         const on = g.items.filter((i) => i.isActive !== false).length;
-        const saved = categoryByName.get(g.category.trim().toLowerCase());
         const folded = collapsed.has(g.category);
         return (
           // No overflow-hidden here: the product picker's dropdown must be able to spill out.
           <div key={g.category} className="rounded-lg border bg-card">
             {/* Category header */}
-            <div className={`flex items-center gap-2 bg-muted/70 px-3 py-2 ${folded ? "rounded-lg" : "rounded-t-lg"}`}>
+            <div className={`flex items-center gap-2 ${CATEGORY_TONE.header} px-3 py-2 ${folded ? "rounded-lg" : "rounded-t-lg"}`}>
               <button type="button" onClick={() => toggleCollapsed(g.category)}
                 aria-label={folded ? `Show ${g.category}` : `Hide ${g.category}`} aria-expanded={!folded}
                 className="h-6 w-6 -ml-1 rounded-md hover:bg-primary/10 flex items-center justify-center text-muted-foreground">
@@ -572,7 +573,7 @@ export default function BoqSheet({
                   onCommit={(v) => renameCategory(g, v)} onCancel={() => setRenaming(null)} />
               ) : (
                 <span className="flex-1 min-w-0 truncate text-sm font-bold uppercase tracking-wide">
-                  <FolderOpen className="inline h-4 w-4 mr-1.5 -mt-0.5 text-[#D97706]" aria-hidden />
+                  <FolderOpen className={`inline h-4 w-4 mr-1.5 -mt-0.5 ${CATEGORY_TONE.icon}`} aria-hidden />
                   <span
                     className={canEdit ? "cursor-text rounded px-0.5 -mx-0.5 hover:bg-primary/10" : ""}
                     title={canEdit ? "Double-click to rename" : undefined}
@@ -594,6 +595,7 @@ export default function BoqSheet({
                     </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" onCloseAutoFocus={(e) => e.preventDefault()}>
+                    <DropdownMenuItem onClick={() => openPanel(g.category)}><PackagePlus className="h-4 w-4 mr-2 text-[#1F5C3F]" /> Add product</DropdownMenuItem>
                     <DropdownMenuItem onClick={() => setCatLine({ category: g.category, kind: "material" })}><Package className="h-4 w-4 mr-2" /> Add material</DropdownMenuItem>
                     <DropdownMenuItem onClick={() => setCatLine({ category: g.category, kind: "labour" })}><Hammer className="h-4 w-4 mr-2" /> Add labour</DropdownMenuItem>
                     <DropdownMenuSeparator />
@@ -654,36 +656,40 @@ export default function BoqSheet({
               ))}
             </div>}
             {!folded && canEdit && (
-              <NewItemRow key={`new-${g.category}`} categoryId={saved?.id} categoryName={g.category} first={g.items.length === 0}
-                onAdd={(d) => addRow(g.category, d)} />
+              <div className="border-t p-1.5">
+                <button type="button" onClick={() => openPanel(g.category)}
+                  className={`flex h-10 w-full items-center justify-center gap-1.5 rounded-md text-sm font-medium transition-colors active:scale-[0.99] ${PRODUCT_TONE.soft}`}>
+                  <PackagePlus className="h-4 w-4" />
+                  {g.items.length === 0 ? `Add the first product to ${g.category}` : `Add product to ${g.category}`}
+                </button>
+              </div>
             )}
           </div>
         );
       })}
 
-      {canEdit && (
-        <AddCategoryBar
-          openSignal={newCategorySignal}
-          categories={savedCategories}
-          used={categoryNames}
-          onSaveCategory={rememberCategory}
-          onAdd={(name) => setExtraCategories((l) => [...l, name.slice(0, CATEGORY_MAX)])}
-        />
+      {canEdit && groups.length > 0 && (
+        <button type="button" onClick={() => openPanel(undefined, true)}
+          className={`flex w-full items-center justify-center gap-2.5 rounded-lg px-4 py-3 text-left transition-colors active:scale-[0.99] ${CATEGORY_TONE.soft}`}>
+          <FolderPlus className={`h-5 w-5 shrink-0 ${CATEGORY_TONE.icon}`} />
+          <span>
+            <span className="block text-sm font-semibold">New category</span>
+            <span className="block text-xs font-normal opacity-80">Start another group, e.g. Blinds, Wallpaper</span>
+          </span>
+        </button>
       )}
 
-      <InventoryDialog
-        open={inventoryOpen}
+      <AddProductPanel
+        open={!!panel}
+        onClose={() => setPanel(null)}
+        initialCategory={panel?.category}
+        newCategory={panel?.newCategory}
         categories={categoryNames}
-        categoryId={(c) => categoryByName.get(c.trim().toLowerCase())?.id}
-        onClose={() => setInventoryOpen(false)}
-        onPick={(category, prod) => {
-          addRow(category, { name: prod.name, product: prod, qty: 1, unit: normalizeUnit(prod.unit) || "Nos", rate: priceOf(prod) });
-          toast.success(`${prod.name} added to ${category}`);
-        }}
-        onPickWebsite={(category, web) => {
-          addRow(category, { name: web.name, web, qty: 1, unit: websiteUnit(web), rate: 0 });
-          toast.success(`${web.name} added to ${category} — type its rate`);
-        }}
+        categoryIdOf={(c) => categoryByName.get(c.trim().toLowerCase())?.id}
+        savedCategories={savedCategories}
+        onSaveCategory={rememberCategory}
+        onAddCategory={(name) => setExtraCategories((l) => [...l, name.slice(0, CATEGORY_MAX)])}
+        onAdd={addRow}
       />
 
       <CategoryLineDialog
@@ -903,7 +909,7 @@ function ItemRow({
           </div>
           {/* Description + colour — under the name until the table has room for their own columns */}
           <div className="flex flex-wrap min-w-0 items-start gap-x-1 @[1100px]:hidden">
-            <div className="min-w-0 flex-1 @[820px]:flex-none max-w-full">
+            <div className="min-w-0 basis-full @[560px]:basis-0 flex-1 @[820px]:flex-none max-w-full">
               <DescriptionBox value={item.description} disabled={!canEdit} quiet
                 onCommit={(v) => onUpdate({ description: v || undefined })} />
             </div>
@@ -1026,139 +1032,6 @@ function ItemRow({
             <NewLabourRow defaultQty={item.quantity ?? 1} rateFor={rateFor} onAdd={onAddLabour} onDone={() => setAdding(null)} />
           )}
         </div>
-      )}
-    </div>
-  );
-}
-
-type NewRowDraft = {
-  name: string; product?: Product; web?: WebsiteProduct; qty: number; unit: string; rate: number;
-  /** Typed-in name: also save it to the catalogue. */
-  saveForLater?: boolean;
-  /** Picked a saved-from-quote item and changed its name / unit: change the saved item too. */
-  updateSaved?: boolean;
-};
-const EMPTY_ROW: NewRowDraft = { name: "", qty: 1, unit: "Nos", rate: 0 };
-
-/**
- * The empty last row of a category table — new products are typed straight into the table:
- * Product (pick from the catalogue or type any name) → Qty → Unit → Rate, Enter adds the line and
- * the row clears for the next one.
- */
-function NewItemRow({ categoryId, categoryName, first, onAdd }: {
-  categoryId?: number; categoryName: string; first: boolean;
-  onAdd: (d: NewRowDraft) => Promise<unknown>;
-}) {
-  const [d, setD] = useState<NewRowDraft>(EMPTY_ROW);
-  const [busy, setBusy] = useState(false);
-  // "Save for future quotes" — on by default; an untick sticks for the next lines in this table.
-  const [saveForLater, setSaveForLater] = useState(true);
-  const typedIn = d.name.trim().length > 0 && !d.product && !d.web;
-  // Picked an item saved from a quote, then changed its name or unit.
-  const savedEdited = !!d.product && d.product.source === "QUOTE" && d.name.trim().length > 0
-    && (d.name.trim() !== d.product.name || (!!d.unit && d.unit !== (normalizeUnit(d.product.unit) || d.product.unit)));
-  const [updateSaved, setUpdateSaved] = useState(true);
-  const nameRef = useRef<HTMLInputElement>(null);
-  const qtyRef = useRef<HTMLInputElement>(null);
-  const ready = d.name.trim().length > 0;
-  const amount = Math.round(d.qty * d.rate * 100) / 100;
-  const box = "h-8 w-full rounded-md border border-border bg-background px-2 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/20";
-  const num = (v: string) => { const n = Number(v.replace(/,/g, "")); return Number.isFinite(n) ? n : 0; };
-
-  const add = async () => {
-    if (!ready || busy) return;
-    setBusy(true);
-    try {
-      await onAdd(savedEdited && !updateSaved
-        ? { ...d, product: undefined } // "this quote only": a plain typed-in line, the saved item untouched
-        : { ...d, saveForLater: typedIn && saveForLater, updateSaved: savedEdited });
-      setD(EMPTY_ROW);
-      nameRef.current?.focus();
-    } finally { setBusy(false); }
-  };
-  const enterAdds = (e: React.KeyboardEvent) => { if (e.key === "Enter") { e.preventDefault(); add(); } };
-
-  return (
-    <div data-newrow={categoryName} className={`grid grid-cols-[20px_minmax(0,1fr)] gap-x-2 gap-y-2 items-center px-3 py-1.5 border-t rounded-b-lg bg-muted/20 ${ROW}`}>
-      <Plus className="h-4 w-4 text-muted-foreground justify-self-center" aria-hidden />
-      {/* Product — spans the #, photo, name (and description) columns */}
-      <div className="min-w-0 @[820px]:col-span-3 @[1100px]:col-span-5">
-        <ProductPicker
-          categoryId={categoryId}
-          categoryName={categoryName}
-          value={d.name}
-          onValueChange={(v) => setD((x) => ({
-            ...x, name: v,
-            // A saved-from-quote item stays picked while its text is corrected — the change goes back to it.
-            product: x.product && (v === x.product.name || (x.product.source === "QUOTE" && v.trim() !== "")) ? x.product : undefined,
-            web: x.web && v === x.web.name ? x.web : undefined,
-          }))}
-          onPick={(p) => {
-            setD((x) => ({ ...x, name: p.name, product: p, web: undefined, unit: normalizeUnit(p.unit) || x.unit, rate: priceOf(p) || x.rate }));
-            setTimeout(() => { qtyRef.current?.focus(); qtyRef.current?.select(); }, 0);
-          }}
-          onPickWebsite={(p) => {
-            // Website products carry no price — the rate is typed in next.
-            setD((x) => ({ ...x, name: p.name, web: p, product: undefined, unit: websiteUnit(p) }));
-            setTimeout(() => { qtyRef.current?.focus(); qtyRef.current?.select(); }, 0);
-          }}
-          onCustom={() => setTimeout(() => { qtyRef.current?.focus(); qtyRef.current?.select(); }, 0)}
-          placeholder={first ? `Add the first product to ${categoryName} — search name or code…` : "Add product — search name or code..."}
-          inputClassName={`${box} pl-8`}
-          inputRef={nameRef}
-        />
-      </div>
-
-      {/* Numbers — a strip on phones, table cells on desktop */}
-      <div className="col-span-2 col-start-1 @[820px]:col-span-1 @[820px]:col-start-auto grid grid-cols-2 @[420px]:grid-cols-[60px_76px_minmax(0,1fr)_minmax(0,1fr)] gap-x-2 @[820px]:contents">
-        <Cell label="Qty">
-          <input ref={qtyRef} inputMode="decimal" aria-label="Quantity" className={`${box} text-right tabular-nums`}
-            value={d.qty || ""} placeholder="1" onFocus={(e) => e.currentTarget.select()}
-            onChange={(e) => setD((x) => ({ ...x, qty: num(e.target.value) }))} onKeyDown={enterAdds} />
-        </Cell>
-        <Cell label="Unit">
-          <select aria-label="Unit" className={`${box} pr-1`} value={d.unit}
-            onChange={(e) => setD((x) => ({ ...x, unit: e.target.value }))}>
-            <UnitOptions value={d.unit} />
-          </select>
-        </Cell>
-        <Cell label="Rate ₹">
-          <input inputMode="decimal" aria-label="Rate" className={`${box} text-right tabular-nums`}
-            value={d.rate || ""} placeholder="0" onFocus={(e) => e.currentTarget.select()}
-            onChange={(e) => setD((x) => ({ ...x, rate: num(e.target.value) }))} onKeyDown={enterAdds} />
-        </Cell>
-        <span className="hidden @[820px]:block" />
-        <Cell label="Amount ₹" className="@[820px]:hidden">
-          <span className="flex h-8 items-center justify-end px-2 text-sm font-semibold tabular-nums text-muted-foreground">
-            {amount > 0 ? inr(amount) : "—"}
-          </span>
-        </Cell>
-      </div>
-
-      <Button size="sm" variant="outline" className="col-span-2 h-8" disabled={!ready || busy} onClick={add}
-        title="Add this product (Enter)">
-        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Plus className="h-4 w-4 @[820px]:mr-0 mr-1" /><span className="@[820px]:hidden">Add product</span></>}
-      </Button>
-
-      {savedEdited && (
-        <label className="col-span-full flex cursor-pointer select-none items-center gap-2 pb-0.5 pl-7 text-xs text-muted-foreground">
-          <input type="checkbox" className="h-3.5 w-3.5 accent-primary" checked={updateSaved}
-            onChange={(e) => setUpdateSaved(e.target.checked)} />
-          <span>
-            <span className="font-medium text-foreground">Update saved item</span>
-            {" "}· "{d.product!.name}" becomes "{d.name.trim()}"{d.unit && d.unit !== (normalizeUnit(d.product!.unit) || d.product!.unit) ? `, unit ${d.unit}` : ""} — untick to use it in this quote only
-          </span>
-        </label>
-      )}
-      {typedIn && (
-        <label className="col-span-full flex cursor-pointer select-none items-center gap-2 pb-0.5 pl-7 text-xs text-muted-foreground">
-          <input type="checkbox" className="h-3.5 w-3.5 accent-primary" checked={saveForLater}
-            onChange={(e) => setSaveForLater(e.target.checked)} />
-          <span>
-            <span className="font-medium text-foreground">Save for future quotes</span>
-            {" "}· new item{d.rate > 0 ? ` at ${inr(d.rate)}/${d.unit || "Nos"}` : ""} — pick it from search next time
-          </span>
-        </label>
       )}
     </div>
   );
@@ -1403,51 +1276,6 @@ function NewLabourRow({ defaultQty, rateFor, onAdd, onDone }: {
       <Button size="sm" onClick={submit}>Add</Button>
       <Button size="sm" variant="ghost" onClick={onDone}>Done</Button>
     </div>
-  );
-}
-
-/** "Add from Inventory": pick a category, then any number of catalogue products. */
-function InventoryDialog({ open, categories, categoryId, onClose, onPick, onPickWebsite }: {
-  open: boolean;
-  categories: string[];
-  categoryId: (name: string) => number | undefined;
-  onClose: () => void;
-  onPick: (category: string, p: Product) => void;
-  onPickWebsite: (category: string, p: WebsiteProduct) => void;
-}) {
-  const [category, setCategory] = useState("");
-  useEffect(() => { if (open) setCategory((c) => (c && categories.includes(c) ? c : categories[0] ?? "")); }, [open, categories]);
-  return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="quote-neutral max-w-lg">
-        <DialogHeader><DialogTitle>Add from Inventory & Website catalogue</DialogTitle></DialogHeader>
-        {categories.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Add a category to the quote first — products are grouped by category.</p>
-        ) : (
-          <div className="space-y-3">
-            <label className="block text-xs text-muted-foreground">Add to category
-              <select className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm text-foreground" value={category}
-                onChange={(e) => setCategory(e.target.value)}>
-                {categories.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </label>
-            <div className="min-h-[18rem]">
-              <ProductPicker
-                key={category}
-                categoryId={categoryId(category)}
-                categoryName={category}
-                placeholder="Search products by name, code or category…"
-                onPick={(p) => onPick(category, p)}
-                onPickWebsite={(p) => onPickWebsite(category, p)}
-                onCustom={() => toast.info("Pick a product from the list — use the table's last row for a custom one.")}
-              />
-              <p className="mt-2 text-[11px] text-muted-foreground">Pick as many as you need — each is added with its saved rate.</p>
-            </div>
-          </div>
-        )}
-        <DialogFooter><Button variant="outline" onClick={onClose}>Done</Button></DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }
 

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Camera, Crop, ImageIcon, ImagePlus, Loader2, Plus, Search, Trash2, X } from "lucide-react";
+import { Camera, Crop, ImageIcon, ImagePlus, Loader2, Plus, Trash2, X } from "lucide-react";
 import api from "@/lib/api";
 import { resolveFileUrl, uploadFile } from "@/lib/uploadFile";
 import { compressImageFile } from "@/lib/imageProcessing";
@@ -135,17 +135,19 @@ export const priceOf = (p: Product) => Number(p.sellingPrice ?? p.price ?? 0);
 
 const CATEGORY_LIST = "quote-category-names";
 
-export function AddCategoryBar({ categories, used, onAdd, onSaveCategory, openSignal }: {
-  /** Bumped by the page's "Add Item → New category" to open the bar. */
-  openSignal?: number;
+/**
+ * Name a new category for the quote: pick a saved one (inventory or website), or type a new name —
+ * optionally saved to the catalogue so it can be picked next time.
+ */
+export function NewCategoryForm({ categories, used, onAdd, onSaveCategory, onCancel, autoFocus = true }: {
   categories: InventoryCategory[];
   /** Category names already on the sheet (not offered again). */
   used: string[];
   onAdd: (name: string) => void;
   onSaveCategory: (c: InventoryCategory) => void;
+  onCancel?: () => void;
+  autoFocus?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
-  useEffect(() => { if (openSignal) setOpen(true); }, [openSignal]);
   const [name, setName] = useState("");
   const [saveToCatalog, setSaveToCatalog] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -159,8 +161,10 @@ export function AddCategoryBar({ categories, used, onAdd, onSaveCategory, openSi
     return [...categories, ...web];
   }, [categories, website.categories]);
   const options = all.filter((c) => !usedSet.has(norm(c.name)));
-  const saved = all.find((c) => norm(c.name) === norm(name));
-  const already = usedSet.has(norm(name));
+  const t = norm(name);
+  const suggestions = (t ? options.filter((c) => norm(c.name).includes(t)) : options).slice(0, 12);
+  const saved = all.find((c) => norm(c.name) === t);
+  const already = usedSet.has(t);
 
   const submit = async (picked?: string) => {
     const n = (picked ?? name).trim();
@@ -179,47 +183,41 @@ export function AddCategoryBar({ categories, used, onAdd, onSaveCategory, openSi
     }
     onAdd(match?.name ?? n);
     setName("");
-    setOpen(false);
   };
 
-  if (!open) {
-    return (
-      <button type="button" onClick={() => setOpen(true)}
-        className="w-full rounded-lg border border-dashed p-2.5 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/40 flex items-center justify-center gap-1.5">
-        <Plus className="h-4 w-4" /> Add category
-      </button>
-    );
-  }
-
   return (
-    <div id="quote-add-category" className="rounded-lg border border-dashed p-3 space-y-2">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm font-medium">New category</span>
-        <Input autoFocus list={CATEGORY_LIST} placeholder="Pick a saved category or type a new name" className="h-9 flex-1 min-w-[14rem]"
+    <div className="space-y-2.5">
+      <div className="flex gap-2">
+        <Input autoFocus={autoFocus} list={CATEGORY_LIST} placeholder="Category name, e.g. Curtains" className="h-10 flex-1 min-w-0"
+          aria-label="New category name" maxLength={50}
           value={name} onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") submit(); if (e.key === "Escape") setOpen(false); }} />
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); submit(); } if (e.key === "Escape" && onCancel) { e.stopPropagation(); onCancel(); } }} />
         <datalist id={CATEGORY_LIST}>
-          {options.map((c) => <option key={c.id} value={c.name}>{c.parent?.name ? `in ${c.parent.name}` : ""}</option>)}
+          {options.map((c) => <option key={c.id} value={c.name} />)}
         </datalist>
-        <Button size="sm" disabled={!name.trim() || already || busy} onClick={() => submit()}>
-          {busy && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />} Add
+        <Button className="h-10 bg-[#B45309] hover:bg-[#92400E] text-white" disabled={!name.trim() || already || busy} onClick={() => submit()}>
+          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Create
         </Button>
-        <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
+        {onCancel && <Button variant="ghost" className="h-10 px-3" onClick={onCancel}>Cancel</Button>}
       </div>
+      {already && <p className="text-xs text-[#B45309]">"{name.trim()}" is already on this quote.</p>}
       {name.trim() && !saved && !already && (
-        <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
-          <input type="checkbox" className="h-3.5 w-3.5 accent-primary" checked={saveToCatalog} onChange={(e) => setSaveToCatalog(e.target.checked)} />
-          New category — also save it to the catalogue so it can be picked next time
+        <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+          <input type="checkbox" className="h-4 w-4 accent-primary" checked={saveToCatalog} onChange={(e) => setSaveToCatalog(e.target.checked)} />
+          Also save it to the catalogue for future quotes
         </label>
       )}
-      {options.length > 0 && !name.trim() && (
-        <div className="flex flex-wrap gap-1.5">
-          {options.slice(0, 16).map((c) => (
-            <button key={c.id} type="button" onClick={() => submit(c.name)}
-              className="rounded-full border bg-background px-3 py-1 text-xs hover:border-primary hover:text-primary">
-              {c.name}
-            </button>
-          ))}
+      {suggestions.length > 0 && (
+        <div>
+          <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{t ? "Matching saved categories" : "Saved categories"}</p>
+          <div className="flex flex-wrap gap-1.5">
+            {suggestions.map((c) => (
+              <button key={c.id} type="button" onClick={() => submit(c.name)}
+                className="h-8 rounded-full border bg-background px-3 text-xs font-medium hover:border-[#D97706] hover:bg-[#FFFBEB] active:scale-[0.98]">
+                {c.name}
+              </button>
+            ))}
+          </div>
         </div>
       )}
     </div>
@@ -230,36 +228,18 @@ export function AddCategoryBar({ categories, used, onAdd, onSaveCategory, openSi
 // Add a product to a category: catalogue search (that category first), or a custom product
 // ---------------------------------------------------------------------------
 
-export function ProductPicker({
-  categoryId, categoryName, onPick, onPickWebsite, onCustom, value, onValueChange, placeholder, inputClassName, inputRef, hideIcon,
-}: {
-  categoryId?: number;
-  categoryName: string;
-  onPick: (p: Product) => void;
-  /** Website catalogue products are offered too when this is given. */
-  onPickWebsite?: (p: WebsiteProduct) => void;
-  onCustom: (name: string) => void;
-  /** Controlled text (the table's new-item row keeps the picked name in the box). */
-  value?: string;
-  onValueChange?: (v: string) => void;
-  placeholder?: string;
-  inputClassName?: string;
-  inputRef?: React.Ref<HTMLInputElement>;
-  hideIcon?: boolean;
+/**
+ * Catalogue search for one category: inventory products (that category's when nothing is typed,
+ * else anything matching) plus a few website catalogue products.
+ */
+export function useCatalogueSearch({ categoryId, categoryName, q, enabled, withWebsite }: {
+  categoryId?: number; categoryName: string; q: string; enabled: boolean; withWebsite: boolean;
 }) {
-  const [ownQ, setOwnQ] = useState("");
-  const q = value ?? ownQ;
-  const setQ = (v: string) => { if (onValueChange) onValueChange(v); else setOwnQ(v); };
-  const [open, setOpen] = useState(false);
   const [results, setResults] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
-  const [active, setActive] = useState(-1);
-  const boxRef = useRef<HTMLDivElement>(null);
   const website = useWebsiteCatalog();
-  // Website products: this category's when nothing is typed, otherwise anything matching the text
-  // (this category's first). Kept short so inventory stays the main list.
   const webResults = useMemo(() => {
-    if (!onPickWebsite) return [];
+    if (!withWebsite) return [];
     const cat = website.categories.find((c) => norm(c.name) === norm(categoryName)
       || norm(c.name).includes(norm(categoryName)) || norm(categoryName).includes(norm(c.name)));
     const t = norm(q);
@@ -268,122 +248,31 @@ export function ProductPicker({
       ? website.products.filter((p) => norm(p.name).includes(t) || norm(p.sku).includes(t))
       : website.products.filter(inCat);
     return [...list].sort((a, b) => Number(inCat(b)) - Number(inCat(a))).slice(0, 8);
-  }, [onPickWebsite, website, categoryName, q]);
-  const total = results.length + webResults.length;
+  }, [withWebsite, website, categoryName, q]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!enabled) return;
     const search = q.trim();
     if (!categoryId && !search) { setResults([]); return; }
+    let alive = true;
     const t = setTimeout(() => {
       setLoading(true);
       const params = new URLSearchParams({ size: "20" });
       if (categoryId) params.set("categoryId", String(categoryId));
       if (search) params.set("search", search);
       api.get(`/inventory/products?${params}`)
-        .then((res) => { setResults(res.data.content || []); setActive(-1); })
-        .catch(() => setResults([]))
-        .finally(() => setLoading(false));
+        .then((res) => { if (alive) setResults(res.data.content || []); })
+        .catch(() => { if (alive) setResults([]); })
+        .finally(() => { if (alive) setLoading(false); });
     }, search ? 250 : 0);
-    return () => clearTimeout(t);
-  }, [q, open, categoryId]);
+    return () => { alive = false; clearTimeout(t); };
+  }, [q, enabled, categoryId]);
 
-  useEffect(() => {
-    if (!open) return;
-    const close = (e: MouseEvent) => { if (!boxRef.current?.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
-  }, [open]);
-
-  // Controlled: the parent decides what the box shows after a pick; uncontrolled: it clears.
-  const pick = (p: Product) => { onPick(p); if (value === undefined) setQ(""); setOpen(false); };
-  const pickWeb = (p: WebsiteProduct) => { onPickWebsite?.(p); if (value === undefined) setQ(""); setOpen(false); };
-  const pickActive = () => {
-    if (active < results.length) pick(results[active]);
-    else pickWeb(webResults[active - results.length]);
-  };
-  const custom = () => { if (q.trim()) { onCustom(q.trim()); if (value === undefined) setQ(""); setOpen(false); } };
-
-  return (
-    <div ref={boxRef} className="relative flex-1 min-w-0">
-      <div className="relative">
-        {!hideIcon && <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />}
-        <Input
-          ref={inputRef}
-          className={inputClassName ?? "h-9 pl-8"}
-          placeholder={placeholder ?? `Add a product to ${categoryName} — search, or type a custom name and press Enter`}
-          value={q}
-          onFocus={() => setOpen(true)}
-          onChange={(e) => { setQ(e.target.value); setOpen(true); }}
-          onKeyDown={(e) => {
-            if (e.key === "ArrowDown") { e.preventDefault(); setActive((a) => Math.min(a + 1, total - 1)); }
-            else if (e.key === "ArrowUp") { e.preventDefault(); setActive((a) => Math.max(a - 1, -1)); }
-            else if (e.key === "Enter" || (e.key === "Tab" && !e.shiftKey && open && (active >= 0 || q.trim()))) {
-              if (e.key === "Enter") e.preventDefault();
-              if (active >= 0 && active < total) pickActive(); else custom();
-            } else if (e.key === "Escape") setOpen(false);
-          }}
-        />
-      </div>
-      {open && (loading || total > 0 || q.trim()) && (
-        <div className="absolute z-30 mt-1 w-full max-h-96 overflow-auto rounded-md border bg-popover shadow-lg">
-          {results.length > 0 && onPickWebsite && <ListHeading>Materials · inventory</ListHeading>}
-          {loading && results.length === 0 && (
-            <div className="px-3 py-2 text-xs text-muted-foreground flex items-center gap-1.5"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading products…</div>
-          )}
-          {results.map((p, i) => (
-            <button key={p.id} type="button" onMouseDown={(e) => { e.preventDefault(); pick(p); }}
-              className={`w-full text-left px-2 py-1.5 text-sm flex items-center gap-2.5 hover:bg-muted ${i === active ? "bg-muted" : ""}`}>
-              <Thumb url={photosOf(p)[0]} size="h-9 w-9" />
-              <span className="min-w-0 flex-1">
-                <span className="flex items-center gap-1.5">
-                  <span className="truncate font-medium">{p.name}</span>
-                  {p.source === "QUOTE" && (
-                    <span className="shrink-0 rounded bg-amber-50 px-1 text-[10px] font-semibold leading-4 text-amber-700" title="Saved from an earlier quote">Saved from quote</span>
-                  )}
-                </span>
-                <span className="block truncate text-xs text-muted-foreground">
-                  {[p.brand, colorsOf(p).length > 1 ? `${colorsOf(p).length} colours` : colorsOf(p)[0]?.name].filter(Boolean).join(" · ") || " "}
-                </span>
-              </span>
-              <span className="text-xs text-muted-foreground shrink-0 tabular-nums">
-                {priceOf(p) ? inr(priceOf(p)) : "—"}{p.unit ? ` / ${p.unit}` : ""}
-              </span>
-            </button>
-          ))}
-          {webResults.length > 0 && (
-            <>
-              <ListHeading>Website catalogue</ListHeading>
-              {webResults.map((p, i) => (
-                <button key={`w${p.id}`} type="button" onMouseDown={(e) => { e.preventDefault(); pickWeb(p); }}
-                  className={`w-full text-left px-2 py-1.5 text-sm flex items-center gap-2.5 hover:bg-muted ${results.length + i === active ? "bg-muted" : ""}`}>
-                  <Thumb url={p.image} size="h-9 w-9" />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate font-medium">{p.name}</span>
-                    <span className="block truncate text-xs text-muted-foreground">{[p.sku, p.shortDescription].filter(Boolean).join(" · ") || " "}</span>
-                  </span>
-                  <span className="text-xs text-muted-foreground shrink-0">per {websiteUnit(p)}</span>
-                </button>
-              ))}
-            </>
-          )}
-          {!loading && total === 0 && !q.trim() && (
-            <div className="px-3 py-2 text-xs text-muted-foreground">No products saved in {categoryName} yet — type a name to add a custom one.</div>
-          )}
-          {q.trim() && (
-            <button type="button" onMouseDown={(e) => { e.preventDefault(); custom(); }}
-              className="w-full text-left px-3 py-2 text-sm border-t hover:bg-muted flex items-center gap-1.5 text-primary">
-              <Plus className="h-4 w-4" /> Add “{q.trim()}” as a custom product
-            </button>
-          )}
-        </div>
-      )}
-    </div>
-  );
+  return { results, webResults, loading };
 }
 
-const ListHeading = ({ children }: { children: React.ReactNode }) => (
-  <div className="sticky top-0 z-10 border-b bg-muted/90 px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground backdrop-blur">
+export const ListHeading = ({ children }: { children: React.ReactNode }) => (
+  <div className="sticky top-0 z-10 border-b bg-muted/95 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground backdrop-blur">
     {children}
   </div>
 );

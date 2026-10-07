@@ -440,7 +440,7 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
   return (
     <section className="quote-layout quote-neutral space-y-3">
       {/* ---- Quotation information ---- */}
-      <dl className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 rounded-xl border bg-card shadow-sm">
+      <dl className="grid grid-cols-2 xl:grid-cols-4 rounded-xl border bg-card shadow-sm">
         <InfoTile icon={Users} label="Customer" value={customerName} sub={customerId !== "—" ? customerId : undefined} />
         <InfoTile icon={Building2} label="Site / Project"
           value={measurement?.siteAddress || measurement?.measurementNumber || (measurement ? `Measurement #${measurement.id}` : "No measurement yet")}
@@ -603,7 +603,7 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
                     History{history.length > 0 && <span className="ml-1 rounded-full bg-muted px-1.5 text-[11px] tabular-nums">{history.length}</span>}
                   </ViewTab>
                 </div>
-                {(view === "items" || view === "cost") && <div ref={setActionsEl} className="ml-auto py-1.5" />}
+                {(view === "items" || view === "cost") && <div ref={setActionsEl} className="w-full pb-2 sm:w-auto sm:ml-auto sm:py-1.5" />}
                 </div>
 
                 <div className="p-3">
@@ -619,22 +619,23 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
                 </div>
 
                 {/* ---- Action bar ---- */}
-                <div className="sticky bottom-16 md:bottom-0 z-10 rounded-b-xl border-t bg-card/95 backdrop-blur px-3 sm:px-4 py-2.5 flex flex-wrap items-center justify-between gap-2">
-                  <div className="text-sm">
-                    <span className="text-muted-foreground">{inQuote.length} item{inQuote.length === 1 ? "" : "s"}<span className="hidden sm:inline"> in quote</span> · </span>
-                    <span className="font-bold tabular-nums">{inr(boq.grandTotal)}</span>
+                <div className="sticky bottom-16 md:bottom-0 z-10 rounded-b-xl border-t bg-card/95 backdrop-blur px-3 sm:px-4 py-2 sm:py-2.5 flex items-center justify-between gap-2">
+                  <div className="min-w-0 text-sm leading-tight sm:whitespace-nowrap">
+                    <span className="block sm:hidden font-bold tabular-nums">{inr(boq.grandTotal)}</span>
+                    <span className="text-xs sm:text-sm text-muted-foreground">{inQuote.length} item{inQuote.length === 1 ? "" : "s"}<span className="hidden sm:inline"> in quote · </span></span>
+                    <span className="hidden sm:inline font-bold tabular-nums">{inr(boq.grandTotal)}</span>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button variant="outline" size="sm" className="h-9" disabled={!!busy || noItems} onClick={openPrint} aria-label="Preview"
+                  <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+                    <Button variant="outline" size="sm" className="h-9 w-9 px-0 sm:w-auto sm:px-3" disabled={!!busy || noItems} onClick={openPrint} aria-label="Preview"
                       title="See the quotation as the customer will — print or save as PDF from there">
                       {busy === "print" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}<span className="hidden sm:inline">Preview</span>
                     </Button>
-                    <Button variant="outline" size="sm" className="h-9" disabled={!!busy || noItems} onClick={shareQuote} aria-label="Share quote"
+                    <Button variant="outline" size="sm" className="h-9 w-9 px-0 sm:w-auto sm:px-3" disabled={!!busy || noItems} onClick={shareQuote} aria-label="Share quote"
                       title="Send the quote number and total — share sheet on phones, WhatsApp on desktop">
                       {busy === "share" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Share2 className="h-4 w-4" />}<span className="hidden sm:inline">Share Quote</span>
                     </Button>
                     {editable && (
-                      <Button variant="outline" size="sm" className="h-9" onClick={saveDraft} aria-label="Save draft"
+                      <Button variant="outline" size="sm" className="hidden sm:inline-flex h-9" onClick={saveDraft} aria-label="Save draft"
                         title="The sheet saves every change as you type — this confirms it">
                         <Save className="h-4 w-4" /><span className="hidden sm:inline">Save Draft</span>
                       </Button>
@@ -1042,13 +1043,13 @@ function InfoTile({ icon: Icon, label, value, sub, strong, tone = "green" }: {
   tone?: "green" | "amber";
 }) {
   return (
-    <div className="flex min-w-0 items-center gap-3 border-b px-4 py-3 last:border-b-0 sm:[&:nth-child(odd)]:border-r xl:border-b-0 xl:border-r xl:last:border-r-0 sm:[&:nth-last-child(-n+2)]:border-b-0">
-      <span className={`h-11 w-11 shrink-0 rounded-lg flex items-center justify-center ${tone === "amber" ? "bg-[#FFF7ED] text-[#D97706]" : "bg-[#ECFDF5] text-[#1F5C3F]"}`}>
+    <div className="flex min-w-0 items-center gap-3 border-b px-3 py-2.5 sm:px-4 sm:py-3 [&:nth-child(odd)]:border-r [&:nth-last-child(-n+2)]:border-b-0 xl:border-b-0 xl:border-r xl:last:border-r-0">
+      <span className={`hidden sm:flex h-11 w-11 shrink-0 rounded-lg items-center justify-center ${tone === "amber" ? "bg-[#FFF7ED] text-[#D97706]" : "bg-[#ECFDF5] text-[#1F5C3F]"}`}>
         <Icon className="h-5 w-5" />
       </span>
       <div className="min-w-0">
         <dt className="text-xs text-muted-foreground">{label}</dt>
-        <dd className={`truncate ${strong ? "text-lg font-bold tabular-nums" : "text-sm font-semibold"}`} title={value}>{value}</dd>
+        <dd className={`truncate ${strong ? "text-base sm:text-lg font-bold tabular-nums" : "text-sm font-semibold"}`} title={value}>{value}</dd>
         {sub && <dd className="truncate text-xs text-muted-foreground">{sub}</dd>}
       </div>
     </div>
