@@ -82,7 +82,9 @@ export function resolveJourney(
   ].some(Boolean);
   const hasRequirement = !!(
     (lead as any)?.projectDescription || (lead as any)?.customerRequirements ||
-    (lead as any)?.roomsRequired || anyScope
+    (lead as any)?.roomsRequired || anyScope ||
+    // The Category → Product enquiry fields (and a budget) count too — newer leads capture only these.
+    lead?.requirementCategory || lead?.requirementProduct || (lead as any)?.estimatedBudget
   );
 
   const measurement = records.measurements[0];

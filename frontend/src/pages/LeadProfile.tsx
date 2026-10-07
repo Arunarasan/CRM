@@ -331,9 +331,9 @@ export default function LeadProfile() {
                 users={users}
                 journey={journey}
                 focusStep={focusStep}
+                canEdit={isOpen}
                 onChanged={() => { fetchLead(); journey.reload(); }}
                 onEditRequirement={() => setEditOpen(true)}
-                onConvert={() => goToStep("quote")}
               />
             </TabsContent>
             <TabsContent value="tasks" className="mt-0">
