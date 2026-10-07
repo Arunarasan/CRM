@@ -4,7 +4,7 @@ import { useParams, Link, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft, CheckCircle2, MoreVertical, XCircle, Check, CalendarClock, CalendarPlus,
   LayoutGrid, ListChecks, Activity as ActivityIcon, FileText, Route, Clock, RotateCcw, Star,
-  ChevronRight, Home, FolderKanban, UserPlus, Phone, MessageCircle, Mail, MapPin, Navigation,
+  ChevronRight, FolderKanban, UserPlus, Phone, MessageCircle, Mail, MapPin, Navigation,
   NotebookPen, Pencil, Crown, Tag, UserCheck, Package, ClipboardList, Calculator, Rocket,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -54,7 +54,6 @@ function normalizeTab(t: string) {
   return (TABS as readonly string[]).includes(t) ? t : LEGACY_TAB_MAP[t] || "overview";
 }
 
-const CHIP = "inline-flex min-w-0 max-w-full items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm shadow-sm transition-colors hover:border-emerald-300 [&>svg]:shrink-0";
 const PILL = "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide";
 
 type PrimaryAction =
@@ -69,7 +68,6 @@ export default function LeadProfile() {
   const [creator, setCreator] = useState<LeadCreator | null>(null);
   const [users, setUsers] = useState<UserSummary[]>([]);
   const [loading, setLoading] = useState(true);
-  const [scrolled, setScrolled] = useState(false);
   const [activeTab, setActiveTabState] = useState(normalizeTab(searchParams.get("tab") || "overview"));
   // The open tab lives in ?tab= too, so in-page links (e.g. the Quote's "Drawings & photos") can switch it.
   const tabParam = searchParams.get("tab");
@@ -160,21 +158,14 @@ export default function LeadProfile() {
     return null;
   })();
 
-  const renderPrimary = (compact = false) => {
+  const renderPrimary = () => {
     if (!primary) return null;
     const Icon = primary.icon;
-    const cls = compact
-      ? "h-8 rounded-lg bg-emerald-800 hover:bg-emerald-900 text-white shrink-0"
-      : "h-11 min-w-0 flex-1 @2xl:flex-none whitespace-nowrap rounded-xl bg-emerald-800 hover:bg-emerald-900 px-5 font-semibold text-white shadow-[0_4px_14px_-4px_rgba(0,53,34,0.45)] transition hover:-translate-y-px";
-    const inner = (
-      <>
-        <Icon className={`w-4 h-4 ${compact ? "mr-1.5" : "mr-2"}`} /> {primary.label}
-        {!compact && <ChevronRight className="w-4 h-4 ml-1.5" />}
-      </>
-    );
+    const cls = "h-9 min-w-0 flex-1 @3xl:flex-none whitespace-nowrap rounded-lg bg-emerald-800 hover:bg-emerald-900 px-4 font-semibold text-white shadow-[0_4px_14px_-4px_rgba(0,53,34,0.45)] transition hover:-translate-y-px";
+    const inner = <><Icon className="w-4 h-4 mr-2" /> {primary.label} <ChevronRight className="w-4 h-4 ml-1.5" /></>;
     return primary.kind === "link"
-      ? <Button asChild size={compact ? "sm" : "default"} className={cls}><Link to={primary.to}>{inner}</Link></Button>
-      : <Button size={compact ? "sm" : "default"} className={cls} disabled={journey.loading && isOpen} onClick={primary.onClick}>{inner}</Button>;
+      ? <Button asChild className={cls}><Link to={primary.to}>{inner}</Link></Button>
+      : <Button className={cls} disabled={journey.loading && isOpen} onClick={primary.onClick}>{inner}</Button>;
   };
 
   // Click a star to set the rating (or the current top star again to clear). Sends the full lead with
@@ -209,210 +200,183 @@ export default function LeadProfile() {
       });
   };
 
+  const CHIP_SM = "inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[13px] shadow-sm whitespace-nowrap [&>svg]:shrink-0";
+
   return (
-    <div className="flex flex-col h-full bg-slate-50/50 relative overflow-hidden animate-in fade-in">
-      {/* One scroll surface: the header scrolls away, the tab strip pins with a compact header. */}
-      <div onScroll={(e) => setScrolled((e.target as HTMLDivElement).scrollTop > 140)} className="flex-1 overflow-y-auto scroll-smooth @container">
-
-        {/* Breadcrumb */}
-        <div className="px-4 sm:px-6 lg:px-8 pt-3">
-          <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-sm text-slate-400">
-            <Link to="/" className="hover:text-emerald-600 flex items-center" aria-label="Home"><Home className="w-3.5 h-3.5" /></Link>
-            <ChevronRight className="w-3.5 h-3.5" />
-            <Link to="/leads" className="hover:text-emerald-600">Leads</Link>
-            <ChevronRight className="w-3.5 h-3.5" />
-            <span className="text-slate-600 font-medium truncate">{lead.name}</span>
-          </nav>
-        </div>
-
-        {/* Header card */}
-        <div className="px-4 sm:px-6 lg:px-8 pt-2">
-          <div className="relative overflow-hidden rounded-2xl border border-slate-100 bg-gradient-to-br from-white via-white to-emerald-50/50 px-4 sm:px-6 py-5 shadow-[0_8px_30px_-12px_rgba(15,23,42,0.12)]">
-            <div className="grid grid-cols-1 @4xl:grid-cols-[minmax(0,1fr)_auto] items-start gap-4">
-              {/* Identity */}
-              <div className="flex items-center gap-3.5 @lg:gap-4 min-w-0">
-                <div className="relative shrink-0">
-                  <div className="flex h-14 w-14 @lg:h-16 @lg:w-16 items-center justify-center rounded-full bg-emerald-50 text-2xl @lg:text-[28px] font-bold text-emerald-800 ring-1 ring-emerald-100">
-                    {(lead.name || "?").trim().charAt(0).toUpperCase()}
-                  </div>
-                  <span className={`absolute bottom-0.5 right-0.5 h-3.5 w-3.5 rounded-full ring-2 ring-white ${dot}`}
-                    title={isOpen ? "Open lead" : isLost ? "Lost" : "Closed"} aria-hidden />
+    <Tabs value={activeTab} onValueChange={setActiveTab}
+      className="@container flex flex-col h-full bg-slate-50/50 overflow-hidden animate-in fade-in">
+      {/* Pinned: compact header card, stage bar and tabs stay put; only the tab content scrolls. */}
+      <div className="shrink-0 z-20 px-4 sm:px-6 lg:px-8 pt-3 pb-2 space-y-2 border-b border-slate-200/70 bg-slate-50/95 backdrop-blur-sm">
+        <div className="rounded-2xl border border-slate-100 bg-gradient-to-br from-white via-white to-emerald-50/50 px-3 sm:px-4 py-2.5 shadow-[0_4px_20px_-12px_rgba(15,23,42,0.15)]">
+          <div className="flex flex-wrap @3xl:flex-nowrap items-center gap-x-3 gap-y-2">
+            {/* Identity */}
+            <div className="flex min-w-0 flex-1 items-center gap-2.5">
+              <button type="button" onClick={goBack} title="Back" aria-label="Back"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-slate-900">
+                <ArrowLeft className="h-4 w-4" />
+              </button>
+              <div className="relative shrink-0">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-50 text-lg font-bold text-emerald-800 ring-1 ring-emerald-100">
+                  {(lead.name || "?").trim().charAt(0).toUpperCase()}
                 </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2.5 flex-wrap">
-                    <h1 className="min-w-0 max-w-full text-2xl @lg:text-[28px] font-bold tracking-tight text-slate-900 truncate">{lead.name}</h1>
-                    <button
-                      type="button"
-                      onClick={() => isOpen && setStatusOpen(true)}
-                      disabled={!isOpen}
-                      title={isOpen ? "Change status" : lead.status}
-                      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-semibold ${statusStyle(lead.status)} ${isOpen ? "hover:ring-1 hover:ring-emerald-400 cursor-pointer" : "cursor-default"}`}
-                    >
-                      {lead.status === "New" ? <Crown className="h-3.5 w-3.5" /> : <span className="h-1.5 w-1.5 rounded-full bg-current" />}
-                      {lead.status}
-                    </button>
-                    {lead.isConverted && <span className={`${PILL} bg-emerald-100 text-emerald-800`}><CheckCircle2 className="h-3 w-3" /> Converted</span>}
-                  </div>
-                  <div className="mt-1 flex items-center gap-3 text-sm text-slate-500">
-                    <span className="font-medium">{lead.leadNumber}</span>
-                    <span className="h-4 w-px bg-slate-200" aria-hidden />
-                    <span className="inline-flex items-center gap-0.5" title={lead.rating ? `Rating ${lead.rating}/5` : "Rate this lead"}>
-                      {[1, 2, 3, 4, 5].map((s) => (
-                        <button key={s} type="button" onClick={() => setRating(s)} disabled={!isOpen}
-                          aria-label={`Set rating ${s} of 5`}
-                          className={isOpen ? "hover:scale-110 transition-transform" : "cursor-default"}>
-                          <Star className={`h-[18px] w-[18px] ${s <= (lead.rating || 0) ? "fill-amber-400 text-amber-400" : "text-slate-300"}`} />
-                        </button>
-                      ))}
-                    </span>
-                  </div>
-                </div>
+                <span className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full ring-2 ring-white ${dot}`}
+                  title={isOpen ? "Open lead" : isLost ? "Lost" : "Closed"} aria-hidden />
               </div>
-
-              {/* Actions */}
-              <div className="flex min-w-0 items-center gap-2 @4xl:justify-end">
-                {lead.isConverted && lead.convertedToCustomer && (
-                  <Button asChild variant="outline" className="h-11 rounded-xl border-slate-200 bg-white px-4 font-semibold text-slate-700 shadow-sm">
-                    <Link to={`/customers/${lead.convertedToCustomer.id}`}>View Customer</Link>
-                  </Button>
-                )}
-                {isLost && (
-                  <Button variant="outline" onClick={() => setWinBackOpen(true)}
-                    className="h-11 rounded-xl border-slate-200 bg-white px-4 font-semibold text-slate-700 shadow-sm">
-                    <CalendarClock className="w-4 h-4 mr-2" /> {lead.winBackDate ? "Change win-back" : "Plan win-back"}
-                  </Button>
-                )}
-                {isOpen && (
-                  <Button variant="outline" title="Edit lead" onClick={() => setEditOpen(true)}
-                    className="h-11 shrink-0 rounded-xl border-slate-200 bg-white px-3.5 @lg:px-4 text-slate-800 font-semibold shadow-sm">
-                    <Pencil className="w-4 h-4 @lg:mr-2" /> <span className="hidden @lg:inline">Edit</span>
-                  </Button>
-                )}
-                {renderPrimary()}
-                {isOpen && (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="outline" size="icon" aria-label="More actions" className="h-11 w-11 shrink-0 rounded-xl border-slate-200 text-slate-600 bg-white shadow-sm">
-                        <MoreVertical className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onSelect={() => setAssignOpen(true)}><Check className="h-4 w-4 mr-2" /> Assign team</DropdownMenuItem>
-                      <DropdownMenuItem onSelect={() => setStatusOpen(true)}><CheckCircle2 className="h-4 w-4 mr-2" /> Change status</DropdownMenuItem>
-                      <DropdownMenuItem onSelect={() => setActiveTab("activity")}><NotebookPen className="h-4 w-4 mr-2" /> Log call / follow-up</DropdownMenuItem>
-                      <DropdownMenuItem onSelect={() => setActiveTab("tasks")}><CalendarPlus className="h-4 w-4 mr-2" /> Add task</DropdownMenuItem>
-                      <DropdownMenuItem onSelect={() => setConvertOpen(true)}><UserPlus className="h-4 w-4 mr-2" /> Convert to customer only</DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem onSelect={() => setLostOpen(true)} className="text-destructive"><XCircle className="h-4 w-4 mr-2" /> Mark as lost</DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                )}
+              <div className="min-w-0">
+                <div className="flex min-w-0 flex-wrap @xl:flex-nowrap items-center gap-x-2 gap-y-0.5">
+                  <h1 className="min-w-0 max-w-full truncate text-lg @lg:text-xl font-bold tracking-tight text-slate-900">{lead.name}</h1>
+                  <button
+                    type="button"
+                    onClick={() => isOpen && setStatusOpen(true)}
+                    disabled={!isOpen}
+                    title={isOpen ? "Change status" : lead.status}
+                    className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${statusStyle(lead.status)} ${isOpen ? "hover:ring-1 hover:ring-emerald-400 cursor-pointer" : "cursor-default"}`}
+                  >
+                    {lead.status === "New" ? <Crown className="h-3 w-3" /> : <span className="h-1.5 w-1.5 rounded-full bg-current" />}
+                    {lead.status}
+                  </button>
+                  {lead.isConverted && <span className={`${PILL} shrink-0 bg-emerald-100 text-emerald-800`}><CheckCircle2 className="h-3 w-3" /> Converted</span>}
+                </div>
+                <div className="flex items-center gap-2 text-xs text-slate-500">
+                  <span className="font-medium">{lead.leadNumber}</span>
+                  <span className="h-3 w-px bg-slate-200" aria-hidden />
+                  <span className="inline-flex items-center" title={lead.rating ? `Rating ${lead.rating}/5` : "Rate this lead"}>
+                    {[1, 2, 3, 4, 5].map((s) => (
+                      <button key={s} type="button" onClick={() => setRating(s)} disabled={!isOpen}
+                        aria-label={`Set rating ${s} of 5`}
+                        className={isOpen ? "p-px hover:scale-110 transition-transform" : "p-px cursor-default"}>
+                        <Star className={`h-3.5 w-3.5 ${s <= (lead.rating || 0) ? "fill-amber-400 text-amber-400" : "text-slate-300"}`} />
+                      </button>
+                    ))}
+                  </span>
+                </div>
               </div>
             </div>
 
-            {/* Contact chips */}
-            <div className="mt-4 flex flex-wrap items-center gap-2.5">
-              {phone && (
-                <span className="inline-flex max-w-full items-stretch rounded-xl border border-slate-200 bg-white text-sm shadow-sm">
-                  <a href={`tel:${phone}`} title="Call" className="inline-flex items-center gap-2 rounded-l-xl px-3.5 py-2 font-medium text-slate-800 hover:bg-emerald-50/60">
-                    <Phone className="h-4 w-4 shrink-0 text-emerald-700" /> {phone}
-                  </a>
-                  {whatsapp && (
-                    <a href={waLink(whatsapp)} target="_blank" rel="noreferrer" title="Open WhatsApp chat"
-                      className="inline-flex items-center gap-2 rounded-r-xl border-l border-slate-200 px-3.5 py-2 font-medium text-emerald-700 hover:bg-emerald-50/60">
-                      <MessageCircle className="h-4 w-4 shrink-0" /> WhatsApp
-                    </a>
-                  )}
-                </span>
+            {/* Actions */}
+            <div className="flex w-full @3xl:w-auto min-w-0 shrink-0 items-center gap-1.5">
+              {lead.isConverted && lead.convertedToCustomer && (
+                <Button asChild variant="outline" className="h-9 rounded-lg border-slate-200 bg-white px-3 font-semibold text-slate-700">
+                  <Link to={`/customers/${lead.convertedToCustomer.id}`}>View Customer</Link>
+                </Button>
               )}
-              {lead.email && (
-                <a href={`mailto:${lead.email}`} className={CHIP} title="Email">
-                  <Mail className="h-4 w-4 text-sky-600" /> <span className="truncate text-slate-800">{lead.email}</span>
-                </a>
+              {isLost && (
+                <Button variant="outline" onClick={() => setWinBackOpen(true)}
+                  className="h-9 rounded-lg border-slate-200 bg-white px-3 font-semibold text-slate-700">
+                  <CalendarClock className="w-4 h-4 mr-1.5" /> {lead.winBackDate ? "Change win-back" : "Plan win-back"}
+                </Button>
               )}
-              {addedBy && (
-                <span className={CHIP} title="Who brought this lead in">
-                  <UserCheck className="h-4 w-4 text-amber-500" />
-                  <span className="text-slate-400">Lead by</span> <span className="truncate font-semibold text-slate-800">{addedBy}</span>
-                </span>
+              {isOpen && (
+                <Button variant="outline" title="Edit lead" onClick={() => setEditOpen(true)}
+                  className="h-9 shrink-0 rounded-lg border-slate-200 bg-white px-3 text-slate-800 font-semibold">
+                  <Pencil className="w-4 h-4 @lg:mr-1.5" /> <span className="hidden @lg:inline">Edit</span>
+                </Button>
+              )}
+              {renderPrimary()}
+              {isOpen && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="icon" aria-label="More actions" className="h-9 w-9 shrink-0 rounded-lg border-slate-200 text-slate-600 bg-white">
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onSelect={() => setAssignOpen(true)}><Check className="h-4 w-4 mr-2" /> Assign team</DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setStatusOpen(true)}><CheckCircle2 className="h-4 w-4 mr-2" /> Change status</DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setActiveTab("activity")}><NotebookPen className="h-4 w-4 mr-2" /> Log call / follow-up</DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setActiveTab("tasks")}><CalendarPlus className="h-4 w-4 mr-2" /> Add task</DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setConvertOpen(true)}><UserPlus className="h-4 w-4 mr-2" /> Convert to customer only</DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onSelect={() => setLostOpen(true)} className="text-destructive"><XCircle className="h-4 w-4 mr-2" /> Mark as lost</DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               )}
             </div>
-
-            {/* Location */}
-            {(place || mapQuery) && (
-              <div className="mt-2.5 flex flex-wrap items-center gap-2.5">
-                {place && (
-                  <span className={CHIP} title={mapQuery || place}>
-                    <MapPin className="h-4 w-4 text-emerald-700" /> <span className="truncate text-slate-800">{place}</span>
-                  </span>
-                )}
-                {mapQuery && (
-                  <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapQuery)}`}
-                    target="_blank" rel="noreferrer" title={`Open in Google Maps: ${mapQuery}`}
-                    className="inline-flex items-center gap-2 rounded-xl bg-emerald-800 px-4 py-2 text-sm font-semibold text-white shadow-[0_4px_12px_-4px_rgba(0,53,34,0.45)] transition hover:-translate-y-px hover:bg-emerald-900">
-                    <Navigation className="h-4 w-4" /> Navigate
-                  </a>
-                )}
-              </div>
-            )}
-
-            {/* What they're looking for */}
-            {(enquiry || lead.requirementCategory || products.length > 0) && (
-              <div className="mt-3 flex flex-wrap items-center gap-2.5">
-                {enquiry && <span className="mr-1 text-sm font-semibold uppercase tracking-wide text-slate-500">{enquiryLabel(enquiry) || enquiry}</span>}
-                {enquiryDetails(lead).filter((d) => d !== lead.requirementCategory).map((d) => (
-                  <span key={d} className="rounded-xl bg-violet-50 px-3.5 py-2 text-sm font-medium text-violet-700">{d}</span>
-                ))}
-                {lead.requirementCategory && (
-                  <span className="inline-flex items-center gap-2 rounded-xl bg-amber-50 px-3.5 py-2 text-sm font-semibold text-amber-900 ring-1 ring-amber-200/70">
-                    <Tag className="h-4 w-4 text-amber-700" /> {lead.requirementCategory}
-                  </span>
-                )}
-                {shownProducts.map((p) => (
-                  <span key={p} className="inline-flex items-center gap-2 rounded-xl bg-slate-100 px-3.5 py-2 text-sm text-slate-700">
-                    <Package className="h-4 w-4 text-slate-500" /> {p}
-                  </span>
-                ))}
-                {products.length > shownProducts.length && (
-                  <span className="text-xs font-medium text-slate-400" title={products.slice(shownProducts.length).join(", ")}>
-                    +{products.length - shownProducts.length} more
-                  </span>
-                )}
-              </div>
-            )}
           </div>
 
-          {isLost
-            ? <div className="mt-3"><LostBanner lead={lead} onPlan={() => setWinBackOpen(true)} /></div>
-            : <LeadJourneyBar journey={journey} onOpen={goToStep} />}
+          {/* One line of chips — scrolls sideways when it doesn't fit, so the header height never grows. */}
+          <div className="mt-2 -mx-1 px-1 flex items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {phone && (
+              <span className="inline-flex shrink-0 items-stretch rounded-lg border border-slate-200 bg-white text-[13px] shadow-sm whitespace-nowrap">
+                <a href={`tel:${phone}`} title="Call" className="inline-flex items-center gap-1.5 rounded-l-lg px-2.5 py-1 font-medium text-slate-800 hover:bg-emerald-50/60">
+                  <Phone className="h-3.5 w-3.5 text-emerald-700" /> {phone}
+                </a>
+                {whatsapp && (
+                  <a href={waLink(whatsapp)} target="_blank" rel="noreferrer" title="Open WhatsApp chat"
+                    className="inline-flex items-center gap-1.5 rounded-r-lg border-l border-slate-200 px-2.5 py-1 font-medium text-emerald-700 hover:bg-emerald-50/60">
+                    <MessageCircle className="h-3.5 w-3.5" /> WhatsApp
+                  </a>
+                )}
+              </span>
+            )}
+            {lead.email && (
+              <a href={`mailto:${lead.email}`} className={`${CHIP_SM} hover:border-emerald-300`} title="Email">
+                <Mail className="h-3.5 w-3.5 text-sky-600" /> <span className="text-slate-800">{lead.email}</span>
+              </a>
+            )}
+            {addedBy && (
+              <span className={CHIP_SM} title="Who brought this lead in">
+                <UserCheck className="h-3.5 w-3.5 text-amber-500" />
+                <span className="text-slate-400">Lead by</span> <span className="font-semibold text-slate-800">{addedBy}</span>
+              </span>
+            )}
+            {place && (
+              <span className={CHIP_SM} title={mapQuery || place}>
+                <MapPin className="h-3.5 w-3.5 text-emerald-700" /> <span className="text-slate-800">{place}</span>
+              </span>
+            )}
+            {mapQuery && (
+              <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapQuery)}`}
+                target="_blank" rel="noreferrer" title={`Open in Google Maps: ${mapQuery}`}
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-emerald-800 px-2.5 py-1 text-[13px] font-semibold text-white whitespace-nowrap hover:bg-emerald-900">
+                <Navigation className="h-3.5 w-3.5" /> Navigate
+              </a>
+            )}
+            {(enquiry || lead.requirementCategory || products.length > 0) && (
+              <span className="mx-1 h-5 w-px shrink-0 bg-slate-200" aria-hidden />
+            )}
+            {enquiry && <span className="shrink-0 text-[11px] font-bold uppercase tracking-wide text-slate-500">{enquiryLabel(enquiry) || enquiry}</span>}
+            {enquiryDetails(lead).filter((d) => d !== lead.requirementCategory).map((d) => (
+              <span key={d} className="shrink-0 whitespace-nowrap rounded-lg bg-violet-50 px-2.5 py-1 text-[13px] font-medium text-violet-700">{d}</span>
+            ))}
+            {lead.requirementCategory && (
+              <span className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-amber-50 px-2.5 py-1 text-[13px] font-semibold text-amber-900 ring-1 ring-amber-200/70">
+                <Tag className="h-3.5 w-3.5 text-amber-700" /> {lead.requirementCategory}
+              </span>
+            )}
+            {shownProducts.map((p) => (
+              <span key={p} className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-slate-100 px-2.5 py-1 text-[13px] text-slate-700">
+                <Package className="h-3.5 w-3.5 text-slate-500" /> {p}
+              </span>
+            ))}
+            {products.length > shownProducts.length && (
+              <span className="shrink-0 text-xs font-medium text-slate-400" title={products.slice(shownProducts.length).join(", ")}>
+                +{products.length - shownProducts.length} more
+              </span>
+            )}
+          </div>
         </div>
 
+        {!isLost && <LeadJourneyBar journey={journey} onOpen={goToStep} />}
+
+        <div role="tablist" aria-label="Lead sections"
+          className="bg-white p-1 border border-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] rounded-xl flex gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {TAB_ITEMS.map(([value, label, Icon]) => {
+            const active = value === activeTab;
+            return (
+              <button key={value} type="button" role="tab" aria-selected={active} onClick={() => setActiveTab(value)}
+                className={`rounded-lg px-3 sm:px-3.5 py-1.5 text-sm font-medium whitespace-nowrap transition-colors flex items-center gap-1.5 shrink-0 ${active ? "bg-emerald-800 text-white shadow-sm" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}>
+                <Icon className="w-4 h-4" /> {label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Scrolling content */}
+      <div className="flex-1 overflow-y-auto scroll-smooth">
         <div className="px-4 sm:px-6 lg:px-8 pt-3 pb-6">
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <div className="sticky top-0 z-20 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-2 mb-3 bg-slate-50/95 backdrop-blur-sm space-y-2">
-              {/* Compact header — slides in once the big header scrolls away, so the lead stays identifiable. */}
-              <div className={`flex items-center justify-between gap-2 overflow-hidden transition-all duration-300 ${scrolled ? "max-h-14 opacity-100" : "max-h-0 opacity-0"}`} aria-hidden={!scrolled}>
-                <div className="flex items-center gap-2 min-w-0">
-                  <button type="button" onClick={goBack} title="Back" tabIndex={scrolled ? 0 : -1} className="text-slate-400 hover:text-slate-600 shrink-0"><ArrowLeft className="h-4 w-4" /></button>
-                  <span className="font-bold text-slate-800 truncate">{lead.name}</span>
-                  {lead.city && <span className="text-xs text-slate-400 shrink-0 hidden sm:inline">· {lead.city}</span>}
-                  <span className={`px-2 py-0.5 text-[10px] rounded-full font-semibold shrink-0 ${statusStyle(lead.status)}`}>{lead.status}</span>
-                </div>
-                {scrolled && renderPrimary(true)}
-              </div>
-              <div role="tablist" aria-label="Lead sections"
-                className="bg-white p-1.5 border border-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] rounded-2xl flex gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                {TAB_ITEMS.map(([value, label, Icon]) => {
-                  const active = value === activeTab;
-                  return (
-                    <button key={value} type="button" role="tab" aria-selected={active} onClick={() => setActiveTab(value)}
-                      className={`rounded-xl px-3 sm:px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-all duration-200 flex items-center gap-2 shrink-0 ${active ? "bg-emerald-800 text-white shadow-sm" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}>
-                      <Icon className="w-4 h-4" /> {label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+          {isLost && <div className="mb-3"><LostBanner lead={lead} onPlan={() => setWinBackOpen(true)} /></div>}
 
             <TabsContent value="overview" className="mt-0">
               <OverviewTab lead={lead} users={users} canEdit={isOpen} onChanged={fetchLead} />
@@ -442,7 +406,6 @@ export default function LeadProfile() {
             <TabsContent value="timeline" className="mt-0">
               <TimelineTab leadId={id} />
             </TabsContent>
-          </Tabs>
         </div>
       </div>
 
@@ -454,7 +417,7 @@ export default function LeadProfile() {
       <MarkLostDialog open={lostOpen} onOpenChange={setLostOpen} lead={lead} onChanged={fetchLead} />
       <WinBackDialog open={winBackOpen} onOpenChange={setWinBackOpen} lead={lead} onChanged={fetchLead} />
       <ReopenDialog open={reopenOpen} onOpenChange={setReopenOpen} lead={lead} users={users} onChanged={fetchLead} />
-    </div>
+    </Tabs>
   );
 }
 

@@ -55,7 +55,7 @@ export default function SalesJourneyTab({
 
   return (
     <div className="space-y-6">
-      <section ref={ref("requirement")} aria-labelledby="journey-requirement" className="scroll-mt-40">
+      <section ref={ref("requirement")} aria-labelledby="journey-requirement" className="scroll-mt-3">
         <RequirementBrief
           lead={lead}
           step={step("requirement")}
@@ -66,12 +66,12 @@ export default function SalesJourneyTab({
         />
       </section>
 
-      <section ref={ref("quote")} aria-labelledby="journey-quote" className="scroll-mt-40 space-y-3">
+      <section ref={ref("quote")} aria-labelledby="journey-quote" className="scroll-mt-3 space-y-3">
         <StageHeader step={step("quote")} index={index("quote")} resolving={resolving} title="Measure & Quote" />
         <QuoteWorkspace leadId={leadId} onChanged={onChanged} />
       </section>
 
-      <section ref={ref("convert")} aria-labelledby="journey-convert" className="scroll-mt-40 space-y-3">
+      <section ref={ref("convert")} aria-labelledby="journey-convert" className="scroll-mt-3 space-y-3">
         <StageHeader step={step("convert")} index={index("convert")} resolving={resolving} title="Project" />
         <ProjectOutcome lead={lead} journey={journey} />
       </section>
