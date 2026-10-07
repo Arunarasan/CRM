@@ -94,6 +94,38 @@
       "env": {
         "VITE_API_URL": "http://localhost:8087/api"
       }
+    },
+    {
+      "name": "backend-work",
+      "runtimeExecutable": "mvn",
+      "runtimeArgs": [
+        "-o",
+        "spring-boot:run",
+        "-Dspring-boot.run.arguments=--server.port=8099"
+      ],
+      "port": 8099,
+      "cwd": "backend",
+      "env": {
+        "CORS_ALLOWED_ORIGINS": "http://localhost:4197",
+        "DB_URL": "jdbc:mysql://localhost:3306/zz_boot_v117b?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true"
+      }
+    },
+    {
+      "name": "frontend-work",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "4197",
+        "--strictPort"
+      ],
+      "port": 4197,
+      "cwd": "frontend",
+      "env": {
+        "VITE_API_URL": "http://localhost:8099/api"
+      }
     }
   ]
 }
