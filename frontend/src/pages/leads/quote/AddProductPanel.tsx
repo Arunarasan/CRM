@@ -1,19 +1,30 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { ArrowLeft, Check, FolderOpen, FolderPlus, Loader2, Minus, PackagePlus, Plus, Search, X } from "lucide-react";
+import { ArrowLeft, Check, ChevronDown, ChevronUp, FolderOpen, FolderPlus, Loader2, PackagePlus, Plus, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { UnitOptions } from "@/components/UnitOptions";
 import { normalizeUnit } from "@/lib/units";
 import type { InventoryCategory, Product } from "@/types/inventory";
 import {
   ListHeading, NewCategoryForm, Thumb, type WebsiteProduct,
-  colorsOf, photosOf, priceOf, useCatalogueSearch, websiteUnit,
+  colorsOf, photosOf, priceOf, productSummary, useCatalogueSearch, websiteUnit,
 } from "./productCells";
 import { CATEGORY_TONE, PRODUCT_TONE } from "./quoteTones";
 
 // "Add product": the one place products (and new categories) are added to the quote. A right-hand
 // drawer on tablet / desktop, a full-height bottom sheet on phones. It stays open, so several
 // products go in one after another: search → pick → Qty / Rate → Add.
+
+const FIELD = "h-11 w-full rounded-md border border-border bg-background text-base tabular-nums outline-none focus:border-ring focus:ring-2 focus:ring-ring/20";
+const FIELD_LABEL = "mb-1 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground";
+const grouped = (v: number) => v.toLocaleString("en-IN", { maximumFractionDigits: 2 });
+
+/** Where the picked product came from — same badges as on the quote rows. */
+function SourceBadge({ kind }: { kind: "product" | "web" | "custom" }) {
+  const [label, cls] = kind === "product" ? ["Inventory", "bg-[#ECFDF5] text-[#16805C]"]
+    : kind === "web" ? ["Website", "bg-slate-100 text-slate-700"] : ["Custom", "bg-[#EFF6FF] text-[#1D4ED8]"];
+  return <span className={`shrink-0 rounded-md px-2 py-0.5 text-[11px] font-semibold uppercase ${cls}`}>{label}</span>;
+}
 
 const inr = (v?: number | null) =>
   "₹" + Number(v ?? 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
@@ -124,6 +135,8 @@ export default function AddProductPanel({
     if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); back(); }
   };
 
+  const pickedDescription = !picked ? undefined
+    : picked.kind === "product" ? productSummary(picked.p) : picked.kind === "web" ? picked.w.shortDescription || undefined : undefined;
   const addedTotal = useMemo(() => added.reduce((s, a) => s + a.amount, 0), [added]);
   const step = (d: number) => setQty((v) => String(Math.max(0, Math.round((num(v) + d) * 100) / 100) || 1));
 
@@ -202,51 +215,65 @@ export default function AddProductPanel({
                   className="-ml-1 inline-flex h-8 items-center gap-1 rounded-md px-1.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground">
                   <ArrowLeft className="h-4 w-4" /> Back to search
                 </button>
-                <div className="flex items-start gap-3">
-                  {picked.kind === "custom"
-                    ? <span className="h-14 w-14 shrink-0 rounded-md border bg-muted/60 flex items-center justify-center"><PackagePlus className="h-6 w-6 text-muted-foreground" /></span>
-                    : <Thumb url={picked.kind === "product" ? photosOf(picked.p)[0] : picked.w.image} size="h-14 w-14" />}
-                  <div className="min-w-0 flex-1">
-                    {picked.kind === "custom" ? (
-                      <input value={name} onChange={(e) => setName(e.target.value)} onKeyDown={enterAdds} aria-label="Product name"
-                        className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm font-semibold outline-none focus:border-ring focus:ring-2 focus:ring-ring/20" />
-                    ) : (
-                      <p className="font-semibold leading-snug">{name}</p>
-                    )}
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {picked.kind === "product" ? "From inventory" : picked.kind === "web" ? "From the website catalogue — type its rate" : "New item"}
-                      {" "}· goes into <span className="font-medium text-foreground">{category}</span>
-                    </p>
+                {/* The same card as a product row on the quote, with its Add button */}
+                <div className="rounded-xl border bg-card p-3 shadow-sm space-y-3">
+                  <div className="flex items-start gap-3">
+                    {picked.kind === "custom"
+                      ? <span className="h-14 w-14 shrink-0 rounded-lg border bg-muted/60 flex items-center justify-center"><PackagePlus className="h-6 w-6 text-muted-foreground" /></span>
+                      : <Thumb url={picked.kind === "product" ? photosOf(picked.p)[0] : picked.w.image} size="h-14 w-14" />}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex min-w-0 items-center gap-2">
+                        {picked.kind === "custom" ? (
+                          <input value={name} onChange={(e) => setName(e.target.value)} onKeyDown={enterAdds} aria-label="Product name"
+                            className="h-9 min-w-0 flex-1 rounded-md border border-border bg-background px-2.5 text-base font-semibold outline-none focus:border-ring focus:ring-2 focus:ring-ring/20" />
+                        ) : (
+                          <p className="min-w-0 truncate text-base font-semibold">{name}</p>
+                        )}
+                        <SourceBadge kind={picked.kind} />
+                      </div>
+                      {pickedDescription && <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{pickedDescription}</p>}
+                    </div>
                   </div>
-                </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <label className="block">
-                    <span className="mb-1 block text-xs font-medium text-muted-foreground">Quantity</span>
-                    <span className="flex h-11 items-stretch overflow-hidden rounded-md border border-border bg-background focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20">
-                      <button type="button" onClick={() => step(-1)} aria-label="Less" className="w-10 shrink-0 flex items-center justify-center text-muted-foreground hover:bg-muted"><Minus className="h-4 w-4" /></button>
-                      <input ref={qtyRef} inputMode="decimal" value={qty} onChange={(e) => setQty(e.target.value)} onKeyDown={enterAdds}
-                        onFocus={(e) => e.currentTarget.select()} aria-label="Quantity"
-                        className="min-w-0 flex-1 bg-transparent text-center text-base tabular-nums outline-none" />
-                      <button type="button" onClick={() => step(1)} aria-label="More" className="w-10 shrink-0 flex items-center justify-center text-muted-foreground hover:bg-muted"><Plus className="h-4 w-4" /></button>
-                    </span>
-                  </label>
-                  <label className="block">
-                    <span className="mb-1 block text-xs font-medium text-muted-foreground">Unit</span>
-                    <select value={unit} onChange={(e) => setUnit(e.target.value)} aria-label="Unit"
-                      className="h-11 w-full rounded-md border border-border bg-background px-2 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/20">
-                      <UnitOptions value={unit} />
-                    </select>
-                  </label>
-                  <label className="block">
-                    <span className="mb-1 block text-xs font-medium text-muted-foreground">Rate ₹ <span className="font-normal">per {unit || "unit"}</span></span>
-                    <input ref={rateRef} inputMode="decimal" value={rate} placeholder="0" onChange={(e) => setRate(e.target.value)} onKeyDown={enterAdds}
-                      onFocus={(e) => e.currentTarget.select()} aria-label="Rate"
-                      className="h-11 w-full rounded-md border border-border bg-background px-3 text-right text-base tabular-nums outline-none focus:border-ring focus:ring-2 focus:ring-ring/20" />
-                  </label>
-                  <div>
-                    <span className="mb-1 block text-xs font-medium text-muted-foreground">Amount</span>
-                    <span className="flex h-11 items-center justify-end rounded-md bg-muted/60 px-3 text-base font-semibold tabular-nums">{inr(amount)}</span>
+                  <div className="grid grid-cols-3 gap-3 items-end">
+                    <label className="block min-w-0">
+                      <span className={FIELD_LABEL}>Qty</span>
+                      <span className="relative block">
+                        <input ref={qtyRef} inputMode="decimal" value={qty} onChange={(e) => setQty(e.target.value)} onKeyDown={enterAdds}
+                          onFocus={(e) => e.currentTarget.select()} aria-label="Quantity"
+                          className={`${FIELD} pl-3 pr-8 text-left`} />
+                        <span className="absolute inset-y-0 right-0.5 flex flex-col justify-center">
+                          <button type="button" onClick={() => step(1)} aria-label="One more"
+                            className="flex h-[18px] w-7 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"><ChevronUp className="h-4 w-4" /></button>
+                          <button type="button" onClick={() => step(-1)} aria-label="One less"
+                            className="flex h-[18px] w-7 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"><ChevronDown className="h-4 w-4" /></button>
+                        </span>
+                      </span>
+                    </label>
+                    <label className="block min-w-0 border-l pl-3">
+                      <span className={FIELD_LABEL}>Unit</span>
+                      <select value={unit} onChange={(e) => setUnit(e.target.value)} aria-label="Unit" className={`${FIELD} px-2`}>
+                        <UnitOptions value={unit} />
+                      </select>
+                    </label>
+                    <label className="block min-w-0 border-l pl-3">
+                      <span className={FIELD_LABEL}>Rate (₹)</span>
+                      <input ref={rateRef} inputMode="decimal" value={rate} placeholder="0" onChange={(e) => setRate(e.target.value)} onKeyDown={enterAdds}
+                        onFocus={(e) => e.currentTarget.select()} aria-label={`Rate per ${unit || "unit"}`}
+                        className={`${FIELD} px-3 text-right`} />
+                    </label>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-lg bg-[#ECFDF5] px-3 py-2">
+                      <span className={FIELD_LABEL}>Amount (₹)</span>
+                      <span className="block text-xl font-bold tabular-nums leading-tight">{grouped(amount)}</span>
+                    </div>
+                    <button type="button" disabled={!name.trim() || busy} onClick={add}
+                      className={`flex min-h-[3.5rem] items-center justify-center gap-2 rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors active:scale-[0.99] disabled:opacity-50 ${PRODUCT_TONE.soft}`}>
+                      {busy ? <Loader2 className="h-4 w-4 shrink-0 animate-spin" /> : <PackagePlus className="h-5 w-5 shrink-0" />}
+                      <span className="min-w-0 break-words text-left leading-tight">Add to {category}</span>
+                    </button>
                   </div>
                 </div>
 
@@ -326,12 +353,7 @@ export default function AddProductPanel({
 
           {/* Footer */}
           <div className="shrink-0 border-t bg-card px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-            {picked ? (
-              <Button className={`h-11 w-full text-base ${PRODUCT_TONE.solid}`} disabled={!name.trim() || busy} onClick={add}>
-                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <PackagePlus className="h-4 w-4" />}
-                Add to {category}{amount > 0 ? ` · ${inr(amount)}` : ""}
-              </Button>
-            ) : (
+            {(
               <div className="flex items-center gap-3">
                 <div className="min-w-0 flex-1 text-sm" aria-live="polite">
                   {added.length > 0 ? (
@@ -339,6 +361,8 @@ export default function AddProductPanel({
                       <span className="flex items-center gap-1.5 font-medium text-[#16805C]"><Check className="h-4 w-4" /> {added.length} added · {inr(addedTotal)}</span>
                       <span className="block truncate text-xs text-muted-foreground">Last: {added[0].name} → {added[0].category}</span>
                     </>
+                  ) : picked ? (
+                    <span className="text-xs text-muted-foreground">Set quantity and rate, then press Add. Enter adds too.</span>
                   ) : creating ? (
                     <span className="text-xs text-muted-foreground">Tap a saved category, or type a new name and press Create. You'll add its products next.</span>
                   ) : (

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { enqueueSave } from "./saveQueue";
 import { createPortal } from "react-dom";
-import { BookmarkPlus, Check, ChevronDown, ChevronRight, FolderOpen, FolderPlus, Hammer, Loader2, MapPin, MoreVertical, Package, PackagePlus, Pencil, Plus, SlidersHorizontal, Trash2 } from "lucide-react";
+import { BookmarkPlus, Check, ChevronDown, ChevronRight, ChevronUp, FolderOpen, FolderPlus, Hammer, Loader2, MapPin, MoreVertical, Package, PackagePlus, Pencil, Plus, SlidersHorizontal, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -626,7 +626,7 @@ export default function BoqSheet({
               </div>
             )}
 
-            {!folded && <div className="divide-y border-t">
+            {!folded && <div className="border-t space-y-2 p-2 @[820px]:space-y-0 @[820px]:p-0 @[820px]:divide-y">
               {g.items.map((item, idx) => (
                 <ItemRow
                   key={item.id}
@@ -784,6 +784,11 @@ const FIELD = "!border-border !bg-background";
  */
 const CELL = "!border-border !bg-background @[820px]:!border-transparent @[820px]:!bg-transparent "
   + "@[820px]:group-hover:!border-border @[820px]:group-hover:!bg-background focus:!border-ring focus:!bg-background";
+/** Phones / tablets: taller, larger fields (touch + no iOS zoom); the wide table keeps compact cells. */
+const BIG = "!h-10 !text-base @[820px]:!h-8 @[820px]:!text-sm";
+/** Amount on phones / tablets: big bold figure sitting in the green box; a normal table cell when wide. */
+const AMOUNT_CELL = "!h-9 !px-1 !text-lg font-bold !border-transparent !bg-transparent hover:!border-[#A7F3D0] focus:!border-ring focus:!bg-background "
+  + "@[820px]:!h-8 @[820px]:!px-2 @[820px]:!text-sm @[820px]:font-semibold @[820px]:group-hover:!border-border @[820px]:group-hover:!bg-background";
 /** Quiet text under the product name (description, colour): no box until hovered or focused. */
 const QUIET = "h-7 text-xs text-muted-foreground !border-transparent !bg-transparent hover:!border-border focus:!border-ring focus:!bg-background focus:text-foreground";
 /** The product name reads as plain bold text until you hover or click it. */
@@ -881,11 +886,11 @@ function ItemRow({
   );
 
   return (
-    <div className={`group transition-colors ${inactive ? "bg-muted/30" : "hover:bg-muted/30"}`}>
-      <div className={`grid grid-cols-[20px_36px_minmax(0,1fr)_auto] gap-x-2 gap-y-1.5 items-start px-3 py-2.5 ${ROW} @[820px]:items-center @[820px]:py-1`}>
+    <div className={`group transition-colors rounded-xl border bg-card shadow-sm @[820px]:rounded-none @[820px]:border-0 @[820px]:shadow-none @[820px]:bg-transparent ${inactive ? "!bg-muted/40" : "@[820px]:hover:bg-muted/30"}`}>
+      <div className={`grid grid-cols-[22px_48px_minmax(0,1fr)_auto] @[440px]:grid-cols-[22px_56px_minmax(0,1fr)_auto] gap-x-2.5 @[440px]:gap-x-3 gap-y-3 items-start p-3 ${ROW} @[820px]:items-center @[820px]:px-3 @[820px]:py-1`}>
         {/* ✓ in quote */}
         <input type="checkbox" aria-label={`${item.itemName} in quote`} title="In the quote (customer's choice)"
-          className="mt-2.5 @[820px]:mt-0 h-4 w-4 accent-primary justify-self-center" disabled={!canEdit}
+          className="mt-4 @[820px]:mt-0 h-5 w-5 @[820px]:h-4 @[820px]:w-4 accent-[#1F5C3F] justify-self-center" disabled={!canEdit}
           checked={!inactive} onChange={onToggleActive} />
 
         {/* # */}
@@ -893,16 +898,17 @@ function ItemRow({
 
         {/* Photo */}
         <div className={inactive ? "opacity-60" : ""}>
-          <ImageCell url={item.imageUrl} options={photos} disabled={!canEdit} size="h-9 w-9 @[820px]:h-8 @[820px]:w-8"
+          <ImageCell url={item.imageUrl} options={photos} disabled={!canEdit} size="h-12 w-12 @[440px]:h-14 @[440px]:w-14 @[820px]:h-8 @[820px]:w-8"
             onChange={(url) => onUpdate({ imageUrl: url })} />
         </div>
 
         {/* Product: name + badge; description · colour as one quiet line underneath */}
         <div className={`min-w-0 ${inactive ? "opacity-60" : ""}`}>
-          <div className="flex min-w-0 items-center gap-1.5">
-            <div className="min-w-0 flex-1 @[820px]:flex-none @[820px]:max-w-[80%]">
+          {/* Narrow phones: the name gets the whole line and the badges wrap under it. */}
+          <div className="flex flex-wrap @[440px]:flex-nowrap min-w-0 items-center gap-x-1.5 gap-y-0.5">
+            <div className="min-w-0 basis-full @[440px]:basis-auto flex-1 @[820px]:flex-none @[820px]:max-w-[80%]">
               <TextCell value={item.itemName} col="itemName" disabled={!canEdit}
-                className={`h-7 font-semibold @[820px]:[field-sizing:content] @[820px]:min-w-[5rem] @[820px]:max-w-full ${canEdit ? `${CELL} ${NAME_CELL}` : ""}`} onCommit={editName} />
+                className={`h-8 text-base @[820px]:h-7 @[820px]:text-sm font-semibold @[820px]:[field-sizing:content] @[820px]:min-w-[5rem] @[820px]:max-w-full ${canEdit ? `${CELL} ${NAME_CELL}` : ""}`} onCommit={editName} />
             </div>
             {badge}
             {inactive && <span className="shrink-0 rounded px-1 text-[10px] font-semibold uppercase leading-4 bg-[#FFFBEB] text-[#B7791F]">Not in quote</span>}
@@ -915,7 +921,7 @@ function ItemRow({
             </div>
             {(canEdit || item.color) && (
               <ColourBox value={item.color} colors={colorsOf(product)} disabled={!canEdit} onChange={onColor}
-                className="w-20 @[440px]:w-24 shrink-0" inputClassName={QUIET} />
+                className="w-24 shrink-0 @[560px]:hidden @[820px]:block" inputClassName={QUIET} />
             )}
           </div>
           {meta && (
@@ -935,28 +941,44 @@ function ItemRow({
             inputClassName={canEdit ? CELL : ""} />
         </div>
 
-        {/* Actions (phone: top-right) */}
-        <div className="row-start-1 col-start-4 @[820px]:hidden flex items-center">{menu}</div>
+        {/* Colour + actions (phones / tablets: top-right of the card) */}
+        <div className="row-start-1 col-start-4 @[820px]:hidden flex items-center gap-1">
+          {(canEdit || item.color) && (
+            <ColourBox value={item.color} colors={colorsOf(product)} disabled={!canEdit} onChange={onColor}
+              className="hidden @[560px]:block w-28" inputClassName={QUIET} />
+          )}
+          {menu}
+        </div>
 
         {/* Numbers — one labelled strip on phones (Qty · Unit · Rate · Disc · Amount), table cells on desktop */}
-        <div className="col-span-4 col-start-1 @[820px]:col-span-1 @[820px]:col-start-auto grid grid-cols-3 @[440px]:grid-cols-[56px_72px_minmax(0,1fr)_72px_minmax(0,1.2fr)] gap-x-1.5 gap-y-1.5 @[820px]:contents rounded-md border border-border/60 bg-muted/30 p-1.5 @[820px]:border-0 @[820px]:p-0">
+        <div className="col-span-4 col-start-1 @[820px]:col-span-1 @[820px]:col-start-auto grid grid-cols-3 @[520px]:grid-cols-[minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,1.1fr)_minmax(0,0.9fr)_minmax(0,1.2fr)] gap-x-3 gap-y-3 items-end @[820px]:contents">
           <Cell label="Qty">
-            <NumCell value={item.quantity} col="qty" disabled={!canEdit} className={f} onCommit={onQty} />
+            <div className="relative">
+              <NumCell value={item.quantity} col="qty" disabled={!canEdit} className={`${f} ${BIG} !text-left @[820px]:!text-right ${canEdit ? "!pl-3 pr-8 @[820px]:!pl-2 @[820px]:pr-2" : ""}`} onCommit={onQty} />
+              {canEdit && (
+                <span className="absolute inset-y-0 right-0.5 flex flex-col justify-center @[820px]:hidden">
+                  <button type="button" aria-label="One more" onClick={() => onQty(Math.round((qty + 1) * 100) / 100)}
+                    className="flex h-[18px] w-7 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"><ChevronUp className="h-4 w-4" /></button>
+                  <button type="button" aria-label="One less" disabled={qty <= 1} onClick={() => onQty(Math.max(1, Math.round((qty - 1) * 100) / 100))}
+                    className="flex h-[18px] w-7 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40"><ChevronDown className="h-4 w-4" /></button>
+                </span>
+              )}
+            </div>
           </Cell>
-          <Cell label="Unit">
-            <UnitCell value={item.unit} disabled={!canEdit} className={f} onCommit={(v) => onUpdate({ unit: v })} />
+          <Cell label="Unit" divider>
+            <UnitCell value={item.unit} disabled={!canEdit} className={`${f} ${BIG}`} onCommit={(v) => onUpdate({ unit: v })} />
           </Cell>
-          <Cell label="Rate ₹">
-            <NumCell value={rate} col="rate" disabled={!canEdit} className={f} format={grouped}
+          <Cell label="Rate (₹)" divider>
+            <NumCell value={rate} col="rate" disabled={!canEdit} className={`${f} ${BIG}`} format={grouped}
               onCommit={(v) => v != null && onSetGross(Math.round(v * (qty > 0 ? qty : 1) * 100) / 100)} />
           </Cell>
-          <Cell label="Disc.">
+          <Cell label="Disc." divider>
             <DiscountCell type={item.discountType} value={item.discountValue} amount={item.discountAmount} disabled={!canEdit}
-              selectClassName={f} onChange={(type, value) => onUpdate({ discountType: type, discountValue: value })} />
+              selectClassName={`${f} ${BIG}`} onChange={(type, value) => onUpdate({ discountType: type, discountValue: value })} />
           </Cell>
-          <Cell label="Amount ₹" className="col-span-2 @[440px]:col-span-1 @[820px]:col-span-1">
+          <Cell label="Amount (₹)" className="col-span-2 @[520px]:col-span-1 rounded-lg bg-[#ECFDF5] px-2 pt-1.5 pb-1 @[820px]:col-span-1 @[820px]:rounded-none @[820px]:bg-transparent @[820px]:p-0">
             <NumCell value={item.amount} col="amount" disabled={!canEdit} format={grouped}
-              className={`font-semibold text-foreground ${f}`}
+              className={`text-foreground ${canEdit ? AMOUNT_CELL : "!h-9 !text-lg font-bold @[820px]:!h-8 @[820px]:!text-sm @[820px]:font-semibold"}`}
               onCommit={(v) => v != null && onSetAmount(v)} />
           </Cell>
         </div>
@@ -1088,11 +1110,11 @@ function RowMenu({ canEdit, open, lineCount, onToggle, onDelete }: {
   );
 }
 
-/** A table cell on desktop; a labelled field on phones. */
-function Cell({ label, className = "", children }: { label: string; className?: string; children: React.ReactNode }) {
+/** A table cell on desktop; a labelled field on phones / tablets (with a divider before it once they sit in one row). */
+function Cell({ label, className = "", divider, children }: { label: string; className?: string; divider?: boolean; children: React.ReactNode }) {
   return (
-    <div className={`min-w-0 ${className}`}>
-      {label && <span className="@[820px]:hidden block text-[10px] font-medium uppercase text-muted-foreground mb-0.5">{label}</span>}
+    <div className={`min-w-0 ${divider ? "@[520px]:border-l @[520px]:pl-3 @[820px]:border-l-0 @[820px]:pl-0" : ""} ${className}`}>
+      {label && <span className="@[820px]:hidden block text-[11px] font-medium uppercase tracking-wide text-muted-foreground mb-1">{label}</span>}
       {children}
     </div>
   );

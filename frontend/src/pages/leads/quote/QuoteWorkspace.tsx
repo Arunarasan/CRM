@@ -620,7 +620,7 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
 
                 {/* ---- Action bar ---- */}
                 <div className="sticky bottom-16 md:bottom-0 z-10 rounded-b-xl border-t bg-card/95 backdrop-blur px-3 sm:px-4 py-2 sm:py-2.5 flex items-center justify-between gap-2">
-                  <div className="min-w-0 text-sm leading-tight sm:whitespace-nowrap">
+                  <div className="min-w-0 sm:shrink-0 text-sm leading-tight sm:whitespace-nowrap">
                     <span className="block sm:hidden font-bold tabular-nums">{inr(boq.grandTotal)}</span>
                     <span className="text-xs sm:text-sm text-muted-foreground">{inQuote.length} item{inQuote.length === 1 ? "" : "s"}<span className="hidden sm:inline"> in quote · </span></span>
                     <span className="hidden sm:inline font-bold tabular-nums">{inr(boq.grandTotal)}</span>
