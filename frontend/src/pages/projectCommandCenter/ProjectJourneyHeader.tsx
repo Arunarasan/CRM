@@ -37,6 +37,7 @@ const STAGE_HINT: Record<number, string[]> = {
 
 export const waLink = (n: string) => {
   let d = n.replace(/\D/g, "");
+  if (d.length === 11 && d.startsWith("0")) d = d.slice(1); // trunk-prefixed 0XXXXXXXXXX
   if (d.length === 10) d = `91${d}`; // bare Indian mobile → add country code
   return `https://wa.me/${d}`;
 };

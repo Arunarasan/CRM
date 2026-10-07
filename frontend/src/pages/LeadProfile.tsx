@@ -2,9 +2,10 @@ import { BaseInput } from '@/components/ui/input';
 import { useCallback, useEffect, useState } from "react";
 import { useParams, Link, useSearchParams } from "react-router-dom";
 import {
-  ArrowLeft, CheckCircle2, MoreHorizontal, Edit, XCircle, Check, CalendarClock, CalendarPlus,
-  LayoutGrid, ListChecks, Activity as ActivityIcon, FileText, Route, Clock, Star, RotateCcw,
-  ChevronRight, Home, ClipboardList, Calculator, Rocket, UserPlus, FolderKanban,
+  ArrowLeft, CheckCircle2, MoreVertical, XCircle, Check, CalendarClock, CalendarPlus,
+  LayoutGrid, ListChecks, Activity as ActivityIcon, FileText, Route, Clock, RotateCcw, Star,
+  ChevronRight, Home, FolderKanban, UserPlus, Phone, MessageCircle, Mail, MapPin, Navigation,
+  NotebookPen, Pencil, Crown, Tag, UserCheck, Package, ClipboardList, Calculator, Rocket,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -25,7 +26,9 @@ import { useGoBack } from "@/hooks/useGoBack";
 import LeadFormDialog from "./leads/LeadFormDialog";
 import ConvertLeadDialog from "./leads/ConvertLeadDialog";
 import { useLeadJourney, type JourneyStepId } from "./leads/journey";
-import { LeadInfoRow, LeadJourneyBar } from "./leads/LeadHeader";
+import { LeadJourneyBar } from "./leads/LeadHeader";
+import { waLink } from "./projectCommandCenter/ProjectJourneyHeader";
+import { enquiryDetails, enquiryLabel, enquiryTypeOf } from "./leads/enquiry";
 import OverviewTab from "./leads/tabs/OverviewTab";
 import EntityDailyReports from "@/components/hr/EntityDailyReports";
 import SalesJourneyTab from "./leads/tabs/SalesJourneyTab";
@@ -51,6 +54,7 @@ function normalizeTab(t: string) {
   return (TABS as readonly string[]).includes(t) ? t : LEGACY_TAB_MAP[t] || "overview";
 }
 
+const CHIP = "inline-flex min-w-0 max-w-full items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm shadow-sm transition-colors hover:border-emerald-300 [&>svg]:shrink-0";
 const PILL = "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide";
 
 type PrimaryAction =
@@ -129,8 +133,18 @@ export default function LeadProfile() {
   const isOpen = !lead.isConverted && !["Lost", "Cancelled"].includes(lead.status);
   const isLost = lead.status === "Lost";
   const canReopen = isLost && lead.canReopen !== false;
-  const addedBy = creator?.name || lead.leadOwner?.name;
   const project = lead.convertedToProject || journey.records.projects[0];
+  const addedBy = creator?.name || lead.leadOwner?.name;
+
+  const phone = lead.mobileNumber;
+  const whatsapp = lead.whatsappNumber || lead.mobileNumber;
+  const place = lead.city || lead.district || lead.state;
+  const mapQuery = [lead.siteAddress || lead.address, lead.city, lead.district, lead.state, lead.pincode]
+    .map((p) => (p || "").trim()).filter(Boolean).join(", ");
+  const enquiry = enquiryTypeOf(lead);
+  const products = (lead.requirementProduct || "").split(",").map((s) => s.trim()).filter(Boolean);
+  const shownProducts = products.slice(0, 4);
+  const dot = isOpen ? "bg-emerald-500" : isLost ? "bg-rose-500" : "bg-slate-400";
 
   // One primary action, chosen by where the deal really is (from records, not the status dropdown).
   const primary: PrimaryAction | null = (() => {
@@ -151,17 +165,22 @@ export default function LeadProfile() {
     const Icon = primary.icon;
     const cls = compact
       ? "h-8 rounded-lg bg-emerald-800 hover:bg-emerald-900 text-white shrink-0"
-      : "h-11 flex-1 @2xl:flex-none whitespace-nowrap rounded-xl bg-emerald-800 hover:bg-emerald-900 px-5 font-semibold text-white shadow-[0_4px_14px_-4px_rgba(0,53,34,0.45)] transition hover:-translate-y-px";
-    const inner = <><Icon className={`w-4 h-4 ${compact ? "mr-1.5" : "mr-2"}`} /> {primary.label}</>;
+      : "h-11 min-w-0 flex-1 @2xl:flex-none whitespace-nowrap rounded-xl bg-emerald-800 hover:bg-emerald-900 px-5 font-semibold text-white shadow-[0_4px_14px_-4px_rgba(0,53,34,0.45)] transition hover:-translate-y-px";
+    const inner = (
+      <>
+        <Icon className={`w-4 h-4 ${compact ? "mr-1.5" : "mr-2"}`} /> {primary.label}
+        {!compact && <ChevronRight className="w-4 h-4 ml-1.5" />}
+      </>
+    );
     return primary.kind === "link"
       ? <Button asChild size={compact ? "sm" : "default"} className={cls}><Link to={primary.to}>{inner}</Link></Button>
       : <Button size={compact ? "sm" : "default"} className={cls} disabled={journey.loading && isOpen} onClick={primary.onClick}>{inner}</Button>;
   };
 
-  // Click a header star to set the rating (or the current top star again to clear). Sends the full
-  // lead with the new rating — updateLead is a full replace — mirroring the card save cleanup.
+  // Click a star to set the rating (or the current top star again to clear). Sends the full lead with
+  // the new rating — updateLead is a full replace — mirroring the Overview save cleanup.
   const setRating = (star: number) => {
-    if (!lead || !isOpen) return;
+    if (!isOpen) return;
     const payload: any = { ...lead, rating: lead.rating === star ? null : star };
     ["estimatedBudget", "minimumBudget", "maximumBudget", "expectedProjectValue",
       "areaSqft", "expectedWorkArea", "floorCount"].forEach((k) => {
@@ -206,87 +225,161 @@ export default function LeadProfile() {
           </nav>
         </div>
 
-        {/* Header band */}
+        {/* Header card */}
         <div className="px-4 sm:px-6 lg:px-8 pt-2">
-          <div className="rounded-2xl border border-slate-100 bg-gradient-to-br from-white via-white to-emerald-50/60 px-4 sm:px-5 py-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+          <div className="relative overflow-hidden rounded-2xl border border-slate-100 bg-gradient-to-br from-white via-white to-emerald-50/50 px-4 sm:px-6 py-5 shadow-[0_8px_30px_-12px_rgba(15,23,42,0.12)]">
             <div className="grid grid-cols-1 @4xl:grid-cols-[minmax(0,1fr)_auto] items-start gap-4">
-              <div className="flex items-start gap-3 min-w-0">
-                <button type="button" onClick={goBack} title="Back" aria-label="Back"
-                  className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm hover:text-slate-900 hover:border-slate-300">
-                  <ArrowLeft className="h-4 w-4" />
-                </button>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h1 className="min-w-0 max-w-full text-xl sm:text-2xl lg:text-[28px] font-bold tracking-tight text-slate-900 truncate">{lead.name}</h1>
+              {/* Identity */}
+              <div className="flex items-center gap-3.5 @lg:gap-4 min-w-0">
+                <div className="relative shrink-0">
+                  <div className="flex h-14 w-14 @lg:h-16 @lg:w-16 items-center justify-center rounded-full bg-emerald-50 text-2xl @lg:text-[28px] font-bold text-emerald-800 ring-1 ring-emerald-100">
+                    {(lead.name || "?").trim().charAt(0).toUpperCase()}
+                  </div>
+                  <span className={`absolute bottom-0.5 right-0.5 h-3.5 w-3.5 rounded-full ring-2 ring-white ${dot}`}
+                    title={isOpen ? "Open lead" : isLost ? "Lost" : "Closed"} aria-hidden />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <h1 className="min-w-0 max-w-full text-2xl @lg:text-[28px] font-bold tracking-tight text-slate-900 truncate">{lead.name}</h1>
                     <button
                       type="button"
                       onClick={() => isOpen && setStatusOpen(true)}
                       disabled={!isOpen}
-                      title={isOpen ? "Change status" : undefined}
-                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${statusStyle(lead.status)} ${isOpen ? "hover:ring-1 hover:ring-emerald-400 cursor-pointer" : "cursor-default"}`}
+                      title={isOpen ? "Change status" : lead.status}
+                      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-semibold ${statusStyle(lead.status)} ${isOpen ? "hover:ring-1 hover:ring-emerald-400 cursor-pointer" : "cursor-default"}`}
                     >
-                      <span className="h-1.5 w-1.5 rounded-full bg-current" /> {lead.status}
+                      {lead.status === "New" ? <Crown className="h-3.5 w-3.5" /> : <span className="h-1.5 w-1.5 rounded-full bg-current" />}
+                      {lead.status}
                     </button>
                     {lead.isConverted && <span className={`${PILL} bg-emerald-100 text-emerald-800`}><CheckCircle2 className="h-3 w-3" /> Converted</span>}
                   </div>
-                  <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
-                    <span className="font-mono">{lead.leadNumber}</span>
-                    {lead.companyName && <span>· {lead.companyName}</span>}
-                    {lead.leadSource && <span>· via {lead.leadSource}</span>}
-                    <span className="inline-flex items-center gap-0.5 ml-1" title={lead.rating ? `Rating ${lead.rating}/5` : "Rate this lead"}>
+                  <div className="mt-1 flex items-center gap-3 text-sm text-slate-500">
+                    <span className="font-medium">{lead.leadNumber}</span>
+                    <span className="h-4 w-px bg-slate-200" aria-hidden />
+                    <span className="inline-flex items-center gap-0.5" title={lead.rating ? `Rating ${lead.rating}/5` : "Rate this lead"}>
                       {[1, 2, 3, 4, 5].map((s) => (
                         <button key={s} type="button" onClick={() => setRating(s)} disabled={!isOpen}
                           aria-label={`Set rating ${s} of 5`}
                           className={isOpen ? "hover:scale-110 transition-transform" : "cursor-default"}>
-                          <Star className={`h-3.5 w-3.5 ${s <= (lead.rating || 0) ? "fill-amber-400 text-amber-400" : "text-slate-300"}`} />
+                          <Star className={`h-[18px] w-[18px] ${s <= (lead.rating || 0) ? "fill-amber-400 text-amber-400" : "text-slate-300"}`} />
                         </button>
                       ))}
                     </span>
                   </div>
-                  <div className="-ml-[52px] @xl:ml-0"><LeadInfoRow lead={lead} addedBy={addedBy} /></div>
                 </div>
               </div>
 
-              <div className="flex flex-col @2xl:flex-row @2xl:flex-wrap @4xl:flex-col items-stretch @2xl:items-center @4xl:items-end gap-3 min-w-0">
-                <div className="flex items-center gap-2 @2xl:order-2 @4xl:order-none @2xl:ml-auto @4xl:ml-0">
-                  {isLost && (
-                    <Button variant="outline" onClick={() => setWinBackOpen(true)}
-                      className="h-11 rounded-xl border-slate-200 bg-white px-4 font-semibold text-slate-700">
-                      <CalendarClock className="w-4 h-4 mr-2" /> {lead.winBackDate ? "Change win-back" : "Plan win-back"}
-                    </Button>
-                  )}
-                  {lead.isConverted && lead.convertedToCustomer && (
-                    <Button asChild variant="outline" className="h-11 rounded-xl border-slate-200 bg-white px-4 font-semibold text-slate-700">
-                      <Link to={`/customers/${lead.convertedToCustomer.id}`}>View Customer</Link>
-                    </Button>
-                  )}
-                  {isOpen && (
-                    <Button variant="outline" title="Edit lead" onClick={() => setEditOpen(true)}
-                      className="h-11 shrink-0 rounded-xl border-slate-200 bg-white px-3.5 @lg:px-4 text-slate-700 font-semibold">
-                      <Edit className="w-4 h-4 @lg:mr-2" /> <span className="hidden @lg:inline">Edit</span>
-                    </Button>
-                  )}
-                  {renderPrimary()}
-                  {isOpen && (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="outline" size="icon" aria-label="More actions" className="h-11 w-11 shrink-0 rounded-xl border-slate-200 text-slate-600 bg-white">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onSelect={() => setAssignOpen(true)}><Check className="h-4 w-4 mr-2" /> Assign team</DropdownMenuItem>
-                        <DropdownMenuItem onSelect={() => setStatusOpen(true)}><CheckCircle2 className="h-4 w-4 mr-2" /> Change status</DropdownMenuItem>
-                        <DropdownMenuItem onSelect={() => setActiveTab("tasks")}><CalendarPlus className="h-4 w-4 mr-2" /> Add task</DropdownMenuItem>
-                        <DropdownMenuItem onSelect={() => setConvertOpen(true)}><UserPlus className="h-4 w-4 mr-2" /> Convert to customer only</DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem onSelect={() => setLostOpen(true)} className="text-destructive"><XCircle className="h-4 w-4 mr-2" /> Mark as lost</DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  )}
-                </div>
+              {/* Actions */}
+              <div className="flex min-w-0 items-center gap-2 @4xl:justify-end">
+                {lead.isConverted && lead.convertedToCustomer && (
+                  <Button asChild variant="outline" className="h-11 rounded-xl border-slate-200 bg-white px-4 font-semibold text-slate-700 shadow-sm">
+                    <Link to={`/customers/${lead.convertedToCustomer.id}`}>View Customer</Link>
+                  </Button>
+                )}
+                {isLost && (
+                  <Button variant="outline" onClick={() => setWinBackOpen(true)}
+                    className="h-11 rounded-xl border-slate-200 bg-white px-4 font-semibold text-slate-700 shadow-sm">
+                    <CalendarClock className="w-4 h-4 mr-2" /> {lead.winBackDate ? "Change win-back" : "Plan win-back"}
+                  </Button>
+                )}
+                {isOpen && (
+                  <Button variant="outline" title="Edit lead" onClick={() => setEditOpen(true)}
+                    className="h-11 shrink-0 rounded-xl border-slate-200 bg-white px-3.5 @lg:px-4 text-slate-800 font-semibold shadow-sm">
+                    <Pencil className="w-4 h-4 @lg:mr-2" /> <span className="hidden @lg:inline">Edit</span>
+                  </Button>
+                )}
+                {renderPrimary()}
+                {isOpen && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="icon" aria-label="More actions" className="h-11 w-11 shrink-0 rounded-xl border-slate-200 text-slate-600 bg-white shadow-sm">
+                        <MoreVertical className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onSelect={() => setAssignOpen(true)}><Check className="h-4 w-4 mr-2" /> Assign team</DropdownMenuItem>
+                      <DropdownMenuItem onSelect={() => setStatusOpen(true)}><CheckCircle2 className="h-4 w-4 mr-2" /> Change status</DropdownMenuItem>
+                      <DropdownMenuItem onSelect={() => setActiveTab("activity")}><NotebookPen className="h-4 w-4 mr-2" /> Log call / follow-up</DropdownMenuItem>
+                      <DropdownMenuItem onSelect={() => setActiveTab("tasks")}><CalendarPlus className="h-4 w-4 mr-2" /> Add task</DropdownMenuItem>
+                      <DropdownMenuItem onSelect={() => setConvertOpen(true)}><UserPlus className="h-4 w-4 mr-2" /> Convert to customer only</DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onSelect={() => setLostOpen(true)} className="text-destructive"><XCircle className="h-4 w-4 mr-2" /> Mark as lost</DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
               </div>
             </div>
+
+            {/* Contact chips */}
+            <div className="mt-4 flex flex-wrap items-center gap-2.5">
+              {phone && (
+                <span className="inline-flex max-w-full items-stretch rounded-xl border border-slate-200 bg-white text-sm shadow-sm">
+                  <a href={`tel:${phone}`} title="Call" className="inline-flex items-center gap-2 rounded-l-xl px-3.5 py-2 font-medium text-slate-800 hover:bg-emerald-50/60">
+                    <Phone className="h-4 w-4 shrink-0 text-emerald-700" /> {phone}
+                  </a>
+                  {whatsapp && (
+                    <a href={waLink(whatsapp)} target="_blank" rel="noreferrer" title="Open WhatsApp chat"
+                      className="inline-flex items-center gap-2 rounded-r-xl border-l border-slate-200 px-3.5 py-2 font-medium text-emerald-700 hover:bg-emerald-50/60">
+                      <MessageCircle className="h-4 w-4 shrink-0" /> WhatsApp
+                    </a>
+                  )}
+                </span>
+              )}
+              {lead.email && (
+                <a href={`mailto:${lead.email}`} className={CHIP} title="Email">
+                  <Mail className="h-4 w-4 text-sky-600" /> <span className="truncate text-slate-800">{lead.email}</span>
+                </a>
+              )}
+              {addedBy && (
+                <span className={CHIP} title="Who brought this lead in">
+                  <UserCheck className="h-4 w-4 text-amber-500" />
+                  <span className="text-slate-400">Lead by</span> <span className="truncate font-semibold text-slate-800">{addedBy}</span>
+                </span>
+              )}
+            </div>
+
+            {/* Location */}
+            {(place || mapQuery) && (
+              <div className="mt-2.5 flex flex-wrap items-center gap-2.5">
+                {place && (
+                  <span className={CHIP} title={mapQuery || place}>
+                    <MapPin className="h-4 w-4 text-emerald-700" /> <span className="truncate text-slate-800">{place}</span>
+                  </span>
+                )}
+                {mapQuery && (
+                  <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapQuery)}`}
+                    target="_blank" rel="noreferrer" title={`Open in Google Maps: ${mapQuery}`}
+                    className="inline-flex items-center gap-2 rounded-xl bg-emerald-800 px-4 py-2 text-sm font-semibold text-white shadow-[0_4px_12px_-4px_rgba(0,53,34,0.45)] transition hover:-translate-y-px hover:bg-emerald-900">
+                    <Navigation className="h-4 w-4" /> Navigate
+                  </a>
+                )}
+              </div>
+            )}
+
+            {/* What they're looking for */}
+            {(enquiry || lead.requirementCategory || products.length > 0) && (
+              <div className="mt-3 flex flex-wrap items-center gap-2.5">
+                {enquiry && <span className="mr-1 text-sm font-semibold uppercase tracking-wide text-slate-500">{enquiryLabel(enquiry) || enquiry}</span>}
+                {enquiryDetails(lead).filter((d) => d !== lead.requirementCategory).map((d) => (
+                  <span key={d} className="rounded-xl bg-violet-50 px-3.5 py-2 text-sm font-medium text-violet-700">{d}</span>
+                ))}
+                {lead.requirementCategory && (
+                  <span className="inline-flex items-center gap-2 rounded-xl bg-amber-50 px-3.5 py-2 text-sm font-semibold text-amber-900 ring-1 ring-amber-200/70">
+                    <Tag className="h-4 w-4 text-amber-700" /> {lead.requirementCategory}
+                  </span>
+                )}
+                {shownProducts.map((p) => (
+                  <span key={p} className="inline-flex items-center gap-2 rounded-xl bg-slate-100 px-3.5 py-2 text-sm text-slate-700">
+                    <Package className="h-4 w-4 text-slate-500" /> {p}
+                  </span>
+                ))}
+                {products.length > shownProducts.length && (
+                  <span className="text-xs font-medium text-slate-400" title={products.slice(shownProducts.length).join(", ")}>
+                    +{products.length - shownProducts.length} more
+                  </span>
+                )}
+              </div>
+            )}
           </div>
 
           {isLost
