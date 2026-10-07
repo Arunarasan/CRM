@@ -2,22 +2,22 @@ import { BaseInput } from '@/components/ui/input';
 import { useCallback, useEffect, useState } from "react";
 import { useParams, Link, useSearchParams } from "react-router-dom";
 import {
-  ArrowLeft, Phone, Mail, Building, CheckCircle2, MoreVertical, Edit, XCircle,
-  MessageCircle, Check, CalendarClock, CalendarPlus, TrendingUp, Crown, ArrowRight,
+  ArrowLeft, CheckCircle2, MoreHorizontal, Edit, XCircle, Check, CalendarClock, CalendarPlus,
   LayoutGrid, ListChecks, Activity as ActivityIcon, FileText, Route, Clock, Star, RotateCcw,
+  ChevronRight, Home, ClipboardList, Calculator, Rocket, UserPlus, FolderKanban,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { leadApi } from "./leads/leadApi";
 import { toast } from "@/components/ui/toast";
 import {
-  LEAD_STATUSES, PRIORITY_STYLES, TEMPERATURE_STYLES,
-  formatDate, formatFollowUp, formatINR, statusStyle,
+  LEAD_STATUSES,
+  formatDate, statusStyle,
   type Lead, type UserSummary, type LeadCreator,
 } from "./leads/constants";
 import { SelectField, TextAreaField, selectClass } from "./leads/fields";
@@ -25,6 +25,7 @@ import { useGoBack } from "@/hooks/useGoBack";
 import LeadFormDialog from "./leads/LeadFormDialog";
 import ConvertLeadDialog from "./leads/ConvertLeadDialog";
 import { useLeadJourney, type JourneyStepId } from "./leads/journey";
+import { LeadInfoRow, LeadJourneyBar } from "./leads/LeadHeader";
 import OverviewTab from "./leads/tabs/OverviewTab";
 import EntityDailyReports from "@/components/hr/EntityDailyReports";
 import SalesJourneyTab from "./leads/tabs/SalesJourneyTab";
@@ -32,14 +33,14 @@ import LeadTasksHub from "./leads/tabs/LeadTasksHub";
 import ActivityTab from "./leads/tabs/ActivityTab";
 import DocumentsTab from "./leads/tabs/DocumentsTab";
 import TimelineTab from "./leads/tabs/TimelineTab";
-import { EnquiryTag, enquiryDetails, enquiryTypeOf } from "./leads/enquiry";
 
-const TAB_TRIGGER_CLASS =
-  "rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-0 pb-2 whitespace-nowrap";
-
-// The consolidated tab set. Old deep-links (?tab=measurements, ?tab=followups, …) still resolve
-// to the new home so bookmarks and cross-page links keep working after the tab collapse.
+// The consolidated tab set, in working order: read the lead → do the sales work → everything else.
+// Old deep-links (?tab=measurements, ?tab=followups, …) still resolve to their new home.
 const TABS = ["overview", "journey", "tasks", "activity", "documents", "timeline"] as const;
+const TAB_ITEMS: [string, string, React.ComponentType<{ className?: string }>][] = [
+  ["overview", "Overview", LayoutGrid], ["journey", "Sales Journey", Route], ["tasks", "Tasks", ListChecks],
+  ["activity", "Activity", ActivityIcon], ["documents", "Documents", FileText], ["timeline", "Timeline", Clock],
+];
 const LEGACY_TAB_MAP: Record<string, string> = {
   customer: "overview", requirements: "overview",
   sitevisits: "journey", measurements: "journey", boqs: "journey", quotations: "journey",
@@ -50,46 +51,11 @@ function normalizeTab(t: string) {
   return (TABS as readonly string[]).includes(t) ? t : LEGACY_TAB_MAP[t] || "overview";
 }
 
-type ActionIcon = React.ComponentType<{ className?: string }>;
+const PILL = "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide";
 
-// A labeled, tappable action in the header (icon tile + caption below).
-function HeaderAction({
-  icon: Icon, label, href, onClick, external, tone = "text-primary",
-}: {
-  icon: ActionIcon; label: string; href?: string; onClick?: () => void; external?: boolean; tone?: string;
-}) {
-  const tile = (
-    <span className="flex flex-col items-center gap-1">
-      <span className={`h-11 w-11 rounded-xl border bg-card shadow-sm grid place-items-center transition-colors group-hover:bg-accent ${tone}`}>
-        <Icon className="h-[18px] w-[18px]" />
-      </span>
-      <span className="text-[11px] text-muted-foreground">{label}</span>
-    </span>
-  );
-  return href
-    ? <a href={href} target={external ? "_blank" : undefined} rel={external ? "noreferrer" : undefined} className="group">{tile}</a>
-    : <button type="button" onClick={onClick} className="group">{tile}</button>;
-}
-
-// One at-a-glance metric tile in the header strip.
-function StatTile({
-  icon: Icon, label, value, hint, tone = "bg-primary/10 text-primary",
-}: {
-  icon: ActionIcon; label: string; value: React.ReactNode; hint?: React.ReactNode; tone?: string;
-}) {
-  return (
-    <div className="rounded-2xl border bg-card shadow-sm p-4 flex items-center gap-3">
-      <div className={`h-11 w-11 rounded-xl grid place-items-center shrink-0 ${tone}`}>
-        <Icon className="h-5 w-5" />
-      </div>
-      <div className="min-w-0">
-        <div className="text-xs text-muted-foreground">{label}</div>
-        <div className="font-bold leading-tight truncate">{value}</div>
-        {hint && <div className="text-xs text-muted-foreground truncate">{hint}</div>}
-      </div>
-    </div>
-  );
-}
+type PrimaryAction =
+  | { kind: "button"; label: string; icon: React.ComponentType<{ className?: string }>; onClick: () => void }
+  | { kind: "link"; label: string; icon: React.ComponentType<{ className?: string }>; to: string };
 
 export default function LeadProfile() {
   const { id } = useParams<{ id: string }>();
@@ -99,6 +65,7 @@ export default function LeadProfile() {
   const [creator, setCreator] = useState<LeadCreator | null>(null);
   const [users, setUsers] = useState<UserSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [scrolled, setScrolled] = useState(false);
   const [activeTab, setActiveTabState] = useState(normalizeTab(searchParams.get("tab") || "overview"));
   // The open tab lives in ?tab= too, so in-page links (e.g. the Quote's "Drawings & photos") can switch it.
   const tabParam = searchParams.get("tab");
@@ -107,7 +74,7 @@ export default function LeadProfile() {
     setActiveTabState(tab);
     setSearchParams((p) => { p.set("tab", tab); return p; }, { replace: true });
   };
-  // Set by the Next-Step banner to jump into the Journey tab and open the right stage.
+  // Set by the header (journey bar / primary action) to jump into the Journey tab at the right stage.
   const [focusStep, setFocusStep] = useState<{ id: JourneyStepId; nonce: number } | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [convertOpen, setConvertOpen] = useState(false);
@@ -127,12 +94,6 @@ export default function LeadProfile() {
 
   const journey = useLeadJourney(id || "", lead);
 
-  // The banner's action jumps to the Journey tab and opens the current stage.
-  const goToNextStep = () => {
-    if (journey.currentStep) setFocusStep({ id: journey.currentStep.id, nonce: Date.now() });
-    setActiveTab("journey");
-  };
-  // Open a specific journey step (from the Overview "Next Step" card).
   const goToStep = (stepId: JourneyStepId) => {
     setFocusStep({ id: stepId, nonce: Date.now() });
     setActiveTab("journey");
@@ -146,27 +107,56 @@ export default function LeadProfile() {
 
   if (loading) {
     return (
-      <div className="p-8 space-y-4">
-        <Skeleton className="h-10 w-96" />
-        <Skeleton className="h-16 w-full" />
-        <Skeleton className="h-64 w-full" />
+      <div className="p-4 sm:p-6 lg:p-8 space-y-4">
+        <Skeleton className="h-36 w-full rounded-2xl" />
+        <div className="grid grid-cols-3 gap-2.5">
+          <Skeleton className="h-16 rounded-2xl" /><Skeleton className="h-16 rounded-2xl" /><Skeleton className="h-16 rounded-2xl" />
+        </div>
+        <Skeleton className="h-12 w-full rounded-2xl" />
+        <Skeleton className="h-64 w-full rounded-2xl" />
       </div>
     );
   }
-  if (!lead || !id) return <div className="p-8 text-destructive">Failed to load lead profile.</div>;
+  if (!lead || !id) {
+    return (
+      <div className="p-8 space-y-3">
+        <p className="text-destructive font-medium">Couldn't load this lead.</p>
+        <Button variant="outline" onClick={goBack}><ArrowLeft className="h-4 w-4 mr-2" /> Back to leads</Button>
+      </div>
+    );
+  }
 
   const isOpen = !lead.isConverted && !["Lost", "Cancelled"].includes(lead.status);
   const isLost = lead.status === "Lost";
   const canReopen = isLost && lead.canReopen !== false;
-  const products = (lead.requirementProduct || "").split(",").map((s) => s.trim()).filter(Boolean);
-  const lastContact = lead.lastContactAt || lead.lastFollowUp;
-  const fuDays = lead.nextFollowUpDate
-    ? Math.ceil((new Date(lead.nextFollowUpDate).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)) / 86400000)
-    : null;
-  const fuHint = fuDays == null ? "Not scheduled"
-    : fuDays < 0 ? `${-fuDays} day${fuDays === -1 ? "" : "s"} overdue`
-    : fuDays === 0 ? "Today"
-    : `${fuDays} day${fuDays === 1 ? "" : "s"} left`;
+  const addedBy = creator?.name || lead.leadOwner?.name;
+  const project = lead.convertedToProject || journey.records.projects[0];
+
+  // One primary action, chosen by where the deal really is (from records, not the status dropdown).
+  const primary: PrimaryAction | null = (() => {
+    if (isOpen && journey.currentStep) {
+      switch (journey.currentStep.id) {
+        case "requirement": return { kind: "button", label: "Add requirement", icon: ClipboardList, onClick: () => setEditOpen(true) };
+        case "quote": return { kind: "button", label: journey.currentStep.actionLabel, icon: Calculator, onClick: () => goToStep("quote") };
+        case "convert": return { kind: "button", label: "Create Project", icon: Rocket, onClick: () => goToStep("quote") };
+      }
+    }
+    if (project?.id) return { kind: "link", label: "View Project", icon: FolderKanban, to: `/projects/${project.id}` };
+    if (canReopen) return { kind: "button", label: "Reopen Lead", icon: RotateCcw, onClick: () => setReopenOpen(true) };
+    return null;
+  })();
+
+  const renderPrimary = (compact = false) => {
+    if (!primary) return null;
+    const Icon = primary.icon;
+    const cls = compact
+      ? "h-8 rounded-lg bg-emerald-800 hover:bg-emerald-900 text-white shrink-0"
+      : "h-11 flex-1 @2xl:flex-none whitespace-nowrap rounded-xl bg-emerald-800 hover:bg-emerald-900 px-5 font-semibold text-white shadow-[0_4px_14px_-4px_rgba(0,53,34,0.45)] transition hover:-translate-y-px";
+    const inner = <><Icon className={`w-4 h-4 ${compact ? "mr-1.5" : "mr-2"}`} /> {primary.label}</>;
+    return primary.kind === "link"
+      ? <Button asChild size={compact ? "sm" : "default"} className={cls}><Link to={primary.to}>{inner}</Link></Button>
+      : <Button size={compact ? "sm" : "default"} className={cls} disabled={journey.loading && isOpen} onClick={primary.onClick}>{inner}</Button>;
+  };
 
   // Click a header star to set the rating (or the current top star again to clear). Sends the full
   // lead with the new rating — updateLead is a full replace — mirroring the card save cleanup.
@@ -201,233 +191,167 @@ export default function LeadProfile() {
   };
 
   return (
-    <div className="p-6 lg:p-8 space-y-5 h-full bg-background flex flex-col overflow-y-auto animate-in fade-in">
-      {/* Header */}
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex items-center gap-4">
-          <Button variant="outline" size="icon" onClick={goBack} title="Back"><ArrowLeft className="h-4 w-4" /></Button>
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl lg:text-3xl font-bold tracking-tight">{lead.name}</h1>
-              <span className="text-sm text-muted-foreground">{lead.leadNumber}</span>
-              <button
-                onClick={() => isOpen && setStatusOpen(true)}
-                className={`px-2 py-1 text-xs rounded-full font-medium ${statusStyle(lead.status)} ${isOpen ? "hover:ring-1 hover:ring-primary cursor-pointer" : "cursor-default"}`}
-                title={isOpen ? "Change status" : undefined}
-              >
-                {lead.status}
-              </button>
-              {lead.leadTemperature && (
-                <span className={`px-2 py-1 text-xs rounded-full font-bold ${TEMPERATURE_STYLES[lead.leadTemperature] || ""}`}>
-                  {lead.leadTemperature}
-                </span>
-              )}
-              {lead.priority && (
-                <span className={`px-2 py-1 text-xs rounded-full font-bold uppercase ${PRIORITY_STYLES[lead.priority] || ""}`}>
-                  {lead.priority}
-                </span>
-              )}
-              {lead.isConverted && (
-                <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full font-medium">CONVERTED</span>
-              )}
-              <span className="inline-flex items-center gap-0.5 ml-0.5" title={lead.rating ? `Rating ${lead.rating}/5` : "Rate this lead"}>
-                {[1, 2, 3, 4, 5].map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => setRating(s)}
-                    disabled={!isOpen}
-                    aria-label={`Set rating ${s}`}
-                    className={isOpen ? "hover:scale-110 transition-transform cursor-pointer" : "cursor-default"}
-                  >
-                    <Star className={`h-4 w-4 ${s <= (lead.rating || 0) ? "fill-amber-400 text-amber-400" : "text-muted-foreground/30"}`} />
-                  </button>
-                ))}
-              </span>
-            </div>
-            <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground mt-1">
-              {lead.companyName && <span className="flex items-center gap-1"><Building className="h-3 w-3" /> {lead.companyName}</span>}
-              {lead.email && (
-                <a href={`mailto:${lead.email}`} className="flex items-center gap-1 hover:text-primary transition-colors">
-                  <Mail className="h-3 w-3" /> {lead.email}
-                </a>
-              )}
-              {lead.mobileNumber && (
-                <a href={`tel:${lead.mobileNumber}`} className="flex items-center gap-1 hover:text-green-600 transition-colors">
-                  <Phone className="h-3 w-3" /> {lead.mobileNumber}
-                </a>
-              )}
-              {lead.leadSource && <span>Source: {lead.leadSource}</span>}
-              {(creator?.name || lead.leadOwner?.name) && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-700 font-medium">
-                  {creator?.fromEmployeePortal ? "Added by employee:" : "Added by:"} {creator?.name || lead.leadOwner?.name}
-                  {creator?.employeeCode && <span className="text-emerald-600/80">· {creator.employeeCode}</span>}
-                  {creator?.designation && <span className="text-emerald-600/60">· {creator.designation}</span>}
-                </span>
-              )}
-            </div>
-            {(products.length > 0 || lead.requirementCategory || enquiryTypeOf(lead)) && (
-              <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                <EnquiryTag type={enquiryTypeOf(lead)} />
-                {enquiryDetails(lead).map((d) => (
-                  <span key={d} className="px-2 py-0.5 bg-violet-100 text-violet-700 text-xs rounded-full font-medium">{d}</span>
-                ))}
-                {lead.requirementCategory && (
-                  <span className="text-xs text-muted-foreground">{lead.requirementCategory}:</span>
-                )}
-                {products.map((p) => (
-                  <span key={p} className="px-2 py-0.5 bg-primary/10 text-primary text-xs rounded-full font-medium">{p}</span>
-                ))}
+    <div className="flex flex-col h-full bg-slate-50/50 relative overflow-hidden animate-in fade-in">
+      {/* One scroll surface: the header scrolls away, the tab strip pins with a compact header. */}
+      <div onScroll={(e) => setScrolled((e.target as HTMLDivElement).scrollTop > 140)} className="flex-1 overflow-y-auto scroll-smooth @container">
+
+        {/* Breadcrumb */}
+        <div className="px-4 sm:px-6 lg:px-8 pt-3">
+          <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-sm text-slate-400">
+            <Link to="/" className="hover:text-emerald-600 flex items-center" aria-label="Home"><Home className="w-3.5 h-3.5" /></Link>
+            <ChevronRight className="w-3.5 h-3.5" />
+            <Link to="/leads" className="hover:text-emerald-600">Leads</Link>
+            <ChevronRight className="w-3.5 h-3.5" />
+            <span className="text-slate-600 font-medium truncate">{lead.name}</span>
+          </nav>
+        </div>
+
+        {/* Header band */}
+        <div className="px-4 sm:px-6 lg:px-8 pt-2">
+          <div className="rounded-2xl border border-slate-100 bg-gradient-to-br from-white via-white to-emerald-50/60 px-4 sm:px-5 py-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+            <div className="grid grid-cols-1 @4xl:grid-cols-[minmax(0,1fr)_auto] items-start gap-4">
+              <div className="flex items-start gap-3 min-w-0">
+                <button type="button" onClick={goBack} title="Back" aria-label="Back"
+                  className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm hover:text-slate-900 hover:border-slate-300">
+                  <ArrowLeft className="h-4 w-4" />
+                </button>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h1 className="min-w-0 max-w-full text-xl sm:text-2xl lg:text-[28px] font-bold tracking-tight text-slate-900 truncate">{lead.name}</h1>
+                    <button
+                      type="button"
+                      onClick={() => isOpen && setStatusOpen(true)}
+                      disabled={!isOpen}
+                      title={isOpen ? "Change status" : undefined}
+                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${statusStyle(lead.status)} ${isOpen ? "hover:ring-1 hover:ring-emerald-400 cursor-pointer" : "cursor-default"}`}
+                    >
+                      <span className="h-1.5 w-1.5 rounded-full bg-current" /> {lead.status}
+                    </button>
+                    {lead.isConverted && <span className={`${PILL} bg-emerald-100 text-emerald-800`}><CheckCircle2 className="h-3 w-3" /> Converted</span>}
+                  </div>
+                  <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
+                    <span className="font-mono">{lead.leadNumber}</span>
+                    {lead.companyName && <span>· {lead.companyName}</span>}
+                    {lead.leadSource && <span>· via {lead.leadSource}</span>}
+                    <span className="inline-flex items-center gap-0.5 ml-1" title={lead.rating ? `Rating ${lead.rating}/5` : "Rate this lead"}>
+                      {[1, 2, 3, 4, 5].map((s) => (
+                        <button key={s} type="button" onClick={() => setRating(s)} disabled={!isOpen}
+                          aria-label={`Set rating ${s} of 5`}
+                          className={isOpen ? "hover:scale-110 transition-transform" : "cursor-default"}>
+                          <Star className={`h-3.5 w-3.5 ${s <= (lead.rating || 0) ? "fill-amber-400 text-amber-400" : "text-slate-300"}`} />
+                        </button>
+                      ))}
+                    </span>
+                  </div>
+                  <div className="-ml-[52px] @xl:ml-0"><LeadInfoRow lead={lead} addedBy={addedBy} /></div>
+                </div>
               </div>
-            )}
+
+              <div className="flex flex-col @2xl:flex-row @2xl:flex-wrap @4xl:flex-col items-stretch @2xl:items-center @4xl:items-end gap-3 min-w-0">
+                <div className="flex items-center gap-2 @2xl:order-2 @4xl:order-none @2xl:ml-auto @4xl:ml-0">
+                  {isLost && (
+                    <Button variant="outline" onClick={() => setWinBackOpen(true)}
+                      className="h-11 rounded-xl border-slate-200 bg-white px-4 font-semibold text-slate-700">
+                      <CalendarClock className="w-4 h-4 mr-2" /> {lead.winBackDate ? "Change win-back" : "Plan win-back"}
+                    </Button>
+                  )}
+                  {lead.isConverted && lead.convertedToCustomer && (
+                    <Button asChild variant="outline" className="h-11 rounded-xl border-slate-200 bg-white px-4 font-semibold text-slate-700">
+                      <Link to={`/customers/${lead.convertedToCustomer.id}`}>View Customer</Link>
+                    </Button>
+                  )}
+                  {isOpen && (
+                    <Button variant="outline" title="Edit lead" onClick={() => setEditOpen(true)}
+                      className="h-11 shrink-0 rounded-xl border-slate-200 bg-white px-3.5 @lg:px-4 text-slate-700 font-semibold">
+                      <Edit className="w-4 h-4 @lg:mr-2" /> <span className="hidden @lg:inline">Edit</span>
+                    </Button>
+                  )}
+                  {renderPrimary()}
+                  {isOpen && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" size="icon" aria-label="More actions" className="h-11 w-11 shrink-0 rounded-xl border-slate-200 text-slate-600 bg-white">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onSelect={() => setAssignOpen(true)}><Check className="h-4 w-4 mr-2" /> Assign team</DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => setStatusOpen(true)}><CheckCircle2 className="h-4 w-4 mr-2" /> Change status</DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => setActiveTab("tasks")}><CalendarPlus className="h-4 w-4 mr-2" /> Add task</DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => setConvertOpen(true)}><UserPlus className="h-4 w-4 mr-2" /> Convert to customer only</DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onSelect={() => setLostOpen(true)} className="text-destructive"><XCircle className="h-4 w-4 mr-2" /> Mark as lost</DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
+
+          {isLost
+            ? <div className="mt-3"><LostBanner lead={lead} onPlan={() => setWinBackOpen(true)} /></div>
+            : <LeadJourneyBar journey={journey} onOpen={goToStep} />}
         </div>
-        <div className="flex items-center gap-4">
-          {isOpen && (
-            <>
-              <Button onClick={() => setConvertOpen(true)} className="bg-green-600 hover:bg-green-700 text-white rounded-full shadow-sm">
-                <CheckCircle2 className="mr-2 h-4 w-4" /> Convert to Project
-              </Button>
-              <div className="flex items-center gap-2">
-                {lead.mobileNumber && <HeaderAction icon={Phone} label="Call" href={`tel:${lead.mobileNumber}`} tone="text-emerald-600" />}
-                {(lead.whatsappNumber || lead.mobileNumber) && (
-                  <HeaderAction icon={MessageCircle} label="WhatsApp" external
-                    href={`https://wa.me/${(lead.whatsappNumber || lead.mobileNumber).replace(/[^0-9]/g, "")}`} tone="text-green-600" />
-                )}
-                {lead.email && <HeaderAction icon={Mail} label="Email" href={`mailto:${lead.email}`} tone="text-orange-500" />}
-                <HeaderAction icon={CalendarPlus} label="Add Task" onClick={() => setActiveTab("tasks")} />
+
+        <div className="px-4 sm:px-6 lg:px-8 pt-3 pb-6">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <div className="sticky top-0 z-20 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-2 mb-3 bg-slate-50/95 backdrop-blur-sm space-y-2">
+              {/* Compact header — slides in once the big header scrolls away, so the lead stays identifiable. */}
+              <div className={`flex items-center justify-between gap-2 overflow-hidden transition-all duration-300 ${scrolled ? "max-h-14 opacity-100" : "max-h-0 opacity-0"}`} aria-hidden={!scrolled}>
+                <div className="flex items-center gap-2 min-w-0">
+                  <button type="button" onClick={goBack} title="Back" tabIndex={scrolled ? 0 : -1} className="text-slate-400 hover:text-slate-600 shrink-0"><ArrowLeft className="h-4 w-4" /></button>
+                  <span className="font-bold text-slate-800 truncate">{lead.name}</span>
+                  {lead.city && <span className="text-xs text-slate-400 shrink-0 hidden sm:inline">· {lead.city}</span>}
+                  <span className={`px-2 py-0.5 text-[10px] rounded-full font-semibold shrink-0 ${statusStyle(lead.status)}`}>{lead.status}</span>
+                </div>
+                {scrolled && renderPrimary(true)}
               </div>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="icon" className="rounded-full"><MoreVertical className="h-4 w-4" /></Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => setEditOpen(true)}><Edit className="h-4 w-4 mr-2" /> Edit Lead</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setAssignOpen(true)}><Check className="h-4 w-4 mr-2" /> Assign Team</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setStatusOpen(true)}><CheckCircle2 className="h-4 w-4 mr-2" /> Change Status</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setLostOpen(true)} className="text-destructive"><XCircle className="h-4 w-4 mr-2" /> Mark as Lost</DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </>
-          )}
-          {isLost && (
-            <div className="flex items-center gap-2">
-              <Button variant="outline" onClick={() => setWinBackOpen(true)} className="rounded-full">
-                <CalendarClock className="mr-2 h-4 w-4" /> {lead.winBackDate ? "Change Win-back" : "Plan Win-back"}
-              </Button>
-              {canReopen && (
-                <Button onClick={() => setReopenOpen(true)} className="rounded-full shadow-sm">
-                  <RotateCcw className="mr-2 h-4 w-4" /> Reopen Lead
-                </Button>
-              )}
+              <div role="tablist" aria-label="Lead sections"
+                className="bg-white p-1.5 border border-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] rounded-2xl flex gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                {TAB_ITEMS.map(([value, label, Icon]) => {
+                  const active = value === activeTab;
+                  return (
+                    <button key={value} type="button" role="tab" aria-selected={active} onClick={() => setActiveTab(value)}
+                      className={`rounded-xl px-3 sm:px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-all duration-200 flex items-center gap-2 shrink-0 ${active ? "bg-emerald-800 text-white shadow-sm" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}>
+                      <Icon className="w-4 h-4" /> {label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          )}
-          {lead.isConverted && lead.convertedToCustomer && (
-            <Link to={`/customers/${lead.convertedToCustomer.id}`}>
-              <Button variant="outline">View Customer</Button>
-            </Link>
-          )}
-          {lead.isConverted && lead.convertedToProject && (
-            <Link to={`/projects/${lead.convertedToProject.id}`}>
-              <Button variant="outline">View Project</Button>
-            </Link>
-          )}
+
+            <TabsContent value="overview" className="mt-0">
+              <OverviewTab lead={lead} users={users} canEdit={isOpen} onChanged={fetchLead} />
+            </TabsContent>
+            <TabsContent value="journey" className="mt-0">
+              <SalesJourneyTab
+                leadId={id}
+                lead={lead}
+                users={users}
+                journey={journey}
+                focusStep={focusStep}
+                onChanged={() => { fetchLead(); journey.reload(); }}
+                onEditRequirement={() => setEditOpen(true)}
+                onConvert={() => goToStep("quote")}
+              />
+            </TabsContent>
+            <TabsContent value="tasks" className="mt-0">
+              <LeadTasksHub leadId={id} users={users} />
+            </TabsContent>
+            <TabsContent value="activity" className="mt-0 space-y-4">
+              <ActivityTab leadId={id} onChanged={fetchLead} />
+              <EntityDailyReports leadId={Number(id)} title="Field Daily Reports for this Lead" />
+            </TabsContent>
+            <TabsContent value="documents" className="mt-0">
+              <DocumentsTab leadId={id} />
+            </TabsContent>
+            <TabsContent value="timeline" className="mt-0">
+              <TimelineTab leadId={id} />
+            </TabsContent>
+          </Tabs>
         </div>
       </div>
-
-      {isLost && <LostBanner lead={lead} onPlan={() => setWinBackOpen(true)} />}
-
-      {/* At-a-glance metric tiles + the "what's next" convert CTA. */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatTile
-          icon={CalendarClock}
-          label="Next Follow-up"
-          value={formatFollowUp(lead.nextFollowUpDate, lead.nextFollowUpTime)}
-          hint={<span className={fuDays != null && fuDays < 0 ? "text-red-500 font-medium" : fuDays === 0 ? "text-emerald-600 font-medium" : ""}>{fuHint}</span>}
-          tone="bg-amber-50 text-amber-500"
-        />
-        <StatTile
-          icon={Phone}
-          label="Last Contact"
-          value={lastContact ? formatDate(lastContact) : "—"}
-          hint={lastContact ? "Most recent touchpoint" : "No contact yet"}
-          tone="bg-sky-50 text-sky-500"
-        />
-        <StatTile
-          icon={TrendingUp}
-          label="Expected Value"
-          value={lead.expectedProjectValue ? formatINR(lead.expectedProjectValue) : formatINR(lead.estimatedBudget)}
-          hint={lead.expectedProjectValue || lead.estimatedBudget ? "Projected deal size" : "Not estimated"}
-          tone="bg-violet-50 text-violet-500"
-        />
-        {isOpen ? (
-          <button
-            type="button"
-            onClick={goToNextStep}
-            className="group text-left rounded-2xl p-4 bg-gradient-to-br from-primary to-primary/75 text-primary-foreground shadow-sm flex items-center gap-3"
-          >
-            <div className="h-11 w-11 rounded-xl bg-white/15 grid place-items-center shrink-0">
-              <Crown className="h-5 w-5" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="font-semibold leading-tight">Potential Customer</div>
-              <div className="text-xs opacity-90 mt-0.5">Take the next step and convert this lead to a project.</div>
-            </div>
-            <ArrowRight className="h-5 w-5 opacity-80 shrink-0 group-hover:translate-x-0.5 transition-transform" />
-          </button>
-        ) : (
-          <StatTile icon={CheckCircle2} label="Status" value={lead.status} hint={lead.isConverted ? "Converted" : undefined} />
-        )}
-      </div>
-
-      {/* Tabs — the 15-tab pipeline is collapsed into 5 task-shaped groups. */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <div className="overflow-x-auto pb-2">
-          <TabsList className="w-full justify-start border-b rounded-none pb-px bg-transparent h-auto p-0 space-x-6 min-w-max flex">
-            {([
-              ["overview", "Overview", LayoutGrid], ["tasks", "Tasks", ListChecks],
-              ["activity", "Activity", ActivityIcon], ["documents", "Documents", FileText],
-              ["journey", "Sales Journey", Route], ["timeline", "Timeline", Clock],
-            ] as const).map(([value, label, Icon]) => (
-              <TabsTrigger key={value} value={value} className={TAB_TRIGGER_CLASS}>
-                <span className="flex items-center gap-1.5"><Icon className="h-4 w-4" /> {label}</span>
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </div>
-
-        <div className="mt-6">
-          <TabsContent value="overview" className="space-y-4">
-            <OverviewTab lead={lead} users={users} canEdit={isOpen} journey={journey} onGoStep={goToStep} onChanged={fetchLead} />
-          </TabsContent>
-
-          <TabsContent value="journey">
-            <SalesJourneyTab
-              leadId={id}
-              lead={lead}
-              users={users}
-              journey={journey}
-              focusStep={focusStep}
-              onChanged={() => { fetchLead(); journey.reload(); }}
-              onEditRequirement={() => setEditOpen(true)}
-              onConvert={() => setConvertOpen(true)}
-            />
-          </TabsContent>
-          <TabsContent value="tasks">
-            <LeadTasksHub leadId={id} users={users} />
-          </TabsContent>
-          <TabsContent value="activity" className="space-y-4">
-            <ActivityTab leadId={id} onChanged={fetchLead} />
-            <EntityDailyReports leadId={Number(id)} title="Field Daily Reports for this Lead" />
-          </TabsContent>
-          <TabsContent value="documents">
-            <DocumentsTab leadId={id} />
-          </TabsContent>
-          <TabsContent value="timeline">
-            <TimelineTab leadId={id} />
-          </TabsContent>
-        </div>
-      </Tabs>
 
       {/* Dialogs */}
       <LeadFormDialog open={editOpen} onOpenChange={setEditOpen} lead={lead} users={users} onSaved={() => fetchLead()} />

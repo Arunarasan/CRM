@@ -1,12 +1,6 @@
 import { BaseInput } from '@/components/ui/input';
 import { useState, useEffect } from "react";
-import {
-  Pencil, Check, X, Star, User, Users, MapPin, Home, ListChecks, Share2, XCircle,
-  Sparkles, Flame, Flag, IndianRupee, CalendarClock, CalendarCheck, Calendar, Clock, Tag,
-  Phone, Mail, MessageCircle, Building2, Globe, GitBranch, TrendingUp, Repeat, ReceiptText,
-  Briefcase, PenTool, Wrench, UserCheck, Map, Hash, MapPinned, Hammer, Layers, Ruler, Palette,
-  Package, DoorOpen, FileText, Contact as ContactIcon, Compass, ArrowRight, Navigation,
-} from "lucide-react";
+import { Pencil, Check, X, Star, Users, MapPin, Home, ListChecks, Share2, XCircle, Sparkles, Phone, MessageCircle, Briefcase, PenTool, Wrench, UserCheck, Contact as ContactIcon, Navigation } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
 import api from "@/lib/api";
@@ -16,7 +10,6 @@ import {
   formatDate, formatDateTime, formatFollowUp, formatINR, avatarColor, initials,
   type Lead, type UserSummary,
 } from "../constants";
-import type { LeadJourney, JourneyStepId } from "../journey";
 import ExistingCustomerSearch from "@/pages/customers/ExistingCustomerSearch";
 import { EnquiryTag, enquiryDetails, enquiryTypeOf } from "../enquiry";
 
@@ -33,29 +26,27 @@ const splitProducts = (v?: string) => (v || "").split(",").map((s) => s.trim()).
 
 // Compact inline controls sized to sit inside a details cell without changing the grid.
 const cellInput = "w-full h-9 rounded-md border border-input bg-background px-2.5 text-sm";
-const FIELD_GRID = "grid grid-cols-2 gap-x-5 gap-y-4";
+// Cards are @containers, so the grid follows the card's own width (main column vs. side rail).
+const FIELD_GRID = "grid grid-cols-1 @xs:grid-cols-2 @2xl:grid-cols-3 gap-x-6 gap-y-3.5";
 
-// One field: a soft icon chip, then label + value (or, when editing, the supplied editor).
+// One field: a quiet label over its value (or, when editing, the supplied editor). Empty values are
+// a faint dash so filled-in details stand out when scanning.
 function Field({
-  icon: Icon, label, editing, view, children, action,
+  label, editing, view, children, action,
 }: {
-  icon: IconType; label: string; editing?: boolean;
+  label: string; editing?: boolean;
   view?: React.ReactNode; children?: React.ReactNode; action?: React.ReactNode;
 }) {
+  const empty = view == null || view === "";
   return (
-    <div className="flex items-start gap-2.5">
-      <div className="h-8 w-8 rounded-lg bg-primary/[0.06] text-primary/80 grid place-items-center shrink-0 mt-0.5">
-        <Icon className="h-4 w-4" />
+    <div className="min-w-0">
+      <div className="flex items-center justify-between gap-2 min-h-[20px]">
+        <span className="text-xs text-slate-500">{label}</span>
+        {!editing && action}
       </div>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-xs text-muted-foreground">{label}</span>
-          {!editing && action}
-        </div>
-        {editing
-          ? <div className="mt-1">{children}</div>
-          : <div className="font-medium text-sm break-words">{view ?? "—"}</div>}
-      </div>
+      {editing
+        ? <div className="mt-1">{children}</div>
+        : <div className={`mt-0.5 text-sm break-words ${empty ? "text-slate-300" : "font-medium text-slate-800"}`}>{empty ? "—" : view}</div>}
     </div>
   );
 }
@@ -176,7 +167,7 @@ function useCardEdit<T extends object>(seed: () => T, save: (draft: T) => Promis
   return { editing, saving, draft, set, patch, start, cancel, doSave };
 }
 
-// A rounded card with an icon-badged title, inline edit controls, and a body.
+// A card with an icon-badged title, inline edit controls, and a body. Each card is a size container.
 function CardBox({
   icon: Icon, title, canEdit, edit, className, children,
 }: {
@@ -184,31 +175,31 @@ function CardBox({
   className?: string; children: React.ReactNode;
 }) {
   return (
-    <div className={`rounded-2xl border bg-card shadow-sm p-5 ${className || ""}`}>
-      <div className="flex items-center justify-between mb-5">
-        <div className="flex items-center gap-2.5">
-          <div className="h-8 w-8 rounded-lg bg-primary/10 text-primary grid place-items-center shrink-0">
-            <Icon className="h-[18px] w-[18px]" />
+    <section className={`@container rounded-2xl border border-slate-100 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4 sm:p-5 ${edit.editing ? "ring-2 ring-emerald-200" : ""} ${className || ""}`}>
+      <div className="flex items-center justify-between gap-2 mb-4">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="h-8 w-8 rounded-lg bg-emerald-50 text-emerald-700 grid place-items-center shrink-0">
+            <Icon className="h-4 w-4" />
           </div>
-          <h3 className="font-semibold tracking-tight">{title}</h3>
+          <h3 className="font-semibold tracking-tight text-slate-900 truncate">{title}</h3>
         </div>
         {canEdit && (edit.editing ? (
-          <div className="flex gap-1.5">
+          <div className="flex gap-1.5 shrink-0">
             <Button size="sm" variant="ghost" onClick={edit.cancel} disabled={edit.saving}>
               <X className="h-4 w-4 mr-1" /> Cancel
             </Button>
-            <Button size="sm" onClick={edit.doSave} disabled={edit.saving}>
+            <Button size="sm" onClick={edit.doSave} disabled={edit.saving} className="bg-emerald-800 hover:bg-emerald-900 text-white">
               <Check className="h-4 w-4 mr-1" /> {edit.saving ? "Saving..." : "Save"}
             </Button>
           </div>
         ) : (
-          <Button size="sm" variant="outline" onClick={edit.start} className="rounded-lg">
+          <Button size="sm" variant="ghost" onClick={edit.start} className="h-8 px-2.5 text-slate-500 hover:text-slate-900 shrink-0" aria-label={`Edit ${title}`}>
             <Pencil className="h-3.5 w-3.5 mr-1.5" /> Edit
           </Button>
         ))}
       </div>
       {children}
-    </div>
+    </section>
   );
 }
 
@@ -216,81 +207,50 @@ type CardProps = { lead: Lead; canEdit: boolean; onChanged: () => void };
 
 // ===========================================================================
 export default function OverviewTab({
-  lead, users, canEdit, journey, onGoStep, onChanged,
+  lead, users, canEdit, onChanged,
 }: {
   lead: Lead;
   users: UserSummary[];
   canEdit: boolean;
-  journey: LeadJourney;
-  onGoStep: (id: JourneyStepId) => void;
   onChanged: () => void;
 }) {
+  // Main column = what the customer wants and where; side rail = the deal and who's on it.
+  // Driven by the page's @container width (the sidebar eats viewport width).
   return (
-    <div className="space-y-4">
-      {/* Two independent columns so each packs tightly top-to-bottom (no row-alignment gaps between
-          cards of unequal height). Left leads with Scope + Contact; right with Summary + Address +
-          the Next Step guide (which also fills the right column so it doesn't end short). */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
-        <div className="flex flex-col gap-4">
-          <ScopeCard lead={lead} canEdit={canEdit} onChanged={onChanged} />
-          <ContactCard lead={lead} canEdit={canEdit} onChanged={onChanged} />
-          <PropertyCard lead={lead} canEdit={canEdit} onChanged={onChanged} />
-        </div>
-        <div className="flex flex-col gap-4">
-          <NextStepCard journey={journey} onGoStep={onGoStep} />
-          <SummaryCard lead={lead} users={users} canEdit={canEdit} onChanged={onChanged} />
-          <AddressCard lead={lead} canEdit={canEdit} onChanged={onChanged} />
-          {lead.status === "Lost" && <LostCard lead={lead} />}
-        </div>
+    <div className="grid grid-cols-1 @5xl:grid-cols-[minmax(0,1fr)_minmax(300px,380px)] gap-4 items-start">
+      <div className="flex flex-col gap-4 min-w-0">
+        <ScopeCard lead={lead} canEdit={canEdit} onChanged={onChanged} />
+        <ContactCard lead={lead} canEdit={canEdit} onChanged={onChanged} />
+        <AddressCard lead={lead} canEdit={canEdit} onChanged={onChanged} />
+        <PropertyCard lead={lead} canEdit={canEdit} onChanged={onChanged} />
       </div>
-      {/* Team spans the full width at the bottom — one row of role tiles. */}
-      <TeamCard lead={lead} users={users} canEdit={canEdit} onChanged={onChanged} />
+      <div className="flex flex-col gap-4 min-w-0">
+        {lead.status === "Lost" && <LostCard lead={lead} />}
+        <SummaryCard lead={lead} users={users} canEdit={canEdit} onChanged={onChanged} />
+        <TeamCard lead={lead} users={users} canEdit={canEdit} onChanged={onChanged} />
+      </div>
     </div>
-  );
-}
-
-// --- Next Step (drives the sales journey) -----------------------------------
-// Just the green CTA — jumps to the current step in the Sales Journey tab. Renders nothing once
-// the lead is converted or closed (no next step to take).
-function NextStepCard({ journey, onGoStep }: { journey: LeadJourney; onGoStep: (id: JourneyStepId) => void }) {
-  const current = journey.currentStep;
-  if (journey.loading || !current) return null;
-  return (
-    <button
-      onClick={() => onGoStep(current.id)}
-      className="w-full text-left rounded-2xl p-4 bg-gradient-to-br from-primary to-primary/80 text-primary-foreground shadow-sm flex items-center gap-3 group"
-    >
-      <div className="h-11 w-11 rounded-xl bg-white/15 grid place-items-center shrink-0">
-        <Compass className="h-5 w-5" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="text-[11px] uppercase tracking-wide opacity-90">Next step · Do next</div>
-        <div className="font-semibold leading-tight">{current.label}</div>
-        <div className="text-xs opacity-90 mt-0.5">{current.summary}</div>
-      </div>
-      <ArrowRight className="h-5 w-5 opacity-80 shrink-0 group-hover:translate-x-0.5 transition-transform" />
-    </button>
   );
 }
 
 // --- Lost lead (read-only) --------------------------------------------------
 function LostCard({ lead }: { lead: Lead }) {
   return (
-    <div className="rounded-2xl border border-destructive/30 bg-destructive/[0.03] shadow-sm p-5">
-      <div className="flex items-center gap-2.5 mb-5">
+    <section className="@container rounded-2xl border border-rose-200 bg-rose-50/40 p-4 sm:p-5">
+      <div className="flex items-center gap-2.5 mb-4">
         <div className="h-8 w-8 rounded-lg bg-destructive/10 text-destructive grid place-items-center">
           <XCircle className="h-[18px] w-[18px]" />
         </div>
         <h3 className="font-semibold tracking-tight text-destructive">Lost Lead Details</h3>
       </div>
       <div className={FIELD_GRID}>
-        <Field icon={Flag} label="Reason" view={lead.lostReason} />
-        <Field icon={Users} label="Competitor" view={lead.competitor} />
-        <div className="col-span-2">
-          <Field icon={FileText} label="Customer Feedback" view={lead.customerFeedback} />
+        <Field label="Reason" view={lead.lostReason} />
+        <Field label="Competitor" view={lead.competitor} />
+        <div className="col-span-full">
+          <Field label="Customer Feedback" view={lead.customerFeedback} />
         </div>
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -311,19 +271,19 @@ function SummaryCard({ lead, users, canEdit, onChanged }: CardProps & { users: U
   );
   const e = edit.editing;
   return (
-    <CardBox icon={Sparkles} title="Lead Summary" canEdit={canEdit} edit={edit}>
+    <CardBox icon={Sparkles} title="Deal" canEdit={canEdit} edit={edit}>
       <div className={FIELD_GRID}>
-        <Field icon={Globe} label="Lead Source" editing={e} view={lead.leadSource}>
+        <Field label="Lead Source" editing={e} view={lead.leadSource}>
           <SelectInput value={edit.draft.leadSource} onChange={edit.set("leadSource")} options={LEAD_SOURCES} />
         </Field>
-        <Field icon={Tag} label="Lead Type" editing={e} view={lead.leadType}>
+        <Field label="Lead Type" editing={e} view={lead.leadType}>
           <SelectInput value={edit.draft.leadType} onChange={edit.set("leadType")} options={LEAD_TYPES} />
         </Field>
-        <Field icon={GitBranch} label="Stage" view={lead.stage} />
-        <Field icon={Flame} label="Temperature" editing={e} view={lead.leadTemperature}>
+        <Field label="Stage" view={lead.stage} />
+        <Field label="Temperature" editing={e} view={lead.leadTemperature}>
           <SelectInput value={edit.draft.leadTemperature} onChange={edit.set("leadTemperature")} options={TEMPERATURES} allowEmpty={false} />
         </Field>
-        <Field icon={Star} label="Rating" editing={e} view={<Stars value={lead.rating} />}>
+        <Field label="Rating" editing={e} view={<Stars value={lead.rating} />}>
           <div className="flex items-center gap-1 h-9">
             {[1, 2, 3, 4, 5].map((s) => (
               <button
@@ -338,22 +298,22 @@ function SummaryCard({ lead, users, canEdit, onChanged }: CardProps & { users: U
             ))}
           </div>
         </Field>
-        <Field icon={IndianRupee} label="Estimated Budget" editing={e} view={<span className="font-semibold">{formatINR(lead.estimatedBudget)}</span>}>
+        <Field label="Estimated Budget" editing={e} view={<span className="font-semibold">{formatINR(lead.estimatedBudget)}</span>}>
           <TextInput type="number" inputMode="numeric" value={edit.draft.estimatedBudget} onChange={edit.set("estimatedBudget") as any} />
         </Field>
-        <Field icon={TrendingUp} label="Expected Project Value" editing={e} view={formatINR(lead.expectedProjectValue)}>
+        <Field label="Expected Project Value" editing={e} view={formatINR(lead.expectedProjectValue)}>
           <TextInput type="number" inputMode="numeric" value={edit.draft.expectedProjectValue} onChange={edit.set("expectedProjectValue") as any} />
         </Field>
-        <Field icon={Calendar} label="Expected Start" editing={e} view={formatDate(lead.expectedStartDate)}>
+        <Field label="Expected Start" editing={e} view={formatDate(lead.expectedStartDate)}>
           <TextInput type="date" value={edit.draft.expectedStartDate} onChange={edit.set("expectedStartDate")} />
         </Field>
-        <Field icon={CalendarCheck} label="Expected Completion" editing={e} view={formatDate(lead.expectedEndDate)}>
+        <Field label="Expected Completion" editing={e} view={formatDate(lead.expectedEndDate)}>
           <TextInput type="date" value={edit.draft.expectedEndDate} onChange={edit.set("expectedEndDate")} />
         </Field>
-        <Field icon={Repeat} label="Follow-ups Logged" view={lead.followUpCount ?? 0} />
-        <Field icon={CalendarClock} label="Next Follow-up" view={formatFollowUp(lead.nextFollowUpDate, lead.nextFollowUpTime)} />
-        <Field icon={Clock} label="Created" view={formatDateTime(lead.createdAt)} />
-        <Field icon={User} label="Created By" view={lead.createdBy} />
+        <Field label="Follow-ups Logged" view={lead.followUpCount ?? 0} />
+        <Field label="Next Follow-up" view={formatFollowUp(lead.nextFollowUpDate, lead.nextFollowUpTime)} />
+        <Field label="Created" view={formatDateTime(lead.createdAt)} />
+        <Field label="Created By" view={lead.createdBy} />
       </div>
       <ReferralSection lead={lead} users={users} canEdit={canEdit} onChanged={onChanged} />
     </CardBox>
@@ -389,28 +349,28 @@ function ContactCard({ lead, canEdit, onChanged }: CardProps) {
   return (
     <CardBox icon={ContactIcon} title="Contact Details" canEdit={canEdit} edit={edit}>
       <div className={FIELD_GRID}>
-        <Field icon={User} label="Customer Name" editing={e} view={lead.name}>
+        <Field label="Customer Name" editing={e} view={lead.name}>
           <TextInput value={edit.draft.name} onChange={edit.set("name")} />
         </Field>
-        <Field icon={Building2} label="Company" editing={e} view={lead.companyName}>
+        <Field label="Company" editing={e} view={lead.companyName}>
           <TextInput value={edit.draft.companyName} onChange={edit.set("companyName")} />
         </Field>
-        <Field icon={Phone} label="Primary Mobile" editing={e} view={lead.mobileNumber} action={phoneActions}>
+        <Field label="Primary Mobile" editing={e} view={lead.mobileNumber} action={phoneActions}>
           <TextInput type="tel" inputMode="tel" value={edit.draft.mobileNumber} onChange={edit.set("mobileNumber")} />
         </Field>
-        <Field icon={Phone} label="Alternative Mobile" editing={e} view={lead.alternateMobile}>
+        <Field label="Alternative Mobile" editing={e} view={lead.alternateMobile}>
           <TextInput type="tel" inputMode="tel" value={edit.draft.alternateMobile} onChange={edit.set("alternateMobile")} />
         </Field>
-        <Field icon={MessageCircle} label="WhatsApp" editing={e} view={lead.whatsappNumber}>
+        <Field label="WhatsApp" editing={e} view={lead.whatsappNumber}>
           <TextInput type="tel" inputMode="tel" value={edit.draft.whatsappNumber} onChange={edit.set("whatsappNumber")} />
         </Field>
-        <Field icon={Mail} label="Email" editing={e} view={lead.email}>
+        <Field label="Email" editing={e} view={lead.email}>
           <TextInput type="email" inputMode="email" value={edit.draft.email} onChange={edit.set("email")} />
         </Field>
-        <Field icon={ReceiptText} label="GST Number" editing={e} view={lead.gstNumber}>
+        <Field label="GST Number" editing={e} view={lead.gstNumber}>
           <TextInput value={edit.draft.gstNumber} onChange={edit.set("gstNumber")} />
         </Field>
-        <Field icon={ContactIcon} label="Contact Person" editing={e} view={lead.contactPerson}>
+        <Field label="Contact Person" editing={e} view={lead.contactPerson}>
           <TextInput value={edit.draft.contactPerson} onChange={edit.set("contactPerson")} />
         </Field>
       </div>
@@ -451,12 +411,12 @@ function TeamCard({ lead, users, canEdit, onChanged }: CardProps & { users: User
   const e = edit.editing;
   return (
     <CardBox icon={Users} title="Team" canEdit={canEdit} edit={edit}>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 @xs:grid-cols-2 gap-2.5">
         {TEAM_ROLES.map((role) => {
           const RoleIcon = TEAM_ICONS[role];
           const name = current[role];
           return (
-            <div key={role} className="rounded-xl border bg-muted/20 p-3">
+            <div key={role} className="rounded-xl border border-slate-100 bg-slate-50/60 p-2.5">
               {e ? (
                 <>
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1.5">
@@ -541,7 +501,7 @@ function ReferralSection({ lead, users, canEdit, onChanged }: CardProps & { user
   const type = edit.draft.referralType;
 
   return (
-    <div className="pt-4 mt-2 border-t">
+    <div className="pt-4 mt-4 border-t border-slate-100">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
           <Share2 className="h-4 w-4" /> Referral
@@ -685,29 +645,29 @@ function AddressCard({ lead, canEdit, onChanged }: CardProps) {
   return (
     <CardBox icon={MapPin} title="Address" canEdit={canEdit} edit={edit}>
       <div className={FIELD_GRID}>
-        <div className="col-span-2">
+        <div className="col-span-full">
           <Field
-            icon={MapPin} label="Address" editing={e} view={lead.address}
+            label="Address" editing={e} view={lead.address}
             action={<MapsLink parts={[lead.address, lead.city, lead.district, lead.state, lead.pincode]} />}
           >
             <AreaInput value={edit.draft.address} onChange={edit.set("address")} />
           </Field>
         </div>
-        <Field icon={Building2} label="City" editing={e} view={lead.city}>
+        <Field label="City" editing={e} view={lead.city}>
           <TextInput value={edit.draft.city} onChange={edit.set("city")} />
         </Field>
-        <Field icon={Map} label="District" editing={e} view={lead.district}>
+        <Field label="District" editing={e} view={lead.district}>
           <TextInput value={edit.draft.district} onChange={edit.set("district")} />
         </Field>
-        <Field icon={Map} label="State" editing={e} view={lead.state}>
+        <Field label="State" editing={e} view={lead.state}>
           <TextInput value={edit.draft.state} onChange={edit.set("state")} />
         </Field>
-        <Field icon={Hash} label="Pincode" editing={e} view={lead.pincode}>
+        <Field label="Pincode" editing={e} view={lead.pincode}>
           <TextInput inputMode="numeric" value={edit.draft.pincode} onChange={edit.set("pincode")} />
         </Field>
-        <div className="col-span-2">
+        <div className="col-span-full">
           <Field
-            icon={MapPinned} label="Project / Site Address" editing={e} view={lead.siteAddress}
+            label="Project / Site Address" editing={e} view={lead.siteAddress}
             action={<MapsLink parts={[lead.siteAddress || lead.address, lead.city, lead.district, lead.state, lead.pincode]} />}
           >
             <AreaInput value={edit.draft.siteAddress} onChange={edit.set("siteAddress")} />
@@ -737,28 +697,28 @@ function PropertyCard({ lead, canEdit, onChanged }: CardProps) {
   return (
     <CardBox icon={Home} title="Property Details" canEdit={canEdit} edit={edit}>
       <div className={FIELD_GRID}>
-        <Field icon={Home} label="Property Type" editing={e} view={lead.propertyType}>
+        <Field label="Property Type" editing={e} view={lead.propertyType}>
           <TextInput value={edit.draft.propertyType} onChange={edit.set("propertyType")} placeholder="e.g. Flat" />
         </Field>
-        <Field icon={Hammer} label="Construction Status" editing={e} view={lead.currentConstructionStage}>
+        <Field label="Construction Status" editing={e} view={lead.currentConstructionStage}>
           <SelectInput value={edit.draft.currentConstructionStage} onChange={edit.set("currentConstructionStage")} options={CONSTRUCTION_STATUSES} />
         </Field>
-        <Field icon={Layers} label="Floors" editing={e} view={lead.floorCount}>
+        <Field label="Floors" editing={e} view={lead.floorCount}>
           <TextInput type="number" inputMode="numeric" value={edit.draft.floorCount} onChange={edit.set("floorCount") as any} />
         </Field>
-        <Field icon={Ruler} label="Area (sq.ft)" editing={e} view={lead.areaSqft}>
+        <Field label="Area (sq.ft)" editing={e} view={lead.areaSqft}>
           <TextInput type="number" inputMode="numeric" value={edit.draft.areaSqft} onChange={edit.set("areaSqft") as any} />
         </Field>
-        <Field icon={Palette} label="Design Style" editing={e} view={lead.preferredDesignStyle}>
+        <Field label="Design Style" editing={e} view={lead.preferredDesignStyle}>
           <TextInput value={edit.draft.preferredDesignStyle} onChange={edit.set("preferredDesignStyle")} placeholder="e.g. Modern" />
         </Field>
-        <Field icon={Package} label="Preferred Materials" editing={e} view={lead.preferredMaterial}>
+        <Field label="Preferred Materials" editing={e} view={lead.preferredMaterial}>
           <TextInput value={edit.draft.preferredMaterial} onChange={edit.set("preferredMaterial")} />
         </Field>
-        <Field icon={Palette} label="Color Theme" editing={e} view={lead.preferredColorTheme}>
+        <Field label="Color Theme" editing={e} view={lead.preferredColorTheme}>
           <TextInput value={edit.draft.preferredColorTheme} onChange={edit.set("preferredColorTheme")} />
         </Field>
-        <Field icon={Clock} label="Duration" editing={e} view={lead.estimatedDuration}>
+        <Field label="Duration" editing={e} view={lead.estimatedDuration}>
           <TextInput value={edit.draft.estimatedDuration} onChange={edit.set("estimatedDuration")} />
         </Field>
       </div>
@@ -811,7 +771,7 @@ function ScopeCard({ lead, canEdit, onChanged }: CardProps) {
     <CardBox icon={ListChecks} title="Scope of Work" canEdit={canEdit} edit={edit}>
       <div className="space-y-5">
         {e ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-5 gap-y-4">
+          <div className="grid grid-cols-1 @md:grid-cols-2 gap-x-6 gap-y-3.5">
             <div>
               <label className="text-xs text-muted-foreground block mb-1">Requirement Category</label>
               <select
@@ -848,11 +808,10 @@ function ScopeCard({ lead, canEdit, onChanged }: CardProps) {
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-x-5 gap-y-4">
+          <div className="grid grid-cols-1 @lg:grid-cols-3 gap-x-6 gap-y-3.5">
             {enquiryTypeOf(lead) && (
-              <div className="md:col-span-3">
+              <div className="@lg:col-span-3">
                 <Field
-                  icon={Tag}
                   label="Looking for"
                   view={(
                     <span className="flex flex-wrap items-center gap-1.5">
@@ -865,10 +824,9 @@ function ScopeCard({ lead, canEdit, onChanged }: CardProps) {
                 />
               </div>
             )}
-            <Field icon={Tag} label="Requirement Category" view={lead.requirementCategory} />
-            <div className="md:col-span-2">
+            <Field label="Requirement Category" view={lead.requirementCategory} />
+            <div className="@lg:col-span-2">
               <Field
-                icon={Package}
                 label="Products"
                 view={products.length ? (
                   <span className="flex flex-wrap gap-1.5">
@@ -882,17 +840,17 @@ function ScopeCard({ lead, canEdit, onChanged }: CardProps) {
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-5 gap-y-4">
-          <Field icon={DoorOpen} label="Rooms Required" editing={e} view={lead.roomsRequired}>
+        <div className="grid grid-cols-1 @md:grid-cols-2 gap-x-6 gap-y-3.5">
+          <Field label="Rooms Required" editing={e} view={lead.roomsRequired}>
             <AreaInput value={edit.draft.roomsRequired} onChange={edit.set("roomsRequired")} placeholder="e.g. 3 Bedrooms, Living Room, Kitchen" />
           </Field>
-          <Field icon={Sparkles} label="Special Requests" editing={e} view={lead.specialRequests}>
+          <Field label="Special Requests" editing={e} view={lead.specialRequests}>
             <AreaInput value={edit.draft.specialRequests} onChange={edit.set("specialRequests")} />
           </Field>
-          <Field icon={FileText} label="Requirement Description" editing={e} view={lead.projectDescription}>
+          <Field label="Requirement Description" editing={e} view={lead.projectDescription}>
             <AreaInput rows={3} value={edit.draft.projectDescription} onChange={edit.set("projectDescription")} />
           </Field>
-          <Field icon={FileText} label="Customer Requirements / Notes" editing={e} view={lead.customerRequirements}>
+          <Field label="Customer Requirements / Notes" editing={e} view={lead.customerRequirements}>
             <AreaInput rows={3} value={edit.draft.customerRequirements} onChange={edit.set("customerRequirements")} />
           </Field>
         </div>

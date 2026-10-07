@@ -209,6 +209,7 @@ function StatusText({ status }: { status: JourneyStep["status"] }) {
       </>
     );
   }
+  if (status === "missing") return <><CircleDashed className="h-3.5 w-3.5 text-rose-500" /> Not filled in</>;
   return <><CircleDashed className="h-3.5 w-3.5" /> Upcoming</>;
 }
 
@@ -259,6 +260,7 @@ function StatusChip({ status }: { status: JourneyStep["status"] }) {
   const base = "text-[11px] font-medium px-2 py-0.5 rounded-full border";
   if (status === "done") return <span className={`${base} border-primary/20 bg-primary/10 text-primary`}>Done</span>;
   if (status === "current") return <span className={`${base} border-gold/30 bg-gold/10 text-foreground`}>In progress</span>;
+  if (status === "missing") return <span className={`${base} border-rose-200 bg-rose-50 text-rose-600`}>Not filled in</span>;
   return <span className={`${base} border-border bg-muted text-muted-foreground`}>Upcoming</span>;
 }
 
@@ -418,7 +420,8 @@ function ConvertPanel({ steps, closed, onConvert }: {
           {closed ? "This lead is closed" : ready ? "Ready to convert" : "Before you convert"}
         </p>
         <p className="text-sm text-muted-foreground mt-0.5 max-w-[60ch]">
-          Converting creates the project, the customer record and the initial billing schedule.
+          The project is created from the approved quote — <span className="font-medium text-foreground">Create Project</span> there
+          also creates the customer record and takes the advance.
         </p>
         <ul className="mt-3 flex flex-col sm:flex-row sm:flex-wrap gap-x-5 gap-y-1.5">
           {checks.map((c) => (
@@ -438,11 +441,8 @@ function ConvertPanel({ steps, closed, onConvert }: {
           variant={ready ? "default" : "outline"}
           className="active:scale-[0.98] transition-transform"
         >
-          <Rocket /> Convert to Project
+          <Rocket /> Go to quote
         </Button>
-        {!ready && !closed && (
-          <span className="text-xs text-muted-foreground md:text-right">You can still convert early.</span>
-        )}
       </div>
     </div>
   );

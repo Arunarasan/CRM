@@ -12,7 +12,8 @@ export type JourneyStepId = "requirement" | "quote" | "convert";
 export interface JourneyStep {
   id: JourneyStepId;
   label: string;
-  status: "done" | "current" | "upcoming";
+  /** "missing" = skipped and never filled in, while a later step is already under way. */
+  status: "done" | "current" | "upcoming" | "missing";
   /** One-line status shown under the label. */
   summary: string;
   /** Verb for the primary action button when this is the current step. */
@@ -129,15 +130,19 @@ export function resolveJourney(
     },
   ];
 
-  // The current step is the first one that isn't done. A closed lead has none.
-  const currentIndex = closed ? -1 : defs.findIndex((d) => !d.done);
+  // The current step is the first one that isn't done — except that sales often skip straight to
+  // the quote: once quoting has started, an empty requirement is "missing", not where the deal is.
+  const quoteStarted = hasMeasurement || hasBoq || hasQuotation;
+  const currentIndex = closed ? -1
+    : defs.findIndex((d) => !d.done && !(d.id === "requirement" && quoteStarted));
 
   const steps: JourneyStep[] = defs.map((d, i) => ({
     id: d.id,
     label: d.label,
     summary: d.summary,
     actionLabel: d.actionLabel,
-    status: d.done ? "done" : i === currentIndex ? "current" : "upcoming",
+    status: d.done ? "done" : i === currentIndex ? "current"
+      : (currentIndex >= 0 && i < currentIndex) || defs.slice(i + 1).some((x) => x.done) ? "missing" : "upcoming",
   }));
 
   const currentStep = currentIndex >= 0 ? steps[currentIndex] : null;
