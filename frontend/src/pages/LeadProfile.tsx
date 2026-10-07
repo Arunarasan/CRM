@@ -4,7 +4,7 @@ import { useParams, Link, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft, CheckCircle2, MoreVertical, XCircle, Check, CalendarClock, CalendarPlus,
   LayoutGrid, ListChecks, Activity as ActivityIcon, FileText, Route, Clock, RotateCcw, Star,
-  ChevronRight, FolderKanban, UserPlus, Phone, MessageCircle, Mail, MapPin, Navigation,
+  ChevronDown, ChevronRight, ChevronUp, FolderKanban, UserPlus, Phone, MessageCircle, Mail, MapPin, Navigation,
   NotebookPen, Pencil, Crown, Tag, UserCheck, Package, ClipboardList, Calculator, Rocket,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -85,6 +85,19 @@ export default function LeadProfile() {
   const [lostOpen, setLostOpen] = useState(false);
   const [reopenOpen, setReopenOpen] = useState(false);
   const [winBackOpen, setWinBackOpen] = useState(false);
+  // Phones: once the content is scrolled, the pinned header folds to name + tabs so the page itself has
+  // room (the full header is ~40% of a phone screen). Tablet / desktop keep the full header — the
+  // fold only ever applies through max-sm: classes. The chevron opens it again by hand.
+  const [scrolled, setScrolled] = useState(false);
+  const [manualOpen, setManualOpen] = useState(false);
+  const fold = scrolled && !manualOpen;
+  const onContentScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    // Fold past 72px, unfold only near the top (hysteresis), and only when there's real scrolling to do —
+    // folding gives the content more room, which must not flip it straight back.
+    if (!scrolled && el.scrollTop > 72 && el.scrollHeight - el.clientHeight > 240) setScrolled(true);
+    else if (scrolled && el.scrollTop < 8) { setScrolled(false); setManualOpen(false); }
+  };
 
   const fetchLead = useCallback(() => {
     if (!id) return;
@@ -206,8 +219,8 @@ export default function LeadProfile() {
     <Tabs value={activeTab} onValueChange={setActiveTab}
       className="@container flex flex-col h-full bg-slate-50/50 overflow-hidden animate-in fade-in">
       {/* Pinned: compact header card, stage bar and tabs stay put; only the tab content scrolls. */}
-      <div className="shrink-0 z-20 px-4 sm:px-6 lg:px-8 pt-3 pb-2 space-y-2 border-b border-slate-200/70 bg-slate-50/95 backdrop-blur-sm">
-        <div className="rounded-2xl border border-slate-100 bg-gradient-to-br from-white via-white to-emerald-50/50 px-3 sm:px-4 py-2.5 shadow-[0_4px_20px_-12px_rgba(15,23,42,0.15)]">
+      <div className={`shrink-0 z-20 px-4 sm:px-6 lg:px-8 pt-3 pb-2 space-y-2 border-b border-slate-200/70 bg-slate-50/95 backdrop-blur-sm ${fold ? "max-sm:pt-2 max-sm:pb-1.5 max-sm:space-y-1.5 max-sm:shadow-sm" : ""}`}>
+        <div className={`rounded-2xl border border-slate-100 bg-gradient-to-br from-white via-white to-emerald-50/50 px-3 sm:px-4 py-2.5 shadow-[0_4px_20px_-12px_rgba(15,23,42,0.15)] ${fold ? "max-sm:py-1.5" : ""}`}>
           <div className="flex flex-wrap @3xl:flex-nowrap items-center gap-x-3 gap-y-2">
             {/* Identity */}
             <div className="flex min-w-0 flex-1 items-center gap-2.5">
@@ -216,7 +229,7 @@ export default function LeadProfile() {
                 <ArrowLeft className="h-4 w-4" />
               </button>
               <div className="relative shrink-0">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-50 text-lg font-bold text-emerald-800 ring-1 ring-emerald-100">
+                <div className={`flex h-10 w-10 items-center justify-center rounded-full bg-emerald-50 text-lg font-bold ${fold ? "max-sm:h-8 max-sm:w-8 max-sm:text-base" : ""} text-emerald-800 ring-1 ring-emerald-100`}>
                   {(lead.name || "?").trim().charAt(0).toUpperCase()}
                 </div>
                 <span className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full ring-2 ring-white ${dot}`}
@@ -237,7 +250,7 @@ export default function LeadProfile() {
                   </button>
                   {lead.isConverted && <span className={`${PILL} shrink-0 bg-emerald-100 text-emerald-800`}><CheckCircle2 className="h-3 w-3" /> Converted</span>}
                 </div>
-                <div className="flex items-center gap-2 text-xs text-slate-500">
+                <div className={`flex items-center gap-2 text-xs text-slate-500 ${fold ? "max-sm:hidden" : ""}`}>
                   <span className="font-medium">{lead.leadNumber}</span>
                   <span className="h-3 w-px bg-slate-200" aria-hidden />
                   <span className="inline-flex items-center" title={lead.rating ? `Rating ${lead.rating}/5` : "Rate this lead"}>
@@ -251,10 +264,17 @@ export default function LeadProfile() {
                   </span>
                 </div>
               </div>
+              {scrolled && (
+                <button type="button" onClick={() => setManualOpen((v) => !v)}
+                  aria-expanded={!fold} aria-label={fold ? "Show lead details" : "Hide lead details"}
+                  className="sm:hidden ml-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600">
+                  {fold ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+                </button>
+              )}
             </div>
 
             {/* Actions */}
-            <div className="flex w-full @3xl:w-auto min-w-0 shrink-0 items-center gap-1.5">
+            <div className={`flex w-full @3xl:w-auto min-w-0 shrink-0 items-center gap-1.5 ${fold ? "max-sm:hidden" : ""}`}>
               {lead.isConverted && lead.convertedToCustomer && (
                 <Button asChild variant="outline" className="h-9 rounded-lg border-slate-200 bg-white px-3 font-semibold text-slate-700">
                   <Link to={`/customers/${lead.convertedToCustomer.id}`}>View Customer</Link>
@@ -295,7 +315,7 @@ export default function LeadProfile() {
           </div>
 
           {/* One line of chips — scrolls sideways when it doesn't fit, so the header height never grows. */}
-          <div className="mt-2 -mx-1 px-1 flex items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className={`mt-2 -mx-1 px-1 flex items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${fold ? "max-sm:hidden" : ""}`}>
             {phone && (
               <span className="inline-flex shrink-0 items-stretch rounded-lg border border-slate-200 bg-white text-[13px] shadow-sm whitespace-nowrap">
                 <a href={`tel:${phone}`} title="Call" className="inline-flex items-center gap-1.5 rounded-l-lg px-2.5 py-1 font-medium text-slate-800 hover:bg-emerald-50/60">
@@ -357,7 +377,7 @@ export default function LeadProfile() {
           </div>
         </div>
 
-        {!isLost && <LeadJourneyBar journey={journey} onOpen={goToStep} />}
+        {!isLost && <div className={fold ? "max-sm:hidden" : ""}><LeadJourneyBar journey={journey} onOpen={goToStep} /></div>}
 
         <div role="tablist" aria-label="Lead sections"
           className="bg-white p-1 border border-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] rounded-xl flex gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -374,7 +394,7 @@ export default function LeadProfile() {
       </div>
 
       {/* Scrolling content */}
-      <div className="flex-1 overflow-y-auto scroll-smooth">
+      <div className="flex-1 overflow-y-auto scroll-smooth" onScroll={onContentScroll}>
         <div className="px-4 sm:px-6 lg:px-8 pt-3 pb-6">
           {isLost && <div className="mb-3"><LostBanner lead={lead} onPlan={() => setWinBackOpen(true)} /></div>}
 
