@@ -1,121 +1,186 @@
 import { BaseInput } from '@/components/ui/input';
-import { useState, useEffect } from "react";
-import { Pencil, Check, X, Star, Users, MapPin, Home, ListChecks, Share2, XCircle, Sparkles, Phone, MessageCircle, Briefcase, PenTool, Wrench, UserCheck, Contact as ContactIcon, Navigation } from "lucide-react";
+import { useEffect, useState } from "react";
+import {
+  Pencil, Check, X, Star, Users, MapPin, Home, ListChecks, Share2, XCircle, Sparkles, Phone,
+  MessageCircle, Contact as ContactIcon, Navigation, Plus, Clock,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
 import api from "@/lib/api";
 import { leadApi } from "../leadApi";
 import {
-  CONSTRUCTION_STATUSES, LEAD_SOURCES, LEAD_TYPES, REFERRAL_TYPES, TEMPERATURES,
+  CONSTRUCTION_STATUSES, LEAD_SOURCES, LEAD_TYPES, PRIORITIES, REFERRAL_TYPES, TEMPERATURES,
   formatDate, formatDateTime, formatFollowUp, formatINR, avatarColor, initials,
   type Lead, type UserSummary,
 } from "../constants";
 import ExistingCustomerSearch from "@/pages/customers/ExistingCustomerSearch";
 import { EnquiryTag, enquiryDetails, enquiryTypeOf } from "../enquiry";
 
-// The Overview tab renders the lead as a responsive two-column grid of icon-rich cards, so every
-// detail is visible on one page. Each card can be edited in place — clicking Edit turns its value
-// cells into inputs in the same slot, so the layout never re-flows. Content cards save via the
-// full-lead update endpoint (a full replace, so we merge edits onto the whole lead); the Team card
-// uses the assignment endpoint and the Referral card its own endpoint.
+// The Overview is ONE "Lead details" card. Read mode shows only what has actually been entered,
+// grouped into sections (a section with nothing filled in disappears) plus a "Not filled yet" line so
+// gaps stay discoverable. One Edit turns the whole card into a single form with one Save — the lead
+// fields go through the full-lead update (a full replace, so edits are merged onto the whole lead),
+// the team through the assignment endpoint and the referral through its own endpoint.
 
 type IconType = React.ComponentType<{ className?: string }>;
+type Kind = "text" | "tel" | "email" | "number" | "money" | "date" | "select" | "area";
+type Custom = "category" | "products" | "scope" | "rating" | "phone" | "map";
 
+interface FieldDef {
+  key: keyof Lead & string;
+  label: string;
+  kind?: Kind;
+  options?: string[];
+  full?: boolean;
+  placeholder?: string;
+  custom?: Custom;
+}
+
+const SCOPE_FLAGS: Array<[keyof Lead & string, string]> = [
+  ["reqKitchen", "Modular Kitchen"], ["reqWardrobe", "Wardrobe"], ["reqTvUnit", "TV Unit"],
+  ["reqFalseCeiling", "False Ceiling"], ["reqPainting", "Painting"], ["reqFlooring", "Flooring"],
+  ["reqElectrical", "Electrical"], ["reqPlumbing", "Plumbing"], ["reqWoodFinish", "Wood Finish"],
+];
+
+const SECTIONS: { id: string; title: string; icon: IconType; wide?: boolean; fields: FieldDef[] }[] = [
+  {
+    id: "requirement", title: "Requirement", icon: ListChecks, wide: true,
+    fields: [
+      { key: "requirementCategory", label: "Category", custom: "category" },
+      { key: "requirementProduct", label: "Products", custom: "products" },
+      { key: "roomsRequired", label: "Rooms required", kind: "area", placeholder: "e.g. 3 Bedrooms, Living Room, Kitchen" },
+      { key: "reqKitchen", label: "Scope of work", custom: "scope", full: true },
+      { key: "projectDescription", label: "Requirement description", kind: "area", full: true },
+      { key: "customerRequirements", label: "Customer notes", kind: "area", full: true },
+      { key: "specialRequests", label: "Special requests", kind: "area", full: true },
+    ],
+  },
+  {
+    id: "contact", title: "Contact", icon: ContactIcon,
+    fields: [
+      { key: "name", label: "Customer name" },
+      { key: "mobileNumber", label: "Mobile", kind: "tel", custom: "phone" },
+      { key: "alternateMobile", label: "Alternate mobile", kind: "tel" },
+      { key: "whatsappNumber", label: "WhatsApp", kind: "tel" },
+      { key: "email", label: "Email", kind: "email" },
+      { key: "companyName", label: "Company" },
+      { key: "contactPerson", label: "Contact person" },
+      { key: "gstNumber", label: "GST number" },
+    ],
+  },
+  {
+    id: "location", title: "Location", icon: MapPin,
+    fields: [
+      { key: "siteAddress", label: "Site address", kind: "area", full: true, custom: "map" },
+      { key: "address", label: "Address", kind: "area", full: true, custom: "map" },
+      { key: "landmark", label: "Landmark" },
+      { key: "city", label: "City" },
+      { key: "district", label: "District" },
+      { key: "state", label: "State" },
+      { key: "pincode", label: "Pincode", kind: "number" },
+    ],
+  },
+  {
+    id: "property", title: "Property", icon: Home,
+    fields: [
+      { key: "propertyType", label: "Property type", placeholder: "e.g. Flat" },
+      { key: "propertyName", label: "Property / building" },
+      { key: "currentConstructionStage", label: "Construction status", kind: "select", options: CONSTRUCTION_STATUSES },
+      { key: "floorCount", label: "Floors", kind: "number" },
+      { key: "areaSqft", label: "Area (sq.ft)", kind: "number" },
+      { key: "expectedWorkArea", label: "Work area (sq.ft)", kind: "number" },
+      { key: "preferredDesignStyle", label: "Design style", placeholder: "e.g. Modern" },
+      { key: "preferredMaterial", label: "Preferred material" },
+      { key: "preferredColorTheme", label: "Colour theme" },
+      { key: "estimatedDuration", label: "Duration" },
+    ],
+  },
+  {
+    id: "deal", title: "Deal", icon: Sparkles,
+    fields: [
+      { key: "estimatedBudget", label: "Estimated budget", kind: "money" },
+      { key: "minimumBudget", label: "Budget from", kind: "money" },
+      { key: "maximumBudget", label: "Budget up to", kind: "money" },
+      { key: "expectedProjectValue", label: "Expected value", kind: "money" },
+      { key: "paymentPreference", label: "Payment preference" },
+      { key: "leadSource", label: "Source", kind: "select", options: LEAD_SOURCES },
+      { key: "leadType", label: "Lead type", kind: "select", options: LEAD_TYPES },
+      { key: "priority", label: "Priority", kind: "select", options: PRIORITIES },
+      { key: "leadTemperature", label: "Temperature", kind: "select", options: TEMPERATURES },
+      { key: "rating", label: "Rating", custom: "rating" },
+      { key: "expectedStartDate", label: "Expected start", kind: "date" },
+      { key: "expectedEndDate", label: "Expected completion", kind: "date" },
+      { key: "preferredCompletionDate", label: "Customer's target date", kind: "date" },
+    ],
+  },
+];
+
+const TEAM_ROLES = ["Sales Executive", "Designer", "Engineer", "Project Manager"] as const;
+type Role = (typeof TEAM_ROLES)[number];
+type TeamDraft = Record<Role, string>;
+
+type ReferralDraft = {
+  referralType: string; referredByCustomerId: string; referredByCustomerName: string;
+  referredByEmployeeId: string; referrerName: string; referrerContact: string; referralNotes: string;
+};
+
+const LEAD_KEYS = SECTIONS.flatMap((s) => s.fields.map((f) => f.key))
+  .concat(SCOPE_FLAGS.map(([k]) => k));
+
+const KEY_FIELDS = [
+  "requirementProduct", "estimatedBudget", "siteAddress", "propertyType", "areaSqft",
+  "roomsRequired", "whatsappNumber", "expectedStartDate",
+];
+const keyRank = (k: string) => { const i = KEY_FIELDS.indexOf(k); return i < 0 ? KEY_FIELDS.length : i; };
+
+const filled = (v: unknown) => v !== null && v !== undefined && v !== "" && v !== false;
 const dateInput = (v?: string) => (v ? v.slice(0, 10) : "");
 const splitProducts = (v?: string) => (v || "").split(",").map((s) => s.trim()).filter(Boolean);
+const inputCls = "w-full h-9 rounded-lg border border-slate-200 bg-white px-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-200";
+const areaCls = "w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-200";
 
-// Compact inline controls sized to sit inside a details cell without changing the grid.
-const cellInput = "w-full h-9 rounded-md border border-input bg-background px-2.5 text-sm";
-// Cards are @containers, so the grid follows the card's own width (main column vs. side rail).
-const FIELD_GRID = "grid grid-cols-1 @xs:grid-cols-2 @2xl:grid-cols-3 gap-x-6 gap-y-3.5";
-
-// One field: a quiet label over its value (or, when editing, the supplied editor). Empty values are
-// a faint dash so filled-in details stand out when scanning.
-function Field({
-  label, editing, view, children, action,
-}: {
-  label: string; editing?: boolean;
-  view?: React.ReactNode; children?: React.ReactNode; action?: React.ReactNode;
-}) {
-  const empty = view == null || view === "";
-  return (
-    <div className="min-w-0">
-      <div className="flex items-center justify-between gap-2 min-h-[20px]">
-        <span className="text-xs text-slate-500">{label}</span>
-        {!editing && action}
-      </div>
-      {editing
-        ? <div className="mt-1">{children}</div>
-        : <div className={`mt-0.5 text-sm break-words ${empty ? "text-slate-300" : "font-medium text-slate-800"}`}>{empty ? "—" : view}</div>}
-    </div>
-  );
+function hasValue(lead: Lead, f: FieldDef): boolean {
+  if (f.custom === "scope") return SCOPE_FLAGS.some(([k]) => !!lead[k]);
+  if (f.custom === "products") return splitProducts(lead.requirementProduct).length > 0;
+  return filled(lead[f.key]);
 }
 
-// Read-only star display for a lead's 1-5 rating — always renders all five so it reads as a
-// rating even when unrated (empty stars).
-function Stars({ value }: { value?: number | null }) {
-  const v = value || 0;
-  return (
-    <span className="inline-flex items-center gap-0.5" title={v ? `${v}/5` : "Unrated"}>
-      {[1, 2, 3, 4, 5].map((s) => (
-        <Star key={s} className={`h-4 w-4 ${s <= v ? "fill-amber-400 text-amber-400" : "text-muted-foreground/30"}`} />
-      ))}
-    </span>
-  );
+function teamOf(lead: Lead): Record<Role, UserSummary | undefined> {
+  return {
+    "Sales Executive": lead.assignedSalesExecutive, "Designer": lead.assignedDesigner,
+    "Engineer": lead.assignedEngineer, "Project Manager": lead.projectManager,
+  };
 }
 
-function TextInput({
-  value, onChange, type = "text", placeholder, inputMode,
-}: {
-  value: any; onChange: (v: string) => void; type?: string; placeholder?: string;
-  inputMode?: "text" | "numeric" | "decimal" | "tel" | "email";
-}) {
-  return (
-    <BaseInput
-      className={cellInput}
-      type={type}
-      placeholder={placeholder}
-      inputMode={inputMode}
-      value={value ?? ""}
-      onChange={(e) => onChange(e.target.value)}
-    />
-  );
+function seedTeam(lead: Lead): TeamDraft {
+  const t = teamOf(lead);
+  return Object.fromEntries(TEAM_ROLES.map((r) => [r, t[r]?.id ? String(t[r]!.id) : ""])) as TeamDraft;
 }
 
-function SelectInput({
-  value, onChange, options, allowEmpty = true, emptyLabel = "Select...",
-}: {
-  value: any; onChange: (v: string) => void; options: string[];
-  allowEmpty?: boolean; emptyLabel?: string;
-}) {
-  return (
-    <select className={cellInput} value={value ?? ""} onChange={(e) => onChange(e.target.value)}>
-      {allowEmpty && <option value="">{emptyLabel}</option>}
-      {options.map((o) => <option key={o} value={o}>{o}</option>)}
-    </select>
-  );
+function seedReferral(lead: Lead): ReferralDraft {
+  return {
+    referralType: lead.referralType || "",
+    referredByCustomerId: lead.referredByCustomer?.id ? String(lead.referredByCustomer.id) : "",
+    referredByCustomerName: lead.referredByCustomer?.name || "",
+    referredByEmployeeId: lead.referredByEmployee?.id ? String(lead.referredByEmployee.id) : "",
+    referrerName: lead.referrerName || "",
+    referrerContact: lead.referrerContact || "",
+    referralNotes: lead.referralNotes || "",
+  };
 }
 
-function AreaInput({
-  value, onChange, rows = 2, placeholder,
-}: { value: any; onChange: (v: string) => void; rows?: number; placeholder?: string }) {
-  return (
-    <textarea
-      className="w-full rounded-md border border-input bg-background px-2.5 py-2 text-sm"
-      rows={rows}
-      placeholder={placeholder}
-      value={value ?? ""}
-      onChange={(e) => onChange(e.target.value)}
-    />
-  );
+function seedLead(lead: Lead): Record<string, any> {
+  const d: Record<string, any> = {};
+  LEAD_KEYS.forEach((k) => { d[k] = (lead as any)[k] ?? ""; });
+  ["expectedStartDate", "expectedEndDate", "preferredCompletionDate"].forEach((k) => { d[k] = dateInput(d[k]); });
+  return d;
 }
 
-// Merge a card's edited fields onto the full lead and persist. updateLead() on the backend is a
-// full replace, so we must send every field; mirrors the payload cleanup in LeadFormDialog.
-function saveLeadPatch(lead: Lead, patch: Partial<Lead>): Promise<void> {
+// updateLead() is a full replace, so merge the edits onto the whole lead; mirrors LeadFormDialog's cleanup.
+function saveLeadPatch(lead: Lead, patch: Record<string, any>): Promise<unknown> {
   const payload: any = { ...lead, ...patch };
   ["estimatedBudget", "minimumBudget", "maximumBudget", "expectedProjectValue",
-    "areaSqft", "expectedWorkArea", "floorCount"].forEach((k) => {
+    "areaSqft", "expectedWorkArea", "floorCount", "rating"].forEach((k) => {
     if (payload[k] === "" || payload[k] === null) delete payload[k];
   });
   ["expectedStartDate", "expectedEndDate", "preferredCompletionDate", "nextFollowUpDate"].forEach((k) => {
@@ -130,80 +195,37 @@ function saveLeadPatch(lead: Lead, patch: Partial<Lead>): Promise<void> {
   delete payload.projectManager;
   delete payload.convertedToCustomer;
   delete payload.convertedToProject;
-  // Referral is set once at creation and untouched by the update endpoint; drop the nested refs.
+  // Referral has its own endpoint; drop the nested refs.
   delete payload.referredByCustomer;
   delete payload.referredByEmployee;
-  return leadApi.update(lead.id, payload).then(() => { toast.success("Saved"); });
+  return leadApi.update(lead.id, payload);
 }
 
-interface CardEdit<T> {
-  editing: boolean;
-  saving: boolean;
-  draft: T;
-  set: <K extends keyof T>(key: K) => (value: T[K]) => void;
-  patch: (partial: Partial<T>) => void;
-  start: () => void;
-  cancel: () => void;
-  doSave: () => Promise<void>;
-}
-
-function useCardEdit<T extends object>(seed: () => T, save: (draft: T) => Promise<void>): CardEdit<T> {
-  const [editing, setEditing] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [draft, setDraft] = useState<T>(seed);
-  const start = () => { setDraft(seed()); setEditing(true); };
-  const cancel = () => setEditing(false);
-  const set = <K extends keyof T>(key: K) => (value: T[K]) =>
-    setDraft((d) => ({ ...d, [key]: value }));
-  const patch = (partial: Partial<T>) => setDraft((d) => ({ ...d, ...partial }));
-  const doSave = async () => {
-    setSaving(true);
-    try { await save(draft); setEditing(false); }
-    catch (err: any) {
-      console.error("Failed to save card", err);
-      toast.error(err?.response?.data?.message || "Failed to save. Please try again.");
-    } finally { setSaving(false); }
-  };
-  return { editing, saving, draft, set, patch, start, cancel, doSave };
-}
-
-// A card with an icon-badged title, inline edit controls, and a body. Each card is a size container.
-function CardBox({
-  icon: Icon, title, canEdit, edit, className, children,
-}: {
-  icon: IconType; title: string; canEdit: boolean; edit: CardEdit<any>;
-  className?: string; children: React.ReactNode;
-}) {
+function MapsLink({ parts }: { parts: (string | undefined | null)[] }) {
+  const query = parts.map((p) => (p || "").trim()).filter(Boolean).join(", ");
+  if (!query) return null;
   return (
-    <section className={`@container rounded-2xl border border-slate-100 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4 sm:p-5 ${edit.editing ? "ring-2 ring-emerald-200" : ""} ${className || ""}`}>
-      <div className="flex items-center justify-between gap-2 mb-4">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div className="h-8 w-8 rounded-lg bg-emerald-50 text-emerald-700 grid place-items-center shrink-0">
-            <Icon className="h-4 w-4" />
-          </div>
-          <h3 className="font-semibold tracking-tight text-slate-900 truncate">{title}</h3>
-        </div>
-        {canEdit && (edit.editing ? (
-          <div className="flex gap-1.5 shrink-0">
-            <Button size="sm" variant="ghost" onClick={edit.cancel} disabled={edit.saving}>
-              <X className="h-4 w-4 mr-1" /> Cancel
-            </Button>
-            <Button size="sm" onClick={edit.doSave} disabled={edit.saving} className="bg-emerald-800 hover:bg-emerald-900 text-white">
-              <Check className="h-4 w-4 mr-1" /> {edit.saving ? "Saving..." : "Save"}
-            </Button>
-          </div>
-        ) : (
-          <Button size="sm" variant="ghost" onClick={edit.start} className="h-8 px-2.5 text-slate-500 hover:text-slate-900 shrink-0" aria-label={`Edit ${title}`}>
-            <Pencil className="h-3.5 w-3.5 mr-1.5" /> Edit
-          </Button>
-        ))}
-      </div>
-      {children}
-    </section>
+    <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`} target="_blank" rel="noopener noreferrer"
+      className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-800 hover:underline" title={`Open in Google Maps: ${query}`}>
+      <Navigation className="h-3.5 w-3.5" /> Map
+    </a>
   );
 }
 
-type CardProps = { lead: Lead; canEdit: boolean; onChanged: () => void };
+function Stars({ value, onPick }: { value?: number | null; onPick?: (v: number | "") => void }) {
+  const v = Number(value) || 0;
+  return (
+    <span className="inline-flex items-center gap-0.5" title={v ? `${v}/5` : "Unrated"}>
+      {[1, 2, 3, 4, 5].map((s) => onPick ? (
+        <button key={s} type="button" onClick={() => onPick(s === v ? "" : s)} aria-label={`Set rating ${s} of 5`} className="hover:scale-110 transition-transform">
+          <Star className={`h-5 w-5 ${s <= v ? "fill-amber-400 text-amber-400" : "text-slate-300"}`} />
+        </button>
+      ) : (
+        <Star key={s} className={`h-4 w-4 ${s <= v ? "fill-amber-400 text-amber-400" : "text-slate-300"}`} />
+      ))}
+    </span>
+  );
+}
 
 // ===========================================================================
 export default function OverviewTab({
@@ -214,647 +236,409 @@ export default function OverviewTab({
   canEdit: boolean;
   onChanged: () => void;
 }) {
-  // Main column = what the customer wants and where; side rail = the deal and who's on it.
-  // Driven by the page's @container width (the sidebar eats viewport width).
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [draft, setDraft] = useState<Record<string, any>>(() => seedLead(lead));
+  const [team, setTeam] = useState<TeamDraft>(() => seedTeam(lead));
+  const [referral, setReferral] = useState<ReferralDraft>(() => seedReferral(lead));
+  const [categories, setCategories] = useState<{ id: number; name: string; slug: string }[]>([]);
+  const [catalog, setCatalog] = useState<{ id: number; name: string; categorySlug?: string }[]>([]);
+
+  // The website catalogue powers the category + product pickers (fetched once, on first edit).
+  useEffect(() => {
+    if (!editing || categories.length) return;
+    api.get("/public/categories").then((r) => setCategories(r.data || [])).catch(() => {});
+    api.get("/public/products").then((r) => setCatalog(r.data || [])).catch(() => {});
+  }, [editing, categories.length]);
+
+  const start = () => {
+    setDraft(seedLead(lead)); setTeam(seedTeam(lead)); setReferral(seedReferral(lead)); setEditing(true);
+  };
+  const set = (k: string) => (v: any) => setDraft((d) => ({ ...d, [k]: v }));
+
+  const save = async () => {
+    if (!String(draft.name || "").trim()) { toast.error("Customer name can't be empty."); return; }
+    if (!String(draft.mobileNumber || "").trim()) { toast.error("Mobile number can't be empty."); return; }
+    setSaving(true);
+    try {
+      // One after another: these all write the same lead row, and parallel writes conflict.
+      await saveLeadPatch(lead, draft);
+      const base = seedTeam(lead);
+      const changedRoles = TEAM_ROLES.filter((r) => team[r] && team[r] !== base[r]);
+      if (changedRoles.length) {
+        await leadApi.assignTeam(lead.id, Object.fromEntries(changedRoles.map((r) => [r, Number(team[r])])));
+      }
+      if (JSON.stringify(referral) !== JSON.stringify(seedReferral(lead))) {
+        const r = referral;
+        await leadApi.updateReferral(lead.id, {
+          referralType: r.referralType || null,
+          referredByCustomerId: r.referralType === "Existing Customer" && r.referredByCustomerId ? Number(r.referredByCustomerId) : null,
+          referredByEmployeeId: r.referralType === "Employee" && r.referredByEmployeeId ? Number(r.referredByEmployeeId) : null,
+          referrerName: r.referrerName || null,
+          referrerContact: r.referrerContact || null,
+          referralNotes: r.referralNotes || null,
+        });
+      }
+      toast.success("Lead details saved");
+      setEditing(false);
+      onChanged();
+    } catch (err: any) {
+      console.error("Failed to save lead details", err);
+      toast.error(err?.response?.data?.message || "Couldn't save. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ---- Read view bookkeeping -------------------------------------------------
+  const assigned = TEAM_ROLES.filter((r) => teamOf(lead)[r]?.name);
+  const hasReferral = !!(lead.referralType || lead.referrerName || lead.referredByCustomer?.id || lead.referredByEmployee?.id);
+  // Gaps that matter most for pricing and visiting come first.
+  const missing = [
+    ...SECTIONS.flatMap((s) => s.fields.filter((f) => !hasValue(lead, f)))
+      .sort((x, y) => keyRank(x.key) - keyRank(y.key)).map((f) => f.label),
+    ...(assigned.length === 0 ? ["Team"] : []),
+  ];
+  const enquiry = enquiryTypeOf(lead);
+
   return (
-    <div className="grid grid-cols-1 @5xl:grid-cols-[minmax(0,1fr)_minmax(300px,380px)] gap-4 items-start">
-      <div className="flex flex-col gap-4 min-w-0">
-        <ScopeCard lead={lead} canEdit={canEdit} onChanged={onChanged} />
-        <ContactCard lead={lead} canEdit={canEdit} onChanged={onChanged} />
-        <AddressCard lead={lead} canEdit={canEdit} onChanged={onChanged} />
-        <PropertyCard lead={lead} canEdit={canEdit} onChanged={onChanged} />
+    <section className="@container rounded-2xl border border-slate-100 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)]" aria-label="Lead details">
+      {/* Card header */}
+      <div className="flex items-center justify-between gap-3 px-4 sm:px-5 pt-4 pb-3 border-b border-slate-100">
+        <div className="min-w-0">
+          <h2 className="font-bold tracking-tight text-slate-900">{editing ? "Edit lead details" : "Lead details"}</h2>
+          <p className="text-xs text-slate-500 mt-0.5 truncate">
+            {editing ? "All fields — leave anything you don't know empty." : "Only the details that have been filled in."}
+          </p>
+        </div>
+        {canEdit && !editing && (
+          <Button size="sm" variant="outline" onClick={start} className="h-9 rounded-lg border-slate-200 font-semibold text-slate-700 shrink-0">
+            <Pencil className="h-3.5 w-3.5 mr-1.5" /> Edit
+          </Button>
+        )}
       </div>
-      <div className="flex flex-col gap-4 min-w-0">
-        {lead.status === "Lost" && <LostCard lead={lead} />}
-        <SummaryCard lead={lead} users={users} canEdit={canEdit} onChanged={onChanged} />
-        <TeamCard lead={lead} users={users} canEdit={canEdit} onChanged={onChanged} />
+
+      <div className="px-4 sm:px-5 py-4 space-y-6">
+        {lead.status === "Lost" && !editing && (
+          <Block icon={XCircle} title="Why it was lost" tone="text-rose-600">
+            <Dl>
+              {lead.lostReason && <Item label="Reason">{lead.lostReason}</Item>}
+              {lead.competitor && <Item label="Went with">{lead.competitor}</Item>}
+              {lead.customerFeedback && <Item label="Customer feedback" full>{lead.customerFeedback}</Item>}
+            </Dl>
+          </Block>
+        )}
+
+        {enquiry && !editing && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-xs text-slate-500 mr-1">Looking for</span>
+            <EnquiryTag type={enquiry} />
+            {enquiryDetails(lead).map((d) => (
+              <span key={d} className="px-2.5 py-0.5 bg-violet-50 text-violet-700 text-xs rounded-full font-medium">{d}</span>
+            ))}
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 @4xl:grid-cols-2 gap-x-10 gap-y-6">
+          {SECTIONS.map((s) => {
+            const shown = editing ? s.fields : s.fields.filter((f) => hasValue(lead, f));
+            if (!shown.length) return null;
+            return (
+              <Block key={s.id} icon={s.icon} title={s.title} className={s.wide ? "@4xl:col-span-2" : ""}>
+                <Dl>
+                  {shown.map((f) => (
+                    <Item key={f.key} label={f.label} full={f.full}
+                      action={!editing && f.custom === "map"
+                        ? <MapsLink parts={[(lead as any)[f.key], lead.city, lead.district, lead.state, lead.pincode]} />
+                        : !editing && f.custom === "phone" && lead.mobileNumber ? <PhoneActions lead={lead} /> : null}>
+                      {editing ? renderEditor(f) : renderValue(f)}
+                    </Item>
+                  ))}
+                </Dl>
+              </Block>
+            );
+          })}
+
+          {(editing || assigned.length > 0) && (
+            <Block icon={Users} title="Team">
+              {editing ? (
+                <Dl>
+                  {TEAM_ROLES.map((r) => (
+                    <Item key={r} label={r}>
+                      <select className={inputCls} value={team[r]} onChange={(e) => setTeam((t) => ({ ...t, [r]: e.target.value }))}>
+                        <option value="">Unassigned</option>
+                        {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+                      </select>
+                    </Item>
+                  ))}
+                </Dl>
+              ) : (
+                <ul className="grid grid-cols-1 @md:grid-cols-2 gap-2">
+                  {assigned.map((r) => {
+                    const name = teamOf(lead)[r]!.name!;
+                    return (
+                      <li key={r} className="flex items-center gap-2.5 min-w-0">
+                        <span className={`h-8 w-8 rounded-full grid place-items-center text-[11px] font-bold shrink-0 ${avatarColor(name)}`}>{initials(name)}</span>
+                        <span className="min-w-0">
+                          <span className="block text-[11px] text-slate-500">{r}</span>
+                          <span className="block text-sm font-medium text-slate-800 truncate">{name}</span>
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </Block>
+          )}
+
+          {(editing || hasReferral) && (
+            <Block icon={Share2} title="Referral">
+              {editing
+                ? <ReferralEditor draft={referral} patch={(p) => setReferral((r) => ({ ...r, ...p }))} users={users} />
+                : (
+                  <Dl>
+                    {lead.referralType && <Item label="Referred by">{lead.referralType}</Item>}
+                    {(lead.referredByCustomer?.name || lead.referredByEmployee?.name || lead.referrerName) && (
+                      <Item label="Referrer">{lead.referredByCustomer?.name || lead.referredByEmployee?.name || lead.referrerName}</Item>
+                    )}
+                    {lead.referrerContact && <Item label="Referrer contact">{lead.referrerContact}</Item>}
+                    {lead.referralNotes && <Item label="Notes" full>{lead.referralNotes}</Item>}
+                  </Dl>
+                )}
+            </Block>
+          )}
+        </div>
+
+        {/* What's still unknown — kept visible so gaps get filled, but out of the way. */}
+        {!editing && missing.length > 0 && (
+          <div className="rounded-xl bg-slate-50 px-3 py-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+            <span className="text-xs font-semibold text-slate-600">Not filled yet ({missing.length})</span>
+            <span className="text-xs text-slate-400 min-w-0 flex-1">
+              {missing.slice(0, 8).join(" · ")}{missing.length > 8 ? ` · +${missing.length - 8} more` : ""}
+            </span>
+            {canEdit && (
+              <button type="button" onClick={start} className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-800 hover:underline shrink-0">
+                <Plus className="h-3.5 w-3.5" /> Add details
+              </button>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* Footer: system facts (read) or the single save bar (edit). */}
+      {editing ? (
+        <div className="sticky bottom-16 md:bottom-0 z-10 flex items-center justify-end gap-2 rounded-b-2xl border-t border-slate-100 bg-white/95 backdrop-blur px-4 sm:px-5 py-3">
+          <Button variant="ghost" onClick={() => setEditing(false)} disabled={saving}><X className="h-4 w-4 mr-1" /> Cancel</Button>
+          <Button onClick={save} disabled={saving} className="bg-emerald-800 hover:bg-emerald-900 text-white">
+            <Check className="h-4 w-4 mr-1" /> {saving ? "Saving..." : "Save changes"}
+          </Button>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-slate-100 px-4 sm:px-5 py-2.5 text-xs text-slate-500">
+          <span className="inline-flex items-center gap-1"><Clock className="h-3.5 w-3.5" /> Created {formatDateTime(lead.createdAt)}{lead.createdBy ? ` by ${lead.createdBy}` : ""}</span>
+          {lead.stage && <span>Stage: <span className="font-medium text-slate-700">{lead.stage}</span></span>}
+          <span>{lead.followUpCount ?? 0} follow-up{lead.followUpCount === 1 ? "" : "s"} logged</span>
+          {lead.nextFollowUpDate && <span>Next follow-up: <span className="font-medium text-slate-700">{formatFollowUp(lead.nextFollowUpDate, lead.nextFollowUpTime)}</span></span>}
+          {lead.lastContactAt && <span>Last contact: {formatDate(lead.lastContactAt)}</span>}
+        </div>
+      )}
+    </section>
+  );
+
+  // ---- Field renderers ---------------------------------------------------------
+  function renderValue(f: FieldDef): React.ReactNode {
+    const v = (lead as any)[f.key];
+    switch (f.custom) {
+      case "products":
+        return <Chips items={splitProducts(lead.requirementProduct)} />;
+      case "scope":
+        return <Chips items={SCOPE_FLAGS.filter(([k]) => lead[k]).map(([, l]) => l)} check />;
+      case "rating":
+        return <Stars value={v} />;
+    }
+    if (f.kind === "money") return <span className="font-semibold">{formatINR(v)}</span>;
+    if (f.kind === "date") return formatDate(v);
+    if (f.kind === "email") return <a href={`mailto:${v}`} className="hover:text-emerald-800 hover:underline break-all">{v}</a>;
+    if (f.kind === "tel") return <a href={`tel:${v}`} className="hover:text-emerald-800 hover:underline">{v}</a>;
+    return <span className="whitespace-pre-line">{String(v)}</span>;
+  }
+
+  function renderEditor(f: FieldDef): React.ReactNode {
+    const v = draft[f.key];
+    switch (f.custom) {
+      case "category":
+        return (
+          <select className={inputCls} value={v || ""} onChange={(e) => set(f.key)(e.target.value)}>
+            <option value="">Select category...</option>
+            {/* Keep a saved value visible even if the catalogue renamed/removed it. */}
+            {v && !categories.some((c) => c.name === v) && <option value={v}>{v}</option>}
+            {categories.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
+          </select>
+        );
+      case "products": {
+        const picked = splitProducts(v);
+        const cat = categories.find((c) => c.name === draft.requirementCategory);
+        const options = catalog.filter((p) => !cat || p.categorySlug === cat.slug).map((p) => p.name).filter((n) => !picked.includes(n));
+        const setPicked = (names: string[]) => set(f.key)(names.join(", "));
+        return (
+          <div className="space-y-2">
+            <select className={inputCls} value="" onChange={(e) => { if (e.target.value) setPicked([...picked, e.target.value]); }}>
+              <option value="">Add a product...</option>
+              {options.map((p) => <option key={p} value={p}>{p}</option>)}
+            </select>
+            {picked.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {picked.map((p) => (
+                  <span key={p} className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+                    {p}
+                    <button type="button" onClick={() => setPicked(picked.filter((x) => x !== p))} aria-label={`Remove ${p}`}><X className="h-3 w-3" /></button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      }
+      case "scope":
+        return (
+          <div className="flex flex-wrap gap-1.5">
+            {SCOPE_FLAGS.map(([k, label]) => {
+              const on = !!draft[k];
+              return (
+                <button key={k} type="button" aria-pressed={on} onClick={() => set(k)(!on)}
+                  className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors ${on ? "border-emerald-300 bg-emerald-50 text-emerald-800" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}>
+                  {on && <Check className="h-3 w-3" strokeWidth={2.5} />} {label}
+                </button>
+              );
+            })}
+          </div>
+        );
+      case "rating":
+        return <div className="h-9 flex items-center"><Stars value={v} onPick={set(f.key)} /></div>;
+    }
+    if (f.kind === "area") {
+      return <textarea className={areaCls} rows={f.full ? 3 : 2} placeholder={f.placeholder} value={v ?? ""} onChange={(e) => set(f.key)(e.target.value)} />;
+    }
+    if (f.kind === "select") {
+      return (
+        <select className={inputCls} value={v ?? ""} onChange={(e) => set(f.key)(e.target.value)}>
+          <option value="">Select...</option>
+          {v && !f.options!.includes(v) && <option value={v}>{v}</option>}
+          {f.options!.map((o) => <option key={o} value={o}>{o}</option>)}
+        </select>
+      );
+    }
+    const type = f.kind === "money" ? "number" : f.kind === "tel" ? "tel" : f.kind || "text";
+    const inputMode = f.kind === "money" || f.kind === "number" ? "numeric" : f.kind === "tel" ? "tel" : f.kind === "email" ? "email" : undefined;
+    return (
+      <BaseInput className={inputCls} type={type} inputMode={inputMode as any} placeholder={f.placeholder}
+        value={v ?? ""} onChange={(e) => set(f.key)(e.target.value)} />
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+function Block({ icon: Icon, title, tone, className, children }: {
+  icon: IconType; title: string; tone?: string; className?: string; children: React.ReactNode;
+}) {
+  return (
+    <div className={`@container min-w-0 ${className || ""}`}>
+      <h3 className={`mb-2.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider ${tone || "text-slate-400"}`}>
+        <Icon className="h-3.5 w-3.5" /> {title}
+      </h3>
+      {children}
     </div>
   );
 }
 
-// --- Lost lead (read-only) --------------------------------------------------
-function LostCard({ lead }: { lead: Lead }) {
+function Dl({ children }: { children: React.ReactNode }) {
+  return <dl className="grid grid-cols-1 @xs:grid-cols-2 @2xl:grid-cols-3 gap-x-6 gap-y-3">{children}</dl>;
+}
+
+function Item({ label, full, action, children }: { label: string; full?: boolean; action?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <section className="@container rounded-2xl border border-rose-200 bg-rose-50/40 p-4 sm:p-5">
-      <div className="flex items-center gap-2.5 mb-4">
-        <div className="h-8 w-8 rounded-lg bg-destructive/10 text-destructive grid place-items-center">
-          <XCircle className="h-[18px] w-[18px]" />
-        </div>
-        <h3 className="font-semibold tracking-tight text-destructive">Lost Lead Details</h3>
-      </div>
-      <div className={FIELD_GRID}>
-        <Field label="Reason" view={lead.lostReason} />
-        <Field label="Competitor" view={lead.competitor} />
-        <div className="col-span-full">
-          <Field label="Customer Feedback" view={lead.customerFeedback} />
-        </div>
-      </div>
-    </section>
+    <div className={`min-w-0 ${full ? "col-span-full" : ""}`}>
+      <dt className="flex items-center justify-between gap-2 text-xs text-slate-500">{label}{action}</dt>
+      <dd className="mt-0.5 text-sm font-medium text-slate-800 break-words">{children}</dd>
+    </div>
   );
 }
 
-// --- Lead Summary -----------------------------------------------------------
-type SummaryDraft = Pick<Lead,
-  "leadSource" | "leadType" | "leadTemperature" | "rating" | "estimatedBudget" |
-  "expectedProjectValue" | "expectedStartDate" | "expectedEndDate">;
-
-function SummaryCard({ lead, users, canEdit, onChanged }: CardProps & { users: UserSummary[] }) {
-  const edit = useCardEdit<SummaryDraft>(
-    () => ({
-      leadSource: lead.leadSource, leadType: lead.leadType, leadTemperature: lead.leadTemperature,
-      rating: lead.rating,
-      estimatedBudget: lead.estimatedBudget, expectedProjectValue: lead.expectedProjectValue,
-      expectedStartDate: dateInput(lead.expectedStartDate), expectedEndDate: dateInput(lead.expectedEndDate),
-    }),
-    async (d) => { await saveLeadPatch(lead, d); onChanged(); },
-  );
-  const e = edit.editing;
+function Chips({ items, check }: { items: string[]; check?: boolean }) {
   return (
-    <CardBox icon={Sparkles} title="Deal" canEdit={canEdit} edit={edit}>
-      <div className={FIELD_GRID}>
-        <Field label="Lead Source" editing={e} view={lead.leadSource}>
-          <SelectInput value={edit.draft.leadSource} onChange={edit.set("leadSource")} options={LEAD_SOURCES} />
-        </Field>
-        <Field label="Lead Type" editing={e} view={lead.leadType}>
-          <SelectInput value={edit.draft.leadType} onChange={edit.set("leadType")} options={LEAD_TYPES} />
-        </Field>
-        <Field label="Stage" view={lead.stage} />
-        <Field label="Temperature" editing={e} view={lead.leadTemperature}>
-          <SelectInput value={edit.draft.leadTemperature} onChange={edit.set("leadTemperature")} options={TEMPERATURES} allowEmpty={false} />
-        </Field>
-        <Field label="Rating" editing={e} view={<Stars value={lead.rating} />}>
-          <div className="flex items-center gap-1 h-9">
-            {[1, 2, 3, 4, 5].map((s) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => edit.set("rating")(s === (edit.draft.rating || 0) ? undefined : s)}
-                className="hover:scale-110 transition-transform"
-                aria-label={`Set rating ${s}`}
-              >
-                <Star className={`h-5 w-5 ${s <= (edit.draft.rating || 0) ? "fill-amber-400 text-amber-400" : "text-muted-foreground/30"}`} />
-              </button>
-            ))}
-          </div>
-        </Field>
-        <Field label="Estimated Budget" editing={e} view={<span className="font-semibold">{formatINR(lead.estimatedBudget)}</span>}>
-          <TextInput type="number" inputMode="numeric" value={edit.draft.estimatedBudget} onChange={edit.set("estimatedBudget") as any} />
-        </Field>
-        <Field label="Expected Project Value" editing={e} view={formatINR(lead.expectedProjectValue)}>
-          <TextInput type="number" inputMode="numeric" value={edit.draft.expectedProjectValue} onChange={edit.set("expectedProjectValue") as any} />
-        </Field>
-        <Field label="Expected Start" editing={e} view={formatDate(lead.expectedStartDate)}>
-          <TextInput type="date" value={edit.draft.expectedStartDate} onChange={edit.set("expectedStartDate")} />
-        </Field>
-        <Field label="Expected Completion" editing={e} view={formatDate(lead.expectedEndDate)}>
-          <TextInput type="date" value={edit.draft.expectedEndDate} onChange={edit.set("expectedEndDate")} />
-        </Field>
-        <Field label="Follow-ups Logged" view={lead.followUpCount ?? 0} />
-        <Field label="Next Follow-up" view={formatFollowUp(lead.nextFollowUpDate, lead.nextFollowUpTime)} />
-        <Field label="Created" view={formatDateTime(lead.createdAt)} />
-        <Field label="Created By" view={lead.createdBy} />
-      </div>
-      <ReferralSection lead={lead} users={users} canEdit={canEdit} onChanged={onChanged} />
-    </CardBox>
+    <span className="flex flex-wrap gap-1.5">
+      {items.map((t) => (
+        <span key={t} className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+          {check && <Check className="h-3 w-3 text-emerald-700" strokeWidth={2.5} />} {t}
+        </span>
+      ))}
+    </span>
   );
 }
 
-// --- Contact Details --------------------------------------------------------
-type ContactDraft = Pick<Lead,
-  "name" | "companyName" | "contactPerson" | "mobileNumber" |
-  "alternateMobile" | "whatsappNumber" | "email" | "gstNumber">;
-
-function ContactCard({ lead, canEdit, onChanged }: CardProps) {
-  const edit = useCardEdit<ContactDraft>(
-    () => ({
-      name: lead.name, companyName: lead.companyName, contactPerson: lead.contactPerson,
-      mobileNumber: lead.mobileNumber, alternateMobile: lead.alternateMobile,
-      whatsappNumber: lead.whatsappNumber, email: lead.email, gstNumber: lead.gstNumber,
-    }),
-    async (d) => { await saveLeadPatch(lead, d); onChanged(); },
-  );
-  const e = edit.editing;
-  const phoneActions = lead.mobileNumber && (
+function PhoneActions({ lead }: { lead: Lead }) {
+  return (
     <span className="flex items-center gap-1">
-      <a href={`tel:${lead.mobileNumber}`} className="h-6 w-6 rounded-full bg-emerald-50 text-emerald-600 grid place-items-center hover:bg-emerald-100" title="Call">
+      <a href={`tel:${lead.mobileNumber}`} className="h-6 w-6 rounded-full bg-emerald-50 text-emerald-700 grid place-items-center hover:bg-emerald-100" title="Call" aria-label="Call">
         <Phone className="h-3 w-3" />
       </a>
       <a href={`https://wa.me/${(lead.whatsappNumber || lead.mobileNumber).replace(/[^0-9]/g, "")}`} target="_blank" rel="noreferrer"
-        className="h-6 w-6 rounded-full bg-green-50 text-green-600 grid place-items-center hover:bg-green-100" title="WhatsApp">
+        className="h-6 w-6 rounded-full bg-emerald-50 text-emerald-700 grid place-items-center hover:bg-emerald-100" title="WhatsApp" aria-label="WhatsApp">
         <MessageCircle className="h-3 w-3" />
       </a>
     </span>
   );
-  return (
-    <CardBox icon={ContactIcon} title="Contact Details" canEdit={canEdit} edit={edit}>
-      <div className={FIELD_GRID}>
-        <Field label="Customer Name" editing={e} view={lead.name}>
-          <TextInput value={edit.draft.name} onChange={edit.set("name")} />
-        </Field>
-        <Field label="Company" editing={e} view={lead.companyName}>
-          <TextInput value={edit.draft.companyName} onChange={edit.set("companyName")} />
-        </Field>
-        <Field label="Primary Mobile" editing={e} view={lead.mobileNumber} action={phoneActions}>
-          <TextInput type="tel" inputMode="tel" value={edit.draft.mobileNumber} onChange={edit.set("mobileNumber")} />
-        </Field>
-        <Field label="Alternative Mobile" editing={e} view={lead.alternateMobile}>
-          <TextInput type="tel" inputMode="tel" value={edit.draft.alternateMobile} onChange={edit.set("alternateMobile")} />
-        </Field>
-        <Field label="WhatsApp" editing={e} view={lead.whatsappNumber}>
-          <TextInput type="tel" inputMode="tel" value={edit.draft.whatsappNumber} onChange={edit.set("whatsappNumber")} />
-        </Field>
-        <Field label="Email" editing={e} view={lead.email}>
-          <TextInput type="email" inputMode="email" value={edit.draft.email} onChange={edit.set("email")} />
-        </Field>
-        <Field label="GST Number" editing={e} view={lead.gstNumber}>
-          <TextInput value={edit.draft.gstNumber} onChange={edit.set("gstNumber")} />
-        </Field>
-        <Field label="Contact Person" editing={e} view={lead.contactPerson}>
-          <TextInput value={edit.draft.contactPerson} onChange={edit.set("contactPerson")} />
-        </Field>
-      </div>
-    </CardBox>
-  );
 }
 
-// --- Team (assignment endpoint) --------------------------------------------
-const TEAM_ROLES = ["Sales Executive", "Designer", "Engineer", "Project Manager"] as const;
-const TEAM_ICONS: Record<(typeof TEAM_ROLES)[number], IconType> = {
-  "Sales Executive": Briefcase, "Designer": PenTool, "Engineer": Wrench, "Project Manager": UserCheck,
-};
-type TeamDraft = Record<(typeof TEAM_ROLES)[number], string>;
-
-function TeamCard({ lead, users, canEdit, onChanged }: CardProps & { users: UserSummary[] }) {
-  const seed = (): TeamDraft => ({
-    "Sales Executive": lead.assignedSalesExecutive?.id ? String(lead.assignedSalesExecutive.id) : "",
-    "Designer": lead.assignedDesigner?.id ? String(lead.assignedDesigner.id) : "",
-    "Engineer": lead.assignedEngineer?.id ? String(lead.assignedEngineer.id) : "",
-    "Project Manager": lead.projectManager?.id ? String(lead.projectManager.id) : "",
-  });
-  const current: Record<(typeof TEAM_ROLES)[number], string | undefined> = {
-    "Sales Executive": lead.assignedSalesExecutive?.name,
-    "Designer": lead.assignedDesigner?.name,
-    "Engineer": lead.assignedEngineer?.name,
-    "Project Manager": lead.projectManager?.name,
-  };
-  const edit = useCardEdit<TeamDraft>(seed, async (draft) => {
-    const base = seed();
-    const changed = TEAM_ROLES.filter((r) => draft[r] && draft[r] !== base[r]);
-    if (!changed.length) { toast.success("No team changes"); return; }
-    // One request for all changed roles: per-role calls rewrote the same lead row back to back
-    // and every one after the first failed.
-    await leadApi.assignTeam(lead.id, Object.fromEntries(changed.map((r) => [r, Number(draft[r])])));
-    toast.success("Team updated");
-    onChanged();
-  });
-  const e = edit.editing;
+function ReferralEditor({ draft, patch, users }: {
+  draft: ReferralDraft; patch: (p: Partial<ReferralDraft>) => void; users: UserSummary[];
+}) {
+  const type = draft.referralType;
   return (
-    <CardBox icon={Users} title="Team" canEdit={canEdit} edit={edit}>
-      <div className="grid grid-cols-1 @xs:grid-cols-2 gap-2.5">
-        {TEAM_ROLES.map((role) => {
-          const RoleIcon = TEAM_ICONS[role];
-          const name = current[role];
-          return (
-            <div key={role} className="rounded-xl border border-slate-100 bg-slate-50/60 p-2.5">
-              {e ? (
-                <>
-                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1.5">
-                    <RoleIcon className="h-3.5 w-3.5" /> {role}
-                  </div>
-                  <select
-                    className={cellInput}
-                    value={edit.draft[role]}
-                    onChange={(ev) => edit.set(role)(ev.target.value)}
-                  >
-                    <option value="">Unassigned</option>
-                    {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-                  </select>
-                </>
-              ) : (
-                <div className="flex items-center gap-2.5">
-                  {name ? (
-                    <div className={`h-9 w-9 rounded-full grid place-items-center text-[11px] font-bold shrink-0 ${avatarColor(name)}`}>
-                      {initials(name)}
-                    </div>
-                  ) : (
-                    <div className="h-9 w-9 rounded-full bg-muted grid place-items-center shrink-0 text-muted-foreground">
-                      <RoleIcon className="h-4 w-4" />
-                    </div>
-                  )}
-                  <div className="min-w-0">
-                    <div className="text-[11px] text-muted-foreground">{role}</div>
-                    <div className={`text-sm font-medium truncate ${name ? "" : "text-muted-foreground"}`}>{name || "Unassigned"}</div>
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </CardBox>
-  );
-}
-
-// --- Referral ---------------------------------------------------------------
-type ReferralDraft = {
-  referralType: string;
-  referredByCustomerId: string;
-  referredByCustomerName: string;
-  referredByEmployeeId: string;
-  referrerName: string;
-  referrerContact: string;
-  referralNotes: string;
-};
-
-function ReferralSection({ lead, users, canEdit, onChanged }: CardProps & { users: UserSummary[] }) {
-  const edit = useCardEdit<ReferralDraft>(
-    () => ({
-      referralType: lead.referralType || "",
-      referredByCustomerId: lead.referredByCustomer?.id ? String(lead.referredByCustomer.id) : "",
-      referredByCustomerName: lead.referredByCustomer?.name || "",
-      referredByEmployeeId: lead.referredByEmployee?.id ? String(lead.referredByEmployee.id) : "",
-      referrerName: lead.referrerName || "",
-      referrerContact: lead.referrerContact || "",
-      referralNotes: lead.referralNotes || "",
-    }),
-    async (d) => {
-      await leadApi.updateReferral(lead.id, {
-        referralType: d.referralType || null,
-        referredByCustomerId: d.referralType === "Existing Customer" && d.referredByCustomerId ? Number(d.referredByCustomerId) : null,
-        referredByEmployeeId: d.referralType === "Employee" && d.referredByEmployeeId ? Number(d.referredByEmployeeId) : null,
-        referrerName: d.referrerName || null,
-        referrerContact: d.referrerContact || null,
-        referralNotes: d.referralNotes || null,
-      });
-      toast.success("Referral updated");
-      onChanged();
-    },
-  );
-
-  const hasReferral = lead.referralType || lead.referrerName
-    || lead.referredByCustomer?.id || lead.referredByEmployee?.id;
-  const e = edit.editing;
-  if (!hasReferral && !canEdit && !e) return null;
-
-  const referrer = lead.referredByCustomer?.name || lead.referredByEmployee?.name || lead.referrerName;
-  const type = edit.draft.referralType;
-
-  return (
-    <div className="pt-4 mt-4 border-t border-slate-100">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
-          <Share2 className="h-4 w-4" /> Referral
-        </div>
-        {canEdit && (e ? (
-          <div className="flex gap-1.5">
-            <Button size="sm" variant="ghost" onClick={edit.cancel} disabled={edit.saving}><X className="h-4 w-4 mr-1" /> Cancel</Button>
-            <Button size="sm" onClick={edit.doSave} disabled={edit.saving}><Check className="h-4 w-4 mr-1" /> {edit.saving ? "Saving..." : "Save"}</Button>
-          </div>
-        ) : (
-          <Button size="sm" variant="ghost" onClick={edit.start} className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground">
-            <Pencil className="h-3.5 w-3.5 mr-1" /> {hasReferral ? "Edit" : "Add"}
-          </Button>
-        ))}
-      </div>
-      {e ? (
-        <div className="space-y-4">
-          <div>
-            <span className="text-muted-foreground block mb-1 text-xs">Referred By</span>
-            <div className="max-w-xs">
-              <SelectInput
-                value={type}
-                onChange={(v) => edit.patch({
-                  referralType: v,
-                  referredByCustomerId: "", referredByCustomerName: "",
-                  referredByEmployeeId: "", referrerName: "", referrerContact: "",
-                })}
-                options={REFERRAL_TYPES}
-                emptyLabel="Not a referral"
-              />
-            </div>
-          </div>
-
-          {type === "Existing Customer" && (
-            <div className="space-y-1.5 max-w-md">
-              <span className="text-muted-foreground block text-xs">Referring Customer</span>
-              {edit.draft.referredByCustomerId ? (
-                <div className="flex items-center justify-between rounded-md border bg-background px-3 py-2 text-sm">
-                  <span className="font-medium">{edit.draft.referredByCustomerName || edit.draft.referrerName}</span>
-                  <button type="button" className="text-xs text-primary hover:underline"
-                    onClick={() => edit.patch({ referredByCustomerId: "", referredByCustomerName: "", referrerName: "", referrerContact: "" })}>
-                    Change
-                  </button>
-                </div>
-              ) : (
-                <ExistingCustomerSearch
-                  placeholder="Search the customer who referred..."
-                  onPick={(id, c) => edit.patch({
-                    referredByCustomerId: String(id),
-                    referredByCustomerName: c?.name || "",
-                    referrerName: c?.name || "",
-                    referrerContact: c?.phone || "",
-                  })}
-                />
-              )}
-            </div>
+    <Dl>
+      <Item label="Referred by">
+        <select className={inputCls} value={type} onChange={(e) => patch({
+          referralType: e.target.value, referredByCustomerId: "", referredByCustomerName: "",
+          referredByEmployeeId: "", referrerName: "", referrerContact: "",
+        })}>
+          <option value="">Not a referral</option>
+          {REFERRAL_TYPES.map((o) => <option key={o} value={o}>{o}</option>)}
+        </select>
+      </Item>
+      {type === "Existing Customer" && (
+        <Item label="Referring customer" full>
+          {draft.referredByCustomerId ? (
+            <span className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2">
+              <span>{draft.referredByCustomerName || draft.referrerName}</span>
+              <button type="button" className="text-xs text-emerald-800 hover:underline"
+                onClick={() => patch({ referredByCustomerId: "", referredByCustomerName: "", referrerName: "", referrerContact: "" })}>Change</button>
+            </span>
+          ) : (
+            <ExistingCustomerSearch placeholder="Search the customer who referred..."
+              onPick={(id, c) => patch({ referredByCustomerId: String(id), referredByCustomerName: c?.name || "", referrerName: c?.name || "", referrerContact: c?.phone || "" })} />
           )}
-
-          {type === "Employee" && (
-            <div className="space-y-1.5 max-w-md">
-              <span className="text-muted-foreground block text-xs">Referring Employee</span>
-              <select
-                className={cellInput}
-                value={edit.draft.referredByEmployeeId}
-                onChange={(ev) => {
-                  const u = users.find((x) => x.id === Number(ev.target.value));
-                  edit.patch({ referredByEmployeeId: ev.target.value, referrerName: u?.name || "" });
-                }}
-              >
-                <option value="">Select employee...</option>
-                {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-              </select>
-            </div>
-          )}
-
-          {type === "Other" && (
-            <div className="grid grid-cols-2 gap-4 max-w-xl">
-              <div>
-                <span className="text-muted-foreground block mb-1 text-xs">Referrer Name</span>
-                <TextInput value={edit.draft.referrerName} onChange={edit.set("referrerName")} />
-              </div>
-              <div>
-                <span className="text-muted-foreground block mb-1 text-xs">Referrer Contact</span>
-                <TextInput type="tel" inputMode="tel" value={edit.draft.referrerContact} onChange={edit.set("referrerContact")} />
-              </div>
-            </div>
-          )}
-
-          {type && (
-            <div>
-              <span className="text-muted-foreground block mb-1 text-xs">Referral Notes</span>
-              <AreaInput value={edit.draft.referralNotes} onChange={edit.set("referralNotes")} />
-            </div>
-          )}
-        </div>
-      ) : hasReferral ? (
-        <div className="flex flex-wrap gap-x-6 gap-y-1.5 text-sm">
-          <span><span className="text-muted-foreground">By: </span><span className="font-medium">{lead.referralType || "—"}</span></span>
-          <span><span className="text-muted-foreground">Referrer: </span><span className="font-medium">{referrer || "—"}</span></span>
-          {lead.referrerContact && <span><span className="text-muted-foreground">Contact: </span><span className="font-medium">{lead.referrerContact}</span></span>}
-          {lead.referralNotes && <span className="w-full text-muted-foreground">{lead.referralNotes}</span>}
-        </div>
-      ) : (
-        <p className="text-sm text-muted-foreground">No referrer recorded.</p>
+        </Item>
       )}
-    </div>
-  );
-}
-
-// --- Address ----------------------------------------------------------------
-type AddressDraft = Pick<Lead, "address" | "city" | "district" | "state" | "pincode" | "siteAddress">;
-
-// A small "Map" link that opens the given address parts as a Google Maps search in a new tab,
-// so a site visit can be navigated to with one tap. Renders nothing when there is nothing to locate.
-function MapsLink({ parts }: { parts: (string | undefined | null)[] }) {
-  const query = parts.map((p) => (p || "").trim()).filter(Boolean).join(", ");
-  if (!query) return null;
-  const href = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline shrink-0"
-      title={`Open in Google Maps: ${query}`}
-    >
-      <Navigation className="h-3.5 w-3.5" /> Map
-    </a>
-  );
-}
-
-function AddressCard({ lead, canEdit, onChanged }: CardProps) {
-  const edit = useCardEdit<AddressDraft>(
-    () => ({
-      address: lead.address, city: lead.city, district: lead.district,
-      state: lead.state, pincode: lead.pincode, siteAddress: lead.siteAddress,
-    }),
-    async (d) => { await saveLeadPatch(lead, d); onChanged(); },
-  );
-  const e = edit.editing;
-  return (
-    <CardBox icon={MapPin} title="Address" canEdit={canEdit} edit={edit}>
-      <div className={FIELD_GRID}>
-        <div className="col-span-full">
-          <Field
-            label="Address" editing={e} view={lead.address}
-            action={<MapsLink parts={[lead.address, lead.city, lead.district, lead.state, lead.pincode]} />}
-          >
-            <AreaInput value={edit.draft.address} onChange={edit.set("address")} />
-          </Field>
-        </div>
-        <Field label="City" editing={e} view={lead.city}>
-          <TextInput value={edit.draft.city} onChange={edit.set("city")} />
-        </Field>
-        <Field label="District" editing={e} view={lead.district}>
-          <TextInput value={edit.draft.district} onChange={edit.set("district")} />
-        </Field>
-        <Field label="State" editing={e} view={lead.state}>
-          <TextInput value={edit.draft.state} onChange={edit.set("state")} />
-        </Field>
-        <Field label="Pincode" editing={e} view={lead.pincode}>
-          <TextInput inputMode="numeric" value={edit.draft.pincode} onChange={edit.set("pincode")} />
-        </Field>
-        <div className="col-span-full">
-          <Field
-            label="Project / Site Address" editing={e} view={lead.siteAddress}
-            action={<MapsLink parts={[lead.siteAddress || lead.address, lead.city, lead.district, lead.state, lead.pincode]} />}
-          >
-            <AreaInput value={edit.draft.siteAddress} onChange={edit.set("siteAddress")} />
-          </Field>
-        </div>
-      </div>
-    </CardBox>
-  );
-}
-
-// --- Property Details -------------------------------------------------------
-type PropertyDraft = Pick<Lead,
-  "propertyType" | "currentConstructionStage" | "floorCount" | "areaSqft" |
-  "preferredDesignStyle" | "preferredMaterial" | "preferredColorTheme" | "estimatedDuration">;
-
-function PropertyCard({ lead, canEdit, onChanged }: CardProps) {
-  const edit = useCardEdit<PropertyDraft>(
-    () => ({
-      propertyType: lead.propertyType, currentConstructionStage: lead.currentConstructionStage,
-      floorCount: lead.floorCount, areaSqft: lead.areaSqft,
-      preferredDesignStyle: lead.preferredDesignStyle, preferredMaterial: lead.preferredMaterial,
-      preferredColorTheme: lead.preferredColorTheme, estimatedDuration: lead.estimatedDuration,
-    }),
-    async (d) => { await saveLeadPatch(lead, d); onChanged(); },
-  );
-  const e = edit.editing;
-  return (
-    <CardBox icon={Home} title="Property Details" canEdit={canEdit} edit={edit}>
-      <div className={FIELD_GRID}>
-        <Field label="Property Type" editing={e} view={lead.propertyType}>
-          <TextInput value={edit.draft.propertyType} onChange={edit.set("propertyType")} placeholder="e.g. Flat" />
-        </Field>
-        <Field label="Construction Status" editing={e} view={lead.currentConstructionStage}>
-          <SelectInput value={edit.draft.currentConstructionStage} onChange={edit.set("currentConstructionStage")} options={CONSTRUCTION_STATUSES} />
-        </Field>
-        <Field label="Floors" editing={e} view={lead.floorCount}>
-          <TextInput type="number" inputMode="numeric" value={edit.draft.floorCount} onChange={edit.set("floorCount") as any} />
-        </Field>
-        <Field label="Area (sq.ft)" editing={e} view={lead.areaSqft}>
-          <TextInput type="number" inputMode="numeric" value={edit.draft.areaSqft} onChange={edit.set("areaSqft") as any} />
-        </Field>
-        <Field label="Design Style" editing={e} view={lead.preferredDesignStyle}>
-          <TextInput value={edit.draft.preferredDesignStyle} onChange={edit.set("preferredDesignStyle")} placeholder="e.g. Modern" />
-        </Field>
-        <Field label="Preferred Materials" editing={e} view={lead.preferredMaterial}>
-          <TextInput value={edit.draft.preferredMaterial} onChange={edit.set("preferredMaterial")} />
-        </Field>
-        <Field label="Color Theme" editing={e} view={lead.preferredColorTheme}>
-          <TextInput value={edit.draft.preferredColorTheme} onChange={edit.set("preferredColorTheme")} />
-        </Field>
-        <Field label="Duration" editing={e} view={lead.estimatedDuration}>
-          <TextInput value={edit.draft.estimatedDuration} onChange={edit.set("estimatedDuration")} />
-        </Field>
-      </div>
-    </CardBox>
-  );
-}
-
-// --- Scope of Work ----------------------------------------------------------
-type ScopeDraft = Pick<Lead,
-  "reqKitchen" | "reqWardrobe" | "reqTvUnit" | "reqFalseCeiling" | "reqPainting" | "reqFlooring" |
-  "reqElectrical" | "reqPlumbing" | "reqWoodFinish" |
-  "requirementCategory" | "requirementProduct" |
-  "roomsRequired" | "specialRequests" | "projectDescription" | "customerRequirements">;
-
-type Cat = { id: number; name: string; slug: string };
-type Prod = { id: number; name: string; slug: string; categorySlug?: string };
-
-function ScopeCard({ lead, canEdit, onChanged }: CardProps) {
-  const [categories, setCategories] = useState<Cat[]>([]);
-  const [catalog, setCatalog] = useState<Prod[]>([]);
-  const edit = useCardEdit<ScopeDraft>(
-    () => ({
-      reqKitchen: lead.reqKitchen, reqWardrobe: lead.reqWardrobe, reqTvUnit: lead.reqTvUnit,
-      reqFalseCeiling: lead.reqFalseCeiling, reqPainting: lead.reqPainting, reqFlooring: lead.reqFlooring,
-      reqElectrical: lead.reqElectrical, reqPlumbing: lead.reqPlumbing, reqWoodFinish: lead.reqWoodFinish,
-      requirementCategory: lead.requirementCategory, requirementProduct: lead.requirementProduct,
-      roomsRequired: lead.roomsRequired, specialRequests: lead.specialRequests,
-      projectDescription: lead.projectDescription, customerRequirements: lead.customerRequirements,
-    }),
-    async (d) => { await saveLeadPatch(lead, d); onChanged(); },
-  );
-  const e = edit.editing;
-
-  // The website catalog powers the category + product pickers (only fetched when editing starts).
-  useEffect(() => {
-    if (!e || categories.length) return;
-    api.get("/public/categories").then((r) => setCategories(r.data || [])).catch(() => {});
-    api.get("/public/products").then((r) => setCatalog(r.data || [])).catch(() => {});
-  }, [e, categories.length]);
-
-  const products = splitProducts(lead.requirementProduct);
-  const draftProducts = splitProducts(edit.draft.requirementProduct);
-  const selectedCat = categories.find((c) => c.name === edit.draft.requirementCategory);
-  const productOptions = catalog
-    .filter((p) => !selectedCat || p.categorySlug === selectedCat.slug)
-    .map((p) => p.name);
-  const setDraftProducts = (names: string[]) => edit.set("requirementProduct")(names.join(", "));
-
-  return (
-    <CardBox icon={ListChecks} title="Scope of Work" canEdit={canEdit} edit={edit}>
-      <div className="space-y-5">
-        {e ? (
-          <div className="grid grid-cols-1 @md:grid-cols-2 gap-x-6 gap-y-3.5">
-            <div>
-              <label className="text-xs text-muted-foreground block mb-1">Requirement Category</label>
-              <select
-                className={cellInput}
-                value={edit.draft.requirementCategory ?? ""}
-                onChange={(ev) => edit.set("requirementCategory")(ev.target.value)}
-              >
-                <option value="">Select category...</option>
-                {categories.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground block mb-1">Products</label>
-              <select
-                className={cellInput}
-                value=""
-                onChange={(ev) => { const v = ev.target.value; if (v && !draftProducts.includes(v)) setDraftProducts([...draftProducts, v]); }}
-              >
-                <option value="">Add a product...</option>
-                {productOptions.filter((p) => !draftProducts.includes(p)).map((p) => <option key={p} value={p}>{p}</option>)}
-              </select>
-              {draftProducts.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                  {draftProducts.map((p) => (
-                    <span key={p} className="inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary px-2.5 py-1 text-xs font-medium">
-                      {p}
-                      <button type="button" onClick={() => setDraftProducts(draftProducts.filter((x) => x !== p))} aria-label={`Remove ${p}`}>
-                        <X className="h-3 w-3" />
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 @lg:grid-cols-3 gap-x-6 gap-y-3.5">
-            {enquiryTypeOf(lead) && (
-              <div className="@lg:col-span-3">
-                <Field
-                  label="Looking for"
-                  view={(
-                    <span className="flex flex-wrap items-center gap-1.5">
-                      <EnquiryTag type={enquiryTypeOf(lead)} />
-                      {enquiryDetails(lead).map((d) => (
-                        <span key={d} className="px-2.5 py-0.5 bg-violet-100 text-violet-700 text-xs rounded-full font-medium">{d}</span>
-                      ))}
-                    </span>
-                  )}
-                />
-              </div>
-            )}
-            <Field label="Requirement Category" view={lead.requirementCategory} />
-            <div className="@lg:col-span-2">
-              <Field
-                label="Products"
-                view={products.length ? (
-                  <span className="flex flex-wrap gap-1.5">
-                    {products.map((p) => (
-                      <span key={p} className="px-2.5 py-0.5 bg-primary/10 text-primary text-xs rounded-full font-medium">{p}</span>
-                    ))}
-                  </span>
-                ) : undefined}
-              />
-            </div>
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 @md:grid-cols-2 gap-x-6 gap-y-3.5">
-          <Field label="Rooms Required" editing={e} view={lead.roomsRequired}>
-            <AreaInput value={edit.draft.roomsRequired} onChange={edit.set("roomsRequired")} placeholder="e.g. 3 Bedrooms, Living Room, Kitchen" />
-          </Field>
-          <Field label="Special Requests" editing={e} view={lead.specialRequests}>
-            <AreaInput value={edit.draft.specialRequests} onChange={edit.set("specialRequests")} />
-          </Field>
-          <Field label="Requirement Description" editing={e} view={lead.projectDescription}>
-            <AreaInput rows={3} value={edit.draft.projectDescription} onChange={edit.set("projectDescription")} />
-          </Field>
-          <Field label="Customer Requirements / Notes" editing={e} view={lead.customerRequirements}>
-            <AreaInput rows={3} value={edit.draft.customerRequirements} onChange={edit.set("customerRequirements")} />
-          </Field>
-        </div>
-      </div>
-    </CardBox>
+      {type === "Employee" && (
+        <Item label="Referring employee">
+          <select className={inputCls} value={draft.referredByEmployeeId}
+            onChange={(e) => patch({ referredByEmployeeId: e.target.value, referrerName: users.find((u) => u.id === Number(e.target.value))?.name || "" })}>
+            <option value="">Select employee...</option>
+            {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+          </select>
+        </Item>
+      )}
+      {type === "Other" && (
+        <>
+          <Item label="Referrer name"><BaseInput className={inputCls} value={draft.referrerName} onChange={(e) => patch({ referrerName: e.target.value })} /></Item>
+          <Item label="Referrer contact"><BaseInput className={inputCls} type="tel" inputMode="tel" value={draft.referrerContact} onChange={(e) => patch({ referrerContact: e.target.value })} /></Item>
+        </>
+      )}
+      {type && (
+        <Item label="Referral notes" full>
+          <textarea className={areaCls} rows={2} value={draft.referralNotes} onChange={(e) => patch({ referralNotes: e.target.value })} />
+        </Item>
+      )}
+    </Dl>
   );
 }
