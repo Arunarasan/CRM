@@ -20,6 +20,8 @@ import java.util.Optional;
 @Service
 public class InventoryService {
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(InventoryService.class);
+
     @Autowired
     private ProductRepository productRepository;
 
@@ -330,6 +332,12 @@ public class InventoryService {
     /** Reserves stock against the warehouse with the most available quantity for this product. */
     @Transactional
     public void reserveStock(Long productId, int quantity, String referenceType, Long referenceId) {
+        // Reservation is advisory — with no warehouse set up yet, skip it rather than block the
+        // quote approval / project flow that triggered it.
+        if (!hasWarehouseFor(productId)) {
+            log.warn("Skipping stock reservation for product {} ({} {}): no warehouse configured", productId, referenceType, referenceId);
+            return;
+        }
         InventoryItem item = pickWarehouseForReservation(productId);
         item.setReservedQuantity(item.getReservedQuantity() + quantity);
         itemRepository.save(item);
@@ -366,7 +374,7 @@ public class InventoryService {
             itemRepository.save(item);
             remaining -= consume;
         }
-        if (remaining > 0) {
+        if (remaining > 0 && hasWarehouseFor(productId)) {
             // No matching reservation found for the remainder — deduct directly (allows negative, matches removeStock).
             InventoryItem item = pickWarehouseForReservation(productId);
             item.setQuantity(item.getQuantity() - remaining);
@@ -410,6 +418,11 @@ public class InventoryService {
                 .orElseThrow(() -> new RuntimeException("Product not found: " + productId));
         if (product.getDefaultWarehouse() != null) return product.getDefaultWarehouse();
         return pickWarehouseForReservation(productId).getWarehouse();
+    }
+
+    /** True when the product already has a stock row or at least one warehouse exists to create one in. */
+    private boolean hasWarehouseFor(Long productId) {
+        return !itemRepository.findByProductId(productId).isEmpty() || warehouseRepository.count() > 0;
     }
 
     private InventoryItem pickWarehouseForReservation(Long productId) {
