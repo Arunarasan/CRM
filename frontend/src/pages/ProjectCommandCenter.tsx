@@ -26,12 +26,12 @@ import {
   AlertTriangle, CheckCircle2, FileImage,
   TrendingUp, Plus, CheckSquare, Layers, Package, Sparkles,
   ChevronDown, ChevronRight, ShoppingCart, ClipboardCheck,
-  Phone, Play, History, RotateCcw, Lock,
-  MoreHorizontal, MapPin, MessageCircle, Wallet, Users,
+  Play, History, RotateCcw, Lock,
+  MoreHorizontal, MapPin, Wallet, Users,
   Pencil, Check, Trash2,
   Calendar, Clock, Flag, Building2, FileText, IndianRupee,
-  BarChart3, FileBarChart, Home, Settings, ClipboardList,
-  ArrowRight, Percent, Zap, Info, Navigation, UserCheck,
+  FileBarChart, Home, Settings, ClipboardList,
+  ArrowRight, Zap, Navigation,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
@@ -54,7 +54,8 @@ import ServiceWarrantyTab from "@/pages/projectCommandCenter/tabs/ServiceWarrant
 import ProjectReportsTab from "@/pages/projectCommandCenter/tabs/ProjectReportsTab";
 import WorkCategoriesTab from "@/pages/projectCommandCenter/tabs/WorkCategoriesTab";
 import TrackingLinkDialog from "@/components/projects/TrackingLinkDialog";
-import { ProjectInfoRow, ProjectJourneyBar, ProjectHeaderSummary, waLink } from "@/pages/projectCommandCenter/ProjectJourneyHeader";
+import { AttentionBar, AttentionItem, KpiTile, inrCompact } from "@/pages/projectCommandCenter/OverviewWidgets";
+import { ProjectInfoRow, ProjectJourneyBar, ProjectHeaderSummary } from "@/pages/projectCommandCenter/ProjectJourneyHeader";
 import ResourceSelect, { ResourceSelection } from "@/components/workforce/ResourceSelect";
 import { ResourceType } from "@/types/workforce";
 import { useGoBack } from "@/hooks/useGoBack";
@@ -763,7 +764,6 @@ export default function ProjectCommandCenter() {
   const summary: ProjectHeaderSummary = data.summary || {};
   // Estimate budget is taken from the approved BOQ's grand total (falls back to the linked BOQ
   // revision, then the manual budget/estimate). Amount spent comes from live project expenses.
-  const approvedBoqId: number | null = masterBoq?.id ?? data?.boq?.id ?? null;
   const boqEstimate = Number(masterBoq?.grandTotal ?? data?.boq?.grandTotal ?? project.budget ?? project.estimatedCost ?? 0);
   const spentAmount = Number(profitability?.totalExpenses ?? project.spentAmount ?? 0);
   const profitOrLoss = boqEstimate - spentAmount;
@@ -1036,236 +1036,235 @@ export default function ProjectCommandCenter() {
 
           <div className="pb-20">
             
-            {/* OVERVIEW TAB */}
+            {/* OVERVIEW TAB — what needs a decision → headline numbers → details, activity, actions */}
             <TabsContent value="overview" className="space-y-3 mt-0 h-full outline-none">
-              {/* Row 1 — Project Overview · Project Progress · Financial Summary */}
-              <div className="grid grid-cols-1 @3xl:grid-cols-2 @6xl:grid-cols-[1.15fr_1fr_1.15fr] gap-3 items-stretch">
+              {(() => {
+                const done = project.status === 'COMPLETED';
+                const progress = Math.max(0, Math.min(100, project.progress || 0));
+                const t = stats?.tasks || {};
+                const start = project.startDate ? new Date(project.startDate).getTime() : null;
+                const end = project.endDate ? new Date(project.endDate).getTime() : null;
+                // Share of the planned schedule already used up — compared against work done to show pace.
+                const elapsedPct = start && end && end > start ? Math.max(0, Math.min(100, ((Date.now() - start) / (end - start)) * 100)) : null;
+                const behindBy = elapsedPct === null ? 0 : Math.round(elapsedPct - progress);
+                const behind = !done && behindBy > 5;
+                const contract = Number(profitability?.quotationValue || boqEstimate || 0);
+                const collected = Number(profitability?.collected ?? 0);
+                const outstanding = Number(profitability?.outstanding ?? 0);
+                const collectedPct = contract ? (collected / contract) * 100 : 0;
 
-                {/* Project Overview — key facts (inline editable) */}
-                <div className={CARD}>
-                  <div className="mb-3 flex items-center justify-between">
-                    <h3 className={CARD_TITLE}><ClipboardCheck className="w-5 h-5 text-emerald-700"/> Project Overview</h3>
-                    {!editingOverview ? (
-                      <button type="button" onClick={() => startEdit('overview')} className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-emerald-700"><Pencil className="w-3.5 h-3.5" /> Edit</button>
-                    ) : (
-                      <div className="flex items-center gap-1.5">
-                        <Button size="sm" onClick={saveOverview} disabled={savingProject} className="h-7 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-xs"><Check className="w-3.5 h-3.5 mr-1" /> Save</Button>
-                        <Button size="sm" variant="outline" onClick={() => setEditingOverview(false)} className="h-7 rounded-lg text-xs">Cancel</Button>
-                      </div>
-                    )}
-                  </div>
-                  <div className="grid grid-cols-2 divide-x divide-slate-100">
-                    {([
-                      { k: 'projectType', icon: FileText, label: 'Project Type', view: project.projectType || '—',
-                        edit: <BaseInput className={cellInput} value={pform.projectType} onChange={e => setPform({ ...pform, projectType: e.target.value })} placeholder="Residential, Commercial…" /> },
-                      { k: 'projectCategory', icon: Building2, label: 'Property Type', view: project.projectCategory || '—',
-                        edit: <BaseInput className={cellInput} value={pform.projectCategory} onChange={e => setPform({ ...pform, projectCategory: e.target.value })} placeholder="Apartment, Villa…" /> },
-                      { k: 'priority', icon: Flag, label: 'Priority',
-                        view: project.priority ? <span className="inline-block px-3 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[11px] font-bold uppercase">{project.priority}</span> : '—',
-                        edit: <select className={cellInput} value={pform.priority} onChange={e => setPform({ ...pform, priority: e.target.value })}>{['LOW', 'MEDIUM', 'HIGH', 'URGENT'].map(p => <option key={p} value={p}>{p}</option>)}</select> },
-                      { k: 'pm', icon: User, label: 'Project Manager', view: project.projectManager?.name ? <span className="text-emerald-800">{project.projectManager.name}</span> : '—' },
-                      { k: 'endDate', icon: Calendar, label: 'Target Completion', view: shortDate(project.endDate),
-                        edit: <BaseInput type="date" className={cellInput} value={pform.endDate} onChange={e => setPform({ ...pform, endDate: e.target.value })} /> },
-                      { k: 'value', icon: IndianRupee, label: 'Project Value', view: project.estimatedCost ? inr(project.estimatedCost) : (project.budget ? inr(project.budget) : '—'),
-                        edit: <BaseInput type="number" min={0} className={cellInput} value={pform.estimatedCost} onChange={e => setPform({ ...pform, estimatedCost: e.target.value })} placeholder="Estimated value" /> },
-                    ] as { k: string; icon: React.ComponentType<{ className?: string }>; label: string; view: React.ReactNode; edit?: React.ReactNode }[]).map((f, i) => (
-                      <div key={f.k} className={`py-2.5 ${i % 2 === 0 ? 'pr-4' : 'pl-4'} ${i >= 2 ? 'border-t border-slate-100' : ''}`}>
-                        <div className="flex items-center gap-1.5 text-xs text-slate-400"><f.icon className="w-3.5 h-3.5" /> {f.label}</div>
-                        <div className="mt-1 text-sm font-semibold text-slate-800 break-words">{editingOverview && f.edit ? f.edit : f.view}</div>
-                      </div>
-                    ))}
-                  </div>
-                  {editingOverview && (
-                    <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-3 border-t border-slate-100 pt-3">
-                      <div>
-                        <div className="text-[11px] font-semibold text-slate-400 mb-1">Start Date</div>
-                        <BaseInput type="date" className={cellInput} value={pform.startDate} onChange={e => setPform({ ...pform, startDate: e.target.value })} />
-                      </div>
-                      <div>
-                        <div className="text-[11px] font-semibold text-slate-400 mb-1">Budget</div>
-                        <BaseInput type="number" min={0} className={cellInput} value={pform.budget} onChange={e => setPform({ ...pform, budget: e.target.value })} />
-                      </div>
-                      <div className="sm:col-span-2">
-                        <div className="text-[11px] font-semibold text-slate-400 mb-1">Property Address</div>
-                        <textarea className="w-full min-h-[44px] rounded-md border border-input bg-background px-3 py-2 text-sm" value={pform.propertyAddress} onChange={e => setPform({ ...pform, propertyAddress: e.target.value })} placeholder="Site / property address" />
-                      </div>
-                      <div className="sm:col-span-2">
-                        <div className="text-[11px] font-semibold text-slate-400 mb-1">Description</div>
-                        <textarea className="w-full min-h-[52px] rounded-md border border-input bg-background px-3 py-2 text-sm" value={pform.projectDescription} onChange={e => setPform({ ...pform, projectDescription: e.target.value })} placeholder="Scope / description of the project" />
-                      </div>
-                      <div className="sm:col-span-2">
-                        <div className="text-[11px] font-semibold text-slate-400 mb-1">Customer Requirements</div>
-                        <textarea className="w-full min-h-[44px] rounded-md border border-input bg-background px-3 py-2 text-sm" value={pform.customerNotes} onChange={e => setPform({ ...pform, customerNotes: e.target.value })} placeholder="What the customer asked for" />
-                      </div>
-                    </div>
-                  )}
-                  {!editingOverview && project.projectDescription && (
-                    <p className="mt-2 border-t border-slate-100 pt-2 text-xs text-slate-500 whitespace-pre-line line-clamp-3">{project.projectDescription}</p>
-                  )}
-                </div>
+                const attention: AttentionItem[] = [];
+                if (!done && daysRemaining !== null && daysRemaining < 0)
+                  attention.push({ key: 'overdue', tone: 'danger', icon: Clock, label: `${Math.abs(daysRemaining)} days past target`, detail: `was due ${shortDate(project.endDate)}`, onClick: () => startEdit('overview') });
+                if ((stats?.issues?.critical ?? 0) > 0)
+                  attention.push({ key: 'critical', tone: 'danger', icon: AlertTriangle, label: `${stats.issues.critical} critical issue${stats.issues.critical > 1 ? 's' : ''}`, detail: `${stats.issues.open} open in total`, onClick: () => setActiveTab('workProgress') });
+                else if ((stats?.issues?.open ?? 0) > 0)
+                  attention.push({ key: 'issues', tone: 'warning', icon: AlertTriangle, label: `${stats.issues.open} open issue${stats.issues.open > 1 ? 's' : ''}`, onClick: () => setActiveTab('workProgress') });
+                if ((t.delayed ?? 0) > 0)
+                  attention.push({ key: 'delayed', tone: 'warning', icon: Clock, label: `${t.delayed} delayed task${t.delayed > 1 ? 's' : ''}`, detail: 'past due date', onClick: () => setActiveTab('workProgress') });
+                if ((stats?.approvals?.pending ?? 0) > 0)
+                  attention.push({ key: 'approvals', tone: 'warning', icon: CheckSquare, label: `${stats.approvals.pending} customer approval${stats.approvals.pending > 1 ? 's' : ''} pending`, onClick: () => setActiveTab('approvals') });
+                if (outstanding > 0)
+                  attention.push({ key: 'due', tone: 'info', icon: IndianRupee, label: `${inr(outstanding)} unpaid`, detail: 'invoiced, not yet received', onClick: () => setActiveTab('payments') });
+                if (!done && !project.projectManager)
+                  attention.push({ key: 'pm', tone: 'info', icon: Users, label: 'No project manager', detail: 'assign the team', onClick: openAssignTeam });
+                if (!done && (stats?.pendingMaterials ?? 0) > 0)
+                  attention.push({ key: 'materials', tone: 'info', icon: Package, label: `${stats.pendingMaterials} material${stats.pendingMaterials > 1 ? 's' : ''} not yet issued`, onClick: () => setActiveTab('purchaseOrders') });
 
-                {/* Project Progress — donut + legend */}
-                <div className={CARD}>
-                  <h3 className={`${CARD_TITLE} mb-3`}><Activity className="w-5 h-5 text-emerald-700"/> Project Progress</h3>
-                  <div className="flex items-center gap-4 @xl:gap-5">
-                    <div className="relative h-28 w-28 @xl:h-32 @xl:w-32 shrink-0">
-                      <svg viewBox="0 0 100 100" className="h-full w-full -rotate-90">
-                        <circle cx="50" cy="50" r="40" fill="none" stroke="currentColor" strokeWidth="11" className="text-slate-200" />
-                        <circle cx="50" cy="50" r="40" fill="none" strokeWidth="11" strokeLinecap="round"
-                          className="text-emerald-600" stroke="currentColor"
-                          strokeDasharray={2 * Math.PI * 40}
-                          strokeDashoffset={2 * Math.PI * 40 * (1 - Math.min(100, project.progress || 0) / 100)} />
-                      </svg>
-                      <div className="absolute inset-0 flex flex-col items-center justify-center">
-                        <span className="text-2xl font-bold text-slate-900 leading-none">{project.progress || 0}%</span>
-                        <span className="text-[11px] text-slate-400 mt-1">Complete</span>
-                      </div>
-                    </div>
-                    <div className="min-w-0 flex-1 space-y-2.5 text-[13px] @xl:text-sm [&>div]:whitespace-nowrap">
-                      <div className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-slate-300 shrink-0"/><span className="font-bold text-slate-800">{project.progress || 0}%</span><span className="text-slate-500">Execution</span></div>
-                      <div className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-sky-600 shrink-0"/><span className="font-bold text-slate-800">{stats?.tasks?.completed ?? 0} of {stats?.tasks?.total ?? 0}</span><span className="text-slate-500">Tasks Completed</span></div>
-                      <div className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-amber-500 shrink-0"/><span className="font-bold text-slate-800">{stats?.tasks?.delayed ?? 0}</span><span className="text-slate-500">Delayed Tasks</span></div>
-                      <div className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-sky-300 shrink-0"/><span className="font-bold text-slate-800">{stats?.tasks?.total ?? 0}</span><span className="text-slate-500">Total Tasks</span></div>
-                    </div>
-                  </div>
-                  <div className="mt-3 text-right">
-                    <button type="button" onClick={() => setActiveTab('workProgress')} className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 hover:text-emerald-900">View Tasks <ArrowRight className="w-3.5 h-3.5" /></button>
-                  </div>
-                </div>
+                const priorityTone: Record<string, string> = {
+                  URGENT: 'bg-rose-50 text-rose-700 ring-rose-200', HIGH: 'bg-amber-50 text-amber-800 ring-amber-200',
+                  MEDIUM: 'bg-sky-50 text-sky-700 ring-sky-200', LOW: 'bg-slate-100 text-slate-600 ring-slate-200',
+                };
+                const address = project.propertyAddress || summary.address;
+                const team = ([['Project Manager', project.projectManager], ['Assistant Manager', project.assistantManager], ['Sales', project.salesExecutive], ['Designer', project.designer], ['Site Engineer', project.siteEngineer]] as [string, any][]).filter(([, u]) => u);
 
-                {/* Financial Summary — estimate · spent · remaining */}
-                <div className={`${CARD} @3xl:col-span-2 @6xl:col-span-1`}>
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className={CARD_TITLE}><Wallet className="w-5 h-5 text-emerald-700"/> Financial Summary</h3>
-                    <button type="button" onClick={() => setActiveTab('payments')} className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 hover:text-emerald-900">View Details <ArrowRight className="w-3.5 h-3.5" /></button>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    {([
-                      { label: 'Estimate Budget', value: inr(boqEstimate), icon: Wallet, tone: 'bg-emerald-50 text-emerald-700', valueTone: 'text-slate-900',
-                        onClick: () => approvedBoqId ? navigate(`/boq/${approvedBoqId}`) : setActiveTab('workProgress'), title: approvedBoqId ? 'Open the BOQ' : 'No BOQ linked yet' },
-                      { label: 'Amount Spent', value: inr(spentAmount), icon: BarChart3, tone: 'bg-sky-50 text-sky-600', valueTone: 'text-slate-900',
-                        onClick: () => setActiveTab('profit'), title: 'View expenses & profit' },
-                      { label: 'Remaining', value: inr(profitOrLoss), icon: Percent, tone: profitOrLoss < 0 ? 'bg-rose-50 text-rose-600' : 'bg-amber-50 text-amber-600', valueTone: profitOrLoss < 0 ? 'text-rose-700' : 'text-slate-900',
-                        onClick: () => setActiveTab('profit'), title: `${utilizationPct}% of the estimate used` },
-                    ]).map((t) => (
-                      <button key={t.label} type="button" onClick={t.onClick} title={t.title}
-                        className={`text-left rounded-xl p-3 transition hover:brightness-[0.97] min-w-0 ${t.tone.split(' ')[0]}`}>
-                        <t.icon className={`w-5 h-5 ${t.tone.split(' ')[1]}`} />
-                        <div className={`mt-3 text-base xl:text-lg font-bold leading-tight truncate ${t.valueTone}`}>{t.value}</div>
-                        <div className={`mt-1 text-[11px] font-medium truncate ${t.tone.split(' ')[1]}`} title={t.label}>{t.label}</div>
-                      </button>
-                    ))}
-                  </div>
-                  <div className="mt-3">
-                    <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
-                      <div className={`h-1.5 rounded-full transition-all ${profitOrLoss < 0 ? 'bg-rose-500' : 'bg-emerald-600'}`} style={{ width: `${Math.min(100, utilizationPct)}%` }} />
-                    </div>
-                    <div className="mt-1 text-right text-[11px] font-medium text-slate-400">{utilizationPct}% utilised</div>
-                  </div>
-                  {!boqEstimate && (
-                    <div className="mt-2 flex items-start gap-1.5 rounded-lg bg-slate-50 p-2 text-[11px] text-slate-400"><IndianRupee className="w-3.5 h-3.5 shrink-0 mt-0.5"/> Create or link a BOQ to set the estimate budget and track profitability.</div>
-                  )}
-                </div>
-              </div>
+                return (
+                  <>
+                    <AttentionBar items={attention} />
 
-              {/* Row 2 — Recent Activity · (Quick Actions + Key Information + Team) */}
-              <div className="grid grid-cols-1 @6xl:grid-cols-[1fr_1.4fr] gap-3 items-start">
-                <div className={CARD}>
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className={CARD_TITLE}><History className="w-5 h-5 text-emerald-700"/> Recent Activity</h3>
-                    <button type="button" onClick={() => setActiveTab('activity')} className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 hover:text-emerald-900">View All <ArrowRight className="w-3.5 h-3.5" /></button>
-                  </div>
-                  <ActivityList items={activityFeed.slice(0, 6)} />
-                </div>
+                    {/* Headline numbers — each opens the screen where it's managed */}
+                    <div className="grid grid-cols-2 @4xl:grid-cols-4 gap-3">
+                      <KpiTile icon={Activity} label="Work Progress" value={`${progress}%`} suffix="complete"
+                        pct={progress} barTone={behind ? 'bg-amber-500' : 'bg-emerald-600'}
+                        marker={elapsedPct !== null && !done ? { pct: elapsedPct, label: `${Math.round(elapsedPct)}% of the schedule used` } : undefined}
+                        sub={done ? 'Project completed' : elapsedPct === null ? 'Set start & target dates to track pace'
+                          : behind ? `Behind pace by ${behindBy}% · ${Math.round(elapsedPct)}% of time used` : `On pace · ${Math.round(elapsedPct)}% of time used`}
+                        subTone={behind ? 'text-amber-700 font-medium' : 'text-slate-500'}
+                        onClick={() => setActiveTab('workProgress')} title="Open Execution & Installation" />
+                      <KpiTile icon={ClipboardList} label="Tasks" value={t.completed ?? 0} suffix={`of ${t.total ?? 0} done`}
+                        pct={t.total ? ((t.completed ?? 0) / t.total) * 100 : 0} barTone="bg-sky-600"
+                        sub={(t.delayed ?? 0) > 0 ? `${t.delayed} delayed · ${t.inProgress ?? 0} in progress` : `${t.inProgress ?? 0} in progress · ${t.pending ?? 0} to start`}
+                        subTone={(t.delayed ?? 0) > 0 ? 'text-rose-600 font-medium' : 'text-slate-500'}
+                        onClick={() => setActiveTab('workProgress')} title="Open the task board" />
+                      <KpiTile icon={IndianRupee} label="Collected" value={inrCompact(collected)} suffix={contract ? `of ${inrCompact(contract)}` : undefined}
+                        pct={collectedPct}
+                        sub={outstanding > 0 ? `${inrCompact(outstanding)} invoiced, awaiting payment` : contract ? `${Math.round(collectedPct)}% of contract value received` : 'No contract value yet'}
+                        subTone={outstanding > 0 ? 'text-amber-700 font-medium' : 'text-slate-500'}
+                        onClick={() => setActiveTab('payments')} title={`Collected ${inr(collected)} of ${inr(contract)}`} />
+                      <KpiTile icon={Wallet} label="Budget Used" value={inrCompact(spentAmount)} suffix={boqEstimate ? `of ${inrCompact(boqEstimate)}` : undefined}
+                        pct={boqEstimate ? utilizationPct : undefined} barTone={profitOrLoss < 0 ? 'bg-rose-500' : utilizationPct > 85 ? 'bg-amber-500' : 'bg-emerald-600'}
+                        sub={!boqEstimate ? 'Link a BOQ to set the budget' : profitOrLoss < 0 ? `${inrCompact(-profitOrLoss)} over budget` : `${inrCompact(profitOrLoss)} left · ${utilizationPct}% used`}
+                        subTone={profitOrLoss < 0 ? 'text-rose-600 font-medium' : 'text-slate-500'}
+                        onClick={() => boqEstimate ? setActiveTab('profit') : setActiveTab('quote')} title={`Spent ${inr(spentAmount)} of ${inr(boqEstimate)} estimate`} />
+                    </div>
 
-                <div className="space-y-3">
-                  {/* Quick Actions */}
-                  <div className={`${CARD} @container`}>
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className={CARD_TITLE}><Zap className="w-5 h-5 text-amber-500"/> Quick Actions</h3>
-                      <button type="button" onClick={() => { setQuickActionView('menu'); setQuickActionOpen(true); }} className="text-xs font-semibold text-slate-500 hover:text-emerald-700">More</button>
-                    </div>
-                    <div className="grid grid-cols-2 @2xl:grid-cols-4 gap-2">
-                      {([
-                        { label: 'Add Task', icon: ClipboardList, cls: 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100', onClick: () => { setQuickActionView('create_task'); setQuickActionOpen(true); } },
-                        { label: 'Upload Document', icon: FileText, cls: 'bg-sky-50 text-sky-700 hover:bg-sky-100', onClick: () => setActiveTab('media') },
-                        { label: 'Add Expense', icon: Wallet, cls: 'bg-amber-50 text-amber-800 hover:bg-amber-100', onClick: () => setActiveTab('profit') },
-                        { label: 'Create Invoice', icon: FileBarChart, cls: 'bg-rose-50 text-rose-700 hover:bg-rose-100', onClick: () => setActiveTab('payments') },
-                      ]).map((a) => (
-                        <button key={a.label} type="button" onClick={a.onClick}
-                          className={`flex items-center justify-center gap-2 rounded-xl px-2.5 py-3 text-[13px] font-medium leading-tight text-center transition-all duration-200 hover:-translate-y-px ${a.cls}`}>
-                          <a.icon className="w-4 h-4 shrink-0" /> <span>{a.label}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Key Information */}
-                  <div className={`${CARD} @container`}>
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className={CARD_TITLE}><Info className="w-5 h-5 text-slate-500"/> Key Information</h3>
-                      {project.customer?.id && (
-                        <Link to={`/customers/${project.customer.id}`} className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-emerald-700"><Pencil className="w-3.5 h-3.5" /> Edit</Link>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-2 @2xl:grid-cols-3 gap-3 @2xl:gap-x-0">
-                      {([
-                        { icon: User, label: 'Customer', value: summary.customerName || project.customer?.name, href: project.customer?.id ? `/customers/${project.customer.id}` : undefined, internal: true },
-                        { icon: Phone, label: 'Phone', value: summary.phone, href: summary.phone ? `tel:${summary.phone}` : undefined },
-                        { icon: MessageCircle, label: 'WhatsApp', value: summary.whatsapp, href: summary.whatsapp ? waLink(summary.whatsapp) : undefined, external: true },
-                        { icon: MapPin, label: 'City', value: summary.city },
-                        { icon: Navigation, label: 'Site Address', value: summary.address, href: summary.mapUrl, external: true },
-                        { icon: UserCheck, label: 'Lead by', value: summary.leadBy },
-                      ] as { icon: React.ComponentType<{ className?: string }>; label: string; value?: string; href?: string; internal?: boolean; external?: boolean }[]).map((f, i) => {
-                        const val = f.value || '—';
-                        const valueEl = f.href && f.value
-                          ? (f.internal
-                            ? <Link to={f.href} className="text-emerald-800 hover:underline">{val}</Link>
-                            : <a href={f.href} target={f.external ? '_blank' : undefined} rel="noreferrer" className="text-emerald-800 hover:underline">{val}</a>)
-                          : <span className="text-slate-800">{val}</span>;
-                        return (
-                          <div key={f.label} className={`flex items-start gap-3 min-w-0 @2xl:px-4 @2xl:border-l @2xl:border-slate-100 ${i % 3 === 0 ? '@2xl:!pl-0 @2xl:!border-l-0' : ''}`}>
-                            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-50 text-slate-500 shrink-0"><f.icon className="w-4 h-4" /></span>
-                            <div className="min-w-0">
-                              <div className="text-[11px] text-slate-400">{f.label}</div>
-                              <div className="text-sm font-semibold truncate" title={f.value}>{valueEl}</div>
-                            </div>
+                    <div className="grid grid-cols-1 @5xl:grid-cols-[minmax(0,1.65fr)_minmax(0,1fr)] gap-3 items-start">
+                      {/* Left — the record itself, then what happened */}
+                      <div className="space-y-3 min-w-0">
+                        <div className={`${CARD} @container`}>
+                          <div className="mb-3 flex items-center justify-between gap-2">
+                            <h3 className={CARD_TITLE}><ClipboardCheck className="w-5 h-5 text-emerald-700"/> Project Details</h3>
+                            {!editingOverview ? (
+                              <Button size="sm" variant="ghost" onClick={() => startEdit('overview')} className="h-8 rounded-lg px-2.5 text-xs text-slate-600 hover:text-emerald-800"><Pencil className="w-3.5 h-3.5 mr-1.5" /> Edit</Button>
+                            ) : (
+                              <div className="flex items-center gap-1.5">
+                                <Button size="sm" variant="outline" onClick={() => setEditingOverview(false)} className="h-8 rounded-lg text-xs">Cancel</Button>
+                                <Button size="sm" onClick={saveOverview} disabled={savingProject} className="h-8 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-xs text-white"><Check className="w-3.5 h-3.5 mr-1" /> {savingProject ? 'Saving…' : 'Save'}</Button>
+                              </div>
+                            )}
                           </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Project Team */}
-                  <div className={CARD}>
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className={CARD_TITLE}><Users className="w-5 h-5 text-emerald-700"/> Project Team</h3>
-                      <button type="button" onClick={openAssignTeam} className="text-xs font-semibold text-emerald-700 hover:text-emerald-900">Assign Team</button>
-                    </div>
-                    {(() => {
-                      const team = ([['Project Manager', project.projectManager], ['Assistant Manager', project.assistantManager], ['Sales', project.salesExecutive], ['Designer', project.designer], ['Site Engineer', project.siteEngineer]] as [string, any][]).filter(([, u]) => u);
-                      return team.length > 0 ? (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          {team.map(([role, u]) => (
-                            <div key={role} className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50/60 px-3 py-2">
-                              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100 text-emerald-800 text-sm font-bold shrink-0">{(u.name || '?').charAt(0).toUpperCase()}</span>
-                              <div className="min-w-0">
-                                <div className="text-sm font-semibold text-slate-800 truncate">{u.name}</div>
-                                <div className="text-[11px] text-slate-400">{role}</div>
+                          <dl className="grid grid-cols-2 @lg:grid-cols-3 gap-x-4 gap-y-3.5">
+                            {([
+                              { k: 'projectType', icon: FileText, label: 'Project Type', view: project.projectType || '—',
+                                edit: <BaseInput className={cellInput} value={pform.projectType} onChange={e => setPform({ ...pform, projectType: e.target.value })} placeholder="Residential, Commercial…" /> },
+                              { k: 'projectCategory', icon: Building2, label: 'Property Type', view: project.projectCategory || '—',
+                                edit: <BaseInput className={cellInput} value={pform.projectCategory} onChange={e => setPform({ ...pform, projectCategory: e.target.value })} placeholder="Apartment, Villa…" /> },
+                              { k: 'priority', icon: Flag, label: 'Priority',
+                                view: project.priority ? <span className={`inline-block rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase ring-1 ${priorityTone[project.priority] || priorityTone.MEDIUM}`}>{project.priority}</span> : '—',
+                                edit: <select className={cellInput} value={pform.priority} onChange={e => setPform({ ...pform, priority: e.target.value })}>{['LOW', 'MEDIUM', 'HIGH', 'URGENT'].map(p => <option key={p} value={p}>{p}</option>)}</select> },
+                              { k: 'startDate', icon: Calendar, label: 'Start Date', view: shortDate(project.startDate),
+                                edit: <BaseInput type="date" className={cellInput} value={pform.startDate} onChange={e => setPform({ ...pform, startDate: e.target.value })} /> },
+                              { k: 'endDate', icon: Flag, label: 'Target Completion',
+                                view: <>{shortDate(project.endDate)}{!done && daysRemaining !== null && <span className={`ml-1.5 text-xs font-medium ${daysRemaining < 0 ? 'text-rose-600' : 'text-slate-400'}`}>({daysRemainingText.toLowerCase()}{daysRemaining >= 0 ? ' left' : ''})</span>}</>,
+                                edit: <BaseInput type="date" className={cellInput} value={pform.endDate} onChange={e => setPform({ ...pform, endDate: e.target.value })} /> },
+                              { k: 'value', icon: IndianRupee, label: 'Project Value', view: project.estimatedCost ? inr(project.estimatedCost) : (project.budget ? inr(project.budget) : '—'),
+                                edit: <BaseInput type="number" min={0} className={cellInput} value={pform.estimatedCost} onChange={e => setPform({ ...pform, estimatedCost: e.target.value })} placeholder="Estimated value" /> },
+                            ] as { k: string; icon: React.ComponentType<{ className?: string }>; label: string; view: React.ReactNode; edit?: React.ReactNode }[]).map((f) => (
+                              <div key={f.k} className="min-w-0">
+                                <dt className="flex items-center gap-1.5 text-xs text-slate-400"><f.icon className="w-3.5 h-3.5" /> {f.label}</dt>
+                                <dd className="mt-1 text-sm font-semibold text-slate-800 break-words">{editingOverview && f.edit ? f.edit : f.view}</dd>
+                              </div>
+                            ))}
+                          </dl>
+                          {editingOverview ? (
+                            <div className="mt-3 grid grid-cols-1 @lg:grid-cols-2 gap-3 border-t border-slate-100 pt-3">
+                              <div>
+                                <div className="text-[11px] font-semibold text-slate-400 mb-1">Budget</div>
+                                <BaseInput type="number" min={0} className={cellInput} value={pform.budget} onChange={e => setPform({ ...pform, budget: e.target.value })} />
+                              </div>
+                              <div className="@lg:col-span-2">
+                                <div className="text-[11px] font-semibold text-slate-400 mb-1">Property Address</div>
+                                <textarea className="w-full min-h-[44px] rounded-md border border-input bg-background px-3 py-2 text-sm" value={pform.propertyAddress} onChange={e => setPform({ ...pform, propertyAddress: e.target.value })} placeholder="Site / property address" />
+                              </div>
+                              <div className="@lg:col-span-2">
+                                <div className="text-[11px] font-semibold text-slate-400 mb-1">Description</div>
+                                <textarea className="w-full min-h-[52px] rounded-md border border-input bg-background px-3 py-2 text-sm" value={pform.projectDescription} onChange={e => setPform({ ...pform, projectDescription: e.target.value })} placeholder="Scope / description of the project" />
+                              </div>
+                              <div className="@lg:col-span-2">
+                                <div className="text-[11px] font-semibold text-slate-400 mb-1">Customer Requirements</div>
+                                <textarea className="w-full min-h-[44px] rounded-md border border-input bg-background px-3 py-2 text-sm" value={pform.customerNotes} onChange={e => setPform({ ...pform, customerNotes: e.target.value })} placeholder="What the customer asked for" />
                               </div>
                             </div>
-                          ))}
+                          ) : (address || project.projectDescription || project.customerNotes) && (
+                            <div className="mt-3.5 space-y-2.5 border-t border-slate-100 pt-3 text-sm">
+                              {address && (
+                                <div className="flex items-start gap-2">
+                                  <MapPin className="w-4 h-4 mt-0.5 shrink-0 text-slate-400" />
+                                  <span className="min-w-0 flex-1 text-slate-700">{address}</span>
+                                  {summary.mapUrl && <a href={summary.mapUrl} target="_blank" rel="noreferrer" className="shrink-0 inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 hover:text-emerald-900"><Navigation className="w-3.5 h-3.5" /> Map</a>}
+                                </div>
+                              )}
+                              {project.projectDescription && (
+                                <div><div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Scope</div><p className="mt-0.5 text-slate-600 whitespace-pre-line line-clamp-3">{project.projectDescription}</p></div>
+                              )}
+                              {project.customerNotes && (
+                                <div><div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Customer requirements</div><p className="mt-0.5 text-slate-600 whitespace-pre-line line-clamp-3">{project.customerNotes}</p></div>
+                              )}
+                            </div>
+                          )}
                         </div>
-                      ) : (
-                        <div className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2.5">
-                          <span className="text-xs text-slate-500">No team members assigned yet</span>
-                          <Button onClick={openAssignTeam} size="sm" className="h-7 bg-emerald-700 hover:bg-emerald-800 rounded-lg text-xs"><Plus className="w-3.5 h-3.5 mr-1"/> Assign</Button>
+
+                        <div className={CARD}>
+                          <div className="flex items-center justify-between mb-1">
+                            <h3 className={CARD_TITLE}><History className="w-5 h-5 text-emerald-700"/> Recent Activity</h3>
+                            {activityFeed.length > 6 && (
+                              <button type="button" onClick={() => setActiveTab('activity')} className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 hover:text-emerald-900">View all {activityFeed.length} <ArrowRight className="w-3.5 h-3.5" /></button>
+                            )}
+                          </div>
+                          <ActivityList items={activityFeed.slice(0, 6)} />
                         </div>
-                      );
-                    })()}
-                  </div>
-                </div>
-              </div>
+                      </div>
+
+                      {/* Right — act, who's on it, what's happening today */}
+                      <div className="space-y-3 min-w-0">
+                        <div className={`${CARD} @container`}>
+                          <div className="flex items-center justify-between mb-3">
+                            <h3 className={CARD_TITLE}><Zap className="w-5 h-5 text-amber-500"/> Quick Actions</h3>
+                            <button type="button" onClick={() => { setQuickActionView('menu'); setQuickActionOpen(true); }} className="text-xs font-semibold text-slate-500 hover:text-emerald-700">More</button>
+                          </div>
+                          <div className="grid grid-cols-2 @md:grid-cols-3 gap-2">
+                            {([
+                              { label: 'Add Task', icon: ClipboardList, onClick: () => { setQuickActionView('create_task'); setQuickActionOpen(true); } },
+                              { label: 'Report Issue', icon: AlertTriangle, onClick: () => { setQuickActionView('report_issue'); setQuickActionOpen(true); } },
+                              { label: 'Upload File', icon: FileText, onClick: () => setActiveTab('media') },
+                              { label: 'Create Invoice', icon: FileBarChart, onClick: () => setActiveTab('payments') },
+                              { label: 'Add Expense', icon: Wallet, onClick: () => setActiveTab('profit') },
+                              { label: 'Purchase', icon: ShoppingCart, onClick: () => { setQuickActionView('purchase_request'); setQuickActionOpen(true); } },
+                            ]).map((a) => (
+                              <button key={a.label} type="button" onClick={a.onClick}
+                                className="group flex min-h-[44px] items-center gap-2 rounded-xl border border-slate-100 bg-slate-50/70 px-2.5 py-2 text-left text-[13px] font-medium text-slate-700 transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600">
+                                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white text-emerald-700 shadow-sm"><a.icon className="w-4 h-4" /></span>
+                                <span className="truncate">{a.label}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className={CARD}>
+                          <div className="flex items-center justify-between mb-2">
+                            <h3 className={CARD_TITLE}><Users className="w-5 h-5 text-emerald-700"/> Project Team</h3>
+                            <button type="button" onClick={openAssignTeam} className="text-xs font-semibold text-emerald-700 hover:text-emerald-900">{team.length ? 'Change' : 'Assign'}</button>
+                          </div>
+                          {team.length > 0 ? (
+                            <ul className="divide-y divide-slate-100">
+                              {team.map(([role, u]) => (
+                                <li key={role} className="flex items-center gap-3 py-2">
+                                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold shrink-0">{(u.name || '?').split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase()}</span>
+                                  <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-800">{u.name}</span>
+                                  <span className="shrink-0 text-[11px] text-slate-400">{role}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <div className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2.5">
+                              <span className="text-xs text-slate-500">No one assigned yet</span>
+                              <Button onClick={openAssignTeam} size="sm" className="h-8 bg-emerald-700 hover:bg-emerald-800 rounded-lg text-xs text-white"><Plus className="w-3.5 h-3.5 mr-1"/> Assign team</Button>
+                            </div>
+                          )}
+                        </div>
+
+                        {!done && (
+                          <div className={CARD}>
+                            <h3 className={`${CARD_TITLE} mb-2`}><Calendar className="w-5 h-5 text-emerald-700"/> Today on Site</h3>
+                            <div className="grid grid-cols-3 divide-x divide-slate-100 text-center">
+                              {([
+                                { label: 'On site', value: stats?.todayManpower ?? 0, onClick: () => setActiveTab('workProgress') },
+                                { label: 'Visits today', value: stats?.siteVisitsToday ?? 0, onClick: () => setActiveTab('workProgress') },
+                                { label: 'Materials due', value: stats?.pendingMaterials ?? 0, onClick: () => setActiveTab('purchaseOrders') },
+                              ]).map((s) => (
+                                <button key={s.label} type="button" onClick={s.onClick} className="rounded-lg px-1 py-1.5 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600">
+                                  <div className="text-lg font-bold text-slate-900 tabular-nums">{s.value}</div>
+                                  <div className="text-[11px] text-slate-500">{s.label}</div>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
             </TabsContent>
 
             {/* ACTIVITY TAB — the full feed */}
