@@ -17,6 +17,7 @@ import TaskCallRecordings from './TaskCallRecordings';
  */
 
 const CONSTRUCTION_STAGES = ['New Construction', 'Ready to Move', 'Under Renovation', 'Old / Resale', 'Bare Shell'];
+// Fallback only — the picker reads the live catalogue categories (same list as the lead form).
 const CATEGORIES = ['Full Interior', 'Modular Kitchen', 'Wardrobe', 'False Ceiling', 'Painting', 'Flooring', 'Renovation', 'Commercial', 'Other'];
 const PAYMENT_PREFS = ['Full Advance', 'Milestone Based', 'On Completion', 'EMI / Finance'];
 const LEAD_TYPES = ['Individual', 'Business', 'Builder', 'Architect', 'Dealer', 'Other'];
@@ -90,6 +91,23 @@ export default function RequirementFormSheet({ taskId, leadId, open, onOpenChang
   }, [open, leadId, taskId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const set = (k: string, val: string) => setV((p) => ({ ...p, [k]: val }));
+
+  // Categories: several can be picked, stored comma-separated on the lead (like products).
+  const [catalogCategories, setCatalogCategories] = useState<string[]>([]);
+  useEffect(() => {
+    if (!open || catalogCategories.length) return;
+    api.get('/public/categories')
+      .then((res) => setCatalogCategories((res.data || []).map((c: { name: string }) => c.name).filter(Boolean)))
+      .catch(() => {});
+  }, [open, catalogCategories.length]);
+  const pickedCategories = (v.requirementCategory || '').split(',').map((x) => x.trim()).filter(Boolean);
+  // Keep saved values visible even if the catalogue renamed/removed them.
+  const categoryChoices = [
+    ...pickedCategories.filter((c) => !(catalogCategories.length ? catalogCategories : CATEGORIES).includes(c)),
+    ...(catalogCategories.length ? catalogCategories : CATEGORIES),
+  ];
+  const toggleCategory = (name: string) => set('requirementCategory',
+    (pickedCategories.includes(name) ? pickedCategories.filter((c) => c !== name) : [...pickedCategories, name]).join(', '));
   const toggleScope = (k: string) => setScope((p) => ({ ...p, [k]: !p[k] }));
   const toggleSec = (id: string) => setOpenSecs((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const filledCount = (id: string) => id === 'scope'
@@ -239,7 +257,20 @@ export default function RequirementFormSheet({ taskId, leadId, open, onOpenChang
           </Section>
 
           <Section id="requirement" icon={<FileText className="h-4 w-4" />} title="Requirement" count={filledCount('requirement')} openSecs={openSecs} toggle={toggleSec}>
-            <Select label="Category" value={v.requirementCategory} onChange={(x) => set('requirementCategory', x)} options={CATEGORIES} />
+            <div>
+              <span className="mb-1 block text-xs font-medium text-muted-foreground">Categories (pick one or more)</span>
+              <div className="flex flex-wrap gap-2">
+                {categoryChoices.map((c) => {
+                  const on = pickedCategories.includes(c);
+                  return (
+                    <button key={c} type="button" aria-pressed={on} onClick={() => toggleCategory(c)}
+                      className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${on ? 'border-primary bg-primary text-primary-foreground' : 'bg-card text-muted-foreground'}`}>
+                      {on ? '✓ ' : ''}{c}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
             <Text label="Products asked" value={v.requirementProduct} onChange={(x) => set('requirementProduct', x)} placeholder="e.g. Sofa, Wardrobe, TV Unit (comma separated)" />
             <Area label="Requirement description" value={v.projectDescription} onChange={(x) => set('projectDescription', x)} placeholder="Describe the full scope the customer wants…" />
             <Area label="Detailed requirements / customer notes" value={v.customerRequirements} onChange={(x) => set('customerRequirements', x)} rows={2} />

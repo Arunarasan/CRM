@@ -107,7 +107,7 @@ export default function RequirementSummaryCard({ taskId }: { taskId: number }) {
           </Group>
 
           <Group icon={<FileText className="h-3.5 w-3.5" />} title="Requirement" show={showReq}>
-            <Field label="Category" value={d.requirementCategory} />
+            <Field label="Categories" value={d.requirementCategory} />
             <Field label="Products asked" value={d.requirementProduct} />
             <Field label="Requirement" value={description} />
             <Field label="Rooms" value={d.roomsRequired} />

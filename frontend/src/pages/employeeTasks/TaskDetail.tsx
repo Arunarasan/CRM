@@ -208,7 +208,7 @@ function LeadDetailsCard({ lead }: { lead: LeadInfo }) {
           <div className="mt-3.5 rounded-xl bg-[#F0F5F1] p-3.5">
             <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#2C7050]">What the customer wants</p>
             <div className="flex flex-col gap-2.5">
-              <LField label="Category" value={lead.requirementCategory} />
+              <LField label="Categories" value={lead.requirementCategory} />
               {has(lead.requirementProduct) && (
                 <div className="flex flex-col gap-1">
                   <span className="text-[10.5px] font-semibold uppercase tracking-wide text-[#A6A99E]">Products asked</span>
