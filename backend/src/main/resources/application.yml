@@ -85,6 +85,11 @@ app:
       # The user's first phone binds instantly; later phones need admin approval.
       auto-approve-first-device: ${ATTENDANCE_AUTO_APPROVE_FIRST_DEVICE:true}
       challenge-ttl-seconds: ${ATTENDANCE_DEVICE_CHALLENGE_TTL:120}
+    # Office fingerprint machine (ZKTeco / eSSL, ADMS push).
+    machine:
+      duplicate-tap-seconds: ${ATTENDANCE_MACHINE_DUPLICATE_TAP_SECONDS:120}
+      max-shift-hours: ${ATTENDANCE_MACHINE_MAX_SHIFT_HOURS:12}
+      offline-alert-minutes: ${ATTENDANCE_MACHINE_OFFLINE_ALERT_MINUTES:30}
   mail:
     # From address on OTP emails. Defaults to the SMTP username when blank.
     from: ${MAIL_FROM:${MAIL_USERNAME:no-reply@arudra.com}}

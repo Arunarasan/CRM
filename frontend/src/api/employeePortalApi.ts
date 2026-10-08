@@ -50,6 +50,7 @@ export const employeePortalApi = {
     lat?: number; lng?: number; accuracyMeters?: number; locationLabel?: string; deviceInfo?: string;
     assertion?: { credentialId: string; authenticatorData: string; clientDataJSON: string; signature: string; userHandle: string | null };
     device?: DeviceProof;
+    note?: string; // field punch: where the employee is
   }) => api.post<TimeStatus>(`${BASE}/attendance/clock-in`, payload ?? {}).then((r) => r.data),
 
   // Attendance phone binding (one approved phone per login)
@@ -77,7 +78,7 @@ export const employeePortalApi = {
   webauthnCredentials: () =>
     api.get<{ id: number; deviceLabel: string; lastUsedAt: string | null; createdAt: string | null }[]>(`${BASE}/webauthn/credentials`).then((r) => r.data),
   webauthnDeleteCredential: (id: number) => api.delete(`${BASE}/webauthn/credentials/${id}`).then((r) => r.data),
-  clockOut: (payload?: { device?: DeviceProof }) =>
+  clockOut: (payload?: { device?: DeviceProof; lat?: number; lng?: number; accuracyMeters?: number; note?: string }) =>
     api.post<TimeStatus>(`${BASE}/attendance/clock-out`, payload ?? {}).then((r) => r.data),
   startBreak: () => api.post<TimeStatus>(`${BASE}/attendance/break/start`).then((r) => r.data),
   endBreak: () => api.post<TimeStatus>(`${BASE}/attendance/break/end`).then((r) => r.data),

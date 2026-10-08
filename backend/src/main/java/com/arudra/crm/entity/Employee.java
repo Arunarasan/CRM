@@ -72,7 +72,10 @@ public class Employee extends BaseEntity {
     @Column(name = "attendance_required", nullable = false)
     private Boolean attendanceRequired = true;
 
-    /** Required clock-in verification: GEO (inside a fence) | OFFICE_DEVICE (biometric) | ANY. */
+    /**
+     * Required clock-in verification: GEO (inside a fence) | OFFICE_DEVICE (biometric) | ANY |
+     * MACHINE (office fingerprint machine verified; own-phone punches always need admin approval).
+     */
     @Column(name = "attendance_method", nullable = false, length = 20)
     private String attendanceMethod = "GEO";
 
@@ -82,6 +85,10 @@ public class Employee extends BaseEntity {
 
     @Column(name = "attendance_method_requested_at")
     private java.time.LocalDateTime attendanceMethodRequestedAt;
+
+    /** The ID typed into the office fingerprint machine for this employee (digits, unique). */
+    @Column(name = "machine_pin", length = 20, unique = true)
+    private String machinePin;
 
     /** Device-binding enforcement override: OFF | SOFT | HARD; null = app default. */
     @Column(name = "device_binding_mode", length = 10)

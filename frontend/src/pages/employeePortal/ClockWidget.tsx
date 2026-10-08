@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { LogIn, LogOut, Coffee, Play, Loader2, TrendingUp, ArrowRight, MapPin, ShieldCheck, ShieldAlert } from 'lucide-react';
+import { LogIn, LogOut, Coffee, Play, Loader2, TrendingUp, ArrowRight, MapPin, ShieldCheck, ShieldAlert, Fingerprint, X, Clock3 } from 'lucide-react';
 import { employeePortalApi } from '@/api/employeePortalApi';
 import { TimeStatus } from '@/types/employeePortal';
 import { assert as webauthnAssert } from '@/lib/webauthn';
@@ -19,6 +19,9 @@ export default function ClockWidget({ onChange }: { onChange?: () => void }) {
   const [status, setStatus] = useState<TimeStatus | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState('');
+  // Fingerprint-machine staff: a phone punch is a "field punch" — ask where they are first.
+  const [fieldMode, setFieldMode] = useState<'in' | 'out' | null>(null);
+  const [fieldNote, setFieldNote] = useState('');
   const [geoAccuracy, setGeoAccuracy] = useState<number | null>(null); // live best-fix accuracy while locating
   const [, forceTick] = useState(0);
   const tickRef = useRef<number | null>(null);
@@ -58,6 +61,8 @@ export default function ClockWidget({ onChange }: { onChange?: () => void }) {
   const sessions = status?.sessions ?? [];
   const sessionCount = status?.sessionsToday ?? 0;
   const lastSession = sessions.length > 0 ? sessions[sessions.length - 1] : null;
+  const isMachine = status?.attendanceMethod === 'MACHINE';
+  const pendingHours = status?.todayPendingHours ?? 0;
 
   // Clock in with the device's best available location (samples GPS for a few seconds to converge)
   // plus, when the employee's method is office-device / either and a credential is registered, a
@@ -89,13 +94,28 @@ export default function ClockWidget({ onChange }: { onChange?: () => void }) {
       lat: geo?.lat, lng: geo?.lng,
       accuracyMeters: geo?.accuracy != null ? Math.round(geo.accuracy) : undefined,
       deviceInfo, assertion, device,
+      note: isMachine ? fieldNote.trim() || undefined : undefined,
     });
   };
 
+  // Machine staff clocking out on the phone share where they are (the admin sees it when approving).
   const clockOutWithDevice = async () => {
+    let geo: Awaited<ReturnType<typeof getBestPosition>> | null = null;
+    if (isMachine) geo = await getBestPosition({ onProgress: (f) => setGeoAccuracy(Math.round(f.accuracy)) });
     const device = phone.phoneState === 'OFF' ? undefined : await phone.proof();
-    await employeePortalApi.clockOut({ device });
+    await employeePortalApi.clockOut({
+      device,
+      lat: geo?.lat, lng: geo?.lng,
+      accuracyMeters: geo?.accuracy != null ? Math.round(geo.accuracy) : undefined,
+      note: isMachine ? fieldNote.trim() || undefined : undefined,
+    });
   };
+
+  const runField = (mode: 'in' | 'out') => act(mode, async () => {
+    await (mode === 'in' ? clockInWithGeo() : clockOutWithDevice());
+    setFieldMode(null);
+    setFieldNote('');
+  });
 
   // Seconds worked so far today = server total (all sessions) + time elapsed since the last sync
   // while running. todayHours already sums closed + open sessions up to the sync instant.
@@ -130,6 +150,11 @@ export default function ClockWidget({ onChange }: { onChange?: () => void }) {
           <span className="font-mono text-3xl font-bold tabular-nums tracking-tight">{fmtHMS(liveSeconds)}</span>
           <span className="text-xs text-emerald-100/80">worked{status && status.todayOvertime > 0 ? ` · ${status.todayOvertime}h OT` : ''}</span>
         </div>
+        {pendingHours > 0 && (
+          <p className="mt-1 flex items-center gap-1 text-[11px] text-amber-100">
+            <Clock3 className="h-3 w-3" /> +{pendingHours}h waiting for admin approval (not counted yet)
+          </p>
+        )}
 
         {/* Progress toward the day's target — the motivational bar */}
         {target > 0 && (
@@ -161,48 +186,94 @@ export default function ClockWidget({ onChange }: { onChange?: () => void }) {
         {error && <p className="mt-2 rounded-md bg-black/25 p-2 text-xs text-amber-100">{error}</p>}
 
         {/* Verification result of the latest session */}
-        {lastSession?.flagged ? (
+        {lastSession?.approvalStatus === 'REJECTED' ? (
+          <div className="mt-3 flex items-start gap-2 rounded-xl bg-red-500/25 px-3 py-2 text-[12px] text-red-50">
+            <X className="mt-0.5 h-4 w-4 shrink-0 text-red-200" />
+            <span><b>Not approved.</b> {lastSession.approvalNote || 'This punch won\'t be counted.'}</span>
+          </div>
+        ) : lastSession?.approvalStatus === 'APPROVED' ? (
+          <div className="mt-3 flex items-center gap-2 rounded-xl bg-white/10 px-3 py-2 text-[12px] text-emerald-50">
+            <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-200" />
+            <span>Approved by admin.</span>
+          </div>
+        ) : lastSession?.flagged ? (
           <div className="mt-3 flex items-start gap-2 rounded-xl bg-amber-400/20 px-3 py-2 text-[12px] text-amber-50">
             <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-200" />
             <span><b>Sent for approval.</b> {lastSession.flagReason || 'Attendance could not be auto-verified.'}</span>
+          </div>
+        ) : lastSession?.verified && lastSession.verificationMethod === 'MACHINE' ? (
+          <div className="mt-3 flex items-center gap-2 rounded-xl bg-white/10 px-3 py-2 text-[12px] text-emerald-50">
+            <Fingerprint className="h-4 w-4 shrink-0 text-emerald-200" />
+            <span>Punched on the fingerprint machine.</span>
           </div>
         ) : lastSession?.verified && (lastSession.verificationMethod === 'GEO' || lastSession.verificationMethod === 'BIOMETRIC') ? (
           <div className="mt-3 flex items-center gap-2 rounded-xl bg-white/10 px-3 py-2 text-[12px] text-emerald-50">
             <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-200" />
             <span>{lastSession.verificationMethod === 'BIOMETRIC' ? 'Biometric verified.' : 'Location verified.'}</span>
           </div>
-        ) : !clockedIn && sessionCount === 0 ? (
+        ) : !clockedIn && sessionCount === 0 && !isMachine ? (
           <p className="mt-3 flex items-center gap-1.5 text-[11px] text-emerald-100/80">
             <MapPin className="h-3 w-3" /> Your location is checked when you clock in.
           </p>
         ) : null}
 
+        {isMachine && !fieldMode && (
+          <div className="mt-3 flex items-start gap-2 rounded-xl bg-white/10 px-3 py-2 text-[12px] text-emerald-50">
+            <Fingerprint className="mt-0.5 h-4 w-4 shrink-0 text-emerald-200" />
+            <span>
+              {clockedIn && lastSession?.checkInSource === 'MACHINE'
+                ? <>You're clocked in on the fingerprint machine — punch out there when you leave. Going to a site instead? Clock out here (needs approval).</>
+                : <>In the office? <b>Punch on the fingerprint machine</b> — it shows here automatically. Working outside? Use a field punch below (an admin approves it).</>}
+            </span>
+          </div>
+        )}
+
+        {fieldMode && (
+          <div className="mt-3 rounded-xl bg-white/15 p-3 text-[12px]">
+            <p className="mb-1.5 font-semibold">{fieldMode === 'in' ? 'Field clock in' : 'Clock out from phone'} — needs admin approval</p>
+            <input value={fieldNote} onChange={(e) => setFieldNote(e.target.value)} maxLength={200} autoFocus
+              placeholder={fieldMode === 'in' ? 'Where are you? e.g. Site: Anna Nagar client' : 'Note (optional), e.g. Finished at site'}
+              className="w-full rounded-lg border-0 bg-white px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground" />
+            <p className="mt-1 text-emerald-50/80">Your location is shared with the admin.</p>
+            <div className="mt-2 grid grid-cols-[1fr_auto] gap-2">
+              <button onClick={() => runField(fieldMode)} disabled={!!busy || phoneBlocked || (fieldMode === 'in' && !fieldNote.trim())}
+                className="flex items-center justify-center gap-2 rounded-lg bg-white py-2.5 text-sm font-bold text-emerald-700 disabled:opacity-60">
+                {busy === fieldMode
+                  ? <><Loader2 className="h-4 w-4 animate-spin" /> Locating…{geoAccuracy != null ? ` ±${geoAccuracy}m` : ''}</>
+                  : fieldMode === 'in' ? <><LogIn className="h-4 w-4" /> Send field clock in</> : <><LogOut className="h-4 w-4" /> Send clock out</>}
+              </button>
+              <button onClick={() => { setFieldMode(null); setFieldNote(''); }} disabled={!!busy}
+                className="rounded-lg bg-black/20 px-3 text-sm font-semibold text-white">Cancel</button>
+            </div>
+          </div>
+        )}
+
         <PhoneStatusStrip binding={phone} />
 
         {/* Actions */}
         <div className="mt-3 grid grid-cols-2 gap-2">
-          {!clockedIn && (
-            <button onClick={() => act('in', clockInWithGeo)} disabled={!!busy || phoneBlocked}
+          {!clockedIn && !fieldMode && (
+            <button onClick={() => (isMachine ? setFieldMode('in') : act('in', clockInWithGeo))} disabled={!!busy || phoneBlocked}
               className="col-span-2 flex items-center justify-center gap-2 rounded-xl bg-white py-3 text-sm font-bold text-emerald-700 shadow-sm active:scale-[0.99] disabled:opacity-60">
               {busy === 'in'
                 ? <><Loader2 className="h-4 w-4 animate-spin" /> Locating…{geoAccuracy != null ? ` ±${geoAccuracy}m` : ''}</>
-                : <><LogIn className="h-4 w-4" /> {sessionCount > 0 ? 'Clock In Again' : 'Clock In'}</>}
+                : <><LogIn className="h-4 w-4" /> {isMachine ? 'Field clock in' : sessionCount > 0 ? 'Clock In Again' : 'Clock In'}</>}
             </button>
           )}
-          {clockedIn && !onBreak && (
+          {clockedIn && !onBreak && !fieldMode && (
             <button onClick={() => act('break', () => employeePortalApi.startBreak())} disabled={!!busy}
               className="flex items-center justify-center gap-2 rounded-xl bg-amber-400 py-3 text-sm font-bold text-amber-950 active:scale-[0.99] disabled:opacity-60">
               {busy === 'break' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Coffee className="h-4 w-4" />} Take Break
             </button>
           )}
-          {clockedIn && onBreak && (
+          {clockedIn && onBreak && !fieldMode && (
             <button onClick={() => act('resume', () => employeePortalApi.endBreak())} disabled={!!busy}
               className="flex items-center justify-center gap-2 rounded-xl bg-white py-3 text-sm font-bold text-emerald-700 active:scale-[0.99] disabled:opacity-60">
               {busy === 'resume' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />} End Break
             </button>
           )}
-          {clockedIn && (
-            <button onClick={() => act('out', clockOutWithDevice)} disabled={!!busy || phoneBlocked}
+          {clockedIn && !fieldMode && (
+            <button onClick={() => (isMachine ? setFieldMode('out') : act('out', clockOutWithDevice))} disabled={!!busy || phoneBlocked}
               className="flex items-center justify-center gap-2 rounded-xl bg-black/30 py-3 text-sm font-bold text-white active:scale-[0.99] disabled:opacity-60">
               {busy === 'out' ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />} Clock Out
             </button>
@@ -233,7 +304,15 @@ export default function ClockWidget({ onChange }: { onChange?: () => void }) {
                       ? <span className={s.onBreak ? 'text-amber-600' : 'text-emerald-600'}>{s.onBreak ? 'on break' : 'now'}</span>
                       : fmtClock(s.checkOutTime)}
                   </span>
-                  {s.breakMinutes > 0 && <span className="text-[11px] text-muted-foreground">{s.breakMinutes}m break</span>}
+                  <span className="flex items-center gap-1.5">
+                    {s.breakMinutes > 0 && <span className="text-[11px] text-muted-foreground">{s.breakMinutes}m break</span>}
+                    {s.checkInSource === 'MACHINE' && <Fingerprint className="h-3.5 w-3.5 text-emerald-600" aria-label="Fingerprint machine" />}
+                    {s.approvalStatus === 'PENDING' && <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">Waiting</span>}
+                    {s.approvalStatus === 'APPROVED' && <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">Approved</span>}
+                    {s.approvalStatus === 'REJECTED' && (
+                      <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700" title={s.approvalNote ?? undefined}>Rejected</span>
+                    )}
+                  </span>
                 </div>
               ))}
             </div>

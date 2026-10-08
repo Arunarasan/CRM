@@ -184,10 +184,16 @@ public class EmployeePortalController {
         public AssertionBody assertion;
         /** Phone-binding proof: the bound phone's signature over a fresh /device/challenge nonce. */
         public DeviceProofBody device;
+        /** "Where I am" note for a field punch (shown to the approver). */
+        public String note;
     }
 
     public static class ClockOutBody {
         public DeviceProofBody device;
+        public BigDecimal lat;
+        public BigDecimal lng;
+        public Integer accuracyMeters;
+        public String note;
     }
 
     public static class DeviceProofBody {
@@ -231,7 +237,7 @@ public class EmployeePortalController {
             biometricVerified = webAuthnService.verifyAssertion(emp, b.assertion.credentialId,
                     b.assertion.authenticatorData, b.assertion.clientDataJSON, b.assertion.signature, b.assertion.userHandle);
         }
-        timeService.clockIn(u, b.lat, b.lng, b.accuracyMeters, b.locationLabel, b.deviceInfo, biometricVerified, device);
+        timeService.clockIn(u, b.lat, b.lng, b.accuracyMeters, b.locationLabel, b.deviceInfo, biometricVerified, device, b.note);
         return ResponseEntity.ok(ApiResponse.success(timeService.getStatus(u)));
     }
 
@@ -240,8 +246,9 @@ public class EmployeePortalController {
     public ResponseEntity<ApiResponse<Map<String, Object>>> clockOut(@RequestBody(required = false) ClockOutBody body,
                                                                     HttpServletRequest request) {
         User u = me();
-        DeviceBindingService.DeviceCheck device = deviceCheck(u, body == null ? null : body.device, request, "Clock-out");
-        timeService.clockOut(u, device);
+        ClockOutBody b = body == null ? new ClockOutBody() : body;
+        DeviceBindingService.DeviceCheck device = deviceCheck(u, b.device, request, "Clock-out");
+        timeService.clockOut(u, device, b.lat, b.lng, b.accuracyMeters, b.note);
         return ResponseEntity.ok(ApiResponse.success(timeService.getStatus(u)));
     }
 

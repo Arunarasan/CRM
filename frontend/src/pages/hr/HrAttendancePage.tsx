@@ -14,6 +14,7 @@ import { toast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import SearchableSelect from '@/components/ui/searchable-select';
 import { DeviceRequests } from './deviceAdmin';
+import { FingerprintMachines, UnmatchedMachineIds, MachinePunchLog } from './machineAdmin';
 
 /**
  * The attendance-verification admin body, mounted both as the Workforce → Attendance page and as
@@ -27,6 +28,9 @@ export function AttendanceAdmin() {
       <DeviceRequests />
       <MethodRequests />
       <PendingApprovals />
+      <UnmatchedMachineIds />
+      <FingerprintMachines />
+      <MachinePunchLog />
       <OfficeLocations />
     </div>
   );
@@ -271,33 +275,82 @@ function PendingApprovals() {
   const [rows, setRows] = useState<PendingAttendance[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<number | null>(null);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   const load = () => {
-    setLoading(true);
-    attendanceApi.listPending().then(setRows).catch(() => setRows([])).finally(() => setLoading(false));
+    attendanceApi.listPending().then((r) => {
+      setRows(r);
+      setSelected((sel) => new Set([...sel].filter((id) => r.some((x) => x.sessionId === id))));
+    }).catch(() => setRows([])).finally(() => setLoading(false));
   };
-  useEffect(load, []);
+  useEffect(() => {
+    load();
+    const t = window.setInterval(load, 30000); // field punches arrive all day
+    return () => window.clearInterval(t);
+  }, []);
 
   const resolve = async (row: PendingAttendance, approve: boolean) => {
+    let reason: string | undefined;
+    if (!approve) {
+      const r = window.prompt('Reason for rejecting (the employee sees this):');
+      if (r === null) return;
+      reason = r.trim() || undefined;
+    }
     setBusy(row.sessionId);
     try {
-      approve ? await attendanceApi.approve(row.sessionId) : await attendanceApi.reject(row.sessionId);
+      approve ? await attendanceApi.approve(row.sessionId) : await attendanceApi.reject(row.sessionId, reason);
       toast.success(approve ? 'Attendance approved' : 'Attendance rejected');
       setRows((prev) => prev.filter((r) => r.sessionId !== row.sessionId));
+      setSelected((sel) => { const n = new Set(sel); n.delete(row.sessionId); return n; });
     } catch (e: any) {
-      toast.error(e?.message || 'Action failed');
+      toast.error(e?.response?.data?.message || e?.message || 'Action failed');
     } finally {
       setBusy(null);
     }
   };
 
+  const approveSelected = async () => {
+    if (selected.size === 0) return;
+    setBulkBusy(true);
+    try {
+      const { approved } = await attendanceApi.approveMany([...selected]);
+      toast.success(`${approved} clock-in${approved === 1 ? '' : 's'} approved`);
+      setSelected(new Set());
+      load();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Action failed');
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const toggle = (id: number) => setSelected((sel) => {
+    const n = new Set(sel);
+    n.has(id) ? n.delete(id) : n.add(id);
+    return n;
+  });
+  const allSelected = rows.length > 0 && selected.size === rows.length;
+
   return (
     <section className="rounded-xl border bg-card shadow-sm">
-      <header className="flex items-center gap-2 border-b px-4 py-3 sm:px-5 sm:py-4">
+      <header className="flex flex-wrap items-center gap-2 border-b px-4 py-3 sm:px-5 sm:py-4">
         <ShieldAlert className="h-5 w-5 text-amber-500" />
         <h2 className="text-base font-semibold">Clock-ins needing approval</h2>
         {rows.length > 0 && (
           <span className="ml-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">{rows.length}</span>
+        )}
+        {rows.length > 0 && (
+          <div className="ml-auto flex items-center gap-2">
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <input type="checkbox" className="h-4 w-4" checked={allSelected}
+                onChange={() => setSelected(allSelected ? new Set() : new Set(rows.map((r) => r.sessionId)))} />
+              All
+            </label>
+            <Button variant="forest" size="sm" disabled={selected.size === 0 || bulkBusy} onClick={approveSelected}>
+              {bulkBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} Approve selected{selected.size ? ` (${selected.size})` : ''}
+            </Button>
+          </div>
         )}
       </header>
 
@@ -309,31 +362,51 @@ function PendingApprovals() {
         <ul className="divide-y">
           {rows.map((r) => (
             <li key={r.sessionId} className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:px-5 sm:items-center sm:justify-between">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                  <span className="font-medium">{r.employeeName}</span>
-                  {r.employeeCode && <span className="text-xs text-muted-foreground">({r.employeeCode})</span>}
-                  <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">{r.verificationMethod ?? '—'}</span>
-                  {r.deviceMismatchReason && (
-                    <span className="inline-flex items-center gap-1 rounded bg-red-100 px-1.5 py-0.5 text-[11px] font-semibold text-red-700"
-                          title={r.deviceMismatchReason}>
-                      <Smartphone className="h-3 w-3" /> Wrong phone
+              <div className="flex min-w-0 gap-3">
+                <input type="checkbox" className="mt-1 h-4 w-4 shrink-0" checked={selected.has(r.sessionId)}
+                  onChange={() => toggle(r.sessionId)} aria-label={`Select ${r.employeeName}`} />
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span className="font-medium">{r.employeeName}</span>
+                    {r.employeeCode && <span className="text-xs text-muted-foreground">({r.employeeCode})</span>}
+                    {r.verificationMethod === 'FIELD' ? (
+                      <span className="inline-flex items-center gap-1 rounded bg-sky-100 px-1.5 py-0.5 text-[11px] font-semibold text-sky-700">
+                        <MapPin className="h-3 w-3" /> Field punch
+                      </span>
+                    ) : (
+                      <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">{r.verificationMethod ?? '—'}</span>
+                    )}
+                    {r.deviceMismatchReason && (
+                      <span className="inline-flex items-center gap-1 rounded bg-red-100 px-1.5 py-0.5 text-[11px] font-semibold text-red-700"
+                            title={r.deviceMismatchReason}>
+                        <Smartphone className="h-3 w-3" /> Wrong phone
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-1 text-sm text-amber-700">{r.flagReason}</p>
+                  {r.fieldNote && <p className="mt-0.5 text-sm">“{r.fieldNote}”</p>}
+                  <p className="mt-0.5 flex flex-wrap items-center gap-x-3 text-xs text-muted-foreground">
+                    <span>
+                      {r.date} · {r.checkInTime?.slice(0, 5)} <Src s={r.checkInSource} machine={r.machineName} />
+                      {' → '}{r.checkOutTime ? <>{r.checkOutTime.slice(0, 5)} <Src s={r.checkOutSource} machine={r.machineName} /></> : 'still open'}
                     </span>
-                  )}
+                    {r.distanceMeters != null && r.verificationMethod !== 'FIELD' && (
+                      <span>{r.distanceMeters} m from {r.officeLocation ?? 'office'}{r.accuracyMeters != null ? ` · ±${r.accuracyMeters} m GPS` : ''}</span>
+                    )}
+                    {r.lat != null && r.lng != null && (
+                      <a className="inline-flex items-center gap-1 text-primary hover:underline"
+                         href={`https://www.google.com/maps?q=${r.lat},${r.lng}`} target="_blank" rel="noreferrer">
+                        <ExternalLink className="h-3 w-3" /> In on map
+                      </a>
+                    )}
+                    {r.outLat != null && r.outLng != null && (
+                      <a className="inline-flex items-center gap-1 text-primary hover:underline"
+                         href={`https://www.google.com/maps?q=${r.outLat},${r.outLng}`} target="_blank" rel="noreferrer">
+                        <ExternalLink className="h-3 w-3" /> Out on map
+                      </a>
+                    )}
+                  </p>
                 </div>
-                <p className="mt-1 text-sm text-amber-700">{r.flagReason}</p>
-                <p className="mt-0.5 flex flex-wrap items-center gap-x-3 text-xs text-muted-foreground">
-                  <span>{r.date} · {r.checkInTime?.slice(0, 5)}</span>
-                  {r.distanceMeters != null && (
-                    <span>{r.distanceMeters} m from {r.officeLocation ?? 'office'}{r.accuracyMeters != null ? ` · ±${r.accuracyMeters} m GPS` : ''}</span>
-                  )}
-                  {r.lat != null && r.lng != null && (
-                    <a className="inline-flex items-center gap-1 text-primary hover:underline"
-                       href={`https://www.google.com/maps?q=${r.lat},${r.lng}`} target="_blank" rel="noreferrer">
-                      <ExternalLink className="h-3 w-3" /> View on map
-                    </a>
-                  )}
-                </p>
               </div>
               <div className="grid shrink-0 grid-cols-2 gap-2 sm:flex">
                 <Button variant="forest" size="sm" disabled={busy === r.sessionId} onClick={() => resolve(r, true)}>
@@ -349,6 +422,14 @@ function PendingApprovals() {
       )}
     </section>
   );
+}
+
+/** Where one half of a session came from, as a tiny tag. */
+function Src({ s, machine }: { s?: string | null; machine?: string | null }) {
+  if (!s) return null;
+  const label = s === 'MACHINE' ? 'machine' : s === 'PHONE' ? 'phone' : s === 'MANUAL' ? 'HR' : s.toLowerCase();
+  return <span className="rounded bg-muted px-1 py-px text-[10px] uppercase tracking-wide"
+               title={s === 'MACHINE' && machine ? machine : undefined}>{label}</span>;
 }
 
 /* -------------------------------- Office locations -------------------------------- */

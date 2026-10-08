@@ -73,10 +73,16 @@ public class EmployeeTimeService {
 
     // --- clock actions -----------------------------------------------------
 
+    public Attendance clockIn(User user, BigDecimal lat, BigDecimal lng, Integer accuracyMeters, String locationLabel,
+                              String deviceInfo, boolean biometricVerified, DeviceBindingService.DeviceCheck deviceCheck) {
+        return clockIn(user, lat, lng, accuracyMeters, locationLabel, deviceInfo, biometricVerified, deviceCheck, null);
+    }
+
     @LogActivity(module = "ATTENDANCE", action = "CLOCK_IN")
     @Transactional
     public Attendance clockIn(User user, BigDecimal lat, BigDecimal lng, Integer accuracyMeters, String locationLabel,
-                              String deviceInfo, boolean biometricVerified, DeviceBindingService.DeviceCheck deviceCheck) {
+                              String deviceInfo, boolean biometricVerified, DeviceBindingService.DeviceCheck deviceCheck,
+                              String fieldNote) {
         Employee employee = requireEmployee(user);
         Attendance att = todayRow(employee.getId());
         if (att == null) {
@@ -97,6 +103,8 @@ public class EmployeeTimeService {
         s.setAccuracyMeters(accuracyMeters);
         s.setLocationLabel(locationLabel);
         s.setDeviceInfo(deviceInfo);
+        s.setCheckInSource(AttendanceSession.SOURCE_PHONE);
+        s.setFieldNote(note(fieldNote));
         // Verify against the employee's required method (geo-fence / biometric). Soft: never blocks,
         // flags for HR approval on failure. Stamps the result onto the session.
         verificationService.verify(s, employee, biometricVerified);
@@ -108,15 +116,31 @@ public class EmployeeTimeService {
         return attendanceRepository.save(att);
     }
 
+    public Attendance clockOut(User user, DeviceBindingService.DeviceCheck deviceCheck) {
+        return clockOut(user, deviceCheck, null, null, null, null);
+    }
+
+    /** Clock-out with optional location + note (recorded as evidence; required for field punches to be judged). */
     @LogActivity(module = "ATTENDANCE", action = "CLOCK_OUT")
     @Transactional
-    public Attendance clockOut(User user, DeviceBindingService.DeviceCheck deviceCheck) {
+    public Attendance clockOut(User user, DeviceBindingService.DeviceCheck deviceCheck,
+                              BigDecimal lat, BigDecimal lng, Integer accuracyMeters, String fieldNote) {
         Employee employee = requireEmployee(user);
         Attendance att = todayRow(employee.getId());
         AttendanceSession s = att == null ? null : openSession(att);
         if (s == null) throw new IllegalStateException("You are not clocked in.");
         if (s.getBreakStart() != null) closeBreak(s, LocalTime.now()); // auto-close a still-open break
         s.setCheckOutTime(LocalTime.now().withNano(0));
+        s.setCheckOutSource(AttendanceSession.SOURCE_PHONE);
+        s.setCheckOutLat(lat);
+        s.setCheckOutLng(lng);
+        s.setCheckOutAccuracy(accuracyMeters);
+        String outNote = note(fieldNote);
+        if (outNote != null) {
+            String merged = s.getFieldNote() == null ? "Out: " + outNote : s.getFieldNote() + " · Out: " + outNote;
+            s.setFieldNote(merged.length() > 255 ? merged.substring(0, 255) : merged);
+        }
+        verificationService.markFieldClockOut(s, employee);
         verificationService.applyDevice(s, employee, deviceCheck, "Clock-out");
         sessionRepository.save(s);
 
@@ -215,6 +239,8 @@ public class EmployeeTimeService {
         m.put("todayHours", live[0]);
         m.put("todayOvertime", live[1]);
         m.put("todayEarnings", live[2]);
+        // Time waiting for admin approval — not in todayHours/earnings until approved.
+        m.put("todayPendingHours", hours(pendingMinutes(today, asOf)));
         m.put("weekEarnings", earningsBetween(employee, startOfWeek(LocalDate.now()), LocalDate.now(), asOf));
         m.put("monthEarnings", earningsBetween(employee, LocalDate.now().withDayOfMonth(1), LocalDate.now(), asOf));
 
@@ -239,6 +265,11 @@ public class EmployeeTimeService {
             sm.put("flagged", Boolean.TRUE.equals(s.getFlagged()));
             sm.put("flagReason", s.getFlagReason());
             sm.put("approvalStatus", s.getApprovalStatus());
+            sm.put("payable", s.isPayable());
+            sm.put("approvalNote", s.getApprovalNote());
+            sm.put("checkInSource", s.getCheckInSource());
+            sm.put("checkOutSource", s.getCheckOutSource());
+            sm.put("fieldNote", s.getFieldNote());
             sm.put("deviceVerified", Boolean.TRUE.equals(s.getDeviceVerified()));
             sm.put("deviceMismatchReason", s.getDeviceMismatchReason());
             sessionList.add(sm);
@@ -348,8 +379,11 @@ public class EmployeeTimeService {
             payableMin = payableMinutes(att.getCheckInTime(), att.getCheckOutTime(), att.getBreakStart(),
                     att.getBreakMinutes(), asOf);
         } else {
+            // Only payable sessions count: a flagged session waits for admin approval and a rejected
+            // one never counts (see AttendanceSession#isPayable). Pending time is reported separately.
             long sum = 0;
             for (AttendanceSession s : sessions) {
+                if (!s.isPayable()) continue;
                 sum += payableMinutes(s.getCheckInTime(), s.getCheckOutTime(), s.getBreakStart(), s.getBreakMinutes(), asOf);
             }
             payableMin = sum;
@@ -372,6 +406,21 @@ public class EmployeeTimeService {
         BigDecimal regularEarnings = regular.multiply(regularRate(employee, weekend)).setScale(2, RoundingMode.HALF_UP);
         BigDecimal overtimeEarnings = overtime.multiply(overtimeRate(employee)).setScale(2, RoundingMode.HALF_UP);
         return new BigDecimal[]{workedHours, overtime, regularEarnings, overtimeEarnings};
+    }
+
+    /** Minutes of a day's sessions still waiting for admin approval (not paid until approved). */
+    private long pendingMinutes(Attendance att, LocalTime asOf) {
+        if (att == null) return 0;
+        long sum = 0;
+        for (AttendanceSession s : sessionsOf(att)) {
+            if (!s.isAwaitingApproval()) continue;
+            sum += payableMinutes(s.getCheckInTime(), s.getCheckOutTime(), s.getBreakStart(), s.getBreakMinutes(), asOf);
+        }
+        return sum;
+    }
+
+    private static BigDecimal hours(long minutes) {
+        return BigDecimal.valueOf(minutes).divide(BigDecimal.valueOf(60), 2, RoundingMode.HALF_UP);
     }
 
     /** Payable minutes of a single session: (out|asOf − in) minus break (accumulated + any open break). */
@@ -411,7 +460,11 @@ public class EmployeeTimeService {
         BigDecimal worked = BigDecimal.ZERO, ot = BigDecimal.ZERO, regHrs = BigDecimal.ZERO;
         BigDecimal regEarn = BigDecimal.ZERO, otEarn = BigDecimal.ZERO;
         int days = 0;
+        long pendingMin = 0;
+        int pendingSessions = 0;
         for (Attendance a : attendanceRepository.findByEmployeeIdAndDateBetween(employee.getId(), from, to)) {
+            pendingMin += pendingMinutes(a, LocalTime.now());
+            pendingSessions += (int) sessionsOf(a).stream().filter(AttendanceSession::isAwaitingApproval).count();
             BigDecimal[] b = computeBreakdown(a, employee, LocalTime.now()); // closed sessions ignore asOf
 
             if (b[0].signum() <= 0) continue;
@@ -429,10 +482,19 @@ public class EmployeeTimeService {
         m.put("regularEarnings", regEarn.setScale(2, RoundingMode.HALF_UP));
         m.put("overtimeEarnings", otEarn.setScale(2, RoundingMode.HALF_UP));
         m.put("attendanceDays", days);
+        // Flagged punches still waiting for an admin — NOT included in the figures above.
+        m.put("pendingHours", hours(pendingMin));
+        m.put("pendingSessions", pendingSessions);
         return m;
     }
 
     private static BigDecimal nz(BigDecimal v, BigDecimal d) { return v == null ? d : v; }
+
+    private static String note(String s) {
+        if (s == null || s.isBlank()) return null;
+        String t = s.trim();
+        return t.length() > 200 ? t.substring(0, 200) : t;
+    }
 
     private static LocalDate startOfWeek(LocalDate d) {
         return d.with(WeekFields.of(Locale.getDefault()).dayOfWeek(), 1);

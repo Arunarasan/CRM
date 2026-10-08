@@ -310,6 +310,8 @@ public class PayrollService {
     private static final class PayCalc {
         BigDecimal workedHours, regularHours, overtimeHours;
         int attendanceDays;
+        BigDecimal pendingHours = BigDecimal.ZERO; // flagged punches awaiting approval — not paid yet
+        int pendingSessions;
         BigDecimal standardHours, monthlySalary;
         // HOURLY
         BigDecimal hourlyRate, hourlyOtRate, hourlyRegular, hourlyOt;
@@ -329,6 +331,8 @@ public class PayrollService {
         c.regularHours = (BigDecimal) sum.get("regularHours");
         c.overtimeHours = (BigDecimal) sum.get("overtimeHours");
         c.attendanceDays = (int) sum.get("attendanceDays");
+        c.pendingHours = (BigDecimal) sum.getOrDefault("pendingHours", BigDecimal.ZERO);
+        c.pendingSessions = (int) sum.getOrDefault("pendingSessions", 0);
 
         BigDecimal stdDaily = e.getStandardDailyHours() != null && e.getStandardDailyHours().signum() > 0
                 ? e.getStandardDailyHours() : new BigDecimal("8");
@@ -424,6 +428,8 @@ public class PayrollService {
         m.put("regularHours", c.regularHours);
         m.put("overtimeHours", c.overtimeHours);
         m.put("attendanceDays", c.attendanceDays);
+        m.put("pendingHours", c.pendingHours);
+        m.put("pendingSessions", c.pendingSessions);
         m.put("standardHours", c.standardHours);
         m.put("defaultBasis", defaultBasis(e, c));
 

@@ -42,6 +42,9 @@ public class SecurityConfig {
                         // POSTs. Everything under /api/portal/** and the rest stays authenticated.
                         .requestMatchers("/api/public/**").permitAll()
                         .requestMatchers("/uploads/**").permitAll()
+                        // Fingerprint machines (ADMS push) can't log in; AdmsController admits them by
+                        // registered serial number instead.
+                        .requestMatchers("/iclock/**").permitAll()
                         .requestMatchers("/health", "/api/health").permitAll()
                         .requestMatchers("/actuator/**").permitAll()
                         .anyRequest().authenticated()

@@ -60,6 +60,12 @@ public class AttendanceAdminController {
         return ResponseEntity.ok(adminService.listPending());
     }
 
+    @GetMapping("/pending/count")
+    @PreAuthorize(HR_READ)
+    public ResponseEntity<Map<String, Object>> pendingCount() {
+        return ResponseEntity.ok(Map.of("count", adminService.countPending()));
+    }
+
     @PostMapping("/sessions/{id}/approve")
     @PreAuthorize(HR_WRITE)
     public ResponseEntity<Map<String, Object>> approve(@PathVariable Long id) {
@@ -68,8 +74,17 @@ public class AttendanceAdminController {
 
     @PostMapping("/sessions/{id}/reject")
     @PreAuthorize(HR_WRITE)
-    public ResponseEntity<Map<String, Object>> reject(@PathVariable Long id) {
-        return ResponseEntity.ok(adminService.resolve(id, false, actor()));
+    public ResponseEntity<Map<String, Object>> reject(@PathVariable Long id,
+                                                      @RequestBody(required = false) Map<String, String> body) {
+        return ResponseEntity.ok(adminService.resolve(id, false, actor(), body == null ? null : body.get("reason")));
+    }
+
+    /** Approve several flagged clock-ins at once: body {"sessionIds": [1, 2, 3]}. */
+    @PostMapping("/sessions/approve-many")
+    @PreAuthorize(HR_WRITE)
+    public ResponseEntity<Map<String, Object>> approveMany(@RequestBody Map<String, List<Long>> body) {
+        int n = adminService.approveMany(body == null ? null : body.get("sessionIds"), actor());
+        return ResponseEntity.ok(Map.of("approved", n));
     }
 
     // --- biometric method-change requests ----------------------------------

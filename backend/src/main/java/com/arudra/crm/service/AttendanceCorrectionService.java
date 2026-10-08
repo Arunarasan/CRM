@@ -158,16 +158,20 @@ public class AttendanceCorrectionService {
             s.setVerified(true);
             s.setFlagged(false);
             s.setVerificationMethod("MANUAL");
+            s.setCheckInSource(AttendanceSession.SOURCE_MANUAL);
+            if (reqOut != null) s.setCheckOutSource(AttendanceSession.SOURCE_MANUAL);
             sessionRepository.save(s);
         } else {
             if (reqIn != null) {
                 AttendanceSession first = sessions.get(0);
                 first.setCheckInTime(reqIn);
+                first.setCheckInSource(AttendanceSession.SOURCE_MANUAL);
                 sessionRepository.save(first);
             }
             if (reqOut != null) {
                 AttendanceSession last = sessions.get(sessions.size() - 1);
                 last.setCheckOutTime(reqOut);
+                last.setCheckOutSource(AttendanceSession.SOURCE_MANUAL);
                 sessionRepository.save(last);
             }
         }

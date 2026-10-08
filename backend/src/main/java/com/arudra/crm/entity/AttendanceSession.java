@@ -109,4 +109,53 @@ public class AttendanceSession extends BaseEntity {
 
     @Column(name = "device_mismatch_reason", length = 255)
     private String deviceMismatchReason;
+
+    /** Where the clock-in came from: PHONE (portal) | MACHINE (fingerprint machine) | MANUAL (HR). */
+    @Column(name = "check_in_source", nullable = false, length = 20)
+    private String checkInSource = SOURCE_PHONE;
+
+    /** Where the clock-out came from (same values); null while the session is still open. */
+    @Column(name = "check_out_source", length = 20)
+    private String checkOutSource;
+
+    /** The fingerprint machine that produced this session, for MACHINE sessions. */
+    @JsonIgnore
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "machine_id")
+    private AttendanceMachine machine;
+
+    @Column(name = "check_out_lat", precision = 10, scale = 6)
+    private BigDecimal checkOutLat;
+
+    @Column(name = "check_out_lng", precision = 10, scale = 6)
+    private BigDecimal checkOutLng;
+
+    @Column(name = "check_out_accuracy")
+    private Integer checkOutAccuracy;
+
+    /** Employee's "where I am" note on a field punch. */
+    @Column(name = "field_note", length = 255)
+    private String fieldNote;
+
+    /** Reason given by the admin when rejecting (shown to the employee). */
+    @Column(name = "approval_note", length = 255)
+    private String approvalNote;
+
+    public static final String SOURCE_PHONE = "PHONE";
+    public static final String SOURCE_MACHINE = "MACHINE";
+    public static final String SOURCE_MANUAL = "MANUAL";
+
+    /**
+     * Whether this session's time counts toward hours and pay: unflagged sessions always do; a
+     * flagged one only once an admin APPROVED it. PENDING waits, REJECTED never counts.
+     */
+    public boolean isPayable() {
+        if (!Boolean.TRUE.equals(flagged)) return true;
+        return "APPROVED".equals(approvalStatus);
+    }
+
+    /** Flagged and still waiting for an admin decision. */
+    public boolean isAwaitingApproval() {
+        return Boolean.TRUE.equals(flagged) && (approvalStatus == null || "PENDING".equals(approvalStatus));
+    }
 }

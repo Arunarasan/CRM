@@ -28,6 +28,9 @@ public class AttendanceAdminService {
     @Autowired private AttendanceLocationRepository locationRepository;
     @Autowired private AttendanceSessionRepository sessionRepository;
     @Autowired private EmployeeRepository employeeRepository;
+    @Autowired private EmployeeTimeService timeService;
+    @Autowired private com.arudra.crm.repository.UserRepository userRepository;
+    @Autowired private NotificationService notificationService;
 
     // --- office geofences --------------------------------------------------
 
@@ -72,15 +75,62 @@ public class AttendanceAdminService {
         return out;
     }
 
+    /** How many clock-ins are waiting for an admin — drives the menu badge. */
+    @Transactional(readOnly = true)
+    public long countPending() {
+        return sessionRepository.countByFlaggedTrueAndApprovalStatus("PENDING");
+    }
+
     @Transactional
     public Map<String, Object> resolve(Long sessionId, boolean approve, String username) {
+        return resolve(sessionId, approve, username, null);
+    }
+
+    /**
+     * Approve or reject a flagged session. The day's hours/earnings are recomputed straight away:
+     * approved time starts counting toward pay, rejected time never does.
+     */
+    @Transactional
+    public Map<String, Object> resolve(Long sessionId, boolean approve, String username, String note) {
         AttendanceSession s = sessionRepository.findById(sessionId)
                 .orElseThrow(() -> new IllegalArgumentException("Attendance session not found."));
         s.setApprovalStatus(approve ? "APPROVED" : "REJECTED");
         s.setApprovedBy(username);
         s.setApprovedAt(LocalDateTime.now());
+        s.setApprovalNote(note == null || note.isBlank() ? null : note.trim().substring(0, Math.min(255, note.trim().length())));
         sessionRepository.save(s);
+        timeService.recomputeAggregate(s.getAttendance());
+        notifyEmployee(s, approve);
         return toReviewRow(s);
+    }
+
+    /** Approve several flagged sessions at once; returns how many were approved. */
+    @Transactional
+    public int approveMany(List<Long> sessionIds, String username) {
+        int n = 0;
+        for (Long id : sessionIds == null ? List.<Long>of() : sessionIds) {
+            AttendanceSession s = sessionRepository.findById(id).orElse(null);
+            if (s == null || !s.isAwaitingApproval()) continue;
+            resolve(id, true, username, null);
+            n++;
+        }
+        return n;
+    }
+
+    private void notifyEmployee(AttendanceSession s, boolean approve) {
+        try {
+            Employee e = s.getAttendance().getEmployee();
+            if (e == null || e.getEmail() == null) return;
+            userRepository.findByEmail(e.getEmail()).ifPresent(u -> notificationService.dispatch(
+                    approve ? "Attendance approved" : "Attendance rejected",
+                    "Your punch on " + s.getAttendance().getDate()
+                            + (s.getCheckInTime() != null ? " at " + s.getCheckInTime().toString().substring(0, 5) : "")
+                            + (approve ? " was approved." : " was rejected"
+                            + (s.getApprovalNote() != null ? ": " + s.getApprovalNote() : ".")),
+                    "ATTENDANCE", u.getId(), "/employee"));
+        } catch (Exception ignored) {
+            // notification is best-effort; the decision itself is already saved
+        }
     }
 
     // --- biometric method-change requests (self-service from the portal) ---
@@ -125,6 +175,15 @@ public class AttendanceAdminService {
                 : (nz(emp.getFirstName()) + " " + nz(emp.getLastName())).trim());
         m.put("date", att == null ? null : att.getDate());
         m.put("checkInTime", s.getCheckInTime());
+        m.put("checkOutTime", s.getCheckOutTime());
+        m.put("checkInSource", s.getCheckInSource());
+        m.put("checkOutSource", s.getCheckOutSource());
+        m.put("fieldNote", s.getFieldNote());
+        m.put("outLat", s.getCheckOutLat());
+        m.put("outLng", s.getCheckOutLng());
+        m.put("outAccuracyMeters", s.getCheckOutAccuracy());
+        m.put("machineName", s.getMachine() == null ? null : s.getMachine().getName());
+        m.put("approvalNote", s.getApprovalNote());
         m.put("verificationMethod", s.getVerificationMethod());
         m.put("flagReason", s.getFlagReason());
         m.put("deviceVerified", Boolean.TRUE.equals(s.getDeviceVerified()));

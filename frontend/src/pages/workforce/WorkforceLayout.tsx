@@ -4,6 +4,7 @@ import {
   ClipboardList, Award, Wallet, Clock3, Network, Star,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { usePendingAttendanceCount } from "@/pages/hr/machineAdmin";
 
 /**
  * Single "HR & Payroll" module home. Merges the old standalone /hr (Human Resources)
@@ -62,6 +63,7 @@ export default function WorkforceLayout() {
   // everything rather than hiding the HR tabs (backend still enforces access).
   const legacySession = authorities.length === 0;
   const canSeeHr = legacySession || hasAuthority("PAYROLL_READ");
+  const pendingAttendance = usePendingAttendanceCount(canSeeHr);
 
   const groups = GROUPS
     .map((g) => ({ ...g, tabs: g.tabs.filter((t) => canSeeHr || !t.hr) }))
@@ -106,6 +108,9 @@ export default function WorkforceLayout() {
                       isActive ? "border-primary text-primary" : "border-transparent text-slate-500 hover:text-slate-900"}`}>
                   <Icon className="h-4 w-4" />
                   {label}
+                  {to === "/workforce/attendance" && pendingAttendance > 0 && (
+                    <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">{pendingAttendance}</span>
+                  )}
                 </NavLink>
               ))}
             </div>

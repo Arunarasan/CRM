@@ -15,4 +15,6 @@ public interface AttendanceSessionRepository extends JpaRepository<AttendanceSes
 
     /** Flagged clock-ins awaiting HR review (attendance verification, newest first). */
     List<AttendanceSession> findByFlaggedTrueAndApprovalStatusOrderByIdDesc(String approvalStatus);
+
+    long countByFlaggedTrueAndApprovalStatus(String approvalStatus);
 }

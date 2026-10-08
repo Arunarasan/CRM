@@ -15,6 +15,7 @@ import { useAuth } from "@/hooks/useAuth";
 import Logo from "@/components/brand/Logo";
 import { getCurrentUser } from "@/lib/currentUser";
 import { useT } from "@/i18n";
+import { usePendingAttendanceCount } from "@/pages/hr/machineAdmin";
 
 /**
  * Sidebar entries gated by the authority needed to actually use the module (matching the
@@ -69,6 +70,8 @@ export default function DashboardLayout() {
   const legacySession = authorities.length === 0;
   const canSee = (item: { authority: string | null; adminOnly?: boolean }) =>
     legacySession || (item.adminOnly ? isAdmin : item.authority === null || hasAuthority(item.authority));
+  // Clock-ins waiting for an admin (field punches, failed checks) — shown on the HR & Payroll item.
+  const pendingAttendance = usePendingAttendanceCount(canSee({ authority: "WORKFORCE_READ" }));
 
   useEffect(() => {
     fetchUnreadCount();
@@ -112,6 +115,12 @@ export default function DashboardLayout() {
           {({ isActive }) => (
             <>
               <NavItemInner Icon={item.icon} label={t(item.labelKey)} isActive={isActive} mini={mini} />
+              {!mini && item.to === "/workforce" && pendingAttendance > 0 && (
+                <span className="min-w-[20px] rounded-full bg-amber-400 px-1.5 py-0.5 text-center text-[10px] font-bold text-amber-950"
+                      title={`${pendingAttendance} clock-in${pendingAttendance === 1 ? "" : "s"} waiting for approval`}>
+                  {pendingAttendance > 99 ? "99+" : pendingAttendance}
+                </span>
+              )}
               {!mini && item.underMaintenance && (
                 <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gold/20 text-[#F0D19B] border border-gold/30">
                   Maint.

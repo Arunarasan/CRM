@@ -15,3 +15,16 @@ jbdecorcdm.com {
     encode zstd gzip
     reverse_proxy web:80
 }
+
+# Office fingerprint machines (ZKTeco / eSSL, ADMS push) usually can't speak HTTPS, so /iclock/* is
+# also served over plain HTTP. Everything else on port 80 still redirects to HTTPS. Defining this
+# http:// site replaces Caddy's automatic redirect for the host (hence the explicit redir below);
+# Let's Encrypt HTTP-01 challenges on port 80 keep working.
+http://jbdecorcdm.com {
+    handle /iclock/* {
+        reverse_proxy web:80
+    }
+    handle {
+        redir https://{host}{uri} permanent
+    }
+}
