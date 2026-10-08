@@ -99,6 +99,10 @@ public class LeadSpecification {
     private static final String COLLECT_REQUIREMENT_CODE = "TT_COLLECT_REQUIREMENT";
     private static final String CALL_SOURCE = "Call Recording";
 
+    public static Specification<Lead> idIn(java.util.Collection<Long> ids) {
+        return (root, query, cb) -> root.get("id").in(ids);
+    }
+
     public static Specification<Lead> journeyStage(String stage) {
         return (root, query, cb) -> {
             if (stage == null || stage.isEmpty()) return null;

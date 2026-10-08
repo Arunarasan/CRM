@@ -21,7 +21,7 @@ import { CATEGORY_GROUPS, EnquiryTag, categoryGroupOf, enquiryDetails, enquiryTy
 import {
   BOARD_DROP_STATUS, EMPTY_FILTERS, ENQUIRY_TYPES, formatFollowUp, LEAD_SOURCES, LEAD_STAGES, LEAD_STATUSES, LEAD_TYPES,
   PRIORITIES, TEMPERATURES, TEMPERATURE_STYLES, avatarColor, followUpTone,
-  formatINR, initials, relativeTime, statusStyle, type BoardColumn,
+  formatINR, initials, relativeTime, statusStyle, JOURNEY_STAGE_META, type BoardColumn,
   type DashboardMetrics, type Lead, type LeadFilters, type LeadPeriodStats, type UserSummary,
 } from "./leads/constants";
 
@@ -363,11 +363,25 @@ export default function Leads() {
       ),
     },
     {
-      key: "status", header: "Status", cellClassName: "whitespace-nowrap", cell: (l) => (
-        <span className={`px-2 py-0.5 text-[11px] rounded-full font-semibold ${statusStyle(l.status)}`}>
-          {l.status || "—"}
-        </span>
-      ),
+      key: "status", header: "Stage", cellClassName: "whitespace-nowrap", cell: (l) => {
+        // The auto-worked-out journey stage (same as the cards); the manual status sits underneath.
+        const meta = l.journeyStage ? JOURNEY_STAGE_META[l.journeyStage] : undefined;
+        if (!meta) {
+          return (
+            <span className={`px-2 py-0.5 text-[11px] rounded-full font-semibold ${statusStyle(l.status)}`}>
+              {l.status || "—"}
+            </span>
+          );
+        }
+        return (
+          <div className="flex flex-col items-start gap-0.5">
+            <span className={`px-2 py-0.5 text-[11px] rounded-full font-semibold ${meta.className}`}>{meta.label}</span>
+            {l.status && l.journeyStage !== "LOST" && (
+              <span className="text-[10.5px] text-muted-foreground">Status: {l.status}</span>
+            )}
+          </div>
+        );
+      },
     },
     {
       key: "next", header: "Next Follow-up", cellClassName: "whitespace-nowrap text-sm", cell: (l) => {

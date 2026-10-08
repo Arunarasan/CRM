@@ -311,6 +311,8 @@ export interface Lead {
   lastContactAt?: string;
   followUpCount?: number;
   isConverted: boolean;
+  /** Computed on the list: which stage card the lead sits in. */
+  journeyStage?: JourneyStage;
   convertedToCustomer?: { id: number; name?: string };
   convertedToProject?: { id: number; projectName?: string };
   convertedDate?: string;
@@ -400,6 +402,17 @@ export interface LeadPeriodStats {
   conversionRate: string;       // e.g. "42.5%"
   conversionRatePercent: number; // e.g. 42.5
 }
+
+export type JourneyStage = "REQUIREMENT" | "QUOTE" | "PROJECT" | "COMPLETED" | "LOST";
+
+/** Label + pill colours for each journey stage — matches the Leads page stage cards. */
+export const JOURNEY_STAGE_META: Record<JourneyStage, { label: string; className: string }> = {
+  REQUIREMENT: { label: "Calls & Requirement", className: "bg-violet-100 text-violet-700" },
+  QUOTE: { label: "Quote Pending", className: "bg-amber-100 text-amber-800" },
+  PROJECT: { label: "Project Approved", className: "bg-cyan-100 text-cyan-700" },
+  COMPLETED: { label: "Completed", className: "bg-green-100 text-green-700" },
+  LOST: { label: "Lost", className: "bg-rose-100 text-rose-700" },
+};
 
 export interface LeadFilters {
   status: string;

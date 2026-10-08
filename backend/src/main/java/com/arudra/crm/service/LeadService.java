@@ -116,7 +116,24 @@ public class LeadService {
                 .and(LeadSpecification.listContains("requirementService", service))
                 .and(LeadSpecification.matchesSearch(search));
 
-        return leadRepository.findAll(spec, pageRequest);
+        Page<Lead> result = leadRepository.findAll(spec, pageRequest);
+        fillJourneyStages(result.getContent());
+        return result;
+    }
+
+    /** Tags each lead with its journey stage — the same rule as the stage cards, one query per stage. */
+    private void fillJourneyStages(List<Lead> leads) {
+        if (leads.isEmpty()) return;
+        Map<Long, Lead> byId = new HashMap<>();
+        leads.forEach(l -> byId.put(l.getId(), l));
+        for (Lead l : leads) {
+            if ("lost".equalsIgnoreCase(l.getStatus())) l.setJourneyStage("LOST");
+        }
+        for (String stage : LeadSpecification.JOURNEY_STAGES) {
+            leadRepository.findAll(Specification.where(LeadSpecification.idIn(byId.keySet()))
+                    .and(LeadSpecification.journeyStage(stage)))
+                    .forEach(l -> byId.get(l.getId()).setJourneyStage(stage));
+        }
     }
 
     public List<Map<String, Object>> getCategoryCounts() {

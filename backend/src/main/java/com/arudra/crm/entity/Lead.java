@@ -350,6 +350,10 @@ public class Lead extends BaseEntity {
     @Column(name = "is_converted", nullable = false)
     private Boolean isConverted = false;
 
+    /** Computed for the Leads list only (REQUIREMENT / QUOTE / PROJECT / COMPLETED / LOST) — not stored. */
+    @Transient
+    private String journeyStage;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "converted_customer_id")
     @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "assignedEmployee", "tags"})
