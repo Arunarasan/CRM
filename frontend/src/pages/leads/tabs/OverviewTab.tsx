@@ -1,8 +1,9 @@
 import { BaseInput } from '@/components/ui/input';
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
-  Pencil, Check, X, Star, Users, MapPin, Home, ListChecks, Share2, XCircle, Sparkles, Phone,
-  MessageCircle, Contact as ContactIcon, Navigation, Plus, Clock,
+  Pencil, Check, X, Star, Users, MapPin, Home, ListChecks, Share2, XCircle, Sparkles,
+  Contact as ContactIcon, Navigation, Plus, Clock, CalendarDays, Wallet, TrendingUp,
+  CalendarClock, UserCircle2, Megaphone, AlertCircle, ChevronDown, History,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
@@ -10,21 +11,25 @@ import api from "@/lib/api";
 import { leadApi } from "../leadApi";
 import {
   CONSTRUCTION_STATUSES, LEAD_SOURCES, LEAD_TYPES, PRIORITIES, REFERRAL_TYPES, TEMPERATURES,
-  formatDate, formatDateTime, formatFollowUp, formatINR, avatarColor, initials,
+  formatDate, formatDateTime, formatINR, avatarColor, initials, followUpTone,
   type Lead, type UserSummary,
 } from "../constants";
 import ExistingCustomerSearch from "@/pages/customers/ExistingCustomerSearch";
 import { EnquiryTag, enquiryDetails, enquiryTypeOf } from "../enquiry";
 
-// The Overview is ONE "Lead details" card. Read mode shows only what has actually been entered,
-// grouped into sections (a section with nothing filled in disappears) plus a "Not filled yet" line so
-// gaps stay discoverable. One Edit turns the whole card into a single form with one Save — the lead
-// fields go through the full-lead update (a full replace, so edits are merged onto the whole lead),
-// the team through the assignment endpoint and the referral through its own endpoint.
+// Overview = what a salesperson needs first, then the details.
+//   1. Key facts strip — budget, expected value, next follow-up, owner, source.
+//   2. "Needed for the next step" — only the gaps that block the lead's current stage.
+//   3. Main column: Requirement, Property. Side column: Site, Deal, Dates, Team, Referral,
+//      More contact, Record (on phones the side extras fold under "More details").
+// Read mode skips what the page header already shows (name, mobile, WhatsApp, email, rating).
+// Editing is still ONE form with one Save — a section's pencil just opens it at that section.
+// Lead fields go through the full-lead update (a full replace, so edits are merged onto the whole
+// lead), the team through the assignment endpoint and the referral through its own endpoint.
 
 type IconType = React.ComponentType<{ className?: string }>;
 type Kind = "text" | "tel" | "email" | "number" | "money" | "date" | "select" | "area";
-type Custom = "category" | "products" | "scope" | "rating" | "phone" | "map";
+type Custom = "category" | "products" | "scope" | "rating" | "map";
 
 interface FieldDef {
   key: keyof Lead & string;
@@ -42,9 +47,21 @@ const SCOPE_FLAGS: Array<[keyof Lead & string, string]> = [
   ["reqElectrical", "Electrical"], ["reqPlumbing", "Plumbing"], ["reqWoodFinish", "Wood Finish"],
 ];
 
-const SECTIONS: { id: string; title: string; icon: IconType; wide?: boolean; fields: FieldDef[] }[] = [
+type SectionId = "requirement" | "property" | "site" | "deal" | "dates" | "contact";
+interface SectionDef {
+  id: SectionId;
+  title: string;
+  readTitle?: string;
+  icon: IconType;
+  side?: boolean;
+  fields: FieldDef[];
+  /** Edited here but not listed in read mode (the page header or key-facts strip shows them). */
+  editOnly?: string[];
+}
+
+const SECTIONS: SectionDef[] = [
   {
-    id: "requirement", title: "Requirement", icon: ListChecks, wide: true,
+    id: "requirement", title: "Requirement", icon: ListChecks,
     fields: [
       { key: "requirementCategory", label: "Categories", custom: "category" },
       { key: "requirementProduct", label: "Products", custom: "products" },
@@ -56,23 +73,25 @@ const SECTIONS: { id: string; title: string; icon: IconType; wide?: boolean; fie
     ],
   },
   {
-    id: "contact", title: "Contact", icon: ContactIcon,
+    id: "property", title: "Property & preferences", icon: Home,
     fields: [
-      { key: "name", label: "Customer name" },
-      { key: "mobileNumber", label: "Mobile", kind: "tel", custom: "phone" },
-      { key: "alternateMobile", label: "Alternate mobile", kind: "tel" },
-      { key: "whatsappNumber", label: "WhatsApp", kind: "tel" },
-      { key: "email", label: "Email", kind: "email" },
-      { key: "companyName", label: "Company" },
-      { key: "contactPerson", label: "Contact person" },
-      { key: "gstNumber", label: "GST number" },
+      { key: "propertyType", label: "Property type", placeholder: "e.g. Flat" },
+      { key: "propertyName", label: "Property / building" },
+      { key: "currentConstructionStage", label: "Construction status", kind: "select", options: CONSTRUCTION_STATUSES },
+      { key: "floorCount", label: "Floors", kind: "number" },
+      { key: "areaSqft", label: "Total area (sq.ft)", kind: "number" },
+      { key: "expectedWorkArea", label: "Area to work on (sq.ft)", kind: "number" },
+      { key: "preferredDesignStyle", label: "Design style", placeholder: "e.g. Modern" },
+      { key: "preferredMaterial", label: "Preferred material" },
+      { key: "preferredColorTheme", label: "Colour theme" },
+      { key: "estimatedDuration", label: "Work duration", placeholder: "e.g. 6 weeks" },
     ],
   },
   {
-    id: "location", title: "Location", icon: MapPin,
+    id: "site", title: "Site", icon: MapPin, side: true,
     fields: [
-      { key: "siteAddress", label: "Site address", kind: "area", full: true, custom: "map" },
-      { key: "address", label: "Address", kind: "area", full: true, custom: "map" },
+      { key: "siteAddress", label: "Site address (work location)", kind: "area", full: true, custom: "map" },
+      { key: "address", label: "Billing / home address", kind: "area", full: true, custom: "map" },
       { key: "landmark", label: "Landmark" },
       { key: "city", label: "City" },
       { key: "district", label: "District" },
@@ -81,22 +100,8 @@ const SECTIONS: { id: string; title: string; icon: IconType; wide?: boolean; fie
     ],
   },
   {
-    id: "property", title: "Property", icon: Home,
-    fields: [
-      { key: "propertyType", label: "Property type", placeholder: "e.g. Flat" },
-      { key: "propertyName", label: "Property / building" },
-      { key: "currentConstructionStage", label: "Construction status", kind: "select", options: CONSTRUCTION_STATUSES },
-      { key: "floorCount", label: "Floors", kind: "number" },
-      { key: "areaSqft", label: "Area (sq.ft)", kind: "number" },
-      { key: "expectedWorkArea", label: "Work area (sq.ft)", kind: "number" },
-      { key: "preferredDesignStyle", label: "Design style", placeholder: "e.g. Modern" },
-      { key: "preferredMaterial", label: "Preferred material" },
-      { key: "preferredColorTheme", label: "Colour theme" },
-      { key: "estimatedDuration", label: "Duration" },
-    ],
-  },
-  {
-    id: "deal", title: "Deal", icon: Sparkles,
+    id: "deal", title: "Deal", icon: Sparkles, side: true,
+    editOnly: ["estimatedBudget", "minimumBudget", "maximumBudget", "expectedProjectValue", "leadSource", "rating"],
     fields: [
       { key: "estimatedBudget", label: "Estimated budget", kind: "money" },
       { key: "minimumBudget", label: "Budget from", kind: "money" },
@@ -108,12 +113,38 @@ const SECTIONS: { id: string; title: string; icon: IconType; wide?: boolean; fie
       { key: "priority", label: "Priority", kind: "select", options: PRIORITIES },
       { key: "leadTemperature", label: "Temperature", kind: "select", options: TEMPERATURES },
       { key: "rating", label: "Rating", custom: "rating" },
+    ],
+  },
+  {
+    id: "dates", title: "Dates", icon: CalendarDays, side: true,
+    fields: [
       { key: "expectedStartDate", label: "Expected start", kind: "date" },
-      { key: "expectedEndDate", label: "Expected completion", kind: "date" },
-      { key: "preferredCompletionDate", label: "Customer's target date", kind: "date" },
+      { key: "expectedEndDate", label: "Our estimated completion", kind: "date" },
+      { key: "preferredCompletionDate", label: "Customer's deadline", kind: "date" },
+    ],
+  },
+  {
+    id: "contact", title: "Contact", readTitle: "More contact", icon: ContactIcon, side: true,
+    editOnly: ["name", "mobileNumber", "whatsappNumber", "email"],
+    fields: [
+      { key: "name", label: "Customer name" },
+      { key: "mobileNumber", label: "Mobile", kind: "tel" },
+      { key: "alternateMobile", label: "Alternate mobile", kind: "tel" },
+      { key: "whatsappNumber", label: "WhatsApp", kind: "tel" },
+      { key: "email", label: "Email", kind: "email" },
+      { key: "companyName", label: "Company" },
+      { key: "contactPerson", label: "Contact person" },
+      { key: "gstNumber", label: "GST number" },
     ],
   },
 ];
+const sectionById = (id: SectionId) => SECTIONS.find((s) => s.id === id)!;
+
+/** What blocks the lead's current stage — listed in "Needed for the next step". */
+const NEXT_STEP_NEEDS: Record<string, { title: string; keys: string[] }> = {
+  REQUIREMENT: { title: "Needed to finish the requirement", keys: ["requirementCategory", "roomsRequired", "reqKitchen", "siteAddress"] },
+  QUOTE: { title: "Needed for the quote", keys: ["siteAddress", "areaSqft", "propertyType", "budget"] },
+};
 
 const TEAM_ROLES = ["Sales Executive", "Designer", "Engineer", "Project Manager"] as const;
 type Role = (typeof TEAM_ROLES)[number];
@@ -127,12 +158,6 @@ type ReferralDraft = {
 const LEAD_KEYS = SECTIONS.flatMap((s) => s.fields.map((f) => f.key))
   .concat(SCOPE_FLAGS.map(([k]) => k));
 
-const KEY_FIELDS = [
-  "requirementProduct", "estimatedBudget", "siteAddress", "propertyType", "areaSqft",
-  "roomsRequired", "whatsappNumber", "expectedStartDate",
-];
-const keyRank = (k: string) => { const i = KEY_FIELDS.indexOf(k); return i < 0 ? KEY_FIELDS.length : i; };
-
 const filled = (v: unknown) => v !== null && v !== undefined && v !== "" && v !== false;
 const dateInput = (v?: string) => (v ? v.slice(0, 10) : "");
 const splitProducts = (v?: string) => (v || "").split(",").map((s) => s.trim()).filter(Boolean);
@@ -143,6 +168,30 @@ function hasValue(lead: Lead, f: FieldDef): boolean {
   if (f.custom === "scope") return SCOPE_FLAGS.some(([k]) => !!lead[k]);
   if (f.custom === "products") return splitProducts(lead.requirementProduct).length > 0;
   return filled(lead[f.key]);
+}
+
+const FIELD_INDEX: Record<string, { field: FieldDef; section: SectionId }> = Object.fromEntries(
+  SECTIONS.flatMap((s) => s.fields.map((f) => [f.key, { field: f, section: s.id }])),
+);
+const hasBudget = (l: Lead) => [l.estimatedBudget, l.minimumBudget, l.maximumBudget].some(filled);
+
+/** 850000 -> ₹8.5L — compact money for the key-facts strip. */
+function compactINR(v?: number | null): string {
+  const n = Number(v);
+  if (!v || Number.isNaN(n)) return "";
+  const fmt = (x: number, unit: string) => `${Number(x.toFixed(x >= 10 ? 0 : 1))}${unit}`;
+  if (n >= 1e7) return `₹${fmt(n / 1e7, "Cr")}`;
+  if (n >= 1e5) return `₹${fmt(n / 1e5, "L")}`;
+  if (n >= 1e3) return `₹${fmt(n / 1e3, "K")}`;
+  return `₹${n}`;
+}
+
+/** One line from the four budget fields: "₹7L–10L · est ₹8.5L". */
+function budgetLine(l: Lead): string {
+  const min = compactINR(l.minimumBudget), max = compactINR(l.maximumBudget), est = compactINR(l.estimatedBudget);
+  const range = min && max ? `${min}–${max.replace("₹", "")}` : min ? `from ${min}` : max ? `up to ${max}` : "";
+  if (range && est) return `${range} · est ${est}`;
+  return range || est;
 }
 
 function teamOf(lead: Lead): Record<Role, UserSummary | undefined> {
@@ -195,6 +244,7 @@ function saveLeadPatch(lead: Lead, patch: Record<string, any>): Promise<unknown>
   delete payload.projectManager;
   delete payload.convertedToCustomer;
   delete payload.convertedToProject;
+  delete payload.journeyStage; // computed, not a lead column
   // Referral has its own endpoint; drop the nested refs.
   delete payload.referredByCustomer;
   delete payload.referredByEmployee;
@@ -238,11 +288,14 @@ export default function OverviewTab({
 }) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const [draft, setDraft] = useState<Record<string, any>>(() => seedLead(lead));
   const [team, setTeam] = useState<TeamDraft>(() => seedTeam(lead));
   const [referral, setReferral] = useState<ReferralDraft>(() => seedReferral(lead));
   const [categories, setCategories] = useState<{ id: number; name: string; slug: string }[]>([]);
   const [catalog, setCatalog] = useState<{ id: number; name: string; categorySlug?: string }[]>([]);
+  // Where to land when edit opens from a section pencil / "Add" chip.
+  const focusTarget = useRef<{ section: string; field?: string } | null>(null);
 
   // The website catalogue powers the category + product pickers (fetched once, on first edit).
   useEffect(() => {
@@ -251,9 +304,24 @@ export default function OverviewTab({
     api.get("/public/products").then((r) => setCatalog(r.data || [])).catch(() => {});
   }, [editing, categories.length]);
 
-  const start = () => {
-    setDraft(seedLead(lead)); setTeam(seedTeam(lead)); setReferral(seedReferral(lead)); setEditing(true);
+  const start = (section?: string, field?: string) => {
+    setDraft(seedLead(lead)); setTeam(seedTeam(lead)); setReferral(seedReferral(lead));
+    focusTarget.current = section ? { section, field } : null;
+    setEditing(true);
   };
+
+  // After edit opens: scroll to the section / field that was asked for and focus its input.
+  useEffect(() => {
+    const t = focusTarget.current;
+    if (!editing || !t) return;
+    focusTarget.current = null;
+    requestAnimationFrame(() => {
+      const el = (t.field && document.getElementById(`ov-f-${t.field}`)) || document.getElementById(`ov-${t.section}`);
+      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+      el?.querySelector<HTMLElement>("input, textarea, select, button")?.focus({ preventScroll: true });
+    });
+  }, [editing]);
+
   const set = (k: string) => (v: any) => setDraft((d) => ({ ...d, [k]: v }));
 
   const save = async () => {
@@ -293,13 +361,41 @@ export default function OverviewTab({
   // ---- Read view bookkeeping -------------------------------------------------
   const assigned = TEAM_ROLES.filter((r) => teamOf(lead)[r]?.name);
   const hasReferral = !!(lead.referralType || lead.referrerName || lead.referredByCustomer?.id || lead.referredByEmployee?.id);
-  // Gaps that matter most for pricing and visiting come first.
-  const missing = [
-    ...SECTIONS.flatMap((s) => s.fields.filter((f) => !hasValue(lead, f)))
-      .sort((x, y) => keyRank(x.key) - keyRank(y.key)).map((f) => f.label),
-    ...(assigned.length === 0 ? ["Team"] : []),
-  ];
+  const referrer = lead.referredByCustomer?.name || lead.referredByEmployee?.name || lead.referrerName;
   const enquiry = enquiryTypeOf(lead);
+  const services = enquiryDetails(lead);
+  const owner = lead.assignedSalesExecutive?.name || lead.leadOwner?.name;
+  const follow = followUpTone(lead.nextFollowUpDate, lead.nextFollowUpTime);
+  const followOverdue = follow.className.includes("red");
+
+  const needs = NEXT_STEP_NEEDS[lead.journeyStage || ""];
+  const blocking = (needs?.keys || []).filter((k) => (k === "budget" ? !hasBudget(lead) : !hasValue(lead, FIELD_INDEX[k].field)));
+  const readFields = (s: SectionDef) => s.fields.filter((f) => !s.editOnly?.includes(f.key) && hasValue(lead, f));
+  const otherEmpty = SECTIONS.flatMap((s) => s.fields.filter((f) => !s.editOnly?.includes(f.key) && !hasValue(lead, f)))
+    .filter((f) => !blocking.includes(f.key)).length;
+
+  const renderSection = (s: SectionDef, extraClass = "") => {
+    const shown = editing ? s.fields : readFields(s);
+    const showServices = s.id === "requirement" && !editing && services.length > 0;
+    if (!shown.length && !showServices) return null;
+    return (
+      <Block key={s.id} id={`ov-${s.id}`} icon={s.icon} title={editing ? s.title : s.readTitle || s.title}
+        onEdit={canEdit && !editing ? () => start(s.id) : undefined} className={extraClass}>
+        <Dl compact={s.side} read={!editing}>
+          {s.id === "site" && !editing ? <SiteRead lead={lead} /> : shown.map((f) => (
+            <Item key={f.key} id={`ov-f-${f.key}`} label={f.label} full={f.full}>
+              {editing ? renderEditor(f) : renderValue(f)}
+            </Item>
+          ))}
+          {showServices && <Item label="Services asked" full><Chips items={services} /></Item>}
+        </Dl>
+      </Block>
+    );
+  };
+
+  const site = sectionById("site");
+  const showTeam = editing || assigned.length > 0;
+  const showReferral = editing || hasReferral;
 
   return (
     <section className="@container rounded-2xl border border-slate-100 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)]" aria-label="Lead details">
@@ -308,17 +404,17 @@ export default function OverviewTab({
         <div className="min-w-0">
           <h2 className="font-bold tracking-tight text-slate-900">{editing ? "Edit lead details" : "Lead details"}</h2>
           <p className="text-xs text-slate-500 mt-0.5 truncate">
-            {editing ? "All fields — leave anything you don't know empty." : "Only the details that have been filled in."}
+            {editing ? "Leave anything you don't know empty." : "Key facts first, then everything that's been filled in."}
           </p>
         </div>
         {canEdit && !editing && (
-          <Button size="sm" variant="outline" onClick={start} className="h-9 rounded-lg border-slate-200 font-semibold text-slate-700 shrink-0">
+          <Button size="sm" variant="outline" onClick={() => start()} className="h-9 rounded-lg border-slate-200 font-semibold text-slate-700 shrink-0">
             <Pencil className="h-3.5 w-3.5 mr-1.5" /> Edit
           </Button>
         )}
       </div>
 
-      <div className="px-4 sm:px-5 py-4 space-y-6">
+      <div className="px-4 sm:px-5 py-4 space-y-5">
         {lead.status === "Lost" && !editing && (
           <Block icon={XCircle} title="Why it was lost" tone="text-rose-600">
             <Dl>
@@ -329,117 +425,161 @@ export default function OverviewTab({
           </Block>
         )}
 
-        {enquiry && !editing && (
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-xs text-slate-500 mr-1">Looking for</span>
-            <EnquiryTag type={enquiry} />
-            {enquiryDetails(lead).map((d) => (
-              <span key={d} className="px-2.5 py-0.5 bg-violet-50 text-violet-700 text-xs rounded-full font-medium">{d}</span>
-            ))}
+        {/* 1. Key facts */}
+        {!editing && (
+          <dl className="grid grid-cols-2 @2xl:grid-cols-5 gap-2" aria-label="Key facts">
+            <Fact icon={Wallet} label="Budget" value={budgetLine(lead)} className="col-span-2 @2xl:col-span-1"
+              onAdd={canEdit ? () => start("deal", "estimatedBudget") : undefined} />
+            <Fact icon={TrendingUp} label="Expected value" value={compactINR(lead.expectedProjectValue)}
+              title={lead.expectedProjectValue ? formatINR(lead.expectedProjectValue) : undefined}
+              onAdd={canEdit ? () => start("deal", "expectedProjectValue") : undefined} />
+            <Fact icon={CalendarClock} label="Next follow-up" value={lead.nextFollowUpDate ? follow.label : ""}
+              valueClass={follow.className} hint={followOverdue ? "Overdue" : undefined} />
+            <Fact icon={UserCircle2} label="Owner" value={owner || ""}
+              hint={assigned.length > 1 ? `+${assigned.length - 1} more in team` : undefined}
+              onAdd={canEdit ? () => start("team") : undefined} />
+            <Fact icon={Megaphone} label="Source" value={lead.leadSource || ""}
+              hint={referrer ? `via ${referrer}` : undefined}
+              onAdd={canEdit ? () => start("deal", "leadSource") : undefined} />
+          </dl>
+        )}
+
+        {/* 2. Needed for the next step */}
+        {!editing && needs && blocking.length > 0 && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50/70 px-3.5 py-3">
+            <p className="flex items-center gap-1.5 text-xs font-bold text-amber-900">
+              <AlertCircle className="h-3.5 w-3.5" /> {needs.title}
+            </p>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {blocking.map((k) => {
+                const label = k === "budget" ? "Budget" : FIELD_INDEX[k].field.label;
+                const section = k === "budget" ? "deal" : FIELD_INDEX[k].section;
+                const field = k === "budget" ? "estimatedBudget" : k;
+                return canEdit ? (
+                  <button key={k} type="button" onClick={() => start(section, field)}
+                    className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-white px-2.5 py-1 text-xs font-semibold text-amber-900 hover:bg-amber-100">
+                    <Plus className="h-3 w-3" /> {label}
+                  </button>
+                ) : (
+                  <span key={k} className="rounded-lg border border-amber-300 bg-white px-2.5 py-1 text-xs font-medium text-amber-900">{label}</span>
+                );
+              })}
+            </div>
           </div>
         )}
 
-        <div className="grid grid-cols-1 @4xl:grid-cols-2 gap-x-10 gap-y-6">
-          {SECTIONS.map((s) => {
-            const shown = editing ? s.fields : s.fields.filter((f) => hasValue(lead, f));
-            if (!shown.length) return null;
-            return (
-              <Block key={s.id} icon={s.icon} title={s.title} className={s.wide ? "@4xl:col-span-2" : ""}>
-                <Dl>
-                  {shown.map((f) => (
-                    <Item key={f.key} label={f.label} full={f.full}
-                      action={!editing && f.custom === "map"
-                        ? <MapsLink parts={[(lead as any)[f.key], lead.city, lead.district, lead.state, lead.pincode]} />
-                        : !editing && f.custom === "phone" && lead.mobileNumber ? <PhoneActions lead={lead} /> : null}>
-                      {editing ? renderEditor(f) : renderValue(f)}
-                    </Item>
-                  ))}
-                </Dl>
-              </Block>
-            );
-          })}
+        {/* 3. Details: main column + side column */}
+        <div className="grid grid-cols-1 @4xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)] gap-x-8 gap-y-5">
+          <div className="min-w-0 space-y-5">
+            {enquiry && !editing && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-xs text-slate-500 mr-1">Looking for</span>
+                <EnquiryTag type={enquiry} />
+              </div>
+            )}
+            {renderSection(sectionById("requirement"))}
+            {/* Phones: the site sits right under the requirement. Desktop: it heads the side column. */}
+            {!editing && renderSection(site, "@4xl:hidden")}
+            {renderSection(sectionById("property"))}
+          </div>
 
-          {(editing || assigned.length > 0) && (
-            <Block icon={Users} title="Team">
-              {editing ? (
-                <Dl>
-                  {TEAM_ROLES.map((r) => (
-                    <Item key={r} label={r}>
-                      <select className={inputCls} value={team[r]} onChange={(e) => setTeam((t) => ({ ...t, [r]: e.target.value }))}>
-                        <option value="">Unassigned</option>
-                        {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-                      </select>
-                    </Item>
-                  ))}
-                </Dl>
-              ) : (
-                <ul className="grid grid-cols-1 @md:grid-cols-2 gap-2">
-                  {assigned.map((r) => {
-                    const name = teamOf(lead)[r]!.name!;
-                    return (
-                      <li key={r} className="flex items-center gap-2.5 min-w-0">
-                        <span className={`h-8 w-8 rounded-full grid place-items-center text-[11px] font-bold shrink-0 ${avatarColor(name)}`}>{initials(name)}</span>
-                        <span className="min-w-0">
-                          <span className="block text-[11px] text-slate-500">{r}</span>
-                          <span className="block text-sm font-medium text-slate-800 truncate">{name}</span>
-                        </span>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </Block>
-          )}
+          <aside className="min-w-0 space-y-5 @4xl:border-l @4xl:border-slate-100 @4xl:pl-8">
+            {renderSection(site, editing ? "" : "hidden @4xl:block")}
 
-          {(editing || hasReferral) && (
-            <Block icon={Share2} title="Referral">
-              {editing
-                ? <ReferralEditor draft={referral} patch={(p) => setReferral((r) => ({ ...r, ...p }))} users={users} />
-                : (
-                  <Dl>
-                    {lead.referralType && <Item label="Referred by">{lead.referralType}</Item>}
-                    {(lead.referredByCustomer?.name || lead.referredByEmployee?.name || lead.referrerName) && (
-                      <Item label="Referrer">{lead.referredByCustomer?.name || lead.referredByEmployee?.name || lead.referrerName}</Item>
-                    )}
-                    {lead.referrerContact && <Item label="Referrer contact">{lead.referrerContact}</Item>}
-                    {lead.referralNotes && <Item label="Notes" full>{lead.referralNotes}</Item>}
-                  </Dl>
-                )}
-            </Block>
-          )}
-        </div>
-
-        {/* What's still unknown — kept visible so gaps get filled, but out of the way. */}
-        {!editing && missing.length > 0 && (
-          <div className="rounded-xl bg-slate-50 px-3 py-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-            <span className="text-xs font-semibold text-slate-600">Not filled yet ({missing.length})</span>
-            <span className="text-xs text-slate-400 min-w-0 flex-1">
-              {missing.slice(0, 8).join(" · ")}{missing.length > 8 ? ` · +${missing.length - 8} more` : ""}
-            </span>
-            {canEdit && (
-              <button type="button" onClick={start} className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-800 hover:underline shrink-0">
-                <Plus className="h-3.5 w-3.5" /> Add details
+            {!editing && (
+              <button type="button" onClick={() => setMoreOpen((o) => !o)} aria-expanded={moreOpen}
+                className="@4xl:hidden flex w-full items-center justify-between gap-2 rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm font-semibold text-slate-700">
+                More details
+                <span className="flex items-center gap-1 text-xs font-medium text-slate-500">
+                  Deal, dates, team, contact
+                  <ChevronDown className={`h-4 w-4 transition-transform ${moreOpen ? "rotate-180" : ""}`} />
+                </span>
               </button>
             )}
-          </div>
+
+            <div className={`space-y-5 ${editing || moreOpen ? "" : "hidden"} @4xl:block`}>
+              {renderSection(sectionById("deal"))}
+              {renderSection(sectionById("dates"))}
+
+              {showTeam && (
+                <Block id="ov-team" icon={Users} title="Team" onEdit={canEdit && !editing ? () => start("team") : undefined}>
+                  {editing ? (
+                    <Dl compact>
+                      {TEAM_ROLES.map((r) => (
+                        <Item key={r} label={r}>
+                          <select className={inputCls} value={team[r]} onChange={(e) => setTeam((t) => ({ ...t, [r]: e.target.value }))}>
+                            <option value="">Unassigned</option>
+                            {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+                          </select>
+                        </Item>
+                      ))}
+                    </Dl>
+                  ) : (
+                    <ul className="space-y-2">
+                      {assigned.map((r) => {
+                        const name = teamOf(lead)[r]!.name!;
+                        return (
+                          <li key={r} className="flex items-center gap-2.5 min-w-0">
+                            <span className={`h-8 w-8 rounded-full grid place-items-center text-[11px] font-bold shrink-0 ${avatarColor(name)}`}>{initials(name)}</span>
+                            <span className="min-w-0">
+                              <span className="block text-sm font-medium text-slate-800 truncate">{name}</span>
+                              <span className="block text-[11px] text-slate-500">{r}</span>
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </Block>
+              )}
+
+              {showReferral && (
+                <Block id="ov-referral" icon={Share2} title="Referral" onEdit={canEdit && !editing ? () => start("referral") : undefined}>
+                  {editing
+                    ? <ReferralEditor draft={referral} patch={(p) => setReferral((r) => ({ ...r, ...p }))} users={users} />
+                    : (
+                      <Dl compact>
+                        {lead.referralType && <Item label="Referred by">{lead.referralType}</Item>}
+                        {referrer && <Item label="Referrer">{referrer}</Item>}
+                        {lead.referrerContact && <Item label="Referrer contact">{lead.referrerContact}</Item>}
+                        {lead.referralNotes && <Item label="Notes" full>{lead.referralNotes}</Item>}
+                      </Dl>
+                    )}
+                </Block>
+              )}
+
+              {renderSection(sectionById("contact"))}
+
+              {!editing && (
+                <Block icon={History} title="Record">
+                  <ul className="space-y-1.5 text-xs text-slate-600">
+                    <li className="flex items-start gap-1.5">
+                      <Clock className="h-3.5 w-3.5 mt-px shrink-0 text-slate-400" />
+                      <span>Created {formatDateTime(lead.createdAt)}{lead.createdBy ? ` by ${lead.createdBy}` : ""}</span>
+                    </li>
+                    <li className="pl-5">{lead.followUpCount ?? 0} follow-up{lead.followUpCount === 1 ? "" : "s"} logged</li>
+                    {lead.lastContactAt && <li className="pl-5">Last contact {formatDate(lead.lastContactAt)}</li>}
+                  </ul>
+                </Block>
+              )}
+            </div>
+          </aside>
+        </div>
+
+        {!editing && canEdit && otherEmpty > 0 && (
+          <button type="button" onClick={() => start()} className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-800 hover:underline">
+            <Plus className="h-3.5 w-3.5" /> {otherEmpty} more field{otherEmpty === 1 ? "" : "s"} not filled — add details
+          </button>
         )}
       </div>
 
-      {/* Footer: system facts (read) or the single save bar (edit). */}
-      {editing ? (
+      {/* Single save bar while editing. */}
+      {editing && (
         <div className="sticky bottom-16 md:bottom-0 z-10 flex items-center justify-end gap-2 rounded-b-2xl border-t border-slate-100 bg-white/95 backdrop-blur px-4 sm:px-5 py-3">
           <Button variant="ghost" onClick={() => setEditing(false)} disabled={saving}><X className="h-4 w-4 mr-1" /> Cancel</Button>
           <Button onClick={save} disabled={saving} className="bg-emerald-800 hover:bg-emerald-900 text-white">
             <Check className="h-4 w-4 mr-1" /> {saving ? "Saving..." : "Save changes"}
           </Button>
-        </div>
-      ) : (
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-slate-100 px-4 sm:px-5 py-2.5 text-xs text-slate-500">
-          <span className="inline-flex items-center gap-1"><Clock className="h-3.5 w-3.5" /> Created {formatDateTime(lead.createdAt)}{lead.createdBy ? ` by ${lead.createdBy}` : ""}</span>
-          {lead.stage && <span>Stage: <span className="font-medium text-slate-700">{lead.stage}</span></span>}
-          <span>{lead.followUpCount ?? 0} follow-up{lead.followUpCount === 1 ? "" : "s"} logged</span>
-          {lead.nextFollowUpDate && <span>Next follow-up: <span className="font-medium text-slate-700">{formatFollowUp(lead.nextFollowUpDate, lead.nextFollowUpTime)}</span></span>}
-          {lead.lastContactAt && <span>Last contact: {formatDate(lead.lastContactAt)}</span>}
         </div>
       )}
     </section>
@@ -552,29 +692,95 @@ export default function OverviewTab({
 }
 
 // ---------------------------------------------------------------------------
-function Block({ icon: Icon, title, tone, className, children }: {
-  icon: IconType; title: string; tone?: string; className?: string; children: React.ReactNode;
+function Block({ id, icon: Icon, title, tone, className, onEdit, children }: {
+  id?: string; icon: IconType; title: string; tone?: string; className?: string; onEdit?: () => void; children: React.ReactNode;
 }) {
   return (
-    <div className={`@container min-w-0 ${className || ""}`}>
-      <h3 className={`mb-2.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider ${tone || "text-slate-400"}`}>
-        <Icon className="h-3.5 w-3.5" /> {title}
-      </h3>
+    <div id={id} className={`@container min-w-0 scroll-mt-24 ${className || ""}`}>
+      <div className="mb-2.5 flex items-center justify-between gap-2">
+        <h3 className={`flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider ${tone || "text-slate-500"}`}>
+          <Icon className="h-3.5 w-3.5" /> {title}
+        </h3>
+        {onEdit && (
+          <button type="button" onClick={onEdit} aria-label={`Edit ${title}`} title={`Edit ${title}`}
+            className="-my-1 h-7 w-7 grid place-items-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300">
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
       {children}
     </div>
   );
 }
 
-function Dl({ children }: { children: React.ReactNode }) {
-  return <dl className="grid grid-cols-1 @xs:grid-cols-2 @2xl:grid-cols-3 gap-x-6 gap-y-3">{children}</dl>;
+// read = two columns even on a phone (short values side by side); edit keeps inputs full-width there.
+function Dl({ compact, read, children }: { compact?: boolean; read?: boolean; children: React.ReactNode }) {
+  const base = read ? "grid-cols-2" : "grid-cols-1 @xs:grid-cols-2";
+  return (
+    <dl className={`grid gap-x-6 gap-y-3 ${base} ${compact ? "" : "@2xl:grid-cols-3"}`}>
+      {children}
+    </dl>
+  );
 }
 
-function Item({ label, full, action, children }: { label: string; full?: boolean; action?: React.ReactNode; children: React.ReactNode }) {
+function Item({ id, label, full, action, children }: {
+  id?: string; label: string; full?: boolean; action?: React.ReactNode; children: React.ReactNode;
+}) {
   return (
-    <div className={`min-w-0 ${full ? "col-span-full" : ""}`}>
+    <div id={id} className={`min-w-0 scroll-mt-24 ${full ? "col-span-full" : ""}`}>
       <dt className="flex items-center justify-between gap-2 text-xs text-slate-500">{label}{action}</dt>
       <dd className="mt-0.5 text-sm font-medium text-slate-800 break-words">{children}</dd>
     </div>
+  );
+}
+
+/** Key-fact tile: label + value, or an Add link (or "Not set") when empty. */
+function Fact({ icon: Icon, label, value, valueClass, hint, title, onAdd, className }: {
+  icon: IconType; label: string; value: string; valueClass?: string; hint?: string; title?: string;
+  onAdd?: () => void; className?: string;
+}) {
+  const tone = valueClass && !valueClass.includes("muted") && !valueClass.includes("text-foreground") ? valueClass : "text-slate-900";
+  return (
+    <div className={`min-w-0 rounded-xl border border-slate-100 bg-slate-50/70 px-3 py-2.5 ${className || ""}`} title={title}>
+      <dt className="flex items-center gap-1.5 text-[11px] font-medium text-slate-500"><Icon className="h-3.5 w-3.5" /> {label}</dt>
+      <dd className="mt-1 min-w-0">
+        {value ? (
+          <>
+            <span className={`block truncate text-sm font-bold ${tone}`}>{value}</span>
+            {hint && <span className="block truncate text-[11px] text-slate-500">{hint}</span>}
+          </>
+        ) : onAdd ? (
+          <button type="button" onClick={onAdd} className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-800 hover:underline">
+            <Plus className="h-3 w-3" /> Add
+          </button>
+        ) : (
+          <span className="text-sm text-slate-400">Not set</span>
+        )}
+      </dd>
+    </div>
+  );
+}
+
+/** Site in read mode: the work address (with Map) first, then the place on one line. */
+function SiteRead({ lead }: { lead: Lead }) {
+  // City and district are often the same ("Coimbatore, Coimbatore") — show each name once.
+  const names = [lead.city, lead.district, lead.state].map((x) => (x || "").trim()).filter(Boolean);
+  const place = [...new Set(names)].join(", ") + (lead.pincode ? ` – ${lead.pincode}` : "");
+  return (
+    <>
+      {lead.siteAddress && (
+        <Item label="Site address (work location)" full action={<MapsLink parts={[lead.siteAddress, lead.city, lead.district, lead.state, lead.pincode]} />}>
+          <span className="whitespace-pre-line">{lead.siteAddress}</span>
+        </Item>
+      )}
+      {lead.landmark && <Item label="Landmark" full>{lead.landmark}</Item>}
+      {place.trim() && <Item label="City / state" full>{place.replace(/^ – /, "Pincode ")}</Item>}
+      {lead.address && lead.address !== lead.siteAddress && (
+        <Item label="Billing / home address" full action={<MapsLink parts={[lead.address, lead.city, lead.state, lead.pincode]} />}>
+          <span className="whitespace-pre-line">{lead.address}</span>
+        </Item>
+      )}
+    </>
   );
 }
 
@@ -590,26 +796,12 @@ function Chips({ items, check }: { items: string[]; check?: boolean }) {
   );
 }
 
-function PhoneActions({ lead }: { lead: Lead }) {
-  return (
-    <span className="flex items-center gap-1">
-      <a href={`tel:${lead.mobileNumber}`} className="h-6 w-6 rounded-full bg-emerald-50 text-emerald-700 grid place-items-center hover:bg-emerald-100" title="Call" aria-label="Call">
-        <Phone className="h-3 w-3" />
-      </a>
-      <a href={`https://wa.me/${(lead.whatsappNumber || lead.mobileNumber).replace(/[^0-9]/g, "")}`} target="_blank" rel="noreferrer"
-        className="h-6 w-6 rounded-full bg-emerald-50 text-emerald-700 grid place-items-center hover:bg-emerald-100" title="WhatsApp" aria-label="WhatsApp">
-        <MessageCircle className="h-3 w-3" />
-      </a>
-    </span>
-  );
-}
-
 function ReferralEditor({ draft, patch, users }: {
   draft: ReferralDraft; patch: (p: Partial<ReferralDraft>) => void; users: UserSummary[];
 }) {
   const type = draft.referralType;
   return (
-    <Dl>
+    <Dl compact>
       <Item label="Referred by">
         <select className={inputCls} value={type} onChange={(e) => patch({
           referralType: e.target.value, referredByCustomerId: "", referredByCustomerName: "",
