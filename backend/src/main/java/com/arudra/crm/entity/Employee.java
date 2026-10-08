@@ -83,6 +83,10 @@ public class Employee extends BaseEntity {
     @Column(name = "attendance_method_requested_at")
     private java.time.LocalDateTime attendanceMethodRequestedAt;
 
+    /** Device-binding enforcement override: OFF | SOFT | HARD; null = app default. */
+    @Column(name = "device_binding_mode", length = 10)
+    private String deviceBindingMode;
+
     @Column(name = "leave_policy", length = 100)
     private String leavePolicy;
 

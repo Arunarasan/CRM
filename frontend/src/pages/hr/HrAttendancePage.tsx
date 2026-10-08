@@ -6,13 +6,14 @@ import { BaseInput } from '@/components/ui/input';
  *    recorded but held for HR to approve or reject (soft enforcement).
  */
 import { useEffect, useState } from 'react';
-import { MapPin, Plus, Trash2, Crosshair, Loader2, ShieldAlert, Check, X, ExternalLink, Fingerprint, Clock3 } from 'lucide-react';
+import { MapPin, Plus, Trash2, Crosshair, Loader2, ShieldAlert, Check, X, ExternalLink, Fingerprint, Clock3, Smartphone } from 'lucide-react';
 import { attendanceApi, AttendanceLocation, PendingAttendance, MethodRequest, CorrectionRequest } from '@/api/attendanceApi';
 import { getBestPosition } from '@/lib/geo';
 import LocationMapPicker from '@/components/LocationMapPicker';
 import { toast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import SearchableSelect from '@/components/ui/searchable-select';
+import { DeviceRequests } from './deviceAdmin';
 
 /**
  * The attendance-verification admin body, mounted both as the Workforce → Attendance page and as
@@ -23,6 +24,7 @@ export function AttendanceAdmin() {
     <div className="space-y-6">
       <CorrectionApprovals />
       <DirectCorrection />
+      <DeviceRequests />
       <MethodRequests />
       <PendingApprovals />
       <OfficeLocations />
@@ -312,6 +314,12 @@ function PendingApprovals() {
                   <span className="font-medium">{r.employeeName}</span>
                   {r.employeeCode && <span className="text-xs text-muted-foreground">({r.employeeCode})</span>}
                   <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">{r.verificationMethod ?? '—'}</span>
+                  {r.deviceMismatchReason && (
+                    <span className="inline-flex items-center gap-1 rounded bg-red-100 px-1.5 py-0.5 text-[11px] font-semibold text-red-700"
+                          title={r.deviceMismatchReason}>
+                      <Smartphone className="h-3 w-3" /> Wrong phone
+                    </span>
+                  )}
                 </div>
                 <p className="mt-1 text-sm text-amber-700">{r.flagReason}</p>
                 <p className="mt-0.5 flex flex-wrap items-center gap-x-3 text-xs text-muted-foreground">

@@ -5,6 +5,7 @@ import com.arudra.crm.entity.Attendance;
 import com.arudra.crm.entity.AttendanceSession;
 import com.arudra.crm.entity.Employee;
 import com.arudra.crm.entity.User;
+import com.arudra.crm.entity.UserDevice;
 import com.arudra.crm.repository.AttendanceRepository;
 import com.arudra.crm.repository.AttendanceSessionRepository;
 import com.arudra.crm.repository.EmployeeRepository;
@@ -42,6 +43,8 @@ public class EmployeeTimeService {
     @Autowired private AttendanceRepository attendanceRepository;
     @Autowired private AttendanceSessionRepository sessionRepository;
     @Autowired private AttendanceVerificationService verificationService;
+    @Autowired private com.arudra.crm.repository.UserDeviceRepository userDeviceRepository;
+    @Autowired private com.arudra.crm.config.DeviceBindingSettings deviceBindingSettings;
     @Autowired private com.arudra.crm.repository.EmployeeWebauthnCredentialRepository webauthnCredentialRepository;
 
     // --- scoping -----------------------------------------------------------
@@ -73,7 +76,7 @@ public class EmployeeTimeService {
     @LogActivity(module = "ATTENDANCE", action = "CLOCK_IN")
     @Transactional
     public Attendance clockIn(User user, BigDecimal lat, BigDecimal lng, Integer accuracyMeters, String locationLabel,
-                              String deviceInfo, boolean biometricVerified) {
+                              String deviceInfo, boolean biometricVerified, DeviceBindingService.DeviceCheck deviceCheck) {
         Employee employee = requireEmployee(user);
         Attendance att = todayRow(employee.getId());
         if (att == null) {
@@ -97,6 +100,7 @@ public class EmployeeTimeService {
         // Verify against the employee's required method (geo-fence / biometric). Soft: never blocks,
         // flags for HR approval on failure. Stamps the result onto the session.
         verificationService.verify(s, employee, biometricVerified);
+        verificationService.applyDevice(s, employee, deviceCheck, "Clock-in");
         sessionRepository.save(s);
 
         att.setStatus("PRESENT");
@@ -106,13 +110,14 @@ public class EmployeeTimeService {
 
     @LogActivity(module = "ATTENDANCE", action = "CLOCK_OUT")
     @Transactional
-    public Attendance clockOut(User user) {
+    public Attendance clockOut(User user, DeviceBindingService.DeviceCheck deviceCheck) {
         Employee employee = requireEmployee(user);
         Attendance att = todayRow(employee.getId());
         AttendanceSession s = att == null ? null : openSession(att);
         if (s == null) throw new IllegalStateException("You are not clocked in.");
         if (s.getBreakStart() != null) closeBreak(s, LocalTime.now()); // auto-close a still-open break
         s.setCheckOutTime(LocalTime.now().withNano(0));
+        verificationService.applyDevice(s, employee, deviceCheck, "Clock-out");
         sessionRepository.save(s);
 
         syncAggregate(att, employee);
@@ -200,6 +205,10 @@ public class EmployeeTimeService {
         m.put("attendanceMethod", employee.getAttendanceMethod() == null ? "GEO" : employee.getAttendanceMethod());
         m.put("attendanceMethodRequested", employee.getAttendanceMethodRequested());
         m.put("biometricRegistered", webauthnCredentialRepository.existsByEmployeeIdAndIsDeletedFalse(employee.getId()));
+        // Phone binding hints: OFF/SOFT/HARD + whether this login has an approved / pending phone.
+        m.put("deviceBindingMode", deviceBindingSettings.effectiveMode(employee));
+        m.put("deviceRegistered", userDeviceRepository.countByUserIdAndStatusAndIsDeletedFalse(user.getId(), UserDevice.ACTIVE) > 0);
+        m.put("devicePending", userDeviceRepository.countByUserIdAndStatusAndIsDeletedFalse(user.getId(), UserDevice.PENDING) > 0);
 
         BigDecimal[] live = today == null ? new BigDecimal[]{BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO}
                 : computeFigures(today, employee, asOf);
@@ -230,6 +239,8 @@ public class EmployeeTimeService {
             sm.put("flagged", Boolean.TRUE.equals(s.getFlagged()));
             sm.put("flagReason", s.getFlagReason());
             sm.put("approvalStatus", s.getApprovalStatus());
+            sm.put("deviceVerified", Boolean.TRUE.equals(s.getDeviceVerified()));
+            sm.put("deviceMismatchReason", s.getDeviceMismatchReason());
             sessionList.add(sm);
         }
         m.put("sessions", sessionList);

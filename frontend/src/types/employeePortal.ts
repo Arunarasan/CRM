@@ -39,6 +39,8 @@ export interface TimeSession {
   flagged?: boolean;
   flagReason?: string | null;
   approvalStatus?: string | null; // PENDING | APPROVED | REJECTED
+  deviceVerified?: boolean;
+  deviceMismatchReason?: string | null;
 }
 
 export interface AttendanceCorrection {
@@ -73,6 +75,43 @@ export interface TimeStatus {
   attendanceMethod?: string; // GEO | OFFICE_DEVICE | ANY
   attendanceMethodRequested?: string | null; // pending admin-approved switch
   biometricRegistered?: boolean;
+  deviceBindingMode?: DeviceBindingMode;
+  deviceRegistered?: boolean; // this login has an approved phone (not necessarily THIS phone)
+  devicePending?: boolean;
+}
+
+/** Attendance phone-binding enforcement: OFF (not checked) | SOFT (flag for HR) | HARD (refuse). */
+export type DeviceBindingMode = 'OFF' | 'SOFT' | 'HARD';
+export type UserDeviceStatus = 'PENDING' | 'ACTIVE' | 'REVOKED' | 'REPLACED' | 'REJECTED';
+
+export interface UserDeviceInfo {
+  id: number;
+  deviceUuid: string;
+  deviceLabel: string | null;
+  platform: string | null;
+  status: UserDeviceStatus;
+  requestReason: string | null;
+  requestedAt: string | null;
+  approvedBy: string | null;
+  approvedAt: string | null;
+  revokedAt: string | null;
+  revokeReason: string | null;
+  lastSeenAt: string | null;
+}
+
+export interface DeviceBindingStatus {
+  mode: DeviceBindingMode;
+  maxDevices: number;
+  hasActiveDevice: boolean;
+  hasPendingDevice: boolean;
+  devices: UserDeviceInfo[];
+}
+
+/** Proof that a clock action came from the bound phone. */
+export interface DeviceProof {
+  deviceUuid: string;
+  nonce: string;
+  signature: string;
 }
 
 export interface EmployeeDashboard {

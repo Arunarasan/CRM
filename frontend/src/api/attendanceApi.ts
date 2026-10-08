@@ -29,6 +29,59 @@ export interface PendingAttendance {
   lng: number | null;
   deviceInfo: string | null;
   approvalStatus: string | null;
+  deviceVerified?: boolean;
+  deviceMismatchReason?: string | null; // set when the punch didn't come from the registered phone
+}
+
+// --- Attendance phone binding (one approved phone per login) ---------------------------------
+export type DeviceBindingMode = 'OFF' | 'SOFT' | 'HARD';
+export type UserDeviceStatus = 'PENDING' | 'ACTIVE' | 'REVOKED' | 'REPLACED' | 'REJECTED';
+
+export interface AdminDevice {
+  id: number;
+  deviceUuid: string;
+  deviceLabel: string | null;
+  platform: string | null;
+  status: UserDeviceStatus;
+  requestReason: string | null;
+  requestedAt: string | null;
+  approvedBy: string | null;
+  approvedAt: string | null;
+  revokedAt: string | null;
+  revokeReason: string | null;
+  lastSeenAt: string | null;
+}
+
+/** A phone waiting for HR approval, with the phone(s) it would replace. */
+export interface DeviceRequest extends AdminDevice {
+  userId: number;
+  userName: string;
+  userEmail: string;
+  employeeId: number | null;
+  userAgent: string | null;
+  lastIp: string | null;
+  currentDevices: AdminDevice[];
+}
+
+export interface DeviceEvent {
+  id: number;
+  deviceId: number | null;
+  event: string;
+  actor: string | null;
+  ip: string | null;
+  details: string | null;
+  at: string | null;
+}
+
+export interface EmployeeDevices {
+  userId: number | null; // null → employee has no portal login yet
+  name?: string;
+  email?: string;
+  employeeId: number | null;
+  modeOverride: DeviceBindingMode | null;
+  effectiveMode: DeviceBindingMode;
+  devices: AdminDevice[];
+  events: DeviceEvent[];
 }
 
 export interface MethodRequest {
@@ -74,6 +127,16 @@ export const attendanceApi = {
   rejectCorrection: (id: number, remarks?: string) => api.post(`${BASE}/corrections/${id}/reject`, { remarks }).then((r) => r.data),
   applyCorrection: (body: { employeeId: number; date: string; checkIn?: string; checkOut?: string }) =>
     api.post(`${BASE}/corrections/apply`, body).then((r) => r.data),
+
+  // Phone binding
+  listDeviceRequests: () => api.get<DeviceRequest[]>(`${BASE}/devices`).then((r) => r.data),
+  employeeDevices: (employeeId: number) => api.get<EmployeeDevices>(`${BASE}/devices/employee/${employeeId}`).then((r) => r.data),
+  approveDevice: (id: number) => api.post(`${BASE}/devices/${id}/approve`).then((r) => r.data),
+  rejectDevice: (id: number, reason?: string) => api.post(`${BASE}/devices/${id}/reject`, { reason }).then((r) => r.data),
+  revokeDevice: (id: number, reason?: string) => api.post(`${BASE}/devices/${id}/revoke`, { reason }).then((r) => r.data),
+  resetDevices: (userId: number) => api.post<EmployeeDevices>(`${BASE}/devices/user/${userId}/reset`).then((r) => r.data),
+  setDeviceMode: (employeeId: number, mode: DeviceBindingMode | 'DEFAULT') =>
+    api.put<{ employeeId: number; modeOverride: string; effectiveMode: DeviceBindingMode }>(`${BASE}/devices/employee/${employeeId}/mode`, { mode }).then((r) => r.data),
 
   // Employee master list for the admin direct-correction picker (paginated endpoint, grab a big page).
   listEmployees: () =>

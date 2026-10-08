@@ -127,6 +127,8 @@ public class AttendanceAdminService {
         m.put("checkInTime", s.getCheckInTime());
         m.put("verificationMethod", s.getVerificationMethod());
         m.put("flagReason", s.getFlagReason());
+        m.put("deviceVerified", Boolean.TRUE.equals(s.getDeviceVerified()));
+        m.put("deviceMismatchReason", s.getDeviceMismatchReason());
         m.put("distanceMeters", s.getDistanceMeters());
         m.put("accuracyMeters", s.getAccuracyMeters());
         m.put("officeLocation", s.getOfficeLocation() == null ? null : s.getOfficeLocation().getName());

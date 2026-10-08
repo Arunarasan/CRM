@@ -96,4 +96,17 @@ public class AttendanceSession extends BaseEntity {
 
     @Column(name = "approved_at")
     private java.time.LocalDateTime approvedAt;
+
+    /** The bound phone this punch was signed by (null when unbound / not checked). */
+    @JsonIgnore
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "device_id")
+    private UserDevice device;
+
+    /** The punch carried a valid signature from the user's ACTIVE bound device. */
+    @Column(name = "device_verified", nullable = false)
+    private Boolean deviceVerified = false;
+
+    @Column(name = "device_mismatch_reason", length = 255)
+    private String deviceMismatchReason;
 }

@@ -75,6 +75,16 @@ app:
     rp-id: ${WEBAUTHN_RP_ID:localhost}
     rp-name: ${WEBAUTHN_RP_NAME:${APP_NAME:Arudra CRM}}
     origin: ${WEBAUTHN_ORIGIN:http://localhost:5173}
+  attendance:
+    # Phone binding for attendance (one approved phone per user account).
+    # default-mode: OFF (not checked) | SOFT (punch saved but flagged for HR) | HARD (punch refused).
+    # Per-employee override lives on employees.device_binding_mode.
+    device-binding:
+      default-mode: ${ATTENDANCE_DEVICE_BINDING_MODE:SOFT}
+      max-devices-per-user: ${ATTENDANCE_MAX_DEVICES_PER_USER:1}
+      # The user's first phone binds instantly; later phones need admin approval.
+      auto-approve-first-device: ${ATTENDANCE_AUTO_APPROVE_FIRST_DEVICE:true}
+      challenge-ttl-seconds: ${ATTENDANCE_DEVICE_CHALLENGE_TTL:120}
   mail:
     # From address on OTP emails. Defaults to the SMTP username when blank.
     from: ${MAIL_FROM:${MAIL_USERNAME:no-reply@arudra.com}}

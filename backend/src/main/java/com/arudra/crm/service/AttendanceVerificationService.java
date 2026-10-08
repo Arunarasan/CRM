@@ -136,6 +136,49 @@ public class AttendanceVerificationService {
         if (!verified) notifyFlagged(employee, reason);
     }
 
+    /**
+     * Stamps the phone-binding result onto a session (clock-in or clock-out). A failed SOFT check
+     * flags the session for HR review on top of whatever the geo/biometric check decided; HARD
+     * failures never reach here (refused upstream). OFF leaves the session untouched.
+     */
+    public void applyDevice(AttendanceSession session, Employee employee, DeviceBindingService.DeviceCheck check, String action) {
+        if (check == null || !check.enforced()) return;
+        DeviceBindingService.Verification v = check.verification();
+        if (v.verified()) {
+            session.setDevice(v.device());
+            if (session.getDeviceMismatchReason() == null) session.setDeviceVerified(true);
+            return;
+        }
+        String reason = action + ": " + phrase(v);
+        session.setDeviceVerified(false);
+        session.setDeviceMismatchReason(clip(reason, 255));
+        boolean alreadyFlagged = Boolean.TRUE.equals(session.getFlagged()) && "PENDING".equals(session.getApprovalStatus());
+        session.setVerified(false);
+        session.setFlagged(true);
+        session.setApprovalStatus("PENDING");
+        String prior = session.getFlagReason();
+        session.setFlagReason(clip(prior == null || prior.isBlank() ? reason : prior + " · " + reason, 255));
+        if (!alreadyFlagged) notifyFlagged(employee, reason);
+    }
+
+    /** Short HR-facing wording for a failed phone check. */
+    private static String phrase(DeviceBindingService.Verification v) {
+        return switch (v.outcome()) {
+            case NO_PROOF -> "no phone check sent";
+            case NOT_BOUND -> "unregistered phone";
+            case PENDING -> "phone awaiting HR approval";
+            case REVOKED -> v.device() != null && "REPLACED".equals(v.device().getStatus())
+                    ? "old (replaced) phone" : "phone registration removed";
+            case BAD_CHALLENGE -> "phone check expired or reused";
+            case BAD_SIGNATURE -> "phone signature did not match";
+            default -> "phone not verified";
+        };
+    }
+
+    private static String clip(String s, int max) {
+        return s == null || s.length() <= max ? s : s.substring(0, max);
+    }
+
     // --- helpers -----------------------------------------------------------
 
     private void stampGeo(AttendanceSession session, GeoMatch geo) {
@@ -187,7 +230,7 @@ public class AttendanceVerificationService {
         if (name.isBlank()) name = "An employee";
         notificationService.dispatchToAdmins(
                 "Attendance needs approval",
-                name + " clocked in but the check failed: " + reason,
+                name + "'s attendance check failed: " + reason,
                 "ATTENDANCE", "/hr", null);
     }
 

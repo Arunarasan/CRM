@@ -94,6 +94,21 @@ public class GlobalExceptionHandler {
         return new ResponseEntity<>(apiError, HttpStatus.CONFLICT);
     }
 
+    /** HARD device binding: the punch came from an unregistered phone. Message is user-facing. */
+    @ExceptionHandler(DeviceNotAuthorizedException.class)
+    public ResponseEntity<ApiError> handleDeviceNotAuthorized(
+            DeviceNotAuthorizedException ex, HttpServletRequest request) {
+
+        log.warn("Device not authorized: {}", ex.getMessage());
+        ApiError apiError = new ApiError(
+                HttpStatus.FORBIDDEN.value(),
+                "DEVICE_NOT_AUTHORIZED",
+                ex.getMessage(),
+                request.getRequestURI()
+        );
+        return new ResponseEntity<>(apiError, HttpStatus.FORBIDDEN);
+    }
+
     @ExceptionHandler({IllegalArgumentException.class, IllegalStateException.class})
     public ResponseEntity<ApiError> handleBadRequest(
             RuntimeException ex, HttpServletRequest request) {

@@ -5,6 +5,7 @@ import { TimeStatus } from '@/types/employeePortal';
 import { assert as webauthnAssert } from '@/lib/webauthn';
 import { getBestPosition } from '@/lib/geo';
 import { inr } from './_shared';
+import { useDeviceBinding, PhoneStatusStrip, errMsg } from './phoneBinding';
 
 /**
  * Self-service time-clock — the money-forward hero of the employee home screen.
@@ -29,6 +30,12 @@ export default function ClockWidget({ onChange }: { onChange?: () => void }) {
   }, []);
   useEffect(() => { load(); }, [load]);
 
+  // Phone binding — only loaded once the server says it's enforced for this employee.
+  const bindingMode = status?.deviceBindingMode ?? 'OFF';
+  const phone = useDeviceBinding(!!status && bindingMode !== 'OFF');
+  // HARD mode: clock actions only work from the approved phone (server refuses otherwise).
+  const phoneBlocked = bindingMode === 'HARD' && phone.phoneState !== 'ACTIVE' && phone.phoneState !== 'LOADING';
+
   const clockedIn = status?.clockedIn ?? false;
   const onBreak = status?.onBreak ?? false;
   const running = clockedIn && !onBreak;
@@ -43,8 +50,8 @@ export default function ClockWidget({ onChange }: { onChange?: () => void }) {
 
   const act = async (label: string, fn: () => Promise<unknown>) => {
     setError(''); setBusy(label);
-    try { await fn(); load(); onChange?.(); }
-    catch (e: any) { setError(e?.message || 'Action failed'); }
+    try { await fn(); load(); phone.refresh(); onChange?.(); }
+    catch (e: any) { setError(errMsg(e, 'Action failed')); load(); }
     finally { setBusy(null); }
   };
 
@@ -72,11 +79,22 @@ export default function ClockWidget({ onChange }: { onChange?: () => void }) {
         assertion = undefined; // fall through — server records it unverified / flagged
       }
     }
+    // First phone: register it silently on the first clock-in (the server auto-approves it).
+    if (phone.phoneState === 'NONE') {
+      try { await phone.bind(); } catch { /* fall through — the punch is recorded and flagged */ }
+    }
+    // Sign the challenge last so it's fresh after the GPS/biometric steps.
+    const device = phone.phoneState === 'OFF' ? undefined : await phone.proof();
     await employeePortalApi.clockIn({
       lat: geo?.lat, lng: geo?.lng,
       accuracyMeters: geo?.accuracy != null ? Math.round(geo.accuracy) : undefined,
-      deviceInfo, assertion,
+      deviceInfo, assertion, device,
     });
+  };
+
+  const clockOutWithDevice = async () => {
+    const device = phone.phoneState === 'OFF' ? undefined : await phone.proof();
+    await employeePortalApi.clockOut({ device });
   };
 
   // Seconds worked so far today = server total (all sessions) + time elapsed since the last sync
@@ -159,10 +177,12 @@ export default function ClockWidget({ onChange }: { onChange?: () => void }) {
           </p>
         ) : null}
 
+        <PhoneStatusStrip binding={phone} />
+
         {/* Actions */}
         <div className="mt-3 grid grid-cols-2 gap-2">
           {!clockedIn && (
-            <button onClick={() => act('in', clockInWithGeo)} disabled={!!busy}
+            <button onClick={() => act('in', clockInWithGeo)} disabled={!!busy || phoneBlocked}
               className="col-span-2 flex items-center justify-center gap-2 rounded-xl bg-white py-3 text-sm font-bold text-emerald-700 shadow-sm active:scale-[0.99] disabled:opacity-60">
               {busy === 'in'
                 ? <><Loader2 className="h-4 w-4 animate-spin" /> Locating…{geoAccuracy != null ? ` ±${geoAccuracy}m` : ''}</>
@@ -182,7 +202,7 @@ export default function ClockWidget({ onChange }: { onChange?: () => void }) {
             </button>
           )}
           {clockedIn && (
-            <button onClick={() => act('out', () => employeePortalApi.clockOut())} disabled={!!busy}
+            <button onClick={() => act('out', clockOutWithDevice)} disabled={!!busy || phoneBlocked}
               className="flex items-center justify-center gap-2 rounded-xl bg-black/30 py-3 text-sm font-bold text-white active:scale-[0.99] disabled:opacity-60">
               {busy === 'out' ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />} Clock Out
             </button>

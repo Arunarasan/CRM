@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
 import { workforceApi } from "@/api/workforceApi";
 import type { WorkforceDetail, WorkforceMeta, WorkforceRequest } from "@/types/workforce";
+import { AttendancePhoneCard } from "@/pages/hr/deviceAdmin";
 
 // The employee-profile Overview tab renders the person's master record as a set of cards, each of
 // which can be edited in place — the same interaction the Lead profile uses. Editing keeps the
@@ -193,6 +194,7 @@ export default function EmployeeOverviewTab({
       <IdentityCard detail={detail} canEdit={canEdit} save={save} />
       <EmergencyCard detail={detail} canEdit={canEdit} save={save} />
       <EmploymentCard detail={detail} meta={meta} canEdit={canEdit} save={save} />
+      {detail.employee?.id != null && <AttendancePhoneCard employeeId={detail.employee.id} canEdit={canEdit} />}
       <BankCard detail={detail} canEdit={canEdit} save={save} />
     </div>
   );

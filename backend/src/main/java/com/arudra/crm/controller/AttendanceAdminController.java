@@ -29,6 +29,7 @@ public class AttendanceAdminController {
     @Autowired private AttendanceAdminService adminService;
     @Autowired private com.arudra.crm.service.AttendanceCorrectionService correctionService;
     @Autowired private CurrentUserService currentUserService;
+    @Autowired private com.arudra.crm.service.DeviceBindingService deviceBindingService;
 
     // --- office geofences --------------------------------------------------
 
@@ -124,6 +125,60 @@ public class AttendanceAdminController {
                 EmployeePortalController.parseTime(body.get("checkIn")),
                 EmployeePortalController.parseTime(body.get("checkOut")));
         return ResponseEntity.noContent().build();
+    }
+
+    // --- attendance phone binding --------------------------------------------
+
+    @GetMapping("/devices")
+    @PreAuthorize(HR_READ)
+    public ResponseEntity<List<Map<String, Object>>> pendingDevices() {
+        return ResponseEntity.ok(deviceBindingService.listPending());
+    }
+
+    @GetMapping("/devices/user/{userId}")
+    @PreAuthorize(HR_READ)
+    public ResponseEntity<Map<String, Object>> userDevices(@PathVariable Long userId) {
+        return ResponseEntity.ok(deviceBindingService.userDevices(userId));
+    }
+
+    @GetMapping("/devices/employee/{employeeId}")
+    @PreAuthorize(HR_READ)
+    public ResponseEntity<Map<String, Object>> employeeDevices(@PathVariable Long employeeId) {
+        return ResponseEntity.ok(deviceBindingService.employeeDevices(employeeId));
+    }
+
+    @PostMapping("/devices/{id}/approve")
+    @PreAuthorize(HR_WRITE)
+    public ResponseEntity<Map<String, Object>> approveDevice(@PathVariable Long id) {
+        return ResponseEntity.ok(deviceBindingService.approve(id, actor()));
+    }
+
+    @PostMapping("/devices/{id}/reject")
+    @PreAuthorize(HR_WRITE)
+    public ResponseEntity<Map<String, Object>> rejectDevice(@PathVariable Long id,
+                                                            @RequestBody(required = false) Map<String, String> body) {
+        return ResponseEntity.ok(deviceBindingService.reject(id, actor(), body == null ? null : body.get("reason")));
+    }
+
+    @PostMapping("/devices/{id}/revoke")
+    @PreAuthorize(HR_WRITE)
+    public ResponseEntity<Map<String, Object>> revokeDevice(@PathVariable Long id,
+                                                            @RequestBody(required = false) Map<String, String> body) {
+        return ResponseEntity.ok(deviceBindingService.revoke(id, actor(), body == null ? null : body.get("reason")));
+    }
+
+    @PostMapping("/devices/user/{userId}/reset")
+    @PreAuthorize(HR_WRITE)
+    public ResponseEntity<Map<String, Object>> resetDevices(@PathVariable Long userId) {
+        deviceBindingService.reset(userId, actor());
+        return ResponseEntity.ok(deviceBindingService.userDevices(userId));
+    }
+
+    @PutMapping("/devices/employee/{employeeId}/mode")
+    @PreAuthorize(HR_WRITE)
+    public ResponseEntity<Map<String, Object>> setDeviceMode(@PathVariable Long employeeId,
+                                                             @RequestBody Map<String, String> body) {
+        return ResponseEntity.ok(deviceBindingService.setEmployeeMode(employeeId, body.get("mode")));
     }
 
     private String actor() {
