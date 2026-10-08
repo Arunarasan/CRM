@@ -24,7 +24,7 @@ import { CATEGORY_TONE, PRODUCT_TONE } from "./quoteTones";
 import { UnitOptions } from "@/components/UnitOptions";
 import { isAreaUnit, isLengthUnit, normalizeUnit, sizeUnitOf } from "@/lib/units";
 
-// The quote sheet, organised Category → Product. Every line is edited in place, saved on blur, and
+// The quote sheet, organised Category → Product. Every line is edited in place, saved on blur (or its ✓), and
 // the sheet is re-fetched after each save so server-calculated totals stay authoritative.
 
 const inr = (v?: number | null) =>
@@ -773,8 +773,8 @@ function SaveState({ pending, lastSaved }: { pending: number; lastSaved: number 
 // ---------------------------------------------------------------------------
 
 /** Desktop column layout shared by the header and every product row. */
-const ROW = "@[820px]:grid @[820px]:grid-cols-[20px_18px_32px_minmax(0,1fr)_64px_76px_88px_72px_104px_28px] "
-  + "@[1100px]:grid-cols-[20px_18px_32px_minmax(0,1.2fr)_minmax(0,1fr)_112px_64px_76px_88px_72px_104px_28px] @[820px]:gap-x-1.5 @[820px]:gap-y-0";
+const ROW = "@[820px]:grid @[820px]:grid-cols-[20px_18px_32px_minmax(0,1fr)_64px_76px_88px_72px_104px_64px] "
+  + "@[1100px]:grid-cols-[20px_18px_32px_minmax(0,1.2fr)_minmax(0,1fr)_112px_64px_76px_88px_72px_104px_64px] @[820px]:gap-x-1.5 @[820px]:gap-y-0";
 
 /** Visible input styling for editable cells (the bare spreadsheet cells only show a border on hover). */
 const FIELD = "!border-border !bg-background";
@@ -824,6 +824,9 @@ function ItemRow({
   onSaveToCatalogue: () => Promise<unknown>;
 }) {
   const inactive = item.isActive === false;
+  // While a field in this row is being typed in, a ✓ shows to save it (cells save on blur, so ✓
+  // just blurs the field — handy on phones, where there's no obvious "leave the field").
+  const [editing, setEditing] = useState(false);
   const [saveMenu, setSaveMenu] = useState(false);
   const [savingToCatalogue, setSavingToCatalogue] = useState(false);
   const [open, setOpen] = useState(false);
@@ -881,12 +884,26 @@ function ItemRow({
   // Location shows as quiet text under the name; it's edited in Details.
   const meta = item.location || item.roomName || "";
   const menu = (
-    <RowMenu canEdit={canEdit} open={detailsOpen} lineCount={lineCount}
-      onToggle={() => setOpen((v) => !v)} onDelete={onDelete} />
+    <span className="flex items-center gap-0.5">
+      {canEdit && editing && (
+        <button type="button" aria-label={`Save ${item.itemName}`} title="Save changes"
+          // Keep focus in the field until the click, so the button doesn't vanish under the finger.
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => { (document.activeElement as HTMLElement | null)?.blur(); setEditing(false); }}
+          className="h-9 w-9 @[820px]:h-7 @[820px]:w-7 shrink-0 rounded-md flex items-center justify-center bg-[#1F5C3F] text-white hover:bg-[#174a32] active:scale-95">
+          <Check className="h-4 w-4" />
+        </button>
+      )}
+      <RowMenu canEdit={canEdit} open={detailsOpen} lineCount={lineCount}
+        onToggle={() => setOpen((v) => !v)} onDelete={onDelete} />
+    </span>
   );
 
   return (
-    <div className={`group transition-colors rounded-xl border bg-card shadow-sm @[820px]:rounded-none @[820px]:border-0 @[820px]:shadow-none @[820px]:bg-transparent ${inactive ? "!bg-muted/40" : "@[820px]:hover:bg-muted/30"}`}>
+    <div
+      onFocus={(e) => { if (canEdit && (e.target as HTMLElement).matches("input:not([type=checkbox]), textarea, select")) setEditing(true); }}
+      onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setEditing(false); }}
+      className={`group transition-colors rounded-xl border bg-card shadow-sm @[820px]:rounded-none @[820px]:border-0 @[820px]:shadow-none @[820px]:bg-transparent ${editing ? "ring-2 ring-[#1F5C3F]/40 @[820px]:ring-inset !bg-[#F0FDF4]" : inactive ? "!bg-muted/40" : "@[820px]:hover:bg-muted/30"}`}>
       <div className={`grid grid-cols-[22px_48px_minmax(0,1fr)_auto] @[440px]:grid-cols-[22px_56px_minmax(0,1fr)_auto] gap-x-2.5 @[440px]:gap-x-3 gap-y-3 items-start p-3 ${ROW} @[820px]:items-center @[820px]:px-3 @[820px]:py-1`}>
         {/* ✓ in quote */}
         <input type="checkbox" aria-label={`${item.itemName} in quote`} title="In the quote (customer's choice)"

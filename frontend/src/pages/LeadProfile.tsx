@@ -314,7 +314,7 @@ export default function LeadProfile() {
             </div>
           </div>
 
-          {/* One line of chips — scrolls sideways when it doesn't fit, so the header height never grows. */}
+          {/* Contact chips — one line that scrolls sideways when it doesn't fit, so the header height never grows. */}
           <div className={`mt-2 -mx-1 px-1 flex items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${fold ? "max-sm:hidden" : ""}`}>
             {phone && (
               <span className="inline-flex shrink-0 items-stretch rounded-lg border border-slate-200 bg-white text-[13px] shadow-sm whitespace-nowrap">
@@ -352,29 +352,32 @@ export default function LeadProfile() {
                 <Navigation className="h-3.5 w-3.5" /> Navigate
               </a>
             )}
-            {(enquiry || lead.requirementCategory || products.length > 0) && (
-              <span className="mx-1 h-5 w-px shrink-0 bg-slate-200" aria-hidden />
-            )}
-            {enquiry && <span className="shrink-0 text-[11px] font-bold uppercase tracking-wide text-slate-500">{enquiryLabel(enquiry) || enquiry}</span>}
-            {enquiryDetails(lead).filter((d) => d !== lead.requirementCategory).map((d) => (
-              <span key={d} className="shrink-0 whitespace-nowrap rounded-lg bg-violet-50 px-2.5 py-1 text-[13px] font-medium text-violet-700">{d}</span>
-            ))}
-            {lead.requirementCategory && (
-              <span className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-amber-50 px-2.5 py-1 text-[13px] font-semibold text-amber-900 ring-1 ring-amber-200/70">
-                <Tag className="h-3.5 w-3.5 text-amber-700" /> {lead.requirementCategory}
-              </span>
-            )}
-            {shownProducts.map((p) => (
-              <span key={p} className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-slate-100 px-2.5 py-1 text-[13px] text-slate-700">
-                <Package className="h-3.5 w-3.5 text-slate-500" /> {p}
-              </span>
-            ))}
-            {products.length > shownProducts.length && (
-              <span className="shrink-0 text-xs font-medium text-slate-400" title={products.slice(shownProducts.length).join(", ")}>
-                +{products.length - shownProducts.length} more
-              </span>
-            )}
           </div>
+
+          {/* What they want — its own line so the category / products are never pushed off-screen. */}
+          {(enquiry || lead.requirementCategory || products.length > 0 || enquiryDetails(lead).length > 0) && (
+            <div className={`mt-1.5 -mx-1 px-1 flex items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${fold ? "max-sm:hidden" : ""}`}>
+              {enquiry && <span className="shrink-0 text-[11px] font-bold uppercase tracking-wide text-slate-500">{enquiryLabel(enquiry) || enquiry}</span>}
+              {enquiryDetails(lead).filter((d) => d !== lead.requirementCategory).map((d) => (
+                <span key={d} className="shrink-0 whitespace-nowrap rounded-lg bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700">{d}</span>
+              ))}
+              {lead.requirementCategory && (
+                <span className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-900 ring-1 ring-amber-200/70">
+                  <Tag className="h-3.5 w-3.5 text-amber-700" /> {lead.requirementCategory}
+                </span>
+              )}
+              {shownProducts.map((p) => (
+                <span key={p} className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-slate-100 px-2 py-0.5 text-xs text-slate-700">
+                  <Package className="h-3.5 w-3.5 text-slate-500" /> {p}
+                </span>
+              ))}
+              {products.length > shownProducts.length && (
+                <span className="shrink-0 text-xs font-medium text-slate-400" title={products.slice(shownProducts.length).join(", ")}>
+                  +{products.length - shownProducts.length} more
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         {!isLost && <div className={fold ? "max-sm:hidden" : ""}><LeadJourneyBar journey={journey} onOpen={goToStep} /></div>}
