@@ -152,7 +152,7 @@ public class LeadController {
     @GetMapping("/{id}")
     @PreAuthorize(READ)
     public ResponseEntity<Lead> getLeadById(@PathVariable Long id) {
-        return ResponseEntity.ok(leadService.getLeadById(id));
+        return ResponseEntity.ok(leadService.getLeadWithStage(id));
     }
 
     /** Who added this lead — name + employee code/designation (resolved for field-portal leads). */

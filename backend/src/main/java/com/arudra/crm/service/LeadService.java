@@ -157,6 +157,13 @@ public class LeadService {
         return out;
     }
 
+    /** The lead page's read: the lead plus its journey stage (same rule as the list and stage cards). */
+    public Lead getLeadWithStage(Long id) {
+        Lead lead = getLeadById(id);
+        fillJourneyStages(List.of(lead));
+        return lead;
+    }
+
     public Lead getLeadById(Long id) {
         Lead lead = leadRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Lead not found with id: " + id));

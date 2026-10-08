@@ -5,7 +5,7 @@ import {
   ArrowLeft, CheckCircle2, MoreVertical, XCircle, Check, CalendarClock, CalendarPlus,
   LayoutGrid, ListChecks, Activity as ActivityIcon, FileText, Route, Clock, RotateCcw, Star,
   ChevronDown, ChevronRight, ChevronUp, FolderKanban, UserPlus, Phone, MessageCircle, Mail, MapPin, Navigation,
-  NotebookPen, Pencil, Crown, Tag, UserCheck, Package, ClipboardList, Calculator, Rocket,
+  NotebookPen, Pencil, Crown, Tag, PhoneCall, XOctagon, UserCheck, Package, ClipboardList, Calculator, Rocket,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -18,8 +18,8 @@ import { leadApi } from "./leads/leadApi";
 import { toast } from "@/components/ui/toast";
 import {
   LEAD_STATUSES,
-  formatDate, statusStyle,
-  type Lead, type UserSummary, type LeadCreator,
+  formatDate, statusStyle, JOURNEY_STAGE_META,
+  type JourneyStage, type Lead, type UserSummary, type LeadCreator,
 } from "./leads/constants";
 import { SelectField, TextAreaField, selectClass } from "./leads/fields";
 import { useGoBack } from "@/hooks/useGoBack";
@@ -53,6 +53,11 @@ const LEGACY_TAB_MAP: Record<string, string> = {
 function normalizeTab(t: string) {
   return (TABS as readonly string[]).includes(t) ? t : LEGACY_TAB_MAP[t] || "overview";
 }
+
+/** Icon per lead stage — colours/labels come from JOURNEY_STAGE_META (shared with the Leads list). */
+const STAGE_ICONS: Record<JourneyStage, React.ElementType> = {
+  REQUIREMENT: PhoneCall, QUOTE: FileText, PROJECT: FolderKanban, COMPLETED: CheckCircle2, LOST: XOctagon,
+};
 
 const PILL = "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide";
 
@@ -143,6 +148,8 @@ export default function LeadProfile() {
 
   const isOpen = !lead.isConverted && !["Lost", "Cancelled"].includes(lead.status);
   const isLost = lead.status === "Lost";
+  const stageMeta = lead.journeyStage ? JOURNEY_STAGE_META[lead.journeyStage] : undefined;
+  const StageIcon = lead.journeyStage ? STAGE_ICONS[lead.journeyStage] : Crown;
   const canReopen = isLost && lead.canReopen !== false;
   const project = lead.convertedToProject || journey.records.projects[0];
   const addedBy = creator?.name || lead.leadOwner?.name;
@@ -238,17 +245,36 @@ export default function LeadProfile() {
               <div className="min-w-0">
                 <div className="flex min-w-0 flex-wrap @xl:flex-nowrap items-center gap-x-2 gap-y-0.5">
                   <h1 className="min-w-0 max-w-full truncate text-lg @lg:text-xl font-bold tracking-tight text-slate-900">{lead.name}</h1>
-                  <button
-                    type="button"
-                    onClick={() => isOpen && setStatusOpen(true)}
-                    disabled={!isOpen}
-                    title={isOpen ? "Change status" : lead.status}
-                    className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${statusStyle(lead.status)} ${isOpen ? "hover:ring-1 hover:ring-emerald-400 cursor-pointer" : "cursor-default"}`}
-                  >
-                    {lead.status === "New" ? <Crown className="h-3 w-3" /> : <span className="h-1.5 w-1.5 rounded-full bg-current" />}
-                    {lead.status}
-                  </button>
-                  {lead.isConverted && <span className={`${PILL} shrink-0 bg-emerald-100 text-emerald-800`}><CheckCircle2 className="h-3 w-3" /> Converted</span>}
+                  {stageMeta ? (
+                    // Lead stage (worked out from requirement / quote / project) + the manual status beside it.
+                    <button
+                      type="button"
+                      onClick={() => isOpen && setStatusOpen(true)}
+                      disabled={!isOpen}
+                      title={isOpen ? `Stage: ${stageMeta.label} · click to change status` : `Stage: ${stageMeta.label}`}
+                      className={`inline-flex shrink-0 items-center gap-1.5 ${isOpen ? "cursor-pointer group" : "cursor-default"}`}
+                    >
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${stageMeta.className} ${isOpen ? "group-hover:ring-1 group-hover:ring-emerald-400" : ""}`}>
+                        <StageIcon className="h-3 w-3" />
+                        {stageMeta.label}
+                      </span>
+                      {lead.journeyStage !== "LOST" && lead.status && (
+                        <span className="text-[11px] text-slate-500">Status: {lead.status}</span>
+                      )}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => isOpen && setStatusOpen(true)}
+                      disabled={!isOpen}
+                      title={isOpen ? "Change status" : lead.status}
+                      className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${statusStyle(lead.status)} ${isOpen ? "hover:ring-1 hover:ring-emerald-400 cursor-pointer" : "cursor-default"}`}
+                    >
+                      {lead.status === "New" ? <Crown className="h-3 w-3" /> : <span className="h-1.5 w-1.5 rounded-full bg-current" />}
+                      {lead.status}
+                    </button>
+                  )}
+                  {!stageMeta && lead.isConverted && <span className={`${PILL} shrink-0 bg-emerald-100 text-emerald-800`}><CheckCircle2 className="h-3 w-3" /> Converted</span>}
                 </div>
                 <div className={`flex items-center gap-2 text-xs text-slate-500 ${fold ? "max-sm:hidden" : ""}`}>
                   <span className="font-medium">{lead.leadNumber}</span>
