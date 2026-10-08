@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import GstModeToggle from "@/components/ui/gst-mode-toggle";
 import { Link } from "react-router-dom";
 import {
-  AlertTriangle, BadgeCheck, BadgePercent, Building2, CalendarDays, Calculator, CheckCircle2, ChevronDown, Eye, FileOutput,
+  AlertTriangle, BadgeCheck, Building2, CalendarDays, Calculator, CheckCircle2, ChevronDown, Eye, FileOutput,
   FileText, History, Image as ImageIcon, Info, Layers, Loader2, Lock, Pencil, RotateCcw,
   Save, Send, Share2, Users, Wand2, XCircle,
 } from "lucide-react";
@@ -50,8 +50,10 @@ const errMsg = (e: any, fallback: string) =>
   e?.response?.data?.message || (typeof e?.response?.data === "string" ? e.response.data : "") || fallback;
 const QUOTE_DONE = new Set(["APPROVED", "CONVERTED"]);
 
-export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode, onCreateProject }: {
+export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode, onCreateProject, readOnly }: {
   leadId: string;
+  /** Closed (lost) lead: show the quote but allow no edits or approvals. */
+  readOnly?: boolean;
   /** Opened from the project: changes update this project (change order), no Create Project. */
   projectId?: number;
   onChanged: () => void;
@@ -159,10 +161,9 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
   const locked = boq?.status === "APPROVED";
   // A change to the running project is open (sheet unlocked, customer hasn't approved it yet).
   const changeInProgress = projectMode && !!projectQuote?.changeOpen;
-  const editable = canPrice && !locked && !sheetProject && (!projectMode || canChangeProject);
+  const editable = !readOnly && canPrice && !locked && !sheetProject && (!projectMode || canChangeProject);
   const inQuote = (boq?.items || []).filter((i) => i.isActive !== false);
   const customerName: string = boq?.customer?.name || measurement?.customer?.name || measurement?.customerName || "—";
-  const customerId: string = measurement?.customerCode || (boq?.customer?.id ? `#${boq.customer.id}` : "—");
 
   // ---------------- Actions ----------------
 
@@ -370,7 +371,8 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
   const noItems = inQuote.length === 0;
   /** The one next step for this quote (approve, approve change, create project). */
   const primary: null | { label: string; icon: typeof CheckCircle2; onClick: () => void; disabled: boolean } =
-    projectMode && changeInProgress && canChangeProject
+    readOnly ? null
+    : projectMode && changeInProgress && canChangeProject
       ? { label: "Customer Approved Change", icon: CheckCircle2, onClick: () => setApproveOpen(true), disabled: !!busy || noItems }
       : !projectMode && !sheetProject && !fieldMode && !approved && canApprove
         ? { label: "Customer Approved", icon: CheckCircle2, onClick: () => setApproveOpen(true), disabled: !!busy || noItems }
@@ -391,7 +393,7 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
               }
             : null;
   /** Less common steps, under the primary button's ▾. */
-  const secondary: { label: string; icon: typeof CheckCircle2; onClick: () => void; disabled?: boolean }[] = [
+  const secondary: { label: string; icon: typeof CheckCircle2; onClick: () => void; disabled?: boolean }[] = readOnly ? [] : [
     ...(fieldMode && !approved && !sheetProject
       ? [{ label: sentToOffice ? "Sent to office" : "Send to office", icon: Send, onClick: sendToOffice, disabled: !!busy || noItems || sentToOffice }]
       : []),
@@ -439,15 +441,9 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
 
   return (
     <section className="quote-layout quote-neutral space-y-3">
-      {/* ---- Quotation information ---- */}
-      <dl className="grid grid-cols-2 xl:grid-cols-4 rounded-xl border bg-card shadow-sm">
-        <InfoTile icon={Users} label="Customer" value={customerName} sub={customerId !== "—" ? customerId : undefined} />
-        <InfoTile icon={Building2} label="Site / Project"
-          value={measurement?.siteAddress || measurement?.measurementNumber || (measurement ? `Measurement #${measurement.id}` : "No measurement yet")}
-          sub={[measurement?.siteAddress ? measurement.measurementNumber : "", measurement?.totalArea ? `${measurement.totalArea} sq.ft` : ""].filter(Boolean).join(" · ") || undefined} />
-        <InfoTile icon={CalendarDays} label="Date" value={formatDate(quote?.quotationDate || quote?.createdAt || boq?.createdAt) || "—"} />
-        <InfoTile icon={FileText} label="Quote Total" value={inr(boq?.grandTotal)} tone="amber" strong />
-      </dl>
+      {/* ---- Which quote, in what state — one line ---- */}
+      <QuoteHeading quote={quote} boq={boq} measurement={measurement}
+        customer={customerName !== "—" ? customerName : undefined} />
 
       {/* Customer pressed "Accept" on the shared link — the approval itself is still ours to confirm. */}
       {quote?.customerAcceptedAt && !approved && (
@@ -619,11 +615,12 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
                 </div>
 
                 {/* ---- Action bar ---- */}
-                <div className="sticky bottom-16 md:bottom-0 z-10 rounded-b-xl border-t bg-card/95 backdrop-blur px-3 sm:px-4 py-2 sm:py-2.5 flex items-center justify-between gap-2">
-                  <div className="min-w-0 sm:shrink-0 text-sm leading-tight sm:whitespace-nowrap">
-                    <span className="block sm:hidden font-bold tabular-nums">{inr(boq.grandTotal)}</span>
-                    <span className="text-xs sm:text-sm text-muted-foreground">{inQuote.length} item{inQuote.length === 1 ? "" : "s"}<span className="hidden sm:inline"> in quote · </span></span>
-                    <span className="hidden sm:inline font-bold tabular-nums">{inr(boq.grandTotal)}</span>
+                <div data-quote-actions className="sticky bottom-16 md:bottom-0 z-10 rounded-b-xl border-t bg-card/95 backdrop-blur px-3 sm:px-4 py-2 sm:py-2.5 flex items-center justify-between gap-2">
+                  <div className="min-w-0 sm:shrink-0 text-sm leading-tight sm:whitespace-nowrap" title={priceBreakdown(boq)}>
+                    <span className="block text-[11px] text-muted-foreground">
+                      Final price<span className="hidden sm:inline"> · {inQuote.length} item{inQuote.length === 1 ? "" : "s"}</span>
+                    </span>
+                    <span className="block font-bold tabular-nums text-base">{inr(boq.grandTotal)}</span>
                   </div>
                   <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
                     <Button variant="outline" size="sm" className="h-9 w-9 px-0 sm:w-auto sm:px-3" disabled={!!busy || noItems} onClick={openPrint} aria-label="Preview"
@@ -711,7 +708,8 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
         <DialogContent className="max-w-md">
           <DialogHeader><DialogTitle>Customer approved this quote?</DialogTitle></DialogHeader>
           <div className="text-sm space-y-2">
-            <p><span className="font-semibold">{inQuote.length}</span> ticked item(s) · final price <span className="font-semibold">{inr(boq?.grandTotal)}</span></p>
+            <p><span className="font-semibold">{inQuote.length}</span> ticked item(s)</p>
+            {boq && <PriceLines boq={boq} />}
             {inQuote.length < (boq?.items?.length ?? 0) && (
               <p className="text-muted-foreground">{(boq?.items?.length ?? 0) - inQuote.length} unticked item(s) are left out.</p>
             )}
@@ -906,41 +904,32 @@ function TotalsPanel({ boq, editable, onSave }: { boq: Boq; editable: boolean; o
   };
 
   return (
-    <div className="space-y-3 text-sm">
-      {/* Quotation summary */}
-      <div className="rounded-xl border bg-card p-4 shadow-sm space-y-3">
-        <h4 className="flex items-center gap-2.5 text-base font-semibold">
-          <span className="h-8 w-8 rounded-lg bg-muted flex items-center justify-center"><Calculator className="h-4 w-4" /></span>
-          Quotation Summary
-        </h4>
-        <Row label="Products Total" value={inr(subtotal + lineDiscounts)} />
-        <Row label="Line Discounts" value={lineDiscounts > 0 ? `– ${inr(lineDiscounts)}` : inr(0)} />
-        <div className="flex items-center justify-between rounded-lg bg-[#FFF7ED] px-3 py-3">
-          <span className="font-semibold">Products Net Total</span>
-          <span className="text-lg font-bold tabular-nums">{inr(subtotal)}</span>
-        </div>
-        {manual && (
-          <div className="rounded-md border border-[#FDE68A] bg-[#FFFBEB] p-2 text-xs text-[#78350F] space-y-1.5">
-            <p>
-              A manual total is set, so this doesn't match the items
-              (items add up to <span className="font-semibold">{inr(itemsMaterial + itemsLabour)}</span>).
-            </p>
-            {editable && (
-              <Button size="sm" variant="outline" className="h-7 bg-background"
-                onClick={() => onSave({ materialTotalOverride: null, labourTotalOverride: null })}>
-                <RotateCcw className="h-3.5 w-3.5 mr-1" /> Use the item totals
-              </Button>
-            )}
-          </div>
-        )}
+    <div className="rounded-xl border bg-card p-4 shadow-sm space-y-3 text-sm">
+      <h4 className="flex items-center gap-2.5 text-base font-semibold">
+        <span className="h-8 w-8 rounded-lg bg-muted flex items-center justify-center"><Calculator className="h-4 w-4" /></span>
+        Price
+      </h4>
+      <div className="space-y-2">
+        <Row label="Products" value={inr(subtotal + lineDiscounts)} />
+        {lineDiscounts > 0 && <Row label="Line discounts" value={`– ${inr(lineDiscounts)}`} />}
+        <Row label="Products net" value={inr(subtotal)} strong />
       </div>
+      {manual && (
+        <div className="rounded-md border border-[#FDE68A] bg-[#FFFBEB] p-2 text-xs text-[#78350F] space-y-1.5">
+          <p>
+            A manual total is set, so this doesn't match the items
+            (items add up to <span className="font-semibold">{inr(itemsMaterial + itemsLabour)}</span>).
+          </p>
+          {editable && (
+            <Button size="sm" variant="outline" className="h-7 bg-background"
+              onClick={() => onSave({ materialTotalOverride: null, labourTotalOverride: null })}>
+              <RotateCcw className="h-3.5 w-3.5 mr-1" /> Use the item totals
+            </Button>
+          )}
+        </div>
+      )}
 
-      {/* Additional charges → final price */}
-      <div className="rounded-xl border bg-card p-4 shadow-sm space-y-3">
-        <h4 className="flex items-center gap-2.5 text-base font-semibold">
-          <span className="h-8 w-8 rounded-lg bg-muted flex items-center justify-center"><BadgePercent className="h-4 w-4" /></span>
-          Additional Charges
-        </h4>
+      <div className="border-t pt-3 space-y-3">
         <div className="grid grid-cols-[1fr_auto] items-center gap-x-3 gap-y-2.5">
           <label className="text-muted-foreground" title="On products only — labour and shipping are added after it">Discount</label>
           <div className="flex items-center gap-1.5">
@@ -1000,6 +989,75 @@ function TotalsPanel({ boq, editable, onSave }: { boq: Boq; editable: boolean; o
   );
 }
 
+/** "Products ₹x − discount ₹y + labour … = ₹final" — hover text on the price in the bar and heading. */
+function priceBreakdown(b: Boq): string {
+  const parts = [`Products ${inr(b.subtotal)}`];
+  if (Number(b.discountAmount ?? 0) > 0) parts.push(`− discount ${inr(b.discountAmount)}`);
+  if (Number(b.labourCharge ?? 0) > 0) parts.push(`+ labour ${inr(b.labourCharge)}`);
+  if (Number(b.shippingCharge ?? 0) > 0) parts.push(`+ shipping ${inr(b.shippingCharge)}`);
+  if (Number(b.taxAmount ?? 0) > 0) parts.push(b.taxInclusive ? `(incl. GST ${inr(b.taxAmount)})` : `+ GST ${inr(b.taxAmount)}`);
+  return `${parts.join(" ")} = ${inr(b.grandTotal)}`;
+}
+
+/** The price as the customer is agreeing to it — shown in the approval dialog. */
+function PriceLines({ boq: b }: { boq: Boq }) {
+  const rows: [string, string][] = [["Products", inr(b.subtotal)]];
+  if (Number(b.discountAmount ?? 0) > 0) rows.push(["Discount", `– ${inr(b.discountAmount)}`]);
+  if (Number(b.labourCharge ?? 0) > 0) rows.push(["Labour", inr(b.labourCharge)]);
+  if (Number(b.shippingCharge ?? 0) > 0) rows.push(["Shipping", inr(b.shippingCharge)]);
+  if (Number(b.taxAmount ?? 0) > 0) rows.push([b.taxInclusive ? "GST (included)" : `GST ${Number(b.taxPercent ?? 0)}%`, inr(b.taxAmount)]);
+  return (
+    <div className="rounded-lg border bg-muted/40 px-3 py-2 space-y-1">
+      {rows.map(([l, v]) => <Row key={l} label={l} value={v} />)}
+      <div className="flex items-center justify-between border-t pt-1.5 mt-1">
+        <span className="font-semibold">Final price</span>
+        <span className="text-base font-bold tabular-nums">{inr(b.grandTotal)}</span>
+      </div>
+    </div>
+  );
+}
+
+/** One line: quote number · revision · status · date · measurement — replaces the four info tiles. */
+function QuoteHeading({ quote, boq, measurement, customer }: {
+  quote?: any; boq: Boq | null; measurement?: any; customer?: string;
+}) {
+  // Before the sheet exists the "Start the quote" card says it all.
+  if (!boq) return null;
+  const status: string | undefined = quote?.status;
+  const acceptedOnline = !!quote?.customerAcceptedAt && !QUOTE_DONE.has(status || "");
+  const chip: [string, string] = acceptedOnline ? ["Accepted online", "bg-emerald-100 text-emerald-800"]
+    : status ? [QUOTATION_STATUS_LABELS[status] || status, QUOTATION_STATUS_STYLES[status] || "bg-slate-100 text-slate-700"]
+    : ["Not shared yet", "bg-slate-100 text-slate-600"];
+  const rev = Number(quote?.revisionNumber ?? 0);
+  const rawDate = quote?.quotationDate || quote?.createdAt || boq.createdAt;
+  const date = rawDate ? formatDate(rawDate) : "";
+  const meas = measurement?.measurementNumber || (measurement ? `Measurement #${measurement.id}` : "");
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl border bg-card px-4 py-2.5 shadow-sm">
+      <span className="flex items-center gap-2 min-w-0">
+        <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <span className="font-semibold truncate">{quote?.quotationNumber || "Quote"}</span>
+        {rev > 0 && <span className="text-xs text-muted-foreground">Rev {rev}</span>}
+        <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${chip[1]}`}>{chip[0]}</span>
+      </span>
+      <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground min-w-0">
+        {date && <span className="inline-flex items-center gap-1"><CalendarDays className="h-3.5 w-3.5" /> {date}</span>}
+        {meas && (
+          <span className="inline-flex items-center gap-1 min-w-0">
+            <Building2 className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">{meas}{measurement?.totalArea ? ` · ${measurement.totalArea} sq.ft` : ""}</span>
+          </span>
+        )}
+        {customer && <span className="inline-flex items-center gap-1"><Users className="h-3.5 w-3.5" /> {customer}</span>}
+      </span>
+      <span className="ml-auto text-right leading-tight" title={priceBreakdown(boq)}>
+        <span className="block text-[11px] text-muted-foreground">Final price</span>
+        <span className="block font-bold tabular-nums">{inr(boq.grandTotal)}</span>
+      </span>
+    </div>
+  );
+}
+
 /** Labour / shipping: an amount added after the discount, with an optional note for the customer. */
 function ChargeRow({ label, amount, note, notePlaceholder, editable, f, onSave }: {
   label: string; amount?: number | null; note?: string | null; notePlaceholder: string;
@@ -1033,25 +1091,6 @@ function Row({ label, value, strong }: { label: string; value: string; strong?: 
     <div className="flex items-center justify-between">
       <span className={strong ? "font-medium" : "text-muted-foreground"}>{label}</span>
       <span className={`tabular-nums ${strong ? "font-semibold" : ""}`}>{value}</span>
-    </div>
-  );
-}
-
-/** One card in the information row: tinted icon tile · label · value. */
-function InfoTile({ icon: Icon, label, value, sub, strong, tone = "green" }: {
-  icon: React.ComponentType<{ className?: string }>; label: string; value: string; sub?: string; strong?: boolean;
-  tone?: "green" | "amber";
-}) {
-  return (
-    <div className="flex min-w-0 items-center gap-3 border-b px-3 py-2.5 sm:px-4 sm:py-3 [&:nth-child(odd)]:border-r [&:nth-last-child(-n+2)]:border-b-0 xl:border-b-0 xl:border-r xl:last:border-r-0">
-      <span className={`hidden sm:flex h-11 w-11 shrink-0 rounded-lg items-center justify-center ${tone === "amber" ? "bg-[#FFF7ED] text-[#D97706]" : "bg-[#ECFDF5] text-[#1F5C3F]"}`}>
-        <Icon className="h-5 w-5" />
-      </span>
-      <div className="min-w-0">
-        <dt className="text-xs text-muted-foreground">{label}</dt>
-        <dd className={`truncate ${strong ? "text-base sm:text-lg font-bold tabular-nums" : "text-sm font-semibold"}`} title={value}>{value}</dd>
-        {sub && <dd className="truncate text-xs text-muted-foreground">{sub}</dd>}
-      </div>
     </div>
   );
 }
