@@ -450,7 +450,9 @@ public class ProjectService {
         }
         if (categories.isEmpty()) {
             String fallback = firstNonBlank(project.getProjectCategory(), lead != null ? lead.getRequirementCategory() : null);
-            if (fallback != null) categories.add(fallback);
+            if (fallback != null) {
+                for (String name : fallback.split(",")) if (!name.isBlank()) categories.add(name.trim());
+            }
         }
         s.put("categories", new java.util.ArrayList<>(categories));
         s.put("products", new java.util.ArrayList<>(products));

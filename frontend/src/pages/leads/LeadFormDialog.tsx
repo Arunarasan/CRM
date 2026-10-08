@@ -85,14 +85,23 @@ export default function LeadFormDialog({
     api.get("/public/services").then((res) => setServices(res.data || [])).catch(() => {});
   }, [open, categories.length]);
 
-  const selectedCategory = categories.find((c) => c.name === form.requirementCategory);
+  // Several categories can be picked (stored comma-separated, like products); a lead may name
+  // only categories and no products. The picked categories narrow the product picker.
+  const selectedCategoryNames = splitList(form.requirementCategory);
+  const selectedCategorySlugs = new Set(categories.filter((c) => selectedCategoryNames.includes(c.name)).map((c) => c.slug));
+  const toggleCategory = (name: string) => {
+    const next = selectedCategoryNames.includes(name)
+      ? selectedCategoryNames.filter((c) => c !== name)
+      : [...selectedCategoryNames, name];
+    setForm((f) => ({ ...f, requirementCategory: next.length ? next.join(", ") : undefined }));
+  };
   const productOptions = products
-    .filter((p) => !selectedCategory || p.categorySlug === selectedCategory.slug)
+    .filter((p) => selectedCategorySlugs.size === 0 || (p.categorySlug != null && selectedCategorySlugs.has(p.categorySlug)))
     .map((p) => p.name);
 
   // A lead can carry several products; they are stored comma-separated in requirementProduct.
-  // The category only filters which products the picker lists — chosen products persist even
-  // after the category is switched, so a lead can span categories.
+  // The categories only filter which products the picker lists — chosen products persist even
+  // after a category is unpicked, so a lead can span categories.
   const selectedProducts = splitList(form.requirementProduct);
   const applyProducts = (names: string[]) => setForm((f) => ({ ...f, requirementProduct: names.join(", ") }));
   const addProduct = (name: string) => {
@@ -269,7 +278,7 @@ export default function LeadFormDialog({
     if (!label) return "";
     if (form.enquiryType === "SERVICE") return join(label, selectedServices.join(", "), selectedProducts.length > 0 && `for ${selectedProducts.join(", ")}`);
     if (form.enquiryType === "OTHER") return join(label, form.requirementOther);
-    return join(label, form.requirementCategory, selectedProducts.join(", "));
+    return join(label, selectedCategoryNames.join(", "), selectedProducts.join(", "));
   })();
   const summaries: Record<StepKey, string> = {
     customer: join(form.name, form.mobileNumber, form.city),
@@ -387,18 +396,18 @@ export default function LeadFormDialog({
 
               {(form.enquiryType === "PRODUCT" || form.enquiryType === "SERVICE") && (
                 <div className="space-y-3 rounded-md bg-muted/30 p-3">
-                  <F label={form.enquiryType === "SERVICE" ? "For which product? — category" : "Category"}>
+                  <F label={form.enquiryType === "SERVICE" ? "For which product? — categories" : "Categories (pick one or more)"}>
                     <div className="flex flex-wrap gap-1.5">
                       {categories.map((c) => (
-                        <Chip key={c.id} active={form.requirementCategory === c.name}
-                          onClick={() => set("requirementCategory")(form.requirementCategory === c.name ? undefined : c.name)}>
+                        <Chip key={c.id} active={selectedCategoryNames.includes(c.name)}
+                          onClick={() => toggleCategory(c.name)}>
                           {c.name}
                         </Chip>
                       ))}
                       {categories.length === 0 && <span className="text-xs text-muted-foreground">Loading categories…</span>}
                     </div>
                   </F>
-                  <F label="Products">
+                  <F label="Products (optional)">
                     {/* Add-and-reset picker: choosing an option appends it, then the select clears. */}
                     <select className={selectCls} value="" onChange={(e) => addProduct(e.target.value)}>
                       <option value="">Add a product…</option>

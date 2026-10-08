@@ -119,13 +119,23 @@ public class LeadService {
     }
 
     public List<Map<String, Object>> getCategoryCounts() {
-        List<Map<String, Object>> out = new ArrayList<>();
+        // A lead may name several categories ("Curtains, Blinds") — count it under each one.
+        Map<String, Long> counts = new java.util.LinkedHashMap<>();
         for (Object[] row : leadRepository.countByRequirementCategory()) {
-            Map<String, Object> m = new HashMap<>();
-            m.put("category", row[0]);
-            m.put("count", row[1]);
-            out.add(m);
+            long n = ((Number) row[1]).longValue();
+            String raw = (String) row[0];
+            if (raw == null || raw.isBlank()) { counts.merge(null, n, Long::sum); continue; }
+            for (String c : raw.split(",")) {
+                if (!c.isBlank()) counts.merge(c.trim(), n, Long::sum);
+            }
         }
+        List<Map<String, Object>> out = new ArrayList<>();
+        counts.forEach((category, count) -> {
+            Map<String, Object> m = new HashMap<>();
+            m.put("category", category);
+            m.put("count", count);
+            out.add(m);
+        });
         return out;
     }
 

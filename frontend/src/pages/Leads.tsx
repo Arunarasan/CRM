@@ -17,7 +17,7 @@ import api from "@/lib/api";
 import { leadApi } from "./leads/leadApi";
 import LeadFormDialog from "./leads/LeadFormDialog";
 import { selectClass } from "./leads/fields";
-import { CATEGORY_GROUPS, EnquiryTag, categoryGroupOf, enquiryDetails, enquiryTypeOf } from "./leads/enquiry";
+import { CATEGORY_GROUPS, EnquiryTag, categoryGroupOf, enquiryDetails, enquiryTypeOf, splitList } from "./leads/enquiry";
 import {
   BOARD_DROP_STATUS, EMPTY_FILTERS, ENQUIRY_TYPES, formatFollowUp, LEAD_SOURCES, LEAD_STAGES, LEAD_STATUSES, LEAD_TYPES,
   PRIORITIES, TEMPERATURES, TEMPERATURE_STYLES, avatarColor, followUpTone,
@@ -299,12 +299,12 @@ export default function Leads() {
   const tempPill = (t?: string) =>
     t ? <span className={`px-2 py-0.5 text-xs rounded-full font-semibold ${TEMPERATURE_STYLES[t] || "bg-muted text-muted-foreground"}`}>{t}</span> : <span className="text-xs text-muted-foreground">—</span>;
 
-  // Requirement shown as compact pills: the catalog category (+ products) picked on the
+  // Requirement shown as compact pills: the catalog categories (+ products) picked on the
   // lead form, plus any legacy scope checkboxes the lead ticked.
   const requirementPills = (l: Lead) => {
     const products = (l.requirementProduct || "").split(",").map((s) => s.trim()).filter(Boolean);
     const reqs = [
-      ...(l.requirementCategory ? [{ key: "requirementCategory", label: l.requirementCategory }] : []),
+      ...splitList(l.requirementCategory).map((c) => ({ key: `category-${c}`, label: c })),
       ...products.map((p) => ({ key: `product-${p}`, label: p })),
       ...enquiryDetails(l).map((d) => ({ key: `service-${d}`, label: d })),
       ...REQUIREMENT_CATEGORIES.filter(({ key }) => l[key]),

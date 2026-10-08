@@ -54,7 +54,11 @@ export const CATEGORY_GROUPS: { key: CategoryGroupKey; label: string; icon: Luci
   { key: "OTHERS", label: "Others", icon: Shapes, tone: "bg-slate-200 text-slate-700" },
 ];
 
+/** Group of a category — or, for a lead's comma-separated list, of its first grouped category. */
 export function categoryGroupOf(category?: string | null): CategoryGroupKey {
-  if (!category) return "OTHERS";
-  return CATEGORY_GROUPS.find((g) => g.match?.test(category))?.key ?? "OTHERS";
+  for (const c of splitList(category)) {
+    const g = CATEGORY_GROUPS.find((x) => x.match?.test(c));
+    if (g) return g.key;
+  }
+  return "OTHERS";
 }

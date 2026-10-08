@@ -145,7 +145,8 @@ public class LeadSpecification {
     public static Specification<Lead> hasCategory(String category) {
         return (root, query, cb) -> {
             if (category == null || category.isEmpty()) return null;
-            return cb.equal(cb.lower(root.get("requirementCategory")), category.toLowerCase());
+            // Categories are comma-separated ("Curtains, Blinds"), so match one entry of the list.
+            return listContains("requirementCategory", category).toPredicate(root, query, cb);
         };
     }
 
@@ -157,20 +158,22 @@ public class LeadSpecification {
         };
     }
 
-    /** Category is one of the given names (case-insensitive). */
+    /** Any of the lead's categories is one of the given names (case-insensitive). */
     public static Specification<Lead> categoryIn(List<String> names) {
         return (root, query, cb) -> {
             if (names == null || names.isEmpty()) return null;
-            return cb.lower(root.get("requirementCategory")).in(names.stream().map(String::toLowerCase).toList());
+            return cb.or(names.stream()
+                    .map(n -> listContains("requirementCategory", n).toPredicate(root, query, cb))
+                    .toArray(Predicate[]::new));
         };
     }
 
-    /** Category is blank or none of the given names — the "Others" bucket. */
+    /** Category is blank or none of the lead's categories is one of the given names — the "Others" bucket. */
     public static Specification<Lead> categoryNotIn(List<String> names) {
         return (root, query, cb) -> {
             if (names == null || names.isEmpty()) return null;
             return cb.or(cb.isNull(root.get("requirementCategory")),
-                    cb.not(cb.lower(root.get("requirementCategory")).in(names.stream().map(String::toLowerCase).toList())));
+                    cb.not(categoryIn(names).toPredicate(root, query, cb)));
         };
     }
 

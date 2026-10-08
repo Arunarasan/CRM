@@ -108,7 +108,7 @@ export default function Leads() {
       .filter((l) => matchesStatus(l, statusFilter))
       .filter((l) => !catGroup || categoryGroupOf(l.requirementCategory) === catGroup)
       .filter((l) => !enq.enquiryType || enquiryTypeOf(l as any) === enq.enquiryType)
-      .filter((l) => !enq.category || (l.requirementCategory || '').toLowerCase() === enq.category.toLowerCase())
+      .filter((l) => !enq.category || listHas(l.requirementCategory, enq.category))
       .filter((l) => !enq.product || listHas(l.requirementProduct, enq.product))
       .filter((l) => !enq.service || listHas(l.requirementService, enq.service))
       .filter((l) => !q || [l.name, l.leadNumber, l.mobileNumber, l.city].some((v) => (v || '').toLowerCase().includes(q)));

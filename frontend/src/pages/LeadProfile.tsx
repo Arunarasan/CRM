@@ -28,7 +28,7 @@ import ConvertLeadDialog from "./leads/ConvertLeadDialog";
 import { useLeadJourney, type JourneyStepId } from "./leads/journey";
 import { LeadJourneyBar } from "./leads/LeadHeader";
 import { waLink } from "./projectCommandCenter/ProjectJourneyHeader";
-import { enquiryDetails, enquiryLabel, enquiryTypeOf } from "./leads/enquiry";
+import { enquiryDetails, enquiryLabel, enquiryTypeOf, splitList } from "./leads/enquiry";
 import OverviewTab from "./leads/tabs/OverviewTab";
 import EntityDailyReports from "@/components/hr/EntityDailyReports";
 import SalesJourneyTab from "./leads/tabs/SalesJourneyTab";
@@ -358,14 +358,14 @@ export default function LeadProfile() {
           {(enquiry || lead.requirementCategory || products.length > 0 || enquiryDetails(lead).length > 0) && (
             <div className={`mt-1.5 -mx-1 px-1 flex items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${fold ? "max-sm:hidden" : ""}`}>
               {enquiry && <span className="shrink-0 text-[11px] font-bold uppercase tracking-wide text-slate-500">{enquiryLabel(enquiry) || enquiry}</span>}
-              {enquiryDetails(lead).filter((d) => d !== lead.requirementCategory).map((d) => (
+              {enquiryDetails(lead).filter((d) => !splitList(lead.requirementCategory).includes(d)).map((d) => (
                 <span key={d} className="shrink-0 whitespace-nowrap rounded-lg bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700">{d}</span>
               ))}
-              {lead.requirementCategory && (
-                <span className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-900 ring-1 ring-amber-200/70">
-                  <Tag className="h-3.5 w-3.5 text-amber-700" /> {lead.requirementCategory}
+              {splitList(lead.requirementCategory).map((c) => (
+                <span key={c} className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-900 ring-1 ring-amber-200/70">
+                  <Tag className="h-3.5 w-3.5 text-amber-700" /> {c}
                 </span>
-              )}
+              ))}
               {shownProducts.map((p) => (
                 <span key={p} className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-slate-100 px-2 py-0.5 text-xs text-slate-700">
                   <Package className="h-3.5 w-3.5 text-slate-500" /> {p}

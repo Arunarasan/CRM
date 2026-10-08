@@ -46,7 +46,7 @@ const SECTIONS: { id: string; title: string; icon: IconType; wide?: boolean; fie
   {
     id: "requirement", title: "Requirement", icon: ListChecks, wide: true,
     fields: [
-      { key: "requirementCategory", label: "Category", custom: "category" },
+      { key: "requirementCategory", label: "Categories", custom: "category" },
       { key: "requirementProduct", label: "Products", custom: "products" },
       { key: "roomsRequired", label: "Rooms required", kind: "area", placeholder: "e.g. 3 Bedrooms, Living Room, Kitchen" },
       { key: "reqKitchen", label: "Scope of work", custom: "scope", full: true },
@@ -449,6 +449,8 @@ export default function OverviewTab({
   function renderValue(f: FieldDef): React.ReactNode {
     const v = (lead as any)[f.key];
     switch (f.custom) {
+      case "category":
+        return <Chips items={splitProducts(lead.requirementCategory)} />;
       case "products":
         return <Chips items={splitProducts(lead.requirementProduct)} />;
       case "scope":
@@ -466,19 +468,31 @@ export default function OverviewTab({
   function renderEditor(f: FieldDef): React.ReactNode {
     const v = draft[f.key];
     switch (f.custom) {
-      case "category":
+      case "category": {
+        // One or more categories, comma-separated (products are optional).
+        const picked = splitProducts(v);
+        const toggle = (name: string) => set(f.key)((picked.includes(name) ? picked.filter((x) => x !== name) : [...picked, name]).join(", "));
+        // Keep saved values visible even if the catalogue renamed/removed them.
+        const names = [...picked.filter((n) => !categories.some((c) => c.name === n)), ...categories.map((c) => c.name)];
         return (
-          <select className={inputCls} value={v || ""} onChange={(e) => set(f.key)(e.target.value)}>
-            <option value="">Select category...</option>
-            {/* Keep a saved value visible even if the catalogue renamed/removed it. */}
-            {v && !categories.some((c) => c.name === v) && <option value={v}>{v}</option>}
-            {categories.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
-          </select>
+          <div className="flex flex-wrap gap-1.5">
+            {names.map((n) => {
+              const on = picked.includes(n);
+              return (
+                <button key={n} type="button" aria-pressed={on} onClick={() => toggle(n)}
+                  className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors ${on ? "border-emerald-300 bg-emerald-50 text-emerald-800" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}>
+                  {on && <Check className="h-3 w-3" strokeWidth={2.5} />} {n}
+                </button>
+              );
+            })}
+          </div>
         );
+      }
       case "products": {
         const picked = splitProducts(v);
-        const cat = categories.find((c) => c.name === draft.requirementCategory);
-        const options = catalog.filter((p) => !cat || p.categorySlug === cat.slug).map((p) => p.name).filter((n) => !picked.includes(n));
+        const cats = splitProducts(draft.requirementCategory);
+        const slugs = new Set(categories.filter((c) => cats.includes(c.name)).map((c) => c.slug));
+        const options = catalog.filter((p) => slugs.size === 0 || (p.categorySlug != null && slugs.has(p.categorySlug))).map((p) => p.name).filter((n) => !picked.includes(n));
         const setPicked = (names: string[]) => set(f.key)(names.join(", "));
         return (
           <div className="space-y-2">

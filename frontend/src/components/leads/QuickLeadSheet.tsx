@@ -84,9 +84,13 @@ export default function QuickLeadSheet({
   const set = <K extends keyof LeadCreateBody>(k: K, v: LeadCreateBody[K]) => setForm((f) => ({ ...f, [k]: v }));
 
   const categoryNames = categories.length ? categories.map((c) => c.name) : FALLBACK_CATEGORIES;
-  const selectedCategory = categories.find((c) => c.name === form.requirementCategory);
+  // Several categories per lead (comma-separated, like products); categories alone are enough.
+  const selectedCategoryNames = splitList(form.requirementCategory);
+  const selectedCategorySlugs = new Set(categories.filter((c) => selectedCategoryNames.includes(c.name)).map((c) => c.slug));
+  const toggleCategory = (name: string) => set('requirementCategory', (selectedCategoryNames.includes(name)
+    ? selectedCategoryNames.filter((x) => x !== name) : [...selectedCategoryNames, name]).join(', '));
   const productOptions = products
-    .filter((p) => !selectedCategory || p.categorySlug === selectedCategory.slug)
+    .filter((p) => selectedCategorySlugs.size === 0 || (p.categorySlug != null && selectedCategorySlugs.has(p.categorySlug)))
     .map((p) => p.name);
 
   // Several products per lead, stored comma-separated in requirementProduct.
@@ -107,7 +111,7 @@ export default function QuickLeadSheet({
     ? joinParts(enquiryLabel(form.enquiryType), selectedServices.join(', '), selectedProducts.length > 0 && `for ${selectedProducts.join(', ')}`)
     : form.enquiryType === 'OTHER'
       ? joinParts(enquiryLabel(form.enquiryType), form.requirementOther)
-      : joinParts(enquiryLabel(form.enquiryType), form.requirementCategory, selectedProducts.join(', '));
+      : joinParts(enquiryLabel(form.enquiryType), selectedCategoryNames.join(', '), selectedProducts.join(', '));
   const visitSummary = joinParts(
     form.preferredVisitDate && `Visit ${new Date(form.preferredVisitDate).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`,
     form.estimatedBudget && `₹${Number(form.estimatedBudget).toLocaleString('en-IN')}`,
@@ -211,18 +215,18 @@ export default function QuickLeadSheet({
 
               {(form.enquiryType === 'PRODUCT' || form.enquiryType === 'SERVICE') && (
                 <div className="space-y-3 rounded-md bg-muted/30 p-3">
-                  <F label="Category">
+                  <F label="Categories (pick one or more)">
                     <div className="flex flex-wrap gap-1.5">
                       {categoryNames.map((c) => (
-                        <Chip key={c} active={form.requirementCategory === c}
-                          onClick={() => set('requirementCategory', form.requirementCategory === c ? '' : c)}>
+                        <Chip key={c} active={selectedCategoryNames.includes(c)}
+                          onClick={() => toggleCategory(c)}>
                           {c}
                         </Chip>
                       ))}
                     </div>
                   </F>
                   {productOptions.length > 0 && (
-                    <F label="Products">
+                    <F label="Products (optional)">
                       <select value="" onChange={(e) => addProduct(e.target.value)} className={selectCls}>
                         <option value="">Add a product…</option>
                         {productOptions.filter((p) => !selectedProducts.includes(p)).map((p) => <option key={p} value={p}>{p}</option>)}

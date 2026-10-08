@@ -129,8 +129,8 @@ public class Lead extends BaseEntity {
     private String currentConstructionStage;
 
     // --- Requirement Details ---
-    @Column(name = "requirement_category", length = 100)
-    private String requirementCategory; // catalog category name chosen at capture
+    @Column(name = "requirement_category", length = 500)
+    private String requirementCategory; // one or more catalog category names, comma-separated
 
     @Column(name = "requirement_product", length = 1000)
     private String requirementProduct; // one or more catalog product names, comma-separated
