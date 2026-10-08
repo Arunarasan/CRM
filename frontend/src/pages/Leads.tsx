@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-pangea/dnd";
 import {
   Search, Plus, Filter, LayoutGrid, List, Clock, Users, Sparkles,
-  ThermometerSun, CheckCircle, XCircle, PhoneCall, MapPin, CalendarDays,
+  CheckCircle, XCircle, PhoneCall, FileText, FolderKanban,
   Target, Mail, Phone, CalendarPlus, MoreVertical, ChevronLeft, ChevronRight,
   RotateCcw, TrendingUp,
 } from "lucide-react";
@@ -74,13 +74,14 @@ type StatCard = {
   className: string; // icon chip colour
   ring: string;      // active-state ring/border colour
   patch: Partial<LeadFilters>; // filter applied when this card is clicked
+  hint?: string;     // tooltip explaining what the card counts
 };
 
 const ROWS_PER_PAGE_OPTIONS = [10, 25, 50, 100];
 
 // The KPI cards act as quick-filter tabs; clicking one drives exactly these filter keys
 // (and clears the others among them), so the cards stay mutually exclusive.
-const SEGMENT_KEYS: (keyof LeadFilters)[] = ["status", "stage", "isConverted", "followUpDue"];
+const SEGMENT_KEYS: (keyof LeadFilters)[] = ["status", "stage", "isConverted", "followUpDue", "journeyStage"];
 
 /** Rich card shown when hovering a lead row. */
 function LeadInfo({ l }: { l: Lead }) {
@@ -252,13 +253,11 @@ export default function Leads() {
 
   const stats: StatCard[] = useMemo(() => [
     { label: "Total Leads", value: dashboard?.totalLeads, icon: Users, className: "bg-emerald-100 text-emerald-600", ring: "ring-emerald-500 border-emerald-500", patch: {} },
-    { label: "New", value: dashboard?.newLeads, icon: Sparkles, className: "bg-emerald-100 text-emerald-600", ring: "ring-emerald-500 border-emerald-500", patch: { status: "New" } },
-    { label: "Contacted", value: dashboard?.contactedLeads, icon: PhoneCall, className: "bg-violet-100 text-violet-600", ring: "ring-violet-500 border-violet-500", patch: { status: "Contacted" } },
-    { label: "Interested", value: dashboard?.interestedLeads, icon: ThermometerSun, className: "bg-purple-100 text-purple-600", ring: "ring-purple-500 border-purple-500", patch: { status: "Interested" } },
-    { label: "Site Visit", value: dashboard?.todaySiteVisits, icon: MapPin, className: "bg-cyan-100 text-cyan-600", ring: "ring-cyan-500 border-cyan-500", patch: { stage: "Site Visit" } },
-    { label: "Converted", value: dashboard?.convertedLeads, icon: CheckCircle, className: "bg-green-100 text-green-600", ring: "ring-green-500 border-green-500", patch: { isConverted: "true" } },
+    { label: "Calls & Requirement", value: dashboard?.journeyStages?.REQUIREMENT, icon: PhoneCall, className: "bg-violet-100 text-violet-600", ring: "ring-violet-500 border-violet-500", patch: { journeyStage: "REQUIREMENT" }, hint: "From call recordings, or the requirement is still to be collected" },
+    { label: "Quote Pending", value: dashboard?.journeyStages?.QUOTE, icon: FileText, className: "bg-amber-100 text-amber-700", ring: "ring-amber-500 border-amber-500", patch: { journeyStage: "QUOTE" }, hint: "No quote yet, or the quote isn't approved yet" },
+    { label: "Project Approved", value: dashboard?.journeyStages?.PROJECT, icon: FolderKanban, className: "bg-cyan-100 text-cyan-600", ring: "ring-cyan-500 border-cyan-500", patch: { journeyStage: "PROJECT" }, hint: "Quote approved — project running" },
+    { label: "Completed", value: dashboard?.journeyStages?.COMPLETED, icon: CheckCircle, className: "bg-green-100 text-green-600", ring: "ring-green-500 border-green-500", patch: { journeyStage: "COMPLETED" }, hint: "Project completed" },
     { label: "Lost", value: dashboard?.lostLeads, icon: XCircle, className: "bg-rose-100 text-rose-600", ring: "ring-rose-500 border-rose-500", patch: { status: "Lost" } },
-    { label: "Follow-ups", value: dashboard?.pendingFollowups, icon: CalendarDays, className: "bg-orange-100 text-orange-600", ring: "ring-orange-500 border-orange-500", patch: { followUpDue: "true" } },
   ], [dashboard]);
 
   const groupCounts = useMemo(() => {
@@ -479,7 +478,7 @@ export default function Leads() {
       </div>
 
       {/* KPI cards — double as quick-filter tabs */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2">
         {stats.map((stat) => {
           const active = isStatActive(stat.patch);
           return (
@@ -487,7 +486,7 @@ export default function Leads() {
               key={stat.label}
               type="button"
               onClick={() => onStatClick(stat.patch)}
-              title={`Show ${stat.label} leads`}
+              title={stat.hint ?? `Show ${stat.label} leads`}
               aria-pressed={active}
               className={`p-2 bg-card rounded-lg border text-left flex items-center gap-2 shadow-sm transition-all hover:border-foreground/20 hover:shadow ${active ? `ring-2 ${stat.ring}` : ""}`}
             >

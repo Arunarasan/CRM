@@ -85,7 +85,7 @@ public class LeadService {
             BigDecimal budgetMin, BigDecimal budgetMax,
             LocalDate dateFrom, LocalDate dateTo, Boolean followUpDue,
             String enquiryType, String category, List<String> categoryIn, List<String> categoryNotIn,
-            String product, String service, Boolean hideLost,
+            String product, String service, Boolean hideLost, String journeyStage,
             String sortBy, String sortDir, int page, int size) {
 
         String sortField = (sortBy != null && SORTABLE_FIELDS.contains(sortBy)) ? sortBy : "id";
@@ -110,6 +110,7 @@ public class LeadService {
                 .and(LeadSpecification.hasCategory(category))
                 .and(LeadSpecification.categoryIn(categoryIn))
                 .and(LeadSpecification.hideLost(hideLost))
+                .and(LeadSpecification.journeyStage(journeyStage))
                 .and(LeadSpecification.categoryNotIn(categoryNotIn))
                 .and(LeadSpecification.listContains("requirementProduct", product))
                 .and(LeadSpecification.listContains("requirementService", service))
@@ -213,6 +214,14 @@ public class LeadService {
         dto.setNewLeads(leadRepository.countByIsDeletedFalseAndStatusIgnoreCase("New"));
         dto.setContactedLeads(leadRepository.countByIsDeletedFalseAndStatusIgnoreCase("Contacted"));
         dto.setInterestedLeads(leadRepository.countByIsDeletedFalseAndStatusIgnoreCase("Interested"));
+
+        // journey-stage cards — the same rule as the list's journeyStage filter
+        Map<String, Long> journey = new LinkedHashMap<>();
+        for (String stage : LeadSpecification.JOURNEY_STAGES) {
+            journey.put(stage, leadRepository.count(Specification.where(LeadSpecification.notDeleted())
+                    .and(LeadSpecification.journeyStage(stage))));
+        }
+        dto.setJourneyStages(journey);
 
         // legacy keys
         dto.setQualifiedLeads(leadRepository.countByIsDeletedFalseAndStatusIn(

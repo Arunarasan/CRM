@@ -84,6 +84,68 @@ public class LeadSpecification {
         };
     }
 
+    // ---------------------------------------------------------------- lead journey stage
+    // Every lead sits in exactly one stage (the furthest it has reached), so the Leads page's
+    // stage cards add up to the total. Lost always wins; then Completed > Project > the rest.
+    public static final String STAGE_REQUIREMENT = "REQUIREMENT";     // from calls / requirement task still open
+    public static final String STAGE_QUOTE = "QUOTE";                 // not quoted, or quote not approved yet
+    public static final String STAGE_PROJECT = "PROJECT";             // quote approved / converted, project running
+    public static final String STAGE_COMPLETED = "COMPLETED";         // its project is completed
+    public static final List<String> JOURNEY_STAGES =
+            List.of(STAGE_REQUIREMENT, STAGE_QUOTE, STAGE_PROJECT, STAGE_COMPLETED);
+
+    private static final List<String> APPROVED_QUOTE_STATUSES = List.of("APPROVED", "CONVERTED");
+    private static final List<String> CLOSED_TASK_STATUSES = List.of("COMPLETED", "CANCELLED");
+    private static final String COLLECT_REQUIREMENT_CODE = "TT_COLLECT_REQUIREMENT";
+    private static final String CALL_SOURCE = "Call Recording";
+
+    public static Specification<Lead> journeyStage(String stage) {
+        return (root, query, cb) -> {
+            if (stage == null || stage.isEmpty()) return null;
+            // NULL-safe throughout: a NULL inside NOT(...) would drop the lead from every stage.
+            Predicate notLost = cb.notEqual(cb.lower(cb.coalesce(root.<String>get("status"), "")), "lost");
+
+            var completedSq = query.subquery(Long.class);
+            var cp = completedSq.from(com.arudra.crm.entity.Project.class);
+            completedSq.select(cp.get("id")).where(cb.equal(cp.get("lead"), root), cb.equal(cp.get("status"), "COMPLETED"));
+            Predicate completed = cb.exists(completedSq);
+
+            var projectSq = query.subquery(Long.class);
+            var pp = projectSq.from(com.arudra.crm.entity.Project.class);
+            projectSq.select(pp.get("id")).where(cb.equal(pp.get("lead"), root));
+            var approvedSq = query.subquery(Long.class);
+            var aq = approvedSq.from(com.arudra.crm.entity.Quotation.class);
+            approvedSq.select(aq.get("id")).where(cb.equal(aq.get("lead"), root), aq.get("status").in(APPROVED_QUOTE_STATUSES));
+            Predicate project = cb.or(cb.isTrue(cb.coalesce(root.<Boolean>get("isConverted"), false)), cb.exists(projectSq), cb.exists(approvedSq));
+
+            var quoteSq = query.subquery(Long.class);
+            var q = quoteSq.from(com.arudra.crm.entity.Quotation.class);
+            quoteSq.select(q.get("id")).where(cb.equal(q.get("lead"), root));
+            var openReqSq = query.subquery(Long.class);
+            var ot = openReqSq.from(com.arudra.crm.entity.Task.class);
+            openReqSq.select(ot.get("id")).where(cb.equal(ot.get("leadId"), root.get("id")),
+                    cb.equal(ot.get("taskTemplate").get("code"), COLLECT_REQUIREMENT_CODE),
+                    cb.not(ot.get("status").in(CLOSED_TASK_STATUSES)));
+            var doneReqSq = query.subquery(Long.class);
+            var dt = doneReqSq.from(com.arudra.crm.entity.Task.class);
+            doneReqSq.select(dt.get("id")).where(cb.equal(dt.get("leadId"), root.get("id")),
+                    cb.equal(dt.get("taskTemplate").get("code"), COLLECT_REQUIREMENT_CODE),
+                    cb.equal(dt.get("status"), "COMPLETED"));
+            // No quote yet and the requirement isn't collected: an open requirement task, or a lead
+            // that came in from a call recording and hasn't had its requirement taken.
+            Predicate requirement = cb.and(cb.not(cb.exists(quoteSq)), cb.or(cb.exists(openReqSq),
+                    cb.and(cb.equal(cb.coalesce(root.<String>get("leadSource"), ""), CALL_SOURCE), cb.not(cb.exists(doneReqSq)))));
+
+            return switch (stage) {
+                case STAGE_COMPLETED -> cb.and(notLost, completed);
+                case STAGE_PROJECT -> cb.and(notLost, cb.not(completed), project);
+                case STAGE_REQUIREMENT -> cb.and(notLost, cb.not(completed), cb.not(project), requirement);
+                case STAGE_QUOTE -> cb.and(notLost, cb.not(completed), cb.not(project), cb.not(requirement));
+                default -> null;
+            };
+        };
+    }
+
     public static Specification<Lead> isConverted(Boolean converted) {
         return (root, query, criteriaBuilder) -> {
             if (converted == null) return null;

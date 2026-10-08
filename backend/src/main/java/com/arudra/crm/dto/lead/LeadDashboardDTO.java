@@ -29,6 +29,9 @@ public class LeadDashboardDTO {
     private long contactedLeads;
     private long interestedLeads;
 
+    // lead journey stage -> count (REQUIREMENT, QUOTE, PROJECT, COMPLETED); Lost is lostLeads
+    private java.util.Map<String, Long> journeyStages;
+
     // legacy keys still consumed by older clients
     private long qualifiedLeads;     // leads in Interested/Negotiation and beyond
     private long wonLeads;           // = convertedLeads
