@@ -409,7 +409,7 @@ export type JourneyStage = "REQUIREMENT" | "COLLECTED" | "QUOTE" | "PROJECT" | "
 export const JOURNEY_STAGE_META: Record<JourneyStage, { label: string; className: string }> = {
   REQUIREMENT: { label: "Enquiry", className: "bg-violet-100 text-violet-700" },
   COLLECTED: { label: "Requirement Collected", className: "bg-blue-100 text-blue-700" },
-  QUOTE: { label: "Quote Sent", className: "bg-amber-100 text-amber-800" },
+  QUOTE: { label: "Quote Not Approved", className: "bg-amber-100 text-amber-800" },
   PROJECT: { label: "Active Project", className: "bg-cyan-100 text-cyan-700" },
   COMPLETED: { label: "Completed", className: "bg-green-100 text-green-700" },
   LOST: { label: "Lost", className: "bg-rose-100 text-rose-700" },

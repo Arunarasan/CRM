@@ -264,9 +264,8 @@ export default function Leads() {
   const stats: StatCard[] = useMemo(() => [
     { label: "Enquiries", value: dashboard?.journeyStages?.REQUIREMENT, icon: Users, className: "bg-violet-100 text-violet-600", ring: "ring-violet-500 border-violet-500", patch: { journeyStage: "REQUIREMENT" }, hint: "New enquiries — requirement not collected yet" },
     { label: "Requirement Collected", value: dashboard?.journeyStages?.COLLECTED, icon: ClipboardCheck, className: "bg-blue-100 text-blue-600", ring: "ring-blue-500 border-blue-500", patch: { journeyStage: "COLLECTED" }, hint: "At least one requirement collection done — no quote yet" },
-    { label: "Quote Sent", value: dashboard?.journeyStages?.QUOTE, icon: FileText, className: "bg-amber-100 text-amber-700", ring: "ring-amber-500 border-amber-500", patch: { journeyStage: "QUOTE" }, hint: "Quote created, not approved yet" },
+    { label: "Quote Not Approved", value: dashboard?.journeyStages?.QUOTE, icon: FileText, className: "bg-amber-100 text-amber-700", ring: "ring-amber-500 border-amber-500", patch: { journeyStage: "QUOTE" }, hint: "Quote created, not approved yet" },
     { label: "Active Projects", value: dashboard?.journeyStages?.PROJECT, icon: FolderKanban, className: "bg-cyan-100 text-cyan-600", ring: "ring-cyan-500 border-cyan-500", patch: { journeyStage: "PROJECT" }, hint: "Quote approved — project running" },
-    { label: "Completed", value: dashboard?.journeyStages?.COMPLETED, icon: CheckCircle, className: "bg-green-100 text-green-600", ring: "ring-green-500 border-green-500", patch: { journeyStage: "COMPLETED" }, hint: "Project completed" },
     { label: "Lost", value: dashboard?.lostLeads, icon: XCircle, className: "bg-rose-100 text-rose-600", ring: "ring-rose-500 border-rose-500", patch: { status: "Lost" } },
   ], [dashboard]);
 
@@ -503,7 +502,7 @@ export default function Leads() {
       </div>
 
       {/* KPI cards — double as quick-filter tabs */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-2">
         {stats.map((stat) => {
           const active = isStatActive(stat.patch);
           return (
