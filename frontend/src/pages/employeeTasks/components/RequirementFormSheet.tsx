@@ -49,12 +49,14 @@ const SECTION_FIELDS: Record<string, string[]> = {
 
 type Values = Record<string, string>;
 
-export default function RequirementFormSheet({ taskId, leadId, open, onOpenChange, onSaved, initial, fromCall }: {
+export default function RequirementFormSheet({ taskId, leadId, open, onOpenChange, onSaved, initial, fromCall, focus }: {
   taskId: number; leadId?: number | null; open: boolean; onOpenChange: (open: boolean) => void; onSaved: () => void;
   /** Starting values when there's no lead yet (a call task: the caller's number, name, the office note). */
   initial?: Record<string, string | null | undefined>;
   /** A call task with no lead yet — submitting creates the lead (and attaches the call's recording). */
   fromCall?: boolean;
+  /** Open with only this section expanded and scrolled into view (the task page's "Edit" buttons). */
+  focus?: string | null;
 }) {
   const [v, setV] = useState<Values>({});
   const [scope, setScope] = useState<Record<string, boolean>>({});
@@ -89,6 +91,14 @@ export default function RequirementFormSheet({ taskId, leadId, open, onOpenChang
       else if (next.followUpDate) setNextStep('FOLLOWUP');
     }).catch(() => {}).finally(() => setLoading(false));
   }, [open, leadId, taskId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!open) return;
+    setOpenSecs(new Set(focus ? [focus] : ['requirement', 'scope', 'nextstep']));
+    if (!focus) return;
+    const t = setTimeout(() => document.getElementById(`req-sec-${focus}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 350);
+    return () => clearTimeout(t);
+  }, [open, focus]);
 
   const set = (k: string, val: string) => setV((p) => ({ ...p, [k]: val }));
 
@@ -342,7 +352,7 @@ function Section({ id, icon, title, count, openSecs, toggle, children }: {
 }) {
   const isOpen = openSecs.has(id);
   return (
-    <div className="overflow-hidden rounded-2xl border border-[#EDE6D8] bg-white shadow-[0_1px_6px_rgba(80,55,20,0.04)]">
+    <div id={`req-sec-${id}`} className="overflow-hidden rounded-2xl border border-[#EDE6D8] bg-white shadow-[0_1px_6px_rgba(80,55,20,0.04)]">
       <button type="button" onClick={() => toggle(id)} className="flex w-full items-center gap-2.5 px-3.5 py-3 text-left">
         <span className="text-[#9B6B32]">{icon}</span>
         <span className="text-[14px] font-semibold text-[#22271F]">{title}</span>

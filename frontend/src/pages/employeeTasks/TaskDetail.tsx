@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft, Camera, AlertTriangle, Package, Play, Pause, CheckCircle2, ThumbsUp,
-  Navigation, ChevronDown, UserPlus, ClipboardList, MapPin, Image as ImageIcon,
+  Navigation, ChevronDown, UserPlus, ClipboardList, ClipboardCheck, MapPin, Image as ImageIcon,
   Users, MessageSquare, Phone, MessageCircle, Star, Home, Wallet, FileText, UserCircle, Mic, CalendarDays,
 } from 'lucide-react';
 import api from '@/lib/api';
@@ -20,6 +20,7 @@ import MaterialUsageSheet from './components/MaterialUsageSheet';
 import LeadTaskFormSheet from './components/LeadTaskFormSheet';
 import RequirementFormSheet from './components/RequirementFormSheet';
 import RequirementSummaryCard from './components/RequirementSummaryCard';
+import RequirementTaskView from './components/RequirementTaskView';
 import ProjectExecutionCard from './components/ProjectExecutionCard';
 import ProjectWorkTaskView, { WorkTab } from '@/components/projectWork/ProjectWorkTaskView';
 import CompleteSheet from './components/CompleteSheet';
@@ -81,7 +82,7 @@ function LField({ label, value }: { label: string; value?: React.ReactNode }) {
  * customer is and what they asked for before collecting/confirming the requirement. Read-only; the
  * "what they want" block is open by default, the rest tucked into quiet disclosures.
  */
-function LeadDetailsCard({ lead }: { lead: LeadInfo }) {
+function LeadDetailsCard({ lead, extrasOnly = false }: { lead: LeadInfo; extrasOnly?: boolean }) {
   const phone = lead.mobileNumber || lead.alternateMobile || lead.whatsappNumber;
   const wa = lead.whatsappNumber || lead.mobileNumber;
   const budget =
@@ -108,9 +109,18 @@ function LeadDetailsCard({ lead }: { lead: LeadInfo }) {
   const files = media.filter((m) => m.kind === 'FILE');
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-[#EDE6D8] bg-white shadow-[0_4px_16px_rgba(80,55,20,0.06)]">
-      <div className="h-1 bg-gradient-to-r from-[#BC8748] via-[#BC8748] to-[#0A573B]" />
-      <div className="p-4">
+    <div className={extrasOnly ? '' : 'overflow-hidden rounded-2xl border border-[#EDE6D8] bg-white shadow-[0_4px_16px_rgba(80,55,20,0.06)]'}>
+      {!extrasOnly && <div className="h-1 bg-gradient-to-r from-[#BC8748] via-[#BC8748] to-[#0A573B]" />}
+      <div className={extrasOnly ? '' : 'p-4'}>
+        {/* "..." on the Collect Requirement page shows only the extras (contacts, media, property, notes). */}
+        {extrasOnly && (has(lead.alternateMobile) || has(lead.whatsappNumber) || has(lead.email) || has(lead.companyName)) && (
+          <div className="flex flex-col gap-0.5 rounded-xl bg-[#FBFAF6] px-3 py-2 text-[12.5px] text-[#5E655D] ring-1 ring-[#EFE9DC]">
+            {has(lead.companyName) && <span>{lead.companyName}</span>}
+            <span>{[lead.mobileNumber, lead.alternateMobile, lead.whatsappNumber && `WA ${lead.whatsappNumber}`].filter(has).join(' · ')}</span>
+            {has(lead.email) && <span className="break-all">{lead.email}</span>}
+          </div>
+        )}
+        {!extrasOnly && (<>
         <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-[#9B6B32]">Lead information</p>
         {/* Header */}
         <div className="flex items-start gap-2.5">
@@ -239,6 +249,8 @@ function LeadDetailsCard({ lead }: { lead: LeadInfo }) {
           </div>
         )}
 
+        </>)}
+
         {/* Photos & voice notes captured with the lead */}
         {media.length > 0 && (
           <div className="mt-3.5 rounded-xl border border-[#EFE9DC] bg-[#FBFAF6] p-3.5">
@@ -349,6 +361,7 @@ export default function TaskDetail() {
   const [voice, setVoice] = useState<CapturedAudio[]>([]);
   const [sheet, setSheet] = useState<'progress' | 'issue' | 'material' | 'complete' | 'payment' | null>(null);
   const [formOpen, setFormOpen] = useState(false);
+  const [formFocus, setFormFocus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [actionErr, setActionErr] = useState('');
   const [workTab, setWorkTab] = useState<WorkTab>('work');
@@ -456,6 +469,10 @@ export default function TaskDetail() {
     }
   };
 
+  // Collect Requirement on a lead gets the card layout (who / where / what / budget / remarks).
+  const reqView = isLeadForm && task.formType === 'REQUIREMENT' && !isCallTask && !!task.lead;
+  const openForm = (section: string | null) => { setFormFocus(section); setFormOpen(true); };
+
   const place = [task.floor, task.room, task.itemName].filter(Boolean).join(' · ');
   const showQuickProgress = !isLeadForm && !moduleDriven && !locked && mine === 'IN_PROGRESS';
   const solid = 'flex w-full items-center justify-center gap-2 rounded-xl py-3 text-[15px] font-semibold transition active:scale-[0.99] disabled:opacity-50';
@@ -467,13 +484,18 @@ export default function TaskDetail() {
         <button onClick={() => navigate(-1)} className="flex h-9 w-9 items-center justify-center rounded-full active:bg-black/5" aria-label="Back">
           <ArrowLeft className="h-5 w-5 text-[#22271F]" />
         </button>
-        <h1 className="min-w-0 flex-1 truncate text-[15px] font-semibold text-[#22271F]">{task.taskName}</h1>
-        <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium ${status.cls}`}>{status.label}</span>
+        <h1 className={`min-w-0 flex-1 truncate text-[#22271F] ${reqView ? 'text-[18px] font-bold' : 'text-[15px] font-semibold'}`}>{task.taskName}</h1>
+        <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] ${reqView ? 'font-bold uppercase tracking-wide' : 'font-medium'} ${status.cls}`}>{status.label}</span>
       </div>
 
       <div className="flex flex-col gap-3.5 p-4">
+        {reqView && task.lead && (
+          <RequirementTaskView task={task} lead={task.lead} canEdit={canSubmitForm} onEdit={openForm} onReload={load}
+            more={<LeadDetailsCard lead={task.lead} extrasOnly />} />
+        )}
+
         {/* Summary — what to do, where, when. The centrepiece: a soft card with a slim gold accent. */}
-        <div className="overflow-hidden rounded-2xl border border-[#EDE6D8] bg-white shadow-[0_4px_16px_rgba(80,55,20,0.06)]">
+        {!reqView && <div className="overflow-hidden rounded-2xl border border-[#EDE6D8] bg-white shadow-[0_4px_16px_rgba(80,55,20,0.06)]">
           <div className="h-1 bg-gradient-to-r from-[#0A573B] via-[#0A573B] to-[#BC8748]" />
           <div className="p-4">
             <div className="flex items-center gap-2">
@@ -509,11 +531,11 @@ export default function TaskDetail() {
               </a>
             )}
           </div>
-        </div>
+        </div>}
 
         {/* The original lead picture — who the customer is and what they asked for at capture. Shown for
             any task tied to a lead so the field employee has full context before collecting/confirming. */}
-        {task.lead ? <LeadDetailsCard lead={task.lead} />
+        {reqView ? null : task.lead ? <LeadDetailsCard lead={task.lead} />
           : task.contact && !isCallTask && (
             <CustomerContactCard contact={task.contact}
               requirement={task.category === 'ENQUIRY' || task.category === 'INSTALLATION' ? task.description : null} />
@@ -580,7 +602,7 @@ export default function TaskDetail() {
 
         {/* Lead-workflow "collect info" tasks are form-first: take the task, then fill the form that
             writes straight onto the lead — no field-work tools (check-in / checklist / progress). */}
-        {isLeadForm && !isCallTask && (
+        {isLeadForm && !isCallTask && !reqView && (
           <div className="overflow-hidden rounded-2xl border border-[#EDE6D8] bg-white shadow-[0_4px_16px_rgba(80,55,20,0.06)]">
             <div className="p-4">
               <div className="flex items-center gap-2.5">
@@ -607,7 +629,7 @@ export default function TaskDetail() {
                   <ThumbsUp className="h-4 w-4" /> Take this task
                 </button>
               ) : canSubmitForm ? (
-                <button onClick={() => setFormOpen(true)} disabled={busy} className={`${solid} mt-3.5 bg-[#0A573B] text-white`}>
+                <button onClick={() => openForm(null)} disabled={busy} className={`${solid} mt-3.5 bg-[#0A573B] text-white`}>
                   <ClipboardList className="h-4 w-4" /> Fill &amp; submit form
                 </button>
               ) : primaryAction ? (
@@ -733,7 +755,7 @@ export default function TaskDetail() {
 
         {/* Remarks — shown for every task type (including lead forms); tracked project tasks use Team chat. */}
         {!workTracking && <div className="overflow-hidden rounded-2xl border border-[#EDE6D8] bg-white shadow-[0_2px_10px_rgba(80,55,20,0.05)]">
-          <Disclosure title="Remarks" count={task.comments.length} icon={<MessageSquare className="h-4 w-4" />}>
+          <Disclosure title={reqView ? 'Task notes' : 'Remarks'} count={task.comments.length} icon={<MessageSquare className="h-4 w-4" />}>
             <ul className="mb-2.5 flex flex-col gap-2">
               {task.comments.length === 0 && <li className="text-[13px] text-[#9A9E96]">No remarks yet.</li>}
               {task.comments.map((c) => {
@@ -766,6 +788,26 @@ export default function TaskDetail() {
           </Disclosure>
         </div>}
       </div>
+
+      {/* Collect Requirement: one clear bottom action — take it, then mark it completed via the form. */}
+      {reqView && !locked && (canPick || canSubmitForm || primaryAction) && (
+        <div className="fixed bottom-16 left-1/2 z-20 w-full max-w-md -translate-x-1/2 bg-[#FAF8F3]/95 px-3.5 pb-3 pt-2 backdrop-blur">
+          {actionErr && <p className="mb-2 rounded-lg bg-[#FBE7E4] p-2.5 text-[12px] text-[#B94B45]">{actionErr}</p>}
+          {canPick ? (
+            <button onClick={pickUp} disabled={busy} className={`${solid} bg-[#0A573B] text-white`}>
+              <ThumbsUp className="h-4 w-4" /> Take this task
+            </button>
+          ) : canSubmitForm ? (
+            <button onClick={() => openForm(null)} disabled={busy} className={`${solid} bg-[#0A573B] text-white`}>
+              <ClipboardCheck className="h-5 w-5" /> Mark as Completed
+            </button>
+          ) : primaryAction && (
+            <button onClick={() => doAction(primaryAction.action)} disabled={busy} className={`${solid} bg-[#0A573B] text-white`}>
+              <primaryAction.icon className="h-4 w-4" /> {primaryAction.label}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Bottom action bar with field-work buttons — hidden for lead forms (their CTA card is at top). */}
       {!isLeadForm && !isCallTask && (
@@ -846,6 +888,7 @@ export default function TaskDetail() {
             leadSource: 'Phone Call',
             customerRequirements: call.note,
           } : undefined}
+          focus={formFocus}
           open={formOpen}
           onOpenChange={setFormOpen}
           onSaved={() => { setFormOpen(false); load(); navigate('/employee/tasks'); }}

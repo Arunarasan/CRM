@@ -57,7 +57,6 @@ export default function TaskList() {
   const onStart = (id: number) => withRefresh(() => runOrQueue({ method: 'post', url: `/employee-tasks/${id}/start`, description: 'Start task' }));
   const onPause = (id: number) => withRefresh(() => runOrQueue({ method: 'post', url: `/employee-tasks/${id}/pause`, description: 'Pause task' }));
   const onComplete = (id: number) => withRefresh(() => runOrQueue({ method: 'post', url: `/employee-tasks/${id}/complete`, description: 'Complete task' }));
-  const onPick = (id: number) => withRefresh(() => employeeTaskApi.pick(id));
   const onExtend = (id: number) => withRefresh(() => employeeTaskApi.extendHold(id));
 
   const active = mine.filter(isActive);
@@ -81,19 +80,19 @@ export default function TaskList() {
     { key: 'COMPLETED', label: 'Done', count: completed.length },
   ];
 
-  const cards = (list: TaskCardType[], pick = false) =>
+  const cards = (list: TaskCardType[]) =>
     list.map((task) => (
       <TaskCard key={task.id} task={task} onStart={onStart} onPause={onPause}
-        onComplete={onComplete} onPick={pick ? onPick : undefined} onExtend={onExtend} />
+        onComplete={onComplete} onExtend={onExtend} />
     ));
 
   const Stack = ({ children }: { children: React.ReactNode }) => (
     <div className="flex flex-col gap-3">{children}</div>
   );
 
-  const Group = ({ icon: Icon, tone, title, list, pick = false }: {
+  const Group = ({ icon: Icon, tone, title, list }: {
     icon: React.ComponentType<{ className?: string }>; tone: string; title: string;
-    list: TaskCardType[]; pick?: boolean;
+    list: TaskCardType[];
   }) => {
     if (list.length === 0) return null;
     return (
@@ -103,7 +102,7 @@ export default function TaskList() {
           <h2 className="text-[17px] font-bold text-[#111817]">{title}</h2>
           <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-[#EEF0EE] px-2 text-[12px] font-semibold text-[#5B625E]">{list.length}</span>
         </div>
-        <Stack>{cards(list, pick)}</Stack>
+        <Stack>{cards(list)}</Stack>
       </section>
     );
   };
@@ -193,7 +192,7 @@ export default function TaskList() {
           : (
             <div className="flex flex-col gap-5">
               <Group icon={FolderKanban} tone="text-[#2563A8]" title="My Project Work" list={myProjectTasks} />
-              <Group icon={Hand} tone="text-[#9B6B32]" title="Available Project Work" list={poolProjectTasks} pick />
+              <Group icon={Hand} tone="text-[#9B6B32]" title="Available Project Work" list={poolProjectTasks} />
             </div>
           )
       )}
@@ -212,7 +211,7 @@ export default function TaskList() {
             <Hand className="h-3.5 w-3.5" /> Unassigned work you can pick up.
           </p>
           {pool.length ? (
-            <Stack>{cards(pool, true)}</Stack>
+            <Stack>{cards(pool)}</Stack>
           ) : empty('No available tasks for you right now.')}
         </>
       )}

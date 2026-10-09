@@ -12,13 +12,12 @@ import HoldTimer from './HoldTimer';
  * Tap the card body to open it; the primary button fires the next step without leaving the list.
  */
 export default function TaskCard({
-  task, onStart, onPause, onComplete, onPick, onExtend,
+  task, onStart, onPause, onComplete, onExtend,
 }: {
   task: TaskCardType;
   onStart: (id: number) => void;
   onPause: (id: number) => void;
   onComplete: (id: number) => void;
-  onPick?: (id: number) => void; // pool mode — no on-card action; picking happens on the detail page
   onExtend?: (id: number) => void | Promise<unknown>; // extend the data-entry hold window
 }) {
   const navigate = useNavigate();
@@ -40,40 +39,6 @@ export default function TaskCard({
     swipe.push({ label: 'Resume', icon: <Play className="h-4 w-4" />, className: 'bg-[#0A573B]', onClick: () => onStart(task.id) });
   }
 
-  const stop = (e: React.MouseEvent) => e.stopPropagation();
-  // Compact pill buttons — sized to their label and right-aligned, so the list stays dense.
-  const solid = 'inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-semibold active:scale-[0.97] disabled:opacity-50';
-
-  // The one obvious next action, rendered as a real button (not hidden behind a swipe).
-  const primary = (() => {
-    if (mine === 'ASSIGNED' || mine === 'ACCEPTED') {
-      return (
-        <button onClick={(e) => { stop(e); onStart(task.id); }} className={`${solid} bg-[#0A573B] text-white`}>
-          <Play className="h-4 w-4" /> Start Task
-        </button>
-      );
-    }
-    if (mine === 'IN_PROGRESS') {
-      return (
-        <div className="flex gap-2">
-          <button onClick={(e) => { stop(e); onComplete(task.id); }} className={`${solid} bg-[#0A573B] text-white`}>
-            <CheckCircle2 className="h-4 w-4" /> Complete
-          </button>
-          <button onClick={(e) => { stop(e); open(); }} className={`${solid} border border-[#0A573B]/25 bg-[#E7F2EC] text-[#0A573B]`}>
-            <Play className="h-4 w-4" /> Continue
-          </button>
-        </div>
-      );
-    }
-    if (mine === 'PAUSED') {
-      return (
-        <button onClick={(e) => { stop(e); onStart(task.id); }} className={`${solid} bg-[#0A573B] text-white`}>
-          <Play className="h-4 w-4" /> Resume
-        </button>
-      );
-    }
-    return null; // completed / view-only — the status pill and a tap say enough
-  })();
 
   const overdue = due.tone === 'overdue' && task.status !== 'COMPLETED';
   const soon = due.tone === 'soon' || mine === 'IN_PROGRESS' || task.status === 'COMPLETED';
@@ -126,7 +91,6 @@ export default function TaskCard({
         )}
 
         <div className="mt-2 flex items-center gap-2">
-          {!onPick && primary}
           {shared && (
             <span className="flex items-center gap-1 text-[11px] text-[#7A817C]">
               <Users className="h-3.5 w-3.5" /> {task.assignedEmployees!.length}

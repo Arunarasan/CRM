@@ -1641,6 +1641,34 @@ public class EmployeeTaskService {
         return toCheckInSummary(checkInRepository.save(checkIn));
     }
 
+    /**
+     * Field employee standing at the customer's site saves their GPS position as the lead's map pin, so
+     * "Navigate to site" works for everyone afterwards. Only someone on the task can do it.
+     */
+    @Transactional
+    public Map<String, Object> saveSiteLocation(Long taskId, User employee, Double latitude, Double longitude) {
+        if (latitude == null || longitude == null || Math.abs(latitude) > 90 || Math.abs(longitude) > 180) {
+            throw new IllegalArgumentException("A valid latitude and longitude are required");
+        }
+        Task task = getTask(taskId);
+        if ("COMPLETED".equals(task.getStatus()) || "CANCELLED".equals(task.getStatus())) {
+            throw new IllegalStateException("This task is closed — the site location can't be changed from it.");
+        }
+        // An employee can be re-assigned (old CANCELLED row + new one), so look for an active row, not a unique one.
+        boolean onTask = assignmentRepository.findByTaskId(taskId).stream()
+                .anyMatch(a -> a.getEmployee() != null && a.getEmployee().getId().equals(employee.getId())
+                        && ACTIVE_ASSIGNMENT_STATUSES.contains(a.getStatus()) && !"COMPLETED".equals(a.getStatus()));
+        if (!onTask) throw new IllegalStateException("Take this task first to save the site location.");
+        Long leadId = task.getLeadId() != null ? task.getLeadId()
+                : (task.getProject() != null && task.getProject().getLead() != null ? task.getProject().getLead().getId() : null);
+        com.arudra.crm.entity.Lead lead = leadId != null ? leadRepository.findById(leadId).orElse(null) : null;
+        if (lead == null) throw new IllegalStateException("This task has no lead to save a site location on");
+        String pin = String.format(java.util.Locale.ROOT, "https://www.google.com/maps?q=%.6f,%.6f", latitude, longitude);
+        lead.setGoogleMapLocation(pin);
+        leadRepository.save(lead);
+        return Map.of("googleMapLocation", pin);
+    }
+
     public Map<String, Object> checkOut(Long taskId, User employee, Double latitude, Double longitude) {
         TaskCheckIn open = checkInRepository
                 .findFirstByTaskIdAndEmployeeIdAndCheckOutTimeIsNullOrderByCheckInTimeDesc(taskId, employee.getId())
@@ -1829,7 +1857,8 @@ public class EmployeeTaskService {
         if (viewerEmployeeId != null) {
             assignments.stream()
                     .filter(a -> a.getEmployee() != null && a.getEmployee().getId().equals(viewerEmployeeId))
-                    .findFirst()
+                    // Re-picked tasks keep the old CANCELLED row — prefer the live one.
+                    .min(java.util.Comparator.comparing((TaskAssignment a) -> "CANCELLED".equals(a.getStatus())))
                     .ifPresent(mine -> card.put("myAssignmentStatus", mine.getStatus()));
         }
         return card;

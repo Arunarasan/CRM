@@ -317,6 +317,14 @@ public class EmployeeTaskController {
         return ResponseEntity.ok(ApiResponse.success(employeeTaskService.checkIn(id, me(), lat, lng, label)));
     }
 
+    @PostMapping("/{id}/site-location")
+    @PreAuthorize(EXECUTE)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> saveSiteLocation(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+        Double lat = body.get("latitude") instanceof Number n ? n.doubleValue() : null;
+        Double lng = body.get("longitude") instanceof Number n ? n.doubleValue() : null;
+        return ResponseEntity.ok(ApiResponse.success(employeeTaskService.saveSiteLocation(id, me(), lat, lng)));
+    }
+
     @PostMapping("/{id}/checkout")
     @PreAuthorize(EXECUTE)
     public ResponseEntity<ApiResponse<Map<String, Object>>> checkOut(@PathVariable Long id, @RequestBody(required = false) Map<String, Object> body) {

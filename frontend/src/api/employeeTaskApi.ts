@@ -94,6 +94,9 @@ export const employeeTaskApi = {
   logMaterialUsage: (id: number, productId: number, quantity: number, remarks?: string) =>
     api.post(`${BASE}/${id}/material-usage`, { productId, quantity, remarks }).then((r) => r.data),
 
+  /** Save the employee's current GPS position as the lead's site map pin. */
+  saveSiteLocation: (id: number, payload: { latitude: number; longitude: number }) =>
+    api.post(`${BASE}/${id}/site-location`, payload).then((r) => r.data),
   checkIn: (id: number, payload?: { latitude?: number; longitude?: number; locationLabel?: string }) =>
     api.post(`${BASE}/${id}/checkin`, payload).then((r) => r.data),
   checkOut: (id: number, payload?: { latitude?: number; longitude?: number }) =>
