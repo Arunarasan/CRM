@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FolderOpen, LayoutGrid, List, Plus, Search } from 'lucide-react';
+import { FolderOpen, GalleryHorizontal, LayoutGrid, List, Plus, Search } from 'lucide-react';
 import { uploadFile } from '@/lib/uploadFile';
 import { compressImageFile } from '@/lib/imageProcessing';
 import { toast } from '@/components/ui/toast';
@@ -86,19 +86,27 @@ export default function DocumentsTab({ projectId, onChanged }: Props) {
       && (!q || [f.fileName, f.type, f.description, f.sourceLabel, f.addedBy].some((v) => v?.toLowerCase().includes(q))));
   }, [files, category, source, query]);
 
-  // Generated documents (quotation / invoices) open their own page; everything else opens the viewer.
-  const open = (f: ProjectFile) => {
-    if (f.generated) { navigate(f.fileUrl); return; }
-    const i = viewerFiles.indexOf(f);
-    if (i >= 0) setViewerIndex(i);
-  };
-  const viewerFiles = useMemo(() => filtered.filter((f) => !f.generated), [filtered]);
-
   // Grid grouped by category when nothing narrows the list.
   const grouped = category === 'ALL' && source === 'ALL' && !query.trim();
   const sections = grouped
     ? CATEGORIES.map((c) => ({ ...c, items: filtered.filter((f) => f.category === c.id) })).filter((s) => s.items.length)
     : [{ id: 'ALL', label: '', items: filtered }];
+
+  // The viewer slides through files in the same order they appear on screen.
+  // Generated documents (quotation / invoices) open their own page instead.
+  const viewerFiles = useMemo(
+    () => (view === 'grid' ? sections.flatMap((s) => s.items) : filtered).filter((f) => !f.generated),
+    [view, filtered, grouped], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  const open = (f: ProjectFile) => {
+    if (f.generated) { navigate(f.fileUrl); return; }
+    const i = viewerFiles.indexOf(f);
+    if (i >= 0) setViewerIndex(i);
+  };
+  const openFirst = (items: ProjectFile[]) => {
+    const first = items.find((f) => !f.generated);
+    if (first) open(first);
+  };
 
   const uploadingTiles = uploading.map((u) => ({
     file: {
@@ -186,9 +194,17 @@ export default function DocumentsTab({ projectId, onChanged }: Props) {
           {sections.map((s) => (
             <section key={s.id}>
               {s.label && (
-                <h3 className="mb-2.5 flex items-center gap-2 text-[13px] font-semibold uppercase tracking-wide text-slate-500">
-                  {s.label} <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">{s.items.length}</span>
-                </h3>
+                <div className="mb-2.5 flex items-center gap-2">
+                  <h3 className="flex items-center gap-2 text-[13px] font-semibold uppercase tracking-wide text-slate-500">
+                    {s.label} <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">{s.items.length}</span>
+                  </h3>
+                  {s.items.some((f) => !f.generated) && (
+                    <button onClick={() => openFirst(s.items)}
+                      className="ml-auto inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[12px] font-semibold text-emerald-700 hover:bg-emerald-50">
+                      <GalleryHorizontal className="h-3.5 w-3.5" /> View all
+                    </button>
+                  )}
+                </div>
               )}
               <div className="grid grid-cols-2 gap-3 @2xl:grid-cols-3 @4xl:grid-cols-4 @6xl:grid-cols-5">
                 {s.items.map((f) => <FileTile key={f.key} file={f} onOpen={() => open(f)} />)}

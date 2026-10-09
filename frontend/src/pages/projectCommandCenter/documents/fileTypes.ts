@@ -103,7 +103,20 @@ export function kindOfFile(file: File): FileKind {
   return 'file';
 }
 
-export const fmtWhen = (s?: string | null) =>
+/** Same as kindOfFile, for a stored file where only the name / URL is known. */
+export function kindOfName(name?: string | null): FileKind {
+  const n = (name || '').split('?')[0].toLowerCase();
+  if (/\.(jpe?g|png|gif|webp|bmp|svg|heic|heif)$/.test(n)) return 'image';
+  if (/\.(mp4|mov|m4v|avi|mkv)$/.test(n)) return 'video';
+  if (/\.(mp3|wav|ogg|oga|webm|m4a|aac|opus)$/.test(n)) return 'audio';
+  if (n.endsWith('.pdf')) return 'pdf';
+  if (/\.(dwg|dxf|skp|rvt)$/.test(n)) return 'cad';
+  if (/\.(xls|xlsx|csv)$/.test(n)) return 'sheet';
+  if (/\.(doc|docx|txt|rtf|odt)$/.test(n)) return 'doc';
+  return 'file';
+}
+
+export const fmtWhen =(s?: string | null) =>
   s ? new Date(s).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '';
 
 export const extOf = (name?: string | null) => {
