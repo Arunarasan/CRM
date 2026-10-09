@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-pangea/dnd";
 import {
   Search, Plus, Filter, LayoutGrid, List, Clock, Users, Sparkles,
-  CheckCircle, XCircle, PhoneCall, FileText, FolderKanban,
+  CheckCircle, XCircle, PhoneCall, FileText, FolderKanban, ClipboardCheck,
   Target, Mail, Phone, CalendarPlus, MoreVertical, ChevronLeft, ChevronRight,
   RotateCcw, TrendingUp,
 } from "lucide-react";
@@ -152,10 +152,19 @@ export default function Leads() {
     return () => clearTimeout(t);
   }, [search]);
 
+  // Category cards count only the leads in the selected stage card (all live leads when none).
+  const countStage = filters.status === "Lost" ? "" : filters.journeyStage;
+  const countLost = filters.status === "Lost";
+  const fetchCategoryCounts = useCallback(() => {
+    leadApi.categoryCounts({ journeyStage: countStage || undefined, status: countLost ? "Lost" : undefined })
+      .then((res) => setCategoryCounts(res.data || [])).catch(() => {});
+  }, [countStage, countLost]);
+
   const fetchDashboard = useCallback(() => {
     leadApi.dashboard().then((res) => setDashboard(res.data)).catch(console.error);
-    leadApi.categoryCounts().then((res) => setCategoryCounts(res.data || [])).catch(() => {});
   }, []);
+
+  useEffect(() => { fetchCategoryCounts(); }, [fetchCategoryCounts]);
 
   const fetchBoard = useCallback(() => {
     setLoading(true);
@@ -218,6 +227,7 @@ export default function Leads() {
 
   const refresh = () => {
     fetchDashboard();
+    fetchCategoryCounts();
     if (viewMode === "kanban") fetchBoard();
     else fetchList();
   };
@@ -252,10 +262,10 @@ export default function Leads() {
   };
 
   const stats: StatCard[] = useMemo(() => [
-    { label: "Total Leads", value: dashboard?.totalLeads, icon: Users, className: "bg-emerald-100 text-emerald-600", ring: "ring-emerald-500 border-emerald-500", patch: {} },
-    { label: "Calls & Requirement", value: dashboard?.journeyStages?.REQUIREMENT, icon: PhoneCall, className: "bg-violet-100 text-violet-600", ring: "ring-violet-500 border-violet-500", patch: { journeyStage: "REQUIREMENT" }, hint: "From call recordings, or the requirement is still to be collected" },
-    { label: "Quote Pending", value: dashboard?.journeyStages?.QUOTE, icon: FileText, className: "bg-amber-100 text-amber-700", ring: "ring-amber-500 border-amber-500", patch: { journeyStage: "QUOTE" }, hint: "No quote yet, or the quote isn't approved yet" },
-    { label: "Project Approved", value: dashboard?.journeyStages?.PROJECT, icon: FolderKanban, className: "bg-cyan-100 text-cyan-600", ring: "ring-cyan-500 border-cyan-500", patch: { journeyStage: "PROJECT" }, hint: "Quote approved — project running" },
+    { label: "Enquiries", value: dashboard?.journeyStages?.REQUIREMENT, icon: Users, className: "bg-violet-100 text-violet-600", ring: "ring-violet-500 border-violet-500", patch: { journeyStage: "REQUIREMENT" }, hint: "New enquiries — requirement not collected yet" },
+    { label: "Requirement Collected", value: dashboard?.journeyStages?.COLLECTED, icon: ClipboardCheck, className: "bg-blue-100 text-blue-600", ring: "ring-blue-500 border-blue-500", patch: { journeyStage: "COLLECTED" }, hint: "At least one requirement collection done — no quote yet" },
+    { label: "Quote Sent", value: dashboard?.journeyStages?.QUOTE, icon: FileText, className: "bg-amber-100 text-amber-700", ring: "ring-amber-500 border-amber-500", patch: { journeyStage: "QUOTE" }, hint: "Quote created, not approved yet" },
+    { label: "Active Projects", value: dashboard?.journeyStages?.PROJECT, icon: FolderKanban, className: "bg-cyan-100 text-cyan-600", ring: "ring-cyan-500 border-cyan-500", patch: { journeyStage: "PROJECT" }, hint: "Quote approved — project running" },
     { label: "Completed", value: dashboard?.journeyStages?.COMPLETED, icon: CheckCircle, className: "bg-green-100 text-green-600", ring: "ring-green-500 border-green-500", patch: { journeyStage: "COMPLETED" }, hint: "Project completed" },
     { label: "Lost", value: dashboard?.lostLeads, icon: XCircle, className: "bg-rose-100 text-rose-600", ring: "ring-rose-500 border-rose-500", patch: { status: "Lost" } },
   ], [dashboard]);
@@ -283,7 +293,7 @@ export default function Leads() {
     SEGMENT_KEYS.every((k) => (filters[k] || "") === ((patch[k] as string) || ""));
 
   const onStatClick = (patch: Partial<LeadFilters>) => {
-    // Clicking the active card (other than "Total") toggles back to all leads.
+    // Clicking the active card toggles back to all leads.
     const target = isStatActive(patch) ? {} : patch;
     setFilters((f) => {
       const next = { ...f };
@@ -423,6 +433,7 @@ export default function Leads() {
           <h1 className="text-3xl font-bold tracking-tight">Lead Management</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Manage and track leads across all stages
+            {dashboard && <> · <span className="font-semibold text-foreground">{dashboard.totalLeads}</span> total</>}
             {dashboard && <> · conversion rate <span className="font-semibold text-foreground">{dashboard.conversionRate}</span></>}
           </p>
         </div>
@@ -520,7 +531,12 @@ export default function Leads() {
         })}
       </div>
 
-      {/* Main product category cards — click to filter, click again to clear */}
+      {/* Main product category cards — counts follow the selected stage card; click to filter, click again to clear */}
+      {(countStage || countLost) && (
+        <p className="-mb-1 text-[11px] font-medium text-muted-foreground">
+          Categories in <span className="font-semibold text-foreground">{stats.find((st) => isStatActive(st.patch))?.label ?? "this stage"}</span>
+        </p>
+      )}
       <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
         {CATEGORY_GROUPS.map((g) => {
           const active = filters.categoryGroup === g.key;

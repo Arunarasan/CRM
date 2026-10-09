@@ -388,8 +388,8 @@ export interface DashboardMetrics {
   todaySiteVisits: number;
   todayMeasurements: number;
   quotationPending: number;
-  /** Lead journey stage -> count: REQUIREMENT, QUOTE, PROJECT, COMPLETED (Lost is lostLeads). */
-  journeyStages?: Record<"REQUIREMENT" | "QUOTE" | "PROJECT" | "COMPLETED", number>;
+  /** Lead journey stage -> count: REQUIREMENT, COLLECTED, QUOTE, PROJECT, COMPLETED (Lost is lostLeads). */
+  journeyStages?: Record<"REQUIREMENT" | "COLLECTED" | "QUOTE" | "PROJECT" | "COMPLETED", number>;
   conversionRate: string;
 }
 
@@ -403,13 +403,14 @@ export interface LeadPeriodStats {
   conversionRatePercent: number; // e.g. 42.5
 }
 
-export type JourneyStage = "REQUIREMENT" | "QUOTE" | "PROJECT" | "COMPLETED" | "LOST";
+export type JourneyStage = "REQUIREMENT" | "COLLECTED" | "QUOTE" | "PROJECT" | "COMPLETED" | "LOST";
 
 /** Label + pill colours for each journey stage — matches the Leads page stage cards. */
 export const JOURNEY_STAGE_META: Record<JourneyStage, { label: string; className: string }> = {
-  REQUIREMENT: { label: "Calls & Requirement", className: "bg-violet-100 text-violet-700" },
-  QUOTE: { label: "Quote Pending", className: "bg-amber-100 text-amber-800" },
-  PROJECT: { label: "Project Approved", className: "bg-cyan-100 text-cyan-700" },
+  REQUIREMENT: { label: "Enquiry", className: "bg-violet-100 text-violet-700" },
+  COLLECTED: { label: "Requirement Collected", className: "bg-blue-100 text-blue-700" },
+  QUOTE: { label: "Quote Sent", className: "bg-amber-100 text-amber-800" },
+  PROJECT: { label: "Active Project", className: "bg-cyan-100 text-cyan-700" },
   COMPLETED: { label: "Completed", className: "bg-green-100 text-green-700" },
   LOST: { label: "Lost", className: "bg-rose-100 text-rose-700" },
 };
@@ -432,7 +433,7 @@ export interface LeadFilters {
   category: string;    // requirementCategory
   product: string;     // one entry of requirementProduct
   service: string;     // one entry of requirementService
-  journeyStage: string; // REQUIREMENT | QUOTE | PROJECT | COMPLETED — the stage cards
+  journeyStage: string; // REQUIREMENT | COLLECTED | QUOTE | PROJECT | COMPLETED — the stage cards
   categoryGroup: string; // CategoryGroupKey from leads/enquiry — expanded to categoryIn/NotIn for the API
 }
 

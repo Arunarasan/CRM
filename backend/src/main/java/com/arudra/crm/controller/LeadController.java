@@ -93,11 +93,13 @@ public class LeadController {
                 enquiryType, category, categoryIn, categoryNotIn, product, service, hideLost, journeyStage, sortBy, sortDir, page, size));
     }
 
-    /** [{category, count}] across all live leads; category is null for leads without one. */
+    /** [{category, count}] for live leads (optionally one stage card); category is null for leads without one. */
     @GetMapping("/category-counts")
     @PreAuthorize(READ)
-    public ResponseEntity<java.util.List<java.util.Map<String, Object>>> getCategoryCounts() {
-        return ResponseEntity.ok(leadService.getCategoryCounts());
+    public ResponseEntity<java.util.List<java.util.Map<String, Object>>> getCategoryCounts(
+            @RequestParam(required = false) String journeyStage,
+            @RequestParam(required = false) String status) {
+        return ResponseEntity.ok(leadService.getCategoryCounts(journeyStage, status));
     }
 
     @GetMapping("/dashboard")

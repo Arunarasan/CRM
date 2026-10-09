@@ -143,6 +143,7 @@ const sectionById = (id: SectionId) => SECTIONS.find((s) => s.id === id)!;
 /** What blocks the lead's current stage — listed in "Needed for the next step". */
 const NEXT_STEP_NEEDS: Record<string, { title: string; keys: string[] }> = {
   REQUIREMENT: { title: "Needed to finish the requirement", keys: ["requirementCategory", "roomsRequired", "reqKitchen", "siteAddress"] },
+  COLLECTED: { title: "Needed for the quote", keys: ["siteAddress", "areaSqft", "propertyType", "budget"] },
   QUOTE: { title: "Needed for the quote", keys: ["siteAddress", "areaSqft", "propertyType", "budget"] },
 };
 

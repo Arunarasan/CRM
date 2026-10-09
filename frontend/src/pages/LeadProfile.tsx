@@ -5,7 +5,7 @@ import {
   ArrowLeft, CheckCircle2, MoreVertical, XCircle, Check, CalendarClock, CalendarPlus,
   LayoutGrid, ListChecks, Activity as ActivityIcon, FileText, Route, Clock, RotateCcw, Star,
   ChevronDown, ChevronRight, ChevronUp, FolderKanban, UserPlus, Phone, MessageCircle, Mail, MapPin, Navigation,
-  NotebookPen, Pencil, Crown, Tag, PhoneCall, XOctagon, UserCheck, Package, ClipboardList, Calculator, Rocket,
+  NotebookPen, Pencil, Crown, Tag, PhoneCall, XOctagon, UserCheck, Package, ClipboardList, ClipboardCheck, Calculator, Rocket,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -56,7 +56,7 @@ function normalizeTab(t: string) {
 
 /** Icon per lead stage — colours/labels come from JOURNEY_STAGE_META (shared with the Leads list). */
 const STAGE_ICONS: Record<JourneyStage, React.ElementType> = {
-  REQUIREMENT: PhoneCall, QUOTE: FileText, PROJECT: FolderKanban, COMPLETED: CheckCircle2, LOST: XOctagon,
+  REQUIREMENT: PhoneCall, COLLECTED: ClipboardCheck, QUOTE: FileText, PROJECT: FolderKanban, COMPLETED: CheckCircle2, LOST: XOctagon,
 };
 
 const PILL = "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide";

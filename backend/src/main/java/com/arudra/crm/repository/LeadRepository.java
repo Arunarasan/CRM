@@ -19,10 +19,6 @@ public interface LeadRepository extends JpaRepository<Lead, Long>, JpaSpecificat
            "LOWER(l.status) LIKE LOWER(CONCAT('%', :search, '%'))")
     Page<Lead> searchLeads(@Param("search") String search, Pageable pageable);
 
-    /** Lead count per requirement category (null = no category, Lost excluded) — feeds the category quick-filter cards. */
-    @Query("SELECT l.requirementCategory, COUNT(l) FROM Lead l WHERE l.isDeleted = false AND (l.status IS NULL OR l.status <> 'Lost') GROUP BY l.requirementCategory")
-    java.util.List<Object[]> countByRequirementCategory();
-
     @Query("SELECT l.status, COUNT(l) FROM Lead l GROUP BY l.status")
     java.util.List<Object[]> countLeadsByStatus();
 

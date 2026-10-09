@@ -25,7 +25,8 @@ export const leadApi = {
   },
 
   dashboard: () => api.get<DashboardMetrics>("/leads/dashboard"),
-  categoryCounts: () => api.get<{ category: string | null; count: number }[]>("/leads/category-counts"),
+  categoryCounts: (params?: { journeyStage?: string; status?: string }) =>
+    api.get<{ category: string | null; count: number }[]>("/leads/category-counts", { params }),
   // Time-boxed stats: leads entered/converted/lost + conversion rate for a period (ISO dates; omit for all-time).
   stats: (from?: string, to?: string) => {
     const q = new URLSearchParams();

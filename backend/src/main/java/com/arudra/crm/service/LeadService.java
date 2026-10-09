@@ -136,10 +136,32 @@ public class LeadService {
         }
     }
 
-    public List<Map<String, Object>> getCategoryCounts() {
+    @jakarta.persistence.PersistenceContext
+    private jakarta.persistence.EntityManager entityManager;
+
+    /**
+     * Lead count per requirement category, optionally narrowed to one stage card: a journey stage
+     * (REQUIREMENT / COLLECTED / QUOTE / PROJECT / COMPLETED) or {@code status=Lost}. With neither,
+     * Lost leads are left out — the working-list default.
+     */
+    public List<Map<String, Object>> getCategoryCounts(String journeyStage, String status) {
+        boolean lost = "lost".equalsIgnoreCase(status);
+        Specification<Lead> spec = Specification.where(LeadSpecification.notDeleted())
+                .and(lost ? LeadSpecification.hasStatus("Lost") : LeadSpecification.hideLost(true))
+                .and(lost ? null : LeadSpecification.journeyStage(journeyStage));
+        var cb = entityManager.getCriteriaBuilder();
+        var cq = cb.createQuery(Object[].class);
+        var root = cq.from(Lead.class);
+        cq.multiselect(root.get("requirementCategory"), cb.count(root))
+                .where(spec.toPredicate(root, cq, cb))
+                .groupBy(root.get("requirementCategory"));
+        return tallyCategories(entityManager.createQuery(cq).getResultList());
+    }
+
+    private List<Map<String, Object>> tallyCategories(List<Object[]> rows) {
         // A lead may name several categories ("Curtains, Blinds") — count it under each one.
         Map<String, Long> counts = new java.util.LinkedHashMap<>();
-        for (Object[] row : leadRepository.countByRequirementCategory()) {
+        for (Object[] row : rows) {
             long n = ((Number) row[1]).longValue();
             String raw = (String) row[0];
             if (raw == null || raw.isBlank()) { counts.merge(null, n, Long::sum); continue; }
