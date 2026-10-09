@@ -75,6 +75,7 @@ type StatCard = {
   ring: string;      // active-state ring/border colour
   patch: Partial<LeadFilters>; // filter applied when this card is clicked
   hint?: string;     // tooltip explaining what the card counts
+  sub?: string;      // small line under the label
 };
 
 const ROWS_PER_PAGE_OPTIONS = [10, 25, 50, 100];
@@ -265,7 +266,13 @@ export default function Leads() {
     { label: "Enquiries", value: dashboard?.journeyStages?.REQUIREMENT, icon: Users, className: "bg-violet-100 text-violet-600", ring: "ring-violet-500 border-violet-500", patch: { journeyStage: "REQUIREMENT" }, hint: "New enquiries — requirement not collected yet" },
     { label: "Requirement Collected", value: dashboard?.journeyStages?.COLLECTED, icon: ClipboardCheck, className: "bg-blue-100 text-blue-600", ring: "ring-blue-500 border-blue-500", patch: { journeyStage: "COLLECTED" }, hint: "At least one requirement collection done — no quote yet" },
     { label: "Quote Not Approved", value: dashboard?.journeyStages?.QUOTE, icon: FileText, className: "bg-amber-100 text-amber-700", ring: "ring-amber-500 border-amber-500", patch: { journeyStage: "QUOTE" }, hint: "Quote created, not approved yet" },
-    { label: "Active Projects", value: dashboard?.journeyStages?.PROJECT, icon: FolderKanban, className: "bg-cyan-100 text-cyan-600", ring: "ring-cyan-500 border-cyan-500", patch: { journeyStage: "PROJECT" }, hint: "Quote approved — project running" },
+    {
+      label: "Active Projects",
+      value: dashboard?.journeyStages ? (dashboard.journeyStages.PROJECT ?? 0) + (dashboard.journeyStages.COMPLETED ?? 0) : undefined,
+      sub: dashboard?.journeyStages ? `${dashboard.journeyStages.PROJECT ?? 0} running · ${dashboard.journeyStages.COMPLETED ?? 0} completed` : undefined,
+      icon: FolderKanban, className: "bg-cyan-100 text-cyan-600", ring: "ring-cyan-500 border-cyan-500",
+      patch: { journeyStage: "PROJECT,COMPLETED" }, hint: "Quote approved — running and completed projects",
+    },
     { label: "Lost", value: dashboard?.lostLeads, icon: XCircle, className: "bg-rose-100 text-rose-600", ring: "ring-rose-500 border-rose-500", patch: { status: "Lost" } },
   ], [dashboard]);
 
@@ -524,6 +531,7 @@ export default function Leads() {
                   <Skeleton className="h-5 w-6" />
                 )}
                 <p className="text-[11px] font-medium text-muted-foreground truncate leading-tight mt-0.5">{stat.label}</p>
+                {stat.sub && <p className="text-[10px] text-muted-foreground/80 truncate leading-tight">{stat.sub}</p>}
               </div>
             </button>
           );

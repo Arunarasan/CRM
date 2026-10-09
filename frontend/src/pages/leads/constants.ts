@@ -433,7 +433,7 @@ export interface LeadFilters {
   category: string;    // requirementCategory
   product: string;     // one entry of requirementProduct
   service: string;     // one entry of requirementService
-  journeyStage: string; // REQUIREMENT | COLLECTED | QUOTE | PROJECT | COMPLETED — the stage cards
+  journeyStage: string; // REQUIREMENT | COLLECTED | QUOTE | PROJECT | COMPLETED, or comma-joined — the stage cards
   categoryGroup: string; // CategoryGroupKey from leads/enquiry — expanded to categoryIn/NotIn for the API
 }
 

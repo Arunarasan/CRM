@@ -105,6 +105,12 @@ public class LeadSpecification {
     public static Specification<Lead> journeyStage(String stage) {
         return (root, query, cb) -> {
             if (stage == null || stage.isEmpty()) return null;
+            // Several stages at once ("PROJECT,COMPLETED") — the Active Projects card includes completed ones.
+            if (stage.contains(",")) {
+                return cb.or(java.util.Arrays.stream(stage.split(",")).map(String::trim).filter(x -> !x.isEmpty())
+                        .map(x -> journeyStage(x).toPredicate(root, query, cb))
+                        .filter(java.util.Objects::nonNull).toArray(Predicate[]::new));
+            }
             // NULL-safe throughout: a NULL inside NOT(...) would drop the lead from every stage.
             Predicate notLost = cb.notEqual(cb.lower(cb.coalesce(root.<String>get("status"), "")), "lost");
 
