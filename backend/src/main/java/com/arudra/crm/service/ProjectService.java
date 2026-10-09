@@ -595,7 +595,12 @@ public class ProjectService {
         project.setEndDate(projectDetails.getEndDate());
         project.setActualCompletionDate(projectDetails.getActualCompletionDate());
         project.setWarrantyEndDate(projectDetails.getWarrantyEndDate());
-        project.setStatus(projectDetails.getStatus());
+        // COMPLETED is set only by the Complete / Handover actions — an edit can't switch it on or off.
+        String nextStatus = projectDetails.getStatus();
+        boolean wasCompleted = "COMPLETED".equalsIgnoreCase(project.getStatus());
+        if (nextStatus != null && wasCompleted == "COMPLETED".equalsIgnoreCase(nextStatus)) {
+            project.setStatus(nextStatus);
+        }
         // progress is auto-derived from the phase rollup — ignore any value in the payload.
         project.setBudget(projectDetails.getBudget());
         project.setSpentAmount(projectDetails.getSpentAmount());
@@ -1407,32 +1412,11 @@ public class ProjectService {
         int pct = phases.isEmpty() ? 0 : (int) Math.round(phases.stream()
                 .mapToInt(p -> p.getCompletionPercentage() == null ? 0 : p.getCompletionPercentage())
                 .average().orElse(0));
-        project.setProgress(pct);
+        // A completed (signed-off) project stays at 100% even if a phase is reopened later.
+        project.setProgress("COMPLETED".equalsIgnoreCase(project.getStatus()) ? 100 : pct);
 
-        boolean allDone = !phases.isEmpty() && phases.stream()
-                .allMatch(p -> "COMPLETED".equalsIgnoreCase(p.getStatus()));
-        String prevStatus = project.getStatus();
-        if (allDone && !"COMPLETED".equalsIgnoreCase(prevStatus)
-                && !"CANCELLED".equalsIgnoreCase(prevStatus) && !"CLOSED".equalsIgnoreCase(prevStatus)) {
-            project.setStatus("COMPLETED");
-            project.setProgress(100);
-            project.setActualCompletionDate(java.time.LocalDate.now());
-            if (project.getStartDate() != null) {
-                project.setTotalDurationDays((int) java.time.temporal.ChronoUnit.DAYS
-                        .between(project.getStartDate(), project.getActualCompletionDate()));
-            }
-            projectRepository.save(project);
-            notifyProject(project, "Project Completed",
-                    project.getProjectName() + " is fully completed");
-            eventPublisher.publishEvent(new com.arudra.crm.event.ProjectProgressChangedEvent(project.getId()));
-            return;
-        }
-        // Auto-completed earlier but a reopen dropped it back below 100.
-        if (!allDone && "COMPLETED".equalsIgnoreCase(prevStatus)) {
-            project.setStatus("RUNNING");
-            project.setActualCompletionDate(null);
-            project.setTotalDurationDays(null);
-        }
+        // Progress only: a project is completed solely through the Complete / Handover actions
+        // (completeProject, completeWithHandover, handover), never by the phase rollup reaching 100%.
         projectRepository.save(project);
         // Let the billing automation react to the new work % (auto-raise due milestone invoices).
         eventPublisher.publishEvent(new com.arudra.crm.event.ProjectProgressChangedEvent(project.getId()));
