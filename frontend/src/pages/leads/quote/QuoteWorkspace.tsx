@@ -44,8 +44,12 @@ import { NumCell } from "./cells";
  * Measurement, BOQ and Quotation stay separate records underneath — this only removes the re-entry.
  */
 
-const inr = (v?: number | null) =>
-  "₹" + Number(v ?? 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
+// Whole rupees stay whole (₹33,506); paise always show two digits (₹33,506.10, never ₹33,506.1).
+const inr = (v?: number | null) => {
+  const n = Number(v ?? 0);
+  const frac = Math.round(n * 100) % 100 !== 0 ? 2 : 0;
+  return "₹" + n.toLocaleString("en-IN", { minimumFractionDigits: frac, maximumFractionDigits: 2 });
+};
 const errMsg = (e: any, fallback: string) =>
   e?.response?.data?.message || (typeof e?.response?.data === "string" ? e.response.data : "") || fallback;
 const QUOTE_DONE = new Set(["APPROVED", "CONVERTED"]);
@@ -90,6 +94,8 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
   const [applyOpen, setApplyOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState<string | null>(null);
   // Items (what the customer sees) vs Cost Breakdown (material / labour behind each price).
+  // Phones show the "lead already has a project" notice as one line; "More" opens the full text.
+  const [projectNoticeOpen, setProjectNoticeOpen] = useState(false);
   const [view, setView] = useState<"items" | "cost" | "photos" | "history">(() => {
     try { return localStorage.getItem("quoteShowBreakdown") === "1" ? "cost" : "items"; } catch { return "items"; }
   });
@@ -498,9 +504,16 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
 
             {/* ---- Seen from the lead: the lead already has a project from an earlier quote ---- */}
             {!projectMode && !sheetProject && !converted && leadProject && (
-              <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 flex flex-wrap sm:flex-nowrap items-start gap-2">
+              <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 @[560px]:p-3 text-sm text-amber-900 flex flex-wrap @[560px]:flex-nowrap items-start gap-2">
                 <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
-                <span className="flex-1">
+                {!projectNoticeOpen && (
+                  <span className="@[560px]:hidden min-w-0 flex-1 truncate">
+                    {/* Action first — the long project code is what truncates. */}
+                    {!leadProject.canChange ? "Closed project " : updateRequested && !canChangeProject ? "Update sent for " : "Updates project "}
+                    <span className="font-semibold">{leadProject.projectCode}</span>
+                  </span>
+                )}
+                <span className={`flex-1 ${projectNoticeOpen ? "" : "hidden @[560px]:inline"}`}>
                   <span className="font-semibold">This lead already has project {leadProject.projectCode}</span>{" "}
                   ({leadProject.quotationNumber} · {inr(leadProject.contractValue)}). A new project won't be created —{" "}
                   {updateRequested
@@ -518,6 +531,10 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
                     : <>once the customer approves this quote, it updates that project.</>}
                   {!leadProject.canChange && <> The project is closed, so its quote can't be changed.</>}
                 </span>
+                <button type="button" onClick={() => setProjectNoticeOpen((v) => !v)} aria-expanded={projectNoticeOpen}
+                  className="@[560px]:hidden -my-1 shrink-0 rounded px-1.5 py-1 text-xs font-semibold underline underline-offset-2">
+                  {projectNoticeOpen ? "Less" : "More"}
+                </button>
                 {!fieldMode && (
                   <div className="flex shrink-0 gap-2">
                     {updateRequested && canChangeProject && (
@@ -615,14 +632,17 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
                 </div>
 
                 {/* ---- Action bar ---- */}
-                <div data-quote-actions className="sticky bottom-16 md:bottom-0 z-10 rounded-b-xl border-t bg-card/95 backdrop-blur px-3 sm:px-4 py-2 sm:py-2.5 flex items-center justify-between gap-2">
+                {/* Field shell: the scroll area already ends above the bottom nav, so dock flush (bottom-0).
+                    Narrow sheet: the next-step button drops to its own full-width row so its label never clips. */}
+                <div data-quote-actions className={`sticky ${fieldMode ? "bottom-0" : "bottom-16 md:bottom-0"} z-10 rounded-b-xl border-t bg-card/95 backdrop-blur px-3 sm:px-4 py-2 sm:py-2.5 flex flex-wrap @[560px]:flex-nowrap items-center justify-between gap-2`}>
                   <div className="min-w-0 sm:shrink-0 text-sm leading-tight sm:whitespace-nowrap" title={priceBreakdown(boq)}>
                     <span className="block text-[11px] text-muted-foreground">
                       Final price<span className="hidden sm:inline"> · {inQuote.length} item{inQuote.length === 1 ? "" : "s"}</span>
                     </span>
                     <span className="block font-bold tabular-nums text-base">{inr(boq.grandTotal)}</span>
                   </div>
-                  <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+                  <div className="contents @[560px]:flex shrink-0 items-center gap-1.5 sm:gap-2">
+                    <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
                     <Button variant="outline" size="sm" className="h-9 w-9 px-0 sm:w-auto sm:px-3" disabled={!!busy || noItems} onClick={openPrint} aria-label="Preview"
                       title="See the quotation as the customer will — print or save as PDF from there">
                       {busy === "print" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}<span className="hidden sm:inline">Preview</span>
@@ -637,7 +657,12 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
                         <Save className="h-4 w-4" /><span className="hidden sm:inline">Save Draft</span>
                       </Button>
                     )}
-                    {renderPrimary(true)}
+                    </div>
+                    {(primary || secondary.length > 0) && (
+                      <div className="w-full @[560px]:w-auto [&>div]:flex [&>div]:w-full [&>div>button:first-child]:flex-1 @[560px]:[&>div>button:first-child]:flex-none">
+                        {renderPrimary(true)}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

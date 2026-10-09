@@ -12,6 +12,8 @@ import { useT } from '@/i18n';
  * gold-accented bottom nav, safe-area aware.
  * Deliberately NOT DashboardLayout: field employees never see the desktop sidebar/table UI.
  */
+const WIDE_ROUTES = ['/employee/quote/new', '/employee/boq-quote/new'];
+
 export default function MobileLayout() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -34,8 +36,12 @@ export default function MobileLayout() {
     { to: '/employee/more', labelKey: 'portal.nav.more', icon: LayoutGrid, match: (p: string) => ['/employee/more', '/employee/profile', '/employee/attendance', '/employee/salary', '/employee/documents', '/employee/timesheet', '/employee/settings'].some((r) => p.startsWith(r)) },
   ];
 
+  // Work-surface pages (the quote sheet) are used on tablets and laptops too: let them take the full
+  // width there. Everything else stays a phone-width column.
+  const wide = WIDE_ROUTES.some((r) => location.pathname.startsWith(r));
+
   return (
-    <div className="flex h-screen w-full flex-col bg-[#F7F7F5] max-w-md mx-auto shadow-sm">
+    <div className={`flex h-screen w-full flex-col bg-[#F7F7F5] mx-auto shadow-sm ${wide ? 'max-w-md md:max-w-none' : 'max-w-md'}`}>
       {/* Premium forest header */}
       <header className="sticky top-0 z-20 shrink-0 bg-[#012B1D] px-4 pt-3 pb-3">
         <div className="flex h-11 items-center justify-between">
@@ -73,23 +79,26 @@ export default function MobileLayout() {
         </div>
       </header>
 
-      <main className="flex-1 overflow-y-auto pb-24">
+      {/* Wide pages dock their own sticky action bar at the bottom, so no FAB clearance (sticky bars
+          stop short of a scroll container's bottom padding) and no floating search covering it. */}
+      <main className={`flex-1 overflow-y-auto ${wide ? '' : 'pb-24'}`}>
         <Outlet />
       </main>
 
-      <button
+      {!wide && <button
         onClick={() => navigate('/employee/tasks?search=1')}
         className="fixed bottom-24 right-4 z-30 flex h-12 w-12 items-center justify-center rounded-full bg-[#C48A16] text-white shadow-lg shadow-black/20 active:scale-95"
         aria-label="Quick search"
       >
         <Search className="h-5 w-5" />
-      </button>
+      </button>}
 
-      {/* Premium forest bottom nav */}
+      {/* Premium forest bottom nav (kept phone-width and centred on wide pages) */}
       <nav
-        className="sticky bottom-0 z-20 grid shrink-0 grid-cols-4 gap-1 bg-[#002B1D] px-2 pt-2.5"
+        className="sticky bottom-0 z-20 shrink-0 bg-[#002B1D] px-2 pt-2.5"
         style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 0.625rem)' }}
       >
+       <div className="mx-auto grid max-w-md grid-cols-4 gap-1">
         {navItems.map(({ to, labelKey, icon: Icon, match }) => {
           const active = match(location.pathname);
           return (
@@ -111,6 +120,7 @@ export default function MobileLayout() {
             </Link>
           );
         })}
+       </div>
       </nav>
     </div>
   );

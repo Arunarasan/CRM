@@ -830,6 +830,10 @@ function ItemRow({
   const [saveMenu, setSaveMenu] = useState(false);
   const [savingToCatalogue, setSavingToCatalogue] = useState(false);
   const [open, setOpen] = useState(false);
+  // Phones (sheet < 520px): the card is one summary row — name, "qty unit × rate", amount — and a
+  // tap opens the full fields. Wider sheets always show the fields, so this only changes phones.
+  const [expanded, setExpanded] = useState(false);
+  const collapsed = !expanded;
   const [adding, setAdding] = useState<null | "material" | "labour">(null);
   // A typed-in price is already the row's Rate/Amount — don't repeat it as a breakdown line.
   const priceLine = priceLineOf(item);
@@ -889,9 +893,16 @@ function ItemRow({
         <button type="button" aria-label={`Save ${item.itemName}`} title="Save changes"
           // Keep focus in the field until the click, so the button doesn't vanish under the finger.
           onMouseDown={(e) => e.preventDefault()}
-          onClick={() => { (document.activeElement as HTMLElement | null)?.blur(); setEditing(false); }}
+          onClick={() => { (document.activeElement as HTMLElement | null)?.blur(); setEditing(false); setExpanded(false); }}
           className="h-9 w-9 @[820px]:h-7 @[820px]:w-7 shrink-0 rounded-md flex items-center justify-center bg-[#1F5C3F] text-white hover:bg-[#174a32] active:scale-95">
           <Check className="h-4 w-4" />
+        </button>
+      )}
+      {expanded && !editing && (
+        <button type="button" aria-label={`Fold ${item.itemName}`} title="Fold"
+          onClick={() => setExpanded(false)}
+          className="@[520px]:hidden h-9 w-9 shrink-0 rounded-md flex items-center justify-center text-muted-foreground hover:bg-muted">
+          <ChevronUp className="h-4 w-4" />
         </button>
       )}
       <RowMenu canEdit={canEdit} open={detailsOpen} lineCount={lineCount}
@@ -904,10 +915,12 @@ function ItemRow({
       onFocus={(e) => { if (canEdit && (e.target as HTMLElement).matches("input:not([type=checkbox]), textarea, select")) setEditing(true); }}
       onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setEditing(false); }}
       className={`group transition-colors rounded-xl border bg-card shadow-sm @[820px]:rounded-none @[820px]:border-0 @[820px]:shadow-none @[820px]:bg-transparent ${editing ? "ring-2 ring-[#1F5C3F]/40 @[820px]:ring-inset !bg-[#F0FDF4]" : inactive ? "!bg-muted/40" : "@[820px]:hover:bg-muted/30"}`}>
-      <div className={`grid grid-cols-[22px_48px_minmax(0,1fr)_auto] @[440px]:grid-cols-[22px_56px_minmax(0,1fr)_auto] gap-x-2.5 @[440px]:gap-x-3 gap-y-3 items-start p-3 ${ROW} @[820px]:items-center @[820px]:px-3 @[820px]:py-1`}>
+      <div className={`grid ${collapsed
+        ? "grid-cols-[22px_40px_minmax(0,1fr)_auto] gap-x-2.5 items-center p-2.5 @[520px]:items-start @[520px]:p-3"
+        : "grid-cols-[22px_48px_minmax(0,1fr)_auto] gap-x-2.5 items-start p-3"} @[440px]:grid-cols-[22px_56px_minmax(0,1fr)_auto] @[440px]:gap-x-3 gap-y-3 ${ROW} @[820px]:items-center @[820px]:px-3 @[820px]:py-1`}>
         {/* ✓ in quote */}
         <input type="checkbox" aria-label={`${item.itemName} in quote`} title="In the quote (customer's choice)"
-          className="mt-4 @[820px]:mt-0 h-5 w-5 @[820px]:h-4 @[820px]:w-4 accent-[#1F5C3F] justify-self-center" disabled={!canEdit}
+          className={`${collapsed ? "@[520px]:mt-4" : "mt-4"} @[820px]:mt-0 h-5 w-5 @[820px]:h-4 @[820px]:w-4 accent-[#1F5C3F] justify-self-center`} disabled={!canEdit}
           checked={!inactive} onChange={onToggleActive} />
 
         {/* # */}
@@ -915,12 +928,31 @@ function ItemRow({
 
         {/* Photo */}
         <div className={inactive ? "opacity-60" : ""}>
-          <ImageCell url={item.imageUrl} options={photos} disabled={!canEdit} size="h-12 w-12 @[440px]:h-14 @[440px]:w-14 @[820px]:h-8 @[820px]:w-8"
+          <ImageCell url={item.imageUrl} options={photos} disabled={!canEdit}
+            size={`${collapsed ? "h-10 w-10" : "h-12 w-12"} @[440px]:h-14 @[440px]:w-14 @[820px]:h-8 @[820px]:w-8`}
             onChange={(url) => onUpdate({ imageUrl: url })} />
         </div>
 
+        {/* Phone summary (folded): tap anywhere on it to open the fields */}
+        {collapsed && (
+          <button type="button" onClick={() => setExpanded(true)} aria-expanded={false}
+            aria-label={`Edit ${item.itemName}`}
+            className={`@[520px]:hidden min-w-0 text-left ${inactive ? "opacity-60" : ""}`}>
+            <span className="flex min-w-0 items-center gap-1.5">
+              <span className="truncate text-[15px] font-semibold leading-5 text-foreground">{item.itemName || "Untitled"}</span>
+            </span>
+            <span className="mt-0.5 block truncate text-xs tabular-nums text-muted-foreground">
+              {inactive && <span className="font-semibold text-[#B7791F]">Not in quote · </span>}
+              {grouped(qty)} {item.unit || "Nos"} × ₹{grouped(rate)}
+              {Number(item.discountAmount ?? 0) > 0 && <> · −₹{grouped(Number(item.discountAmount))}</>}
+              {item.color && <> · {item.color}</>}
+              {meta && <> · {meta}</>}
+            </span>
+          </button>
+        )}
+
         {/* Product: name + badge; description · colour as one quiet line underneath */}
-        <div className={`min-w-0 ${inactive ? "opacity-60" : ""}`}>
+        <div className={`min-w-0 ${collapsed ? "hidden @[520px]:block" : ""} ${inactive ? "opacity-60" : ""}`}>
           {/* Narrow phones: the name gets the whole line and the badges wrap under it. */}
           <div className="flex flex-wrap @[440px]:flex-nowrap min-w-0 items-center gap-x-1.5 gap-y-0.5">
             <div className="min-w-0 basis-full @[440px]:basis-auto flex-1 @[820px]:flex-none @[820px]:max-w-[80%]">
@@ -960,6 +992,12 @@ function ItemRow({
 
         {/* Colour + actions (phones / tablets: top-right of the card) */}
         <div className="row-start-1 col-start-4 @[820px]:hidden flex items-center gap-1">
+          {collapsed && (
+            <button type="button" onClick={() => setExpanded(true)} tabIndex={-1}
+              className={`@[520px]:hidden pl-1 text-right text-[15px] font-bold tabular-nums ${inactive ? "text-muted-foreground line-through" : "text-foreground"}`}>
+              ₹{grouped(Number(item.amount ?? 0))}
+            </button>
+          )}
           {(canEdit || item.color) && (
             <ColourBox value={item.color} colors={colorsOf(product)} disabled={!canEdit} onChange={onColor}
               className="hidden @[560px]:block w-28" inputClassName={QUIET} />
@@ -968,7 +1006,7 @@ function ItemRow({
         </div>
 
         {/* Numbers — one labelled strip on phones (Qty · Unit · Rate · Disc · Amount), table cells on desktop */}
-        <div className="col-span-4 col-start-1 @[820px]:col-span-1 @[820px]:col-start-auto grid grid-cols-3 @[520px]:grid-cols-[minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,1.1fr)_minmax(0,0.9fr)_minmax(0,1.2fr)] gap-x-3 gap-y-3 items-end @[820px]:contents">
+        <div className={`col-span-4 col-start-1 @[820px]:col-span-1 @[820px]:col-start-auto ${collapsed ? "hidden @[520px]:grid" : "grid"} grid-cols-3 @[520px]:grid-cols-[minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,1.1fr)_minmax(0,0.9fr)_minmax(0,1.2fr)] gap-x-3 gap-y-3 items-end @[820px]:contents`}>
           <Cell label="Qty">
             <div className="relative">
               <NumCell value={item.quantity} col="qty" disabled={!canEdit} className={`${f} ${BIG} !text-left @[820px]:!text-right ${canEdit ? "!pl-3 pr-8 @[820px]:!pl-2 @[820px]:pr-2" : ""}`} onCommit={onQty} />
