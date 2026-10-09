@@ -1792,17 +1792,22 @@ public class EmployeeTaskService {
         card.put("progressPercent", latestProgressPercent(t.getId()));
 
         // Who & where — so a pool card tells the employee the customer and site before they pick it up.
+        com.arudra.crm.entity.Lead lead = t.getLeadId() != null ? leadRepository.findById(t.getLeadId()).orElse(null) : null;
         String customer = null;
         if (t.getProject() != null && t.getProject().getCustomer() != null) {
             customer = t.getProject().getCustomer().getName();
-        } else if (t.getLeadId() != null) {
-            customer = leadRepository.findById(t.getLeadId()).map(com.arudra.crm.entity.Lead::getName).orElse(null);
+        } else if (lead != null) {
+            customer = lead.getName();
         }
         card.put("customer", customer);
         String location = t.getProject() != null ? siteAddressText(t.getProject())
-                : (t.getLeadId() != null ? leadRepository.findById(t.getLeadId())
-                        .map(l -> isNotBlank(l.getCity()) ? l.getCity() : l.getAddress()).orElse(null) : null);
+                : (lead != null ? (isNotBlank(lead.getCity()) ? lead.getCity() : lead.getAddress()) : null);
         card.put("location", location);
+        // What the customer asked for (lead tasks) — e.g. "Mosquito Net" · "Door Type" on the card.
+        // Project tasks fall back to the lead the project was converted from.
+        com.arudra.crm.entity.Lead reqLead = lead != null ? lead : (t.getProject() != null ? t.getProject().getLead() : null);
+        card.put("requirementCategory", reqLead != null ? reqLead.getRequirementCategory() : null);
+        card.put("requirementProduct", reqLead != null ? reqLead.getRequirementProduct() : null);
         // Assignment mode (SINGLE_EMPLOYEE / MULTIPLE_EMPLOYEES / TEAM) and the origin category lane.
         card.put("assignmentType", t.getAssignmentType());
         String[] cat = taskCategoryFor(t);

@@ -45,7 +45,7 @@ export default function SwipeActions({ children, actions, onTap }: { children: R
   };
 
   return (
-    <div className="relative overflow-hidden rounded-xl">
+    <div className="relative overflow-hidden rounded-2xl">
       {actions.length > 0 && (
         <div className="absolute inset-y-0 right-0 flex" style={{ width: maxReveal }}>
           {actions.map((action) => (

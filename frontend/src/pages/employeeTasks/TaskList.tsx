@@ -87,6 +87,10 @@ export default function TaskList() {
         onComplete={onComplete} onPick={pick ? onPick : undefined} onExtend={onExtend} />
     ));
 
+  const Stack = ({ children }: { children: React.ReactNode }) => (
+    <div className="flex flex-col gap-3">{children}</div>
+  );
+
   const Group = ({ icon: Icon, tone, title, list, pick = false }: {
     icon: React.ComponentType<{ className?: string }>; tone: string; title: string;
     list: TaskCardType[]; pick?: boolean;
@@ -94,14 +98,12 @@ export default function TaskList() {
     if (list.length === 0) return null;
     return (
       <section>
-        <div className="mb-2 flex items-center gap-2 px-1">
-          <Icon className={`h-[18px] w-[18px] ${tone}`} />
-          <h2 className="text-[15px] font-bold text-[#111817]">{title}</h2>
-          <span className="rounded-full bg-[#EEF0EE] px-2 py-0.5 text-[11px] font-semibold text-[#5B625E]">{list.length}</span>
+        <div className="mb-2.5 flex items-center gap-2.5 px-1">
+          <Icon className={`h-5 w-5 ${tone}`} />
+          <h2 className="text-[17px] font-bold text-[#111817]">{title}</h2>
+          <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-[#EEF0EE] px-2 text-[12px] font-semibold text-[#5B625E]">{list.length}</span>
         </div>
-        <div className="overflow-hidden rounded-2xl border border-[#ECEAE5] bg-white shadow-[0_2px_10px_rgba(0,35,22,0.04)]">
-          {cards(list, pick)}
-        </div>
+        <Stack>{cards(list, pick)}</Stack>
       </section>
     );
   };
@@ -119,9 +121,9 @@ export default function TaskList() {
       {/* Title + capacity + search toggle */}
       <div className="flex items-center justify-between px-0.5">
         <div>
-          <h1 className="text-[22px] font-bold leading-tight text-[#111817]">Tasks to Do</h1>
+          <h1 className="text-[26px] font-bold leading-tight tracking-tight text-[#111817]">Tasks to Do</h1>
           {capacity && (
-            <p className="mt-0.5 text-[12px] text-[#7A817C]">
+            <p className="mt-0.5 text-[13px] text-[#7A817C]">
               {capacity.active} active · {capacity.max - capacity.active > 0
                 ? `${capacity.max - capacity.active} more you can take`
                 : 'at capacity'}
@@ -130,7 +132,7 @@ export default function TaskList() {
         </div>
         <button
           onClick={() => { setShowSearch((s) => { const n = !s; if (!n) setSearch(''); return n; }); }}
-          className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-[#0A573B] shadow-sm active:scale-95"
+          className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-[#0A573B] shadow-[0_2px_10px_rgba(0,35,22,0.08)] active:scale-95"
           aria-label={showSearch ? 'Close search' : 'Search tasks'}
         >
           {showSearch ? <X className="h-5 w-5" /> : <Search className="h-5 w-5" />}
@@ -156,13 +158,13 @@ export default function TaskList() {
           <button
             key={c.key}
             onClick={() => setFilter(c.key)}
-            className={`flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[13px] font-semibold transition-colors ${
-              filter === c.key ? 'bg-[#0A573B] text-white' : 'bg-white text-[#5B625E] shadow-sm'
+            className={`flex shrink-0 items-center gap-2 rounded-full px-4 py-2 text-[14px] font-semibold transition-colors ${
+              filter === c.key ? 'bg-[#0A573B] text-white shadow-[0_2px_8px_rgba(10,87,59,0.3)]' : 'bg-white text-[#3F4642] shadow-[0_1px_6px_rgba(0,35,22,0.06)]'
             }`}
           >
             {c.label}
             {c.count > 0 && (
-              <span className={`rounded-full px-1.5 text-[11px] ${filter === c.key ? 'bg-white/20' : 'bg-[#EEF0EE] text-[#5B625E]'}`}>
+              <span className={`flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] ${filter === c.key ? 'bg-white/20' : 'bg-[#EEF0EE] text-[#5B625E]'}`}>
                 {c.count}
               </span>
             )}
@@ -178,7 +180,7 @@ export default function TaskList() {
           ? empty('No tasks need your attention right now. Enjoy the breather!', true)
           : (
             <div className="flex flex-col gap-5">
-              <Group icon={AlertTriangle} tone="text-[#B94B45]" title="Overdue" list={overdue} />
+              <Group icon={AlertTriangle} tone="text-[#D64541]" title="Overdue" list={overdue} />
               <Group icon={Flame} tone="text-[#EA6A2D]" title="Do Now" list={now} />
               <Group icon={CalendarDays} tone="text-[#0A573B]" title="Today" list={today} />
               <Group icon={Clock} tone="text-[#7A817C]" title="Upcoming" list={upcoming} />
@@ -196,13 +198,13 @@ export default function TaskList() {
           )
       )}
       {filter === 'OVERDUE' && (overdue.length ? (
-        <div className="overflow-hidden rounded-2xl border border-[#ECEAE5] bg-white shadow-sm">{cards(overdue)}</div>
+        <Stack>{cards(overdue)}</Stack>
       ) : empty('No overdue tasks — nicely on top of things.', true))}
       {filter === 'TODAY' && ((today.length + now.length) ? (
-        <div className="overflow-hidden rounded-2xl border border-[#ECEAE5] bg-white shadow-sm">{cards([...now, ...today])}</div>
+        <Stack>{cards([...now, ...today])}</Stack>
       ) : empty('Nothing scheduled for today.', true))}
       {filter === 'UPCOMING' && (upcoming.length ? (
-        <div className="overflow-hidden rounded-2xl border border-[#ECEAE5] bg-white shadow-sm">{cards(upcoming)}</div>
+        <Stack>{cards(upcoming)}</Stack>
       ) : empty('No upcoming tasks yet.'))}
       {filter === 'AVAILABLE' && (
         <>
@@ -210,12 +212,12 @@ export default function TaskList() {
             <Hand className="h-3.5 w-3.5" /> Unassigned work you can pick up.
           </p>
           {pool.length ? (
-            <div className="mt-2 overflow-hidden rounded-2xl border border-[#ECEAE5] bg-white shadow-sm">{cards(pool, true)}</div>
+            <Stack>{cards(pool, true)}</Stack>
           ) : empty('No available tasks for you right now.')}
         </>
       )}
       {filter === 'COMPLETED' && (completed.length ? (
-        <div className="overflow-hidden rounded-2xl border border-[#ECEAE5] bg-white shadow-sm">{cards(completed)}</div>
+        <Stack>{cards(completed)}</Stack>
       ) : empty('No completed tasks yet.'))}
     </div>
   );

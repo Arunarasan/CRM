@@ -35,6 +35,19 @@ export function humanizeDue(
   return { text: `Due ${nice}`, tone: 'normal' };
 }
 
+/** Compact deadline for tight card corners: "30d late", "Today", "Tomorrow", "In 3d", "12 Oct". */
+export function shortDue(dueDate: string | null, status?: string): string {
+  if (!dueDate) return 'No date';
+  const nice = new Date(`${dueDate}T00:00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  const diff = daysUntil(dueDate);
+  if (status === 'COMPLETED' || status === 'CANCELLED' || diff == null) return nice;
+  if (diff < 0) return `${-diff}d late`;
+  if (diff === 0) return 'Today';
+  if (diff === 1) return 'Tomorrow';
+  if (diff <= 6) return `In ${diff}d`;
+  return nice;
+}
+
 const DUE_TONE: Record<string, string> = {
   normal: 'text-[#6B726E]',
   soon: 'text-[#B27A12]',

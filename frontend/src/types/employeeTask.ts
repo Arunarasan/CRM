@@ -40,6 +40,8 @@ export interface TaskCard {
   assignmentType?: 'SINGLE_EMPLOYEE' | 'MULTIPLE_EMPLOYEES' | 'TEAM' | null;
   category?: string | null; // origin lane code: LEAD | PROJECT | FIELD_WORK | STITCHING | INSTALLATION | ENQUIRY | OTHER
   categoryLabel?: string | null; // human label for the lane
+  requirementCategory?: string | null; // lead tasks: comma-separated catalog categories ("Mosquito Net")
+  requirementProduct?: string | null; // lead tasks: comma-separated catalog products ("Door Type")
 }
 
 /** Active-task capacity for the current employee. */
