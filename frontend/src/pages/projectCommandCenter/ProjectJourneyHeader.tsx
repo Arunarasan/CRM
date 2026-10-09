@@ -42,6 +42,9 @@ export const waLink = (n: string) => {
   return `https://wa.me/${d}`;
 };
 
+/** Product chips shown on a phone-width header before collapsing into "+N more". */
+const PHONE_PRODUCTS = 2;
+
 /** Customer contact / lead / location / scope rows shown under the project name. */
 export function ProjectInfoRow({ summary }: { summary: ProjectHeaderSummary }) {
   const chip = "inline-flex min-w-0 items-center gap-2 rounded-xl bg-white border border-slate-200 px-2.5 @lg:px-3 py-1.5 text-[13px] @lg:text-sm text-slate-700 shadow-sm whitespace-nowrap [&>svg]:shrink-0";
@@ -85,13 +88,16 @@ export function ProjectInfoRow({ summary }: { summary: ProjectHeaderSummary }) {
               <Tag className="h-3.5 w-3.5" /> {c}
             </span>
           ))}
-          {shownProducts.map((p) => (
-            <span key={p} className="inline-flex items-center gap-1.5 rounded-xl bg-slate-100 px-3 py-1 text-slate-600">
-              <Package className="h-3.5 w-3.5 text-slate-400" /> {p}
+          {shownProducts.map((p, i) => (
+            <span key={p} className={`${i >= PHONE_PRODUCTS ? "hidden @xl:inline-flex" : "inline-flex"} min-w-0 max-w-full items-center gap-1.5 rounded-xl bg-slate-100 px-3 py-1 text-slate-600`}>
+              <Package className="h-3.5 w-3.5 shrink-0 text-slate-400" /> <span className="truncate">{p}</span>
             </span>
           ))}
+          {products.length > PHONE_PRODUCTS && (
+            <span className="@xl:hidden text-xs text-slate-400 font-medium" title={products.slice(PHONE_PRODUCTS).join(", ")}>+{products.length - PHONE_PRODUCTS} more</span>
+          )}
           {products.length > shownProducts.length && (
-            <span className="text-xs text-slate-400 font-medium" title={products.slice(shownProducts.length).join(", ")}>+{products.length - shownProducts.length} more</span>
+            <span className="hidden @xl:inline text-xs text-slate-400 font-medium" title={products.slice(shownProducts.length).join(", ")}>+{products.length - shownProducts.length} more</span>
           )}
         </div>
       )}

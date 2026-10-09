@@ -840,6 +840,61 @@ export default function ProjectCommandCenter() {
       .sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
   })();
 
+  // Quotation summary card — top of Overview and head of the Measurement & Quotation tab.
+  const renderQuoteCard = (inOverview: boolean) => {
+    const q = project.quotation;
+    if (!q) return null;
+    const items = (q.items || []).filter((i: any) => !i.isDeleted);
+    const expired = q.expiryDate && new Date(q.expiryDate).getTime() < new Date(new Date().toDateString()).getTime();
+    const st = String(q.status || 'DRAFT');
+    return (
+      <section className="rounded-2xl border border-slate-100 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+        <div className="p-4 flex flex-col @3xl:flex-row @3xl:items-center gap-4">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <FileText className="h-5 w-5 text-emerald-700" />
+              <span className="text-base font-bold text-slate-900">{q.quotationNumber || 'Quotation'}</span>
+              {Number(q.revisionNumber || 0) > 0 && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">Rev {q.revisionNumber}</span>}
+              <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold uppercase ${st === 'APPROVED' || st === 'CONVERTED' ? 'bg-emerald-100 text-emerald-800' : st === 'REJECTED' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-800'}`}>{st.replace(/_/g, ' ')}</span>
+            </div>
+            <div className="mt-2 text-2xl font-bold text-slate-900">{inr(Number(q.grandTotal || 0))}</div>
+            <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-500">
+              <span>{items.length} item{items.length === 1 ? '' : 's'}</span>
+              {q.quotationDate && <span>Quoted {shortDate(q.quotationDate)}</span>}
+              {q.expiryDate && <span className={expired ? 'font-semibold text-rose-600' : ''}>{expired ? 'Expired' : 'Valid till'} {shortDate(q.expiryDate)}</span>}
+              {q.approvedDate && <span>Approved {shortDate(q.approvedDate)}</span>}
+            </div>
+            {(summary.categories || []).length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {(summary.categories || []).map((c) => (
+                  <span key={c} className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-semibold text-amber-800">{c}</span>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2 shrink-0">
+            {q.id && (
+              <a href={`${import.meta.env.BASE_URL.replace(/\/$/, '')}/quotations/${q.id}/print`} target="_blank" rel="noreferrer"
+                className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                <FileBarChart className="h-4 w-4 text-emerald-700" /> Print / PDF
+              </a>
+            )}
+            {project.lead?.id && (
+              <Button size="sm" variant="outline" onClick={() => { setQuoteOpen(true); if (inOverview) setActiveTab('quote'); }} className="h-9 rounded-xl">
+                <Pencil className="h-4 w-4 mr-1" /> Change quote
+              </Button>
+            )}
+            {project.lead?.id && (
+              <Button size="sm" onClick={() => { if (inOverview) { setQuoteOpen(true); setActiveTab('quote'); } else setQuoteOpen((o) => !o); }} className="h-9 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white">
+                {!inOverview && quoteOpen ? 'Hide workspace' : 'Open full workspace'} <ChevronDown className={`h-4 w-4 ml-1 transition-transform ${!inOverview && quoteOpen ? 'rotate-180' : ''}`} />
+              </Button>
+            )}
+          </div>
+        </div>
+      </section>
+    );
+  };
+
   return (
     <div className="flex flex-col h-full bg-slate-50/50 relative overflow-hidden">
       {/* Single smooth-scroll surface: the whole top scrolls away, only the tab bar pins. */}
@@ -867,7 +922,7 @@ export default function ProjectCommandCenter() {
               </button>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2.5 flex-wrap">
-                  <h1 className="min-w-0 max-w-full text-xl sm:text-2xl lg:text-[28px] font-bold tracking-tight text-slate-900 truncate">{summary.customerName || project.customer?.name || project.projectName}</h1>
+                  <h1 className="min-w-0 max-w-full text-xl @xl:text-2xl @4xl:text-[28px] font-bold leading-tight tracking-tight text-slate-900 line-clamp-2 break-words @xl:truncate">{summary.customerName || project.customer?.name || project.projectName}</h1>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <button type="button" className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ring-1 ${STATUS_PILL[project.status] || STATUS_PILL.PLANNING}`}>
@@ -897,10 +952,37 @@ export default function ProjectCommandCenter() {
               </div>
             </div>
 
-            <div className="flex flex-col @2xl:flex-row @2xl:flex-wrap @4xl:flex-col items-stretch @2xl:items-center @4xl:items-end gap-3 min-w-0">
-              <div className="flex items-center gap-2 @2xl:order-2 @4xl:order-none @2xl:ml-auto @4xl:ml-0">
-                <Button variant="outline" title="Edit Project" className="h-11 shrink-0 rounded-xl border-slate-200 bg-white px-3.5 @lg:px-4 text-slate-700 font-semibold transition hover:-translate-y-px hover:shadow-sm" onClick={() => { setActiveTab('overview'); startEdit('overview'); }}>
-                  <Pencil className="w-4 h-4 @lg:mr-2" /> <span className="hidden @lg:inline">Edit Project</span>
+            {/* Phone: money then full-width actions · tablet: one row · desktop: actions above money, right-aligned */}
+            <div className="flex flex-col @2xl:flex-row @4xl:flex-col-reverse items-stretch @2xl:items-center @4xl:items-end gap-3 min-w-0">
+              {/* Money card — paid so far | still to collect */}
+              {(() => {
+                const contract = Number(profitability?.quotationValue || boqEstimate || 0);
+                const paid = Number(profitability?.collected ?? 0);
+                const pending = contract ? Math.max(0, contract - paid) : Number(profitability?.outstanding ?? 0);
+                return (
+                  <div className="flex items-stretch w-full @2xl:w-auto @2xl:flex-1 @2xl:max-w-md @4xl:flex-none @4xl:max-w-none rounded-2xl bg-white border border-slate-100 shadow-sm divide-x divide-slate-100">
+                    <button type="button" onClick={() => setActiveTab('payments')} title="Open Billing & Payments"
+                      className="flex items-center gap-2.5 @lg:gap-3 px-3 @lg:px-4 py-2.5 @4xl:py-3 flex-1 min-w-0 text-left rounded-l-2xl hover:bg-slate-50/70">
+                      <span className="flex h-9 w-9 @lg:h-10 @lg:w-10 items-center justify-center rounded-full bg-emerald-50 text-emerald-700 shrink-0"><IndianRupee className="w-5 h-5" /></span>
+                      <div className="min-w-0">
+                        <div className="text-[11px] font-medium text-slate-400 truncate">Paid<span className="hidden @md:inline"> Amount</span></div>
+                        <div className="text-base @4xl:text-lg font-bold leading-tight text-slate-800 truncate">{inr(Math.round(paid))}</div>
+                      </div>
+                    </button>
+                    <button type="button" onClick={() => setActiveTab('payments')} title={contract ? `Balance of ${inr(contract)} contract value` : 'Invoiced, not yet received'}
+                      className="flex items-center gap-2.5 @lg:gap-3 px-3 @lg:px-4 py-2.5 @4xl:py-3 flex-1 min-w-0 text-left rounded-r-2xl hover:bg-slate-50/70">
+                      <span className="flex h-9 w-9 @lg:h-10 @lg:w-10 items-center justify-center rounded-full bg-amber-50 text-amber-600 shrink-0"><Wallet className="w-5 h-5" /></span>
+                      <div className="min-w-0">
+                        <div className="text-[11px] font-medium text-slate-400 truncate">Pending<span className="hidden @md:inline"> Amount</span></div>
+                        <div className={`text-base @4xl:text-lg font-bold leading-tight truncate ${pending > 0 ? 'text-slate-800' : 'text-emerald-700'}`}>{inr(Math.round(pending))}</div>
+                      </div>
+                    </button>
+                  </div>
+                );
+              })()}
+              <div className="flex items-center gap-2 @2xl:shrink-0">
+                <Button variant="outline" title="Edit Project" className="h-11 shrink-0 rounded-xl border-slate-200 bg-white px-3.5 @lg:px-4 @2xl:px-3.5 @4xl:px-4 text-slate-700 font-semibold transition hover:-translate-y-px hover:shadow-sm" onClick={() => { setActiveTab('overview'); startEdit('overview'); }}>
+                  <Pencil className="w-4 h-4 @lg:mr-2" /> <span className="hidden @lg:inline @2xl:hidden @4xl:inline">Edit Project</span>
                 </Button>
                 {project.status !== 'COMPLETED' && (
                   <Button onClick={handleCompleteProject} className="h-11 flex-1 @2xl:flex-none whitespace-nowrap rounded-xl bg-emerald-800 hover:bg-emerald-900 px-5 font-semibold text-white shadow-[0_4px_14px_-4px_rgba(0,53,34,0.45)] transition hover:-translate-y-px">
@@ -927,23 +1009,6 @@ export default function ProjectCommandCenter() {
                 </DropdownMenu>
               </div>
 
-              {/* Date card — start date | days remaining */}
-              <div className="flex items-stretch rounded-2xl bg-white border border-slate-100 shadow-sm divide-x divide-slate-100 @2xl:order-1 @4xl:order-none">
-                <div className="flex items-center gap-3 px-3 @lg:px-4 py-2.5 flex-1 min-w-0">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-50 text-emerald-700 shrink-0"><Calendar className="w-5 h-5" /></span>
-                  <div>
-                    <div className="text-[11px] font-medium text-slate-400 whitespace-nowrap">Start Date</div>
-                    <div className="text-sm font-bold text-slate-800 whitespace-nowrap">{shortDate(project.startDate)}</div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3 px-3 @lg:px-4 py-2.5 flex-1 min-w-0">
-                  <span className={`flex h-10 w-10 items-center justify-center rounded-full shrink-0 ${daysRemaining !== null && daysRemaining < 0 ? 'bg-rose-50 text-rose-600' : 'bg-amber-50 text-amber-500'}`}><Clock className="w-5 h-5" /></span>
-                  <div>
-                    <div className="text-[11px] font-medium text-slate-400 whitespace-nowrap">Days Remaining</div>
-                    <div className={`text-sm font-bold whitespace-nowrap ${daysRemaining !== null && daysRemaining < 0 ? 'text-rose-600' : 'text-slate-800'}`}>{daysRemainingText}</div>
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
         </div>
@@ -1080,6 +1145,7 @@ export default function ProjectCommandCenter() {
 
                 return (
                   <>
+                    {renderQuoteCard(true)}
                     <AttentionBar items={attention} />
 
                     {/* Headline numbers — each opens the screen where it's managed */}
@@ -2003,59 +2069,7 @@ export default function ProjectCommandCenter() {
             </TabsContent>
 
             <TabsContent value="quote" className="space-y-3 mt-0 h-full outline-none">
-              {(() => {
-                const q = project.quotation;
-                if (!q) return null;
-                const items = (q.items || []).filter((i: any) => !i.isDeleted);
-                const expired = q.expiryDate && new Date(q.expiryDate).getTime() < new Date(new Date().toDateString()).getTime();
-                const st = String(q.status || 'DRAFT');
-                return (
-                  <section className="rounded-2xl border border-slate-100 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-                    <div className="p-4 flex flex-col @3xl:flex-row @3xl:items-center gap-4">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <FileText className="h-5 w-5 text-emerald-700" />
-                          <span className="text-base font-bold text-slate-900">{q.quotationNumber || 'Quotation'}</span>
-                          {Number(q.revisionNumber || 0) > 0 && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">Rev {q.revisionNumber}</span>}
-                          <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold uppercase ${st === 'APPROVED' || st === 'CONVERTED' ? 'bg-emerald-100 text-emerald-800' : st === 'REJECTED' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-800'}`}>{st.replace(/_/g, ' ')}</span>
-                        </div>
-                        <div className="mt-2 text-2xl font-bold text-slate-900">{inr(Number(q.grandTotal || 0))}</div>
-                        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-500">
-                          <span>{items.length} item{items.length === 1 ? '' : 's'}</span>
-                          {q.quotationDate && <span>Quoted {shortDate(q.quotationDate)}</span>}
-                          {q.expiryDate && <span className={expired ? 'font-semibold text-rose-600' : ''}>{expired ? 'Expired' : 'Valid till'} {shortDate(q.expiryDate)}</span>}
-                          {q.approvedDate && <span>Approved {shortDate(q.approvedDate)}</span>}
-                        </div>
-                        {(summary.categories || []).length > 0 && (
-                          <div className="mt-2 flex flex-wrap gap-1.5">
-                            {(summary.categories || []).map((c) => (
-                              <span key={c} className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-semibold text-amber-800">{c}</span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex flex-wrap gap-2 shrink-0">
-                        {q.id && (
-                          <a href={`${import.meta.env.BASE_URL.replace(/\/$/, '')}/quotations/${q.id}/print`} target="_blank" rel="noreferrer"
-                            className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
-                            <FileBarChart className="h-4 w-4 text-emerald-700" /> Print / PDF
-                          </a>
-                        )}
-                        {project.lead?.id && (
-                          <Button size="sm" variant="outline" onClick={() => setQuoteOpen(true)} className="h-9 rounded-xl">
-                            <Pencil className="h-4 w-4 mr-1" /> Change quote
-                          </Button>
-                        )}
-                        {project.lead?.id && (
-                          <Button size="sm" onClick={() => setQuoteOpen((o) => !o)} className="h-9 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white">
-                            {quoteOpen ? 'Hide workspace' : 'Open full workspace'} <ChevronDown className={`h-4 w-4 ml-1 transition-transform ${quoteOpen ? 'rotate-180' : ''}`} />
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  </section>
-                );
-              })()}
+              {renderQuoteCard(false)}
               {project.lead?.id ? (
                 (quoteOpen || !project.quotation) && <QuoteWorkspace leadId={String(project.lead.id)} projectId={project.id}
                   onChanged={() => { fetchCore(); fetchProjectData(); }} />
