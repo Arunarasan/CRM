@@ -87,9 +87,9 @@ public class LeadSpecification {
     // ---------------------------------------------------------------- lead journey stage
     // Every lead sits in exactly one stage (the furthest it has reached), so the Leads page's
     // stage cards add up to the total. Lost always wins; then Completed > Project > Quote > the rest.
-    public static final String STAGE_REQUIREMENT = "REQUIREMENT";     // enquiry: no requirement collected yet
-    public static final String STAGE_COLLECTED = "COLLECTED";         // ≥1 requirement-collection task done, no quote yet
-    public static final String STAGE_QUOTE = "QUOTE";                 // quote created, not approved yet
+    public static final String STAGE_REQUIREMENT = "REQUIREMENT";     // New: nothing collected yet
+    public static final String STAGE_COLLECTED = "COLLECTED";         // any requirement info captured, no quote yet
+    public static final String STAGE_QUOTE = "QUOTE";                 // quote (or BOQ) being built, not approved yet
     public static final String STAGE_PROJECT = "PROJECT";             // quote approved / converted, project running
     public static final String STAGE_COMPLETED = "COMPLETED";         // its project is completed
     public static final List<String> JOURNEY_STAGES =
@@ -127,18 +127,34 @@ public class LeadSpecification {
             approvedSq.select(aq.get("id")).where(cb.equal(aq.get("lead"), root), aq.get("status").in(APPROVED_QUOTE_STATUSES));
             Predicate project = cb.or(cb.isTrue(cb.coalesce(root.<Boolean>get("isConverted"), false)), cb.exists(projectSq), cb.exists(approvedSq));
 
+            // Quote building: a quotation or a BOQ exists for the lead.
             var quoteSq = query.subquery(Long.class);
             var q = quoteSq.from(com.arudra.crm.entity.Quotation.class);
             quoteSq.select(q.get("id")).where(cb.equal(q.get("lead"), root));
-            Predicate quoted = cb.exists(quoteSq);
+            var boqSq = query.subquery(Long.class);
+            var bq = boqSq.from(com.arudra.crm.entity.Boq.class);
+            boqSq.select(bq.get("id")).where(cb.equal(bq.get("lead"), root));
+            Predicate quoted = cb.or(cb.exists(quoteSq), cb.exists(boqSq));
 
-            // At least one requirement-collection task finished (the workflow is repeatable).
+            // Requirement collected: any single piece of info captured — a finished requirement
+            // task, a document/photo/voice note, a measurement, or saved task data.
             var doneReqSq = query.subquery(Long.class);
             var dt = doneReqSq.from(com.arudra.crm.entity.Task.class);
             doneReqSq.select(dt.get("id")).where(cb.equal(dt.get("leadId"), root.get("id")),
                     cb.equal(dt.get("taskTemplate").get("code"), COLLECT_REQUIREMENT_CODE),
                     cb.equal(dt.get("status"), "COMPLETED"));
-            Predicate collected = cb.exists(doneReqSq);
+            var docSq = query.subquery(Long.class);
+            var dc = docSq.from(com.arudra.crm.entity.LeadDocument.class);
+            docSq.select(dc.get("id")).where(cb.equal(dc.get("lead"), root),
+                    cb.isFalse(cb.coalesce(dc.<Boolean>get("isDeleted"), false)));
+            var measSq = query.subquery(Long.class);
+            var ms = measSq.from(com.arudra.crm.entity.Measurement.class);
+            measSq.select(ms.get("id")).where(cb.equal(ms.get("lead"), root),
+                    cb.isFalse(cb.coalesce(ms.<Boolean>get("isDeleted"), false)));
+            var subSq = query.subquery(Long.class);
+            var sb = subSq.from(com.arudra.crm.entity.LeadTaskSubmission.class);
+            subSq.select(sb.get("id")).where(cb.equal(sb.get("leadId"), root.get("id")));
+            Predicate collected = cb.or(cb.exists(doneReqSq), cb.exists(docSq), cb.exists(measSq), cb.exists(subSq));
 
             Predicate open = cb.and(notLost, cb.not(completed), cb.not(project));
             return switch (stage) {

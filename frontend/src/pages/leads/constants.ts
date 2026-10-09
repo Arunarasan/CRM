@@ -58,16 +58,8 @@ export const CONSTRUCTION_STATUSES = [
 ];
 
 /** Kanban board: dropping a card into a column applies this status. */
+/** Pipeline columns move automatically with the lead's work; only Lost is a manual drop target. */
 export const BOARD_DROP_STATUS: Record<string, string> = {
-  "New": "New",
-  "Contacted": "Contacted",
-  "Interested": "Interested",
-  "Site Visit": "Site Visit Scheduled",
-  "Measurement": "Measurement Scheduled",
-  "Quotation": "Quotation Sent",
-  "Negotiation": "Negotiation",
-  "Won": "Project Confirmed",
-  "On Hold": "On Hold",
   "Lost": "Lost",
 };
 
@@ -407,11 +399,11 @@ export type JourneyStage = "REQUIREMENT" | "COLLECTED" | "QUOTE" | "PROJECT" | "
 
 /** Label + pill colours for each journey stage — matches the Leads page stage cards. */
 export const JOURNEY_STAGE_META: Record<JourneyStage, { label: string; className: string }> = {
-  REQUIREMENT: { label: "Enquiry", className: "bg-violet-100 text-violet-700" },
+  REQUIREMENT: { label: "New", className: "bg-violet-100 text-violet-700" },
   COLLECTED: { label: "Requirement Collected", className: "bg-blue-100 text-blue-700" },
-  QUOTE: { label: "Quote Not Approved", className: "bg-amber-100 text-amber-800" },
+  QUOTE: { label: "Quote Building", className: "bg-amber-100 text-amber-800" },
   PROJECT: { label: "Active Project", className: "bg-cyan-100 text-cyan-700" },
-  COMPLETED: { label: "Completed", className: "bg-green-100 text-green-700" },
+  COMPLETED: { label: "Project Completed", className: "bg-green-100 text-green-700" },
   LOST: { label: "Lost", className: "bg-rose-100 text-rose-700" },
 };
 

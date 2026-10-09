@@ -28,20 +28,16 @@ public class LeadService {
             "estimatedBudget", "nextFollowUpDate", "lastContactAt", "createdAt", "city");
 
     /** Pipeline board columns → the statuses they aggregate. */
-    private static final Map<String, List<String>> BOARD_COLUMNS = new LinkedHashMap<>();
+    /** Pipeline board columns — the same journey stages as the Leads page cards, in order. */
+    private static final Map<String, String> BOARD_COLUMNS = new LinkedHashMap<>();
 
     static {
-        BOARD_COLUMNS.put("New", List.of("New"));
-        BOARD_COLUMNS.put("Contacted", List.of("Contacted", "Follow-up"));
-        BOARD_COLUMNS.put("Interested", List.of("Interested"));
-        BOARD_COLUMNS.put("Site Visit", List.of("Site Visit Scheduled", "Site Visit Completed"));
-        BOARD_COLUMNS.put("Measurement", List.of("Measurement Scheduled", "Measurement Completed"));
-        BOARD_COLUMNS.put("Quotation", List.of("Quotation Preparing", "Quotation Sent",
-                "Quotation Revised", "Quotation Approved", "Quotation Rejected"));
-        BOARD_COLUMNS.put("Negotiation", List.of("Negotiation"));
-        BOARD_COLUMNS.put("Won", List.of("Project Confirmed", "Project Started", "Completed"));
-        BOARD_COLUMNS.put("On Hold", List.of("On Hold"));
-        BOARD_COLUMNS.put("Lost", List.of("Lost", "Cancelled"));
+        BOARD_COLUMNS.put(LeadSpecification.STAGE_REQUIREMENT, "New");
+        BOARD_COLUMNS.put(LeadSpecification.STAGE_COLLECTED, "Requirement Collected");
+        BOARD_COLUMNS.put(LeadSpecification.STAGE_QUOTE, "Quote Building");
+        BOARD_COLUMNS.put(LeadSpecification.STAGE_PROJECT, "Active Projects");
+        BOARD_COLUMNS.put(LeadSpecification.STAGE_COMPLETED, "Project Completed");
+        BOARD_COLUMNS.put("LOST", "Lost");
     }
 
     /** Probability weights per open status for the revenue forecast. */
@@ -205,18 +201,18 @@ public class LeadService {
         List<Lead> leads = leadRepository.findAll(spec,
                 PageRequest.of(0, 500, Sort.by("id").descending())).getContent();
 
+        fillJourneyStages(leads);
+
         Map<String, LeadBoardColumnDTO> columns = new LinkedHashMap<>();
-        Map<String, String> statusToColumn = new HashMap<>();
-        BOARD_COLUMNS.forEach((column, statuses) -> {
+        BOARD_COLUMNS.forEach((stage, label) -> {
             LeadBoardColumnDTO dto = new LeadBoardColumnDTO();
-            dto.setKey(column);
-            columns.put(column, dto);
-            statuses.forEach(s -> statusToColumn.put(s, column));
+            dto.setKey(label);
+            columns.put(stage, dto);
         });
 
         for (Lead lead : leads) {
-            String column = statusToColumn.getOrDefault(lead.getStatus(), "New");
-            LeadBoardColumnDTO dto = columns.get(column);
+            LeadBoardColumnDTO dto = columns.getOrDefault(lead.getJourneyStage(),
+                    columns.get(LeadSpecification.STAGE_REQUIREMENT));
             dto.getLeads().add(LeadCardDTO.from(lead));
             dto.setCount(dto.getCount() + 1);
             if (lead.getEstimatedBudget() != null) {

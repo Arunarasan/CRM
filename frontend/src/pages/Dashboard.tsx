@@ -93,15 +93,15 @@ const FALLBACK_BOARD: BoardColumn[] = [
     { id: 1, leadNumber: "L-1041", name: "Vignesh Kumar", city: "Chennai", leadType: "Modular Kitchen", status: "New", estimatedBudget: 650000 },
     { id: 2, leadNumber: "L-1042", name: "Priya & Aravind", city: "OMR", leadType: "Full Home Interior", status: "New", estimatedBudget: 1800000 },
   ] },
-  { key: "Site Visit", count: 36, totalValue: 0, leads: [
+  { key: "Requirement Collected", count: 36, totalValue: 0, leads: [
     { id: 3, leadNumber: "L-1030", name: "Sreeja Narayanan", city: "ECR", leadType: "Interior + Home Theatre", status: "Site Visit Scheduled", estimatedBudget: 4200000 },
     { id: 4, leadNumber: "L-1031", name: "Rahul TechSol", city: "T. Nagar", leadType: "Office Interiors", status: "Site Visit Scheduled", estimatedBudget: 2800000 },
   ] },
-  { key: "Quotation", count: 28, totalValue: 0, leads: [
+  { key: "Quote Building", count: 28, totalValue: 0, leads: [
     { id: 5, leadNumber: "L-1012", name: "Lakshmi Builders", city: "GST Road", leadType: "Office Interior", status: "Quotation Sent", estimatedBudget: 12000000 },
     { id: 6, leadNumber: "L-1013", name: "SPV Developers", city: "Adyar", leadType: "Model Flat", status: "Quotation Sent", estimatedBudget: 8500000 },
   ] },
-  { key: "Won", count: 16, totalValue: 0, leads: [
+  { key: "Active Projects", count: 16, totalValue: 0, leads: [
     { id: 7, leadNumber: "L-0990", name: "Ananya Residence", city: "Anna Nagar", leadType: "Full Interior", status: "Project Confirmed", estimatedBudget: 3600000 },
     { id: 8, leadNumber: "L-0991", name: "GreenField Infra", city: "Chennai", leadType: "Workstations", status: "Project Confirmed", estimatedBudget: 7200000 },
   ] },
@@ -160,9 +160,9 @@ export default function Dashboard() {
   const col = (k: string) => board.find((c) => c.key === k) || { key: k, count: 0, totalValue: 0, leads: [] };
   const pipeline = [
     { label: "New Leads", data: col("New"), won: false },
-    { label: "Site Visit", data: col("Site Visit"), won: false },
-    { label: "Quoted", data: col("Quotation"), won: false },
-    { label: "Won / Closed", data: col("Won"), won: true },
+    { label: "Requirement Collected", data: col("Requirement Collected"), won: false },
+    { label: "Quote Building", data: col("Quote Building"), won: false },
+    { label: "Active Projects", data: col("Active Projects"), won: true },
   ];
 
   return (

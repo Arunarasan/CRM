@@ -258,9 +258,6 @@ export default function LeadProfile() {
                         <StageIcon className="h-3 w-3" />
                         {stageMeta.label}
                       </span>
-                      {lead.journeyStage !== "LOST" && lead.status && (
-                        <span className="text-[11px] text-slate-500">Status: {lead.status}</span>
-                      )}
                     </button>
                   ) : (
                     <button

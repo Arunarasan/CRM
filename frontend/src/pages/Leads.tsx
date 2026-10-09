@@ -239,7 +239,8 @@ export default function Leads() {
     if (source.droppableId === destination.droppableId) return;
 
     const leadId = parseInt(draggableId, 10);
-    const newStatus = BOARD_DROP_STATUS[destination.droppableId];
+    // Columns follow the lead's work automatically: only "mark Lost" or "reopen a Lost lead" is manual.
+    const newStatus = BOARD_DROP_STATUS[destination.droppableId] ?? (source.droppableId === "Lost" ? "Follow-up" : undefined);
     if (!newStatus) return;
 
     // optimistic move
@@ -257,22 +258,18 @@ export default function Leads() {
       return next;
     });
 
+    // Re-read the board either way: a reopened lead lands in whichever stage its work puts it.
     leadApi.updateStatus(leadId, newStatus)
-      .then(() => fetchDashboard())
-      .catch(() => fetchBoard());
+      .then(() => { fetchDashboard(); fetchCategoryCounts(); })
+      .finally(() => fetchBoard());
   };
 
   const stats: StatCard[] = useMemo(() => [
-    { label: "Enquiries", value: dashboard?.journeyStages?.REQUIREMENT, icon: Users, className: "bg-violet-100 text-violet-600", ring: "ring-violet-500 border-violet-500", patch: { journeyStage: "REQUIREMENT" }, hint: "New enquiries — requirement not collected yet" },
-    { label: "Requirement Collected", value: dashboard?.journeyStages?.COLLECTED, icon: ClipboardCheck, className: "bg-blue-100 text-blue-600", ring: "ring-blue-500 border-blue-500", patch: { journeyStage: "COLLECTED" }, hint: "At least one requirement collection done — no quote yet" },
-    { label: "Quote Not Approved", value: dashboard?.journeyStages?.QUOTE, icon: FileText, className: "bg-amber-100 text-amber-700", ring: "ring-amber-500 border-amber-500", patch: { journeyStage: "QUOTE" }, hint: "Quote created, not approved yet" },
-    {
-      label: "Active Projects",
-      value: dashboard?.journeyStages ? (dashboard.journeyStages.PROJECT ?? 0) + (dashboard.journeyStages.COMPLETED ?? 0) : undefined,
-      sub: dashboard?.journeyStages ? `${dashboard.journeyStages.PROJECT ?? 0} running · ${dashboard.journeyStages.COMPLETED ?? 0} completed` : undefined,
-      icon: FolderKanban, className: "bg-cyan-100 text-cyan-600", ring: "ring-cyan-500 border-cyan-500",
-      patch: { journeyStage: "PROJECT,COMPLETED" }, hint: "Quote approved — running and completed projects",
-    },
+    { label: "New", value: dashboard?.journeyStages?.REQUIREMENT, icon: Users, className: "bg-violet-100 text-violet-600", ring: "ring-violet-500 border-violet-500", patch: { journeyStage: "REQUIREMENT" }, hint: "Nothing collected yet" },
+    { label: "Requirement Collected", sub: "Quote pending", value: dashboard?.journeyStages?.COLLECTED, icon: ClipboardCheck, className: "bg-blue-100 text-blue-600", ring: "ring-blue-500 border-blue-500", patch: { journeyStage: "COLLECTED" }, hint: "Some requirement info captured (task done, document, photo, measurement…) — no quote yet" },
+    { label: "Quote Building", value: dashboard?.journeyStages?.QUOTE, icon: FileText, className: "bg-amber-100 text-amber-700", ring: "ring-amber-500 border-amber-500", patch: { journeyStage: "QUOTE" }, hint: "Quote or BOQ started, not approved yet" },
+    { label: "Active Projects", value: dashboard?.journeyStages?.PROJECT, icon: FolderKanban, className: "bg-cyan-100 text-cyan-600", ring: "ring-cyan-500 border-cyan-500", patch: { journeyStage: "PROJECT" }, hint: "Converted to a project — work running" },
+    { label: "Project Completed", value: dashboard?.journeyStages?.COMPLETED, icon: CheckCircle, className: "bg-green-100 text-green-600", ring: "ring-green-500 border-green-500", patch: { journeyStage: "COMPLETED" }, hint: "Its project is completed" },
     { label: "Lost", value: dashboard?.lostLeads, icon: XCircle, className: "bg-rose-100 text-rose-600", ring: "ring-rose-500 border-rose-500", patch: { status: "Lost" } },
   ], [dashboard]);
 
@@ -392,9 +389,6 @@ export default function Leads() {
         return (
           <div className="flex flex-col items-start gap-0.5">
             <span className={`px-2 py-0.5 text-[11px] rounded-full font-semibold ${meta.className}`}>{meta.label}</span>
-            {l.status && l.journeyStage !== "LOST" && (
-              <span className="text-[10.5px] text-muted-foreground">Status: {l.status}</span>
-            )}
           </div>
         );
       },
@@ -509,7 +503,7 @@ export default function Leads() {
       </div>
 
       {/* KPI cards — double as quick-filter tabs */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2">
         {stats.map((stat) => {
           const active = isStatActive(stat.patch);
           return (
@@ -737,8 +731,8 @@ export default function Leads() {
                       <a href={`tel:${l.mobileNumber}`} className="flex items-center gap-1.5 text-muted-foreground hover:text-primary">
                         <Phone className="h-3.5 w-3.5" /> {l.mobileNumber}
                       </a>
-                      <span className={`ml-auto px-2 py-0.5 text-[11px] rounded-full font-semibold ${statusStyle(l.status)}`}>
-                        {l.status || "—"}
+                      <span className={`ml-auto px-2 py-0.5 text-[11px] rounded-full font-semibold ${l.journeyStage ? JOURNEY_STAGE_META[l.journeyStage].className : statusStyle(l.status)}`}>
+                        {l.journeyStage ? JOURNEY_STAGE_META[l.journeyStage].label : l.status || "—"}
                       </span>
                     </div>
                   </div>
