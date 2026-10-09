@@ -31,6 +31,7 @@ public class ProjectFinanceService {
     @Autowired private InvoiceRepository invoiceRepository;
     @Autowired private CustomerPaymentRepository paymentRepository;
     @Autowired private PurchasePaymentRepository purchasePaymentRepository;
+    @Autowired private RefundRepository refundRepository;
 
     // =====================================================================
     // Expenses
@@ -229,8 +230,9 @@ public class ProjectFinanceService {
                 : netProfit.multiply(BigDecimal.valueOf(100)).divide(invoiced, 2, RoundingMode.HALF_UP);
 
         // ---- Cash basis: money that has actually moved to date ----
-        // Revenue = what the customer has really paid us; costs = what we have really paid out.
-        BigDecimal customerPaid = collected;
+        // Revenue = what the customer has really paid us (less advance refunded); costs = what we have really paid out.
+        BigDecimal refunded = nz(refundRepository.sumForProject(projectId, List.of("PAID")));
+        BigDecimal customerPaid = collected.subtract(refunded);
         BigDecimal contractorPaid = nz(contractorPaymentRepository.sumPaidForProject(projectId));
         BigDecimal purchasePaid = nz(purchasePaymentRepository.sumForProject(projectId));
         BigDecimal otherExpensesPaid = nz(expenseRepository.totalForProjectBySource(projectId, "MANUAL"));
@@ -260,6 +262,7 @@ public class ProjectFinanceService {
         result.put("netProfit", netProfit);
         result.put("profitPercent", profitPercent);
         // Cash-basis view (actual money in vs actual money out)
+        result.put("refunded", refunded);
         result.put("customerPaid", customerPaid);
         result.put("contractorPaid", contractorPaid);
         result.put("purchasePaid", purchasePaid);

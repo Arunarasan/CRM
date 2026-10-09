@@ -318,6 +318,8 @@ export interface ProjectProfitability {
   netProfit: number;
   profitPercent: number;
   // Cash basis — money that has actually moved to date
+  /** Advance refunded to the customer (paid refunds); customerPaid is net of it. */
+  refunded?: number;
   customerPaid: number;
   contractorPaid: number;
   purchasePaid: number;

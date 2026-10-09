@@ -195,6 +195,18 @@ public class Project extends BaseEntity {
     @Column(name = "completion_certificate_base64", columnDefinition = "TEXT")
     private String completionCertificateBase64;
 
+    /** Set when the project is cancelled (status CANCELLED); the advance refund lives in {@code refunds}. */
+    @Column(name = "cancelled_at")
+    private java.time.LocalDateTime cancelledAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "cancelled_by_id")
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "roles", "refreshTokens", "password"})
+    private User cancelledBy;
+
+    @Column(name = "cancellation_reason", columnDefinition = "TEXT")
+    private String cancellationReason;
+
     /** Unguessable token behind the public, no-login tracking link (/track/{token}). Auto-set on create. */
     @Column(name = "share_token", unique = true, length = 64)
     private String shareToken;

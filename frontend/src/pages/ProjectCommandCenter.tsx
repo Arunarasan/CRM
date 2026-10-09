@@ -17,6 +17,7 @@ import ProjectPaymentsTab from "@/pages/projectFinance/ProjectPaymentsTab";
 import CommercialSummary from "@/pages/projectFinance/CommercialSummary";
 import BulkWorkUpdateDialog from "@/pages/projectCommandCenter/BulkWorkUpdateDialog";
 import CompleteProjectDialog from "@/pages/projectCommandCenter/CompleteProjectDialog";
+import CancelProjectDialog, { CancelledBanner } from "@/pages/projectCommandCenter/CancelProjectDialog";
 import ProjectPurchaseOrdersTab from "@/pages/projectCommandCenter/tabs/ProjectPurchaseOrdersTab";
 import ProjectGoodsReceivedTab from "@/pages/projectCommandCenter/tabs/ProjectGoodsReceivedTab";
 import CameraCaptureButton from "@/components/CameraCaptureButton";
@@ -31,7 +32,7 @@ import {
   Pencil, Check, Trash2,
   Calendar, Clock, Flag, Building2, FileText, IndianRupee,
   FileBarChart, Home, Settings, ClipboardList,
-  ArrowRight, Zap, Navigation,
+  ArrowRight, Zap, Navigation, Ban,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
@@ -750,6 +751,9 @@ export default function ProjectCommandCenter() {
   // Mark Completed opens the handover dialog (photos + client approval + delivery confirmation).
   const [completeOpen, setCompleteOpen] = useState(false);
   const handleCompleteProject = () => setCompleteOpen(true);
+  // Cancel (any stage before completion, optional partial advance refund) / refund more once cancelled.
+  const [cancelMode, setCancelMode] = useState<null | 'cancel' | 'refund'>(null);
+  const [cancelRefresh, setCancelRefresh] = useState(0);
 
   const handleStartExecution = () => {
     api.post(`/projects/${id}/start-execution`)
@@ -761,6 +765,7 @@ export default function ProjectCommandCenter() {
   if (!data || !data.project) return <div className="p-8 text-red-500">Project not found</div>;
 
   const { project, stages, dailyLogs, qualityChecks, issues, risks, documents } = data;
+  const isClosed = ['COMPLETED', 'CANCELLED', 'CLOSED'].includes(project.status);
   const summary: ProjectHeaderSummary = data.summary || {};
   // Estimate budget is taken from the approved BOQ's grand total (falls back to the linked BOQ
   // revision, then the manual budget/estimate). Amount spent comes from live project expenses.
@@ -935,8 +940,11 @@ export default function ProjectCommandCenter() {
                       {['PLANNING', 'PENDING', 'APPROVED'].includes(project.status) && (
                         <DropdownMenuItem onSelect={handleStartExecution}><Play className="w-4 h-4 mr-2"/> Start Execution</DropdownMenuItem>
                       )}
-                      {project.status !== 'COMPLETED' && (
+                      {!isClosed && (
                         <DropdownMenuItem onSelect={handleCompleteProject}><CheckCircle2 className="w-4 h-4 mr-2"/> Mark Completed</DropdownMenuItem>
+                      )}
+                      {!isClosed && (
+                        <DropdownMenuItem onSelect={() => setCancelMode('cancel')} className="text-rose-600 focus:text-rose-700"><Ban className="w-4 h-4 mr-2"/> Cancel Project</DropdownMenuItem>
                       )}
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -957,8 +965,9 @@ export default function ProjectCommandCenter() {
               {/* Money card — paid so far | still to collect */}
               {(() => {
                 const contract = Number(profitability?.quotationValue || boqEstimate || 0);
-                const paid = Number(profitability?.collected ?? 0);
-                const pending = contract ? Math.max(0, contract - paid) : Number(profitability?.outstanding ?? 0);
+                // Net of advance refunded; a cancelled project has nothing left to collect.
+                const paid = Number(profitability?.collected ?? 0) - Number(profitability?.refunded ?? 0);
+                const pending = project.status === 'CANCELLED' ? 0 : contract ? Math.max(0, contract - paid) : Number(profitability?.outstanding ?? 0);
                 return (
                   <div className="flex items-stretch w-full @2xl:w-auto @2xl:flex-1 @2xl:max-w-md @4xl:flex-none @4xl:max-w-none rounded-2xl bg-white border border-slate-100 shadow-sm divide-x divide-slate-100">
                     <button type="button" onClick={() => setActiveTab('payments')} title="Open Billing & Payments"
@@ -984,7 +993,7 @@ export default function ProjectCommandCenter() {
                 <Button variant="outline" title="Edit Project" className="h-11 shrink-0 rounded-xl border-slate-200 bg-white px-3.5 @lg:px-4 @2xl:px-3.5 @4xl:px-4 text-slate-700 font-semibold transition hover:-translate-y-px hover:shadow-sm" onClick={() => { setActiveTab('overview'); startEdit('overview'); }}>
                   <Pencil className="w-4 h-4 @lg:mr-2" /> <span className="hidden @lg:inline @2xl:hidden @4xl:inline">Edit Project</span>
                 </Button>
-                {project.status !== 'COMPLETED' && (
+                {!isClosed && (
                   <Button onClick={handleCompleteProject} className="h-11 flex-1 @2xl:flex-none whitespace-nowrap rounded-xl bg-emerald-800 hover:bg-emerald-900 px-5 font-semibold text-white shadow-[0_4px_14px_-4px_rgba(0,53,34,0.45)] transition hover:-translate-y-px">
                     <CheckCircle2 className="w-4 h-4 mr-2"/> Mark Completed
                   </Button>
@@ -1005,6 +1014,12 @@ export default function ProjectCommandCenter() {
                     {project.customer?.id && (
                       <DropdownMenuItem asChild><Link to={`/customers/${project.customer.id}`}>View Customer</Link></DropdownMenuItem>
                     )}
+                    {!isClosed && (
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onSelect={() => setCancelMode('cancel')} className="text-rose-600 focus:text-rose-700"><Ban className="w-4 h-4 mr-2"/> Cancel Project</DropdownMenuItem>
+                      </>
+                    )}
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
@@ -1013,8 +1028,13 @@ export default function ProjectCommandCenter() {
           </div>
         </div>
 
+        {project.status === 'CANCELLED' && (
+          <CancelledBanner projectId={projectId} refreshKey={cancelRefresh} onRefund={() => setCancelMode('refund')} />
+        )}
         <ProjectJourneyBar stages={summary.journey || []} onOpen={() => setActiveTab('workProgress')} />
       </div>
+      <CancelProjectDialog projectId={projectId} mode={cancelMode || 'cancel'} open={cancelMode !== null} onClose={() => setCancelMode(null)}
+        onDone={async () => { setCancelRefresh((n) => n + 1); await fetchProjectData(); fetchCore(); }} />
       <TrackingLinkDialog projectId={Number(projectId)} open={trackingOpen} onOpenChange={setTrackingOpen} />
 
       <div className="flex flex-col">
@@ -1034,7 +1054,7 @@ export default function ProjectCommandCenter() {
                     {project.customer?.city && <span className="text-xs text-slate-400 shrink-0 hidden sm:inline">· {project.customer.city}</span>}
                     <span className="px-2 py-0.5 text-[10px] rounded-full font-semibold uppercase bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100 shrink-0">{project.status.replace(/_/g, ' ')}</span>
                   </div>
-                  {project.status !== 'COMPLETED' && (
+                  {!isClosed && (
                     <Button size="sm" onClick={handleCompleteProject} className="bg-emerald-800 hover:bg-emerald-900 rounded-lg h-8 shrink-0"><CheckCircle2 className="w-4 h-4 mr-1.5"/> Mark Completed</Button>
                   )}
                 </div>

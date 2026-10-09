@@ -3,6 +3,7 @@ package com.arudra.crm.controller;
 import com.arudra.crm.dto.ApiResponse;
 import com.arudra.crm.entity.*;
 import com.arudra.crm.security.CurrentUserService;
+import com.arudra.crm.service.ProjectCancellationService;
 import com.arudra.crm.service.ProjectService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
@@ -33,6 +34,9 @@ public class ProjectController {
 
     @Autowired
     private CurrentUserService currentUserService;
+
+    @Autowired
+    private ProjectCancellationService projectCancellationService;
 
     @Autowired
     private com.arudra.crm.service.SupplyInstallService supplyInstallService;
@@ -221,6 +225,27 @@ public class ProjectController {
     public ResponseEntity<Project> completeWithHandover(@PathVariable Long id, @RequestBody CompleteHandoverRequest req) {
         return ResponseEntity.ok(projectService.completeWithHandover(id, req.clientApproved, req.productsDelivered,
                 req.notes, req.photoUrls, req.force, currentUserService.getCurrentUser()));
+    }
+
+    /** Money position for cancelling: paid, refunds already raised, still refundable, refund history. */
+    @GetMapping("/{id}/cancellation")
+    @PreAuthorize(READ)
+    public ResponseEntity<Map<String, Object>> cancellationPreview(@PathVariable Long id) {
+        return ResponseEntity.ok(projectCancellationService.preview(id));
+    }
+
+    /** Cancel the project at any stage before completion, optionally refunding part of the advance. */
+    @PostMapping("/{id}/cancel")
+    @PreAuthorize(APPROVE)
+    public ResponseEntity<Project> cancelProject(@PathVariable Long id, @RequestBody ProjectCancellationService.CancelRequest req) {
+        return ResponseEntity.ok(projectCancellationService.cancel(id, req, currentUserService.getCurrentUser()));
+    }
+
+    /** Return more of the advance on an already-cancelled project. */
+    @PostMapping("/{id}/cancellation/refund")
+    @PreAuthorize(APPROVE)
+    public ResponseEntity<Refund> refundCancelledProject(@PathVariable Long id, @RequestBody ProjectCancellationService.CancelRequest req) {
+        return ResponseEntity.ok(projectCancellationService.refundAdvance(id, req, currentUserService.getCurrentUser()));
     }
 
     /** Completion-gate readiness checklist (which §42 conditions are met / outstanding). */
