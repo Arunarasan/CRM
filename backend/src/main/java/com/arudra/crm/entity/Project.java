@@ -114,7 +114,7 @@ public class Project extends BaseEntity {
     @Column(name = "actual_completion_date")
     private LocalDate actualCompletionDate;
 
-    /** Days from startDate to actualCompletionDate, set automatically when the project auto-completes. */
+    /** Days from startDate to actualCompletionDate. */
     @Column(name = "total_duration_days")
     private Integer totalDurationDays;
 

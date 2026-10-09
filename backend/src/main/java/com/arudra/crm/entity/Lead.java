@@ -350,9 +350,13 @@ public class Lead extends BaseEntity {
     @Column(name = "is_converted", nullable = false)
     private Boolean isConverted = false;
 
-    /** Computed for the Leads list only (REQUIREMENT / QUOTE / PROJECT / COMPLETED / LOST) — not stored. */
+    /** Computed for the Leads list only (REQUIREMENT / COLLECTED / QUOTE / PROJECT / COMPLETED / LOST) — not stored. */
     @Transient
     private String journeyStage;
+
+    /** Computed: in Quote Building with an approved quote, waiting to be converted to a project. */
+    @Transient
+    private Boolean quoteApproved;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "converted_customer_id")

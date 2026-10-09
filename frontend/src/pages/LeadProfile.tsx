@@ -85,7 +85,6 @@ export default function LeadProfile() {
   const [focusStep, setFocusStep] = useState<{ id: JourneyStepId; nonce: number } | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [convertOpen, setConvertOpen] = useState(false);
-  const [statusOpen, setStatusOpen] = useState(false);
   const [assignOpen, setAssignOpen] = useState(false);
   const [lostOpen, setLostOpen] = useState(false);
   const [reopenOpen, setReopenOpen] = useState(false);
@@ -246,30 +245,22 @@ export default function LeadProfile() {
                 <div className="flex min-w-0 flex-wrap @xl:flex-nowrap items-center gap-x-2 gap-y-0.5">
                   <h1 className="min-w-0 max-w-full truncate text-lg @lg:text-xl font-bold tracking-tight text-slate-900">{lead.name}</h1>
                   {stageMeta ? (
-                    // Lead stage (worked out from requirement / quote / project) + the manual status beside it.
-                    <button
-                      type="button"
-                      onClick={() => isOpen && setStatusOpen(true)}
-                      disabled={!isOpen}
-                      title={isOpen ? `Stage: ${stageMeta.label} · click to change status` : `Stage: ${stageMeta.label}`}
-                      className={`inline-flex shrink-0 items-center gap-1.5 ${isOpen ? "cursor-pointer group" : "cursor-default"}`}
-                    >
-                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${stageMeta.className} ${isOpen ? "group-hover:ring-1 group-hover:ring-emerald-400" : ""}`}>
-                        <StageIcon className="h-3 w-3" />
-                        {stageMeta.label}
-                      </span>
-                    </button>
+                    // Lead stage — worked out automatically from documents / quote / project; never set by hand.
+                    <span title={`Stage: ${stageMeta.label}`}
+                      className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${stageMeta.className}`}>
+                      <StageIcon className="h-3 w-3" />
+                      {stageMeta.label}
+                    </span>
                   ) : (
-                    <button
-                      type="button"
-                      onClick={() => isOpen && setStatusOpen(true)}
-                      disabled={!isOpen}
-                      title={isOpen ? "Change status" : lead.status}
-                      className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${statusStyle(lead.status)} ${isOpen ? "hover:ring-1 hover:ring-emerald-400 cursor-pointer" : "cursor-default"}`}
-                    >
+                    <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${statusStyle(lead.status)}`}>
                       {lead.status === "New" ? <Crown className="h-3 w-3" /> : <span className="h-1.5 w-1.5 rounded-full bg-current" />}
                       {lead.status}
-                    </button>
+                    </span>
+                  )}
+                  {lead.quoteApproved && (
+                    <span className={`${PILL} shrink-0 bg-emerald-100 text-emerald-800 normal-case tracking-normal`}>
+                      <CheckCircle2 className="h-3 w-3" /> Approved – convert to project
+                    </span>
                   )}
                   {!stageMeta && lead.isConverted && <span className={`${PILL} shrink-0 bg-emerald-100 text-emerald-800`}><CheckCircle2 className="h-3 w-3" /> Converted</span>}
                 </div>
@@ -325,7 +316,6 @@ export default function LeadProfile() {
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     <DropdownMenuItem onSelect={() => setAssignOpen(true)}><Check className="h-4 w-4 mr-2" /> Assign team</DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => setStatusOpen(true)}><CheckCircle2 className="h-4 w-4 mr-2" /> Change status</DropdownMenuItem>
                     <DropdownMenuItem onSelect={() => setActiveTab("activity")}><NotebookPen className="h-4 w-4 mr-2" /> Log call / follow-up</DropdownMenuItem>
                     <DropdownMenuItem onSelect={() => setActiveTab("tasks")}><CalendarPlus className="h-4 w-4 mr-2" /> Add task</DropdownMenuItem>
                     <DropdownMenuItem onSelect={() => setConvertOpen(true)}><UserPlus className="h-4 w-4 mr-2" /> Convert to customer only</DropdownMenuItem>
@@ -458,47 +448,11 @@ export default function LeadProfile() {
       {/* Dialogs */}
       <LeadFormDialog open={editOpen} onOpenChange={setEditOpen} lead={lead} users={users} onSaved={() => fetchLead()} />
       <ConvertLeadDialog open={convertOpen} onOpenChange={setConvertOpen} lead={lead} />
-      <StatusDialog open={statusOpen} onOpenChange={setStatusOpen} lead={lead} onChanged={fetchLead} />
       <AssignDialog open={assignOpen} onOpenChange={setAssignOpen} lead={lead} users={users} onChanged={fetchLead} />
       <MarkLostDialog open={lostOpen} onOpenChange={setLostOpen} lead={lead} onChanged={fetchLead} />
       <WinBackDialog open={winBackOpen} onOpenChange={setWinBackOpen} lead={lead} onChanged={fetchLead} />
       <ReopenDialog open={reopenOpen} onOpenChange={setReopenOpen} lead={lead} users={users} onChanged={fetchLead} />
     </Tabs>
-  );
-}
-
-function StatusDialog({
-  open, onOpenChange, lead, onChanged,
-}: { open: boolean; onOpenChange: (o: boolean) => void; lead: Lead; onChanged: () => void }) {
-  const [status, setStatus] = useState(lead.status);
-  const [remarks, setRemarks] = useState("");
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => { if (open) { setStatus(lead.status); setRemarks(""); } }, [open, lead.status]);
-
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setSaving(true);
-    leadApi.updateStatus(lead.id, status, remarks || undefined)
-      .then(() => { onOpenChange(false); onChanged(); })
-      .catch(console.error)
-      .finally(() => setSaving(false));
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
-        <DialogHeader><DialogTitle>Change Status</DialogTitle></DialogHeader>
-        <form onSubmit={submit} className="space-y-4">
-          <SelectField label="Status" value={status} onChange={setStatus} options={LEAD_STATUSES} allowEmpty={false} />
-          <TextAreaField label="Remarks" value={remarks} onChange={setRemarks} />
-          <div className="flex justify-end gap-2 pt-2 border-t">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit" disabled={saving}>{saving ? "Updating..." : "Update Status"}</Button>
-          </div>
-        </form>
-      </DialogContent>
-    </Dialog>
   );
 }
 

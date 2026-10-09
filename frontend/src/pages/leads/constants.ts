@@ -305,6 +305,8 @@ export interface Lead {
   isConverted: boolean;
   /** Computed on the list: which stage card the lead sits in. */
   journeyStage?: JourneyStage;
+  /** In Quote Building with an approved quote — not converted to a project yet. */
+  quoteApproved?: boolean;
   convertedToCustomer?: { id: number; name?: string };
   convertedToProject?: { id: number; projectName?: string };
   convertedDate?: string;
@@ -380,8 +382,8 @@ export interface DashboardMetrics {
   todaySiteVisits: number;
   todayMeasurements: number;
   quotationPending: number;
-  /** Lead journey stage -> count: REQUIREMENT, COLLECTED, QUOTE, PROJECT, COMPLETED (Lost is lostLeads). */
-  journeyStages?: Record<"REQUIREMENT" | "COLLECTED" | "QUOTE" | "PROJECT" | "COMPLETED", number>;
+  /** Lead journey stage -> count: REQUIREMENT, COLLECTED, QUOTE, PROJECT, COMPLETED, LOST. */
+  journeyStages?: Record<"REQUIREMENT" | "COLLECTED" | "QUOTE" | "PROJECT" | "COMPLETED" | "LOST", number>;
   conversionRate: string;
 }
 
@@ -425,7 +427,7 @@ export interface LeadFilters {
   category: string;    // requirementCategory
   product: string;     // one entry of requirementProduct
   service: string;     // one entry of requirementService
-  journeyStage: string; // REQUIREMENT | COLLECTED | QUOTE | PROJECT | COMPLETED, or comma-joined — the stage cards
+  journeyStage: string; // REQUIREMENT | COLLECTED | QUOTE | PROJECT | COMPLETED | LOST, or comma-joined — the stage cards
   categoryGroup: string; // CategoryGroupKey from leads/enquiry — expanded to categoryIn/NotIn for the API
 }
 

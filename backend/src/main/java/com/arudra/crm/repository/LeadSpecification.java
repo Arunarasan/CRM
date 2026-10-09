@@ -85,18 +85,30 @@ public class LeadSpecification {
     }
 
     // ---------------------------------------------------------------- lead journey stage
-    // Every lead sits in exactly one stage (the furthest it has reached), so the Leads page's
-    // stage cards add up to the total. Lost always wins; then Completed > Project > Quote > the rest.
+    // Every lead sits in exactly one stage, worked out only from real records (never set by hand,
+    // except marking a lead Lost). First match wins: Lost > Project > Completed > Quote > Collected > New.
     public static final String STAGE_REQUIREMENT = "REQUIREMENT";     // New: nothing collected yet
-    public static final String STAGE_COLLECTED = "COLLECTED";         // any requirement info captured, no quote yet
-    public static final String STAGE_QUOTE = "QUOTE";                 // quote (or BOQ) being built, not approved yet
-    public static final String STAGE_PROJECT = "PROJECT";             // quote approved / converted, project running
-    public static final String STAGE_COMPLETED = "COMPLETED";         // its project is completed
-    public static final List<String> JOURNEY_STAGES =
-            List.of(STAGE_REQUIREMENT, STAGE_COLLECTED, STAGE_QUOTE, STAGE_PROJECT, STAGE_COMPLETED);
+    public static final String STAGE_COLLECTED = "COLLECTED";         // any requirement info captured, no quotation
+    public static final String STAGE_QUOTE = "QUOTE";                 // a quotation exists, no project yet
+    public static final String STAGE_PROJECT = "PROJECT";             // a live project exists
+    public static final String STAGE_COMPLETED = "COMPLETED";         // its project was completed (Complete / Handover)
+    public static final String STAGE_LOST = "LOST";                   // marked Lost, or its project was cancelled
+    public static final List<String> JOURNEY_STAGES = List.of(
+            STAGE_REQUIREMENT, STAGE_COLLECTED, STAGE_QUOTE, STAGE_PROJECT, STAGE_COMPLETED, STAGE_LOST);
 
     private static final List<String> APPROVED_QUOTE_STATUSES = List.of("APPROVED", "CONVERTED");
+    private static final List<String> ENDED_PROJECT_STATUSES = List.of("COMPLETED", "CANCELLED");
     private static final String COLLECT_REQUIREMENT_CODE = "TT_COLLECT_REQUIREMENT";
+
+    /** The lead has an approved (or converted) quotation — the "Approved – convert to project" badge. */
+    public static Specification<Lead> hasApprovedQuote() {
+        return (root, query, cb) -> {
+            var sq = query.subquery(Long.class);
+            var q = sq.from(com.arudra.crm.entity.Quotation.class);
+            sq.select(q.get("id")).where(cb.equal(q.get("lead"), root), q.get("status").in(APPROVED_QUOTE_STATUSES));
+            return cb.exists(sq);
+        };
+    }
 
     public static Specification<Lead> idIn(java.util.Collection<Long> ids) {
         return (root, query, cb) -> root.get("id").in(ids);
@@ -105,64 +117,68 @@ public class LeadSpecification {
     public static Specification<Lead> journeyStage(String stage) {
         return (root, query, cb) -> {
             if (stage == null || stage.isEmpty()) return null;
-            // Several stages at once ("PROJECT,COMPLETED") — the Active Projects card includes completed ones.
+            // Several stages at once, comma-joined ("PROJECT,COMPLETED").
             if (stage.contains(",")) {
                 return cb.or(java.util.Arrays.stream(stage.split(",")).map(String::trim).filter(x -> !x.isEmpty())
                         .map(x -> journeyStage(x).toPredicate(root, query, cb))
                         .filter(java.util.Objects::nonNull).toArray(Predicate[]::new));
             }
             // NULL-safe throughout: a NULL inside NOT(...) would drop the lead from every stage.
-            Predicate notLost = cb.notEqual(cb.lower(cb.coalesce(root.<String>get("status"), "")), "lost");
+            // Each use builds a fresh predicate — Hibernate's cb.not() can negate a predicate in place,
+            // so a predicate object must never be shared between two spots in the tree.
+            java.util.function.Function<String, Predicate> project = status -> {
+                var sq = query.subquery(Long.class);
+                var p = sq.from(com.arudra.crm.entity.Project.class);
+                jakarta.persistence.criteria.Expression<String> st = cb.upper(cb.coalesce(p.<String>get("status"), ""));
+                Predicate match = status == null ? cb.not(st.in(ENDED_PROJECT_STATUSES)) : cb.equal(st, status);
+                sq.select(p.get("id")).where(cb.equal(p.get("lead"), root), notDeletedRow(cb, p), match);
+                return cb.exists(sq);
+            };
+            java.util.function.Supplier<Predicate> live = () -> project.apply(null);
+            java.util.function.Supplier<Predicate> completed = () -> project.apply("COMPLETED");
+            // Lost: marked Lost, or its project was cancelled and nothing else is live/finished.
+            java.util.function.Supplier<Predicate> lost = () -> cb.or(
+                    cb.equal(cb.lower(cb.coalesce(root.<String>get("status"), "")), "lost"),
+                    cb.and(project.apply("CANCELLED"), cb.not(live.get()), cb.not(completed.get())));
 
-            var completedSq = query.subquery(Long.class);
-            var cp = completedSq.from(com.arudra.crm.entity.Project.class);
-            completedSq.select(cp.get("id")).where(cb.equal(cp.get("lead"), root), cb.equal(cp.get("status"), "COMPLETED"));
-            Predicate completed = cb.exists(completedSq);
-
-            var projectSq = query.subquery(Long.class);
-            var pp = projectSq.from(com.arudra.crm.entity.Project.class);
-            projectSq.select(pp.get("id")).where(cb.equal(pp.get("lead"), root));
-            var approvedSq = query.subquery(Long.class);
-            var aq = approvedSq.from(com.arudra.crm.entity.Quotation.class);
-            approvedSq.select(aq.get("id")).where(cb.equal(aq.get("lead"), root), aq.get("status").in(APPROVED_QUOTE_STATUSES));
-            Predicate project = cb.or(cb.isTrue(cb.coalesce(root.<Boolean>get("isConverted"), false)), cb.exists(projectSq), cb.exists(approvedSq));
-
-            // Quote building: a quotation or a BOQ exists for the lead.
-            var quoteSq = query.subquery(Long.class);
-            var q = quoteSq.from(com.arudra.crm.entity.Quotation.class);
-            quoteSq.select(q.get("id")).where(cb.equal(q.get("lead"), root));
-            var boqSq = query.subquery(Long.class);
-            var bq = boqSq.from(com.arudra.crm.entity.Boq.class);
-            boqSq.select(bq.get("id")).where(cb.equal(bq.get("lead"), root));
-            Predicate quoted = cb.or(cb.exists(quoteSq), cb.exists(boqSq));
+            // Quote building: a quotation exists (a BOQ alone doesn't count — it's created while measuring).
+            java.util.function.Supplier<Predicate> quoted = () -> {
+                var sq = query.subquery(Long.class);
+                var q = sq.from(com.arudra.crm.entity.Quotation.class);
+                sq.select(q.get("id")).where(cb.equal(q.get("lead"), root));
+                return cb.exists(sq);
+            };
 
             // Requirement collected: any single piece of info captured — a finished requirement
             // task, a document/photo/voice note, a measurement, or saved task data.
-            var doneReqSq = query.subquery(Long.class);
-            var dt = doneReqSq.from(com.arudra.crm.entity.Task.class);
-            doneReqSq.select(dt.get("id")).where(cb.equal(dt.get("leadId"), root.get("id")),
-                    cb.equal(dt.get("taskTemplate").get("code"), COLLECT_REQUIREMENT_CODE),
-                    cb.equal(dt.get("status"), "COMPLETED"));
-            var docSq = query.subquery(Long.class);
-            var dc = docSq.from(com.arudra.crm.entity.LeadDocument.class);
-            docSq.select(dc.get("id")).where(cb.equal(dc.get("lead"), root),
-                    cb.isFalse(cb.coalesce(dc.<Boolean>get("isDeleted"), false)));
-            var measSq = query.subquery(Long.class);
-            var ms = measSq.from(com.arudra.crm.entity.Measurement.class);
-            measSq.select(ms.get("id")).where(cb.equal(ms.get("lead"), root),
-                    cb.isFalse(cb.coalesce(ms.<Boolean>get("isDeleted"), false)));
-            var subSq = query.subquery(Long.class);
-            var sb = subSq.from(com.arudra.crm.entity.LeadTaskSubmission.class);
-            subSq.select(sb.get("id")).where(cb.equal(sb.get("leadId"), root.get("id")));
-            Predicate collected = cb.or(cb.exists(doneReqSq), cb.exists(docSq), cb.exists(measSq), cb.exists(subSq));
+            java.util.function.Supplier<Predicate> collected = () -> {
+                var doneReqSq = query.subquery(Long.class);
+                var dt = doneReqSq.from(com.arudra.crm.entity.Task.class);
+                doneReqSq.select(dt.get("id")).where(cb.equal(dt.get("leadId"), root.get("id")),
+                        cb.equal(dt.get("taskTemplate").get("code"), COLLECT_REQUIREMENT_CODE),
+                        cb.equal(dt.get("status"), "COMPLETED"));
+                var docSq = query.subquery(Long.class);
+                var dc = docSq.from(com.arudra.crm.entity.LeadDocument.class);
+                docSq.select(dc.get("id")).where(cb.equal(dc.get("lead"), root), notDeletedRow(cb, dc));
+                var measSq = query.subquery(Long.class);
+                var ms = measSq.from(com.arudra.crm.entity.Measurement.class);
+                measSq.select(ms.get("id")).where(cb.equal(ms.get("lead"), root), notDeletedRow(cb, ms));
+                var subSq = query.subquery(Long.class);
+                var sb = subSq.from(com.arudra.crm.entity.LeadTaskSubmission.class);
+                subSq.select(sb.get("id")).where(cb.equal(sb.get("leadId"), root.get("id")));
+                return cb.or(cb.exists(doneReqSq), cb.exists(docSq), cb.exists(measSq), cb.exists(subSq));
+            };
 
-            Predicate open = cb.and(notLost, cb.not(completed), cb.not(project));
+            // A live project wins over an older completed one (repeat customer, new job).
+            java.util.function.Supplier<Predicate> open = () ->
+                    cb.and(cb.not(lost.get()), cb.not(completed.get()), cb.not(live.get()));
             return switch (stage) {
-                case STAGE_COMPLETED -> cb.and(notLost, completed);
-                case STAGE_PROJECT -> cb.and(notLost, cb.not(completed), project);
-                case STAGE_QUOTE -> cb.and(open, quoted);
-                case STAGE_COLLECTED -> cb.and(open, cb.not(quoted), collected);
-                case STAGE_REQUIREMENT -> cb.and(open, cb.not(quoted), cb.not(collected));
+                case STAGE_LOST -> lost.get();
+                case STAGE_PROJECT -> cb.and(cb.not(lost.get()), live.get());
+                case STAGE_COMPLETED -> cb.and(cb.not(lost.get()), cb.not(live.get()), completed.get());
+                case STAGE_QUOTE -> cb.and(open.get(), quoted.get());
+                case STAGE_COLLECTED -> cb.and(open.get(), cb.not(quoted.get()), collected.get());
+                case STAGE_REQUIREMENT -> cb.and(open.get(), cb.not(quoted.get()), cb.not(collected.get()));
                 default -> null;
             };
         };
@@ -234,11 +250,12 @@ public class LeadSpecification {
         };
     }
 
-    /** Lost leads live only behind the "Lost" filter, so the working list hides them on request. */
+    /** Lost leads live only behind the Lost card, so the working list hides them on request. */
     public static Specification<Lead> hideLost(Boolean hide) {
         return (root, query, cb) -> {
             if (!Boolean.TRUE.equals(hide)) return null;
-            return cb.or(cb.isNull(root.get("status")), cb.notEqual(root.get("status"), "Lost"));
+            // Same rule as the Lost card: marked Lost, or its project was cancelled.
+            return cb.not(journeyStage(STAGE_LOST).toPredicate(root, query, cb));
         };
     }
 
@@ -270,6 +287,11 @@ public class LeadSpecification {
                             cb.lower(root.get(field)), cb.literal(", "), cb.literal(","))), ",");
             return cb.like(normalized, "%," + value.trim().toLowerCase() + ",%");
         };
+    }
+
+    private static Predicate notDeletedRow(jakarta.persistence.criteria.CriteriaBuilder cb,
+                                           jakarta.persistence.criteria.From<?, ?> row) {
+        return cb.isFalse(cb.coalesce(row.<Boolean>get("isDeleted"), false));
     }
 
     private static Predicate blankNot(jakarta.persistence.criteria.CriteriaBuilder cb,

@@ -122,13 +122,18 @@ public class LeadService {
         if (leads.isEmpty()) return;
         Map<Long, Lead> byId = new HashMap<>();
         leads.forEach(l -> byId.put(l.getId(), l));
-        for (Lead l : leads) {
-            if ("lost".equalsIgnoreCase(l.getStatus())) l.setJourneyStage("LOST");
-        }
         for (String stage : LeadSpecification.JOURNEY_STAGES) {
             leadRepository.findAll(Specification.where(LeadSpecification.idIn(byId.keySet()))
                     .and(LeadSpecification.journeyStage(stage)))
                     .forEach(l -> byId.get(l.getId()).setJourneyStage(stage));
+        }
+        // Quote approved but not converted yet → "Approved – convert to project" badge.
+        List<Long> quoting = leads.stream()
+                .filter(l -> LeadSpecification.STAGE_QUOTE.equals(l.getJourneyStage())).map(Lead::getId).toList();
+        if (!quoting.isEmpty()) {
+            leadRepository.findAll(Specification.where(LeadSpecification.idIn(quoting))
+                    .and(LeadSpecification.hasApprovedQuote()))
+                    .forEach(l -> byId.get(l.getId()).setQuoteApproved(true));
         }
     }
 
@@ -136,15 +141,15 @@ public class LeadService {
     private jakarta.persistence.EntityManager entityManager;
 
     /**
-     * Lead count per requirement category, optionally narrowed to one stage card: a journey stage
-     * (REQUIREMENT / COLLECTED / QUOTE / PROJECT / COMPLETED) or {@code status=Lost}. With neither,
-     * Lost leads are left out — the working-list default.
+     * Lead count per requirement category, optionally narrowed to one stage card (a journey stage,
+     * LOST included; {@code status=Lost} is the legacy spelling). With none, Lost leads are left out —
+     * the working-list default.
      */
     public List<Map<String, Object>> getCategoryCounts(String journeyStage, String status) {
-        boolean lost = "lost".equalsIgnoreCase(status);
+        String stage = "lost".equalsIgnoreCase(status) ? LeadSpecification.STAGE_LOST : journeyStage;
+        boolean anyStage = stage == null || stage.isBlank();
         Specification<Lead> spec = Specification.where(LeadSpecification.notDeleted())
-                .and(lost ? LeadSpecification.hasStatus("Lost") : LeadSpecification.hideLost(true))
-                .and(lost ? null : LeadSpecification.journeyStage(journeyStage));
+                .and(anyStage ? LeadSpecification.hideLost(true) : LeadSpecification.journeyStage(stage));
         var cb = entityManager.getCriteriaBuilder();
         var cq = cb.createQuery(Object[].class);
         var root = cq.from(Lead.class);
@@ -242,7 +247,6 @@ public class LeadService {
         dto.setWarmLeads(leadRepository.countByIsDeletedFalseAndLeadTemperatureIgnoreCaseAndIsConvertedFalse("Warm"));
         dto.setColdLeads(leadRepository.countByIsDeletedFalseAndLeadTemperatureIgnoreCaseAndIsConvertedFalse("Cold"));
         dto.setConvertedLeads(leadRepository.countByIsDeletedFalseAndIsConvertedTrue());
-        dto.setLostLeads(leadRepository.countByIsDeletedFalseAndStatusIgnoreCase("Lost"));
         dto.setTodaysFollowups(leadRepository.countByIsDeletedFalseAndNextFollowUpDateAndIsConvertedFalse(today));
         dto.setPendingFollowups(leadRepository
                 .countByIsDeletedFalseAndNextFollowUpDateBeforeAndIsConvertedFalseAndStatusNotIn(
@@ -264,6 +268,7 @@ public class LeadService {
                     .and(LeadSpecification.journeyStage(stage))));
         }
         dto.setJourneyStages(journey);
+        dto.setLostLeads(journey.get(LeadSpecification.STAGE_LOST)); // marked Lost or project cancelled
 
         // legacy keys
         dto.setQualifiedLeads(leadRepository.countByIsDeletedFalseAndStatusIn(

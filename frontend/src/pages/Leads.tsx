@@ -19,7 +19,7 @@ import LeadFormDialog from "./leads/LeadFormDialog";
 import { selectClass } from "./leads/fields";
 import { CATEGORY_GROUPS, EnquiryTag, categoryGroupOf, enquiryDetails, enquiryTypeOf, splitList } from "./leads/enquiry";
 import {
-  BOARD_DROP_STATUS, EMPTY_FILTERS, ENQUIRY_TYPES, formatFollowUp, LEAD_SOURCES, LEAD_STAGES, LEAD_STATUSES, LEAD_TYPES,
+  BOARD_DROP_STATUS, EMPTY_FILTERS, ENQUIRY_TYPES, formatFollowUp, LEAD_SOURCES, LEAD_TYPES,
   PRIORITIES, TEMPERATURES, TEMPERATURE_STYLES, avatarColor, followUpTone,
   formatINR, initials, relativeTime, statusStyle, JOURNEY_STAGE_META, type BoardColumn,
   type DashboardMetrics, type Lead, type LeadFilters, type LeadPeriodStats, type UserSummary,
@@ -84,6 +84,15 @@ const ROWS_PER_PAGE_OPTIONS = [10, 25, 50, 100];
 // (and clears the others among them), so the cards stay mutually exclusive.
 const SEGMENT_KEYS: (keyof LeadFilters)[] = ["status", "stage", "isConverted", "followUpDue", "journeyStage"];
 
+/** Quote approved, project not created yet — nudges the team to convert. */
+function ApprovedBadge({ className = "" }: { className?: string }) {
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10.5px] font-semibold text-emerald-800 whitespace-nowrap ${className}`}>
+      <CheckCircle size={11} /> Approved – convert to project
+    </span>
+  );
+}
+
 /** Rich card shown when hovering a lead row. */
 function LeadInfo({ l }: { l: Lead }) {
   return (
@@ -101,7 +110,7 @@ function LeadInfo({ l }: { l: Lead }) {
       </div>
       <div className="divide-y divide-slate-100">
         <div className="pb-1.5">
-          <InfoRow label="Stage" value={l.stage || l.status} />
+          <InfoRow label="Stage" value={l.journeyStage ? JOURNEY_STAGE_META[l.journeyStage].label : undefined} />
           <InfoRow label="Source" value={l.leadSource} />
           {l.leadOwner?.name && <InfoRow label="Added by" value={l.leadOwner.name} />}
           <InfoRow label="Type" value={l.leadType} />
@@ -154,12 +163,11 @@ export default function Leads() {
   }, [search]);
 
   // Category cards count only the leads in the selected stage card (all live leads when none).
-  const countStage = filters.status === "Lost" ? "" : filters.journeyStage;
-  const countLost = filters.status === "Lost";
+  const countStage = filters.journeyStage;
   const fetchCategoryCounts = useCallback(() => {
-    leadApi.categoryCounts({ journeyStage: countStage || undefined, status: countLost ? "Lost" : undefined })
+    leadApi.categoryCounts({ journeyStage: countStage || undefined })
       .then((res) => setCategoryCounts(res.data || [])).catch(() => {});
-  }, [countStage, countLost]);
+  }, [countStage]);
 
   const fetchDashboard = useCallback(() => {
     leadApi.dashboard().then((res) => setDashboard(res.data)).catch(console.error);
@@ -182,7 +190,7 @@ export default function Leads() {
     const { categoryGroup, ...rest } = filters;
     const apiFilters: Record<string, string> = { ...rest };
     // Lost leads only appear when the Lost card / status filter is picked.
-    if (rest.status !== "Lost") apiFilters.hideLost = "true";
+    if (rest.journeyStage !== "LOST") apiFilters.hideLost = "true";
     if (categoryGroup) {
       const names = Array.from(new Set([
         ...categoryCounts.map((c) => c.category).filter((c): c is string => !!c),
@@ -270,7 +278,7 @@ export default function Leads() {
     { label: "Quote Building", value: dashboard?.journeyStages?.QUOTE, icon: FileText, className: "bg-amber-100 text-amber-700", ring: "ring-amber-500 border-amber-500", patch: { journeyStage: "QUOTE" }, hint: "Quote or BOQ started, not approved yet" },
     { label: "Active Projects", value: dashboard?.journeyStages?.PROJECT, icon: FolderKanban, className: "bg-cyan-100 text-cyan-600", ring: "ring-cyan-500 border-cyan-500", patch: { journeyStage: "PROJECT" }, hint: "Converted to a project — work running" },
     { label: "Project Completed", value: dashboard?.journeyStages?.COMPLETED, icon: CheckCircle, className: "bg-green-100 text-green-600", ring: "ring-green-500 border-green-500", patch: { journeyStage: "COMPLETED" }, hint: "Its project is completed" },
-    { label: "Lost", value: dashboard?.lostLeads, icon: XCircle, className: "bg-rose-100 text-rose-600", ring: "ring-rose-500 border-rose-500", patch: { status: "Lost" } },
+    { label: "Lost", value: dashboard?.journeyStages?.LOST, icon: XCircle, className: "bg-rose-100 text-rose-600", ring: "ring-rose-500 border-rose-500", patch: { journeyStage: "LOST" }, hint: "Marked Lost, or its project was cancelled" },
   ], [dashboard]);
 
   const groupCounts = useMemo(() => {
@@ -345,6 +353,7 @@ export default function Leads() {
           {(l.city || l.state) && (
             <div className="text-xs text-muted-foreground truncate">{[l.city, l.state].filter(Boolean).join(", ")}</div>
           )}
+          {l.quoteApproved && <ApprovedBadge className="mt-1" />}
         </div>
       ),
     },
@@ -374,24 +383,6 @@ export default function Leads() {
           )}
         </div>
       ),
-    },
-    {
-      key: "status", header: "Stage", cellClassName: "whitespace-nowrap", cell: (l) => {
-        // The auto-worked-out journey stage (same as the cards); the manual status sits underneath.
-        const meta = l.journeyStage ? JOURNEY_STAGE_META[l.journeyStage] : undefined;
-        if (!meta) {
-          return (
-            <span className={`px-2 py-0.5 text-[11px] rounded-full font-semibold ${statusStyle(l.status)}`}>
-              {l.status || "—"}
-            </span>
-          );
-        }
-        return (
-          <div className="flex flex-col items-start gap-0.5">
-            <span className={`px-2 py-0.5 text-[11px] rounded-full font-semibold ${meta.className}`}>{meta.label}</span>
-          </div>
-        );
-      },
     },
     {
       key: "next", header: "Next Follow-up", cellClassName: "whitespace-nowrap text-sm", cell: (l) => {
@@ -533,7 +524,7 @@ export default function Leads() {
       </div>
 
       {/* Main product category cards — counts follow the selected stage card; click to filter, click again to clear */}
-      {(countStage || countLost) && (
+      {countStage && (
         <p className="-mb-1 text-[11px] font-medium text-muted-foreground">
           Categories in <span className="font-semibold text-foreground">{stats.find((st) => isStatActive(st.patch))?.label ?? "this stage"}</span>
         </p>
@@ -582,10 +573,6 @@ export default function Leads() {
             <select className={`${selectClass} w-auto min-w-[6.5rem] max-w-[11rem] shrink-0`} value={filters.category} onChange={(e) => setCategory(e.target.value)}>
               <option value="">All Categories</option>
               {categories.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
-            </select>
-            <select className={`${selectClass} w-auto min-w-[6.5rem] shrink-0`} value={filters.stage} onChange={(e) => setFilter("stage")(e.target.value)}>
-              <option value="">All Stages</option>
-              {LEAD_STAGES.map((o) => <option key={o} value={o}>{o}</option>)}
             </select>
             <select className={`${selectClass} w-auto min-w-[6.5rem] shrink-0`} value={filters.source} onChange={(e) => setFilter("source")(e.target.value)}>
               <option value="">All Sources</option>
@@ -731,7 +718,8 @@ export default function Leads() {
                       <a href={`tel:${l.mobileNumber}`} className="flex items-center gap-1.5 text-muted-foreground hover:text-primary">
                         <Phone className="h-3.5 w-3.5" /> {l.mobileNumber}
                       </a>
-                      <span className={`ml-auto px-2 py-0.5 text-[11px] rounded-full font-semibold ${l.journeyStage ? JOURNEY_STAGE_META[l.journeyStage].className : statusStyle(l.status)}`}>
+                      {l.quoteApproved && <ApprovedBadge className="ml-auto" />}
+                      <span className={`${l.quoteApproved ? "" : "ml-auto "}px-2 py-0.5 text-[11px] rounded-full font-semibold ${l.journeyStage ? JOURNEY_STAGE_META[l.journeyStage].className : statusStyle(l.status)}`}>
                         {l.journeyStage ? JOURNEY_STAGE_META[l.journeyStage].label : l.status || "—"}
                       </span>
                     </div>
@@ -816,8 +804,6 @@ export default function Leads() {
         {[
           { label: "Lead Source", key: "source" as const, options: LEAD_SOURCES },
           { label: "Lead Type", key: "leadType" as const, options: LEAD_TYPES },
-          { label: "Status", key: "status" as const, options: LEAD_STATUSES },
-          { label: "Stage", key: "stage" as const, options: LEAD_STAGES },
           { label: "Priority", key: "priority" as const, options: PRIORITIES },
           { label: "Temperature", key: "temperature" as const, options: TEMPERATURES },
         ].map(({ label, key, options }) => (
@@ -834,14 +820,6 @@ export default function Leads() {
           <select className={selectClass} value={filters.assignedEmployeeId} onChange={(e) => setFilter("assignedEmployeeId")(e.target.value)}>
             <option value="">All</option>
             {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-          </select>
-        </div>
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium">Conversion</label>
-          <select className={selectClass} value={filters.isConverted} onChange={(e) => setFilter("isConverted")(e.target.value)}>
-            <option value="">Any</option>
-            <option value="false">Open Leads</option>
-            <option value="true">Converted</option>
           </select>
         </div>
         <div className="grid grid-cols-2 gap-2">
