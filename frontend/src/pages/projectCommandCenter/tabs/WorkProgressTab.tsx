@@ -5,12 +5,13 @@ import { projectWorkApi } from '@/api/projectWorkApi';
 import { employeeTaskApi } from '@/api/employeeTaskApi';
 import { toast } from '@/components/ui/toast';
 import { TaskDetail } from '@/types/employeeTask';
-import { WorkBoard, WorkEvent, WorkTaskInfo, EVENT_LABELS } from '@/types/projectWork';
+import { WorkBoard, WorkEvent, WorkTaskInfo } from '@/types/projectWork';
 import ExecutionBoard from '@/components/projectWork/ExecutionBoard';
 import InstallationBoard from '@/components/projectWork/InstallationBoard';
 import DailyLogPanel from '@/components/projectWork/DailyLogPanel';
 import TeamChat, { ChatTag } from '@/components/projectWork/TeamChat';
-import { CARD, GHOST, PRIMARY, Thumbs, errMsg, fmtWhen } from '@/components/projectWork/workUi';
+import { CARD, GHOST, PRIMARY, errMsg } from '@/components/projectWork/workUi';
+import WorkHistoryList from '@/components/projectWork/WorkHistoryList';
 import { useAuth } from '@/hooks/useAuth';
 import CategoryDefaultsDialog from '@/components/projectWork/CategoryDefaultsDialog';
 
@@ -169,31 +170,8 @@ export default function WorkProgressTab({ projectId, onChanged }: { projectId: n
         {(view === 'log' || view === 'chat') && !activeTask && (
           <p className={`${CARD} p-4 text-[13px] text-[#8A8F86]`}>This task doesn't exist on the project yet — use “Refresh from quotation”.</p>
         )}
-        {view === 'history' && <HistoryList events={events} />}
+        {view === 'history' && <WorkHistoryList events={events} />}
       </div>
     </div>
-  );
-}
-
-function HistoryList({ events }: { events: WorkEvent[] | null }) {
-  if (!events) return <p className="p-4 text-center text-[13px] text-[#9A9E96]">Loading…</p>;
-  if (!events.length) return <p className={`${CARD} p-4 text-[13px] text-[#8A8F86]`}>Nothing recorded yet.</p>;
-  return (
-    <ol className={`${CARD} divide-y divide-[#F1ECE2]`}>
-      {events.map((e) => (
-        <li key={e.id} className="flex gap-3 p-3.5">
-          <div className="min-w-0 flex-1">
-            <p className="text-[13px] text-[#22271F]">
-              <span className="font-semibold">{e.itemName || e.category || 'Project'}</span>
-              {e.stepType && e.stepType !== 'INSTALL' && <span className="text-[#6B7169]"> · {e.stepLabel}</span>}
-              {' — '}{EVENT_LABELS[e.action] || e.action}{e.percent != null ? ` (${e.percent}%)` : ''}
-            </p>
-            {e.note && <p className="text-[12.5px] text-[#5E655D]">{e.note}</p>}
-            <p className="text-[11px] text-[#9A9E96]">{e.actorName} · {fmtWhen(e.createdAt)}</p>
-          </div>
-          {e.photoUrl && <Thumbs urls={[e.photoUrl]} size="h-12 w-12" />}
-        </li>
-      ))}
-    </ol>
   );
 }

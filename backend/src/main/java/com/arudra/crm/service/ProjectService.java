@@ -2206,6 +2206,19 @@ public class ProjectService {
         else if (!lines.isEmpty()) taskChecklistService.seedNamedChecklist(exec, WORK_ITEMS_CHECKLIST, lines);
     }
 
+    /** Thumbnail for an execution item: the quoted line's photo, else its catalogue product's photo. */
+    private String executionItemImage(ProjectRoomItem it) {
+        if (it.getBoqItemId() == null) return null;
+        BoqItem line = boqItemRepository.findById(it.getBoqItemId()).orElse(null);
+        if (line == null) return null;
+        if (line.getImageUrl() != null && !line.getImageUrl().isBlank()) return line.getImageUrl();
+        if (line.getProductId() == null) return null;
+        return productRepository.findById(line.getProductId())
+                .map(com.arudra.crm.entity.Product::getImageUrl)
+                .filter(u -> !u.isBlank())
+                .orElse(null);
+    }
+
     /**
      * Read-only context shown on the shared execution task so the team has everything in one place:
      * project + customer, the BOQ rooms/items (sizes &amp; locations), the planned materials, and the
@@ -2249,6 +2262,9 @@ public class ProjectService {
                 im.put("description", it.getDescription());
                 im.put("quantity", it.getQuantity());
                 im.put("unit", it.getUnit());
+                im.put("status", it.getStatus());
+                im.put("progress", it.getProgress());
+                im.put("imageUrl", executionItemImage(it));
                 itemList.add(im);
             }
             rm.put("items", itemList);

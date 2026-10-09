@@ -1,5 +1,7 @@
-import { Clock, MessageCircle, Plus, Wallet } from 'lucide-react';
+import { useState } from 'react';
+import { Clock, IndianRupee, MessageCircle, Plus, Wallet } from 'lucide-react';
 import { ProjectExecutionInfo } from '@/types/employeeTask';
+import { HeadLink, SectionHead } from './ProjectTaskLayout';
 
 const has = (v: unknown) => v != null && String(v).trim() !== '';
 const money = (v: unknown) => '₹' + Number(v || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 });
@@ -11,13 +13,17 @@ const waHref = (phone: string, text: string) =>
  * the balance still to collect — with "Record payment" (saved as pending until an admin confirms it) and
  * "Request on WhatsApp" (a ready-made reminder to the customer for the balance).
  */
-export default function PaymentBox({ info, phone, canRecord, onRecord }: {
+export default function PaymentBox({ info, phone, canRecord, onRecord, compact = false }: {
   info: ProjectExecutionInfo;
+  /** Half-width card: Received / Awaiting only, with "View" revealing value, balance and the list. */
+  compact?: boolean;
   /** Customer's WhatsApp / mobile number for the payment request. */
   phone?: string | null;
   canRecord: boolean;
   onRecord: () => void;
 }) {
+  const [expanded, setExpanded] = useState(false);
+  const full = !compact || expanded;
   const payments = (info.payments || []).filter((p) => p.amount != null);
   const pending = Number(info.collectedPending || 0);
   const confirmed = Number(info.collectedConfirmed || 0);
@@ -36,19 +42,38 @@ export default function PaymentBox({ info, phone, canRecord, onRecord }: {
 
   return (
     <div className="overflow-hidden rounded-2xl border border-[#EDE6D8] bg-white shadow-[0_4px_16px_rgba(80,55,20,0.06)]">
-      <div className="p-4">
-        <p className="mb-2.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-[#9B6B32]">
-          <Wallet className="h-3.5 w-3.5" /> Payments
-        </p>
+      <div className={compact ? 'p-3.5' : 'p-4'}>
+        {compact ? (
+          <SectionHead icon={<Wallet className="h-4 w-4" />} title="Payments" tight
+            right={<HeadLink label="View" open={expanded} onClick={() => setExpanded((o) => !o)} />} />
+        ) : (
+          <p className="mb-2.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-[#9B6B32]">
+            <Wallet className="h-3.5 w-3.5" /> Payments
+          </p>
+        )}
 
-        <div className="grid grid-cols-2 gap-2">
-          {value != null && <Stat label="Order value" value={money(value)} tone="text-[#1A211E]" />}
-          <Stat label="Received" value={money(confirmed)} tone="text-[#2C7050]" />
-          <Stat label="Awaiting check" value={money(pending)} tone="text-[#9B6B32]" icon />
-          {balance != null && <Stat label="Balance due" value={money(balance)} tone={balance > 0 ? 'text-[#B94B45]' : 'text-[#2C7050]'} />}
-        </div>
+        {compact ? (
+          <div className="grid grid-cols-1 gap-2">
+            <BigStat label="Received" value={money(confirmed)} icon={<IndianRupee className="h-3.5 w-3.5" />} tone="bg-[#EAF3EE] text-[#0A573B]" />
+            <BigStat label="Awaiting check" value={money(pending)} icon={<Clock className="h-3.5 w-3.5" />} tone="bg-[#FBF1E1] text-[#B07A2E]" />
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-2">
+            {value != null && <Stat label="Order value" value={money(value)} tone="text-[#1A211E]" />}
+            <Stat label="Received" value={money(confirmed)} tone="text-[#2C7050]" />
+            <Stat label="Awaiting check" value={money(pending)} tone="text-[#9B6B32]" icon />
+            {balance != null && <Stat label="Balance due" value={money(balance)} tone={balance > 0 ? 'text-[#B94B45]' : 'text-[#2C7050]'} />}
+          </div>
+        )}
 
-        {payments.length > 0 && (
+        {compact && expanded && (value != null || balance != null) && (
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            {value != null && <Stat label="Order value" value={money(value)} tone="text-[#1A211E]" />}
+            {balance != null && <Stat label="Balance due" value={money(balance)} tone={balance > 0 ? 'text-[#B94B45]' : 'text-[#2C7050]'} />}
+          </div>
+        )}
+
+        {full && payments.length > 0 && (
           <ul className="mt-3 flex flex-col gap-1.5 border-t border-[#F1ECE2] pt-2.5">
             {payments.map((p, i) => {
               const isPending = String(p.status).toUpperCase() === 'PENDING_APPROVAL';
@@ -70,7 +95,7 @@ export default function PaymentBox({ info, phone, canRecord, onRecord }: {
           </ul>
         )}
 
-        <div className="mt-3 grid grid-cols-2 gap-2">
+        <div className={`mt-3 grid gap-2 ${compact ? 'grid-cols-1' : 'grid-cols-2'}`}>
           {canRecord && (
             <button onClick={onRecord}
               className="flex items-center justify-center gap-1.5 rounded-xl bg-[#0A573B] py-2.5 text-[13px] font-semibold text-white active:scale-[0.99]">
@@ -79,12 +104,12 @@ export default function PaymentBox({ info, phone, canRecord, onRecord }: {
           )}
           {has(phone) && (
             <a href={waHref(phone as string, requestText)} target="_blank" rel="noopener noreferrer"
-              className={`flex items-center justify-center gap-1.5 rounded-xl border border-[#D7DED8] bg-white py-2.5 text-[13px] font-semibold text-[#0A573B] active:scale-[0.99] ${canRecord ? '' : 'col-span-2'}`}>
+              className={`flex items-center justify-center gap-1.5 rounded-xl border border-[#D7DED8] bg-white py-2.5 text-[13px] font-semibold text-[#0A573B] active:scale-[0.99] ${canRecord || compact ? '' : 'col-span-2'} ${compact ? 'border-[#0A573B]' : ''}`}>
               <MessageCircle className="h-4 w-4" /> Request payment
             </a>
           )}
         </div>
-        {canRecord && (
+        {canRecord && full && (
           <p className="mt-2 text-[11.5px] text-[#8A8F86]">A recorded payment stays “awaiting check” until the office verifies it.</p>
         )}
       </div>
@@ -99,6 +124,18 @@ function Stat({ label, value, tone, icon }: { label: string; value: string; tone
         {icon && <Clock className="h-2.5 w-2.5" />} {label}
       </p>
       <p className={`text-[15px] font-bold ${tone}`}>{value}</p>
+    </div>
+  );
+}
+
+function BigStat({ label, value, icon, tone }: { label: string; value: string; icon: React.ReactNode; tone: string }) {
+  return (
+    <div className="flex min-w-0 items-center gap-2.5 rounded-xl bg-[#FBFAF6] px-2.5 py-2 ring-1 ring-[#EFE9DC]">
+      <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${tone}`}>{icon}</span>
+      <div className="min-w-0">
+        <p className="truncate text-[11px] text-[#8A8F86]">{label}</p>
+        <p className="truncate text-[15px] font-bold text-[#1A211E]">{value}</p>
+      </div>
     </div>
   );
 }

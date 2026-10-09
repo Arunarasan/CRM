@@ -21,7 +21,7 @@ import LeadTaskFormSheet from './components/LeadTaskFormSheet';
 import RequirementFormSheet from './components/RequirementFormSheet';
 import RequirementSummaryCard from './components/RequirementSummaryCard';
 import RequirementTaskView from './components/RequirementTaskView';
-import ProjectExecutionCard from './components/ProjectExecutionCard';
+import { ItemsToMakeCard, ProjectInfoCards, ProjectTaskHero } from './components/ProjectTaskLayout';
 import ProjectWorkTaskView, { WorkTab } from '@/components/projectWork/ProjectWorkTaskView';
 import CompleteSheet from './components/CompleteSheet';
 import CallLeadPanel from '@/components/callRecordings/CallLeadPanel';
@@ -37,8 +37,10 @@ import AudioPlayer from "@/components/AudioPlayer";
 
 /** A quiet disclosure row — keeps history/team/notes tucked away until wanted. Designed to sit
  *  inside a grouped card with `divide-y`, so it carries no border of its own (spec §6). */
-function Disclosure({ title, count, icon, children }: {
+function Disclosure({ title, count, meta, icon, children }: {
   title: string; count?: number; icon?: React.ReactNode; children: React.ReactNode;
+  /** Always-on hint pill (e.g. "0 photos") — replaces the count pill when given. */
+  meta?: string;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -46,7 +48,9 @@ function Disclosure({ title, count, icon, children }: {
       <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-3 px-4 py-3.5 text-left">
         {icon && <span className="text-[#9B6B32]">{icon}</span>}
         <span className="flex-1 text-[14px] font-medium text-[#22271F]">{title}</span>
-        {count != null && count > 0 && (
+        {meta ? (
+          <span className="rounded-full bg-[#F6F3EC] px-2 py-0.5 text-[11px] text-[#8A8F86]">{meta}</span>
+        ) : count != null && count > 0 && (
           <span className="rounded-full bg-[#F3EEE2] px-2 py-0.5 text-[11px] font-medium text-[#8A6A2E]">{count}</span>
         )}
         <ChevronDown className={`h-4 w-4 shrink-0 text-[#B4B0A4] transition-transform ${open ? 'rotate-180' : ''}`} />
@@ -474,6 +478,7 @@ export default function TaskDetail() {
   const openForm = (section: string | null) => { setFormFocus(section); setFormOpen(true); };
 
   const place = [task.floor, task.room, task.itemName].filter(Boolean).join(' · ');
+  const photoCount = task.progress.reduce((n, p) => n + p.media.filter((m) => m.mediaType === 'PHOTO').length, 0);
   const showQuickProgress = !isLeadForm && !moduleDriven && !locked && mine === 'IN_PROGRESS';
   const solid = 'flex w-full items-center justify-center gap-2 rounded-xl py-3 text-[15px] font-semibold transition active:scale-[0.99] disabled:opacity-50';
 
@@ -495,7 +500,8 @@ export default function TaskDetail() {
         )}
 
         {/* Summary — what to do, where, when. The centrepiece: a soft card with a slim gold accent. */}
-        {!reqView && <div className="overflow-hidden rounded-2xl border border-[#EDE6D8] bg-white shadow-[0_4px_16px_rgba(80,55,20,0.06)]">
+        {isProjectTask && <ProjectTaskHero task={task} />}
+        {!reqView && !isProjectTask && <div className="overflow-hidden rounded-2xl border border-[#EDE6D8] bg-white shadow-[0_4px_16px_rgba(80,55,20,0.06)]">
           <div className="h-1 bg-gradient-to-r from-[#0A573B] via-[#0A573B] to-[#BC8748]" />
           <div className="p-4">
             <div className="flex items-center gap-2">
@@ -535,26 +541,34 @@ export default function TaskDetail() {
 
         {/* The original lead picture — who the customer is and what they asked for at capture. Shown for
             any task tied to a lead so the field employee has full context before collecting/confirming. */}
-        {reqView ? null : task.lead ? <LeadDetailsCard lead={task.lead} />
+        {reqView || isProjectTask ? null : task.lead ? <LeadDetailsCard lead={task.lead} />
           : task.contact && !isCallTask && (
             <CustomerContactCard contact={task.contact}
               requirement={task.category === 'ENQUIRY' || task.category === 'INSTALLATION' ? task.description : null} />
           )}
 
-        {/* Shared project task — the full project picture (customer, items, materials, sizes). */}
-        {isProjectTask && task.projectInfo && <ProjectExecutionCard info={task.projectInfo} />}
+        {/* Shared project task — customer + project side by side, then the numbered items to make. */}
+        {isProjectTask && <ProjectInfoCards task={task} />}
+        {isProjectTask && task.projectInfo && <ItemsToMakeCard info={task.projectInfo} />}
 
-        {/* Payments: order value, received, awaiting check, balance — record one or request it on WhatsApp. */}
+        {/* Payments (record one or request it on WhatsApp) beside the work-items checklist; tracked projects
+            have their own work board below, so payments take the full width there. */}
         {isProjectTask && task.projectInfo && (
-          <PaymentBox info={task.projectInfo}
-            phone={task.lead?.whatsappNumber || task.lead?.mobileNumber || task.contact?.whatsappNumber
-              || task.contact?.phone || task.projectInfo.customer?.phone}
-            canRecord={canRecordPayment} onRecord={() => setSheet('payment')} />
+          <div className={`grid grid-cols-1 gap-3.5 ${workTracking ? '' : 'min-[380px]:grid-cols-2'}`}>
+            <PaymentBox info={task.projectInfo} compact
+              phone={task.lead?.whatsappNumber || task.lead?.mobileNumber || task.contact?.whatsappNumber
+                || task.contact?.phone || task.projectInfo.customer?.phone}
+              canRecord={canRecordPayment} onRecord={() => setSheet('payment')} />
+            {!workTracking && (
+              <ChecklistPanel taskId={taskId} checklist={task.checklist} onChanged={load} locked={locked} compact
+                title={isProjectExec ? 'Work Items' : 'Work to Complete'} />
+            )}
+          </div>
         )}
 
-        {/* Category → Product work: products & steps (Execution) or category checklists (Installation),
-            the daily log and the team chat. Replaces the generic checklist / progress / remarks. */}
-        {workTracking && (
+        {/* The project page's Execution tab: Execution / Installation / Daily log / Team chat / History. On a
+            project not yet tracked by product it shows the set-up prompt, and the checklist + remarks stay. */}
+        {isProjectTask && (
           <ProjectWorkTaskView task={task} editable={!locked && !!mine} locked={locked} onReload={load}
             tab={workTab} onTab={setWorkTab} />
         )}
@@ -665,7 +679,7 @@ export default function TaskDetail() {
         {/* Site check-in is for single field visits — not the long-running shared project task. */}
         {!isProjectTask && <CheckInBar taskId={taskId} checkins={task.checkins} onChanged={load} locked={locked} />}
 
-        {!workTracking && (
+        {!workTracking && !(isProjectTask && task.projectInfo) && (
           <ChecklistPanel taskId={taskId} checklist={task.checklist} onChanged={load} locked={locked}
             title={isProjectExec ? 'Work Items' : 'Work to Complete'} />
         )}
@@ -699,8 +713,11 @@ export default function TaskDetail() {
         )}
 
         {/* History / team / issues — folded into one quiet grouped card so the screen stays calm. */}
-        <div className="divide-y divide-[#F1ECE2] overflow-hidden rounded-2xl border border-[#EDE6D8] bg-white shadow-[0_2px_10px_rgba(80,55,20,0.05)]">
-          <Disclosure title="Progress & photos" count={task.progress.length} icon={<ImageIcon className="h-4 w-4" />}>
+        <div className={isProjectTask
+          ? 'flex flex-col gap-2.5 [&>div]:overflow-hidden [&>div]:rounded-2xl [&>div]:border [&>div]:border-[#EDE6D8] [&>div]:bg-white [&>div]:shadow-[0_2px_10px_rgba(80,55,20,0.05)]'
+          : 'divide-y divide-[#F1ECE2] overflow-hidden rounded-2xl border border-[#EDE6D8] bg-white shadow-[0_2px_10px_rgba(80,55,20,0.05)]'}>
+          <Disclosure title={isProjectTask ? 'Progress & Photos' : 'Progress & photos'} count={task.progress.length}
+            meta={isProjectTask ? `${photoCount} photo${photoCount === 1 ? '' : 's'}` : undefined} icon={<ImageIcon className="h-4 w-4" />}>
             {task.progress.length === 0 && <p className="text-[13px] text-[#9A9E96]">No updates yet.</p>}
             <ul className="flex flex-col gap-2.5">
               {task.progress.map((p) => (
@@ -727,7 +744,8 @@ export default function TaskDetail() {
             </ul>
           </Disclosure>
 
-          <Disclosure title="Assigned team" count={task.team.length} icon={<Users className="h-4 w-4" />}>
+          <Disclosure title={isProjectTask ? 'Assigned Team' : 'Assigned team'} count={task.team.length}
+            meta={isProjectTask ? `${task.team.length} member${task.team.length === 1 ? '' : 's'}` : undefined} icon={<Users className="h-4 w-4" />}>
             <ul className="flex flex-col gap-2">
               {task.team.map((m) => (
                 <li key={m.employeeId} className="flex items-center justify-between text-[13px] text-[#33392F]">
@@ -755,7 +773,9 @@ export default function TaskDetail() {
 
         {/* Remarks — shown for every task type (including lead forms); tracked project tasks use Team chat. */}
         {!workTracking && <div className="overflow-hidden rounded-2xl border border-[#EDE6D8] bg-white shadow-[0_2px_10px_rgba(80,55,20,0.05)]">
-          <Disclosure title={reqView ? 'Task notes' : 'Remarks'} count={task.comments.length} icon={<MessageSquare className="h-4 w-4" />}>
+          <Disclosure title={reqView ? 'Task notes' : isProjectTask ? 'Remarks & Notes' : 'Remarks'} count={task.comments.length}
+            meta={isProjectTask ? (task.comments.length ? `${task.comments.length} note${task.comments.length === 1 ? '' : 's'}` : 'Add notes…') : undefined}
+            icon={<MessageSquare className="h-4 w-4" />}>
             <ul className="mb-2.5 flex flex-col gap-2">
               {task.comments.length === 0 && <li className="text-[13px] text-[#9A9E96]">No remarks yet.</li>}
               {task.comments.map((c) => {
@@ -841,7 +861,7 @@ export default function TaskDetail() {
               </button>
             ) : null}
             {actionErr && <p className="mb-2 rounded-lg bg-[#FBE7E4] p-2.5 text-[12px] text-[#B94B45]">{actionErr}</p>}
-            <div className={`grid gap-2 ${workTracking ? 'grid-cols-2' : isProjectExec ? 'grid-cols-1' : 'grid-cols-3'}`}>
+            {!(isProjectTask && !mine) && <div className={`grid gap-2 ${workTracking ? 'grid-cols-2' : isProjectExec ? 'grid-cols-1' : 'grid-cols-3'}`}>
               {workTracking ? (<>
                 <button onClick={() => { setWorkTab('log'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="flex flex-col items-center gap-1 rounded-xl border border-[#E4DECF] bg-white py-2.5 text-[11px] font-medium text-[#4B524E] active:scale-95">
                   <CalendarDays className="h-[18px] w-[18px] text-[#0A573B]" /> Today's update
@@ -865,7 +885,7 @@ export default function TaskDetail() {
                   <Package className="h-[18px] w-[18px] text-[#9B6B32]" /> Material
                 </button>
               )}
-            </div>
+            </div>}
           </>
         )}
       </div>

@@ -287,7 +287,12 @@ export interface ProjectExecutionInfo {
   customer?: { name?: string | null; phone?: string | null; email?: string | null; city?: string | null } | null;
   rooms?: Array<{
     room?: string | null; floor?: string | null; roomType?: string | null;
-    items?: Array<{ name?: string | null; description?: string | null; quantity?: number | string | null; unit?: string | null }>;
+    items?: Array<{
+      name?: string | null; description?: string | null; quantity?: number | string | null; unit?: string | null;
+      status?: string | null; progress?: number | null;
+      /** Quoted line photo, else the catalogue product photo. */
+      imageUrl?: string | null;
+    }>;
   }>;
   materials?: Array<{ product?: string | null; quantity?: number | string | null; unit?: string | null }>;
   measurements?: Array<{
