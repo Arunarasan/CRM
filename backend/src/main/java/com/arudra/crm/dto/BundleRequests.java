@@ -17,7 +17,8 @@ public final class BundleRequests {
         public String priority;        // LOW / MEDIUM (default) / HIGH / URGENT
         public String resourceType;    // EMPLOYEE / CONTRACTOR (optional)
         public Long resourceId;
-        public String handoverMode;    // PICKUP (default) / DELIVERY
+        public String handoverMode;    // PICKUP (default) / DELIVERY; INSTALL only with installTaskId
+        public Long installTaskId;     // the bill's installation task (counter sale with installation)
         public String rackLocation;
         public String notes;
         public List<BundleSpec> bundles;
@@ -69,10 +70,6 @@ public final class BundleRequests {
     public static class Assign {
         public String resourceType;    // null/blank clears the assignment
         public Long resourceId;
-    }
-
-    public static class Hold {
-        public String reason;
     }
 
     /** Edit header fields and/or per-item specs. Null fields are left unchanged. */

@@ -199,7 +199,9 @@ function App() {
             <Route path="projects/:id" element={<ProjectCommandCenter />} />
             <Route path="projects/:id/tasks/:taskId" element={<TaskReportPage />} />
             <Route path="tasks" element={<Tasks />} />
-            {/* Bundle tracking — stickered stitching / making bundles; a sticker QR opens /bundles/code/:code. */}
+            {/* Orders (bundle tracking) — stickered stitching / making work; a sticker QR opens /bundles/code/:code,
+                so the /bundles URLs stay and /orders just points there. */}
+            <Route path="orders" element={<Navigate to="/bundles" replace />} />
             <Route path="bundles" element={<BundlesPage />} />
             <Route path="bundles/code/:code" element={<BundleDetailPage />} />
             <Route path="bundles/:id" element={<BundleDetailPage />} />

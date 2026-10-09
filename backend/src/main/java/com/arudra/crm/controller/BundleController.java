@@ -100,18 +100,6 @@ public class BundleController {
         return ResponseEntity.ok(bundleService.move(id, req, currentUserService.getCurrentUser(), canOverride()));
     }
 
-    @PostMapping("/{id}/hold")
-    @PreAuthorize(MOVE)
-    public ResponseEntity<BundleView> hold(@PathVariable Long id, @RequestBody BundleRequests.Hold req) {
-        return ResponseEntity.ok(bundleService.hold(id, req == null ? null : req.reason, currentUserService.getCurrentUser()));
-    }
-
-    @PostMapping("/{id}/release")
-    @PreAuthorize(MOVE)
-    public ResponseEntity<BundleView> release(@PathVariable Long id) {
-        return ResponseEntity.ok(bundleService.release(id, currentUserService.getCurrentUser()));
-    }
-
     @PutMapping("/{id}/assign")
     @PreAuthorize(WRITE)
     public ResponseEntity<BundleView> assign(@PathVariable Long id, @RequestBody BundleRequests.Assign req) {

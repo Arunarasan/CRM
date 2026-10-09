@@ -27,6 +27,7 @@ import CompleteSheet from './components/CompleteSheet';
 import CallLeadPanel from '@/components/callRecordings/CallLeadPanel';
 import { callRecordingApi, type CallRecording } from '@/api/callRecordingApi';
 import CollectPaymentSheet from './components/CollectPaymentSheet';
+import MarkInstalledSheet, { InstallOrderCard } from './components/MarkInstalledSheet';
 import PaymentBox from './components/PaymentBox';
 import CustomerContactCard from './components/CustomerContactCard';
 import TimeTracker from './components/TimeTracker';
@@ -363,7 +364,7 @@ export default function TaskDetail() {
   const [task, setTask] = useState<TaskDetailType | null>(null);
   const [note, setNote] = useState('');
   const [voice, setVoice] = useState<CapturedAudio[]>([]);
-  const [sheet, setSheet] = useState<'progress' | 'issue' | 'material' | 'complete' | 'payment' | null>(null);
+  const [sheet, setSheet] = useState<'progress' | 'issue' | 'material' | 'complete' | 'payment' | 'installed' | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [formFocus, setFormFocus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -546,6 +547,9 @@ export default function TaskDetail() {
             <CustomerContactCard contact={task.contact}
               requirement={task.category === 'ENQUIRY' || task.category === 'INSTALLATION' ? task.description : null} />
           )}
+
+        {/* Installing a stitched order from a counter sale: its status + what to collect. */}
+        {task.installOrder && <InstallOrderCard info={task.installOrder} />}
 
         {/* Shared project task — customer + project side by side, then the numbered items to make. */}
         {isProjectTask && <ProjectInfoCards task={task} />}
@@ -847,7 +851,12 @@ export default function TaskDetail() {
             )}
             {/* Module-driven tasks open their module; in-progress field tasks complete via the confirm sheet;
                 an untaken pool task can be picked up here. */}
-            {moduleDriven && task.moduleLink ? (
+            {task.installOrder && !task.installOrder.installed && mine ? (
+              <button onClick={() => setSheet('installed')} disabled={busy || !task.installOrder.ready}
+                className={`${solid} mb-2 bg-[#0A573B] text-white disabled:opacity-50`}>
+                <CheckCircle2 className="h-4 w-4" /> {task.installOrder.ready ? 'Mark Installed' : 'Mark Installed — order not completed yet'}
+              </button>
+            ) : moduleDriven && task.moduleLink ? (
               <button onClick={() => navigate(task.moduleLink!)} className={`${solid} mb-2 bg-[#0A573B] text-white`}>
                 <ClipboardList className="h-4 w-4" /> {task.moduleLabel ?? 'Open module'}
               </button>
@@ -896,6 +905,10 @@ export default function TaskDetail() {
       <MaterialUsageSheet taskId={taskId} open={sheet === 'material'} onOpenChange={(o) => setSheet(o ? 'material' : null)} onSaved={load} />
       <CompleteSheet taskId={taskId} execution={workTracking ? closing : isProjectExec} open={sheet === 'complete'} onOpenChange={(o) => setSheet(o ? 'complete' : null)}
         onDone={() => { load(); navigate('/employee/tasks'); }} />
+      {task.installOrder && (
+        <MarkInstalledSheet taskId={taskId} info={task.installOrder} open={sheet === 'installed'}
+          onOpenChange={(o) => setSheet(o ? 'installed' : null)} onDone={() => { load(); navigate('/employee/tasks'); }} />
+      )}
       <CollectPaymentSheet taskId={taskId} open={sheet === 'payment'} onOpenChange={(o) => setSheet(o ? 'payment' : null)} onSaved={load} />
       {isLeadForm && task.formType === 'REQUIREMENT' ? (
         <RequirementFormSheet

@@ -16,9 +16,7 @@ public class BundleView {
     public Integer bundleNo;
     public Integer bundleTotal;
     public String status;
-    public String nextStatus;          // the next step in the flow (null when terminal / on hold)
-    public String heldFromStatus;
-    public String holdReason;
+    public String nextStatus;          // the next step in the flow (null when terminal)
     public String workType;
     public String resourceType;
     public Long resourceId;
@@ -26,7 +24,9 @@ public class BundleView {
     public LocalDate dueDate;
     public boolean overdue;
     public String priority;
-    public String handoverMode;
+    public String handoverMode;        // PICKUP / DELIVERY / INSTALL
+    public Long installTaskId;
+    public String installerName;       // who installs it (the installation task's assignee)
     public String rackLocation;
     public String notes;
     public LocalDateTime packedAt;

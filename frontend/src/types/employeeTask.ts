@@ -311,6 +311,16 @@ export interface ProjectExecutionInfo {
   balanceDue?: number | string | null;
 }
 
+export interface InstallOrderInfo {
+  orders: { id: number; code: string; status: string; itemCount: number }[];
+  /** Every order is Completed — the installer can take it out. */
+  ready: boolean;
+  installed: boolean;
+  invoiceNumber?: string | null;
+  /** Still owed on the bill — the installer collects it on site. */
+  balanceDue: number;
+}
+
 export interface TaskDetail extends TaskCard {
   description: string | null;
   assignmentType: 'SINGLE_EMPLOYEE' | 'MULTIPLE_EMPLOYEES' | 'TEAM' | null;
@@ -326,6 +336,8 @@ export interface TaskDetail extends TaskCard {
   projectId?: number | null;
   /** Admin approval of this task closes the project (Installation, or Execution on older projects). */
   closingTask?: boolean;
+  /** A counter-sale installation task that installs stitched orders — closes through Mark Installed. */
+  installOrder?: InstallOrderInfo | null;
   /** The signed-in user's id — tells "my" chat messages apart. */
   viewerId?: number | null;
   projectInfo?: ProjectExecutionInfo | null;

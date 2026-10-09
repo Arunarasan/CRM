@@ -24,13 +24,18 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * Bundle tracking: the customer's material that needs work (stitching / making) after a sale is
- * tracked as physical bundles, each with a printed sticker code. Scanning/typing the code opens the
- * bundle (items, work specs, status, history) and staff move it through the work steps:
- * RECEIVED → CUTTING → STITCHING → QC_CHECK → PACKED → READY → DELIVERED.
+ * Orders (called "bundles" in code and tables): the customer's material that needs work (stitching /
+ * making) after a sale is tracked as physical orders, each with a printed sticker code. Scanning/typing
+ * the code opens the order (items, work specs, status, history) and staff move it through four steps:
+ * ORDER → PROCESS → COMPLETED → DELIVERED (CANCELLED only when the bill is cancelled).
  *
- * <p>Floor staff can only step a bundle forward one step; admins/managers may jump or step back
- * (logged as an override). ON_HOLD parks a bundle with a reason and resumes where it left off.
+ * <p>Floor staff can only step an order forward one step; admins/managers may jump or step back
+ * (logged as an override).
+ *
+ * <p>An order leaves by PICKUP, DELIVERY or INSTALL. INSTALL is set only from a bill that includes
+ * installation: the order is linked to the bill's installation task ({@code installTaskId}), the
+ * installer is told when every linked order is COMPLETED, and {@link #markInstalled} (installer on
+ * site, may collect the balance) delivers them all and closes the installation task.
  *
  * <p>Every bundle owns one task on the task board (source {@code BUNDLE}, "Stitching" lane): the
  * bundle's tailor is the task's assignee and the bundle status drives the task status (see
@@ -40,13 +45,15 @@ import java.util.stream.Collectors;
 @Service
 public class BundleService {
 
-    public static final List<String> FLOW =
-            List.of("RECEIVED", "CUTTING", "STITCHING", "QC_CHECK", "PACKED", "READY", "DELIVERED");
-    public static final String ON_HOLD = "ON_HOLD";
+    public static final List<String> FLOW = List.of("ORDER", "PROCESS", "COMPLETED", "DELIVERED");
+    public static final String COMPLETED = "COMPLETED";
+    public static final String DELIVERED = "DELIVERED";
     public static final String CANCELLED = "CANCELLED";
-    private static final List<String> CLOSED = List.of("DELIVERED", CANCELLED);
+    public static final String INSTALL = "INSTALL";
+    private static final List<String> CLOSED = List.of(DELIVERED, CANCELLED);
     private static final Set<String> WORK_TYPES = Set.of("STITCHING", "MAKING", "FITTING", "OTHER");
     private static final Set<String> PRIORITIES = Set.of("LOW", "MEDIUM", "HIGH", "URGENT");
+    /** Staff may pick these; INSTALL comes only from a bill with installation. */
     private static final Set<String> HANDOVER_MODES = Set.of("PICKUP", "DELIVERY");
     /** Sticker code prefix (JB-0042). */
     private static final String CODE_PREFIX = "JB";
@@ -89,7 +96,7 @@ public class BundleService {
             if (invoice.getCustomer() != null) customerId = invoice.getCustomer().getId();
         }
         if (invoice == null && customerId == null) {
-            throw new IllegalArgumentException("A bundle needs a bill or a customer");
+            throw new IllegalArgumentException("An order needs a bill or a customer");
         }
 
         Map<Long, InvoiceItem> billLines = invoice == null ? Map.of()
@@ -100,6 +107,18 @@ public class BundleService {
         String resourceType = hasResource ? ResourceType.normalize(req.resourceType) : null;
         if (hasResource && !resourceService.exists(resourceType, req.resourceId)) {
             throw new IllegalArgumentException("Selected tailor / worker was not found");
+        }
+
+        // INSTALL only when the bill itself includes installation: link its installation task.
+        Long installTaskId = null;
+        if (invoice != null) {
+            Long billId = invoice.getId();
+            installTaskId = req.installTaskId != null
+                    ? taskRepository.findById(req.installTaskId).filter(t -> billId.equals(t.getInvoiceId()))
+                        .map(Task::getId)
+                        .orElseThrow(() -> new IllegalArgumentException("That installation task is not on this bill"))
+                    : taskRepository.findFirstByInvoiceIdAndSourceAndStatusNotOrderByIdAsc(billId, "MANUAL", "CANCELLED")
+                        .map(Task::getId).orElse(null);
         }
 
         int total = req.bundles.size();
@@ -117,7 +136,12 @@ public class BundleService {
             b.setStatus(FLOW.get(0));
             b.setWorkType(pick(req.workType, WORK_TYPES, "STITCHING"));
             b.setPriority(pick(req.priority, PRIORITIES, "MEDIUM"));
-            b.setHandoverMode(pick(req.handoverMode, HANDOVER_MODES, "PICKUP"));
+            if (installTaskId != null) {
+                b.setHandoverMode(INSTALL);
+                b.setInstallTaskId(installTaskId);
+            } else {
+                b.setHandoverMode(pick(req.handoverMode, HANDOVER_MODES, "PICKUP"));
+            }
             b.setDueDate(parseDate(req.dueDate));
             b.setRackLocation(blankToNull(req.rackLocation));
             b.setNotes(blankToNull(req.notes));
@@ -157,9 +181,9 @@ public class BundleService {
                 }
             }
             if (itemCount == 0) {
-                throw new IllegalArgumentException("Bundle " + saved.getCode() + " has no items");
+                throw new IllegalArgumentException("Order " + saved.getCode() + " has no items");
             }
-            logEvent(saved, null, saved.getStatus(), user, "Bundle created", null);
+            logEvent(saved, null, saved.getStatus(), user, "Order created", null);
             created.add(saved);
         }
 
@@ -175,11 +199,11 @@ public class BundleService {
     /** The scan lookup. A group code (JB-0042) of a multi-bundle order opens its first bundle. */
     public BundleView getByCode(String code) {
         String c = code == null ? "" : code.trim();
-        if (c.isEmpty()) throw new IllegalArgumentException("Enter a bundle code");
+        if (c.isEmpty()) throw new IllegalArgumentException("Enter an order code");
         Bundle b = bundleRepository.findFirstByCodeIgnoreCaseAndIsDeletedFalse(c)
                 .or(() -> bundleRepository.findByGroupCodeIgnoreCaseAndIsDeletedFalseOrderByBundleNoAsc(c)
                         .stream().findFirst())
-                .orElseThrow(() -> new ResourceNotFoundException("No bundle found for code " + c));
+                .orElseThrow(() -> new ResourceNotFoundException("No order found for code " + c));
         return toView(b, true);
     }
 
@@ -189,7 +213,7 @@ public class BundleService {
      */
     public List<BundleView> lookup(String q) {
         String c = q == null ? "" : q.trim();
-        if (c.isEmpty()) throw new IllegalArgumentException("Enter a bundle code or bill number");
+        if (c.isEmpty()) throw new IllegalArgumentException("Enter an order code or bill number");
         Optional<Bundle> exact = bundleRepository.findFirstByCodeIgnoreCaseAndIsDeletedFalse(c);
         if (exact.isPresent()) return List.of(toView(exact.get(), true));
         List<Bundle> group = bundleRepository.findByGroupCodeIgnoreCaseAndIsDeletedFalseOrderByBundleNoAsc(c);
@@ -197,7 +221,7 @@ public class BundleService {
         List<BundleView> bill = invoiceRepository.findFirstByInvoiceNumberIgnoreCase(c)
                 .map(inv -> forInvoice(inv.getId())).orElse(List.of());
         if (!bill.isEmpty()) return bill;
-        throw new ResourceNotFoundException("No bundle found for " + c);
+        throw new ResourceNotFoundException("No order found for " + c);
     }
 
     public BundleView get(Long id) {
@@ -226,12 +250,11 @@ public class BundleService {
                 .map(b -> toView(b, true)).toList();
     }
 
-    /** Counts per status for open bundles, plus overdue and ready-for-handover totals. */
+    /** Counts per status for open orders, plus overdue and ready-for-handover totals. */
     public Map<String, Object> summary() {
         List<Bundle> open = bundleRepository.findByIsDeletedFalseAndStatusNotIn(CLOSED);
         Map<String, Long> byStatus = new LinkedHashMap<>();
-        for (String s : FLOW) if (!"DELIVERED".equals(s)) byStatus.put(s, 0L);
-        byStatus.put(ON_HOLD, 0L);
+        for (String s : FLOW) if (!DELIVERED.equals(s)) byStatus.put(s, 0L);
         LocalDate today = LocalDate.now();
         long overdue = 0;
         for (Bundle b : open) {
@@ -242,9 +265,8 @@ public class BundleService {
         out.put("byStatus", byStatus);
         out.put("open", open.size());
         out.put("overdue", overdue);
-        out.put("ready", byStatus.getOrDefault("READY", 0L));
-        out.put("onHold", byStatus.getOrDefault(ON_HOLD, 0L));
-        out.put("inWork", open.size() - byStatus.getOrDefault("READY", 0L) - byStatus.getOrDefault(ON_HOLD, 0L));
+        out.put("ready", byStatus.getOrDefault(COMPLETED, 0L));
+        out.put("inWork", open.size() - byStatus.getOrDefault(COMPLETED, 0L));
         return out;
     }
 
@@ -262,29 +284,29 @@ public class BundleService {
         String to = req == null || req.status == null ? "" : req.status.trim().toUpperCase();
         if (!FLOW.contains(to)) throw new IllegalArgumentException("Unknown status: " + to);
         String from = b.getStatus();
-        if (CANCELLED.equals(from)) throw new IllegalStateException("This bundle is cancelled");
-        if (ON_HOLD.equals(from)) throw new IllegalStateException("This bundle is on hold — release it first");
+        if (CANCELLED.equals(from)) throw new IllegalStateException("This order is cancelled");
         if (to.equals(from)) return toView(b, true);
 
         int fromIdx = FLOW.indexOf(from);
         int toIdx = FLOW.indexOf(to);
         boolean nextStep = toIdx == fromIdx + 1;
-        if ("DELIVERED".equals(to) && !canOverride) {
+        if (DELIVERED.equals(to) && !canOverride) {
             BigDecimal due = balanceDue(b.getInvoiceId());
             if (due.signum() > 0) {
                 throw new IllegalStateException(rupees(due) + " is still due on bill " + invoiceNumber(b.getInvoiceId())
-                        + " — collect it with Hand over, or ask a manager.");
+                        + " — collect it with " + (INSTALL.equals(b.getHandoverMode()) ? "Mark Installed" : "Hand over")
+                        + ", or ask a manager.");
             }
         }
         if (!nextStep && !canOverride) {
-            throw new IllegalStateException("Next step for " + b.getCode() + " is " + FLOW.get(Math.min(fromIdx + 1, FLOW.size() - 1))
+            throw new IllegalStateException("Next step for " + b.getCode() + " is " + stepLabel(FLOW.get(Math.min(fromIdx + 1, FLOW.size() - 1)))
                     + ". Only a manager can skip or go back.");
         }
 
         b.setStatus(to);
-        if (toIdx >= FLOW.indexOf("PACKED") && b.getPackedAt() == null) b.setPackedAt(LocalDateTime.now());
-        if (toIdx < FLOW.indexOf("PACKED")) b.setPackedAt(null);
-        if ("DELIVERED".equals(to)) {
+        if (toIdx >= FLOW.indexOf(COMPLETED) && b.getPackedAt() == null) b.setPackedAt(LocalDateTime.now());
+        if (toIdx < FLOW.indexOf(COMPLETED)) b.setPackedAt(null);
+        if (DELIVERED.equals(to)) {
             b.setDeliveredAt(LocalDateTime.now());
             b.setDeliveredTo(blankToNull(req.deliveredTo));
         } else {
@@ -295,50 +317,143 @@ public class BundleService {
 
         String note = blankToNull(req.note);
         if (!nextStep) note = (toIdx < fromIdx ? "Moved back" : "Skipped ahead") + " by manager" + (note == null ? "" : " — " + note);
-        if ("DELIVERED".equals(to) && b.getDeliveredTo() != null) {
-            note = (note == null ? "" : note + " · ") + "Handed to " + b.getDeliveredTo();
+        if (DELIVERED.equals(to) && b.getDeliveredTo() != null) {
+            note = (note == null ? "" : note + " · ") + (INSTALL.equals(b.getHandoverMode()) ? "Installed for " : "Handed to ")
+                    + b.getDeliveredTo();
         }
         logEvent(b, from, to, user, note, blankToNull(req.photoUrl));
         syncTaskStatus(b);
 
-        if ("READY".equals(to)) {
-            notificationService.dispatchToAdmins("Bundle " + b.getCode() + " is ready",
-                    "Packed and ready for " + ("DELIVERY".equals(b.getHandoverMode()) ? "delivery" : "pickup")
+        if (COMPLETED.equals(to)) {
+            String mode = b.getHandoverMode();
+            notificationService.dispatchToAdmins("Order " + b.getCode() + " is completed",
+                    "Ready for " + (INSTALL.equals(mode) ? "installation" : "DELIVERY".equals(mode) ? "delivery" : "pickup")
                             + customerSuffix(b), "BUNDLE_READY", "/bundles/" + b.getId(),
                     user != null ? user.getId() : null);
+            if (INSTALL.equals(mode)) notifyInstallerIfReady(b);
         }
+        if (DELIVERED.equals(to) && INSTALL.equals(b.getHandoverMode())) closeInstallTaskIfDone(b, user);
         return toView(b, true);
     }
 
-    @Transactional
-    public BundleView hold(Long id, String reason, User user) {
-        Bundle b = find(id);
-        if (CLOSED.contains(b.getStatus())) throw new IllegalStateException("This bundle is already closed");
-        if (ON_HOLD.equals(b.getStatus())) return toView(b, true);
-        String r = blankToNull(reason);
-        if (r == null) throw new IllegalArgumentException("Give a reason for the hold");
-        String from = b.getStatus();
-        b.setHeldFromStatus(from);
-        b.setHoldReason(r.length() > 500 ? r.substring(0, 500) : r);
-        b.setStatus(ON_HOLD);
-        bundleRepository.save(b);
-        logEvent(b, from, ON_HOLD, user, r, null);
-        syncTaskStatus(b);
-        return toView(b, true);
+    // =====================================================================
+    // Installation (orders from a bill that includes installation)
+    // =====================================================================
+
+    /** The orders an installation task installs, cancelled ones left out (empty for a plain install task). */
+    private List<Bundle> installOrders(Long installTaskId) {
+        if (installTaskId == null) return List.of();
+        return bundleRepository.findByInstallTaskIdAndIsDeletedFalseOrderByBundleNoAsc(installTaskId).stream()
+                .filter(x -> !CANCELLED.equals(x.getStatus())).toList();
     }
 
+    /** Every linked order is COMPLETED → tell the installer the job can go out. */
+    private void notifyInstallerIfReady(Bundle b) {
+        List<Bundle> orders = installOrders(b.getInstallTaskId());
+        if (orders.isEmpty() || orders.stream().anyMatch(x -> FLOW.indexOf(x.getStatus()) < FLOW.indexOf(COMPLETED))) return;
+        String codes = orders.stream().map(Bundle::getCode).collect(Collectors.joining(", "));
+        String title = "Ready to install: " + b.getGroupCode();
+        String message = "Order " + codes + " is completed — take it and install" + customerSuffix(b);
+        for (Long userId : installerUserIds(b.getInstallTaskId())) {
+            notificationService.dispatch(title, message, "BUNDLE_READY", userId, "/employee/tasks/" + b.getInstallTaskId());
+        }
+    }
+
+    /** Users who install: the installation task's active employee assignees (or its assigned employee). */
+    private Set<Long> installerUserIds(Long taskId) {
+        Set<Long> ids = new LinkedHashSet<>();
+        for (TaskAssignment a : assignmentRepository.findByTaskId(taskId)) {
+            if ("CANCELLED".equals(a.getStatus()) || "REJECTED".equals(a.getStatus())) continue;
+            if (a.getEmployee() != null) ids.add(a.getEmployee().getId());
+            else if (ResourceType.EMPLOYEE.equals(a.getResourceType()) && a.getResourceId() != null) ids.add(a.getResourceId());
+        }
+        if (ids.isEmpty()) {
+            taskRepository.findById(taskId).map(Task::getAssignedEmployee).ifPresent(u -> ids.add(u.getId()));
+        }
+        return ids;
+    }
+
+    private String installerName(Long taskId) {
+        List<String> names = new ArrayList<>();
+        for (TaskAssignment a : assignmentRepository.findByTaskId(taskId)) {
+            if ("CANCELLED".equals(a.getStatus()) || "REJECTED".equals(a.getStatus())) continue;
+            if (a.getEmployee() != null) names.add(a.getEmployee().getName());
+            else if (a.getResourceId() != null) names.add(resourceService.displayName(a.getResourceType(), a.getResourceId()));
+        }
+        if (names.isEmpty()) {
+            return taskRepository.findById(taskId).map(Task::getAssignedEmployee).map(User::getName).orElse(null);
+        }
+        return String.join(", ", names);
+    }
+
+    /** Every linked order delivered → the installation task is done too. */
+    private void closeInstallTaskIfDone(Bundle b, User user) {
+        List<Bundle> orders = installOrders(b.getInstallTaskId());
+        if (orders.isEmpty() || !orders.stream().allMatch(x -> DELIVERED.equals(x.getStatus()))) return;
+        employeeTaskService.finishInstallTask(b.getInstallTaskId(), user);
+    }
+
+    /**
+     * What the installer's task shows: the linked orders, whether all are completed (ready to install)
+     * and what is still owed on the bill. Null when the task installs no orders.
+     */
+    public Map<String, Object> installInfo(Long taskId) {
+        List<Bundle> orders = installOrders(taskId);
+        if (orders.isEmpty()) return null;
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("orders", orders.stream().map(x -> {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", x.getId());
+            m.put("code", x.getCode());
+            m.put("status", x.getStatus());
+            m.put("itemCount", itemRepository.findByBundleIdAndIsDeletedFalseOrderByIdAsc(x.getId()).size());
+            return m;
+        }).toList());
+        out.put("ready", orders.stream().allMatch(x -> COMPLETED.equals(x.getStatus()) || DELIVERED.equals(x.getStatus())));
+        out.put("installed", orders.stream().allMatch(x -> DELIVERED.equals(x.getStatus())));
+        List<Long> invoiceIds = orders.stream().map(Bundle::getInvoiceId).filter(Objects::nonNull).distinct().sorted().toList();
+        out.put("invoiceNumber", invoiceIds.isEmpty() ? null : invoiceNumber(invoiceIds.get(0)));
+        out.put("balanceDue", totalDue(invoiceIds));
+        return out;
+    }
+
+    /** True when the task installs orders that are not all delivered yet (it closes through Mark Installed). */
+    public boolean installPending(Long taskId) {
+        List<Bundle> orders = installOrders(taskId);
+        return !orders.isEmpty() && !orders.stream().allMatch(x -> DELIVERED.equals(x.getStatus()));
+    }
+
+    /**
+     * The installer on site: collects what the customer pays now (installers may collect), then marks
+     * every linked order installed (DELIVERED), which also closes the installation task. Anything still
+     * owed afterwards needs a manager, as at the counter.
+     */
     @Transactional
-    public BundleView release(Long id, User user) {
-        Bundle b = find(id);
-        if (!ON_HOLD.equals(b.getStatus())) return toView(b, true);
-        String back = b.getHeldFromStatus() != null && FLOW.contains(b.getHeldFromStatus()) ? b.getHeldFromStatus() : FLOW.get(0);
-        b.setStatus(back);
-        b.setHeldFromStatus(null);
-        b.setHoldReason(null);
-        bundleRepository.save(b);
-        logEvent(b, ON_HOLD, back, user, "Hold released", null);
-        syncTaskStatus(b);
-        return toView(b, true);
+    public List<BundleView> markInstalled(Long taskId, BundleRequests.Handover req, User user, boolean canOverride) {
+        List<Bundle> orders = installOrders(taskId).stream().filter(x -> !DELIVERED.equals(x.getStatus())).toList();
+        if (orders.isEmpty()) throw new IllegalStateException("This task has no order waiting to be installed");
+        if (!canOverride && (user == null || !installerUserIds(taskId).contains(user.getId()))) {
+            throw new IllegalStateException("Only the installer on this task can mark it installed");
+        }
+        for (Bundle x : orders) {
+            if (!COMPLETED.equals(x.getStatus())) {
+                throw new IllegalStateException("Order " + x.getCode() + " is still at " + stepLabel(x.getStatus())
+                        + " — it can be installed once it is Completed.");
+            }
+        }
+        BundleRequests.Handover h = req == null ? new BundleRequests.Handover() : req;
+        h.bundleIds = orders.stream().map(Bundle::getId).toList();
+        return handover(h, user, canOverride, true);
+    }
+
+    private static String stepLabel(String status) {
+        return switch (status == null ? "" : status) {
+            case "ORDER" -> "Order";
+            case "PROCESS" -> "Process";
+            case "COMPLETED" -> "Completed";
+            case "DELIVERED" -> "Delivered";
+            default -> status;
+        };
     }
 
     @Transactional
@@ -372,7 +487,10 @@ public class BundleService {
         if (req == null) return toView(b, true);
         if (req.workType != null) b.setWorkType(pick(req.workType, WORK_TYPES, b.getWorkType()));
         if (req.priority != null) b.setPriority(pick(req.priority, PRIORITIES, b.getPriority()));
-        if (req.handoverMode != null) b.setHandoverMode(pick(req.handoverMode, HANDOVER_MODES, b.getHandoverMode()));
+        // INSTALL comes from the bill and can't be picked or dropped here.
+        if (req.handoverMode != null && !INSTALL.equals(b.getHandoverMode())) {
+            b.setHandoverMode(pick(req.handoverMode, HANDOVER_MODES, b.getHandoverMode()));
+        }
         if (req.dueDate != null) b.setDueDate(parseDate(req.dueDate));
         if (req.rackLocation != null) b.setRackLocation(blankToNull(req.rackLocation));
         if (req.notes != null) b.setNotes(blankToNull(req.notes));
@@ -411,14 +529,13 @@ public class BundleService {
     @Transactional
     public List<BundleView> handover(BundleRequests.Handover req, User user, boolean canOverride, boolean canCollect) {
         if (req == null || req.bundleIds == null || req.bundleIds.isEmpty()) {
-            throw new IllegalArgumentException("Pick at least one bundle to hand over");
+            throw new IllegalArgumentException("Pick at least one order to hand over");
         }
         List<Bundle> bundles = req.bundleIds.stream().distinct().map(this::find).toList();
         for (Bundle b : bundles) {
             if (CLOSED.contains(b.getStatus())) throw new IllegalStateException(b.getCode() + " is already " + b.getStatus().toLowerCase());
-            if (ON_HOLD.equals(b.getStatus())) throw new IllegalStateException(b.getCode() + " is on hold — release it first");
-            if (!"READY".equals(b.getStatus()) && !canOverride) {
-                throw new IllegalStateException(b.getCode() + " is not ready yet. Only a manager can hand it over early.");
+            if (!COMPLETED.equals(b.getStatus()) && !canOverride) {
+                throw new IllegalStateException(b.getCode() + " is not completed yet. Only a manager can hand it over early.");
             }
         }
         List<Long> invoiceIds = bundles.stream().map(Bundle::getInvoiceId).filter(Objects::nonNull)
@@ -429,7 +546,7 @@ public class BundleService {
                 .filter(p -> p != null && p.amount != null && p.amount.signum() > 0).toList();
         if (!tenders.isEmpty()) {
             if (!canCollect) throw new IllegalStateException("You are not allowed to collect payments");
-            if (invoiceIds.isEmpty()) throw new IllegalStateException("These bundles have no bill to collect against");
+            if (invoiceIds.isEmpty()) throw new IllegalStateException("These orders have no bill to collect against");
             BigDecimal owed = totalDue(invoiceIds);
             BigDecimal paying = tenders.stream().map(p -> p.amount).reduce(BigDecimal.ZERO, BigDecimal::add);
             if (paying.compareTo(owed) > 0) {
@@ -476,7 +593,7 @@ public class BundleService {
         List<BundleView> out = new ArrayList<>();
         for (Bundle b : bundles) {
             BundleRequests.Move mv = new BundleRequests.Move();
-            mv.status = "DELIVERED";
+            mv.status = DELIVERED;
             mv.note = note;
             mv.photoUrl = req.photoUrl;
             mv.deliveredTo = req.deliveredTo;
@@ -529,7 +646,7 @@ public class BundleService {
     private Bundle find(Long id) {
         return bundleRepository.findById(id)
                 .filter(b -> !Boolean.TRUE.equals(b.getIsDeleted()))
-                .orElseThrow(() -> new ResourceNotFoundException("Bundle not found: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Order not found: " + id));
     }
 
     private void logEvent(Bundle b, String from, String to, User user, String note, String photoUrl) {
@@ -548,17 +665,16 @@ public class BundleService {
 
     // ---------------------------------------------------------------- task-board link
 
-    /** Bundle status -> task status: waiting, being worked on, work done (packed onwards), parked, void. */
+    /** Order status -> task status: Order = waiting, Process = being worked on, Completed onwards = done. */
     public static void applyBundleStatus(Task task, String bundleStatus) {
         int idx = FLOW.indexOf(bundleStatus);
         String status;
         if (CANCELLED.equals(bundleStatus)) status = "CANCELLED";
-        else if (ON_HOLD.equals(bundleStatus)) status = "PAUSED";
-        else if (idx >= FLOW.indexOf("PACKED")) status = "COMPLETED";
+        else if (idx >= FLOW.indexOf(COMPLETED)) status = "COMPLETED";
         else if (idx > 0) status = "IN_PROGRESS";
         else status = "PENDING";
         task.setStatus(status);
-        if (idx >= 0) task.setProgress(Math.min(100, Math.round(idx * 100f / FLOW.indexOf("PACKED"))));
+        if (idx >= 0) task.setProgress(Math.min(100, Math.round(idx * 100f / FLOW.indexOf(COMPLETED))));
         if ("COMPLETED".equals(status)) {
             if (task.getCompletedDate() == null) task.setCompletedDate(LocalDate.now());
         } else {
@@ -638,7 +754,7 @@ public class BundleService {
 
     /** Items + work specs, so the task alone tells the tailor what to make. */
     private String taskDescription(Bundle b) {
-        StringBuilder sb = new StringBuilder("Bundle ").append(b.getCode());
+        StringBuilder sb = new StringBuilder("Order ").append(b.getCode());
         if (b.getBundleTotal() != null && b.getBundleTotal() > 1) {
             sb.append(" (").append(b.getBundleNo()).append(" of ").append(b.getBundleTotal()).append(')');
         }
@@ -739,8 +855,6 @@ public class BundleService {
         v.status = b.getStatus();
         int idx = FLOW.indexOf(b.getStatus());
         v.nextStatus = idx >= 0 && idx < FLOW.size() - 1 ? FLOW.get(idx + 1) : null;
-        v.heldFromStatus = b.getHeldFromStatus();
-        v.holdReason = b.getHoldReason();
         v.workType = b.getWorkType();
         v.resourceType = b.getResourceType();
         v.resourceId = b.getResourceId();
@@ -749,6 +863,8 @@ public class BundleService {
         v.overdue = b.getDueDate() != null && b.getDueDate().isBefore(LocalDate.now()) && !CLOSED.contains(b.getStatus());
         v.priority = b.getPriority();
         v.handoverMode = b.getHandoverMode();
+        v.installTaskId = b.getInstallTaskId();
+        if (b.getInstallTaskId() != null) v.installerName = installerName(b.getInstallTaskId());
         v.rackLocation = b.getRackLocation();
         v.notes = b.getNotes();
         v.packedAt = b.getPackedAt();

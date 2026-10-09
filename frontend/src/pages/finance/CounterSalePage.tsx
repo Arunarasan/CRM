@@ -359,14 +359,14 @@ export default function CounterSalePage() {
               <BaseInput type="checkbox" checked={workOn} onChange={(e) => setWorkOn(e.target.checked)} className="w-4 h-4" />
               <Scissors className="w-4 h-4 text-slate-500" />
               <span className="text-sm font-medium text-slate-700">Needs stitching / work</span>
-              <span className="text-xs text-slate-400">prints a sticker for each bundle</span>
+              <span className="text-xs text-slate-400">prints a sticker for each order</span>
             </label>
             {workOn && (
               <div className="px-3 pb-3">
                 <BundleWorkEditor
                   lines={lines.map((l) => ({ key: l.key, label: l.name, sub: `${l.qty} ${l.unit}` }))}
                   header={workHeader} onHeader={patchWorkHeader}
-                  lineState={workLines} onLine={patchWorkLine} showCharge />
+                  lineState={workLines} onLine={patchWorkLine} showCharge installing={installOn} />
               </div>
             )}
           </div>

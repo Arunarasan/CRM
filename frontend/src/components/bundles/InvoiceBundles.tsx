@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { bundleApi, BUNDLE_STATUS_LABELS, BUNDLE_STATUS_STYLES, type Bundle } from "@/api/bundleApi";
+import { bundleApi, BUNDLE_STATUS_STYLES, statusLabel, type Bundle } from "@/api/bundleApi";
 import type { InvoiceItem } from "@/types/finance";
 import type { CompanyProfile } from "@/lib/companyProfile";
 import { apiError } from "@/lib/apiError";
@@ -71,7 +71,7 @@ export default function InvoiceBundles({
   return (
     <div className={`bg-white border rounded-2xl shadow-sm p-5 ${blocked ? "ring-2 ring-amber-300" : ""}`}>
       <div className="flex flex-wrap items-center gap-2 mb-3">
-        <h2 className="font-semibold text-slate-800 flex items-center gap-2"><Package className="w-4 h-4 text-slate-500" /> Work bundles</h2>
+        <h2 className="font-semibold text-slate-800 flex items-center gap-2"><Package className="w-4 h-4 text-slate-500" /> Orders</h2>
         <div className="ml-auto flex flex-wrap items-center gap-2">
           {bundles.length > 0 && (
             <>
@@ -79,28 +79,29 @@ export default function InvoiceBundles({
                 className="h-9 rounded-md border bg-white px-2 text-xs" title="Sticker size">
                 {LABEL_SIZES.map((s) => <option key={s.v} value={s.v}>{s.label}</option>)}
               </select>
-              {canMove && bundles.some((b) => b.status === "READY") && (
-                <Button size="sm" variant="outline" onClick={() => setHandoverOpen(true)}><HandCoins className="w-4 h-4 mr-1" /> Hand over</Button>
+              {canMove && bundles.some((b) => b.status === "COMPLETED") && (
+                <Button size="sm" variant="outline" onClick={() => setHandoverOpen(true)}><HandCoins className="w-4 h-4 mr-1" /> {bundles[0]?.handoverMode === "INSTALL" ? "Mark installed" : "Hand over"}</Button>
               )}
               <Button size="sm" onClick={() => print(bundles)}><Printer className="w-4 h-4 mr-1" /> Print {bundles.length > 1 ? `${bundles.length} stickers` : "sticker"}</Button>
             </>
           )}
           {!cancelled && (
-            <Button size="sm" variant="outline" onClick={() => setCreateOpen(true)}><Plus className="w-4 h-4 mr-1" /> {bundles.length ? "Add bundle" : "Create bundle"}</Button>
+            <Button size="sm" variant="outline" onClick={() => setCreateOpen(true)}><Plus className="w-4 h-4 mr-1" /> {bundles.length ? "Add order" : "Create order"}</Button>
           )}
         </div>
       </div>
       {blocked && <p className="text-xs text-amber-700 mb-2">The sticker window was blocked — click <b>Print</b> above (and allow pop-ups for this site).</p>}
       {bundles.length === 0 ? (
-        <p className="text-sm text-slate-500">No stitching / work bundles on this bill. Create one to print a sticker and track the work.</p>
+        <p className="text-sm text-slate-500">No stitching / work orders on this bill. Create one to print a sticker and track the work.</p>
       ) : (
         <ul className="divide-y text-sm">
           {bundles.map((b) => (
             <li key={b.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
               <Link to={`/bundles/${b.id}`} className="font-mono font-bold text-slate-800 hover:underline">{b.code}</Link>
-              <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${BUNDLE_STATUS_STYLES[b.status] ?? ""}`}>{BUNDLE_STATUS_LABELS[b.status] ?? b.status}</span>
+              <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${BUNDLE_STATUS_STYLES[b.status] ?? ""}`}>{statusLabel(b)}</span>
               <span className="text-slate-500">{b.itemCount} item{b.itemCount === 1 ? "" : "s"}</span>
               <span className="text-slate-500">{b.assigneeName ? `· ${b.assigneeName}` : "· unassigned"}</span>
+              {b.handoverMode === "INSTALL" && <span className="text-sky-700">· install{b.installerName ? ` by ${b.installerName}` : ""}</span>}
               {b.dueDate && <span className={b.overdue ? "text-red-600 font-medium" : "text-slate-500"}>· due {b.dueDate}</span>}
               <button className="ml-auto text-xs text-slate-500 hover:text-slate-800 hover:underline" onClick={() => print([b])}>Sticker</button>
             </li>
@@ -146,7 +147,7 @@ function CreateBundleDialog({ invoiceId, items, onClose, onCreated }: {
       toast.success(`${created.map((b) => b.code).join(", ")} created.`);
       onCreated(created);
     } catch (e) {
-      toast.error(apiError(e, "Could not create the bundle."));
+      toast.error(apiError(e, "Could not create the order."));
       setSaving(false);
     }
   };
@@ -154,7 +155,7 @@ function CreateBundleDialog({ invoiceId, items, onClose, onCreated }: {
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader><DialogTitle>Create work bundle</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>Create order</DialogTitle></DialogHeader>
         <BundleWorkEditor
           lines={billLines.map((it) => ({ key: it.id!, label: it.description, sub: `${it.quantity} ${it.unit ?? ""}` }))}
           header={header} onHeader={(p) => setHeader((h) => ({ ...h, ...p }))}

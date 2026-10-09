@@ -24,6 +24,9 @@ public interface BundleRepository extends JpaRepository<Bundle, Long> {
     /** The bundle behind a task-board task (tasks with source BUNDLE). */
     Optional<Bundle> findFirstByTaskIdAndIsDeletedFalse(Long taskId);
 
+    /** The orders an installation task installs (counter sale with installation). */
+    List<Bundle> findByInstallTaskIdAndIsDeletedFalseOrderByBundleNoAsc(Long installTaskId);
+
     List<Bundle> findByIsDeletedFalseAndStatusNotIn(List<String> statuses);
 
     /**

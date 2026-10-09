@@ -244,12 +244,11 @@ public class FinanceService {
 
         postInvoiceToLedger(saved);
 
-        if (hasInstallation) {
-            createInstallationTask(saved, customer, inst);
-        }
+        Task installTask = hasInstallation ? createInstallationTask(saved, customer, inst, hasWork) : null;
 
         if (hasWork) {
-            createWorkBundles(saved, savedItems, sourceLines, work, user);
+            // Installation on the bill → the orders are installed by that task's installer.
+            createWorkBundles(saved, savedItems, sourceLines, work, installTask != null ? installTask.getId() : null, user);
         }
 
         if (req.collectNow) {
@@ -328,7 +327,7 @@ public class FinanceService {
     /** Packs the counter-sale lines flagged {@code needsWork} into stickered bundles. */
     private void createWorkBundles(Invoice invoice, List<InvoiceItem> items,
                                    Map<InvoiceItem, CounterSaleRequest.Item> sourceLines,
-                                   CounterSaleRequest.Work work, User user) {
+                                   CounterSaleRequest.Work work, Long installTaskId, User user) {
         int count = work.bundleCount == null || work.bundleCount < 1 ? 1 : Math.min(work.bundleCount, 50);
         List<BundleRequests.BundleSpec> bundles = new ArrayList<>();
         for (int i = 0; i < count; i++) {
@@ -356,12 +355,14 @@ public class FinanceService {
         req.resourceType = work.resourceType;
         req.resourceId = work.resourceId;
         req.handoverMode = work.handoverMode;
+        req.installTaskId = installTaskId;
         req.notes = work.notes;
         req.bundles = bundles;
         bundleService.create(req, user);
     }
 
-    private void createInstallationTask(Invoice invoice, Customer customer, CounterSaleRequest.Installation inst) {
+    private Task createInstallationTask(Invoice invoice, Customer customer, CounterSaleRequest.Installation inst,
+                                        boolean withOrders) {
         Task task = new Task();
         task.setTaskName("Installation — " + invoice.getInvoiceNumber() + " (" + customer.getName() + ")");
         task.setStatus("PENDING");
@@ -374,6 +375,7 @@ public class FinanceService {
         if (customer.getPhone() != null && !customer.getPhone().isBlank()) {
             desc.append(" Customer contact: ").append(customer.getPhone()).append('.');
         }
+        if (withOrders) desc.append(" Take the stitched order once it is Completed, install it, then tap Mark Installed.");
         if (inst.notes != null && !inst.notes.isBlank()) desc.append('\n').append(inst.notes.trim());
         task.setDescription(desc.toString());
 
@@ -386,7 +388,7 @@ public class FinanceService {
         } else {
             task.setAssignmentType("TEAM"); // unassigned pool — any eligible employee can pick it up
         }
-        taskService.createTask(task); // seeds a checklist + notifies the assignee (if any)
+        return taskService.createTask(task); // seeds a checklist + notifies the assignee (if any)
     }
 
     /**

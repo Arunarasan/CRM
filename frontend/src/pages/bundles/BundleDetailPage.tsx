@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
-  bundleApi, BUNDLE_FLOW, BUNDLE_STATUS_LABELS, BUNDLE_NEXT_ACTION, WORK_TYPES,
+  bundleApi, BUNDLE_FLOW, BUNDLE_STATUS_LABELS, BUNDLE_NEXT_ACTION, WORK_TYPES, statusLabel,
   type Bundle, type BundleItem,
 } from "@/api/bundleApi";
 import { useGoBack } from "@/hooks/useGoBack";
@@ -21,13 +21,13 @@ import { printBundleStickers, printJobCard, getLabelSize, setLabelSize, LABEL_SI
 import HandoverDialog from "@/components/bundles/HandoverDialog";
 import { StatusPill } from "./BundlesPage";
 import {
-  ArrowLeft, Phone, Printer, PauseCircle, PlayCircle, Check, Pencil, FileText, ChevronDown, Camera,
+  ArrowLeft, Phone, Printer, Check, Pencil, FileText, ChevronDown, Camera,
 } from "lucide-react";
 
 const fmtTime = (s?: string | null) =>
   s ? new Date(s).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "";
 
-/** One bundle — what scanning its sticker opens. Route: /bundles/:id or /bundles/code/:code. */
+/** One order — what scanning its sticker opens. Route: /bundles/:id or /bundles/code/:code. */
 export default function BundleDetailPage() {
   const { id, code } = useParams();
   const navigate = useNavigate();
@@ -46,9 +46,8 @@ export default function BundleDetailPage() {
   const [note, setNote] = useState("");
   const [photo, setPhoto] = useState("");
   const [showPhoto, setShowPhoto] = useState(false);
-  /** Hand-over candidates (every bundle of the bill); non-null = dialog open. */
+  /** Hand-over candidates (every order of the bill); non-null = dialog open. */
   const [handover, setHandover] = useState<Bundle[] | null>(null);
-  const [holdOpen, setHoldOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [specEdit, setSpecEdit] = useState<BundleItem | null>(null);
 
@@ -62,7 +61,7 @@ export default function BundleDetailPage() {
       }
       setB(await bundleApi.get(Number(id)));
     } catch (e) {
-      setError(apiError(e, "Bundle not found."));
+      setError(apiError(e, "Order not found."));
     }
   }, [id, code, navigate]);
 
@@ -78,7 +77,7 @@ export default function BundleDetailPage() {
       if (msg) toast.success(msg);
       return true;
     } catch (e) {
-      toast.error(apiError(e, "Could not update the bundle."));
+      toast.error(apiError(e, "Could not update the order."));
       return false;
     } finally {
       setBusy(false);
@@ -89,7 +88,7 @@ export default function BundleDetailPage() {
     if (!b) return;
     let list: Bundle[] = [b];
     if (b.invoiceId) {
-      try { list = await bundleApi.forInvoice(b.invoiceId); } catch { /* fall back to this bundle */ }
+      try { list = await bundleApi.forInvoice(b.invoiceId); } catch { /* fall back to this order */ }
       if (!list.some((x) => x.id === b.id)) list = [b, ...list];
     }
     setHandover(list);
@@ -104,17 +103,17 @@ export default function BundleDetailPage() {
     return (
       <div className="max-w-lg mx-auto text-center py-16 space-y-3">
         <p className="text-slate-700 font-medium">{error}</p>
-        <Button variant="outline" onClick={() => navigate("/bundles")}>Back to Bundles</Button>
+        <Button variant="outline" onClick={() => navigate("/bundles")}>Back to Orders</Button>
       </div>
     );
   }
   if (!b) return <p className="text-sm text-slate-500 p-6">Loading…</p>;
 
-  const flowIdx = BUNDLE_FLOW.indexOf(b.status as (typeof BUNDLE_FLOW)[number]);
-  const heldIdx = BUNDLE_FLOW.indexOf((b.heldFromStatus ?? "") as (typeof BUNDLE_FLOW)[number]);
-  const stepIdx = flowIdx >= 0 ? flowIdx : heldIdx;
-  const onHold = b.status === "ON_HOLD";
+  const stepIdx = BUNDLE_FLOW.indexOf(b.status as (typeof BUNDLE_FLOW)[number]);
   const closed = b.status === "DELIVERED" || b.status === "CANCELLED";
+  const install = b.handoverMode === "INSTALL";
+  /** Last step's word: an INSTALL order is "Installed", not "Delivered". */
+  const stepName = (s: string) => (s === "DELIVERED" && install ? "Installed" : BUNDLE_STATUS_LABELS[s]);
 
   const print = (fn: () => boolean) => { if (!fn()) toast.error("Allow pop-ups for this site to print."); };
 
@@ -126,12 +125,12 @@ export default function BundleDetailPage() {
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="font-mono text-2xl md:text-3xl font-black text-slate-900">{b.code}</h1>
-            <StatusPill status={b.status} />
+            <StatusPill status={b.status} handoverMode={b.handoverMode} />
             {b.overdue && <span className="rounded-full bg-red-50 border border-red-200 px-2 py-0.5 text-[11px] font-medium text-red-700">Overdue</span>}
           </div>
           <div className="text-sm text-slate-600 mt-0.5">
             {WORK_TYPES.find((w) => w.v === b.workType)?.label ?? b.workType}
-            {b.bundleTotal > 1 && ` · bundle ${b.bundleNo} of ${b.bundleTotal}`}
+            {b.bundleTotal > 1 && ` · order ${b.bundleNo} of ${b.bundleTotal}`}
             {b.invoiceId && <> · Bill <Link className="hover:underline" to={`/billing/invoices/${b.invoiceId}`}>{b.invoiceNumber}</Link></>}
           </div>
         </div>
@@ -145,13 +144,13 @@ export default function BundleDetailPage() {
         </div>
       </div>
 
-      {/* sibling bundles of the same order */}
+      {/* sibling orders of the same bill */}
       {b.siblings && b.siblings.length > 1 && (
         <div className="flex flex-wrap gap-2">
           {b.siblings.map((s) => (
             <Link key={s.id} to={`/bundles/${s.id}`}
               className={`rounded-lg border px-2.5 py-1 text-xs font-mono ${s.id === b.id ? "bg-slate-800 text-white border-slate-800" : "bg-white hover:bg-slate-50"}`}>
-              {s.code} <span className="font-sans opacity-70">· {BUNDLE_STATUS_LABELS[s.status]}</span>
+              {s.code} <span className="font-sans opacity-70">· {statusLabel({ status: s.status, handoverMode: b.handoverMode })}</span>
             </Link>
           ))}
         </div>
@@ -166,8 +165,8 @@ export default function BundleDetailPage() {
             return (
               <li key={s} className="flex items-center gap-1 shrink-0">
                 <span className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
-                  done ? "bg-emerald-50 text-emerald-700" : current ? (onHold ? "bg-orange-100 text-orange-800" : "bg-slate-800 text-white") : "text-slate-400"}`}>
-                  {done && <Check className="w-3.5 h-3.5" />}{BUNDLE_STATUS_LABELS[s]}
+                  done ? "bg-emerald-50 text-emerald-700" : current ? "bg-slate-800 text-white" : "text-slate-400"}`}>
+                  {done && <Check className="w-3.5 h-3.5" />}{stepName(s)}
                 </span>
                 {i < BUNDLE_FLOW.length - 1 && <span className="w-4 h-px bg-slate-200" />}
               </li>
@@ -175,55 +174,44 @@ export default function BundleDetailPage() {
           })}
         </ol>
 
-        {onHold && (
-          <div className="mt-3 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-sm text-orange-800">
-            <b>On hold:</b> {b.holdReason}
-          </div>
-        )}
         {b.status === "CANCELLED" && (
-          <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">This bundle was cancelled with its bill.</div>
+          <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">This order was cancelled with its bill.</div>
         )}
         {b.status === "DELIVERED" && (
           <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-            Handed over {fmtTime(b.deliveredAt)}{b.deliveredTo ? ` to ${b.deliveredTo}` : ""}.
+            {install ? "Installed" : "Handed over"} {fmtTime(b.deliveredAt)}{b.deliveredTo ? ` ${install ? "for" : "to"} ${b.deliveredTo}` : ""}.
+          </div>
+        )}
+        {install && b.status === "COMPLETED" && (
+          <div className="mt-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-800">
+            Ready to install{b.installerName ? ` — ${b.installerName} takes it and marks it installed on site` : " — no installer picked yet (assign the installation task)"}.
           </div>
         )}
 
         {/* actions */}
         {canMove && !closed && (
           <div className="mt-4 space-y-2">
-            {!onHold && (
-              <div className="flex flex-col sm:flex-row gap-2">
-                <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (optional)" className="h-11 sm:flex-1" />
-                <Button variant="outline" className="h-11" onClick={() => setShowPhoto((v) => !v)}><Camera className="w-4 h-4 mr-1" /> {photo ? "Photo added" : "Photo"}</Button>
-              </div>
-            )}
-            {showPhoto && !onHold && (
+            <div className="flex flex-col sm:flex-row gap-2">
+              <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (optional)" className="h-11 sm:flex-1" />
+              <Button variant="outline" className="h-11" onClick={() => setShowPhoto((v) => !v)}><Camera className="w-4 h-4 mr-1" /> {photo ? "Photo added" : "Photo"}</Button>
+            </div>
+            {showPhoto && (
               <div className="max-w-xs"><ImageCaptureField module="BUNDLE" value={photo} onChange={(r) => setPhoto(r.url)} label="Work photo" allowEdit /></div>
             )}
             <div className="flex flex-wrap gap-2">
-              {onHold ? (
-                <Button className="h-12 flex-1 sm:flex-none text-base" disabled={busy} onClick={() => act(() => bundleApi.release(b.id), "Hold released")}>
-                  <PlayCircle className="w-5 h-5 mr-1.5" /> Release hold
-                </Button>
-              ) : b.nextStatus && (
+              {b.nextStatus && (
                 <Button className="h-12 flex-1 sm:flex-none sm:min-w-[220px] text-base" disabled={busy}
                   onClick={() => (b.nextStatus === "DELIVERED" ? openHandover() : moveTo(b.nextStatus!))}>
-                  {BUNDLE_NEXT_ACTION[b.nextStatus] ?? BUNDLE_STATUS_LABELS[b.nextStatus]} →
+                  {b.nextStatus === "DELIVERED" && install ? "Mark installed" : (BUNDLE_NEXT_ACTION[b.nextStatus] ?? BUNDLE_STATUS_LABELS[b.nextStatus])} →
                 </Button>
               )}
-              {!onHold && (
-                <Button variant="outline" className="h-12" disabled={busy} onClick={() => setHoldOpen(true)}>
-                  <PauseCircle className="w-4 h-4 mr-1.5" /> Hold
-                </Button>
-              )}
-              {canOverride && !onHold && (
+              {canOverride && (
                 <div className="relative">
                   <select value="" disabled={busy}
                     onChange={(e) => { const v = e.target.value; if (!v) return; if (v === "DELIVERED") openHandover(); else moveTo(v); }}
                     className="h-12 appearance-none rounded-md border bg-white pl-3 pr-8 text-sm text-slate-700">
                     <option value="">Move to…</option>
-                    {BUNDLE_FLOW.filter((s) => s !== b.status).map((s) => <option key={s} value={s}>{BUNDLE_STATUS_LABELS[s]}</option>)}
+                    {BUNDLE_FLOW.filter((s) => s !== b.status).map((s) => <option key={s} value={s}>{stepName(s)}</option>)}
                   </select>
                   <ChevronDown className="w-4 h-4 absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                 </div>
@@ -299,10 +287,13 @@ export default function BundleDetailPage() {
             </Detail>
             <Detail label="Ready by"><span className={b.overdue ? "text-red-600 font-medium" : ""}>{b.dueDate || "—"}</span></Detail>
             <Detail label="Priority">{b.priority}</Detail>
-            <Detail label="Handover">{b.handoverMode === "DELIVERY" ? "Delivery" : "Customer pickup"}</Detail>
+            <Detail label="Handover">
+              {install ? <>Install at customer's place{b.installerName && <span className="block text-slate-500">Installer: {b.installerName}</span>}</>
+                : b.handoverMode === "DELIVERY" ? "Delivery" : "Customer pickup"}
+            </Detail>
             <Detail label="Kept at">{b.rackLocation || "—"}</Detail>
             {b.notes && <Detail label="Notes"><span className="whitespace-pre-wrap">{b.notes}</span></Detail>}
-            {b.packedAt && <Detail label="Packed">{fmtTime(b.packedAt)}</Detail>}
+            {b.packedAt && <Detail label="Completed">{fmtTime(b.packedAt)}</Detail>}
           </dl>
         </div>
       </div>
@@ -333,10 +324,6 @@ export default function BundleDetailPage() {
         <HandoverDialog bundles={handover} focusId={b.id} onClose={() => setHandover(null)}
           onDone={(updated) => { setHandover(null); setB(updated.find((x) => x.id === b.id) ?? b); load(); }} />
       )}
-      {holdOpen && (
-        <HoldDialog busy={busy} onClose={() => setHoldOpen(false)}
-          onConfirm={async (reason) => { if (await act(() => bundleApi.hold(b.id, reason), "Put on hold")) setHoldOpen(false); }} />
-      )}
       {editOpen && (
         <EditDialog bundle={b} busy={busy} onClose={() => setEditOpen(false)}
           onSave={async (body) => { if (await act(() => bundleApi.update(b.id, body), "Saved")) setEditOpen(false); }} />
@@ -365,26 +352,6 @@ function Detail({ label, children }: { label: string; children: React.ReactNode 
   );
 }
 
-function HoldDialog({ busy, onClose, onConfirm }: { busy: boolean; onClose: () => void; onConfirm: (reason: string) => void }) {
-  const [reason, setReason] = useState("");
-  const quick = ["Fabric short", "Waiting for customer confirmation", "Accessories pending", "Re-measure needed"];
-  return (
-    <Dialog open onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-sm">
-        <DialogHeader><DialogTitle>Put on hold</DialogTitle></DialogHeader>
-        <div className="flex flex-wrap gap-1.5">
-          {quick.map((q) => <button key={q} onClick={() => setReason(q)} className="rounded-full border px-2.5 py-1 text-xs hover:bg-slate-50">{q}</button>)}
-        </div>
-        <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason" autoFocus />
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button disabled={busy || !reason.trim()} onClick={() => onConfirm(reason.trim())}>Hold</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 function EditDialog({ bundle, busy, onClose, onSave }: { bundle: Bundle; busy: boolean; onClose: () => void; onSave: (body: Record<string, unknown>) => void }) {
   const [f, setF] = useState({
     workType: bundle.workType, dueDate: bundle.dueDate ?? "", priority: bundle.priority,
@@ -408,9 +375,13 @@ function EditDialog({ bundle, busy, onClose, onSave }: { bundle: Bundle; busy: b
               <option value="LOW">Low</option><option value="MEDIUM">Normal</option><option value="HIGH">High</option><option value="URGENT">Urgent</option>
             </select></label>
           <label><span className="text-slate-500 text-xs">Handover</span>
-            <select value={f.handoverMode} onChange={(e) => set({ handoverMode: e.target.value as Bundle["handoverMode"] })} className={sel}>
-              <option value="PICKUP">Customer pickup</option><option value="DELIVERY">Delivery</option>
-            </select></label>
+            {f.handoverMode === "INSTALL" ? (
+              <div className="h-9 mt-1 flex items-center px-2 rounded-md border bg-slate-50 text-slate-600" title="Set by the bill's installation">Install</div>
+            ) : (
+              <select value={f.handoverMode} onChange={(e) => set({ handoverMode: e.target.value as Bundle["handoverMode"] })} className={sel}>
+                <option value="PICKUP">Customer pickup</option><option value="DELIVERY">Delivery</option>
+              </select>
+            )}</label>
           <label className="col-span-2"><span className="text-slate-500 text-xs">Kept at (rack / shelf)</span>
             <Input value={f.rackLocation} onChange={(e) => set({ rackLocation: e.target.value })} className="h-9 mt-1" placeholder="e.g. Shelf B2" /></label>
           <label className="col-span-2"><span className="text-slate-500 text-xs">Notes</span>

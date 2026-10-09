@@ -63,6 +63,9 @@ export const employeeTaskApi = {
   // Record how much the customer paid on a project execution task → PENDING_APPROVAL payment (admin verifies).
   collectPayment: (id: number, payload: { amount: number | string; method?: string; note?: string }) =>
     api.post(`${BASE}/${id}/collect-payment`, payload).then((r) => r.data),
+  // Installer on site: collect the balance, mark the bill's stitched orders installed (closes the task).
+  markInstalled: (id: number, payload: { payments?: { method: string; amount: number }[]; deliveredTo?: string; note?: string; photoUrl?: string }) =>
+    api.post(`${BASE}/${id}/mark-installed`, payload).then((r) => r.data),
   // Lead-workflow structured form: captures data, writes it onto the lead, then completes the task.
   submitLeadForm: (id: number, payload: LeadFormPayload) =>
     api.post(`${BASE}/${id}/lead-form`, payload).then((r) => r.data),

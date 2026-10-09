@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { bundleApi, BUNDLE_STATUS_LABELS, BUNDLE_STATUS_STYLES, type Bundle } from "@/api/bundleApi";
+import { bundleApi, BUNDLE_STATUS_STYLES, statusLabel, type Bundle } from "@/api/bundleApi";
 import { useAuth } from "@/hooks/useAuth";
 import { apiError } from "@/lib/apiError";
 import { toast } from "@/components/ui/toast";
@@ -19,14 +19,14 @@ const METHODS = [
 const inr = (n: number) => `₹${n.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 
 /**
- * Hand bundles to the customer in one step: tick the bundles going out (every READY one of the bill
- * by default), collect what is still owed on the bill, record who took them. Staff can't hand over
- * while money is due; a manager can, with a reason.
+ * Hand orders to the customer in one step: tick the orders going out (every COMPLETED one of the bill
+ * by default), collect what is still owed on the bill, record who took them. INSTALL orders read
+ * "Mark installed". Staff can't hand over while money is due; a manager can, with a reason.
  */
 export default function HandoverDialog({ bundles, focusId, onClose, onDone }: {
-  /** Candidate bundles — usually every bundle of the bill. Closed ones are ignored. */
+  /** Candidate orders — usually every order of the bill. Closed ones are ignored. */
   bundles: Bundle[];
-  /** The bundle the dialog was opened from (always pre-ticked). */
+  /** The order the dialog was opened from (always pre-ticked). */
   focusId?: number;
   onClose: () => void;
   onDone: (updated: Bundle[]) => void;
@@ -37,7 +37,7 @@ export default function HandoverDialog({ bundles, focusId, onClose, onDone }: {
 
   const open = bundles.filter((b) => b.status !== "DELIVERED" && b.status !== "CANCELLED");
   const [picked, setPicked] = useState<Set<number>>(
-    () => new Set(open.filter((b) => b.status === "READY" || b.id === focusId).map((b) => b.id)),
+    () => new Set(open.filter((b) => b.status === "COMPLETED" || b.id === focusId).map((b) => b.id)),
   );
 
   // balance per bill (each bill counted once)
@@ -59,13 +59,13 @@ export default function HandoverDialog({ bundles, focusId, onClose, onDone }: {
   const [showPhoto, setShowPhoto] = useState(false);
   const [allowDue, setAllowDue] = useState(false);
   const [busy, setBusy] = useState(false);
-  // ticking/unticking bundles of another bill changes what is owed — default to collecting all of it
+  // ticking/unticking orders of another bill changes what is owed — default to collecting all of it
   useEffect(() => { setAmount(due > 0 ? String(due) : ""); }, [due]);
 
   const paying = canCollect ? Math.max(0, Number(amount) || 0) : 0;
   const left = Math.max(0, Math.round((due - paying) * 100) / 100);
   const overpay = paying > due + 0.001;
-  const notReady = open.filter((b) => picked.has(b.id) && b.status !== "READY");
+  const notReady = open.filter((b) => picked.has(b.id) && b.status !== "COMPLETED");
   const blocked = picked.size === 0 || overpay
     || (left > 0 && (!canOverride || !allowDue || !note.trim()))
     || (notReady.length > 0 && !canOverride);
@@ -87,7 +87,7 @@ export default function HandoverDialog({ bundles, focusId, onClose, onDone }: {
         payments: paying > 0 ? [{ method, amount: paying, referenceNumber: ref.trim() || undefined }] : [],
         allowBalanceDue: left > 0 && allowDue,
       });
-      toast.success(`${updated.map((b) => b.code).join(", ")} handed over${paying > 0 ? ` · ${inr(paying)} collected` : ""}.`);
+      toast.success(`${updated.map((b) => b.code).join(", ")} ${install ? "installed" : "handed over"}${paying > 0 ? ` · ${inr(paying)} collected` : ""}.`);
       onDone(updated);
     } catch (e) {
       toast.error(apiError(e, "Could not hand over."));
@@ -95,20 +95,22 @@ export default function HandoverDialog({ bundles, focusId, onClose, onDone }: {
     }
   };
 
-  const pickupWord = first?.handoverMode === "DELIVERY" ? "Delivered to" : "Collected by";
+  const install = first?.handoverMode === "INSTALL";
+  const pickupWord = install ? "Installed for" : first?.handoverMode === "DELIVERY" ? "Delivered to" : "Collected by";
+  const verb = install ? "Mark installed" : "Hand over";
 
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
-        <DialogHeader><DialogTitle>Hand over{first?.invoiceNumber ? ` · Bill ${first.invoiceNumber}` : ""}</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>{verb}{first?.invoiceNumber ? ` · Bill ${first.invoiceNumber}` : ""}</DialogTitle></DialogHeader>
 
         <div className="space-y-4 text-sm">
-          {/* bundles */}
+          {/* orders */}
           <div>
-            <div className="text-xs uppercase tracking-wide text-slate-400 mb-1.5">Bundles going out</div>
+            <div className="text-xs uppercase tracking-wide text-slate-400 mb-1.5">{install ? "Orders installed" : "Orders going out"}</div>
             <ul className="rounded-lg border divide-y">
               {open.map((b) => {
-                const ready = b.status === "READY";
+                const ready = b.status === "COMPLETED";
                 const disabled = !ready && !canOverride;
                 return (
                   <li key={b.id}>
@@ -117,7 +119,7 @@ export default function HandoverDialog({ bundles, focusId, onClose, onDone }: {
                         onChange={() => toggle(b.id)} />
                       <span className="font-mono font-bold text-slate-800">{b.code}</span>
                       <span className="text-slate-500">{b.itemCount} item{b.itemCount === 1 ? "" : "s"}</span>
-                      <span className={`ml-auto rounded-full border px-2 py-0.5 text-[11px] font-medium ${BUNDLE_STATUS_STYLES[b.status] ?? ""}`}>{BUNDLE_STATUS_LABELS[b.status] ?? b.status}</span>
+                      <span className={`ml-auto rounded-full border px-2 py-0.5 text-[11px] font-medium ${BUNDLE_STATUS_STYLES[b.status] ?? ""}`}>{statusLabel(b)}</span>
                     </label>
                   </li>
                 );
@@ -125,7 +127,7 @@ export default function HandoverDialog({ bundles, focusId, onClose, onDone }: {
             </ul>
             {notReady.length > 0 && (
               <p className="mt-1 text-xs text-amber-700">
-                {notReady.map((b) => b.code).join(", ")} {notReady.length === 1 ? "is" : "are"} not {BUNDLE_STATUS_LABELS.READY.toLowerCase()} yet
+                {notReady.map((b) => b.code).join(", ")} {notReady.length === 1 ? "is" : "are"} not completed yet
                 {canOverride ? " — handing over early as manager." : "."}
               </p>
             )}
@@ -168,17 +170,17 @@ export default function HandoverDialog({ bundles, focusId, onClose, onDone }: {
                     {canOverride ? (
                       <label className="mt-1 flex items-center gap-2 text-xs text-amber-900">
                         <BaseInput type="checkbox" className="w-4 h-4" checked={allowDue} onChange={(e) => setAllowDue(e.target.checked)} />
-                        Hand over with balance due (reason required)
+                        {verb} with balance due (reason required)
                       </label>
                     ) : (
-                      <p className="text-xs text-amber-800">Collect the full balance to hand over, or ask a manager.</p>
+                      <p className="text-xs text-amber-800">Collect the full balance to {install ? "finish" : "hand over"}, or ask a manager.</p>
                     )}
                   </div>
                 )}
               </>
             ) : (
               <div className="flex items-center justify-between font-medium text-emerald-800">
-                <span>{owed.length ? "Bill fully paid" : "No bill on these bundles"}</span>
+                <span>{owed.length ? "Bill fully paid" : "No bill on these orders"}</span>
                 {owed.length > 0 && <span>PAID</span>}
               </div>
             )}
@@ -189,18 +191,18 @@ export default function HandoverDialog({ bundles, focusId, onClose, onDone }: {
             <Input value={to} onChange={(e) => setTo(e.target.value)} className="mt-1" placeholder="Name (optional)" /></label>
           <div className="flex gap-2">
             <Input value={note} onChange={(e) => setNote(e.target.value)}
-              placeholder={left > 0 && allowDue ? "Reason for handing over with balance due" : "Note (optional)"} className="flex-1" />
+              placeholder={left > 0 && allowDue ? "Reason for leaving a balance due" : "Note (optional)"} className="flex-1" />
             <Button type="button" variant="outline" onClick={() => setShowPhoto((v) => !v)}><Camera className="w-4 h-4 mr-1" />{photo ? "Photo added" : "Photo"}</Button>
           </div>
           {showPhoto && (
-            <div className="max-w-xs"><ImageCaptureField module="BUNDLE" value={photo} onChange={(r) => setPhoto(r.url)} label="Handover photo" allowEdit /></div>
+            <div className="max-w-xs"><ImageCaptureField module="BUNDLE" value={photo} onChange={(r) => setPhoto(r.url)} label={install ? "Installed photo" : "Handover photo"} allowEdit /></div>
           )}
         </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
           <Button disabled={busy || blocked} onClick={submit}>
-            {busy ? "Saving…" : paying > 0 ? `Collect ${inr(paying)} & hand over ${picked.size}` : `Hand over ${picked.size}`}
+            {busy ? "Saving…" : paying > 0 ? `Collect ${inr(paying)} & ${verb.toLowerCase()}` : `${verb} (${picked.size})`}
           </Button>
         </DialogFooter>
       </DialogContent>

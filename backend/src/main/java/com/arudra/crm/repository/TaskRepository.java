@@ -57,4 +57,7 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
     /** Open (not done/cancelled) tasks whose due date has passed — for overdue escalation. */
     @Query("SELECT t FROM Task t WHERE t.dueDate < :today AND t.status NOT IN ('COMPLETED','CANCELLED')")
     java.util.List<Task> findOverdue(@Param("today") java.time.LocalDate today);
+
+    /** A counter-sale bill's installation task (source MANUAL; order tasks are source BUNDLE). */
+    java.util.Optional<Task> findFirstByInvoiceIdAndSourceAndStatusNotOrderByIdAsc(Long invoiceId, String source, String status);
 }

@@ -112,6 +112,9 @@ public class EmployeeTaskService {
     private com.arudra.crm.repository.InvoiceRepository invoiceRepository;
     @Autowired
     private com.arudra.crm.repository.BundleEventRepository bundleEventRepository;
+    @Autowired
+    @org.springframework.context.annotation.Lazy
+    private BundleService bundleService;
 
     private static final List<String> ACTIVE_ASSIGNMENT_STATUSES =
             List.of("ASSIGNED", "ACCEPTED", "IN_PROGRESS", "PAUSED", "WAITING_MATERIAL", "REWORK", "COMPLETED");
@@ -678,6 +681,8 @@ public class EmployeeTaskService {
                 && projectWorkService.hasWorkLines(task.getProject().getId()));
         detail.put("projectId", task.getProject() != null ? task.getProject().getId() : null);
         detail.put("closingTask", projectWorkService.isClosingTask(task));
+        // A bill's installation task that installs stitched orders: their status + what is still owed.
+        detail.put("installOrder", bundleService.installInfo(task.getId()));
         detail.put("viewerId", employee != null ? employee.getId() : null); // lets the chat tell "my" messages apart
         if ((projectExecution || projectInstallation) && task.getProject() != null) {
             if (!detail.containsKey("lead") && task.getProject().getLead() != null) {
@@ -1117,6 +1122,11 @@ public class EmployeeTaskService {
             throw new IllegalStateException("Finish this call from its Lead section — create the lead, add the call "
                     + "to an existing lead, or mark it Not a lead.");
         }
+        // Installing stitched orders closes through Mark Installed (it hands the orders over too).
+        if (bundleService.installPending(taskId)) {
+            throw new IllegalStateException("Use Mark Installed once the order is installed — it closes this task "
+                    + "and hands the order over.");
+        }
         if (guard.getTaskTemplate() != null
                 && com.arudra.crm.util.LeadTaskForms.isModuleDriven(guard.getTaskTemplate().getCode())) {
             throw new IllegalStateException("This task is completed automatically when its work is finalized "
@@ -1187,6 +1197,20 @@ public class EmployeeTaskService {
     }
 
     /** Finalize a task as COMPLETED, close its assignments, notify, and drive the workflow forward. */
+    /** Closes a bill's installation task once every order it installs is delivered (BundleService). */
+    @Transactional
+    public void finishInstallTask(Long taskId, User by) {
+        Task task = taskRepository.findById(taskId).orElse(null);
+        if (task == null || "COMPLETED".equals(task.getStatus()) || "CANCELLED".equals(task.getStatus())) return;
+        if (by == null) {
+            task.setStatus("COMPLETED");
+            task.setCompletedDate(LocalDate.now());
+            taskRepository.save(task);
+            return;
+        }
+        finalizeTaskCompletion(task, by);
+    }
+
     /** Closes a call follow-up task once its outcome has been recorded on the call recording. */
     @Transactional
     public Task closeCallFollowUp(Long taskId, User by) {

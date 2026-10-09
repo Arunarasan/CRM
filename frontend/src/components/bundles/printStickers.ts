@@ -76,7 +76,7 @@ function smallLabel(b: Bundle) {
     <div class="qr">${qrSvg(bundleScanUrl(b.code))}</div>
     <div class="txt">
       <div class="code">${esc(b.code)}</div>
-      <div class="ln">${payTag(b) && Number(b.balanceDue) > 0 ? `<b class="bal">BAL</b> ` : ""}${esc(b.customerName || "Walk-in")}</div>
+      <div class="ln">${b.handoverMode === "INSTALL" ? `<b>INSTALL</b> ` : ""}${payTag(b) && Number(b.balanceDue) > 0 ? `<b class="bal">BAL</b> ` : ""}${esc(b.customerName || "Walk-in")}</div>
       <div class="ln mut">${b.bundleTotal > 1 ? `${b.bundleNo}/${b.bundleTotal} · ` : ""}${b.itemCount} item${b.itemCount === 1 ? "" : "s"}${b.dueDate ? ` · ${d(b.dueDate)}` : ""}</div>
     </div>
   </div>`;
@@ -90,11 +90,11 @@ function largeLabel(b: Bundle, co: CompanyProfile | undefined, cls: string, maxI
       <div class="qr">${qrSvg(bundleScanUrl(b.code))}</div>
       <div class="txt">
         <div class="code">${esc(b.code)}</div>
-        ${b.bundleTotal > 1 ? `<div class="bn">Bundle ${b.bundleNo} of ${b.bundleTotal}</div>` : ""}
+        ${b.bundleTotal > 1 ? `<div class="bn">Order ${b.bundleNo} of ${b.bundleTotal}</div>` : ""}
         <div class="cust">${esc(b.customerName || "Walk-in")}</div>
         ${b.customerPhone ? `<div class="mut">${esc(b.customerPhone)}</div>` : ""}
         <div class="mut">${b.invoiceNumber ? `Bill ${esc(b.invoiceNumber)}` : ""}${b.dueDate ? ` · Due ${d(b.dueDate)}` : ""}</div>
-        <div class="mut">${b.handoverMode === "DELIVERY" ? "Delivery" : "Pickup"}</div>
+        <div class="mut">${b.handoverMode === "INSTALL" ? "<b>INSTALL</b>" : b.handoverMode === "DELIVERY" ? "Delivery" : "Pickup"}</div>
       </div>
     </div>
     <div class="bc">${barcodeSvg(b.code)}</div>
@@ -121,7 +121,7 @@ export function printBundleStickers(bundles: Bundle[], size: LabelSize, company?
     body = `<div class="sheet">${bundles.map((b) => largeLabel(b, company, "a", 3)).join("")}</div>`;
   }
 
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Bundle stickers</title>
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Order stickers</title>
   <style>
     ${page}
     * { box-sizing: border-box; }
@@ -228,7 +228,7 @@ export function printJobCard(b: Bundle, company?: CompanyProfile): boolean {
       <div><span>Ready by</span>${b.dueDate ? new Date(b.dueDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—"}</div>
       <div><span>Tailor</span>${esc(b.assigneeName || "—")}</div>
       <div><span>Priority</span>${esc(b.priority)}</div>
-      <div><span>Handover</span>${b.handoverMode === "DELIVERY" ? "Delivery" : "Pickup"}</div>
+      <div><span>Handover</span>${b.handoverMode === "INSTALL" ? "Install" : b.handoverMode === "DELIVERY" ? "Delivery" : "Pickup"}</div>
     </div>
     <table><thead><tr><th>#</th><th>Item &amp; work</th><th>Qty</th><th>Done</th></tr></thead><tbody>${rows}</tbody></table>
     <div class="notes"><b>Notes:</b> ${esc(b.notes || "")}</div>

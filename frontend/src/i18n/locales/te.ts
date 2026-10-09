@@ -53,7 +53,7 @@ const te = {
     inventory: 'ఇన్వెంటరీ',
     purchasing: 'కొనుగోలు',
     billing: 'బిల్లింగ్',
-    bundles: 'బండిల్స్',
+    bundles: 'ఆర్డర్లు',
     finance: 'ఫైనాన్స్',
     workforce: 'హెచ్‌ఆర్ & పేరోల్',
     website: 'వెబ్‌సైట్',

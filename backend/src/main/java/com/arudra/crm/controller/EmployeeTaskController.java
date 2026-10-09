@@ -34,14 +34,17 @@ public class EmployeeTaskController {
     private final CurrentUserService currentUserService;
     private final com.arudra.crm.service.TaskTimeService taskTimeService;
     private final com.arudra.crm.service.LeadTaskFormService leadTaskFormService;
+    private final com.arudra.crm.service.BundleService bundleService;
 
     public EmployeeTaskController(EmployeeTaskService employeeTaskService, CurrentUserService currentUserService,
                                   com.arudra.crm.service.TaskTimeService taskTimeService,
-                                  com.arudra.crm.service.LeadTaskFormService leadTaskFormService) {
+                                  com.arudra.crm.service.LeadTaskFormService leadTaskFormService,
+                                  com.arudra.crm.service.BundleService bundleService) {
         this.employeeTaskService = employeeTaskService;
         this.currentUserService = currentUserService;
         this.taskTimeService = taskTimeService;
         this.leadTaskFormService = leadTaskFormService;
+        this.bundleService = bundleService;
     }
 
     private User me() {
@@ -181,6 +184,22 @@ public class EmployeeTaskController {
     public ResponseEntity<ApiResponse<Task>> complete(@PathVariable Long id, @RequestBody(required = false) Map<String, String> body) {
         String remarks = body == null ? null : body.get("remarks");
         return ResponseEntity.ok(ApiResponse.success(employeeTaskService.complete(id, me(), remarks)));
+    }
+
+    /**
+     * Installer on site: collect what the customer pays now, then mark the bill's stitched orders installed
+     * (delivered), which closes this installation task. Payload: {payments:[{method,amount}], deliveredTo,
+     * note, photoUrl, allowBalanceDue (managers only)}.
+     */
+    @PostMapping("/{id}/mark-installed")
+    @PreAuthorize(EXECUTE)
+    public ResponseEntity<ApiResponse<List<com.arudra.crm.dto.BundleView>>> markInstalled(@PathVariable Long id,
+            @RequestBody(required = false) com.arudra.crm.dto.BundleRequests.Handover body) {
+        org.springframework.security.core.Authentication auth =
+                org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        boolean manager = auth != null && auth.getAuthorities().stream()
+                .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()) || "ROLE_MANAGER".equals(a.getAuthority()));
+        return ResponseEntity.ok(ApiResponse.success(bundleService.markInstalled(id, body, me(), manager)));
     }
 
     /** Record how much the customer paid, collected on the project execution task (pending admin verification). */

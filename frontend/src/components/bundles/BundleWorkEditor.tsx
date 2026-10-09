@@ -33,10 +33,10 @@ const selectCls = "h-9 w-full rounded-md border bg-white px-2 text-sm";
 
 /**
  * The "needs stitching / work" editor: job header (type, stickers, charge, due, tailor, pickup/delivery)
- * plus, per bill line, a "needs work" tick, which bundle it goes in, and its work spec.
+ * plus, per bill line, a "needs work" tick, which order it goes in, and its work spec.
  */
 export default function BundleWorkEditor({
-  lines, header, onHeader, lineState, onLine, showCharge,
+  lines, header, onHeader, lineState, onLine, showCharge, installing,
 }: {
   lines: WorkLineOption[];
   header: WorkHeader;
@@ -44,6 +44,8 @@ export default function BundleWorkEditor({
   lineState: Record<number, WorkLine>;
   onLine: (key: number, patch: Partial<WorkLine>) => void;
   showCharge?: boolean;
+  /** The bill includes installation: the order goes out by Install (not pickup/delivery). */
+  installing?: boolean;
 }) {
   const [openKey, setOpenKey] = useState<number | null>(null);
   const bundleNos = Array.from({ length: header.bundleCount }, (_, i) => i + 1);
@@ -56,7 +58,7 @@ export default function BundleWorkEditor({
             {WORK_TYPES.map((w) => <option key={w.v} value={w.v}>{w.label}</option>)}
           </select>
         </label>
-        <label className="text-xs"><span className="text-slate-500">Bundles (stickers)</span>
+        <label className="text-xs"><span className="text-slate-500">Orders (stickers)</span>
           <Input type="number" min={1} max={20} value={header.bundleCount}
             onChange={(e) => onHeader({ bundleCount: Math.max(1, Math.min(20, Number(e.target.value) || 1)) })} className="h-9 mt-1" /></label>
         {showCharge && (
@@ -69,10 +71,16 @@ export default function BundleWorkEditor({
           <div className="mt-1"><ResourceSelect value={header.resource} onChange={(r) => onHeader({ resource: r })} placeholder="Assign later" /></div>
         </label>
         <label className="text-xs"><span className="text-slate-500">Handover</span>
-          <select value={header.handoverMode} onChange={(e) => onHeader({ handoverMode: e.target.value as WorkHeader["handoverMode"] })} className={`${selectCls} mt-1`}>
-            <option value="PICKUP">Customer pickup</option>
-            <option value="DELIVERY">Delivery</option>
-          </select>
+          {installing ? (
+            <div className="h-9 mt-1 flex items-center rounded-md border bg-sky-50 px-2 text-sm text-sky-800" title="This bill includes installation">
+              Install at site
+            </div>
+          ) : (
+            <select value={header.handoverMode} onChange={(e) => onHeader({ handoverMode: e.target.value as WorkHeader["handoverMode"] })} className={`${selectCls} mt-1`}>
+              <option value="PICKUP">Customer pickup</option>
+              <option value="DELIVERY">Delivery</option>
+            </select>
+          )}
         </label>
         <label className="text-xs"><span className="text-slate-500">Priority</span>
           <select value={header.priority} onChange={(e) => onHeader({ priority: e.target.value })} className={`${selectCls} mt-1`}>
@@ -101,8 +109,8 @@ export default function BundleWorkEditor({
                 </button>
                 {st.on && header.bundleCount > 1 && (
                   <select value={Math.min(st.bundleNo, header.bundleCount)} onChange={(e) => onLine(l.key, { bundleNo: Number(e.target.value) })}
-                    className="h-8 rounded-md border bg-white px-1.5 text-xs shrink-0" title="Which bundle">
-                    {bundleNos.map((n) => <option key={n} value={n}>Bundle {n}</option>)}
+                    className="h-8 rounded-md border bg-white px-1.5 text-xs shrink-0" title="Which order">
+                    {bundleNos.map((n) => <option key={n} value={n}>Order {n}</option>)}
                   </select>
                 )}
                 {st.on && (

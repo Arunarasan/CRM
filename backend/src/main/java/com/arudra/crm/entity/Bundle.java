@@ -42,15 +42,9 @@ public class Bundle extends BaseEntity {
     @Column(name = "bundle_total", nullable = false)
     private Integer bundleTotal = 1;
 
-    /** RECEIVED, CUTTING, STITCHING, QC_CHECK, PACKED, READY, DELIVERED, ON_HOLD, CANCELLED. */
+    /** ORDER, PROCESS, COMPLETED, DELIVERED, CANCELLED (V129). */
     @Column(nullable = false, length = 20)
-    private String status = "RECEIVED";
-
-    @Column(name = "held_from_status", length = 20)
-    private String heldFromStatus;
-
-    @Column(name = "hold_reason", length = 500)
-    private String holdReason;
+    private String status = "ORDER";
 
     /** STITCHING / MAKING / FITTING / OTHER. */
     @Column(name = "work_type", nullable = false, length = 30)
@@ -66,6 +60,10 @@ public class Bundle extends BaseEntity {
     @Column(name = "task_id")
     private Long taskId;
 
+    /** The bill's installation task, when the order is installed at the customer's place (V129). */
+    @Column(name = "install_task_id")
+    private Long installTaskId;
+
     @Column(name = "due_date")
     private LocalDate dueDate;
 
@@ -73,7 +71,7 @@ public class Bundle extends BaseEntity {
     @Column(nullable = false, length = 10)
     private String priority = "MEDIUM";
 
-    /** PICKUP / DELIVERY. */
+    /** PICKUP / DELIVERY, or INSTALL — set only from a bill that includes installation. */
     @Column(name = "handover_mode", nullable = false, length = 20)
     private String handoverMode = "PICKUP";
 

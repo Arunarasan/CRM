@@ -1,45 +1,53 @@
 import api from '../lib/api';
 import type { PageResp } from '../types/finance';
 
-// Bundle tracking — stickered bundles of customer material that need work (stitching / making).
-// Thin typed wrapper around /api/bundles.
+// Orders (called "bundles" in code and on /api/bundles) — stickered customer material that needs
+// work (stitching / making) after a sale. Four steps: Order → Process → Completed → Delivered.
 
-export const BUNDLE_FLOW = ['RECEIVED', 'CUTTING', 'STITCHING', 'QC_CHECK', 'PACKED', 'READY', 'DELIVERED'] as const;
-export type BundleStatus = (typeof BUNDLE_FLOW)[number] | 'ON_HOLD' | 'CANCELLED';
+export const BUNDLE_FLOW = ['ORDER', 'PROCESS', 'COMPLETED', 'DELIVERED'] as const;
+export type BundleStatus = (typeof BUNDLE_FLOW)[number] | 'CANCELLED';
 
+/** Labels incl. the pre-V129 steps, which still appear in old order history. */
 export const BUNDLE_STATUS_LABELS: Record<string, string> = {
+  ORDER: 'Order',
+  PROCESS: 'Process',
+  COMPLETED: 'Completed',
+  DELIVERED: 'Delivered',
+  CANCELLED: 'Cancelled',
   RECEIVED: 'Received',
   CUTTING: 'Cutting',
   STITCHING: 'Stitching',
   QC_CHECK: 'QC Check',
   PACKED: 'Packed',
   READY: 'Ready',
-  DELIVERED: 'Delivered',
   ON_HOLD: 'On Hold',
-  CANCELLED: 'Cancelled',
 };
+
+/** Status label for one order — a delivered INSTALL order reads "Installed". */
+export const statusLabel = (b: { status: string; handoverMode?: string | null }) =>
+  b.status === 'DELIVERED' && b.handoverMode === 'INSTALL' ? 'Installed' : (BUNDLE_STATUS_LABELS[b.status] ?? b.status);
 
 /** Pill colours per status (premium theme remaps these families centrally). */
 export const BUNDLE_STATUS_STYLES: Record<string, string> = {
-  RECEIVED: 'bg-slate-100 text-slate-700 border-slate-200',
-  CUTTING: 'bg-sky-50 text-sky-700 border-sky-200',
-  STITCHING: 'bg-indigo-50 text-indigo-700 border-indigo-200',
-  QC_CHECK: 'bg-violet-50 text-violet-700 border-violet-200',
-  PACKED: 'bg-amber-50 text-amber-800 border-amber-200',
-  READY: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  ORDER: 'bg-slate-100 text-slate-700 border-slate-200',
+  PROCESS: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+  COMPLETED: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   DELIVERED: 'bg-emerald-600 text-white border-emerald-600',
-  ON_HOLD: 'bg-orange-50 text-orange-700 border-orange-200',
   CANCELLED: 'bg-red-50 text-red-600 border-red-200',
 };
 
-/** Action label for moving INTO a status ("Start stitching", "Mark packed" …). */
+/** Action label for moving INTO a status. */
 export const BUNDLE_NEXT_ACTION: Record<string, string> = {
-  CUTTING: 'Start cutting',
-  STITCHING: 'Start stitching',
-  QC_CHECK: 'Send to QC',
-  PACKED: 'Mark packed',
-  READY: 'Mark ready',
+  PROCESS: 'Start work',
+  COMPLETED: 'Mark completed',
   DELIVERED: 'Hand over',
+};
+
+/** How the order leaves the shop. INSTALL is set only from a bill that includes installation. */
+export const HANDOVER_LABELS: Record<string, string> = {
+  PICKUP: 'Pickup',
+  DELIVERY: 'Delivery',
+  INSTALL: 'Install',
 };
 
 export const WORK_TYPES = [
@@ -84,8 +92,6 @@ export interface Bundle {
   bundleTotal: number;
   status: BundleStatus;
   nextStatus?: string | null;
-  heldFromStatus?: string | null;
-  holdReason?: string | null;
   workType: string;
   resourceType?: string | null;
   resourceId?: number | null;
@@ -93,7 +99,10 @@ export interface Bundle {
   dueDate?: string | null;
   overdue: boolean;
   priority: string;
-  handoverMode: 'PICKUP' | 'DELIVERY';
+  handoverMode: 'PICKUP' | 'DELIVERY' | 'INSTALL';
+  /** The bill's installation task (INSTALL orders). */
+  installTaskId?: number | null;
+  installerName?: string | null;
   rackLocation?: string | null;
   notes?: string | null;
   packedAt?: string | null;
@@ -122,8 +131,9 @@ export interface BundleSummary {
   byStatus: Record<string, number>;
   open: number;
   overdue: number;
+  /** Completed, waiting to go out. */
   ready: number;
-  onHold: number;
+  /** Order + Process. */
   inWork: number;
 }
 
@@ -183,8 +193,6 @@ export const bundleApi = {
   create: (body: CreateBundlesInput) => api.post<Bundle[]>('/bundles', body).then((r) => r.data),
   move: (id: number, body: { status: string; note?: string; photoUrl?: string; deliveredTo?: string }) =>
     api.put<Bundle>(`/bundles/${id}/status`, body).then((r) => r.data),
-  hold: (id: number, reason: string) => api.post<Bundle>(`/bundles/${id}/hold`, { reason }).then((r) => r.data),
-  release: (id: number) => api.post<Bundle>(`/bundles/${id}/release`).then((r) => r.data),
   assign: (id: number, resourceType: string | null, resourceId: number | null) =>
     api.put<Bundle>(`/bundles/${id}/assign`, { resourceType, resourceId }).then((r) => r.data),
   update: (id: number, body: Record<string, unknown>) => api.put<Bundle>(`/bundles/${id}`, body).then((r) => r.data),
