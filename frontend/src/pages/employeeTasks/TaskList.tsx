@@ -52,6 +52,15 @@ export default function TaskList() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Keep the list honest when the office acts on a task (an admin completes or reassigns it):
+  // refresh when the employee comes back to the app, and quietly every 30s while it's open.
+  useEffect(() => {
+    const onVisible = () => { if (document.visibilityState === 'visible') load(); };
+    document.addEventListener('visibilitychange', onVisible);
+    const timer = window.setInterval(() => { if (document.visibilityState === 'visible') load(); }, 30_000);
+    return () => { document.removeEventListener('visibilitychange', onVisible); window.clearInterval(timer); };
+  }, [load]);
+
   const withRefresh = (fn: () => Promise<unknown>) =>
     fn().then(() => setError('')).catch((e: any) => setError(e?.message || 'Action failed')).finally(load);
   const onStart = (id: number) => withRefresh(() => runOrQueue({ method: 'post', url: `/employee-tasks/${id}/start`, description: 'Start task' }));

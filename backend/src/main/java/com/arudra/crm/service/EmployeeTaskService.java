@@ -169,7 +169,7 @@ public class EmployeeTaskService {
         home.put("completedThisWeek", completedThisWeek);
         home.put("pending", pending);
         home.put("todaysTasks", tasks.stream()
-                .filter(t -> today.equals(t.getDueDate()) || isOverdue(t, today))
+                .filter(t -> !isClosed(t) && (today.equals(t.getDueDate()) || isOverdue(t, today)))
                 .map(t -> toCard(t, employee.getId()))
                 .collect(Collectors.toList()));
         return home;
@@ -177,9 +177,15 @@ public class EmployeeTaskService {
 
     public List<Map<String, Object>> getMyTasks(User employee, String status, String search) {
         List<TaskAssignment> mine = assignmentRepository.findByEmployeeId(employee.getId());
+        // Tasks the employee was taken off (only CANCELLED/REJECTED rows left) aren't theirs any more.
+        java.util.Set<Long> stillMine = mine.stream()
+                .filter(a -> !"CANCELLED".equals(a.getStatus()) && !"REJECTED".equals(a.getStatus()))
+                .map(a -> a.getTask().getId())
+                .collect(Collectors.toSet());
         return mine.stream()
                 .map(TaskAssignment::getTask)
                 .distinct()
+                .filter(t -> stillMine.contains(t.getId()))
                 .filter(t -> status == null || status.isBlank() || status.equalsIgnoreCase(t.getStatus()))
                 .filter(t -> search == null || search.isBlank()
                         || t.getTaskName().toLowerCase().contains(search.toLowerCase())
@@ -302,7 +308,14 @@ public class EmployeeTaskService {
             assertHasCapacity(employee);
         }
 
-        TaskAssignment a = new TaskAssignment();
+        // Picking a task you were taken off earlier reuses that row instead of stacking a duplicate.
+        TaskAssignment a = assignmentRepository.findByTaskIdAndEmployeeId(taskId, employee.getId())
+                .filter(x -> "CANCELLED".equals(x.getStatus()) || "REJECTED".equals(x.getStatus()))
+                .orElseGet(TaskAssignment::new);
+        a.setAssignedDate(LocalDateTime.now());
+        a.setStartedAt(null);
+        a.setCompletedAt(null);
+        a.setHoldExtendedAt(null);
         a.setTask(task);
         a.setResourceType(ResourceType.EMPLOYEE);
         a.setResourceId(employee.getId());
@@ -386,6 +399,8 @@ public class EmployeeTaskService {
         return (int) assignmentRepository.findByEmployeeId(employeeId).stream()
                 .filter(a -> CAPACITY_STATUSES.contains(a.getStatus()))
                 .filter(a -> a.getTask() != null)
+                // A task an admin closed (completed/cancelled) no longer occupies the employee's slots.
+                .filter(a -> !isClosed(a.getTask()))
                 .filter(a -> !isDataEntryLeadTask(a.getTask()))
                 .map(a -> a.getTask().getId())
                 .distinct().count();
@@ -1728,6 +1743,10 @@ public class EmployeeTaskService {
         return assignmentRepository.findByEmployeeId(employeeId).stream()
                 .filter(a -> ACTIVE_ASSIGNMENT_STATUSES.contains(a.getStatus()))
                 .collect(Collectors.toList());
+    }
+
+    private static boolean isClosed(Task t) {
+        return "COMPLETED".equals(t.getStatus()) || "CANCELLED".equals(t.getStatus());
     }
 
     private boolean isOverdue(Task t, LocalDate today) {

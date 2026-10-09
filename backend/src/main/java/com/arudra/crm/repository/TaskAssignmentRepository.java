@@ -13,12 +13,33 @@ import java.util.Optional;
 public interface TaskAssignmentRepository extends JpaRepository<TaskAssignment, Long> {
     List<TaskAssignment> findByTaskId(Long taskId);
     List<TaskAssignment> findByEmployeeId(Long employeeId);
-    Optional<TaskAssignment> findByTaskIdAndEmployeeId(Long taskId, Long employeeId);
+
+    /**
+     * A person can hold more than one row on a task (taken off → CANCELLED, then picked/assigned again).
+     * Rows come back live-first, newest first, so callers asking for "the" assignment get the current one
+     * instead of a NonUniqueResult crash.
+     */
+    @Query("SELECT a FROM TaskAssignment a WHERE a.task.id = :taskId AND a.employee.id = :employeeId " +
+           "ORDER BY CASE WHEN a.status IN ('CANCELLED', 'REJECTED') THEN 1 ELSE 0 END, a.id DESC")
+    List<TaskAssignment> findAllByTaskAndEmployeeLiveFirst(@Param("taskId") Long taskId, @Param("employeeId") Long employeeId);
+
+    default Optional<TaskAssignment> findByTaskIdAndEmployeeId(Long taskId, Long employeeId) {
+        return findAllByTaskAndEmployeeLiveFirst(taskId, employeeId).stream().findFirst();
+    }
 
     // Unified workforce queries (resource-type agnostic).
     List<TaskAssignment> findByResourceType(String resourceType);
     List<TaskAssignment> findByResourceTypeAndResourceId(String resourceType, Long resourceId);
-    Optional<TaskAssignment> findByTaskIdAndResourceTypeAndResourceId(Long taskId, String resourceType, Long resourceId);
+
+    @Query("SELECT a FROM TaskAssignment a WHERE a.task.id = :taskId AND a.resourceType = :type AND a.resourceId = :resourceId " +
+           "ORDER BY CASE WHEN a.status IN ('CANCELLED', 'REJECTED') THEN 1 ELSE 0 END, a.id DESC")
+    List<TaskAssignment> findAllByTaskAndResourceLiveFirst(@Param("taskId") Long taskId, @Param("type") String resourceType,
+                                                           @Param("resourceId") Long resourceId);
+
+    /** Live-first like {@link #findByTaskIdAndEmployeeId} — tolerates re-assignment duplicates. */
+    default Optional<TaskAssignment> findByTaskIdAndResourceTypeAndResourceId(Long taskId, String resourceType, Long resourceId) {
+        return findAllByTaskAndResourceLiveFirst(taskId, resourceType, resourceId).stream().findFirst();
+    }
     List<TaskAssignment> findByStatusNot(String status);
     List<TaskAssignment> findByStatusIn(List<String> statuses);
 
