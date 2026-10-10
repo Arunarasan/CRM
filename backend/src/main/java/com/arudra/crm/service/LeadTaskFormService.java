@@ -184,6 +184,36 @@ public class LeadTaskFormService {
     }
 
     /**
+     * "Save changes" on the Collect Requirement form — writes the edited lead details straight onto the lead
+     * WITHOUT completing the task (no next-step, no approval). Any carried-forward draft on this task is
+     * updated too, so reopening the form shows the saved values rather than the older draft.
+     */
+    @Transactional
+    public Map<String, Object> saveRequirementEdits(Long taskId, User employee, Map<String, Object> payload) {
+        Task task = taskRepository.findById(taskId).orElseThrow(() -> new RuntimeException("Task not found"));
+        if (!"REQUIREMENT".equals(formTypeFor(task)) || isOpenCallTask(task)) {
+            throw new IllegalStateException("Only a lead's Collect Requirement task can save lead details.");
+        }
+        Lead lead = employeeTaskService.leadForOpenTask(taskId, employee, "edit the lead");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> data = payload != null && payload.get("data") instanceof Map
+                ? new HashMap<>((Map<String, Object>) payload.get("data")) : new HashMap<>();
+        // Scheduling belongs to "Mark as Completed", never to a plain save.
+        List.of("siteVisitDate", "followUpDate", "followUpTime", "followUpNotes").forEach(data::remove);
+        applyRequirementFields(lead, data);
+        leadRepository.save(lead);
+        leadService.addNote(lead.getId(), "Lead details updated from the Collect Requirement task", employee);
+
+        submissionRepository.findByTaskIdOrderBySubmittedAtDesc(taskId).stream().findFirst().ifPresent(draft -> {
+            Map<String, Object> merged = new HashMap<>(readJsonMap(draft.getDataJson()));
+            merged.putAll(data);
+            draft.setDataJson(writeJson(merged));
+            submissionRepository.save(draft);
+        });
+        return Map.of("leadId", lead.getId());
+    }
+
+    /**
      * Applies a task's captured form data onto the native lead once the task is finalized/approved.
      * Fired for every task completion; a no-op for tasks that carry no pending submission.
      */
@@ -211,6 +241,73 @@ public class LeadTaskFormService {
         }
     }
 
+    /** Writes the Collect Requirement form's lead fields (summary, contact, address, property, scope, budget). */
+    private void applyRequirementFields(Lead lead, Map<String, Object> data) {
+        // Lead summary + contact
+        setIf(str(data.get("name")), lead::setName);
+        setIf(str(data.get("companyName")), lead::setCompanyName);
+        setIf(str(data.get("contactPerson")), lead::setContactPerson);
+        setIf(str(data.get("mobileNumber")), lead::setMobileNumber);
+        setIf(str(data.get("alternateMobile")), lead::setAlternateMobile);
+        setIf(str(data.get("whatsappNumber")), lead::setWhatsappNumber);
+        setIf(str(data.get("email")), lead::setEmail);
+        setIf(str(data.get("gstNumber")), lead::setGstNumber);
+        // Classification
+        setIf(str(data.get("leadType")), lead::setLeadType);
+        setIf(str(data.get("leadSource")), lead::setLeadSource);
+        setIf(intVal(data.get("rating")), lead::setRating);
+        setIf(str(data.get("priority")), lead::setPriority);
+        setIf(str(data.get("leadTemperature")), lead::setLeadTemperature);
+        // Address
+        setIf(str(data.get("address")), lead::setAddress);
+        setIf(str(data.get("city")), lead::setCity);
+        setIf(str(data.get("district")), lead::setDistrict);
+        setIf(str(data.get("state")), lead::setState);
+        setIf(str(data.get("pincode")), lead::setPincode);
+        setIf(str(data.get("landmark")), lead::setLandmark);
+        setIf(str(data.get("googleMapLocation")), lead::setGoogleMapLocation);
+        // Property
+        setIf(str(data.get("propertyType")), lead::setPropertyType);
+        setIf(str(data.get("currentConstructionStage")), lead::setCurrentConstructionStage);
+        setIf(intVal(data.get("floorCount")), lead::setFloorCount);
+        setIf(dec(data.get("areaSqft")), lead::setAreaSqft);
+        setIf(str(data.get("propertyName")), lead::setPropertyName);
+        setIf(str(data.get("siteAddress")), lead::setSiteAddress);
+        setIf(dec(data.get("expectedWorkArea")), lead::setExpectedWorkArea);
+        // Requirement scope (free text)
+        setIf(str(data.get("customerRequirements")), lead::setCustomerRequirements);
+        setIf(str(data.get("projectDescription")), lead::setProjectDescription);
+        setIf(str(data.get("requirementCategory")), lead::setRequirementCategory);
+        setIf(str(data.get("requirementProduct")), lead::setRequirementProduct);
+        setIf(str(data.get("roomsRequired")), lead::setRoomsRequired);
+        setIf(str(data.get("specialRequests")), lead::setSpecialRequests);
+        setIf(str(data.get("remarks")), lead::setRemarks);
+        // Scope-of-work checklist — authoritative, so set whenever the key is present.
+        setBool(data, "reqKitchen", lead::setReqKitchen);
+        setBool(data, "reqWardrobe", lead::setReqWardrobe);
+        setBool(data, "reqTvUnit", lead::setReqTvUnit);
+        setBool(data, "reqFalseCeiling", lead::setReqFalseCeiling);
+        setBool(data, "reqPainting", lead::setReqPainting);
+        setBool(data, "reqFlooring", lead::setReqFlooring);
+        setBool(data, "reqElectrical", lead::setReqElectrical);
+        setBool(data, "reqPlumbing", lead::setReqPlumbing);
+        setBool(data, "reqWoodFinish", lead::setReqWoodFinish);
+        // Preferences
+        setIf(str(data.get("preferredDesignStyle")), lead::setPreferredDesignStyle);
+        setIf(str(data.get("preferredMaterial")), lead::setPreferredMaterial);
+        setIf(str(data.get("preferredColorTheme")), lead::setPreferredColorTheme);
+        // Budget & timeline
+        setIf(dec(data.get("estimatedBudget")), lead::setEstimatedBudget);
+        setIf(dec(data.get("minimumBudget")), lead::setMinimumBudget);
+        setIf(dec(data.get("maximumBudget")), lead::setMaximumBudget);
+        setIf(dec(data.get("expectedProjectValue")), lead::setExpectedProjectValue);
+        setIf(str(data.get("paymentPreference")), lead::setPaymentPreference);
+        setIf(date(data.get("expectedStartDate")), lead::setExpectedStartDate);
+        setIf(date(data.get("expectedEndDate")), lead::setExpectedEndDate);
+        setIf(date(data.get("preferredCompletionDate")), lead::setPreferredCompletionDate);
+        setIf(str(data.get("estimatedDuration")), lead::setEstimatedDuration);
+    }
+
     private void applyToLead(String formType, Lead lead, User employee, String outcome, String notes,
                              LocalDate nextFollowUp, Map<String, Object> data) {
         switch (formType) {
@@ -228,69 +325,7 @@ public class LeadTaskFormService {
                 leadService.addFollowup(lead.getId(), f, employee); // updates lead follow-up fields + timeline
             }
             case "REQUIREMENT" -> {
-                // Lead summary + contact
-                setIf(str(data.get("name")), lead::setName);
-                setIf(str(data.get("companyName")), lead::setCompanyName);
-                setIf(str(data.get("contactPerson")), lead::setContactPerson);
-                setIf(str(data.get("mobileNumber")), lead::setMobileNumber);
-                setIf(str(data.get("alternateMobile")), lead::setAlternateMobile);
-                setIf(str(data.get("whatsappNumber")), lead::setWhatsappNumber);
-                setIf(str(data.get("email")), lead::setEmail);
-                setIf(str(data.get("gstNumber")), lead::setGstNumber);
-                // Classification
-                setIf(str(data.get("leadType")), lead::setLeadType);
-                setIf(str(data.get("leadSource")), lead::setLeadSource);
-                setIf(intVal(data.get("rating")), lead::setRating);
-                setIf(str(data.get("priority")), lead::setPriority);
-                setIf(str(data.get("leadTemperature")), lead::setLeadTemperature);
-                // Address
-                setIf(str(data.get("address")), lead::setAddress);
-                setIf(str(data.get("city")), lead::setCity);
-                setIf(str(data.get("district")), lead::setDistrict);
-                setIf(str(data.get("state")), lead::setState);
-                setIf(str(data.get("pincode")), lead::setPincode);
-                setIf(str(data.get("landmark")), lead::setLandmark);
-                setIf(str(data.get("googleMapLocation")), lead::setGoogleMapLocation);
-                // Property
-                setIf(str(data.get("propertyType")), lead::setPropertyType);
-                setIf(str(data.get("currentConstructionStage")), lead::setCurrentConstructionStage);
-                setIf(intVal(data.get("floorCount")), lead::setFloorCount);
-                setIf(dec(data.get("areaSqft")), lead::setAreaSqft);
-                setIf(str(data.get("propertyName")), lead::setPropertyName);
-                setIf(str(data.get("siteAddress")), lead::setSiteAddress);
-                setIf(dec(data.get("expectedWorkArea")), lead::setExpectedWorkArea);
-                // Requirement scope (free text)
-                setIf(str(data.get("customerRequirements")), lead::setCustomerRequirements);
-                setIf(str(data.get("projectDescription")), lead::setProjectDescription);
-                setIf(str(data.get("requirementCategory")), lead::setRequirementCategory);
-                setIf(str(data.get("requirementProduct")), lead::setRequirementProduct);
-                setIf(str(data.get("roomsRequired")), lead::setRoomsRequired);
-                setIf(str(data.get("specialRequests")), lead::setSpecialRequests);
-                setIf(str(data.get("remarks")), lead::setRemarks);
-                // Scope-of-work checklist — authoritative, so set whenever the key is present.
-                setBool(data, "reqKitchen", lead::setReqKitchen);
-                setBool(data, "reqWardrobe", lead::setReqWardrobe);
-                setBool(data, "reqTvUnit", lead::setReqTvUnit);
-                setBool(data, "reqFalseCeiling", lead::setReqFalseCeiling);
-                setBool(data, "reqPainting", lead::setReqPainting);
-                setBool(data, "reqFlooring", lead::setReqFlooring);
-                setBool(data, "reqElectrical", lead::setReqElectrical);
-                setBool(data, "reqPlumbing", lead::setReqPlumbing);
-                setBool(data, "reqWoodFinish", lead::setReqWoodFinish);
-                // Preferences
-                setIf(str(data.get("preferredDesignStyle")), lead::setPreferredDesignStyle);
-                setIf(str(data.get("preferredMaterial")), lead::setPreferredMaterial);
-                setIf(str(data.get("preferredColorTheme")), lead::setPreferredColorTheme);
-                // Budget & timeline
-                setIf(dec(data.get("estimatedBudget")), lead::setEstimatedBudget);
-                setIf(dec(data.get("minimumBudget")), lead::setMinimumBudget);
-                setIf(dec(data.get("maximumBudget")), lead::setMaximumBudget);
-                setIf(dec(data.get("expectedProjectValue")), lead::setExpectedProjectValue);
-                setIf(str(data.get("paymentPreference")), lead::setPaymentPreference);
-                setIf(date(data.get("expectedStartDate")), lead::setExpectedStartDate);
-                setIf(date(data.get("expectedEndDate")), lead::setExpectedEndDate);
-                setIf(date(data.get("preferredCompletionDate")), lead::setPreferredCompletionDate);
-                setIf(str(data.get("estimatedDuration")), lead::setEstimatedDuration);
+                applyRequirementFields(lead, data);
                 leadRepository.save(lead);
                 String summary = str(data.get("projectDescription"));
                 if (summary == null) summary = str(data.get("customerRequirements"));

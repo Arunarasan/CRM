@@ -14,6 +14,9 @@ import java.util.Map;
 @Service
 public class TaskService {
 
+    @Autowired @org.springframework.context.annotation.Lazy
+    private LeadService leadService;
+
     @Autowired
     private TaskRepository taskRepository;
     
@@ -211,7 +214,16 @@ public class TaskService {
         Task task = getTaskById(taskId);
         comment.setTask(task);
         comment.setAuthor(user);
-        return commentRepository.save(comment);
+        TaskComment saved = commentRepository.save(comment);
+        // A note on a lead's task also lands in the lead's Notes, so the office sees it on the lead page.
+        if (task.getLeadId() != null && comment.getContent() != null && !comment.getContent().isBlank()) {
+            try {
+                boolean voiceOnly = comment.getAudioUrl() != null && comment.getContent().trim().endsWith("Voice note");
+                String text = voiceOnly ? "Voice note added (play it on the task)" : comment.getContent().trim();
+                leadService.addNote(task.getLeadId(), "[" + task.getTaskName() + "] " + text, user);
+            } catch (Exception ignored) { /* the task note is saved either way */ }
+        }
+        return saved;
     }
     
     public TaskAttachment addAttachment(Long taskId, TaskAttachment attachment) {

@@ -1686,26 +1686,126 @@ public class EmployeeTaskService {
      */
     @Transactional
     public Map<String, Object> saveSiteLocation(Long taskId, User employee, Double latitude, Double longitude) {
+        return saveSiteLocation(taskId, employee, latitude, longitude, Map.of());
+    }
+
+    /**
+     * Saves the employee's live GPS position as the lead's map pin. {@code address} carries what the phone
+     * looked up for that spot (address/city/district/state/pincode) — each fills the lead only where it's blank,
+     * so a GPS tap never overwrites an address someone typed.
+     */
+    public Map<String, Object> saveSiteLocation(Long taskId, User employee, Double latitude, Double longitude,
+                                                Map<String, String> address) {
         if (latitude == null || longitude == null || Math.abs(latitude) > 90 || Math.abs(longitude) > 180) {
             throw new IllegalArgumentException("A valid latitude and longitude are required");
         }
+        com.arudra.crm.entity.Lead lead = leadForOpenTask(taskId, employee, "save the site location");
+        String pin = String.format(java.util.Locale.ROOT, "https://www.google.com/maps?q=%.6f,%.6f", latitude, longitude);
+        lead.setGoogleMapLocation(pin);
+        if (address != null) {
+            fillIfBlank(lead.getAddress(), address.get("address"), lead::setAddress);
+            fillIfBlank(lead.getCity(), address.get("city"), lead::setCity);
+            fillIfBlank(lead.getDistrict(), address.get("district"), lead::setDistrict);
+            fillIfBlank(lead.getState(), address.get("state"), lead::setState);
+            fillIfBlank(lead.getPincode(), address.get("pincode"), lead::setPincode);
+        }
+        leadRepository.save(lead);
+        return Map.of("googleMapLocation", pin);
+    }
+
+    private static void fillIfBlank(String current, String value, java.util.function.Consumer<String> setter) {
+        if ((current == null || current.isBlank()) && value != null && !value.isBlank()) setter.accept(value.trim());
+    }
+
+    /**
+     * The lead behind an open task the employee is actively on (a re-assigned employee can have an old
+     * CANCELLED row + a new one, so look for an active row, not a unique one). {@code what} finishes the
+     * "Take this task first to …" message.
+     */
+    public com.arudra.crm.entity.Lead leadForOpenTask(Long taskId, User employee, String what) {
         Task task = getTask(taskId);
         if ("COMPLETED".equals(task.getStatus()) || "CANCELLED".equals(task.getStatus())) {
-            throw new IllegalStateException("This task is closed — the site location can't be changed from it.");
+            throw new IllegalStateException("This task is closed — you can't " + what + " from it.");
         }
-        // An employee can be re-assigned (old CANCELLED row + new one), so look for an active row, not a unique one.
         boolean onTask = assignmentRepository.findByTaskId(taskId).stream()
                 .anyMatch(a -> a.getEmployee() != null && a.getEmployee().getId().equals(employee.getId())
                         && ACTIVE_ASSIGNMENT_STATUSES.contains(a.getStatus()) && !"COMPLETED".equals(a.getStatus()));
-        if (!onTask) throw new IllegalStateException("Take this task first to save the site location.");
+        if (!onTask) throw new IllegalStateException("Take this task first to " + what + ".");
+        com.arudra.crm.entity.Lead lead = leadOf(task);
+        if (lead == null) throw new IllegalStateException("This task has no lead to " + what + " on");
+        return lead;
+    }
+
+    private com.arudra.crm.entity.Lead leadOf(Task task) {
         Long leadId = task.getLeadId() != null ? task.getLeadId()
                 : (task.getProject() != null && task.getProject().getLead() != null ? task.getProject().getLead().getId() : null);
-        com.arudra.crm.entity.Lead lead = leadId != null ? leadRepository.findById(leadId).orElse(null) : null;
-        if (lead == null) throw new IllegalStateException("This task has no lead to save a site location on");
-        String pin = String.format(java.util.Locale.ROOT, "https://www.google.com/maps?q=%.6f,%.6f", latitude, longitude);
-        lead.setGoogleMapLocation(pin);
-        leadRepository.save(lead);
-        return Map.of("googleMapLocation", pin);
+        return leadId != null ? leadRepository.findById(leadId).orElse(null) : null;
+    }
+
+    // ---------------------------------------------------------------- Lead photos (from the task page)
+
+    private static final java.util.Set<String> IMAGE_EXT =
+            java.util.Set.of("jpg", "jpeg", "png", "webp", "gif", "heic", "heif", "bmp");
+
+    private static boolean isImageDoc(LeadDocument d) {
+        if (d.getFileUrl() == null) return false;
+        if ("image".equalsIgnoreCase(d.getDocumentType()) || "photo".equalsIgnoreCase(d.getDocumentType())) return true;
+        String name = (d.getFileName() != null ? d.getFileName() : d.getFileUrl()).split("\\?")[0];
+        int dot = name.lastIndexOf('.');
+        return dot >= 0 && IMAGE_EXT.contains(name.substring(dot + 1).toLowerCase(java.util.Locale.ROOT));
+    }
+
+    private static Map<String, Object> photoRow(LeadDocument d, User me) {
+        Map<String, Object> m = new HashMap<>();
+        m.put("id", d.getId());
+        m.put("fileUrl", d.getFileUrl());
+        m.put("fileName", d.getFileName());
+        m.put("category", d.getCategory());
+        m.put("uploadedByName", d.getUploadedBy() != null ? d.getUploadedBy().getName() : null);
+        m.put("createdAt", d.getCreatedAt());
+        m.put("mine", me != null && d.getUploadedBy() != null && me.getId().equals(d.getUploadedBy().getId()));
+        return m;
+    }
+
+    /** Every photo on the task's lead, newest first. */
+    public List<Map<String, Object>> leadPhotos(Long taskId, User me) {
+        com.arudra.crm.entity.Lead lead = leadOf(getTask(taskId));
+        if (lead == null) return List.of();
+        return leadDocumentRepository.findByLeadId(lead.getId()).stream()
+                .filter(EmployeeTaskService::isImageDoc)
+                .sorted(Comparator.comparing(LeadDocument::getId).reversed())
+                .map(d -> photoRow(d, me))
+                .collect(Collectors.toList());
+    }
+
+    /** Saves an uploaded photo straight onto the lead (its Documents tab), as a "Property Images" photo. */
+    @Transactional
+    public Map<String, Object> addLeadPhoto(Long taskId, User employee, String fileUrl, String fileName) {
+        if (fileUrl == null || fileUrl.isBlank()) throw new IllegalArgumentException("fileUrl is required");
+        com.arudra.crm.entity.Lead lead = leadForOpenTask(taskId, employee, "add photos");
+        LeadDocument d = new LeadDocument();
+        d.setLead(lead);
+        d.setFileUrl(fileUrl);
+        d.setFileName(fileName != null && !fileName.isBlank() ? fileName : "Site photo");
+        d.setDocumentType("Image");
+        d.setCategory("Property Images");
+        d.setUploadedBy(employee);
+        return photoRow(leadDocumentRepository.save(d), employee);
+    }
+
+    /** Removes a photo the employee added themselves (others' photos are managed from the office). */
+    @Transactional
+    public void deleteLeadPhoto(Long taskId, Long documentId, User employee) {
+        com.arudra.crm.entity.Lead lead = leadForOpenTask(taskId, employee, "remove photos");
+        LeadDocument d = leadDocumentRepository.findById(documentId)
+                .orElseThrow(() -> new IllegalArgumentException("Photo not found"));
+        if (d.getLead() == null || !d.getLead().getId().equals(lead.getId())) {
+            throw new IllegalArgumentException("Photo not found on this lead");
+        }
+        if (d.getUploadedBy() == null || !d.getUploadedBy().getId().equals(employee.getId())) {
+            throw new IllegalStateException("You can only remove photos you added.");
+        }
+        leadDocumentRepository.delete(d);
     }
 
     public Map<String, Object> checkOut(Long taskId, User employee, Double latitude, Double longitude) {

@@ -20,6 +20,8 @@ import MaterialUsageSheet from './components/MaterialUsageSheet';
 import LeadTaskFormSheet from './components/LeadTaskFormSheet';
 import RequirementFormSheet from './components/RequirementFormSheet';
 import RequirementSummaryCard from './components/RequirementSummaryCard';
+import { toast } from '@/components/ui/toast';
+import LeadPhotosCard from './components/LeadPhotosCard';
 import RequirementTaskView from './components/RequirementTaskView';
 import { ItemsToMakeCard, ProjectInfoCards, ProjectTaskHero } from './components/ProjectTaskLayout';
 import ProjectWorkTaskView, { WorkTab } from '@/components/projectWork/ProjectWorkTaskView';
@@ -38,12 +40,12 @@ import AudioPlayer from "@/components/AudioPlayer";
 
 /** A quiet disclosure row — keeps history/team/notes tucked away until wanted. Designed to sit
  *  inside a grouped card with `divide-y`, so it carries no border of its own (spec §6). */
-function Disclosure({ title, count, meta, icon, children }: {
-  title: string; count?: number; icon?: React.ReactNode; children: React.ReactNode;
+function Disclosure({ title, count, meta, icon, children, defaultOpen = false }: {
+  title: string; count?: number; icon?: React.ReactNode; children: React.ReactNode; defaultOpen?: boolean;
   /** Always-on hint pill (e.g. "0 photos") — replaces the count pill when given. */
   meta?: string;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   return (
     <div>
       <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-3 px-4 py-3.5 text-left">
@@ -386,7 +388,10 @@ export default function TaskDetail() {
 
   if (!task) return <div className="p-6 text-center text-sm text-muted-foreground">Loading…</div>;
 
-  const mine = task.myAssignmentStatus;
+  // A released/declined assignment (e.g. the data-entry hold ran out) no longer makes the task "mine" —
+  // the employee can pick it up again.
+  const mine = task.myAssignmentStatus === 'CANCELLED' || task.myAssignmentStatus === 'REJECTED'
+    ? undefined : task.myAssignmentStatus;
   // Once the work is submitted/approved the task is read-only for the employee: no more progress,
   // photos, notes, issues, material or checklist edits. A manager "reject → rework" reopens it.
   const locked = mine === 'COMPLETED' || ['WAITING_APPROVAL', 'COMPLETED', 'CANCELLED'].includes(task.status);
@@ -496,7 +501,7 @@ export default function TaskDetail() {
 
       <div className="flex flex-col gap-3.5 p-4">
         {reqView && task.lead && (
-          <RequirementTaskView task={task} lead={task.lead} canEdit={canSubmitForm} onEdit={openForm} onReload={load}
+          <RequirementTaskView task={task} lead={task.lead} canEdit={canSubmitForm} takeFirst={canPick} onEdit={openForm} onReload={load}
             more={<LeadDetailsCard lead={task.lead} extrasOnly />} />
         )}
 
@@ -777,7 +782,7 @@ export default function TaskDetail() {
 
         {/* Remarks — shown for every task type (including lead forms); tracked project tasks use Team chat. */}
         {!workTracking && <div className="overflow-hidden rounded-2xl border border-[#EDE6D8] bg-white shadow-[0_2px_10px_rgba(80,55,20,0.05)]">
-          <Disclosure title={reqView ? 'Task notes' : isProjectTask ? 'Remarks & Notes' : 'Remarks'} count={task.comments.length}
+          <Disclosure defaultOpen={reqView} title={reqView ? 'Task notes & photos' : isProjectTask ? 'Remarks & Notes' : 'Remarks'} count={task.comments.length}
             meta={isProjectTask ? (task.comments.length ? `${task.comments.length} note${task.comments.length === 1 ? '' : 's'}` : 'Add notes…') : undefined}
             icon={<MessageSquare className="h-4 w-4" />}>
             <ul className="mb-2.5 flex flex-col gap-2">
@@ -807,7 +812,14 @@ export default function TaskDetail() {
                 <div className="mt-2">
                   <AudioCaptureField value={voice} onChange={onVoiceRemark} module="task-remark" label="Or add a voice note" />
                 </div>
+                {task.leadId && <p className="mt-1.5 text-[11px] text-[#8A918C]">Notes also show on the lead page.</p>}
               </>
+            )}
+            {/* Collect Requirement: site photos live with the notes — taken or uploaded, saved on the lead's Documents. */}
+            {reqView && (
+              <div className="mt-3.5 border-t border-[#F1ECE2] pt-3">
+                <LeadPhotosCard taskId={taskId} canEdit={canSubmitForm} takeFirst={canPick} embedded />
+              </div>
             )}
           </Disclosure>
         </div>}
@@ -925,6 +937,7 @@ export default function TaskDetail() {
           open={formOpen}
           onOpenChange={setFormOpen}
           onSaved={() => { setFormOpen(false); load(); navigate('/employee/tasks'); }}
+          onDetailsSaved={() => { toast.success('Lead details saved'); load(); }}
         />
       ) : isLeadForm && task.formType && (
         <LeadTaskFormSheet

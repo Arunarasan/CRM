@@ -2,18 +2,23 @@ import { BaseInput } from '@/components/ui/input';
 import { useEffect, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { X, ChevronDown, User, Phone, MapPin, Home, ListChecks, FileText, Camera, Check, Wallet, CalendarClock, Mic } from 'lucide-react';
+import { X, ChevronDown, User, Phone, MapPin, Home, ListChecks, FileText, Camera, Check, Wallet, CalendarClock, Mic, Crosshair, Loader2 } from 'lucide-react';
 import api from '@/lib/api';
 import { employeeTaskApi } from '@/api/employeeTaskApi';
+import { resolveFileUrl } from '@/lib/uploadFile';
 import { LeadFormMedia } from '@/types/employeeTask';
 import TaskCallRecordings from './TaskCallRecordings';
+import PhotoPickButtons from './PhotoPickButtons';
+import { getBestPosition, locationErrorMessage, reverseGeocode } from '@/lib/geo';
 
 /**
  * The redesigned "Collect Requirement" form for the TT_COLLECT_REQUIREMENT task. Captures the WHOLE
  * lead picture the office needs — the same groups as the desktop lead's Sales Journey — but on one
  * portal page as collapsible open/close sections. Existing lead values are pre-filled so the field
  * employee confirms/edits rather than retyping. On submit every field is written onto the lead
- * (once the task is approved).
+ * (once the task is approved). "Save changes" writes the edits onto the lead right away WITHOUT
+ * completing the task. Photos taken here go straight onto the lead (except a call's new lead, where
+ * they ride along with the submission that creates it).
  */
 
 const CONSTRUCTION_STAGES = ['New Construction', 'Ready to Move', 'Under Renovation', 'Old / Resale', 'Bare Shell'];
@@ -49,8 +54,10 @@ const SECTION_FIELDS: Record<string, string[]> = {
 
 type Values = Record<string, string>;
 
-export default function RequirementFormSheet({ taskId, leadId, open, onOpenChange, onSaved, initial, fromCall, focus }: {
+export default function RequirementFormSheet({ taskId, leadId, open, onOpenChange, onSaved, onDetailsSaved, initial, fromCall, focus }: {
   taskId: number; leadId?: number | null; open: boolean; onOpenChange: (open: boolean) => void; onSaved: () => void;
+  /** "Save changes" finished — lead updated, task still open. */
+  onDetailsSaved?: () => void;
   /** Starting values when there's no lead yet (a call task: the caller's number, name, the office note). */
   initial?: Record<string, string | null | undefined>;
   /** A call task with no lead yet — submitting creates the lead (and attaches the call's recording). */
@@ -67,6 +74,10 @@ export default function RequirementFormSheet({ taskId, leadId, open, onOpenChang
   const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [locating, setLocating] = useState(false);
+  // Photos saved straight onto the lead from this form (shown as a strip; the task page lists them all).
+  const [savedPhotos, setSavedPhotos] = useState<string[]>([]);
+  const photosToLead = !fromCall && !!leadId;
 
   // Prefill from the lead AND the latest draft (so a re-collected follow-up shows what was already entered).
   useEffect(() => {
@@ -124,18 +135,59 @@ export default function RequirementFormSheet({ taskId, leadId, open, onOpenChang
     ? Object.values(scope).filter(Boolean).length
     : (SECTION_FIELDS[id] || []).filter((k) => v[k]?.trim()).length;
 
-  const onFiles = async (files: FileList | null) => {
-    if (!files || files.length === 0) return;
+  const onFiles = async (files: File[]) => {
+    if (files.length === 0) return;
     setUploading(true);
     try {
-      for (const file of Array.from(files)) {
-        const res = await employeeTaskApi.uploadFile(file, 'lead-task');
-        setMedia((prev) => [...prev, { url: res.fileUrl, type: 'PHOTO', caption: res.fileName }]);
+      for (const file of files) {
+        const res = await employeeTaskApi.uploadFile(file, photosToLead ? 'LEAD' : 'lead-task');
+        if (photosToLead) {
+          await employeeTaskApi.addLeadPhoto(taskId, { fileUrl: res.fileUrl, fileName: res.fileName || file.name });
+          setSavedPhotos((prev) => [...prev, res.fileUrl]);
+        } else {
+          setMedia((prev) => [...prev, { url: res.fileUrl, type: 'PHOTO', caption: res.fileName }]);
+        }
       }
-    } catch { setError('Upload failed. Try again.'); } finally { setUploading(false); }
+    } catch (e: any) { setError(e?.response?.data?.message || 'Upload failed. Try again.'); } finally { setUploading(false); }
+  };
+
+  // GPS -> map link + the street address for that spot (only blank address fields are filled).
+  const useGps = async () => {
+    setError('');
+    setLocating(true);
+    try {
+      const fix = await getBestPosition({ targetAccuracyM: 25, maxWaitMs: 15000 });
+      if (!fix) { setError(await locationErrorMessage()); return; }
+      const addr = await reverseGeocode(fix.lat, fix.lng);
+      setV((p) => {
+        const n: Values = { ...p, googleMapLocation: `https://www.google.com/maps?q=${fix.lat.toFixed(6)},${fix.lng.toFixed(6)}` };
+        (Object.entries(addr) as [string, string | undefined][]).forEach(([k, val]) => { if (val && !p[k]?.trim()) n[k] = val; });
+        return n;
+      });
+    } finally { setLocating(false); }
   };
 
   const SCHED_KEYS = ['siteVisitDate', 'followUpDate', 'followUpTime', 'followUpNotes'];
+  // The lead fields as the backend expects them (scheduling keys left out).
+  const leadData = () => {
+    const data: Record<string, string | boolean> = {};
+    for (const [k, val] of Object.entries(v)) if (val != null && val !== '' && !SCHED_KEYS.includes(k)) data[k] = val;
+    for (const s of SCOPE) data[s.key] = !!scope[s.key];
+    return data;
+  };
+
+  const saveChanges = async () => {
+    setError('');
+    setSaving(true);
+    try {
+      await employeeTaskApi.saveLeadForm(taskId, leadData());
+      onOpenChange(false);
+      onDetailsSaved?.();
+    } catch (e: any) {
+      setError(e?.response?.data?.message || e?.message || 'Could not save the changes.');
+    } finally { setSaving(false); }
+  };
+
   const submit = async () => {
     setError('');
     if (fromCall && !v.name?.trim()) { setError("Enter the customer's name (Lead Summary) — it creates the lead."); return; }
@@ -149,9 +201,7 @@ export default function RequirementFormSheet({ taskId, leadId, open, onOpenChang
     }
     setSaving(true);
     try {
-      const data: Record<string, string | boolean> = {};
-      for (const [k, val] of Object.entries(v)) if (val != null && val !== '' && !SCHED_KEYS.includes(k)) data[k] = val;
-      for (const s of SCOPE) data[s.key] = !!scope[s.key];
+      const data = leadData();
       if (nextStep === 'VISIT') {
         data.siteVisitDate = v.siteVisitDate;
       } else {
@@ -241,6 +291,12 @@ export default function RequirementFormSheet({ taskId, leadId, open, onOpenChang
             </div>
             <Text label="Landmark" value={v.landmark} onChange={(x) => set('landmark', x)} />
             <Text label="Google Maps link" value={v.googleMapLocation} onChange={(x) => set('googleMapLocation', x)} />
+            <button type="button" onClick={useGps} disabled={locating}
+              className="flex items-center justify-center gap-2 rounded-xl border border-[#0A573B]/30 bg-[#F3F8F5] px-3 py-2.5 text-[13px] font-semibold text-[#0A573B] active:scale-[0.98] disabled:opacity-60">
+              {locating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Crosshair className="h-4 w-4" />}
+              {locating ? 'Getting GPS location…' : 'Set location by GPS'}
+            </button>
+            <p className="-mt-1 text-[11px] text-muted-foreground">Turn on GPS and stand at the site. Fills the map link and any empty address fields.</p>
           </Section>
 
           <Section id="property" icon={<Home className="h-4 w-4" />} title="Property Details" count={filledCount('property')} openSecs={openSecs} toggle={toggleSec}>
@@ -317,9 +373,15 @@ export default function RequirementFormSheet({ taskId, leadId, open, onOpenChang
             </Section>
           )}
 
-          <Section id="media" icon={<Camera className="h-4 w-4" />} title="Photos & Notes" count={media.length + (v.notes?.trim() ? 1 : 0)} openSecs={openSecs} toggle={toggleSec}>
-            <BaseInput type="file" accept="image/*" multiple capture="environment" onChange={(e) => onFiles(e.target.files)} className="w-full text-xs" />
+          <Section id="media" icon={<Camera className="h-4 w-4" />} title="Photos & Notes" count={media.length + savedPhotos.length + (v.notes?.trim() ? 1 : 0)} openSecs={openSecs} toggle={toggleSec}>
+            <PhotoPickButtons onPicked={onFiles} busy={uploading} />
             {uploading && <p className="mt-1 text-xs text-muted-foreground">Uploading…</p>}
+            {savedPhotos.length > 0 && (
+              <div className="flex gap-2 overflow-x-auto">
+                {savedPhotos.map((u) => <img key={u} src={resolveFileUrl(u)} alt="" className="h-16 w-16 shrink-0 rounded-md object-cover" />)}
+              </div>
+            )}
+            {photosToLead && <p className="text-[11px] text-muted-foreground">Photos are saved on the lead straight away.</p>}
             {media.length > 0 && (
               <div className="mt-2 flex gap-2 overflow-x-auto">
                 {media.map((m, i) => (
@@ -336,7 +398,12 @@ export default function RequirementFormSheet({ taskId, leadId, open, onOpenChang
           </Section>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="flex-col gap-2 sm:flex-col sm:space-x-0">
+          {!fromCall && (
+            <Button variant="outline" onClick={saveChanges} disabled={saving || uploading || loading} className="w-full">
+              {saving ? 'Saving…' : 'Save changes'}
+            </Button>
+          )}
           <Button onClick={submit} disabled={saving || uploading} className="w-full">
             {saving ? 'Saving…' : nextStep === 'FOLLOWUP' ? 'Save & Schedule Follow-up' : 'Save & Schedule Site Visit'}
           </Button>

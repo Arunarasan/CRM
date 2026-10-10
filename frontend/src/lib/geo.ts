@@ -64,3 +64,40 @@ export function getBestPosition(opts?: {
     }
   });
 }
+
+export interface SiteAddress { address?: string; city?: string; district?: string; state?: string; pincode?: string }
+
+/**
+ * Street address for a GPS spot, from OpenStreetMap's free geocoder (same service the map picker uses).
+ * Best-effort: resolves {} when offline or nothing is known for the spot, so callers never block on it.
+ */
+export async function reverseGeocode(lat: number, lng: number): Promise<SiteAddress> {
+  try {
+    const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&addressdetails=1&zoom=18&lat=${lat}&lon=${lng}`;
+    const res = await fetch(url, { headers: { Accept: 'application/json' } });
+    if (!res.ok) return {};
+    const a = (await res.json())?.address || {};
+    const street = [a.house_number, a.road].filter(Boolean).join(' ');
+    const area = a.neighbourhood || a.suburb || a.village || a.hamlet || a.quarter;
+    const city = a.city || a.town || a.municipality || a.village || a.county;
+    return {
+      address: [street, area !== city ? area : null].filter(Boolean).join(', ') || undefined,
+      city: city || undefined,
+      district: a.state_district || a.county || undefined,
+      state: a.state || undefined,
+      pincode: a.postcode ? String(a.postcode).replace(/\s/g, '') : undefined,
+    };
+  } catch {
+    return {};
+  }
+}
+
+/** Why the phone gave no fix — turns a null from getBestPosition into a message the employee can act on. */
+export async function locationErrorMessage(): Promise<string> {
+  if (typeof navigator === 'undefined' || !('geolocation' in navigator)) return 'This phone can’t share its location.';
+  try {
+    const p = await navigator.permissions?.query({ name: 'geolocation' as PermissionName });
+    if (p?.state === 'denied') return 'Location is blocked. Turn on location (GPS) and allow it for this app, then try again.';
+  } catch { /* permissions API missing — fall through */ }
+  return 'Couldn’t get your location. Turn on GPS, step outside if you can, and try again.';
+}

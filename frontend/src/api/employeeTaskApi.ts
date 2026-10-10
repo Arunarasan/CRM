@@ -9,6 +9,17 @@ import {
 
 const BASE = '/employee-tasks';
 
+export interface LeadPhoto {
+  id: number;
+  fileUrl: string;
+  fileName?: string;
+  category?: string;
+  uploadedByName?: string;
+  createdAt?: string;
+  /** Added by the signed-in employee — only these can be removed from the task page. */
+  mine: boolean;
+}
+
 export const employeeTaskApi = {
   home: () => api.get<HomeSummary>(`${BASE}/home`).then((r) => r.data),
   myTasks: (params?: { status?: string; search?: string }) => {
@@ -72,6 +83,15 @@ export const employeeTaskApi = {
   // Latest captured draft for a lead task — prefill on a re-collected follow-up.
   leadFormDraft: (id: number) =>
     api.get<Record<string, any>>(`${BASE}/${id}/lead-form/draft`).then((r) => r.data),
+  // Collect Requirement "Save changes": edit the lead's details without completing the task.
+  saveLeadForm: (id: number, data: Record<string, string | boolean>) =>
+    api.post(`${BASE}/${id}/lead-form/save`, { data }).then((r) => r.data),
+  // Photos on the task's lead (its Documents tab) — list, add an uploaded one, remove one you added.
+  leadPhotos: (id: number) => api.get<LeadPhoto[]>(`${BASE}/${id}/lead-photos`).then((r) => r.data),
+  addLeadPhoto: (id: number, payload: { fileUrl: string; fileName?: string }) =>
+    api.post<LeadPhoto>(`${BASE}/${id}/lead-photos`, payload).then((r) => r.data),
+  deleteLeadPhoto: (id: number, documentId: number) =>
+    api.delete(`${BASE}/${id}/lead-photos/${documentId}`).then((r) => r.data),
 
   // Lead-scoped (the in-portal module screens are opened by leadId, not task id):
   // schedule a second site visit — spawns a repeat visit task and holds the BOQ step.
@@ -97,8 +117,9 @@ export const employeeTaskApi = {
   logMaterialUsage: (id: number, productId: number, quantity: number, remarks?: string) =>
     api.post(`${BASE}/${id}/material-usage`, { productId, quantity, remarks }).then((r) => r.data),
 
-  /** Save the employee's current GPS position as the lead's site map pin. */
-  saveSiteLocation: (id: number, payload: { latitude: number; longitude: number }) =>
+  /** Save the employee's current GPS position as the lead's site map pin. The optional address parts
+   *  (looked up for that spot) fill only the lead's blank address fields. */
+  saveSiteLocation: (id: number, payload: { latitude: number; longitude: number } & Partial<Record<'address' | 'city' | 'district' | 'state' | 'pincode', string>>) =>
     api.post(`${BASE}/${id}/site-location`, payload).then((r) => r.data),
   checkIn: (id: number, payload?: { latitude?: number; longitude?: number; locationLabel?: string }) =>
     api.post(`${BASE}/${id}/checkin`, payload).then((r) => r.data),

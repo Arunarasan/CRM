@@ -341,7 +341,42 @@ public class EmployeeTaskController {
     public ResponseEntity<ApiResponse<Map<String, Object>>> saveSiteLocation(@PathVariable Long id, @RequestBody Map<String, Object> body) {
         Double lat = body.get("latitude") instanceof Number n ? n.doubleValue() : null;
         Double lng = body.get("longitude") instanceof Number n ? n.doubleValue() : null;
-        return ResponseEntity.ok(ApiResponse.success(employeeTaskService.saveSiteLocation(id, me(), lat, lng)));
+        // Optional address looked up on the phone for that spot — fills only the lead's blank address fields.
+        Map<String, String> address = new java.util.HashMap<>();
+        for (String k : List.of("address", "city", "district", "state", "pincode")) {
+            if (body.get(k) instanceof String s && !s.isBlank()) address.put(k, s);
+        }
+        return ResponseEntity.ok(ApiResponse.success(employeeTaskService.saveSiteLocation(id, me(), lat, lng, address)));
+    }
+
+    /** Photos on this task's lead (its Documents tab), newest first. */
+    @GetMapping("/{id}/lead-photos")
+    @PreAuthorize(EXECUTE)
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> leadPhotos(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.success(employeeTaskService.leadPhotos(id, me())));
+    }
+
+    /** Add an already-uploaded photo ({fileUrl, fileName}) to this task's lead. */
+    @PostMapping("/{id}/lead-photos")
+    @PreAuthorize(EXECUTE)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> addLeadPhoto(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+        return ResponseEntity.ok(ApiResponse.success(employeeTaskService.addLeadPhoto(id, me(),
+                (String) body.get("fileUrl"), (String) body.get("fileName"))));
+    }
+
+    @DeleteMapping("/{id}/lead-photos/{documentId}")
+    @PreAuthorize(EXECUTE)
+    public ResponseEntity<ApiResponse<Void>> deleteLeadPhoto(@PathVariable Long id, @PathVariable Long documentId) {
+        employeeTaskService.deleteLeadPhoto(id, documentId, me());
+        return ResponseEntity.ok(ApiResponse.success(null));
+    }
+
+    /** Collect Requirement "Save changes": edit the lead's details without completing the task. */
+    @PostMapping("/{id}/lead-form/save")
+    @PreAuthorize(EXECUTE)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> saveLeadForm(
+            @PathVariable Long id, @RequestBody(required = false) Map<String, Object> body) {
+        return ResponseEntity.ok(ApiResponse.success(leadTaskFormService.saveRequirementEdits(id, me(), body)));
     }
 
     @PostMapping("/{id}/checkout")

@@ -4,14 +4,16 @@ import {
   ClipboardList, Layers, Box, Pencil, Wallet, IndianRupee, CalendarDays, Hourglass, MessageSquare, ListChecks,
 } from 'lucide-react';
 import { employeeTaskApi } from '@/api/employeeTaskApi';
+import { getBestPosition, locationErrorMessage, reverseGeocode } from '@/lib/geo';
 import { LeadInfo, TaskDetail } from '@/types/employeeTask';
 import { humanizeDue, priorityMeta } from '../taskUtils';
 
 /**
  * Collect Requirement task page body — one card per question the field employee has:
  * who is the customer (and how to reach them), where is the site, what do they want,
- * budget & timeline, and the remarks so far. "Edit" opens the requirement form at that part.
- * The site card can save the employee's live GPS position as the lead's map pin.
+ * budget & timeline, site photos, and the remarks so far. "Edit" opens the requirement form at that part.
+ * The site card saves the employee's live GPS position as the lead's map pin (and fills a blank address
+ * from it). While the task is still open to pick, the buttons show but ask the employee to take it first.
  */
 
 const has = (v: unknown) => v != null && String(v).trim() !== '';
@@ -82,11 +84,13 @@ function Stat({ icon, label, value }: { icon: React.ReactNode; label: string; va
   );
 }
 
-export default function RequirementTaskView({ task, lead, canEdit, onEdit, onReload, more }: {
+export default function RequirementTaskView({ task, lead, canEdit, takeFirst, onEdit, onReload, more }: {
   task: TaskDetail;
   lead: LeadInfo;
-  /** The employee holds the task and it isn't locked — Edit buttons + "use my location" show. */
+  /** The employee holds the task and it isn't locked — Edit, location and photo buttons work. */
   canEdit: boolean;
+  /** The task is open to pick — the same buttons show, but ask the employee to take the task first. */
+  takeFirst?: boolean;
   /** Opens the requirement form at a section: 'requirement' | 'budget' | 'address' … */
   onEdit: (section: string) => void;
   onReload: () => void;
@@ -96,6 +100,13 @@ export default function RequirementTaskView({ task, lead, canEdit, onEdit, onRel
   const [showMore, setShowMore] = useState(false);
   const [locating, setLocating] = useState(false);
   const [locErr, setLocErr] = useState('');
+  const [hint, setHint] = useState('');
+  const showActions = canEdit || !!takeFirst;
+  // Runs the action once the task is the employee's; before that, explains what to do.
+  const guard = (fn: () => void) => () => {
+    if (canEdit) { setHint(''); fn(); } else setHint('Tap “Take this task” below first, then you can edit the lead, set the location and add photos in Task notes.');
+  };
+  const edit = (section: string) => guard(() => onEdit(section));
 
   const prio = priorityMeta(task.priority);
   const due = humanizeDue(task.dueDate, task.status);
@@ -122,29 +133,21 @@ export default function RequirementTaskView({ task, lead, canEdit, onEdit, onRel
   const expected = fmtDate(lead.expectedStartDate) || fmtDate(lead.preferredCompletionDate);
   const remarks = lead.remarks || lead.customerRequirements || lead.projectDescription;
 
-  const useMyLocation = () => {
+  // GPS pin + the street address for that spot (fills only the lead's blank address fields).
+  const useMyLocation = async () => {
     setLocErr('');
-    if (!('geolocation' in navigator)) { setLocErr('This phone can’t share its location.'); return; }
     setLocating(true);
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        try {
-          await employeeTaskApi.saveSiteLocation(task.id, { latitude: pos.coords.latitude, longitude: pos.coords.longitude });
-          onReload();
-        } catch (e: any) {
-          setLocErr(e?.response?.data?.message || 'Could not save the location.');
-        } finally {
-          setLocating(false);
-        }
-      },
-      (err) => {
-        setLocating(false);
-        setLocErr(err.code === err.PERMISSION_DENIED
-          ? 'Location is blocked. Turn on location (GPS) and allow it for this app, then try again.'
-          : 'Couldn’t get your location. Turn on GPS, step outside if you can, and try again.');
-      },
-      { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 },
-    );
+    try {
+      const fix = await getBestPosition({ targetAccuracyM: 25, maxWaitMs: 15000 });
+      if (!fix) { setLocErr(await locationErrorMessage()); return; }
+      const addr = await reverseGeocode(fix.lat, fix.lng);
+      await employeeTaskApi.saveSiteLocation(task.id, { latitude: fix.lat, longitude: fix.lng, ...addr });
+      onReload();
+    } catch (e: any) {
+      setLocErr(e?.response?.data?.message || 'Could not save the location.');
+    } finally {
+      setLocating(false);
+    }
   };
 
   const btn = '[&>svg]:shrink-0 flex min-w-0 items-center justify-center gap-1 rounded-xl border border-[#DDE2DE] bg-white px-1 py-2.5 text-[12.5px] font-semibold text-[#0A573B] active:scale-[0.98]';
@@ -195,8 +198,15 @@ export default function RequirementTaskView({ task, lead, canEdit, onEdit, onRel
           <span className="truncate">{phone}</span>
           {leadBy && <span className="truncate text-right">Lead by: {leadBy}{fmtDate(lead.capturedAt) ? ` · ${fmtDate(lead.capturedAt)}` : ''}</span>}
         </div>
+        {showActions && (
+          <button onClick={edit('summary')}
+            className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-[#0A573B]/30 bg-[#F3F8F5] px-3 py-2.5 text-[13px] font-semibold text-[#0A573B] active:scale-[0.98]">
+            <Pencil className="h-4 w-4" /> Edit lead details
+          </button>
+        )}
         {showMore && more && <div className="mt-3">{more}</div>}
       </div>
+      {hint && <p className="-mt-1 rounded-lg bg-[#FDF3E2] px-3 py-2 text-[12.5px] text-[#8A5A1E]">{hint}</p>}
 
       {/* Where — site location, navigate, and save my live location */}
       <div className="rounded-2xl border border-[#ECEAE5] bg-white p-2 shadow-[0_2px_10px_rgba(0,35,22,0.04)]">
@@ -207,7 +217,15 @@ export default function RequirementTaskView({ task, lead, canEdit, onEdit, onRel
                 <MapPin className="h-4 w-4 fill-current text-[#0A573B]" />
               </span>
               <div className="min-w-0">
-                <p className="text-[11px] font-bold uppercase tracking-wide text-[#0A573B]">Site location</p>
+                <div className="flex items-center gap-2">
+                  <p className="flex-1 whitespace-nowrap text-[11px] font-bold uppercase tracking-wide text-[#0A573B]">Site location</p>
+                  {showActions && (
+                    <button onClick={edit('address')} aria-label="Edit address"
+                      className="flex items-center gap-1 rounded-lg border border-[#DDE2DE] bg-white px-2 py-1 text-[11.5px] font-semibold text-[#0A573B] active:scale-95">
+                      <Pencil className="h-3 w-3" /> Edit
+                    </button>
+                  )}
+                </div>
                 {line1 && <p className="truncate text-[14px] font-semibold text-[#1A211E]">{line1}</p>}
                 {line2 && <p className="truncate text-[12.5px] text-[#5B625E]">{line2}</p>}
                 {!line1 && !line2 && <p className="text-[12.5px] text-[#7A817C]">{coords ? 'Pinned on map' : 'No address yet'}</p>}
@@ -220,11 +238,11 @@ export default function RequirementTaskView({ task, lead, canEdit, onEdit, onRel
                   <Navigation className="h-4 w-4" /> Navigate to site
                 </a>
               )}
-              {canEdit && (
-                <button onClick={useMyLocation} disabled={locating}
+              {showActions && (
+                <button onClick={guard(useMyLocation)} disabled={locating}
                   className="flex items-center justify-center gap-2 rounded-xl border border-[#0A573B]/30 bg-white px-3 py-2 text-[12.5px] font-semibold text-[#0A573B] active:scale-[0.98] disabled:opacity-60">
                   {locating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Crosshair className="h-4 w-4" />}
-                  {locating ? 'Getting location…' : coords ? 'Re-pin to my location' : 'Use my location'}
+                  {locating ? 'Getting GPS location…' : coords ? 'Re-pin by GPS' : 'Set location by GPS'}
                 </button>
               )}
             </div>
@@ -244,9 +262,10 @@ export default function RequirementTaskView({ task, lead, canEdit, onEdit, onRel
         {locErr && <p className="mt-1.5 rounded-lg bg-[#FBE7E4] px-2.5 py-2 text-[12px] text-[#B94B45]">{locErr}</p>}
       </div>
 
+
       {/* What — categories and products */}
       <Card icon={<ClipboardList className="h-4 w-4" />} iconCls="bg-[#E7F2EC] text-[#0A573B]" title="Customer requirement"
-        onEdit={canEdit ? () => onEdit('requirement') : undefined}>
+        onEdit={showActions ? edit('requirement') : undefined}>
         <div className="grid grid-cols-2 divide-x divide-[#EEEDE9] rounded-xl border border-[#EEEDE9]">
           <div className="flex min-w-0 gap-2 p-2.5">
             <Layers className="mt-0.5 h-4 w-4 shrink-0 text-[#33392F]" />
@@ -275,7 +294,7 @@ export default function RequirementTaskView({ task, lead, canEdit, onEdit, onRel
 
       {/* Budget & timeline */}
       <Card icon={<Wallet className="h-4 w-4" />} iconCls="bg-[#FBEFE0] text-[#9B6B32]" title="Budget & timeline"
-        onEdit={canEdit ? () => onEdit('budget') : undefined}>
+        onEdit={showActions ? edit('budget') : undefined}>
         <div className="grid grid-cols-3 gap-1.5">
           <Stat icon={<IndianRupee className="h-4 w-4 text-[#9B6B32]" />} label="Budget" value={budget} />
           <Stat icon={<CalendarDays className="h-4 w-4" />} label="Expected" value={expected} />
@@ -285,7 +304,7 @@ export default function RequirementTaskView({ task, lead, canEdit, onEdit, onRel
 
       {/* Remarks */}
       <Card icon={<MessageSquare className="h-4 w-4" />} iconCls="bg-[#FBEFE0] text-[#9B6B32]" title="Remarks"
-        onEdit={canEdit ? () => onEdit('requirement') : undefined}>
+        onEdit={showActions ? edit('requirement') : undefined}>
         <p className={`whitespace-pre-wrap rounded-xl border border-[#EEEDE9] bg-[#F7F8F6] px-3 py-2.5 text-[13px] ${remarks ? 'text-[#33392F]' : 'text-[#8A918C]'}`}>
           {remarks || 'No remarks yet. Add customer notes, discussion points, requirements, etc.'}
         </p>
