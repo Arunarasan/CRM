@@ -15,34 +15,91 @@ import { Button } from '@/components/ui/button';
 import SearchableSelect from '@/components/ui/searchable-select';
 import { DeviceRequests } from './deviceAdmin';
 import { FingerprintMachines, UnmatchedMachineIds, MachinePunchLog } from './machineAdmin';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import AttendanceRegister from './AttendanceRegister';
 
 /**
- * The attendance-verification admin body, mounted both as the Workforce → Attendance page and as
- * the Tasks → Attendance tab.
+ * The attendance admin body, mounted both as the Workforce → Attendance page and as the
+ * Tasks → Attendance tab. Split by job: the day's register first, then what's waiting for
+ * approval (with counts), fixing a time, the raw punch log, and one-time setup.
  */
 export function AttendanceAdmin() {
+  const [tab, setTab] = useState('register');
+  const [counts, setCounts] = useState({ punches: 0, corrections: 0, devices: 0, methods: 0 });
+  const [prefill, setPrefill] = useState<CorrectionPrefill | null>(null);
+
+  const loadCounts = () => {
+    Promise.all([
+      attendanceApi.pendingCount().catch(() => 0),
+      attendanceApi.listCorrections().then((r) => r.length).catch(() => 0),
+      attendanceApi.listDeviceRequests().then((r) => r.length).catch(() => 0),
+      attendanceApi.listMethodRequests().then((r) => r.length).catch(() => 0),
+    ]).then(([punches, corrections, devices, methods]) => setCounts({ punches, corrections, devices, methods }));
+  };
+  useEffect(loadCounts, [tab]);
+  const waiting = counts.punches + counts.corrections + counts.devices + counts.methods;
+
   return (
-    <div className="space-y-6">
-      <CorrectionApprovals />
-      <DirectCorrection />
-      <DeviceRequests />
-      <MethodRequests />
-      <PendingApprovals />
-      <UnmatchedMachineIds />
-      <FingerprintMachines />
-      <MachinePunchLog />
-      <OfficeLocations />
-    </div>
+    <Tabs value={tab} onValueChange={setTab} className="w-full">
+      <div className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
+        <TabsList className="h-auto w-max">
+          <TabsTrigger value="register" className="py-1.5">Day register</TabsTrigger>
+          <TabsTrigger value="approve" className="py-1.5">
+            To approve {waiting > 0 && <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 text-[11px] font-semibold text-amber-800">{waiting}</span>}
+          </TabsTrigger>
+          <TabsTrigger value="fix" className="py-1.5">Fix a time</TabsTrigger>
+          <TabsTrigger value="log" className="py-1.5">Punch log</TabsTrigger>
+          <TabsTrigger value="setup" className="py-1.5">Setup</TabsTrigger>
+        </TabsList>
+      </div>
+
+      <TabsContent value="register" className="mt-4">
+        <AttendanceRegister onFix={(p) => { setPrefill({ ...p, nonce: Date.now() }); setTab('fix'); }} />
+      </TabsContent>
+
+      <TabsContent value="approve" className="mt-4 space-y-6">
+        {waiting === 0 && (
+          <p className="rounded-xl border bg-card px-4 py-6 text-center text-sm text-slate-500">Nothing waiting — field punches, time corrections and phone requests are all handled.</p>
+        )}
+        <PendingApprovals />
+        <CorrectionApprovals />
+        <DeviceRequests />
+        <MethodRequests />
+      </TabsContent>
+
+      <TabsContent value="fix" className="mt-4">
+        <DirectCorrection prefill={prefill} onApplied={() => setTab('register')} />
+      </TabsContent>
+
+      <TabsContent value="log" className="mt-4">
+        <MachinePunchLog />
+      </TabsContent>
+
+      <TabsContent value="setup" className="mt-4 space-y-6">
+        <OfficeLocations />
+        <FingerprintMachines />
+        <UnmatchedMachineIds />
+      </TabsContent>
+    </Tabs>
   );
 }
 
 /* --------------------------- Admin direct time correction --------------------------- */
 
-function DirectCorrection() {
+export type CorrectionPrefill = { employeeId?: string; date?: string; checkIn?: string; checkOut?: string; nonce: number };
+
+/** Set any day's clock-in/out. `prefill` (from the day register's "Fix time") opens it filled in. */
+export function DirectCorrection({ prefill, onApplied }: { prefill?: CorrectionPrefill | null; onApplied?: () => void } = {}) {
   const [emps, setEmps] = useState<{ value: string; label: string; hint?: string }[]>([]);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(!!prefill);
   const [form, setForm] = useState({ employeeId: '', date: '', checkIn: '', checkOut: '' });
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!prefill) return;
+    setForm({ employeeId: prefill.employeeId ?? '', date: prefill.date ?? '', checkIn: prefill.checkIn ?? '', checkOut: prefill.checkOut ?? '' });
+    setOpen(true);
+  }, [prefill?.nonce]);
 
   useEffect(() => {
     if (!open || emps.length) return;
@@ -66,6 +123,7 @@ function DirectCorrection() {
       toast.success('Applied — attendance & hours updated');
       setForm({ employeeId: '', date: '', checkIn: '', checkOut: '' });
       setOpen(false);
+      onApplied?.();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || 'Could not apply');
     } finally {

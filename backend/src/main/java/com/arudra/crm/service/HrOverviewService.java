@@ -1,6 +1,7 @@
 package com.arudra.crm.service;
 
 import com.arudra.crm.entity.Attendance;
+import com.arudra.crm.entity.AttendanceSession;
 import com.arudra.crm.entity.Employee;
 import com.arudra.crm.entity.EmployeeBonus;
 import com.arudra.crm.entity.LeaveRequest;
@@ -30,6 +31,7 @@ public class HrOverviewService {
     @Autowired private EmployeeBonusRepository bonusRepository;
     @Autowired private AttendanceAdminService attendanceAdminService;
     @Autowired private PayrollService payrollService;
+    @Autowired private AttendanceSessionRepository sessionRepository;
 
     @Transactional(readOnly = true)
     public Map<String, Object> overview() {
@@ -115,6 +117,88 @@ public class HrOverviewService {
         out.put("today", todayOut);
         out.put("waiting", waiting);
         out.put("payroll", payroll);
+        return out;
+    }
+
+    /**
+     * The attendance register for one day: every current staff member with their status (in now /
+     * done for the day / on leave / not in), first in, last out, hours, overtime, number of punches
+     * and how many punches are still waiting for HR approval.
+     */
+    @Transactional(readOnly = true)
+    public Map<String, Object> day(LocalDate date) {
+        LocalDate today = LocalDate.now();
+        List<Employee> staff = employeeRepository.findAll().stream()
+                .filter(e -> !Boolean.TRUE.equals(e.getIsDeleted()))
+                .filter(e -> e.getStatus() == null || !"TERMINATED".equalsIgnoreCase(e.getStatus()))
+                .sorted(Comparator.comparing(e -> ((e.getFirstName() == null ? "" : e.getFirstName()) + " "
+                        + (e.getLastName() == null ? "" : e.getLastName())).trim().toLowerCase()))
+                .toList();
+
+        Map<Long, Attendance> byEmp = new HashMap<>();
+        for (Attendance a : attendanceRepository.findByDate(date)) {
+            if (a.getEmployee() != null) byEmp.putIfAbsent(a.getEmployee().getId(), a);
+        }
+        Map<Long, String> leaveType = new HashMap<>();
+        for (LeaveRequest l : leaveRequestRepository.findAll()) {
+            if (!"APPROVED".equalsIgnoreCase(l.getStatus()) || l.getEmployee() == null
+                    || l.getStartDate() == null || l.getEndDate() == null) continue;
+            if (!date.isBefore(l.getStartDate()) && !date.isAfter(l.getEndDate())) {
+                leaveType.put(l.getEmployee().getId(), l.getType());
+            }
+        }
+
+        List<Map<String, Object>> rows = new ArrayList<>();
+        int in = 0, done = 0, leave = 0, notIn = 0, waiting = 0;
+        for (Employee e : staff) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", e.getId());
+            m.put("name", ((e.getFirstName() == null ? "" : e.getFirstName()) + " "
+                    + (e.getLastName() == null ? "" : e.getLastName())).trim());
+            m.put("code", e.getEmployeeCode());
+            m.put("designation", e.getDesignation());
+            Attendance a = byEmp.get(e.getId());
+            String status;
+            if (a != null && a.getCheckInTime() != null) {
+                List<AttendanceSession> sessions = sessionRepository.findByAttendanceIdOrderByIdAsc(a.getId());
+                boolean open = sessions.isEmpty() ? a.getCheckOutTime() == null
+                        : sessions.get(sessions.size() - 1).getCheckOutTime() == null;
+                int pending = (int) sessions.stream()
+                        .filter(x -> Boolean.TRUE.equals(x.getFlagged()) && "PENDING".equalsIgnoreCase(x.getApprovalStatus()))
+                        .count();
+                status = open && date.equals(today) ? "IN" : "DONE";
+                m.put("checkIn", a.getCheckInTime());
+                m.put("checkOut", open ? null : a.getCheckOutTime());
+                m.put("workedHours", a.getWorkedHours());
+                m.put("overtimeHours", a.getOvertimeHours());
+                m.put("punches", Math.max(1, sessions.size()));
+                m.put("pending", pending);
+                waiting += pending;
+                if ("IN".equals(status)) in++; else done++;
+            } else if (leaveType.containsKey(e.getId())) {
+                status = "LEAVE";
+                m.put("leaveType", leaveType.get(e.getId()));
+                leave++;
+            } else {
+                status = date.isAfter(today) ? "UPCOMING" : "NOT_IN";
+                if (!date.isAfter(today)) notIn++;
+            }
+            m.put("status", status);
+            rows.add(m);
+        }
+        Map<String, Object> counts = new LinkedHashMap<>();
+        counts.put("staff", staff.size());
+        counts.put("in", in);
+        counts.put("done", done);
+        counts.put("leave", leave);
+        counts.put("notIn", notIn);
+        counts.put("waiting", waiting);
+
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("date", date);
+        out.put("today", date.equals(today));
+        out.put("counts", counts);
+        out.put("rows", rows);
         return out;
     }
 }

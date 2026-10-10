@@ -11,7 +11,10 @@ import { FilterChips, PersonChip, SearchField, StatusPill } from "@/pages/workfo
  * Leave requests with approve / reject. Extracted from the old Human Resources "Leaves"
  * tab when HR + Workforce merged into one module. Pending requests are shown first.
  */
-type StatusKey = "PENDING" | "APPROVED" | "REJECTED" | "ALL";
+type StatusKey = "PENDING" | "UPCOMING" | "APPROVED" | "REJECTED" | "ALL";
+const todayIso = () => format(new Date(), "yyyy-MM-dd");
+/** Approved leave that hasn't finished yet — who's away now or soon. */
+const isUpcoming = (l: any) => l.status === "APPROVED" && String(l.endDate || "") >= todayIso();
 
 const fmt = (v?: string) => { if (!v) return "—"; const d = new Date(v); return isNaN(d.getTime()) ? "—" : format(d, "d MMM yyyy"); };
 const days = (a?: string, b?: string) => {
@@ -49,17 +52,17 @@ export default function HrLeavePage() {
   };
 
   const counts = useMemo(() => {
-    const c: Record<StatusKey, number> = { PENDING: 0, APPROVED: 0, REJECTED: 0, ALL: leaves.length };
-    leaves.forEach((l) => { if (l.status in c) c[l.status as StatusKey]++; });
+    const c: Record<StatusKey, number> = { PENDING: 0, UPCOMING: 0, APPROVED: 0, REJECTED: 0, ALL: leaves.length };
+    leaves.forEach((l) => { if (l.status in c) c[l.status as StatusKey]++; if (isUpcoming(l)) c.UPCOMING++; });
     return c;
   }, [leaves]);
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
     return leaves
-      .filter((l) => status === "ALL" || l.status === status)
+      .filter((l) => status === "ALL" || (status === "UPCOMING" ? isUpcoming(l) : l.status === status))
       .filter((l) => !q || nameOf(l.employee).toLowerCase().includes(q) || (l.type || "").toLowerCase().includes(q))
-      .sort((a, b) => String(a.startDate).localeCompare(String(b.startDate)) * (status === "PENDING" ? 1 : -1));
+      .sort((a, b) => String(a.startDate).localeCompare(String(b.startDate)) * (status === "PENDING" || status === "UPCOMING" ? 1 : -1));
   }, [leaves, status, search]);
 
   const actions = (l: any) => l.status === "PENDING" ? (
@@ -102,6 +105,7 @@ export default function HrLeavePage() {
           value={status} onChange={setStatus}
           options={[
             { key: "PENDING", label: "Pending", count: counts.PENDING },
+            { key: "UPCOMING", label: "Away now / upcoming", count: counts.UPCOMING },
             { key: "APPROVED", label: "Approved", count: counts.APPROVED },
             { key: "REJECTED", label: "Rejected", count: counts.REJECTED },
             { key: "ALL", label: "All", count: counts.ALL },

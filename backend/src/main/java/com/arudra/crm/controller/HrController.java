@@ -49,6 +49,14 @@ public class HrController {
         return ResponseEntity.ok(hrOverviewService.overview());
     }
 
+    /** Attendance register for one day (default today): status, first in, last out, hours per person. */
+    @GetMapping("/attendance/day")
+    @PreAuthorize(HR_READ)
+    public ResponseEntity<Map<String, Object>> attendanceDay(
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate date) {
+        return ResponseEntity.ok(hrOverviewService.day(date == null ? java.time.LocalDate.now() : date));
+    }
+
     @Autowired
     private com.arudra.crm.service.PayslipEditService payslipEditService;
 
