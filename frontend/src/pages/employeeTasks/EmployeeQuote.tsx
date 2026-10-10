@@ -30,6 +30,8 @@ export default function EmployeeQuote() {
   const [leadProject, setLeadProject] = useState<LeadProjectStatus | null>(null);
   // Bumped when a site visit is saved, so its new photos show in the Site photos strip.
   const [photosKey, setPhotosKey] = useState(0);
+  // Bumped after "Send for Approval" so the sheet reloads and shows it waits for an admin.
+  const [sheetKey, setSheetKey] = useState(0);
 
   useEffect(() => {
     if (leadId) api.get(`/leads/${leadId}`).then((r) => setLead(r.data)).catch(() => {});
@@ -52,11 +54,11 @@ export default function EmployeeQuote() {
           <SiteVisitCard leadId={leadId} agreedDate={lead?.siteVisitDate} onSaved={() => setPhotosKey((k) => k + 1)} />
         </aside>
         <div className="mt-3 min-w-0 xl:mt-0">
-          <QuoteWorkspace leadId={String(leadId)} fieldMode onChanged={() => {}} onCreateProject={(lp) => { setLeadProject(lp); setConvertOpen(true); }} />
+          <QuoteWorkspace key={sheetKey} leadId={String(leadId)} fieldMode onChanged={() => {}} onCreateProject={(lp) => { setLeadProject(lp); setConvertOpen(true); }} />
         </div>
       </div>
       <ConvertProjectSheet leadId={leadId} leadProject={leadProject} open={convertOpen} onOpenChange={setConvertOpen}
-        onDone={() => navigate('/employee/tasks')} />
+        onDone={() => navigate('/employee/tasks')} onRequested={() => setSheetKey((k) => k + 1)} />
     </div>
   );
 }

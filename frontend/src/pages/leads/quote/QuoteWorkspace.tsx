@@ -29,6 +29,8 @@ import { buildQuotationPdf, loadPdfImages } from "@/lib/quotationPdf";
 import { fetchCompanyProfile } from "@/lib/companyProfile";
 import { uploadFile } from "@/lib/uploadFile";
 import { NumCell } from "./cells";
+import ProjectRequestBanner from "./ProjectRequestBanner";
+import { projectRequestApi, type ProjectRequest } from "@/api/projectRequestApi";
 
 /**
  * The combined Quote page — measure, price, quote, customer approval and later changes all happen
@@ -93,6 +95,8 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
   const [leadProject, setLeadProject] = useState<LeadProjectStatus | null>(null);
   const [applyOpen, setApplyOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState<string | null>(null);
+  // A field employee's "Customer Agreed" waiting for (or turned down by) an admin — lead view only.
+  const [projectRequest, setProjectRequest] = useState<ProjectRequest | null>(null);
   // Items (what the customer sees) vs Cost Breakdown (material / labour behind each price).
   // Phones show the "lead already has a project" notice as one line; "More" opens the full text.
   const [projectNoticeOpen, setProjectNoticeOpen] = useState(false);
@@ -109,7 +113,7 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
   const [actionsEl, setActionsEl] = useState<HTMLDivElement | null>(null);
 
   const load = useCallback(async () => {
-    const [m, b, q, pq] = await Promise.all([
+    const [m, b, q, pq, pr] = await Promise.all([
       leadApi.getMeasurements(leadId).catch(() => ({ data: [] })),
       leadApi.getBoqs(leadId).catch(() => ({ data: [] })),
       leadApi.getQuotations(leadId).catch(() => ({ data: [] })),
@@ -117,7 +121,9 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
       projectId != null
         ? quoteWorkspaceApi.projectStatus(projectId).catch(() => quoteWorkspaceApi.projectStatus(projectId)).catch(() => null)
         : Promise.resolve(null),
+      projectId == null ? projectRequestApi.forLead(leadId).catch(() => null) : Promise.resolve(null),
     ]);
+    setProjectRequest(pr);
     setMeasurements(m.data || []);
     const list: Boq[] = b.data || [];
     setQuotations(q.data || []);
@@ -163,6 +169,8 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
   const converted = quote?.status === "CONVERTED";
   // A field employee asked to apply this quote to the lead's project — waits for an admin / PM.
   const updateRequested = (quote as any)?.internalApprovalStatus === "PROJECT_UPDATE_REQUESTED";
+  // A new project for this lead is waiting for an admin (sent by a field employee).
+  const createRequested = projectRequest?.status === "PENDING";
   // Locked = the customer approved it (or the older flow approved the sheet before quoting).
   const locked = boq?.status === "APPROVED";
   // A change to the running project is open (sheet unlocked, customer hasn't approved it yet).
@@ -386,14 +394,16 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
           ? canChangeProject
             ? { label: `Update Project ${leadProject.projectCode || ""}`.trim(), icon: FileOutput, onClick: () => setApplyOpen(true), disabled: !!busy || !leadProject.canChange }
             : null
-        : !projectMode && !sheetProject && !fieldMode && approved && !converted && canConvert
+        : !projectMode && !sheetProject && !fieldMode && approved && !converted && canConvert && !createRequested
           ? { label: "Create Project", icon: FileOutput, onClick: () => setConvertCfg({ advanceAmount: "", advanceMethod: "Cash" }), disabled: !!busy }
+          : fieldMode && !converted && !sheetProject && onCreateProject && createRequested && !leadProject
+            ? { label: "Waiting for admin approval", icon: FileOutput, onClick: () => {}, disabled: true }
           : fieldMode && !converted && !sheetProject && onCreateProject
             ? {
                 label: leadProject
                   ? (updateRequested && !canChangeProject ? "Sent to admin for approval"
                     : approved ? "Update Project" : "Customer Agreed · Update Project")
-                  : (approved ? "Create Project" : "Customer Agreed · Create Project"),
+                  : (approved ? "Send to Admin · Create Project" : "Customer Agreed · Send to Admin"),
                 icon: FileOutput, onClick: () => onCreateProject(leadProject),
                 disabled: !!busy || noItems || (!!leadProject && (!leadProject.canChange || (updateRequested && !canChangeProject))),
               }
@@ -500,6 +510,11 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
                   </Link>
                 )}
               </div>
+            )}
+
+            {/* ---- A field employee's "Customer Agreed" — admin approves to create the project ---- */}
+            {!projectMode && !sheetProject && !converted && projectRequest && (
+              <ProjectRequestBanner request={projectRequest} canDecide={canChangeProject} onDecided={refreshAll} />
             )}
 
             {/* ---- Seen from the lead: the lead already has a project from an earlier quote ---- */}

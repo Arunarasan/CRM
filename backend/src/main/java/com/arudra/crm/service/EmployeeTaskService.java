@@ -1519,6 +1519,11 @@ public class EmployeeTaskService {
             }
             return List.of(requestProjectUpdate(leadId, quote, project, employee, advanceAmount, advanceMethod));
         }
+        // A field employee's new project waits for an admin (ProjectConversionRequestService) — only
+        // admins / project managers create it straight away.
+        if (!ProjectConversionRequestService.canDecide(employee)) {
+            throw new IllegalStateException("Send it to the admin for approval — the project is created once an admin approves it.");
+        }
         // Employee/admin approval: promote the header to APPROVED so conversion's guard passes
         // (convertToProject also normalizes item-level statuses).
         if (!"APPROVED".equals(quote.getStatus()) && !"CONVERTED".equals(quote.getStatus())) {
