@@ -30,6 +30,7 @@ public class WorkflowTriggerService {
     @Autowired private WorkflowPhaseInstanceRepository phaseInstanceRepository;
     @Autowired private ProjectService projectService;
     @Autowired private ProjectWorkService projectWorkService;
+    @Autowired @org.springframework.context.annotation.Lazy private EmployeeTaskService employeeTaskService;
 
     /** A new lead was created — spin up its LEAD workflow and generate the first task(s). */
     @Transactional
@@ -157,6 +158,24 @@ public class WorkflowTriggerService {
                 projectWorkService.ensureTasks(project.getId());
                 projectWorkService.syncFromQuote(project.getId());
                 projectService.seedExecutionChecklist(project.getId());
+            }
+            // A team carried over from the lead runs the execution task from day one — done after the
+            // conversion commits so it can never fail the conversion itself.
+            Long projectId = project.getId();
+            Runnable assignTeam = () -> {
+                try {
+                    employeeTaskService.assignProjectTeamToExecution(projectId);
+                } catch (Exception ex) {
+                    log.warn("Project team not put on execution task for project {}: {}", projectId, ex.getMessage());
+                }
+            };
+            if (org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive()) {
+                org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                        new org.springframework.transaction.support.TransactionSynchronization() {
+                            @Override public void afterCommit() { assignTeam.run(); }
+                        });
+            } else {
+                assignTeam.run();
             }
         } catch (Exception e) {
             log.error("Workflow setup failed for project {} created from quotation", project.getId(), e);

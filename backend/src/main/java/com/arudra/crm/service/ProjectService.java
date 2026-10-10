@@ -19,6 +19,7 @@ public class ProjectService {
 
     @Autowired private com.arudra.crm.repository.ProjectWorkLineRepository workLineRepository;
     @Autowired @org.springframework.context.annotation.Lazy private ProjectWorkService projectWorkService;
+    @Autowired @org.springframework.context.annotation.Lazy private EmployeeTaskService employeeTaskService;
 
     @Autowired
     private ProjectRepository projectRepository;
@@ -626,7 +627,21 @@ public class ProjectService {
         project.setAssistantManager(assistantManagerId == null ? null
                 : userRepository.findById(assistantManagerId).orElseThrow(
                         () -> new RuntimeException("User not found: " + assistantManagerId)));
-        return projectRepository.save(project);
+        Project saved = projectRepository.save(project);
+        // The team runs the project's shared Execution & Installation task — put them on it so it
+        // shows in their employee portal.
+        Long projectId = saved.getId();
+        if (org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive()) {
+            org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                    new org.springframework.transaction.support.TransactionSynchronization() {
+                        @Override public void afterCommit() {
+                            employeeTaskService.assignProjectTeamToExecution(projectId);
+                        }
+                    });
+        } else {
+            employeeTaskService.assignProjectTeamToExecution(projectId);
+        }
+        return saved;
     }
 
     public void deleteProject(Long id) {

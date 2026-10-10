@@ -29,6 +29,7 @@ public class ConvertedProjectTaskBackfill implements CommandLineRunner {
     @Autowired private ProjectWorkService projectWorkService;
     @Autowired private ProjectService projectService;
     @Autowired private TransactionTemplate transactionTemplate;
+    @Autowired private com.arudra.crm.service.EmployeeTaskService employeeTaskService;
 
     @Override
     public void run(String... args) {
@@ -66,6 +67,16 @@ public class ConvertedProjectTaskBackfill implements CommandLineRunner {
         }
         if (needed > 0) {
             logger.info("Execution & Installation task backfilled for {} of {} converted project(s)", done, needed);
+        }
+
+        // Put each running project's PM / Assistant Manager on its Execution & Installation task so it
+        // shows in their portal (idempotent — people already on the task are skipped).
+        for (Long id : candidates) {
+            try {
+                transactionTemplate.executeWithoutResult(tx -> employeeTaskService.assignProjectTeamToExecution(id));
+            } catch (Exception e) {
+                logger.warn("Project team not put on execution task for project {}: {}", id, e.getMessage());
+            }
         }
     }
 }

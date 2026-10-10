@@ -629,7 +629,14 @@ public class EmployeeTaskService {
      */
     public List<Map<String, Object>> getAvailablePool(User employee) {
         boolean hasCapacity = activeTaskCount(employee.getId()) < maxActiveTasks();
-        return taskRepository.findByStatus("AVAILABLE").stream()
+        // Workflow tasks wait in the pool as AVAILABLE; project / order / installation work is created
+        // PENDING (or follows its order to IN_PROGRESS) — offer those too while nobody holds them.
+        List<Task> candidates = new ArrayList<>(taskRepository.findByStatus("AVAILABLE"));
+        for (String st : List.of("PENDING", "IN_PROGRESS")) {
+            taskRepository.findByStatus(st).stream().filter(this::isWorkTask).forEach(candidates::add);
+        }
+        return candidates.stream()
+                .filter(t -> !Boolean.TRUE.equals(t.getIsDeleted()))
                 .filter(this::isUnassigned)
                 .filter(t -> taskEligibilityService.isEligible(employee, t))
                 .sorted(Comparator.comparing(Task::getDueDate, Comparator.nullsLast(Comparator.naturalOrder())))
@@ -640,6 +647,41 @@ public class EmployeeTaskService {
                     return card;
                 })
                 .collect(Collectors.toList());
+    }
+
+    /** Project, order or installation work (not a lead / call task) — what the Projects & Orders tabs show. */
+    private boolean isWorkTask(Task t) {
+        String source = t.getSource() == null ? "" : t.getSource().toUpperCase();
+        return t.getLeadId() == null
+                && (t.getProject() != null || t.getInvoiceId() != null
+                    || "BUNDLE".equals(source) || "SERVICE_REQUEST".equals(source));
+    }
+
+    /**
+     * Puts the project's leadership pair (Project Manager + Assistant Manager) on the project's shared
+     * "Execution & Installation" task, so it shows in their portal under Projects. Idempotent: anyone
+     * who already has a row on the task (active or removed earlier) is left as is.
+     */
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    public void assignProjectTeamToExecution(Long projectId) {
+        if (projectId == null) return;
+        Task exec = taskRepository.findByProjectId(projectId).stream()
+                .filter(t -> !Boolean.TRUE.equals(t.getIsDeleted()))
+                .filter(t -> t.getTaskTemplate() != null && "TT_PM_EXECUTION".equals(t.getTaskTemplate().getCode()))
+                .filter(t -> !"COMPLETED".equals(t.getStatus()) && !"CANCELLED".equals(t.getStatus()))
+                .findFirst().orElse(null);
+        if (exec == null || exec.getProject() == null) return;
+        Project project = exec.getProject();
+        List<User> team = new ArrayList<>();
+        if (project.getProjectManager() != null) team.add(project.getProjectManager());
+        if (project.getAssistantManager() != null) team.add(project.getAssistantManager());
+        List<AssignResourceRequest> add = team.stream()
+                .filter(u -> assignmentRepository.findByTaskIdAndResourceTypeAndResourceId(
+                        exec.getId(), ResourceType.EMPLOYEE, u.getId()).isEmpty())
+                .map(u -> new AssignResourceRequest(ResourceType.EMPLOYEE, u.getId(),
+                        u == project.getProjectManager() ? "Owner" : "Member"))
+                .toList();
+        if (!add.isEmpty()) assignResources(exec.getId(), add, team.get(0));
     }
 
     public Map<String, Object> getTaskDetail(Long taskId, User employee) {
