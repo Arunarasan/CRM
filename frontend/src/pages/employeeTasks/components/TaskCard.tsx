@@ -5,6 +5,26 @@ import { humanizeDue, shortDue, statusMeta } from '../taskUtils';
 import SwipeActions, { SwipeAction } from './SwipeActions';
 import HoldTimer from './HoldTimer';
 
+/** Small coloured type badge so a mixed list reads Project / Order / Lead at a glance. */
+function laneMeta(category?: string | null, label?: string | null): { label: string; cls: string } | null {
+  switch ((category ?? '').toUpperCase()) {
+    case 'PROJECT':
+    case 'FIELD_WORK':
+      return { label: label || 'Project', cls: 'bg-[#E6EEF8] text-[#2563A8]' };
+    case 'STITCHING':
+    case 'INSTALLATION':
+      return { label: label || 'Order', cls: 'bg-[#F6ECDD] text-[#9B6B32]' };
+    case 'LEAD':
+    case 'ENQUIRY':
+    case 'CALL':
+      return { label: label || 'Lead', cls: 'bg-[#EDE6F7] text-[#6D4AA8]' };
+    case '':
+      return null;
+    default:
+      return { label: label || 'Other', cls: 'bg-[#EEF0EE] text-[#5B625E]' };
+  }
+}
+
 /**
  * One scannable task row for the field employee. Answers, at a glance: what · where ·
  * when it's due · current state · the one obvious next action. Everything technical
@@ -54,6 +74,7 @@ export default function TaskCard({
   const product = first(task.requirementCategory) || task.itemName || null;
   const variant = first(task.requirementProduct) || task.room || null;
   const title = task.customer || task.taskName;
+  const lane = laneMeta(task.category, task.categoryLabel);
 
   return (
     <SwipeActions actions={swipe} onTap={open}>
@@ -61,7 +82,14 @@ export default function TaskCard({
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
             <p className="truncate text-[17px] font-bold leading-snug text-[#111817]">{title}</p>
-            {task.customer && <p className="truncate text-[11px] font-medium text-[#8A918C]">{task.taskName}</p>}
+            <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
+              {lane && (
+                <span className={`shrink-0 rounded-md px-1.5 py-px text-[10px] font-bold uppercase tracking-wide ${lane.cls}`}>
+                  {lane.label}
+                </span>
+              )}
+              {task.customer && <p className="truncate text-[11px] font-medium text-[#8A918C]">{task.taskName}</p>}
+            </div>
           </div>
           <span className={`flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${pill}`}>
             <span className={`h-1.5 w-1.5 rounded-full ${pillDot}`} /> {status.label}

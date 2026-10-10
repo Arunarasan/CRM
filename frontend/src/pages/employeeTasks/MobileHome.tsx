@@ -155,7 +155,7 @@ export default function MobileHome() {
         {/* Task capacity + available pool shortcut */}
         {home && home.maxActiveTasks != null && (
           <button
-            onClick={() => navigate('/employee/tasks?tab=AVAILABLE')}
+            onClick={() => navigate('/employee/tasks?view=AVAILABLE')}
             className={`${CARD} flex items-center justify-between px-4 py-3.5 text-left active:scale-[0.99]`}
           >
             <div>

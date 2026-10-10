@@ -74,6 +74,8 @@ export function priorityMeta(priority?: string): { label: string; dot: string; u
 /** Plain-language task status the employee actually understands, with a soft pill colour. */
 export function statusMeta(status: string): { label: string; cls: string } {
   switch (status) {
+    case 'AVAILABLE': // backend-only status on pool cards
+      return { label: 'Open to pick', cls: 'bg-[#F6ECDD] text-[#9B6B32]' };
     case 'PENDING':
       return { label: 'Not started', cls: 'bg-[#EEF0EE] text-[#5B625E]' };
     case 'ACCEPTED':
