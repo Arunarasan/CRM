@@ -711,6 +711,17 @@ public class EmployeeTaskService {
         detail.put("checklist", checklistRepository.findByTaskId(taskId).stream().map(this::toChecklistSummary).collect(Collectors.toList()));
         detail.put("comments", commentRepository.findByTaskIdOrderByCreatedAtDesc(taskId).stream()
                 .map(this::toCommentSummary).collect(Collectors.toList()));
+        // Closed by the office on the employee's behalf → the portal shows a read-only banner.
+        commentRepository.findByTaskIdOrderByCreatedAtDesc(taskId).stream()
+                .filter(c -> OFFICE_CLOSE_ROLE.equals(c.getRole()))
+                .findFirst()
+                .ifPresent(c -> {
+                    Map<String, Object> office = new HashMap<>();
+                    office.put("by", c.getAuthor() != null ? c.getAuthor().getName() : null);
+                    office.put("at", c.getCreatedAt());
+                    office.put("note", c.getContent());
+                    detail.put("closedByOffice", office);
+                });
         detail.put("attachments", attachmentRepository.findByTaskId(taskId).stream()
                 .map(a -> Map.of("id", a.getId(), "fileName", a.getFileName(), "fileUrl", a.getFileUrl()))
                 .collect(Collectors.toList()));
@@ -1211,6 +1222,126 @@ public class EmployeeTaskService {
         finalizeTaskCompletion(task, by);
     }
 
+    /** Comment role marking a task the office completed on the employee's behalf ("By office" badge). */
+    public static final String OFFICE_CLOSE_ROLE = "OFFICE_CLOSE";
+    private static final String COLLECT_REQUIREMENT_CODE = "TT_COLLECT_REQUIREMENT";
+
+    @Autowired @org.springframework.context.annotation.Lazy
+    private TaskTimeService taskTimeService;
+
+    @Autowired
+    private org.springframework.transaction.PlatformTransactionManager transactionManager;
+
+    /**
+     * The office did a lead's requirement work itself (edited the requirement, booked a visit, saved a
+     * measurement or created a quote) → close the lead's open "Collect Requirement" task(s) as done by
+     * the office, so the workflow generates "Site Visit, Measure & Quote". That next task goes to the
+     * employee who held Collect Requirement, who is told what happened. Skipped when the person doing the
+     * work is the task's own assignee — that is the employee finishing their own task the normal way.
+     */
+    // Runs AFTER the office's own save commits, in its own transaction — a problem here can never roll
+    // back the lead / visit / measurement / quote the office just saved.
+    @org.springframework.transaction.event.TransactionalEventListener(fallbackExecution = true)
+    public void onLeadRequirementCollected(com.arudra.crm.event.LeadRequirementCollectedEvent event) {
+        if (event.getLeadId() == null) return;
+        try {
+            org.springframework.transaction.support.TransactionTemplate tx =
+                    new org.springframework.transaction.support.TransactionTemplate(transactionManager);
+            tx.setPropagationBehavior(org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+            // 1) close Collect Requirement (own transaction)…
+            Object[] handover = tx.execute(status -> closeRequirementByOffice(event));
+            // 2) …then hand the next task to the same employee(s), separately, so an assignment problem
+            //    (e.g. capacity) can never undo the close.
+            if (handover != null) {
+                Long nextId = (Long) handover[0];
+                @SuppressWarnings("unchecked") List<Long> holderIds = (List<Long>) handover[1];
+                Long byId = (Long) handover[2];
+                try {
+                    tx.executeWithoutResult(status -> {
+                        User assignedBy = userRepository.findById(byId).orElse(null);
+                        assignResources(nextId, holderIds.stream()
+                                .map(id -> new AssignResourceRequest(com.arudra.crm.entity.ResourceType.EMPLOYEE, id, null))
+                                .toList(), assignedBy);
+                    });
+                } catch (Exception e) {
+                    org.slf4j.LoggerFactory.getLogger(EmployeeTaskService.class)
+                            .warn("Next lead task {} not assigned after office close: {}", nextId, e.getMessage());
+                }
+            }
+        } catch (Exception e) {
+            // Never let the office's own save fail because of task housekeeping.
+            org.slf4j.LoggerFactory.getLogger(EmployeeTaskService.class)
+                    .warn("Collect Requirement close failed for lead {}: {}", event.getLeadId(), e.getMessage());
+        }
+    }
+
+    /** @return {nextTaskId, holderEmployeeIds, assignedById} when the next task should be handed over, else null. */
+    private Object[] closeRequirementByOffice(com.arudra.crm.event.LeadRequirementCollectedEvent event) {
+        List<Task> open = taskRepository.findByLeadId(event.getLeadId()).stream()
+                .filter(t -> !Boolean.TRUE.equals(t.getIsDeleted()))
+                .filter(t -> t.getTaskTemplate() != null && COLLECT_REQUIREMENT_CODE.equals(t.getTaskTemplate().getCode()))
+                .filter(t -> !"COMPLETED".equals(t.getStatus()) && !"CANCELLED".equals(t.getStatus()))
+                .sorted(Comparator.comparing(Task::getId))
+                .toList();
+        if (open.isEmpty()) return null;
+
+        User by = event.getByUserId() != null ? userRepository.findById(event.getByUserId()).orElse(null) : null;
+        // Who was working the requirement (live assignments) — they inherit the next task.
+        java.util.LinkedHashMap<Long, User> holders = new java.util.LinkedHashMap<>();
+        for (Task t : open) {
+            for (TaskAssignment a : assignmentRepository.findByTaskId(t.getId())) {
+                if (a.getEmployee() != null && !"CANCELLED".equals(a.getStatus()) && !"REJECTED".equals(a.getStatus())) {
+                    holders.putIfAbsent(a.getEmployee().getId(), a.getEmployee());
+                }
+            }
+        }
+        if (by != null && holders.containsKey(by.getId())) return null; // the assignee's own work
+
+        String who = by != null ? by.getName() : "the office";
+        // A note needs an author — for system/backfill closes, credit the first admin account.
+        User author = by != null ? by : userRepository.findAll().stream()
+                .filter(u -> u.getRoles() != null && u.getRoles().stream().anyMatch(r -> "ROLE_ADMIN".equals(r.getName())))
+                .min(Comparator.comparing(User::getId)).orElse(null);
+        for (Task t : open) {
+            for (User h : holders.values()) {
+                taskTimeService.stopIfRunning(t.getId(), h);
+            }
+            if (author != null) {
+                TaskComment note = new TaskComment();
+                note.setTask(t);
+                note.setAuthor(author);
+                note.setRole(OFFICE_CLOSE_ROLE);
+                note.setContent("Completed by " + who + " (office) — " + event.getReason() + ".");
+                commentRepository.save(note);
+            }
+            finalizeTaskCompletion(t, by);
+        }
+
+        // The workflow has generated the next task — hand it to whoever held the requirement task.
+        Task next = taskRepository.findByLeadId(event.getLeadId()).stream()
+                .filter(t -> !Boolean.TRUE.equals(t.getIsDeleted()))
+                .filter(t -> t.getTaskTemplate() != null && !COLLECT_REQUIREMENT_CODE.equals(t.getTaskTemplate().getCode()))
+                .filter(t -> !"COMPLETED".equals(t.getStatus()) && !"CANCELLED".equals(t.getStatus()))
+                .max(Comparator.comparing(Task::getId))
+                .orElse(null);
+        boolean nextUnassigned = next != null && assignmentRepository.findByTaskId(next.getId()).stream()
+                .noneMatch(a -> !"CANCELLED".equals(a.getStatus()) && !"REJECTED".equals(a.getStatus()));
+        if (event.isNotify()) {
+            String customer = open.get(0).getLeadId() != null
+                    ? leadRepository.findById(open.get(0).getLeadId()).map(com.arudra.crm.entity.Lead::getName).orElse("the lead")
+                    : "the lead";
+            String msg = "Requirement for " + customer + " was collected by " + who + " (office)."
+                    + (next != null ? " Next: " + next.getTaskName() + "." : "");
+            for (User h : holders.values()) {
+                notificationService.dispatch("Task completed by office", msg, "TASK", h.getId(),
+                        next != null ? "/employee/tasks/" + next.getId() : "/employee/tasks");
+            }
+        }
+        if (!nextUnassigned || holders.isEmpty()) return null;
+        User assigner = by != null ? by : holders.values().iterator().next();
+        return new Object[]{next.getId(), new ArrayList<>(holders.keySet()), assigner.getId()};
+    }
+
     /** Closes a call follow-up task once its outcome has been recorded on the call recording. */
     @Transactional
     public Task closeCallFollowUp(Long taskId, User by) {
@@ -1238,7 +1369,8 @@ public class EmployeeTaskService {
         for (Long mgr : managersForTask(task)) {
             notificationService.dispatch("Task Completed", message, "TASK", mgr, "/tasks");
         }
-        notificationService.dispatchToAdmins("Task Completed", message, "TASK", "/tasks", byEmployee.getId());
+        notificationService.dispatchToAdmins("Task Completed", message, "TASK", "/tasks",
+                byEmployee != null ? byEmployee.getId() : null);
 
         workflowTriggerService.onTaskCompleted(saved);
         // Apply any captured lead-task form data onto the lead now that the task is truly done.
@@ -1961,6 +2093,8 @@ public class EmployeeTaskService {
         card.put("dueDate", t.getDueDate());
         card.put("dueState", dueState(t, LocalDate.now())); // ON_TRACK | DUE_SOON | OVERDUE (derived, non-destructive)
         card.put("progressPercent", latestProgressPercent(t.getId()));
+        card.put("closedByOffice", "COMPLETED".equals(t.getStatus())
+                && commentRepository.existsByTaskIdAndRole(t.getId(), OFFICE_CLOSE_ROLE));
 
         // Who & where — so a pool card tells the employee the customer and site before they pick it up.
         com.arudra.crm.entity.Lead lead = t.getLeadId() != null ? leadRepository.findById(t.getLeadId()).orElse(null) : null;

@@ -42,6 +42,7 @@ export interface TaskCard {
   categoryLabel?: string | null; // human label for the lane
   requirementCategory?: string | null; // lead tasks: comma-separated catalog categories ("Mosquito Net")
   requirementProduct?: string | null; // lead tasks: comma-separated catalog products ("Door Type")
+  closedByOffice?: boolean; // completed by the office on the employee's behalf
 }
 
 /** Active-task capacity for the current employee. */
@@ -321,7 +322,8 @@ export interface InstallOrderInfo {
   balanceDue: number;
 }
 
-export interface TaskDetail extends TaskCard {
+export interface TaskDetail extends Omit<TaskCard, 'closedByOffice'> {
+  closedByOffice?: { by: string | null; at: string | null; note: string | null } | null;
   description: string | null;
   assignmentType: 'SINGLE_EMPLOYEE' | 'MULTIPLE_EMPLOYEES' | 'TEAM' | null;
   completionRule: string | null;

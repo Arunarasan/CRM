@@ -37,6 +37,7 @@ public class MeasurementService {
     private static final double DEFAULT_WINDOW_AREA = 15.0; // 3ft x 5ft
 
     @Autowired private MeasurementRepository measurementRepository;
+    @Autowired private org.springframework.context.ApplicationEventPublisher eventPublisher;
     @Autowired private WorkflowTriggerService workflowTriggerService;
     @Autowired private MeasurementRoomRepository roomRepository;
     @Autowired private MeasurementItemRepository itemRepository;
@@ -159,6 +160,9 @@ public class MeasurementService {
 
         Measurement saved = measurementRepository.save(measurement);
         logActivity(saved, "Created", "Measurement created", currentUser);
+        // A measurement means the requirement stage is over — close Collect Requirement.
+        if (saved.getLead() != null) eventPublisher.publishEvent(new com.arudra.crm.event.LeadRequirementCollectedEvent(
+                saved.getLead().getId(), currentUser != null ? currentUser.getId() : null, "measurement saved"));
         seedChecklist(saved);
         if (currentUser != null && saved.getAssignedEngineer() != null
                 && currentUser.getId().equals(saved.getAssignedEngineer().getId())) {

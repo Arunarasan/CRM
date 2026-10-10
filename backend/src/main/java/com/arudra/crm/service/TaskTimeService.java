@@ -92,6 +92,18 @@ public class TaskTimeService {
         return toLogSummary(timeLogRepository.save(log));
     }
 
+    /** Stops the employee's open timer on a task if there is one (no-op otherwise, never throws). */
+    @Transactional
+    public void stopIfRunning(Long taskId, User employee) {
+        TaskTimeLog log = openLog(taskId, employee.getId());
+        if (log == null) return;
+        if (log.getPausedAt() == null) {
+            accrueSinceAnchor(log);
+        }
+        log.setCompletedAt(LocalDateTime.now());
+        timeLogRepository.save(log);
+    }
+
     /** Add the elapsed minutes since the running anchor (start/last resume) into the accrued total. */
     private void accrueSinceAnchor(TaskTimeLog log) {
         LocalDateTime anchor = log.getResumedAt() != null ? log.getResumedAt() : log.getStartedAt();

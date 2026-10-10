@@ -88,6 +88,9 @@ export default function TaskCard({
                   {lane.label}
                 </span>
               )}
+              {task.closedByOffice && (
+                <span className="shrink-0 rounded-md bg-[#EEF6F0] px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-[#0A573B]">By office</span>
+              )}
               {task.customer && <p className="truncate text-[11px] font-medium text-[#8A918C]">{task.taskName}</p>}
             </div>
           </div>

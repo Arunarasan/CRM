@@ -22,6 +22,7 @@ import java.util.List;
 public class SiteVisitService {
 
     @Autowired private SiteVisitRepository siteVisitRepository;
+    @Autowired private org.springframework.context.ApplicationEventPublisher eventPublisher;
     @Autowired private SiteVisitAssignmentRepository assignmentRepository;
     @Autowired private SiteRoomRepository roomRepository;
     @Autowired private SiteMeasurementRepository measurementRepository;
@@ -127,6 +128,9 @@ public class SiteVisitService {
         SiteVisit saved = siteVisitRepository.save(siteVisit);
         seedChecklist(saved);
         logHistory(saved, "Scheduled", performedBy, "Site Visit " + saved.getVisitNumber() + " scheduled");
+        // Booking a visit means the requirement stage is over — close Collect Requirement.
+        if (saved.getLead() != null) eventPublisher.publishEvent(new com.arudra.crm.event.LeadRequirementCollectedEvent(
+                saved.getLead().getId(), performedBy != null ? performedBy.getId() : null, "site visit booked"));
         return saved;
     }
 

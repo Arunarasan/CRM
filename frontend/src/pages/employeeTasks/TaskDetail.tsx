@@ -4,7 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft, Camera, AlertTriangle, Package, Play, Pause, CheckCircle2, ThumbsUp,
   Navigation, ChevronDown, UserPlus, ClipboardList, ClipboardCheck, MapPin, Image as ImageIcon,
-  Users, MessageSquare, Phone, MessageCircle, Star, Home, Wallet, FileText, UserCircle, Mic, CalendarDays,
+  Users, MessageSquare, Phone, MessageCircle, Star, Home, Wallet, FileText, UserCircle, Mic, CalendarDays, Building2,
 } from 'lucide-react';
 import api from '@/lib/api';
 import { employeeTaskApi } from '@/api/employeeTaskApi';
@@ -500,6 +500,18 @@ export default function TaskDetail() {
       </div>
 
       <div className="flex flex-col gap-3.5 p-4">
+        {task.closedByOffice && (
+          <div className="flex items-start gap-2.5 rounded-2xl border border-[#D9E7DD] bg-[#EEF6F0] px-3.5 py-3">
+            <Building2 className="mt-0.5 h-5 w-5 shrink-0 text-[#0A573B]" />
+            <div className="min-w-0">
+              <p className="text-[14px] font-semibold text-[#0A573B]">
+                Done by {task.closedByOffice.by || 'the office'} (office)
+                {task.closedByOffice.at ? ` on ${new Date(task.closedByOffice.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}` : ''}
+              </p>
+              <p className="mt-0.5 text-[12px] text-[#4F6B5A]">Nothing more to do here — check your Leads tab for the next step.</p>
+            </div>
+          </div>
+        )}
         {reqView && task.lead && (
           <RequirementTaskView task={task} lead={task.lead} canEdit={canSubmitForm} takeFirst={canPick} onEdit={openForm} onReload={load}
             more={<LeadDetailsCard lead={task.lead} extrasOnly />} />

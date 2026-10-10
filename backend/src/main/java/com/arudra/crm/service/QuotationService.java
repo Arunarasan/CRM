@@ -17,6 +17,8 @@ import java.util.*;
 @Service
 public class QuotationService {
 
+    @Autowired private org.springframework.context.ApplicationEventPublisher eventPublisher;
+
     @Autowired
     private QuotationRepository quotationRepository;
 
@@ -177,6 +179,8 @@ public class QuotationService {
         Quotation saved = quotationRepository.save(quotation);
         if (autoNumber) saved = assignNumber(saved);
         logActivity(saved, "CREATED", "Quotation created.", user);
+        if (saved.getLead() != null) eventPublisher.publishEvent(new com.arudra.crm.event.LeadRequirementCollectedEvent(
+                saved.getLead().getId(), user != null ? user.getId() : null, "quotation created"));
         return saved;
     }
 

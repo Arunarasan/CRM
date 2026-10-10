@@ -51,6 +51,7 @@ public class LeadService {
             Map.entry("Quotation Approved", 0.85), Map.entry("On Hold", 0.10));
 
     @Autowired private LeadRepository leadRepository;
+    @Autowired private org.springframework.context.ApplicationEventPublisher eventPublisher;
     @Autowired private CustomerRepository customerRepository;
     @Autowired private ProjectRepository projectRepository;
     @Autowired private UserRepository userRepository;
@@ -363,6 +364,7 @@ public class LeadService {
     @Transactional
     public Lead updateLead(Long id, Lead d, User currentUser) {
         Lead lead = getLeadById(id);
+        String requirementBefore = requirementSnapshot(lead);
 
         // Basic
         lead.setName(d.getName());
@@ -439,7 +441,33 @@ public class LeadService {
 
         Lead updatedLead = leadRepository.save(lead);
         logActivity(updatedLead, "UPDATED", "Lead details updated.", currentUser);
+        // The office filled in / changed what the customer wants → the requirement is collected,
+        // so the employee's open Collect Requirement task closes and the next task starts.
+        String requirementAfter = requirementSnapshot(updatedLead);
+        if (!requirementAfter.equals(requirementBefore) && hasRequirement(updatedLead)) {
+            eventPublisher.publishEvent(new com.arudra.crm.event.LeadRequirementCollectedEvent(
+                    updatedLead.getId(), currentUser != null ? currentUser.getId() : null, "requirement updated on the lead"));
+        }
         return updatedLead;
+    }
+
+    /** What the customer wants, flattened — compared before/after an edit to spot requirement work. */
+    private static String requirementSnapshot(Lead l) {
+        return java.util.Arrays.asList(l.getRequirementCategory(), l.getRequirementProduct(), l.getEnquiryType(),
+                l.getRequirementService(), l.getRequirementOther(), l.getProjectDescription(),
+                l.getCustomerRequirements(), l.getRoomsRequired(), l.getSpecialRequests(),
+                l.getEstimatedBudget(), l.getMinimumBudget(), l.getMaximumBudget(), l.getExpectedProjectValue())
+                .toString();
+    }
+
+    private static boolean hasRequirement(Lead l) {
+        return notBlankText(l.getRequirementCategory()) || notBlankText(l.getRequirementProduct())
+                || notBlankText(l.getRequirementService()) || notBlankText(l.getRequirementOther())
+                || notBlankText(l.getCustomerRequirements()) || notBlankText(l.getProjectDescription());
+    }
+
+    private static boolean notBlankText(Object v) {
+        return v != null && !String.valueOf(v).isBlank();
     }
 
     // =====================================================================
