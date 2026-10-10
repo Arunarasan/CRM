@@ -225,6 +225,9 @@ export interface PayrollPreviewRow {
   attendanceDays: number;
   standardHours: number;
   workingDaysPerMonth?: number;
+  /** Field punches still waiting for approval (not paid until approved). */
+  pendingHours?: number;
+  pendingSessions?: number;
   defaultBasis: "HOURLY" | "MONTHLY" | null;
   hourly: { available: boolean; rate?: number | null; overtimeRate?: number | null; rateSource?: string; regular?: number | null; overtime?: number | null; total?: number | null };
   monthly: { available: boolean; salary?: number | null; perHour?: number | null; overtimeRate?: number | null; regular?: number | null; overtime?: number | null; total?: number | null };

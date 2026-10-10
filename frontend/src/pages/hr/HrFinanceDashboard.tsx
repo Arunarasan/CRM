@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { payrollApi } from "@/api/payrollApi";
-import type { FinanceDashboard, EmployeeDeduction, PayrollLine, PayrollSummary, PayrollRequest } from "@/types/payroll";
+import type { FinanceDashboard, EmployeeDeduction, PayrollLine, PayrollRequest } from "@/types/payroll";
 import { inr } from "@/pages/workforce/WorkforceFinanceTab";
 import { useAuth } from "@/hooks/useAuth";
 import QuickPayDialog from "./QuickPayDialog";
 import PayslipEditor from "./PayslipEditor";
-import GeneratePayslips from "./GeneratePayslips";
+import PayRun from "./PayRun";
 import WageSettingsDialog from "@/components/hr/WageSettingsDialog";
 import api from "@/lib/api";
 import { toast } from "@/components/ui/toast";
@@ -19,11 +19,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  Bell, PlayCircle, Gift, Plus, Check, BadgeIndianRupee, Settings2, MinusCircle, FileText,
-  Wallet, CircleHelp, ExternalLink, Zap, Pencil, MoreHorizontal, Inbox, X,
+  Bell, Gift, Plus, Check, BadgeIndianRupee, Settings2, MinusCircle,
+  Wallet, ExternalLink, Zap, MoreHorizontal, Inbox, X,
 } from "lucide-react";
 import {
-  CardStat, FilterChips, MONTHS, PeriodPicker, PersonChip, SearchField, StatTile, StatusPill,
+  CardStat, MONTHS, PeriodPicker, PersonChip, SearchField, StatusPill,
 } from "@/pages/workforce/hrUi";
 
 const BONUS_TYPES = [
@@ -51,10 +51,6 @@ const empName = (e: any) => (e ? [e.firstName, e.lastName].filter(Boolean).join(
 const num = (v: any) => Number(v || 0);
 const errMsg = (e: any, fallback: string) => e?.response?.data?.message || fallback;
 
-/** Payslip statuses read as the next step for the person running payroll. */
-const SLIP_LABELS = { PENDING: "To approve", APPROVED: "To pay", PAID: "Paid" };
-
-type EmpStatus = "ALL" | "PENDING" | "APPROVED" | "PAID";
 
 export default function HrFinanceDashboard() {
   // Who may actually pay/approve/award/deduct/run — mirrors the backend PAYROLL_PROCESS gate
@@ -70,21 +66,17 @@ export default function HrFinanceDashboard() {
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
-  const [tab, setTab] = useState("salary");
-  const [previewKey, setPreviewKey] = useState(0);
+  const [tab, setTab] = useState("run");
+  const [runKey, setRunKey] = useState(0); // bump to make the pay run reload
   const [editSlip, setEditSlip] = useState<{ employeeId: number; name?: string } | null>(null);
 
   const [lines, setLines] = useState<PayrollLine[]>([]);
-  const [psum, setPsum] = useState<PayrollSummary | null>(null);
   const [bonuses, setBonuses] = useState<any[]>([]);
   const [deductions, setDeductions] = useState<EmployeeDeduction[]>([]);
   const [payReqs, setPayReqs] = useState<PayrollRequest[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
 
-  // table search / filters
-  const [empSearch, setEmpSearch] = useState("");
-  const [empStatus, setEmpStatus] = useState<EmpStatus>("ALL");
   const [conSearch, setConSearch] = useState("");
 
   const [awardOpen, setAwardOpen] = useState(false);
@@ -95,13 +87,12 @@ export default function HrFinanceDashboard() {
   const [wageEmpId, setWageEmpId] = useState<number | null>(null);
   const [rejecting, setRejecting] = useState<{ id: number; remarks: string } | null>(null);
 
+  // Full-page loading only the first time — later refreshes keep the pay run (and its filters) on screen.
   const load = () => {
-    setLoading(true);
     payrollApi.financeDashboard().then(setD).catch(console.error).finally(() => setLoading(false));
   };
   const loadUnified = () => {
     payrollApi.unifiedRegister(month, year).then(setLines).catch(() => setLines([]));
-    payrollApi.payrollSummary(month, year).then(setPsum).catch(() => setPsum(null));
   };
   const loadBonuses = () => payrollApi.allBonuses().then(setBonuses).catch(() => setBonuses([]));
   const loadDeductions = () => payrollApi.allDeductions().then(setDeductions).catch(() => setDeductions([]));
@@ -114,23 +105,7 @@ export default function HrFinanceDashboard() {
   }, []);
   useEffect(() => { loadUnified(); }, [month, year]);
 
-  const empLines = useMemo(() => lines.filter((l) => l.resourceType === "EMPLOYEE"), [lines]);
   const conLines = useMemo(() => lines.filter((l) => l.resourceType === "CONTRACTOR"), [lines]);
-
-  const empStatusCounts = useMemo(() => {
-    const c: Record<string, number> = { ALL: empLines.length, PENDING: 0, APPROVED: 0, PAID: 0 };
-    empLines.forEach((l) => { const s = l.status || ""; if (c[s] != null) c[s]++; });
-    return c;
-  }, [empLines]);
-
-  const filteredEmp = useMemo(() => {
-    const q = empSearch.trim().toLowerCase();
-    return empLines.filter((l) => {
-      if (empStatus !== "ALL" && (l.status || "") !== empStatus) return false;
-      if (!q) return true;
-      return (l.name || "").toLowerCase().includes(q) || (l.code || "").toLowerCase().includes(q);
-    });
-  }, [empLines, empSearch, empStatus]);
 
   const filteredCon = useMemo(() => {
     const q = conSearch.trim().toLowerCase();
@@ -162,8 +137,6 @@ export default function HrFinanceDashboard() {
       .then((r: any) => toast.success(`Alerts sent — ${r.overduePayments} overdue, ${r.finalPaymentsPending} final pending, ${r.contractsClosedWithBalance} closed w/ balance.`))
       .catch(() => toast.error("Failed to send alerts"));
   };
-  const approveRec = (id: number) => payrollApi.approvePayroll(id).then(() => { toast.success("Payslip approved."); loadUnified(); }).catch((e) => toast.error(errMsg(e, "Failed")));
-  const payRec = (id: number) => payrollApi.markPaid(id).then(() => { toast.success("Marked as paid."); loadUnified(); load(); }).catch((e) => toast.error(errMsg(e, "Failed")));
   const submitAward = () => {
     if (!award.employeeId) { toast.error("Select an employee to award the bonus to."); return; }
     if (!award.amount || Number(award.amount) <= 0) { toast.error("Enter a bonus amount greater than zero."); return; }
@@ -174,7 +147,7 @@ export default function HrFinanceDashboard() {
       .then(() => {
         setAwardOpen(false);
         setAward({ employeeId: "", bonusType: "PROJECT_COMPLETION", amount: "", projectId: "", reason: "" });
-        toast.success("Bonus awarded."); loadBonuses();
+        toast.success("Bonus awarded."); loadBonuses(); setRunKey((k) => k + 1);
       })
       .catch((e) => toast.error(errMsg(e, "Failed to award bonus")));
   };
@@ -193,7 +166,7 @@ export default function HrFinanceDashboard() {
   const payBonus = (id: number) => payrollApi.payBonus(id).then(() => { toast.success("Bonus marked paid."); loadBonuses(); }).catch((e) => toast.error(errMsg(e, "Failed")));
   const approveDeduction = (id: number) => payrollApi.approveDeduction(id).then(() => { toast.success("Deduction approved."); loadDeductions(); }).catch((e) => toast.error(errMsg(e, "Failed")));
   const approveRequest = (id: number) => payrollApi.approvePayrollRequest(id)
-    .then(() => { toast.success("Request approved."); loadPayReqs(); load(); })
+    .then(() => { toast.success("Request approved."); loadPayReqs(); load(); setRunKey((k) => k + 1); })
     .catch((e) => toast.error(errMsg(e, "Failed to approve")));
   const rejectRequest = () => {
     if (!rejecting) return;
@@ -203,42 +176,15 @@ export default function HrFinanceDashboard() {
   };
 
   const openWage = (employeeId?: number | null) => { setWageEmpId(employeeId ?? null); setWageOpen(true); };
-  const showSlips = (status: EmpStatus) => { setEmpStatus(status); setTab("salary"); };
-  const onEditSlip = (ln: PayrollLine) => setEditSlip({ employeeId: ln.personId!, name: ln.name });
-
   if (loading || !d) return <div className="p-6 text-muted-foreground">Loading payroll…</div>;
 
   const select = "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm";
-  const toApprove = psum?.toApprove ?? 0;
-  const toPay = psum?.toPay ?? 0;
+  const pendingAdjustments = bonuses.filter((b) => b.status === "PENDING" || b.status === "RECOMMENDED").length
+    + deductions.filter((x) => x.status === "PENDING").length;
+  // Something outside the pay run changed payroll (editor, quick pay, wage, adjustments) — reload it.
+  const changed = () => { setRunKey((k) => k + 1); loadUnified(); load(); loadBonuses(); loadDeductions(); loadPayReqs(); };
 
   // ---------- list definitions ----------
-  const salaryCols: Column<PayrollLine>[] = [
-    { key: "who", header: "Employee", cell: (l) => <PersonCell line={l} /> },
-    { key: "type", header: "Pay basis", headClassName: "hidden xl:table-cell", cellClassName: "hidden xl:table-cell", cell: (l) => (
-      <div><PayTypeTag model={l.payModel} /><div className="mt-0.5 whitespace-nowrap text-xs text-slate-500">{l.basisLabel || "—"}</div></div>
-    ) },
-    { key: "gross", header: "Gross", headClassName: "hidden text-right xl:table-cell", cellClassName: "hidden text-right tabular-nums text-slate-700 xl:table-cell", cell: (l) => l.gross != null ? inr(l.gross) : "—" },
-    { key: "ded", header: "Deductions", headClassName: "hidden text-right xl:table-cell", cellClassName: "hidden text-right tabular-nums text-rose-700 xl:table-cell", cell: (l) => num(l.deductions) > 0 ? `− ${inr(l.deductions)}` : <span className="text-slate-400">—</span> },
-    { key: "net", header: "Net payable", headClassName: "text-right", cellClassName: "text-right tabular-nums", cell: (l) => (
-      <div>
-        <div className="font-semibold text-slate-900">{inr(l.payable)}</div>
-        {/* Gross / deductions have their own columns on wide screens */}
-        <div className="whitespace-nowrap text-xs text-slate-500 xl:hidden">
-          {l.gross != null ? inr(l.gross) : "—"}{num(l.deductions) > 0 && <span className="text-rose-700"> − {inr(l.deductions)}</span>}
-        </div>
-      </div>
-    ) },
-    { key: "status", header: "Status", cell: (l) => (
-      <div className="flex flex-col items-start gap-1">
-        <StatusPill status={l.status} labels={SLIP_LABELS} />
-        <span className="xl:hidden"><PayTypeTag model={l.payModel} /></span>
-      </div>
-    ) },
-    { key: "act", header: <span className="sr-only">Actions</span>, headClassName: "text-right", cellClassName: "text-right whitespace-nowrap",
-      cell: (l) => <RowAction line={l} onApprove={approveRec} onPay={payRec} canProcess={canProcess} onEdit={onEditSlip} onWage={openWage} /> },
-  ];
-
   const conCols: Column<PayrollLine>[] = [
     { key: "who", header: "Contractor", cell: (l) => <PersonCell line={l} /> },
     { key: "period", header: "This period", headClassName: "hidden xl:table-cell", cellClassName: "hidden whitespace-nowrap text-slate-500 xl:table-cell", cell: (l) => l.basisLabel || "—" },
@@ -247,7 +193,7 @@ export default function HrFinanceDashboard() {
     { key: "pending", header: "Pending", headClassName: "text-right", cellClassName: "text-right tabular-nums font-semibold text-amber-800", cell: (l) => num(l.outstanding) > 0 ? inr(l.outstanding) : <span className="font-normal text-slate-400">—</span> },
     { key: "status", header: "Status", cell: (l) => <StatusPill status={l.status} /> },
     { key: "act", header: <span className="sr-only">Actions</span>, headClassName: "text-right", cellClassName: "text-right whitespace-nowrap",
-      cell: (l) => <RowAction line={l} onApprove={approveRec} onPay={payRec} canProcess={canProcess} /> },
+      cell: (l) => <ContractorAction line={l} /> },
   ];
 
   const bonusCols: Column<any>[] = [
@@ -301,133 +247,63 @@ export default function HrFinanceDashboard() {
 
   return (
     <div className="space-y-5">
-      {/* ---- PERIOD BAR — which month, where the run stands, and the actions to move it on.
-              Sticky on wide screens so it stays in reach; scrolls away on smaller screens to save height. ---- */}
-      <div className="z-20 bg-slate-50 xl:sticky xl:top-0 xl:pb-1">
-        <div className="rounded-xl border bg-card p-4 shadow-sm">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div className="min-w-0 space-y-1">
-              <div className="text-xs font-medium text-slate-500">Payroll period</div>
-              <PeriodPicker month={month} year={year} onChange={(m, y) => { setMonth(m); setYear(y); }} />
-            </div>
-            {canProcess ? (
-              <div className="flex w-full items-center gap-2 sm:w-auto">
-                <Button onClick={() => setTab("generate")} className="flex-1 sm:flex-none">
-                  <PlayCircle className="mr-1.5 h-4 w-4" /> Generate payslips
-                </Button>
-                <Button variant="forest" onClick={() => setQuickOpen(true)} className="flex-1 sm:flex-none">
-                  <Zap className="mr-1.5 h-4 w-4" /> Quick pay
-                </Button>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="icon" className="shrink-0" aria-label="More payroll actions"><MoreHorizontal className="h-4 w-4" /></Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-56">
-                    <DropdownMenuItem onClick={() => openWage()}><Settings2 className="mr-2 h-4 w-4" /> Wage &amp; pay basis</DropdownMenuItem>
-                    <DropdownMenuItem onClick={runAlerts}><Bell className="mr-2 h-4 w-4" /> Send payment alerts</DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            ) : (
-              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">View only</span>
-            )}
-          </div>
-
-          {/* Run progress — the next steps, each one opens the matching payslips */}
-          <div className="mt-3 grid grid-cols-3 gap-2">
-            <RunStep label="To approve" value={toApprove} tone={toApprove > 0 ? "warning" : "muted"} onClick={() => showSlips("PENDING")} />
-            <RunStep label="To pay" value={toPay} tone={toPay > 0 ? "primary" : "muted"} onClick={() => showSlips("APPROVED")} />
-            <RunStep label="Total payout" value={inr(psum?.combinedPayout)} tone="muted" onClick={() => showSlips("ALL")} />
-          </div>
-          <p className="mt-3 hidden items-start gap-1.5 border-t pt-3 text-xs text-slate-500 lg:flex">
-            <CircleHelp className="mt-px h-3.5 w-3.5 shrink-0" />
-            {canProcess
-              ? `Payslips are built from attendance hours. "Generate payslips" prices each employee's hours Hourly and Monthly — pick one per person. Generating again only fills anyone missed; nobody is paid twice.`
-              : `You can review payroll for ${MONTHS[month - 1]} ${year}. Approving and paying require payroll-processing rights.`}
+      {/* ---- HEADER — which month, plus the occasional actions. The next step of the run
+              (make / approve / pay) is the button on the pay-run step bar below. ---- */}
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="min-w-0">
+          <h2 className="text-lg font-semibold text-slate-900">Payroll · {MONTHS[month - 1]} {year}</h2>
+          <p className="text-sm text-slate-500">
+            {canProcess ? "Make, check, approve and pay this month's salaries." : "View only — approving and paying need payroll rights."}
           </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <PeriodPicker month={month} year={year} onChange={(m, y) => { setMonth(m); setYear(y); }} />
+          {canProcess && (
+            <>
+              <Button variant="outline" onClick={() => setQuickOpen(true)}><Zap className="mr-1.5 h-4 w-4" /> Quick pay</Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="icon" className="shrink-0" aria-label="More payroll actions"><MoreHorizontal className="h-4 w-4" /></Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuItem onClick={() => openWage()}><Settings2 className="mr-2 h-4 w-4" /> Wage &amp; pay basis</DropdownMenuItem>
+                  <DropdownMenuItem onClick={runAlerts}><Bell className="mr-2 h-4 w-4" /> Send payment alerts</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </>
+          )}
         </div>
       </div>
 
-      {/* ---- MONEY AT A GLANCE — employee money, then contractor money ---- */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <StatTile label="Payroll due" value={inr(d.employee.payrollDue)} tone={num(d.employee.payrollDue) > 0 ? "warning" : "neutral"} />
-        <StatTile label="Paid this month" value={inr(d.employee.salaryPaidThisMonth)} tone="success" />
-        <StatTile label="Advances out" value={inr(d.employee.advancesOutstanding)} hint="to recover" />
-        <StatTile label="Loans out" value={inr(d.employee.loansOutstanding)} hint="to recover" />
-        <StatTile label="Contractor pending" value={inr(d.contractor.outstandingPayments)} tone={num(d.contractor.outstandingPayments) > 0 ? "warning" : "neutral"} />
-        <StatTile label="Contractor overdue" value={inr(d.contractor.overduePayments)} tone={num(d.contractor.overduePayments) > 0 ? "danger" : "neutral"} />
-      </div>
-
-      {/* ---- TABS — one focused section at a time ---- */}
       <Tabs value={tab} onValueChange={setTab} className="w-full">
         <div className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
           <TabsList className="h-auto w-max">
-            <TabsTrigger value="salary" className="py-1.5">Salary <CountPill n={empLines.length} /></TabsTrigger>
-            <TabsTrigger value="contractors" className="py-1.5">Contractors <CountPill n={conLines.length} /></TabsTrigger>
-            <TabsTrigger value="adjustments" className="py-1.5">Bonuses &amp; deductions</TabsTrigger>
+            <TabsTrigger value="run" className="py-1.5">Pay run</TabsTrigger>
+            <TabsTrigger value="adjustments" className="py-1.5">Bonuses &amp; deductions {pendingAdjustments > 0 && <CountPill n={pendingAdjustments} tone="amber" />}</TabsTrigger>
             <TabsTrigger value="requests" className="py-1.5">Requests {pendingReqCount > 0 && <CountPill n={pendingReqCount} tone="amber" />}</TabsTrigger>
-            <TabsTrigger value="generate" className="py-1.5">Generate</TabsTrigger>
+            <TabsTrigger value="contractors" className="py-1.5">Contractors <CountPill n={conLines.length} /></TabsTrigger>
           </TabsList>
         </div>
 
-        {/* ===================== SALARY ===================== */}
-        <TabsContent value="salary" className="mt-4 space-y-3">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <FilterChips<EmpStatus>
-              value={empStatus} onChange={setEmpStatus}
-              options={[
-                { key: "ALL", label: "All", count: empStatusCounts.ALL },
-                { key: "PENDING", label: "To approve", count: empStatusCounts.PENDING },
-                { key: "APPROVED", label: "To pay", count: empStatusCounts.APPROVED },
-                { key: "PAID", label: "Paid", count: empStatusCounts.PAID },
-              ]}
-            />
-            <SearchField value={empSearch} onChange={setEmpSearch} placeholder="Search employee or code…" className="md:w-72" />
-          </div>
-
-          <ResponsiveList
-            items={filteredEmp}
-            columns={salaryCols}
-            getRowKey={(l) => `emp-${l.personId}-${l.recordId ?? ""}`}
-            emptyIcon={BadgeIndianRupee}
-            emptyTitle={empLines.length ? "No employees match" : `No payslips for ${MONTHS[month - 1]} yet`}
-            emptyDescription={empLines.length ? "Change the search or status filter." : "Generate payslips to build them from attendance hours."}
-            emptyAction={!empLines.length && canProcess
-              ? <Button size="sm" onClick={() => setTab("generate")}><PlayCircle className="mr-1 h-4 w-4" /> Generate payslips</Button>
-              : undefined}
-            renderCard={(l) => (
-              <div className="space-y-3">
-                <div className="flex items-start justify-between gap-2">
-                  <PersonCell line={l} />
-                  <StatusPill status={l.status} labels={SLIP_LABELS} />
-                </div>
-                <div className="flex items-center gap-2 text-xs text-slate-500">
-                  <PayTypeTag model={l.payModel} /> <span className="truncate">{l.basisLabel || "—"}</span>
-                </div>
-                <div className="grid grid-cols-3 gap-2 rounded-lg bg-slate-50 p-2.5">
-                  <CardStat label="Gross" value={l.gross != null ? inr(l.gross) : "—"} />
-                  <CardStat label="Deductions" value={num(l.deductions) > 0 ? inr(l.deductions) : "—"} className="text-rose-700" />
-                  <CardStat label="Net" value={inr(l.payable)} className="font-semibold" />
-                </div>
-                <div className="flex justify-end">
-                  <RowAction line={l} onApprove={approveRec} onPay={payRec} canProcess={canProcess} onEdit={onEditSlip} onWage={openWage} />
-                </div>
-              </div>
-            )}
+        {/* ===================== PAY RUN ===================== */}
+        <TabsContent value="run" className="mt-4">
+          <PayRun
+            month={month} year={year} canProcess={canProcess} refreshKey={runKey}
+            onChanged={() => { load(); loadPayReqs(); }}
+            onOpenSlip={(employeeId, name) => setEditSlip({ employeeId, name })}
+            onEditWage={canProcess ? openWage : undefined}
           />
-          {filteredEmp.length > 0 && (
-            <p className="text-xs text-slate-500">Showing {filteredEmp.length} of {empLines.length} · {MONTHS[month - 1]} {year}</p>
-          )}
         </TabsContent>
 
         {/* ===================== CONTRACTORS ===================== */}
         <TabsContent value="contractors" className="mt-4 space-y-3">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             {filteredCon.length > 0 ? (
-              <div className="grid grid-cols-3 gap-2 md:flex md:gap-6">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 md:flex md:gap-6">
                 <CardStat label="Billed" value={inr(conTotals.billed)} />
                 <CardStat label="Paid so far" value={inr(conTotals.paid)} />
                 <CardStat label="Pending" value={inr(conTotals.pending)} className="font-semibold text-amber-800" />
+                <CardStat label="Overdue" value={inr(d.contractor.overduePayments)} className={num(d.contractor.overduePayments) > 0 ? "font-semibold text-rose-700" : ""} />
               </div>
             ) : <span />}
             <SearchField value={conSearch} onChange={setConSearch} placeholder="Search contractor or code…" className="md:w-72" />
@@ -452,7 +328,7 @@ export default function HrFinanceDashboard() {
                   <CardStat label="Paid" value={inr(l.paidToDate)} />
                   <CardStat label="Pending" value={num(l.outstanding) > 0 ? inr(l.outstanding) : "—"} className="font-semibold text-amber-800" />
                 </div>
-                <div className="flex justify-end"><RowAction line={l} onApprove={() => {}} onPay={() => {}} canProcess={false} /></div>
+                <div className="flex justify-end"><ContractorAction line={l} /></div>
               </div>
             )}
           />
@@ -493,8 +369,14 @@ export default function HrFinanceDashboard() {
 
         {/* ===================== REQUESTS ===================== */}
         <TabsContent value="requests" className="mt-4 space-y-3">
-          <ListHeader icon={Inbox} title="Employee requests" count={payReqs.length}
+          <ListHeader icon={Inbox} title="Borrow & repay requests" count={payReqs.length}
             badge={pendingReqCount > 0 ? `${pendingReqCount} waiting` : undefined} />
+          {(num(d.employee.advancesOutstanding) + num(d.employee.loansOutstanding)) > 0 && (
+            <p className="text-sm text-slate-600">
+              Employees owe <b className="tabular-nums text-rose-700">{inr(num(d.employee.advancesOutstanding) + num(d.employee.loansOutstanding))}</b> in total
+              <span className="text-slate-400"> · advances {inr(d.employee.advancesOutstanding)} · loans {inr(d.employee.loansOutstanding)}</span>
+            </p>
+          )}
           <ResponsiveList
             items={payReqs} columns={reqCols} getRowKey={(r) => r.id}
             emptyIcon={Inbox} emptyTitle="No employee requests"
@@ -507,21 +389,10 @@ export default function HrFinanceDashboard() {
             )}
           />
           <p className="text-xs text-slate-500">
-            Approving an advance creates a recoverable advance; loan repayments and other adjustments are applied to the target month's payroll run.
+            Approving "Borrow money" gives them an advance that's paid back from salary. Approved repayments come off that month's payslip. You can also approve these on the pay run.
           </p>
         </TabsContent>
 
-        {/* ===================== GENERATE ===================== */}
-        <TabsContent value="generate" className="mt-4">
-          <GeneratePayslips
-            key={`${month}-${year}-${previewKey}`}
-            month={month} year={year} canProcess={canProcess}
-            onGenerated={() => { loadUnified(); load(); loadBonuses(); loadDeductions(); loadPayReqs(); }}
-            onEditWage={canProcess ? openWage : undefined}
-            onOpenSlip={(employeeId, name) => setEditSlip({ employeeId, name })}
-            onReview={() => showSlips("PENDING")}
-          />
-        </TabsContent>
       </Tabs>
 
       {/* AWARD BONUS */}
@@ -616,7 +487,7 @@ export default function HrFinanceDashboard() {
         employees={employees}
         month={month}
         year={year}
-        onSaved={() => { reloadEmployees(); loadUnified(); setPreviewKey((k) => k + 1); }}
+        onSaved={() => { reloadEmployees(); changed(); }}
       />
 
       {/* QUICK PAY — search anyone and pay inline */}
@@ -626,7 +497,7 @@ export default function HrFinanceDashboard() {
           onClose={() => setQuickOpen(false)}
           employees={employees}
           canPayContractor={canPayContractor}
-          onDone={() => { loadUnified(); load(); loadBonuses(); loadDeductions(); loadPayReqs(); }}
+          onDone={changed}
         />
       )}
 
@@ -636,24 +507,11 @@ export default function HrFinanceDashboard() {
           name={editSlip.name}
           month={month}
           year={year}
-          onClose={() => { setEditSlip(null); setPreviewKey((k) => k + 1); }}
-          onChanged={() => { loadUnified(); load(); loadBonuses(); loadDeductions(); loadPayReqs(); }}
+          onClose={() => { setEditSlip(null); changed(); }}
+          onChanged={() => { load(); loadPayReqs(); }}
         />
       )}
     </div>
-  );
-}
-
-function RunStep({ label, value, tone, onClick }: { label: string; value: React.ReactNode; tone: "warning" | "primary" | "muted"; onClick: () => void }) {
-  const t = tone === "warning" ? "border-amber-200 bg-amber-50 text-amber-800"
-    : tone === "primary" ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-    : "border-slate-200 bg-card text-slate-700";
-  return (
-    <button type="button" onClick={onClick}
-      className={`min-w-0 rounded-lg border px-3 py-2 text-left transition-colors hover:border-slate-300 ${t}`}>
-      <div className="truncate text-[11px] font-medium opacity-80">{label}</div>
-      <div className="truncate text-sm font-semibold tabular-nums">{value}</div>
-    </button>
   );
 }
 
@@ -713,20 +571,6 @@ function AdjustmentCard({ emp, kind, text, amount, amountClass = "text-slate-900
   );
 }
 
-function PayTypeTag({ model }: { model?: string }) {
-  const tone: Record<string, string> = {
-    HOURLY: "bg-sky-100 text-sky-800",
-    MONTHLY: "bg-violet-100 text-violet-800",
-    CONTRACT: "bg-amber-100 text-amber-800",
-  };
-  const label = model === "HOURLY" ? "Hourly" : model === "CONTRACT" ? "Contract" : "Monthly";
-  return (
-    <span className={`inline-flex rounded px-1.5 py-0.5 text-[11px] font-semibold ${tone[model || "MONTHLY"] || "bg-slate-100 text-slate-600"}`}>
-      {label}
-    </span>
-  );
-}
-
 /** Person cell — routes to the employee record or the contractor detail page, colour-coded by type. */
 function PersonCell({ line }: { line: PayrollLine }) {
   const isCon = line.resourceType === "CONTRACTOR";
@@ -736,41 +580,13 @@ function PersonCell({ line }: { line: PayrollLine }) {
   return <PersonChip name={line.name} sub={line.code} to={to} tone={isCon ? "contractor" : "employee"} />;
 }
 
-/** Per-row action — the one next step as a button (Approve / Pay), the rest tucked into a menu. */
-function RowAction({ line, onApprove, onPay, canProcess, onEdit, onWage }: { line: PayrollLine; onApprove: (id: number) => void; onPay: (id: number) => void; canProcess: boolean; onEdit?: (line: PayrollLine) => void; onWage?: (employeeId: number) => void }) {
-  if (line.resourceType === "CONTRACTOR") {
-    const to = line.actionHint === "LEDGER" ? "/contractors/ledger" : `/contractors/directory/${line.personId}`;
-    const label = line.actionHint === "LEDGER" ? "Ledger" : "Open bill";
-    return (
-      <Button asChild size="sm" variant="outline">
-        <Link to={to}><ExternalLink className="mr-1 h-3.5 w-3.5" /> {label}</Link>
-      </Button>
-    );
-  }
-  const id = line.recordId ?? undefined;
-  const canEdit = canProcess && onEdit && id && line.status !== "PAID" && line.personId;
-  const canWage = canProcess && onWage && line.personId;
+/** Contractors are paid from their bill or ledger — the row just links there. */
+function ContractorAction({ line }: { line: PayrollLine }) {
+  const to = line.actionHint === "LEDGER" ? "/contractors/ledger" : `/contractors/directory/${line.personId}`;
+  const label = line.actionHint === "LEDGER" ? "Ledger" : "Open bill";
   return (
-    <div className="inline-flex items-center gap-1.5">
-      {canEdit && <Button size="sm" variant="ghost" onClick={() => onEdit!(line)} aria-label={`Edit payslip for ${line.name}`}><Pencil className="mr-1 h-3.5 w-3.5" /> Edit</Button>}
-      {canProcess && line.status === "PENDING" && id && <Button size="sm" variant="outline" onClick={() => onApprove(id)}><Check className="mr-1 h-3.5 w-3.5" /> Approve</Button>}
-      {canProcess && line.status === "APPROVED" && id && <Button size="sm" variant="forest" onClick={() => onPay(id)}><BadgeIndianRupee className="mr-1 h-3.5 w-3.5" /> Pay</Button>}
-      {id && (
-        <Button size="sm" variant="ghost" className="h-9 w-9 p-0" title="Open payslip" aria-label="Open payslip" onClick={() => window.open(`/hr/payslip/${id}`, "_blank")}>
-          <FileText className="h-4 w-4" />
-        </Button>
-      )}
-      {canWage && (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button size="sm" variant="ghost" className="h-9 w-9 p-0" aria-label={`More actions for ${line.name}`}><MoreHorizontal className="h-4 w-4" /></Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-60">
-            {canEdit && <DropdownMenuItem onClick={() => onEdit!(line)}><Pencil className="mr-2 h-4 w-4" /> Edit, regenerate or delete</DropdownMenuItem>}
-            <DropdownMenuItem onClick={() => onWage!(line.personId!)}><Settings2 className="mr-2 h-4 w-4" /> Wage &amp; pay basis</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      )}
-    </div>
+    <Button asChild size="sm" variant="outline">
+      <Link to={to}><ExternalLink className="mr-1 h-3.5 w-3.5" /> {label}</Link>
+    </Button>
   );
 }
