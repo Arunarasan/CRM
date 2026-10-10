@@ -54,7 +54,7 @@ const VALID_TABS = ["overview", "attendance", "leads", "reports", "payroll", "do
 export default function EmployeeProfile() {
   const { id } = useParams();
   const [searchParams] = useSearchParams();
-  const goBack = useGoBack("/workforce");
+  const goBack = useGoBack("/workforce/people");
   // A deep link (e.g. a "Payroll Request" notification → ?tab=payroll) opens straight to that tab.
   const initialTab = searchParams.get("tab");
   const [activeTab, setActiveTab] = useState(initialTab && VALID_TABS.includes(initialTab) ? initialTab : "overview");

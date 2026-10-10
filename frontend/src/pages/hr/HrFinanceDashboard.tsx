@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { payrollApi } from "@/api/payrollApi";
 import type { FinanceDashboard, EmployeeDeduction, PayrollLine, PayrollRequest } from "@/types/payroll";
 import { inr } from "@/pages/workforce/WorkforceFinanceTab";
@@ -66,7 +66,12 @@ export default function HrFinanceDashboard() {
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
-  const [tab, setTab] = useState("run");
+  // ?tab=requests|adjustments|contractors deep-links from the HR home page.
+  const [searchParams] = useSearchParams();
+  const [tab, setTab] = useState(() => {
+    const t = searchParams.get("tab");
+    return t && ["run", "adjustments", "requests", "contractors"].includes(t) ? t : "run";
+  });
   const [runKey, setRunKey] = useState(0); // bump to make the pay run reload
   const [editSlip, setEditSlip] = useState<{ employeeId: number; name?: string } | null>(null);
 

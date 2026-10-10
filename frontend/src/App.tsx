@@ -96,6 +96,7 @@ const FinanceReportsPage = lazy(() => import("./pages/finance/FinanceReportsPage
 const EmployeeProfile = lazy(() => import("./pages/EmployeeProfile"));
 const WorkforceLayout = lazy(() => import("./pages/workforce/WorkforceLayout"));
 const WorkforceDirectoryPage = lazy(() => import("./pages/workforce/WorkforceDirectoryPage"));
+const WorkforceHome = lazy(() => import("./pages/workforce/WorkforceHome"));
 const WorkforceProfilePage = lazy(() => import("./pages/workforce/WorkforceProfilePage"));
 const WorkforceReportsPage = lazy(() => import("./pages/workforce/WorkforceReportsPage"));
 const DailyReportsPage = lazy(() => import("./pages/workforce/DailyReportsPage"));
@@ -294,7 +295,8 @@ function App() {
                 in as tabs. The old standalone /hr screen redirects here. Contractor operations
                 (/contractors) remain the deep-linked operational module. */}
             <Route path="workforce" element={<WorkforceLayout />}>
-              <Route index element={<WorkforceDirectoryPage />} />
+              <Route index element={<WorkforceHome />} />
+              <Route path="people" element={<WorkforceDirectoryPage />} />
               <Route path="payroll" element={<HrFinanceDashboard />} />
               <Route path="cashflow" element={<CashflowPage />} />
               <Route path="attendance" element={<HrAttendancePage />} />

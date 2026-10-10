@@ -40,6 +40,16 @@ public class HrController {
     private PayrollService payrollService;
 
     @Autowired
+    private com.arudra.crm.service.HrOverviewService hrOverviewService;
+
+    /** HR landing page: who's in today, what's waiting for HR, and this month's payroll — read-only. */
+    @GetMapping("/overview")
+    @PreAuthorize(HR_READ)
+    public ResponseEntity<Map<String, Object>> overview() {
+        return ResponseEntity.ok(hrOverviewService.overview());
+    }
+
+    @Autowired
     private com.arudra.crm.service.PayslipEditService payslipEditService;
 
     @Autowired

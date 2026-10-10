@@ -61,7 +61,7 @@ export default function HrDepartmentsPage() {
               <div className="min-w-0 flex-1">
                 <h3 className="truncate font-semibold text-slate-900">{d.name}</h3>
                 <p className="line-clamp-2 text-sm text-slate-500">{d.description || "No description"}</p>
-                <Link to="/workforce" state={{ department: d.name }} className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+                <Link to="/workforce/people" state={{ department: d.name }} className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
                   <Users className="h-3.5 w-3.5" /> View people
                 </Link>
               </div>

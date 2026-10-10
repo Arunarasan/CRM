@@ -12,7 +12,7 @@ import { useGoBack } from "@/hooks/useGoBack";
 
 export default function WorkforceProfilePage() {
   const { id } = useParams();
-  const goBack = useGoBack("/workforce");
+  const goBack = useGoBack("/workforce/people");
   const [detail, setDetail] = useState<WorkforceDetail | null>(null);
   const [meta, setMeta] = useState<WorkforceMeta | null>(null);
   const [loading, setLoading] = useState(true);

@@ -293,7 +293,8 @@ export default function PayRun({
           </div>
         ) : (
           <>
-            <table className="hidden w-full text-sm md:table">
+            <div className="hidden overflow-x-auto lg:block">
+            <table className="w-full text-sm">
               <thead className="border-b bg-slate-50/70 text-xs text-slate-500">
                 <tr>
                   {canProcess && (
@@ -303,7 +304,7 @@ export default function PayRun({
                   )}
                   <th className="px-3 py-2.5 text-left font-medium">Employee</th>
                   <th className="px-3 py-2.5 text-left font-medium">Hours</th>
-                  <th className="hidden px-3 py-2.5 text-left font-medium lg:table-cell">Pay basis</th>
+                  <th className="hidden px-3 py-2.5 text-left font-medium 2xl:table-cell">Pay basis</th>
                   <th className="px-3 py-2.5 text-right font-medium">Net pay</th>
                   <th className="px-3 py-2.5 text-left font-medium">Status</th>
                   <th className="px-3 py-2.5"><span className="sr-only">Actions</span></th>
@@ -318,9 +319,18 @@ export default function PayRun({
                           onChange={(e) => setSelected((s) => ({ ...s, [r.id]: e.target.checked }))} aria-label={`Select ${r.name}`} />
                       </td>
                     )}
-                    <td className="px-3 py-3 align-top"><Who r={r} onRequests={() => setReqFor(r)} /></td>
-                    <td className="px-3 py-3 align-top"><HoursCell p={r.preview} /></td>
-                    <td className="hidden px-3 py-3 align-top lg:table-cell">
+                    <td className="max-w-[260px] px-3 py-3 align-top"><Who r={r} onRequests={() => setReqFor(r)} /></td>
+                    <td className="px-3 py-3 align-top">
+                      <HoursCell p={r.preview} />
+                      {/* Below 2xl the basis choice sits under the hours instead of its own column */}
+                      {r.status === "NONE" && (
+                        <div className="mt-2 2xl:hidden">
+                          <BasisCell r={r} chosen={choice[r.id]} canProcess={canProcess}
+                            onPick={(b) => setChoice((c) => ({ ...c, [r.id]: b }))} onEditWage={onEditWage} />
+                        </div>
+                      )}
+                    </td>
+                    <td className="hidden px-3 py-3 align-top 2xl:table-cell">
                       <BasisCell r={r} chosen={choice[r.id]} canProcess={canProcess}
                         onPick={(b) => setChoice((c) => ({ ...c, [r.id]: b }))} onEditWage={onEditWage} />
                     </td>
@@ -335,8 +345,9 @@ export default function PayRun({
                 ))}
               </tbody>
             </table>
+            </div>
 
-            <ul className="divide-y md:hidden">
+            <ul className="divide-y lg:hidden">
               {visible.map((r) => (
                 <li key={r.id} className={`space-y-3 p-4 ${selected[r.id] ? "bg-primary/5" : ""}`}>
                   <div className="flex items-start gap-3">
@@ -458,7 +469,7 @@ function BasisCell({ r, chosen, canProcess, onPick, onEditWage }: {
     { b: "HOURLY", label: "Hourly", amount: p.hourly.total, ok: p.hourly.available },
   ];
   return (
-    <div className="inline-flex rounded-lg border bg-slate-50 p-0.5" role="radiogroup" aria-label={`Pay basis for ${r.name}`}>
+    <div className="inline-flex flex-wrap rounded-lg border bg-slate-50 p-0.5" role="radiogroup" aria-label={`Pay basis for ${r.name}`}>
       {opts.filter((o) => o.ok).map((o) => {
         const on = chosen === o.b;
         return (
