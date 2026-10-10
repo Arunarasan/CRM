@@ -10,7 +10,7 @@ import { format } from "date-fns";
 import {
   ArrowLeft, Briefcase, FileText, CalendarClock, HandCoins, Award, Plus, Download, Pencil,
   Mail, Phone, Calendar, IdCard, CheckSquare, FolderKanban, ChevronRight, ChevronDown, ListChecks,
-  Target, ClipboardList, Star,
+  Target, ClipboardList,
 } from "lucide-react";
 import { dailyReportApi, type AdminDailyReport, type EmployeeLeadSummary } from "@/api/dailyReportApi";
 import DailyReportCard from "@/components/hr/DailyReportCard";
@@ -49,7 +49,9 @@ const tenure = (doj?: string | null) => {
   return [y ? `${y}y` : "", m ? `${m}m` : ""].filter(Boolean).join(" ") || "0m";
 };
 
-const VALID_TABS = ["overview", "attendance", "leads", "reports", "payroll", "documents", "performance", "reviews"];
+const VALID_TABS = ["overview", "attendance", "payroll", "work", "documents", "performance"];
+// Older links point at tabs that were merged: leads/reports → Work, reviews → Performance.
+const TAB_ALIASES: Record<string, string> = { leads: "work", reports: "work", reviews: "performance" };
 
 export default function EmployeeProfile() {
   const { id } = useParams();
@@ -57,7 +59,10 @@ export default function EmployeeProfile() {
   const goBack = useGoBack("/workforce/people");
   // A deep link (e.g. a "Payroll Request" notification → ?tab=payroll) opens straight to that tab.
   const initialTab = searchParams.get("tab");
-  const [activeTab, setActiveTab] = useState(initialTab && VALID_TABS.includes(initialTab) ? initialTab : "overview");
+  const [activeTab, setActiveTab] = useState(() => {
+    const t = initialTab ? (TAB_ALIASES[initialTab] ?? initialTab) : null;
+    return t && VALID_TABS.includes(t) ? t : "overview";
+  });
   const [employee, setEmployee] = useState<any>(null);
   const [attendance, setAttendance] = useState<any[]>([]);
   const [leaves, setLeaves] = useState<any[]>([]);
@@ -229,15 +234,13 @@ export default function EmployeeProfile() {
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full flex flex-col">
           <div className="-mx-4 mb-5 shrink-0 overflow-x-auto px-4 md:mx-0 md:px-0">
-          <TabsList className="h-auto w-max gap-0.5 rounded-xl border bg-card p-1 shadow-sm lg:grid lg:w-full lg:grid-cols-8">
-            <TabTrig value="overview" icon={<Briefcase className="w-4 h-4 mr-2" />}>Overview</TabTrig>
-            <TabTrig value="attendance" icon={<CalendarClock className="w-4 h-4 mr-2" />}>Time &amp; Leave</TabTrig>
-            <TabTrig value="leads" icon={<Target className="w-4 h-4 mr-2" />}>Leads</TabTrig>
-            <TabTrig value="reports" icon={<ClipboardList className="w-4 h-4 mr-2" />}>Reports</TabTrig>
-            <TabTrig value="payroll" icon={<HandCoins className="w-4 h-4 mr-2" />}>Payroll</TabTrig>
-            <TabTrig value="documents" icon={<FileText className="w-4 h-4 mr-2" />}>Documents</TabTrig>
-            <TabTrig value="performance" icon={<Award className="w-4 h-4 mr-2" />}>Performance</TabTrig>
-            <TabTrig value="reviews" icon={<Star className="w-4 h-4 mr-2" />}>Reviews</TabTrig>
+          <TabsList className="h-auto w-max">
+            <TabTrig value="overview" icon={<Briefcase className="mr-1.5 h-4 w-4" />}>Overview</TabTrig>
+            <TabTrig value="attendance" icon={<CalendarClock className="mr-1.5 h-4 w-4" />}>Time &amp; leave</TabTrig>
+            <TabTrig value="payroll" icon={<HandCoins className="mr-1.5 h-4 w-4" />}>Pay</TabTrig>
+            <TabTrig value="work" icon={<Target className="mr-1.5 h-4 w-4" />}>Work</TabTrig>
+            <TabTrig value="documents" icon={<FileText className="mr-1.5 h-4 w-4" />}>Documents</TabTrig>
+            <TabTrig value="performance" icon={<Award className="mr-1.5 h-4 w-4" />}>Performance</TabTrig>
           </TabsList>
           </div>
 
@@ -405,12 +408,12 @@ export default function EmployeeProfile() {
             </div>
           </TabsContent>
 
-          {/* ---- Leads raised from the field ---- */}
-          <TabsContent value="leads">
+          {/* ---- Work: leads raised from the field + daily reports ---- */}
+          <TabsContent value="work" className="space-y-6">
             <div className="bg-white border rounded-2xl shadow-sm">
               <div className="p-5 border-b flex items-center gap-2">
                 <Target className="w-5 h-5 text-emerald-600" />
-                <h3 className="font-bold text-slate-800">Leads Added by this Employee</h3>
+                <h3 className="font-semibold text-slate-900">Leads they added</h3>
                 <span className="ml-auto text-sm text-slate-500">{empLeads.length} total</span>
               </div>
               {empLeads.length === 0 ? (
@@ -442,14 +445,11 @@ export default function EmployeeProfile() {
                 </ul>
               )}
             </div>
-          </TabsContent>
 
-          {/* ---- Daily reports submitted from the field ---- */}
-          <TabsContent value="reports">
             <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <ClipboardList className="w-5 h-5 text-emerald-600" />
-                <h3 className="font-bold text-slate-800">Daily Reports</h3>
+                <h3 className="font-semibold text-slate-900">Daily reports</h3>
                 <span className="ml-auto text-sm text-slate-500">{empReports.length} total</span>
               </div>
               {empReports.length === 0 ? (
@@ -532,13 +532,13 @@ export default function EmployeeProfile() {
                   <p className="text-slate-700 text-sm bg-slate-50 p-4 rounded-lg">{p.comments}</p>
                 </div>
               ))}
-              {performance.length === 0 && <div className="text-center py-12 text-slate-500 bg-white border rounded-2xl">No performance reviews found.</div>}
+              {performance.length === 0 && <div className="rounded-2xl border bg-white py-8 text-center text-slate-500">No manual reviews yet.</div>}
+              {/* Customer reviews from their QR code */}
+              <div className="border-t pt-6">
+                <h3 className="mb-3 font-semibold text-slate-900">Customer reviews</h3>
+                <EmployeeReviewsTab employeeId={Number(id)} />
+              </div>
             </div>
-          </TabsContent>
-
-          {/* ---- Reviews (customer QR reviews + personal review QR) ---- */}
-          <TabsContent value="reviews">
-            <EmployeeReviewsTab employeeId={Number(id)} />
           </TabsContent>
         </Tabs>
       </div>
@@ -606,7 +606,7 @@ export default function EmployeeProfile() {
 
 function TabTrig({ value, icon, children }: { value: string; icon: React.ReactNode; children: React.ReactNode }) {
   return (
-    <TabsTrigger value={value} className="h-10 rounded-lg px-3 font-medium data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+    <TabsTrigger value={value} className="py-1.5">
       {icon}{children}
     </TabsTrigger>
   );
