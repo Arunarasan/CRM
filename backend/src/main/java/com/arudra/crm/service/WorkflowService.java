@@ -25,6 +25,7 @@ public class WorkflowService {
     @Autowired private WorkflowInstanceRepository instanceRepository;
     @Autowired private WorkflowPhaseInstanceRepository phaseInstanceRepository;
     @Autowired private TaskGenerationService taskGenerationService;
+    @Autowired private TaskRepository taskRepository;
 
     /**
      * Start (or return the existing) LEAD workflow for a lead. Idempotent: a second call for the
@@ -98,6 +99,32 @@ public class WorkflowService {
         phaseInstance.setStartedAt(LocalDateTime.now());
         phaseInstanceRepository.save(phaseInstance);
         taskGenerationService.materializePhase(phaseInstance);
+        skipIfEmpty(phaseInstance);
+    }
+
+    /**
+     * An ACTIVE phase that has no tasks — typically a stage since removed from the template (older leads
+     * still carry Site Visit / Measurement / BOQ phases) — would stall the workflow forever. Close it and
+     * activate the next phase instead (which recurses past further empty phases), or finish the workflow.
+     * @return true when the phase was skipped.
+     */
+    public boolean skipIfEmpty(WorkflowPhaseInstance phaseInstance) {
+        if (!"ACTIVE".equals(phaseInstance.getStatus())) return false;
+        if (!taskRepository.findByWorkflowPhaseInstanceId(phaseInstance.getId()).isEmpty()) return false;
+        phaseInstance.setStatus("COMPLETED");
+        phaseInstance.setProgress(100);
+        phaseInstance.setCompletedAt(LocalDateTime.now());
+        phaseInstanceRepository.save(phaseInstance);
+        WorkflowInstance instance = phaseInstance.getWorkflowInstance();
+        Optional<WorkflowPhaseInstance> next = nextPendingPhase(instance);
+        if (next.isPresent()) {
+            activatePhase(next.get());
+        } else {
+            instance.setStatus("COMPLETED");
+            instance.setCompletedAt(LocalDateTime.now());
+            instanceRepository.save(instance);
+        }
+        return true;
     }
 
     /** The lowest-ordered phase instance still PENDING, or empty when the workflow is out of phases. */
