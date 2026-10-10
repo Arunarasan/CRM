@@ -763,6 +763,12 @@ public class QuotationService {
         for (Project p : projects) {
             workflowTriggerService.onProjectCreated(p, single);
         }
+        // Close every lead task still open for this lead (follow-ups, older workflow versions…) —
+        // the lead is a project now. Runs after this conversion commits.
+        if (quotation.getLead() != null) {
+            eventPublisher.publishEvent(com.arudra.crm.event.LeadRequirementCollectedEvent.converted(
+                    quotation.getLead().getId(), user != null ? user.getId() : null, true));
+        }
 
         logActivity(quotation, "CONVERTED", "Converted to " + projects.size() + " project(s): " +
                 projects.stream().map(Project::getProjectCode).reduce((a, b) -> a + ", " + b).orElse(""), user);

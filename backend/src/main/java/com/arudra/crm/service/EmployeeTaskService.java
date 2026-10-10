@@ -1279,7 +1279,10 @@ public class EmployeeTaskService {
     private Object[] closeRequirementByOffice(com.arudra.crm.event.LeadRequirementCollectedEvent event) {
         List<Task> open = taskRepository.findByLeadId(event.getLeadId()).stream()
                 .filter(t -> !Boolean.TRUE.equals(t.getIsDeleted()))
-                .filter(t -> t.getTaskTemplate() != null && COLLECT_REQUIREMENT_CODE.equals(t.getTaskTemplate().getCode()))
+                // Converted lead → every lead-workflow task (any template, old versions and follow-ups
+                // included); otherwise just Collect Requirement.
+                .filter(t -> t.getTaskTemplate() != null && t.getProject() == null
+                        && (event.isLeadConverted() || COLLECT_REQUIREMENT_CODE.equals(t.getTaskTemplate().getCode())))
                 .filter(t -> !"COMPLETED".equals(t.getStatus()) && !"CANCELLED".equals(t.getStatus()))
                 .sorted(Comparator.comparing(Task::getId))
                 .toList();
@@ -1295,7 +1298,7 @@ public class EmployeeTaskService {
                 }
             }
         }
-        if (by != null && holders.containsKey(by.getId())) return null; // the assignee's own work
+        if (!event.isLeadConverted() && by != null && holders.containsKey(by.getId())) return null; // the assignee's own work
 
         String who = by != null ? by.getName() : "the office";
         // A note needs an author — for system/backfill closes, credit the first admin account.
@@ -1315,6 +1318,19 @@ public class EmployeeTaskService {
                 commentRepository.save(note);
             }
             finalizeTaskCompletion(t, by);
+        }
+
+        if (event.isLeadConverted()) {
+            if (event.isNotify()) {
+                String customer = leadRepository.findById(event.getLeadId())
+                        .map(com.arudra.crm.entity.Lead::getName).orElse("the lead");
+                for (User h : holders.values()) {
+                    notificationService.dispatch("Lead moved to project",
+                            customer + " is now a project — your lead task was closed by the office.",
+                            "TASK", h.getId(), "/employee/tasks");
+                }
+            }
+            return null;
         }
 
         // The workflow has generated the next task — hand it to whoever held the requirement task.

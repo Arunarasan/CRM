@@ -50,6 +50,30 @@ public class RequirementTaskBackfill implements CommandLineRunner {
                     OR EXISTS (SELECT 1 FROM measurements m WHERE m.lead_id = t.lead_id AND m.is_deleted = 0)
                     OR EXISTS (SELECT 1 FROM quotations q WHERE q.lead_id = t.lead_id AND q.is_deleted = 0))
                 """, Long.class);
+        // Leads already converted to a project but still carrying open lead tasks.
+        List<Long> converted = jdbcTemplate.queryForList("""
+                SELECT DISTINCT t.lead_id
+                FROM tasks t
+                JOIN projects p ON p.lead_id = t.lead_id AND (p.is_deleted = 0 OR p.is_deleted IS NULL)
+                WHERE t.task_template_id IS NOT NULL
+                  AND t.project_id IS NULL
+                  AND (t.is_deleted = 0 OR t.is_deleted IS NULL)
+                  AND t.status NOT IN ('COMPLETED', 'CANCELLED')
+                """, Long.class);
+        int closed = 0;
+        for (Long leadId : converted) {
+            try {
+                transactionTemplate.executeWithoutResult(tx -> eventPublisher.publishEvent(
+                        LeadRequirementCollectedEvent.converted(leadId, null, false)));
+                closed++;
+            } catch (Exception e) {
+                logger.warn("Lead tasks not closed for converted lead {}: {}", leadId, e.getMessage());
+            }
+        }
+        if (!converted.isEmpty()) {
+            logger.info("Open lead tasks closed for {} of {} lead(s) already converted to a project", closed, converted.size());
+        }
+
         if (leadIds.isEmpty()) return;
         int done = 0;
         for (Long leadId : leadIds) {
