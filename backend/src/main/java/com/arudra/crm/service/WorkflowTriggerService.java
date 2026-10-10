@@ -151,6 +151,13 @@ public class WorkflowTriggerService {
                 projectWorkService.syncFromQuote(project.getId());
                 projectService.seedExecutionChecklist(project.getId());
             });
+            // A converted project is running work — make sure its task exists even if the workflow
+            // was already started or produced nothing (idempotent).
+            if (projectWorkService.findExecutionTask(project.getId()) == null) {
+                projectWorkService.ensureTasks(project.getId());
+                projectWorkService.syncFromQuote(project.getId());
+                projectService.seedExecutionChecklist(project.getId());
+            }
         } catch (Exception e) {
             log.error("Workflow setup failed for project {} created from quotation", project.getId(), e);
         }

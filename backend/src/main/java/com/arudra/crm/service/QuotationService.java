@@ -849,8 +849,13 @@ public class QuotationService {
                     : quotation.getLead() != null ? quotation.getLead().getName()
                     : "Customer";
             project.setProjectName((floorLabel != null ? floorLabel + " - " : "") + "Project for " + owner);
-            project.setStatus("PLANNING");
             project.setProgress(0);
+        }
+        // A converted project is a running job straight away — its Execution & Installation task is
+        // generated right after conversion, so there is no separate "Start Execution" step.
+        String st = project.getStatus();
+        if (st == null || "PLANNING".equalsIgnoreCase(st) || "PENDING".equalsIgnoreCase(st) || "APPROVED".equalsIgnoreCase(st)) {
+            project.setStatus("RUNNING");
         }
         // A reused stub project (from the old direct-conversion path) may predate projectCode being set.
         if (project.getProjectCode() == null) {
