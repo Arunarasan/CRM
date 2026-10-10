@@ -255,6 +255,10 @@ export interface Payslip {
   monthlySalary?: number | null;
   standardHours?: number | null;
   lineItems?: { id: number; category: string; label: string; amount: number }[] | null;
+  allowances?: number | null;
+  otherEarnings?: number | null;
+  otherDeductions?: number | null;
+  remarks?: string | null;
 }
 
 export interface SalarySummary {

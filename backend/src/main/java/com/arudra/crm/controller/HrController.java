@@ -153,6 +153,30 @@ public class HrController {
         return ResponseEntity.ok(payslipEditService.deleteItem(itemId));
     }
 
+    /** Edit the payslip's own amounts / details (earnings, deductions, hours, days, note). */
+    @PutMapping("/payslips/{recordId}/components")
+    @PreAuthorize(PAYROLL_PROCESS)
+    public ResponseEntity<Map<String, Object>> updatePayslipComponents(@PathVariable Long recordId,
+                                                                       @RequestBody Map<String, Object> body) {
+        return ResponseEntity.ok(payslipEditService.updateComponents(recordId, body));
+    }
+
+    /** Delete an unpaid payslip and undo what generating it applied, so the month can be generated again. */
+    @DeleteMapping("/payroll/{id}")
+    @PreAuthorize(PAYROLL_PROCESS)
+    public ResponseEntity<Map<String, Object>> deletePayslip(@PathVariable Long id) {
+        payrollService.deletePayslip(id);
+        return ResponseEntity.ok(Map.of("deleted", id));
+    }
+
+    /** Delete + generate again from current data; basis HOURLY | MONTHLY, omitted keeps the payslip's own. */
+    @PostMapping("/payroll/{id}/regenerate")
+    @PreAuthorize(PAYROLL_PROCESS)
+    public ResponseEntity<SalaryRecord> regeneratePayslip(@PathVariable Long id,
+                                                          @RequestParam(required = false) String basis) {
+        return ResponseEntity.ok(payrollService.regeneratePayslip(id, basis));
+    }
+
     // --- Leaves ---
     @GetMapping("/leaves")
     @PreAuthorize(HR_READ)

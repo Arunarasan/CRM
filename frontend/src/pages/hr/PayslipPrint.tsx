@@ -3,6 +3,8 @@ import { useParams } from "react-router-dom";
 import { payrollApi } from "@/api/payrollApi";
 import { useGoBack } from "@/hooks/useGoBack";
 import type { SalaryRecord } from "@/types/payroll";
+import type { Payslip } from "@/types/employeePortal";
+import { payslipRows } from "@/pages/employeePortal/printPayslip";
 import { inr } from "@/pages/workforce/WorkforceFinanceTab";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Printer } from "lucide-react";
@@ -30,29 +32,8 @@ export default function PayslipPrint() {
   const monthlyHours = rec.standardHours != null;
   const hourly = rec.payType === "HOURLY" || monthlyHours;
 
-  const earnings: [string, number][] = hourly
-    ? [
-        [monthlyHours ? "Salary for hours worked" : "Regular earnings", rec.regularEarnings ?? 0], ["Overtime pay", rec.overtimeAmount],
-        ["Project bonus", rec.projectBonus ?? 0], ["Manual bonus", rec.manualBonus ?? 0],
-        ["Incentive", rec.incentive],
-      ]
-    : [
-        ["Basic", rec.basic], ["HRA", rec.hra], ["Allowances", rec.allowances],
-        ["Overtime", rec.overtimeAmount], ["Bonus", rec.bonus], ["Incentive", rec.incentive],
-      ];
-  const deductions: [string, number][] = hourly
-    ? [
-        ["Manual deduction", rec.manualDeduction ?? 0], ["Advance recovery", rec.advanceRecovery],
-        ["Loan recovery", rec.loanRecovery],
-      ]
-    : [
-        ["PF", rec.pfAmount], ["ESI", rec.esiAmount], ["Professional tax", rec.professionalTax],
-        ["Leave (LOP)", rec.leaveDeduction], ["Advance recovery", rec.advanceRecovery], ["Loan recovery", rec.loanRecovery],
-      ];
-
-  // Named items added with "Edit payslip" — already included in the totals.
-  const lineRows = (cat: string): [string, number][] =>
-    (rec.lineItems ?? []).filter((i: any) => i.category === cat).map((i: any) => [i.label, i.amount]);
+  // Same rows the employee sees on their portal and PDF (every non-zero amount + extra lines).
+  const { earnings, deductions } = payslipRows(rec as unknown as Payslip);
 
   return (
     <div className="p-4 md:p-8 max-w-3xl mx-auto">
@@ -95,14 +76,17 @@ export default function PayslipPrint() {
         )}
 
         <div className="grid grid-cols-2 gap-6">
-          <Column title="Earnings" rows={[...earnings, ...lineRows("EARNING")]} total={rec.grossEarnings} />
-          <Column title="Deductions" rows={[...deductions, ...lineRows("DEDUCTION")]} total={rec.totalDeductions} />
+          <Column title="Earnings" rows={earnings} total={rec.grossEarnings} />
+          <Column title="Deductions" rows={deductions} total={rec.totalDeductions} />
         </div>
 
         <div className="mt-6 flex items-center justify-between bg-slate-50 border rounded-xl p-4">
           <span className="font-bold text-slate-800">Net Pay</span>
           <span className="text-2xl font-bold text-emerald-700">{inr(rec.netSalary)}</span>
         </div>
+        {rec.remarks && (
+          <p className="mt-3 whitespace-pre-wrap rounded-lg border px-3 py-2 text-sm"><b>Note:</b> {rec.remarks}</p>
+        )}
         <p className="text-xs text-muted-foreground mt-2">
           Status: {rec.status}{rec.paymentDate ? ` · Paid on ${rec.paymentDate}` : ""}
         </p>
@@ -117,8 +101,8 @@ function Column({ title, rows, total }: { title: string; rows: [string, number][
       <h3 className="font-bold text-slate-700 mb-2">{title}</h3>
       <table className="w-full text-sm">
         <tbody className="divide-y">
-          {rows.filter(([, v]) => Number(v) !== 0).map(([k, v]) => (
-            <tr key={k}><td className="py-1.5 text-slate-600">{k}</td><td className="py-1.5 text-right font-medium">{inr(v)}</td></tr>
+          {rows.map(([k, v], i) => (
+            <tr key={`${k}-${i}`}><td className="py-1.5 text-slate-600">{k}</td><td className="py-1.5 text-right font-medium">{inr(v)}</td></tr>
           ))}
         </tbody>
         <tfoot><tr className="border-t-2"><td className="py-2 font-bold">Total</td><td className="py-2 text-right font-bold">{inr(total)}</td></tr></tfoot>

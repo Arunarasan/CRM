@@ -13,6 +13,9 @@ public interface EmployeeDeductionRepository extends JpaRepository<EmployeeDeduc
 
     List<EmployeeDeduction> findByIsDeletedFalseOrderByIdDesc();
 
+    /** Deductions a payslip applied — released again when that payslip is deleted. */
+    List<EmployeeDeduction> findByAppliedSalaryRecordId(Long salaryRecordId);
+
     List<EmployeeDeduction> findByStatusAndIsDeletedFalseOrderByIdDesc(String status);
 
     /** Approved, not-yet-applied deductions for an employee — candidates for the next payroll run. */

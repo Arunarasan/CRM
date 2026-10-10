@@ -78,6 +78,63 @@ public class PayslipEditService {
         return view(rec);
     }
 
+    /**
+     * HR edits the payslip's own amounts and details (anything sent; fields left out are unchanged),
+     * then gross / deductions / net recompute. Advance and loan recovery aren't editable here because
+     * they move real balances — delete and regenerate the payslip to change those.
+     */
+    @Transactional
+    public Map<String, Object> updateComponents(Long salaryRecordId, Map<String, Object> body) {
+        SalaryRecord r = editable(salaryRecordId);
+        // Earnings
+        r.setRegularEarnings(money(body, "regularEarnings", r.getRegularEarnings()));
+        r.setOvertimeAmount(money(body, "overtimeAmount", r.getOvertimeAmount()));
+        r.setBasic(money(body, "basic", r.getBasic()));
+        r.setHra(money(body, "hra", r.getHra()));
+        r.setAllowances(money(body, "allowances", r.getAllowances()));
+        r.setProjectBonus(money(body, "projectBonus", r.getProjectBonus()));
+        r.setManualBonus(money(body, "manualBonus", r.getManualBonus()));
+        // `bonus` is project + manual; older payslips may only carry `bonus`, so keep any remainder.
+        BigDecimal split = nz(r.getProjectBonus()).add(nz(r.getManualBonus()));
+        if (body.containsKey("projectBonus") || body.containsKey("manualBonus") || split.signum() > 0) r.setBonus(split);
+        r.setIncentive(money(body, "incentive", r.getIncentive()));
+        r.setOtherEarnings(money(body, "otherEarnings", r.getOtherEarnings()));
+        // Deductions — other_deductions = manual deduction + any other (request) deductions.
+        r.setPfAmount(money(body, "pfAmount", r.getPfAmount()));
+        r.setEsiAmount(money(body, "esiAmount", r.getEsiAmount()));
+        r.setProfessionalTax(money(body, "professionalTax", r.getProfessionalTax()));
+        r.setLeaveDeduction(money(body, "leaveDeduction", r.getLeaveDeduction()));
+        BigDecimal oldManual = nz(r.getManualDeduction());
+        BigDecimal otherExtra = nz(r.getOtherDeductions()).subtract(oldManual).max(BigDecimal.ZERO);
+        r.setManualDeduction(money(body, "manualDeduction", oldManual));
+        otherExtra = money(body, "otherDeductionsExtra", otherExtra);
+        r.setOtherDeductions(nz(r.getManualDeduction()).add(otherExtra));
+        // Details shown on the payslip
+        r.setWorkedHours(money(body, "workedHours", r.getWorkedHours()));
+        r.setOvertimeHours(money(body, "overtimeHours", r.getOvertimeHours()));
+        if (body.get("attendanceDays") != null) r.setAttendanceDays(money(body, "attendanceDays", null).intValue());
+        if (body.containsKey("paidDays")) r.setPaidDays(money(body, "paidDays", r.getPaidDays()));
+        if (body.containsKey("lopDays")) r.setLopDays(money(body, "lopDays", r.getLopDays()));
+        if (body.containsKey("remarks")) {
+            Object v = body.get("remarks");
+            r.setRemarks(v == null || v.toString().isBlank() ? null : v.toString().trim());
+        }
+        recompute(r);
+        return view(r);
+    }
+
+    /** A non-negative amount from the body, or {@code current} when the key wasn't sent. */
+    private static BigDecimal money(Map<String, Object> body, String key, BigDecimal current) {
+        if (!body.containsKey(key)) return current;
+        Object v = body.get(key);
+        if (v == null || v.toString().isBlank()) return BigDecimal.ZERO;
+        try {
+            return new BigDecimal(v.toString().trim()).max(BigDecimal.ZERO);
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("Enter a valid number for " + key + ".");
+        }
+    }
+
     // --- core --------------------------------------------------------------
 
     /** Recompute gross/net = stable auto base (from component fields) + Σ line items. Idempotent. */

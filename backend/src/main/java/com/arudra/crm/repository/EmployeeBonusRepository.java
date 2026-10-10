@@ -29,6 +29,9 @@ public interface EmployeeBonusRepository extends JpaRepository<EmployeeBonus, Lo
 
     List<EmployeeBonus> findByIsDeletedFalseOrderByIdDesc();
 
+    /** Bonuses a payslip absorbed — released again when that payslip is deleted. */
+    List<EmployeeBonus> findByPaidSalaryRecordId(Long salaryRecordId);
+
     List<EmployeeBonus> findByStatusAndIsDeletedFalseOrderByIdDesc(String status);
 
     /** Approved bonuses not yet absorbed into a payslip — candidates for a payroll run. */

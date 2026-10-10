@@ -6,7 +6,7 @@ import { inr } from "@/pages/workforce/WorkforceFinanceTab";
 import { toast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
 import { SearchField } from "@/pages/workforce/hrUi";
-import { Clock, PlayCircle, CircleHelp, FileText, Settings2 } from "lucide-react";
+import { Clock, PlayCircle, CircleHelp, FileText, Settings2, Pencil } from "lucide-react";
 
 type Basis = "HOURLY" | "MONTHLY";
 
@@ -20,13 +20,17 @@ const hrs = (v: any) => n(v).toFixed(1).replace(/\.0$/, "");
  * Generating applies approved bonuses / deductions / advance & loan recovery on top.
  */
 export default function GeneratePayslips({
-  month, year, canProcess, onGenerated, onEditWage,
+  month, year, canProcess, onGenerated, onEditWage, onOpenSlip, onReview,
 }: {
   month: number;
   year: number;
   canProcess: boolean;
   onGenerated: () => void;
   onEditWage?: (employeeId: number) => void;
+  /** Open the full payslip editor for one employee (after generating, or from a generated row). */
+  onOpenSlip?: (employeeId: number, name?: string) => void;
+  /** Several were generated — take HR to the "To approve" list to check each one. */
+  onReview?: () => void;
 }) {
   const [rows, setRows] = useState<PayrollPreviewRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -88,8 +92,17 @@ export default function GeneratePayslips({
     payrollApi.generatePayslips(month, year, choices)
       .then((r) => {
         if (r.errors?.length) toast.error(`${r.errors.length} failed: ${r.errors[0]}`);
-        toast.success(`${r.generated} payslip${r.generated === 1 ? "" : "s"} generated${r.skipped ? `, ${r.skipped} skipped` : ""}.`);
         load(); onGenerated();
+        if (r.generated === 0) {
+          toast.success(`Nothing generated${r.skipped ? ` — ${r.skipped} skipped` : ""}.`);
+        } else if (selected.length === 1 && onOpenSlip) {
+          // One payslip — open it straight away so HR can check and edit everything before approving.
+          toast.success("Payslip generated. Check it and edit anything before approving.");
+          onOpenSlip(selected[0].employeeId, selected[0].name);
+        } else {
+          toast.success(`${r.generated} payslips generated${r.skipped ? `, ${r.skipped} skipped` : ""}. Open each one to check or edit it before approving.`);
+          onReview?.();
+        }
       })
       .catch((e) => toast.error(e?.response?.data?.message || "Failed to generate payslips"))
       .finally(() => setBusy(false));
@@ -143,7 +156,7 @@ export default function GeneratePayslips({
                 <td className="p-3"><Hours r={r} /></td>
                 <td className="p-3"><Option r={r} basis="HOURLY" chosen={choice[r.employeeId]} onPick={pick} onEditWage={onEditWage} canProcess={canProcess} /></td>
                 <td className="p-3"><Option r={r} basis="MONTHLY" chosen={choice[r.employeeId]} onPick={pick} onEditWage={onEditWage} canProcess={canProcess} /></td>
-                <td className="p-3 text-right"><Generated r={r} /></td>
+                <td className="p-3 text-right"><Generated r={r} onOpen={canProcess ? onOpenSlip : undefined} /></td>
               </tr>
             ))}
             {!loading && visible.length === 0 && (
@@ -166,7 +179,7 @@ export default function GeneratePayslips({
                 )}
                 <Person r={r} onEditWage={canProcess ? onEditWage : undefined} />
               </div>
-              <Generated r={r} />
+              <Generated r={r} onOpen={canProcess ? onOpenSlip : undefined} />
             </div>
             <div className="mt-2"><Hours r={r} /></div>
             <div className="mt-2 grid grid-cols-2 gap-2">
@@ -282,14 +295,22 @@ function Option({ r, basis, chosen, onPick, onEditWage, canProcess }: {
   );
 }
 
-function Generated({ r }: { r: PayrollPreviewRow }) {
+function Generated({ r, onOpen }: { r: PayrollPreviewRow; onOpen?: (employeeId: number, name?: string) => void }) {
   if (!r.recordId) return <span className="text-xs text-slate-400">Not generated</span>;
   return (
-    <div className="inline-flex flex-col items-end gap-0.5">
+    <div className="inline-flex flex-col items-end gap-1">
       <span className="text-sm font-bold text-emerald-600">{inr(r.netSalary)}</span>
-      <a href={`/hr/payslip/${r.recordId}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary">
-        <FileText className="w-3 h-3" /> {r.status}
-      </a>
+      <div className="flex items-center gap-2">
+        <a href={`/hr/payslip/${r.recordId}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary">
+          <FileText className="w-3 h-3" /> {r.status}
+        </a>
+        {onOpen && (
+          <button type="button" onClick={() => onOpen(r.employeeId, r.name)}
+            className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-50">
+            <Pencil className="w-3 h-3" /> {r.status === "PAID" ? "View" : "Edit"}
+          </button>
+        )}
+      </div>
     </div>
   );
 }

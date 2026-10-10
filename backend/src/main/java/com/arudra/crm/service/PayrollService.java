@@ -697,6 +697,83 @@ public class PayrollService {
         return out;
     }
 
+    /**
+     * Deletes an unpaid payslip and undoes everything generating it did, so the month can be generated
+     * again from scratch: absorbed bonuses go back to APPROVED, applied deductions and employee requests
+     * back to APPROVED, advance/loan recoveries are added back to their balances, and leads paid as
+     * "Leads collected" become payable again. A PAID payslip can't be deleted.
+     */
+    @Transactional
+    public void deletePayslip(Long salaryRecordId) {
+        SalaryRecord rec = salaryRepository.findById(salaryRecordId)
+                .orElseThrow(() -> new ResourceNotFoundException("Payslip not found: " + salaryRecordId));
+        if ("PAID".equalsIgnoreCase(rec.getStatus())) {
+            throw new IllegalStateException("This payslip is already paid, so it can't be deleted.");
+        }
+        Long id = rec.getId();
+
+        for (EmployeeBonus bo : bonusRepository.findByPaidSalaryRecordId(id)) {
+            bo.setStatus("APPROVED");
+            bo.setPaidAt(null);
+            bo.setPaidSalaryRecordId(null);
+            bonusRepository.save(bo);
+        }
+        for (EmployeeDeduction dd : deductionRepository.findByAppliedSalaryRecordId(id)) {
+            dd.setStatus("APPROVED");
+            dd.setAppliedSalaryRecordId(null);
+            deductionRepository.save(dd);
+        }
+        for (com.arudra.crm.entity.PayrollRequest r : payrollRequestRepository.findByAppliedSalaryRecordId(id)) {
+            r.setStatus("APPROVED");
+            r.setAppliedSalaryRecordId(null);
+            payrollRequestRepository.save(r);
+        }
+        // Put each recovery back on the advance / loan it paid down.
+        List<PayrollRecovery> recoveries = recoveryRepository.findBySalaryRecordId(id);
+        for (PayrollRecovery pr : recoveries) {
+            BigDecimal amt = nz(pr.getAmount());
+            if ("ADVANCE".equalsIgnoreCase(pr.getSourceType())) {
+                advanceRepository.findById(pr.getSourceId()).ifPresent(a -> {
+                    a.setBalance(nz(a.getBalance()).add(amt));
+                    a.setRecoveredAmount(nz(a.getRecoveredAmount()).subtract(amt).max(BigDecimal.ZERO));
+                    a.setStatus(nz(a.getRecoveredAmount()).signum() > 0 ? "RECOVERING" : "APPROVED");
+                    advanceRepository.save(a);
+                });
+            } else if ("LOAN".equalsIgnoreCase(pr.getSourceType())) {
+                loanRepository.findById(pr.getSourceId()).ifPresent(l -> {
+                    l.setBalance(nz(l.getBalance()).add(amt));
+                    l.setRecoveredAmount(nz(l.getRecoveredAmount()).subtract(amt).max(BigDecimal.ZERO));
+                    l.setStatus("ACTIVE");
+                    loanRepository.save(l);
+                });
+            }
+        }
+        recoveryRepository.deleteAll(recoveries);
+        for (Lead l : leadRepository.findByLeadRewardSalaryRecordId(id)) {
+            l.setLeadRewardSalaryRecordId(null);
+            leadRepository.save(l);
+        }
+        lineItemRepository.deleteAll(lineItemRepository.findBySalaryRecordId(id));
+        salaryRepository.delete(rec);
+        salaryRepository.flush();
+    }
+
+    /**
+     * Deletes an unpaid payslip (undoing its effects) and generates the month again from current
+     * attendance, bonuses, deductions, recoveries and leads. {@code basis} null keeps the payslip's own.
+     * Any manual edits on the old payslip are discarded.
+     */
+    @Transactional
+    public SalaryRecord regeneratePayslip(Long salaryRecordId, String basis) {
+        SalaryRecord rec = salaryRepository.findById(salaryRecordId)
+                .orElseThrow(() -> new ResourceNotFoundException("Payslip not found: " + salaryRecordId));
+        Long employeeId = rec.getEmployee().getId();
+        int month = rec.getMonth(), year = rec.getYear();
+        String b = basis == null || basis.isBlank() ? rec.getPayType() : basis;
+        deletePayslip(salaryRecordId);
+        return generatePayslip(employeeId, month, year, b);
+    }
+
     /** HR approves a generated payslip (PENDING → APPROVED) before it can be marked paid. */
     @Transactional
     public SalaryRecord approvePayroll(Long salaryRecordId, User approver) {

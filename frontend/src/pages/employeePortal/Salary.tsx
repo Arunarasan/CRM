@@ -82,6 +82,13 @@ function PayslipDetail({ slip, onBack, employeeName, employeeCode }: { slip: Pay
         {rows(deductions)}
         <div className="flex justify-between bg-muted/40 px-4 py-2.5 text-sm font-semibold"><span>Total</span><span>{inr(slip.totalDeductions)}</span></div>
       </div>
+
+      {slip.remarks && (
+        <div className="mx-3 -mt-3 mb-6 rounded-xl border bg-card px-4 py-3 text-sm shadow-sm">
+          <p className="text-xs font-semibold uppercase text-muted-foreground">Note from HR</p>
+          <p className="mt-1 whitespace-pre-wrap">{slip.remarks}</p>
+        </div>
+      )}
     </div>
   );
 }

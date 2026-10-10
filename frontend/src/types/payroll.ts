@@ -45,6 +45,8 @@ export interface SalaryRecord {
   standardHours?: number | null;
   lineItems?: { id: number; category: string; label: string; amount: number }[] | null;
   approvedAt?: string;
+  otherEarnings?: number;
+  remarks?: string | null;
 }
 
 // Manual deduction (fine / damage / advance recovery / loan recovery / other).

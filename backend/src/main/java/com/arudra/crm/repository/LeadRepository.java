@@ -31,6 +31,9 @@ public interface LeadRepository extends JpaRepository<Lead, Long>, JpaSpecificat
     // "own leads only" scope for the create-only self-service lead flow.
     java.util.List<Lead> findByLeadOwnerIdAndIsDeletedFalseOrderByIdDesc(Long ownerId);
 
+    /** Leads whose collector reward a payslip paid — released again when that payslip is deleted. */
+    java.util.List<Lead> findByLeadRewardSalaryRecordId(Long salaryRecordId);
+
     Page<Lead> findByConvertedToCustomerId(Long customerId, Pageable pageable);
 
     // --- Lead number generation (LEAD-000001 pattern) ---

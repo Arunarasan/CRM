@@ -518,6 +518,8 @@ export default function HrFinanceDashboard() {
             month={month} year={year} canProcess={canProcess}
             onGenerated={() => { loadUnified(); load(); loadBonuses(); loadDeductions(); loadPayReqs(); }}
             onEditWage={canProcess ? openWage : undefined}
+            onOpenSlip={(employeeId, name) => setEditSlip({ employeeId, name })}
+            onReview={() => showSlips("PENDING")}
           />
         </TabsContent>
       </Tabs>
@@ -634,8 +636,8 @@ export default function HrFinanceDashboard() {
           name={editSlip.name}
           month={month}
           year={year}
-          onClose={() => setEditSlip(null)}
-          onChanged={() => loadUnified()}
+          onClose={() => { setEditSlip(null); setPreviewKey((k) => k + 1); }}
+          onChanged={() => { loadUnified(); load(); loadBonuses(); loadDeductions(); loadPayReqs(); }}
         />
       )}
     </div>
@@ -750,6 +752,7 @@ function RowAction({ line, onApprove, onPay, canProcess, onEdit, onWage }: { lin
   const canWage = canProcess && onWage && line.personId;
   return (
     <div className="inline-flex items-center gap-1.5">
+      {canEdit && <Button size="sm" variant="ghost" onClick={() => onEdit!(line)} aria-label={`Edit payslip for ${line.name}`}><Pencil className="mr-1 h-3.5 w-3.5" /> Edit</Button>}
       {canProcess && line.status === "PENDING" && id && <Button size="sm" variant="outline" onClick={() => onApprove(id)}><Check className="mr-1 h-3.5 w-3.5" /> Approve</Button>}
       {canProcess && line.status === "APPROVED" && id && <Button size="sm" variant="forest" onClick={() => onPay(id)}><BadgeIndianRupee className="mr-1 h-3.5 w-3.5" /> Pay</Button>}
       {id && (
@@ -757,14 +760,14 @@ function RowAction({ line, onApprove, onPay, canProcess, onEdit, onWage }: { lin
           <FileText className="h-4 w-4" />
         </Button>
       )}
-      {(canEdit || canWage) && (
+      {canWage && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button size="sm" variant="ghost" className="h-9 w-9 p-0" aria-label={`More actions for ${line.name}`}><MoreHorizontal className="h-4 w-4" /></Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-60">
-            {canEdit && <DropdownMenuItem onClick={() => onEdit!(line)}><Pencil className="mr-2 h-4 w-4" /> Edit payslip lines</DropdownMenuItem>}
-            {canWage && <DropdownMenuItem onClick={() => onWage!(line.personId!)}><Settings2 className="mr-2 h-4 w-4" /> Wage &amp; pay basis</DropdownMenuItem>}
+            {canEdit && <DropdownMenuItem onClick={() => onEdit!(line)}><Pencil className="mr-2 h-4 w-4" /> Edit, regenerate or delete</DropdownMenuItem>}
+            <DropdownMenuItem onClick={() => onWage!(line.personId!)}><Settings2 className="mr-2 h-4 w-4" /> Wage &amp; pay basis</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       )}

@@ -10,4 +10,7 @@ import java.util.List;
 public interface PayslipLineItemRepository extends JpaRepository<PayslipLineItem, Long> {
 
     List<PayslipLineItem> findBySalaryRecordIdAndIsDeletedFalseOrderByIdAsc(Long salaryRecordId);
+
+    /** Every line of a payslip, removed ones included (for deleting the payslip). */
+    List<PayslipLineItem> findBySalaryRecordId(Long salaryRecordId);
 }

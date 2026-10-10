@@ -10,21 +10,27 @@ export type PayslipRow = [string, number];
  */
 export function payslipRows(slip: Payslip): { earnings: PayslipRow[]; deductions: PayslipRow[] } {
   const monthlyHours = slip.standardHours != null; // MONTHLY generated from hours
-  const hourly = slip.payType === 'HOURLY' || monthlyHours;
   const items = slip.lineItems ?? [];
-  const nonZero = (rows: PayslipRow[]) => rows.filter(([, v]) => Number(v || 0) !== 0);
+  const n = (v?: number | null) => Number(v || 0);
+  const nonZero = (rows: PayslipRow[]) => rows.filter(([, v]) => n(v) !== 0);
+  // `bonus` is project + manual bonus; older payslips may only have the combined figure.
+  const splitBonus = n(slip.projectBonus) + n(slip.manualBonus);
+  const otherDed = Math.max(0, n(slip.otherDeductions) - n(slip.manualDeduction));
 
   const earnings = nonZero([
-    ...(hourly
-      ? [[monthlyHours ? 'Salary for hours worked' : 'Regular earnings', slip.regularEarnings ?? 0], ['Overtime pay', slip.overtimeAmount],
-         ['Project bonus', slip.projectBonus ?? 0], ['Manual bonus', slip.manualBonus ?? 0], ['Incentive', slip.incentive]] as PayslipRow[]
-      : [['Basic', slip.basic], ['HRA', slip.hra], ['Overtime', slip.overtimeAmount], ['Bonus', slip.bonus], ['Incentive', slip.incentive]] as PayslipRow[]),
+    ['Basic', n(slip.basic)], ['HRA', n(slip.hra)], ['Allowances', n(slip.allowances)],
+    [monthlyHours ? 'Salary for hours worked' : slip.payType === 'HOURLY' ? 'Regular earnings' : 'Salary', n(slip.regularEarnings)],
+    ['Overtime pay', n(slip.overtimeAmount)],
+    ...(splitBonus > 0
+      ? [['Project bonus', n(slip.projectBonus)], ['Manual bonus', n(slip.manualBonus)]] as PayslipRow[]
+      : [['Bonus', n(slip.bonus)]] as PayslipRow[]),
+    ['Incentive', n(slip.incentive)], ['Other earnings', n(slip.otherEarnings)],
     ...items.filter((i) => i.category === 'EARNING').map((i) => [i.label, i.amount] as PayslipRow),
   ]);
   const deductions = nonZero([
-    ['PF', slip.pfAmount], ['ESI', slip.esiAmount], ['Professional tax', slip.professionalTax],
-    ['Leave (LOP)', slip.leaveDeduction], ['Manual deduction', slip.manualDeduction ?? 0],
-    ['Advance recovery', slip.advanceRecovery], ['Loan recovery', slip.loanRecovery],
+    ['PF', n(slip.pfAmount)], ['ESI', n(slip.esiAmount)], ['Professional tax', n(slip.professionalTax)],
+    ['Leave (LOP)', n(slip.leaveDeduction)], ['Manual deduction', n(slip.manualDeduction)], ['Other deductions', otherDed],
+    ['Advance recovery', n(slip.advanceRecovery)], ['Loan recovery', n(slip.loanRecovery)],
     ...items.filter((i) => i.category === 'DEDUCTION').map((i) => [i.label, i.amount] as PayslipRow),
   ]);
   return { earnings, deductions };
@@ -87,6 +93,7 @@ export async function printPayslip(slip: Payslip, opts?: { employeeName?: string
     .net{margin-top:16px;display:flex;justify-content:space-between;align-items:center;background:#0f5132;color:#fff;border-radius:10px;padding:12px 18px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
     .net .lbl{font-weight:700}
     .net .amt{font-size:22px;font-weight:800}
+    .note{margin-top:10px;font-size:12px;color:#333;border:1px solid #e5e7eb;border-radius:8px;padding:8px 12px;white-space:pre-wrap}
     .foot{margin-top:10px;color:#888;font-size:11px}
   </style></head><body>
     <div class="head">
@@ -113,6 +120,7 @@ export async function printPayslip(slip: Payslip, opts?: { employeeName?: string
       </div>
     </div>
     <div class="net"><span class="lbl">Net Pay</span><span class="amt">${inr(slip.netSalary)}</span></div>
+    ${slip.remarks ? `<div class="note"><b>Note:</b> ${esc(slip.remarks)}</div>` : ''}
     <div class="foot">Status: ${esc(slip.status)}${slip.paymentDate ? ` · Paid on ${esc(slip.paymentDate)}` : ''} · This is a computer-generated payslip.</div>
   </body></html>`;
 

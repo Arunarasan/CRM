@@ -17,6 +17,9 @@ public interface PayrollRequestRepository extends JpaRepository<PayrollRequest, 
 
     List<PayrollRequest> findByIsDeletedFalseOrderByIdDesc();
 
+    /** Requests a payslip applied — released again when that payslip is deleted. */
+    List<PayrollRequest> findByAppliedSalaryRecordId(Long salaryRecordId);
+
     List<PayrollRequest> findByStatusAndIsDeletedFalseOrderByIdDesc(String status);
 
     /**

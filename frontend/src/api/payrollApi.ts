@@ -67,6 +67,15 @@ export const payrollApi = {
     api.put<PayslipEditView>(`/hr/payslips/line-items/${itemId}`, body).then((r) => r.data),
   deletePayslipLineItem: (itemId: number) =>
     api.delete<PayslipEditView>(`/hr/payslips/line-items/${itemId}`).then((r) => r.data),
+  // Edit the payslip's own amounts / hours / days / note (keys left out stay unchanged).
+  updatePayslipComponents: (recordId: number, body: Record<string, number | string | null>) =>
+    api.put<PayslipEditView>(`/hr/payslips/${recordId}/components`, body).then((r) => r.data),
+  // Delete an unpaid payslip (undoes bonuses / deductions / recoveries / leads it used) …
+  deletePayslip: (salaryRecordId: number) =>
+    api.delete(`/hr/payroll/${salaryRecordId}`).then((r) => r.data),
+  // … or delete and generate it again from current data (basis omitted keeps the payslip's own).
+  regeneratePayslip: (salaryRecordId: number, basis?: 'HOURLY' | 'MONTHLY') =>
+    api.post<SalaryRecord>(`/hr/payroll/${salaryRecordId}/regenerate${basis ? `?basis=${basis}` : ''}`).then((r) => r.data),
   markPaid: (salaryRecordId: number) =>
     api.post<SalaryRecord>(`/hr/payroll/${salaryRecordId}/pay`).then((r) => r.data),
 
