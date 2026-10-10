@@ -19,6 +19,7 @@ import { printInvoice } from "../projectFinance/printInvoice";
 import { printReceipt } from "./printReceipt";
 import { fetchCompanyProfile, type CompanyProfile } from "@/lib/companyProfile";
 import InvoiceBundles from "@/components/bundles/InvoiceBundles";
+import { resolveFileUrl } from "@/lib/uploadFile";
 import { ArrowLeft, CheckCircle2, Send, XCircle, IndianRupee, RotateCcw, Printer, ChevronDown, MoreHorizontal, MessageCircle, Phone, MapPin, User } from "lucide-react";
 
 export default function InvoiceDetailPage() {
@@ -261,7 +262,19 @@ export default function InvoiceDetailPage() {
             <tbody className="divide-y">
               {items.map((it, i) => (
                 <tr key={it.id ?? i}>
-                  <td className="px-4 py-3 font-medium text-slate-800">{it.description}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-start gap-3">
+                      {it.imageUrl && (
+                        <a href={resolveFileUrl(it.imageUrl)} target="_blank" rel="noreferrer" className="shrink-0">
+                          <img src={resolveFileUrl(it.imageUrl)} alt="" className="h-10 w-10 rounded-md border object-cover" />
+                        </a>
+                      )}
+                      <div className="min-w-0">
+                        <div className="font-medium text-slate-800">{it.description}</div>
+                        {it.notes && <div className="text-xs text-slate-500 whitespace-pre-wrap">{it.notes}</div>}
+                      </div>
+                    </div>
+                  </td>
                   <td className="px-4 py-3 text-slate-500">{it.hsnCode || "—"}</td>
                   <td className="px-4 py-3 text-right">{it.quantity} {it.unit || ""}</td>
                   <td className="px-4 py-3 text-right">{currencyFull(inv.taxInclusive && it.unitPriceIncl != null ? it.unitPriceIncl : it.unitPrice)}</td>

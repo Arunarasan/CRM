@@ -19,7 +19,7 @@ export async function openInvoicePdf(load: () => Promise<InvoiceDoc>): Promise<v
   }
   try {
     const { invoice, items, project } = await load();
-    const assets = await loadInvoicePdfAssets(invoice);
+    const assets = await loadInvoicePdfAssets(invoice, items);
     const doc = buildInvoicePdf(invoice, items, project, assets);
     doc.setProperties({ title: invoice.invoiceNumber || "Invoice" });
     doc.autoPrint();

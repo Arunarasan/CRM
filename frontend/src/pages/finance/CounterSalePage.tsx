@@ -12,13 +12,15 @@ import SearchableSelect from "@/components/ui/searchable-select";
 import { currency } from "./helpers";
 import BundleWorkEditor, { defaultWorkHeader, type WorkHeader, type WorkLine } from "@/components/bundles/BundleWorkEditor";
 import { specToJson } from "@/components/bundles/workSpec";
-import { Plus, Minus, Search, Trash2, Wrench, Scissors, Receipt, RotateCcw, Banknote } from "lucide-react";
+import { resolveFileUrl } from "@/lib/uploadFile";
+import BillItemDialog, { type BillItem } from "./BillItemDialog";
+import { Plus, Search, Trash2, Wrench, Scissors, Receipt, RotateCcw, Banknote, ImageIcon, Pencil } from "lucide-react";
 
 interface CustomerLite { id: number; name: string; phone?: string }
-interface ProductLite { id: number; name?: string; sku?: string; materialCode?: string; unit?: string; hsnCode?: string; gstPercent?: number; price?: number; sellingPrice?: number }
+interface ProductLite { id: number; name?: string; sku?: string; materialCode?: string; unit?: string; hsnCode?: string; gstPercent?: number; price?: number; sellingPrice?: number; imageUrl?: string }
 interface WarehouseLite { id: number; name: string }
 interface EmployeeLite { id: number; name: string }
-interface Line { key: number; productId: number | null; name: string; hsnCode: string; unit: string; qty: number; rate: number; gst: number }
+type Line = BillItem;
 
 const PAYMENT_METHODS = [
   { v: "CASH", label: "Cash" },
@@ -46,6 +48,8 @@ export default function CounterSalePage() {
 
   // cart
   const [lines, setLines] = useState<Line[]>([]);
+  /** The add-new-item / item-details dialog: a fresh custom line, or the line being edited. */
+  const [editing, setEditing] = useState<Line | null>(null);
 
   // charges / tax
   const [gstType, setGstType] = useState<"CGST_SGST" | "IGST">("CGST_SGST");
@@ -139,14 +143,19 @@ export default function CounterSalePage() {
         return next;
       }
       return [...ls, {
-        key: keySeed++, productId: p.id ?? null, name: p.name ?? "Item",
+        key: keySeed++, productId: p.id ?? null, name: p.name ?? "Item", notes: "", imageUrl: p.imageUrl ?? "",
         hsnCode: p.hsnCode ?? "", unit: p.unit ?? "Nos",
         qty: 1, rate: Number(p.sellingPrice ?? p.price ?? 0), gst: Number(p.gstPercent ?? 18),
       }];
     });
   };
   const addCustomLine = () =>
-    setLines((ls) => [...ls, { key: keySeed++, productId: null, name: "", hsnCode: "", unit: "Nos", qty: 1, rate: 0, gst: 18 }]);
+    setEditing({ key: keySeed++, productId: null, name: "", notes: "", imageUrl: "", hsnCode: "", unit: "Nos", qty: 1, rate: 0, gst: 18 });
+  /** Dialog saved: replace the edited line, or append a new one. */
+  const saveLine = (item: Line) => {
+    setLines((ls) => (ls.some((l) => l.key === item.key) ? ls.map((l) => (l.key === item.key ? item : l)) : [...ls, item]));
+    setEditing(null);
+  };
   const patchLine = (key: number, patch: Partial<Line>) =>
     setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
   const removeLine = (key: number) => setLines((ls) => ls.filter((l) => l.key !== key));
@@ -201,6 +210,7 @@ export default function CounterSalePage() {
           const w = workOn ? workLines[l.key] : undefined;
           return {
             productId: l.productId, description: l.name.trim(), hsnCode: l.hsnCode || null,
+            notes: l.notes.trim() || null, imageUrl: l.imageUrl || null,
             unit: l.unit || null, quantity: l.qty, unitPrice: l.rate, gstRate: l.gst || 0,
             needsWork: !!w?.on, bundleNo: w?.on ? Math.min(w.bundleNo, workHeader.bundleCount) : null,
             workSpec: w?.on ? specToJson(w.spec) : null,
@@ -281,7 +291,7 @@ export default function CounterSalePage() {
                 <Search className="h-5 w-5 text-slate-400" />
               </div>
               <p className="mt-3 text-sm font-semibold text-slate-700">Scan a barcode or search a product to start the bill</p>
-              <p className="mt-1 text-xs text-slate-400">Enter adds the top match · use <span className="font-semibold text-slate-500">Custom</span> for anything not in stock</p>
+              <p className="mt-1 text-xs text-slate-400">Enter adds the top match · use <span className="font-semibold text-slate-500">New item</span> for anything not in stock</p>
               <div className="mt-4 inline-flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[11px] text-slate-500">
                 <span className="inline-flex items-center gap-1"><Kbd>F2</Kbd> Search</span>
                 <span className="inline-flex items-center gap-1"><Kbd>F4</Kbd> Customer</span>
@@ -292,29 +302,41 @@ export default function CounterSalePage() {
             <div className="bg-white border rounded-xl overflow-hidden">
               {/* header row (desktop) */}
               <div className="hidden md:grid grid-cols-[28px_1fr_auto_120px_70px_110px_36px] gap-3 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400 border-b bg-slate-50/60">
-                <span>#</span><span>Item</span><span className="text-center">Qty</span><span className="text-right">Rate ₹{taxInclusive ? " (incl.)" : ""}</span>
+                <span>#</span><span>Item</span><span className="text-center">Quantity</span><span className="text-right">Rate ₹{taxInclusive ? " (incl.)" : ""}</span>
                 <span className="text-right">GST%</span><span className="text-right">Amount</span><span />
               </div>
               {lines.map((l, idx) => (
                 <div key={l.key} className="grid grid-cols-2 md:grid-cols-[28px_1fr_auto_120px_70px_110px_36px] gap-2 md:gap-3 items-center px-3 py-2.5 border-b last:border-0 hover:bg-slate-50/50">
                   <span className="hidden md:block text-xs font-semibold tabular-nums text-slate-400">{idx + 1}</span>
-                  <div className="col-span-2 md:col-span-1 min-w-0">
-                    {l.productId ? (
-                      <>
-                        <div className="text-sm font-medium text-slate-800 truncate">{l.name}</div>
-                        <div className="text-[11px] text-slate-400">{l.hsnCode ? `HSN ${l.hsnCode} · ` : ""}{l.unit}</div>
-                      </>
+                  {/* item: photo + name + description — click to edit the details */}
+                  <button type="button" onClick={() => setEditing(l)} title="Edit description / photo"
+                    className="group col-span-2 md:col-span-1 min-w-0 flex items-center gap-2.5 text-left">
+                    {l.imageUrl ? (
+                      <img src={resolveFileUrl(l.imageUrl)} alt="" className="h-11 w-11 shrink-0 rounded-md border object-cover" />
                     ) : (
-                      <Input value={l.name} placeholder="Item name" onChange={(e) => patchLine(l.key, { name: e.target.value })} className="h-9" />
+                      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-dashed text-slate-300 group-hover:border-slate-400 group-hover:text-slate-500">
+                        <ImageIcon className="h-4 w-4" />
+                      </span>
                     )}
-                  </div>
-                  {/* qty stepper */}
-                  <div className="flex items-center justify-center">
-                    <div className="inline-flex items-center rounded-lg border bg-white">
-                      <button aria-label="Less" className="px-2 py-1.5 text-slate-500 hover:bg-slate-50 active:scale-95" onClick={() => patchLine(l.key, { qty: Math.max(1, l.qty - 1) })}><Minus className="w-3.5 h-3.5" /></button>
-                      <BaseInput inputMode="numeric" value={l.qty} onChange={(e) => patchLine(l.key, { qty: Math.max(1, Number(e.target.value) || 1) })} className="w-10 text-center text-sm font-semibold tabular-nums outline-none" />
-                      <button aria-label="More" className="px-2 py-1.5 text-slate-500 hover:bg-slate-50 active:scale-95" onClick={() => patchLine(l.key, { qty: l.qty + 1 })}><Plus className="w-3.5 h-3.5" /></button>
-                    </div>
+                    <span className="min-w-0">
+                      <span className="flex items-center gap-1.5 text-sm font-medium text-slate-800">
+                        <span className="truncate">{l.name || "Unnamed item"}</span>
+                        <Pencil className="h-3 w-3 shrink-0 text-slate-300 group-hover:text-slate-500" />
+                      </span>
+                      {l.notes
+                        ? <span className="block text-xs text-slate-500 line-clamp-2">{l.notes}</span>
+                        : <span className="block text-[11px] text-slate-400 group-hover:text-primary">+ Add description / photo</span>}
+                      {l.hsnCode && <span className="block text-[11px] text-slate-400">HSN {l.hsnCode}</span>}
+                    </span>
+                  </button>
+                  {/* quantity — typed in */}
+                  <div className="flex items-center justify-center gap-1.5">
+                    <Input type="number" inputMode="numeric" min={1} step={1} aria-label="Quantity"
+                      value={l.qty || ""} onFocus={(e) => e.target.select()}
+                      onChange={(e) => patchLine(l.key, { qty: Math.max(0, Math.floor(Number(e.target.value) || 0)) })}
+                      onBlur={() => { if (!l.qty) patchLine(l.key, { qty: 1 }); }}
+                      className="h-9 w-20 text-center text-sm font-semibold tabular-nums" />
+                    <span className="text-xs text-slate-400">{l.unit}</span>
                   </div>
                   <div className="md:text-right">
                     <Input type="number" min={0} value={l.rate} onChange={(e) => patchLine(l.key, { rate: Number(e.target.value) })} className="h-9 md:text-right" />
@@ -575,6 +597,7 @@ export default function CounterSalePage() {
             {blocker && <p className="text-center text-[11px] text-slate-400">{blocker}</p>}
           </div>
         </div>
+        {editing && <BillItemDialog item={editing} taxInclusive={taxInclusive} onClose={() => setEditing(null)} onSave={saveLine} />}
     </div>
   );
 }
@@ -621,8 +644,11 @@ function ProductAdd({ onPick, onCustom, inputRef }: {
         {open && results.length > 0 && (
           <div className="absolute z-30 mt-1 w-full max-h-72 overflow-y-auto bg-white border rounded-lg shadow-lg divide-y">
             {results.map((p) => (
-              <button key={p.id} type="button" onMouseDown={() => pick(p)} className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center justify-between gap-2">
-                <span className="min-w-0">
+              <button key={p.id} type="button" onMouseDown={() => pick(p)} className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2.5">
+                {p.imageUrl
+                  ? <img src={resolveFileUrl(p.imageUrl)} alt="" className="h-9 w-9 shrink-0 rounded border object-cover" />
+                  : <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded border bg-slate-50 text-slate-300"><ImageIcon className="h-4 w-4" /></span>}
+                <span className="min-w-0 flex-1">
                   <span className="block text-sm font-medium text-slate-800 truncate">{p.name}</span>
                   <span className="block text-[11px] text-slate-400">{p.materialCode || p.sku || "—"} · {p.unit || "Nos"}</span>
                 </span>
@@ -632,7 +658,7 @@ function ProductAdd({ onPick, onCustom, inputRef }: {
           </div>
         )}
       </div>
-      <Button variant="outline" className="h-11 shrink-0" onClick={onCustom}><Plus className="w-4 h-4 mr-1" /> Custom</Button>
+      <Button variant="outline" className="h-11 shrink-0" onClick={onCustom}><Plus className="w-4 h-4 mr-1" /> New item</Button>
     </div>
   );
 }

@@ -23,7 +23,7 @@ export function printReceipt(invoice: Invoice, items: InvoiceItem[], company?: C
     const amt = (it as any).totalPrice ?? Number(it.quantity) * Number(it.unitPrice);
     return `
     <tr>
-      <td class="nm" colspan="2">${esc(it.description)}</td>
+      <td class="nm" colspan="2">${esc(it.description)}${it.notes ? `<div class="mut">${esc(it.notes)}</div>` : ""}</td>
     </tr>
     <tr class="ln">
       <td class="qd">${esc(it.quantity)}${it.unit ? " " + esc(it.unit) : ""} × ${inr(incl && it.unitPriceIncl != null ? it.unitPriceIncl : it.unitPrice)}${it.gstRate ? ` <span class="mut">(${it.gstRate}% GST${incl ? " incl." : ""})</span>` : ""}</td>

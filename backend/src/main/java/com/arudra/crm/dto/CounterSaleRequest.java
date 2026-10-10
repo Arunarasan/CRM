@@ -50,6 +50,8 @@ public class CounterSaleRequest {
         public BigDecimal unitPrice;
         public BigDecimal gstRate;
         public Long warehouseId;  // optional per-line source warehouse
+        public String notes;      // short description under the item name
+        public String imageUrl;   // item photo
         // --- bundle work (stitching / making) for this line ---
         public boolean needsWork;
         public Integer bundleNo;  // which bundle (1-based) this line goes in; default 1

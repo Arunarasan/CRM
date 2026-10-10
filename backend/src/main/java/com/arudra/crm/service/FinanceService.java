@@ -177,6 +177,8 @@ public class FinanceService {
                 item.setDescription(li.description.trim());
                 item.setHsnCode(emptyToNull(li.hsnCode));
                 item.setUnit(emptyToNull(li.unit));
+                item.setNotes(emptyToNull(li.notes));
+                item.setImageUrl(emptyToNull(li.imageUrl));
                 item.setQuantity(li.quantity == null || li.quantity < 1 ? 1 : li.quantity);
                 item.setUnitPrice(li.unitPrice == null ? BigDecimal.ZERO : li.unitPrice);
                 item.setGstRate(li.gstRate == null ? BigDecimal.ZERO : li.gstRate);

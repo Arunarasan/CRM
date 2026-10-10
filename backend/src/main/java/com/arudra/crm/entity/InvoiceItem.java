@@ -43,6 +43,14 @@ public class InvoiceItem extends BaseEntity {
     private BigDecimal totalPrice;
 
     /** Set when this line is a catalogue product sold on a counter sale (no FK — plain id). */
+    /** Short description shown under the item name (counter sale). */
+    @Column(columnDefinition = "TEXT")
+    private String notes;
+
+    /** Item photo — the catalogue product's image, or one taken while billing. */
+    @Column(name = "image_url", length = 500)
+    private String imageUrl;
+
     @Column(name = "product_id")
     private Long productId;
 

@@ -103,8 +103,9 @@ export async function loadPdfImages(quotation: Quotation): Promise<Record<string
 }
 
 /** Letterhead, fonts and the bank box (UPI QR asking for `upiAmount`) for an invoice PDF. */
-export function loadInvoicePdfAssets(invoice: Invoice): Promise<Record<string, string>> {
-  return loadDocAssets([], n(invoice.balanceDue ?? invoice.totalAmount), invoice.invoiceNumber || "Invoice");
+export function loadInvoicePdfAssets(invoice: Invoice, lines: InvoiceItem[] = []): Promise<Record<string, string>> {
+  const urls = lines.map((l) => l.imageUrl).filter((u): u is string => !!u);
+  return loadDocAssets(urls, n(invoice.balanceDue ?? invoice.totalAmount), invoice.invoiceNumber || "Invoice");
 }
 
 /** Everything a document PDF draws that has to be fetched first: line photos, letterhead, fonts, bank box. */
@@ -329,7 +330,8 @@ export function buildInvoicePdf(invoice: Invoice, lines: InvoiceItem[], project?
     id: l.id ?? i,
     category: invoiceTypeLabel(invoice.invoiceType),
     itemName: l.description || "Item",
-    description: l.hsnCode ? `HSN ${l.hsnCode}` : undefined,
+    description: [l.notes?.trim(), l.hsnCode ? `HSN ${l.hsnCode}` : ""].filter(Boolean).join("  ·  ") || undefined,
+    imageUrl: l.imageUrl || undefined,
     quantity: n(l.quantity),
     unit: l.unit,
     rate: rateOf(l),

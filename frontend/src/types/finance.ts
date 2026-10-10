@@ -40,6 +40,10 @@ export interface InvoiceItem {
   unitPriceIncl?: number | null;
   gstRate?: number;
   totalPrice?: number;
+  /** Short description under the item name (counter sale). */
+  notes?: string | null;
+  /** Item photo — catalogue image or one taken while billing. */
+  imageUrl?: string | null;
 }
 
 export interface Invoice {
