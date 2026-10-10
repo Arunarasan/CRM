@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { payrollApi } from "@/api/payrollApi";
-import type { PayrollPreviewRow } from "@/types/payroll";
+import type { PayrollPreviewRow, PendingMoneyRequest } from "@/types/payroll";
 import { inr } from "@/pages/workforce/WorkforceFinanceTab";
 import { toast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
@@ -65,6 +65,8 @@ export default function GeneratePayslips({
   }, [rows, q]);
 
   const pending = rows.filter((r) => !r.recordId);
+  // A request was approved / rejected — refresh hours + payslips (an approval can change a generated one).
+  const afterRequest = () => { load(); onGenerated(); };
   const selected = pending.filter((r) => picked[r.employeeId] && choice[r.employeeId]);
   const selectedTotal = selected.reduce((a, r) => a + n(choice[r.employeeId] === "HOURLY" ? r.hourly.total : r.monthly.total), 0);
   const allPicked = pending.length > 0 && pending.every((r) => !r.defaultBasis || picked[r.employeeId]);
@@ -152,7 +154,10 @@ export default function GeneratePayslips({
                       onChange={(e) => setPicked((p) => ({ ...p, [r.employeeId]: e.target.checked }))} />
                   )}
                 </td>
-                <td className="p-3"><Person r={r} onEditWage={canProcess ? onEditWage : undefined} /></td>
+                <td className="p-3">
+                  <Person r={r} onEditWage={canProcess ? onEditWage : undefined} />
+                  <MoneyRequests r={r} canProcess={canProcess} onDone={afterRequest} />
+                </td>
                 <td className="p-3"><Hours r={r} /></td>
                 <td className="p-3"><Option r={r} basis="HOURLY" chosen={choice[r.employeeId]} onPick={pick} onEditWage={onEditWage} canProcess={canProcess} /></td>
                 <td className="p-3"><Option r={r} basis="MONTHLY" chosen={choice[r.employeeId]} onPick={pick} onEditWage={onEditWage} canProcess={canProcess} /></td>
@@ -181,6 +186,7 @@ export default function GeneratePayslips({
               </div>
               <Generated r={r} onOpen={canProcess ? onOpenSlip : undefined} />
             </div>
+            <MoneyRequests r={r} canProcess={canProcess} onDone={afterRequest} />
             <div className="mt-2"><Hours r={r} /></div>
             <div className="mt-2 grid grid-cols-2 gap-2">
               <Option r={r} basis="HOURLY" chosen={choice[r.employeeId]} onPick={pick} onEditWage={onEditWage} canProcess={canProcess} />
@@ -311,6 +317,57 @@ function Generated({ r, onOpen }: { r: PayrollPreviewRow; onOpen?: (employeeId: 
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+const MON = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const REQ_TITLE: Record<string, string> = {
+  ADVANCE: "Borrow", REPAY: "Repay", LOAN_REPAYMENT: "Loan repayment", ADVANCE_REPAYMENT: "Advance repayment",
+  SET_RECOVERY: "Repay plan", OTHER: "Other",
+};
+
+/**
+ * The employee's waiting money requests, approved or rejected right here while making payslips.
+ * Approved repayments go on that month's payslip (straight onto it if it's already generated).
+ */
+function MoneyRequests({ r, canProcess, onDone }: { r: PayrollPreviewRow; canProcess: boolean; onDone: () => void }) {
+  const [busy, setBusy] = useState<number | null>(null);
+  const reqs = r.pendingRequests ?? [];
+  if (reqs.length === 0 && !(n(r.owed) > 0)) return null;
+
+  const act = (q: PendingMoneyRequest, approve: boolean) => {
+    if (!approve && !confirm(`Reject this ${REQ_TITLE[q.requestType]?.toLowerCase() || "money"} request of ${inr(q.amount)}?`)) return;
+    setBusy(q.id);
+    (approve ? payrollApi.approvePayrollRequest(q.id) : payrollApi.rejectPayrollRequest(q.id))
+      .then(() => { toast.success(approve ? "Request approved" : "Request rejected"); onDone(); })
+      .catch((e) => toast.error(e?.response?.data?.message || "Could not update the request"))
+      .finally(() => setBusy(null));
+  };
+
+  return (
+    <div className="mt-2 space-y-1.5">
+      {n(r.owed) > 0 && <div className="text-[11px] text-slate-500">Owes <b className="text-rose-600">{inr(r.owed)}</b></div>}
+      {reqs.map((q) => (
+        <div key={q.id} className="rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs">
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-semibold text-amber-900">
+              {REQ_TITLE[q.requestType] || q.requestType} {inr(q.amount)}
+              {q.targetMonth ? <span className="font-normal text-amber-800"> · {MON[q.targetMonth]} {q.targetYear}</span> : null}
+              {q.requestType === "ADVANCE" && n(q.monthlyRecovery) > 0 ? <span className="font-normal text-amber-800"> · {inr(q.monthlyRecovery)}/mo</span> : null}
+            </span>
+            {canProcess && (
+              <span className="flex shrink-0 gap-1">
+                <button type="button" disabled={busy === q.id} onClick={() => act(q, true)}
+                  className="rounded bg-emerald-600 px-2 py-0.5 font-semibold text-white disabled:opacity-50">Approve</button>
+                <button type="button" disabled={busy === q.id} onClick={() => act(q, false)}
+                  className="rounded border border-slate-300 bg-white px-2 py-0.5 font-semibold text-slate-700 disabled:opacity-50">Reject</button>
+              </span>
+            )}
+          </div>
+          {q.reason && <div className="mt-0.5 truncate text-amber-800" title={q.reason}>{q.reason}</div>}
+        </div>
+      ))}
     </div>
   );
 }

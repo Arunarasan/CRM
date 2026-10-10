@@ -67,7 +67,7 @@ export interface PayrollRequest {
   id: number;
   employee?: any;
   requestedBy?: any;
-  requestType: 'ADVANCE' | 'LOAN_REPAYMENT' | 'ADVANCE_REPAYMENT' | 'SET_RECOVERY' | 'OTHER';
+  requestType: 'ADVANCE' | 'REPAY' | 'LOAN_REPAYMENT' | 'ADVANCE_REPAYMENT' | 'SET_RECOVERY' | 'OTHER';
   direction: 'DEBIT' | 'CREDIT';
   amount: number;
   monthlyRecovery?: number | null;
@@ -233,4 +233,19 @@ export interface PayrollPreviewRow {
   status?: string;
   payType?: string;
   netSalary?: number;
+  /** Money requests still waiting for HR — approved / rejected right on the Generate screen. */
+  pendingRequests?: PendingMoneyRequest[];
+  /** What the employee owes now (open advances + loans). */
+  owed?: number;
+}
+
+export interface PendingMoneyRequest {
+  id: number;
+  requestType: string; // ADVANCE (borrow) | REPAY | older types
+  amount: number;
+  reason?: string | null;
+  direction?: string | null;
+  monthlyRecovery?: number | null;
+  targetMonth?: number | null;
+  targetYear?: number | null;
 }

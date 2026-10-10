@@ -8,16 +8,14 @@ import { printPayslip, payslipRows } from './printPayslip';
 
 const MONTHS = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-const REQ_TYPES: { value: PayrollRequestType; label: string }[] = [
-  { value: 'ADVANCE', label: 'Salary advance' },
-  { value: 'LOAN_REPAYMENT', label: 'Repay loan' },
-  { value: 'ADVANCE_REPAYMENT', label: 'Repay advance' },
-  { value: 'SET_RECOVERY', label: 'Set repay plan' },
-  { value: 'OTHER', label: 'Other' },
-];
 const REQ_LABEL: Record<string, string> = {
-  ADVANCE: 'Salary advance', LOAN_REPAYMENT: 'Loan repayment', ADVANCE_REPAYMENT: 'Advance repayment',
-  SET_RECOVERY: 'Recovery plan', OTHER: 'Other',
+  ADVANCE: 'Borrow money', REPAY: 'Repay money',
+  // older requests raised before the two-option form
+  LOAN_REPAYMENT: 'Loan repayment', ADVANCE_REPAYMENT: 'Advance repayment', SET_RECOVERY: 'Repay plan', OTHER: 'Other',
+};
+// Request status in plain words for the employee.
+const REQ_STATUS: Record<string, string> = {
+  PENDING: 'Waiting', APPROVED: 'Approved', CONVERTED: 'Given', APPLIED: 'On payslip', REJECTED: 'Rejected',
 };
 const BONUS_LABEL: Record<string, string> = {
   PROJECT_COMPLETION: 'Project Completion', QUALITY: 'Quality', PERFORMANCE: 'Performance',
@@ -95,50 +93,30 @@ function PayslipDetail({ slip, onBack, employeeName, employeeCode }: { slip: Pay
 
 const now = new Date();
 
-function RequestSheet({ loans, advances, onClose, onSaved }: { loans: MyLoan[]; advances: MyAdvance[]; onClose: () => void; onSaved: () => void }) {
-  const [type, setType] = useState<PayrollRequestType>('ADVANCE');
+function RequestSheet({ owed, onClose, onSaved }: { owed: number; onClose: () => void; onSaved: () => void }) {
+  const [type, setType] = useState<'ADVANCE' | 'REPAY'>(owed > 0 ? 'REPAY' : 'ADVANCE');
   const [amount, setAmount] = useState('');
   const [reason, setReason] = useState('');
   const [monthlyRecovery, setMonthlyRecovery] = useState('');
-  const [loanId, setLoanId] = useState<string>('');
-  const [advanceId, setAdvanceId] = useState<string>('');
-  const [recoveryTarget, setRecoveryTarget] = useState<string>(''); // "L:3" | "A:5"
-  const [direction, setDirection] = useState<'DEBIT' | 'CREDIT'>('DEBIT');
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  const outstandingLoans = loans.filter((l) => l.balance > 0 && l.status !== 'CLOSED');
-  const outstandingAdvances = advances.filter((a) => a.balance > 0 && a.status !== 'RECOVERED' && a.status !== 'PENDING');
-  const isMonthTargeted = type === 'LOAN_REPAYMENT' || type === 'ADVANCE_REPAYMENT' || type === 'OTHER';
-  const amountLabel = type === 'SET_RECOVERY' ? 'Monthly recovery amount (₹)'
-    : type === 'ADVANCE' ? 'Amount to take this month (₹)' : 'Amount (₹)';
-
   const submit = async () => {
     setError('');
     const amt = Number(amount);
     if (!amt || amt <= 0) { setError('Enter an amount greater than zero.'); return; }
-    if (type === 'LOAN_REPAYMENT' && !loanId) { setError('Select the loan to repay.'); return; }
-    if (type === 'ADVANCE_REPAYMENT' && !advanceId) { setError('Select the advance to repay.'); return; }
-    let recLoanId: number | undefined, recAdvanceId: number | undefined;
-    if (type === 'SET_RECOVERY') {
-      if (!recoveryTarget) { setError('Select the loan or advance to set the plan for.'); return; }
-      const [kind, id] = recoveryTarget.split(':');
-      if (kind === 'L') recLoanId = Number(id); else recAdvanceId = Number(id);
-    }
+    if (type === 'REPAY' && amt > owed) { setError(`You owe ${inr(owed)} — enter that or less.`); return; }
     setSaving(true);
     try {
       await employeePortalApi.createPayrollRequest({
-        requestType: type,
+        requestType: type as PayrollRequestType,
         amount: amt,
         reason: reason || undefined,
-        ...(type === 'ADVANCE' ? { monthlyRecovery: monthlyRecovery ? Number(monthlyRecovery) : undefined } : {}),
-        ...(isMonthTargeted ? { targetMonth: month, targetYear: year } : {}),
-        ...(type === 'LOAN_REPAYMENT' ? { loanId: Number(loanId) } : {}),
-        ...(type === 'ADVANCE_REPAYMENT' ? { advanceId: Number(advanceId) } : {}),
-        ...(type === 'SET_RECOVERY' ? { loanId: recLoanId, advanceId: recAdvanceId } : {}),
-        ...(type === 'OTHER' ? { direction } : {}),
+        ...(type === 'ADVANCE'
+          ? { monthlyRecovery: monthlyRecovery ? Number(monthlyRecovery) : undefined }
+          : { targetMonth: month, targetYear: year }),
       });
       onSaved();
     } catch (e: any) {
@@ -148,77 +126,46 @@ function RequestSheet({ loans, advances, onClose, onSaved }: { loans: MyLoan[]; 
     }
   };
 
+  const choices: { value: 'ADVANCE' | 'REPAY'; title: string; hint: string; disabled?: boolean }[] = [
+    { value: 'ADVANCE', title: 'Borrow money', hint: 'Get money now, pay it back from salary' },
+    { value: 'REPAY', title: 'Repay money', hint: owed > 0 ? `Pay back from a month's salary · you owe ${inr(owed)}` : 'You don’t owe anything', disabled: owed <= 0 },
+  ];
+
   return (
     <div className="fixed inset-0 z-40 flex items-end bg-black/40" onClick={onClose}>
       <div className="mx-auto max-h-[90vh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-card p-4 pb-6" onClick={(e) => e.stopPropagation()}>
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-base font-semibold">Raise a Money Request</h2>
-          <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-full active:bg-accent"><X className="h-5 w-5" /></button>
+          <h2 className="text-base font-semibold">Money request</h2>
+          <button onClick={onClose} aria-label="Close" className="flex h-8 w-8 items-center justify-center rounded-full active:bg-accent"><X className="h-5 w-5" /></button>
         </div>
         {error && <p className="mb-2 rounded-md bg-destructive/15 p-2 text-xs text-destructive">{error}</p>}
         <div className="flex flex-col gap-3">
-          <div>
-            <label className="text-xs font-medium text-muted-foreground">Request type</label>
-            <div className="mt-1 flex flex-wrap gap-2">
-              {REQ_TYPES.map((t) => (
-                <button key={t.value} onClick={() => setType(t.value)}
-                  className={`rounded-full border px-3 py-1.5 text-xs font-medium ${type === t.value ? 'border-primary bg-primary text-primary-foreground' : 'bg-card text-muted-foreground'}`}>
-                  {t.label}
-                </button>
-              ))}
-            </div>
+          <div className="grid grid-cols-2 gap-2">
+            {choices.map((c) => (
+              <button key={c.value} type="button" disabled={c.disabled} onClick={() => setType(c.value)}
+                className={`rounded-xl border p-3 text-left transition-colors disabled:opacity-50 ${type === c.value ? 'border-primary bg-primary/10 ring-1 ring-primary' : 'bg-card'}`}>
+                <p className="text-sm font-semibold">{c.title}</p>
+                <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">{c.hint}</p>
+              </button>
+            ))}
           </div>
 
           <div>
-            <label className="text-xs font-medium text-muted-foreground">{amountLabel}</label>
+            <label className="text-xs font-medium text-muted-foreground">{type === 'ADVANCE' ? 'How much do you need? (₹)' : 'How much to repay? (₹)'}</label>
             <BaseInput type="number" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value)}
-              className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" placeholder="e.g. 2000" />
+              className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" placeholder="2000" />
           </div>
 
-          {type === 'ADVANCE' && (
+          {type === 'ADVANCE' ? (
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Preferred monthly recovery (optional)</label>
+              <label className="text-xs font-medium text-muted-foreground">Pay back per month (optional)</label>
               <BaseInput type="number" inputMode="numeric" value={monthlyRecovery} onChange={(e) => setMonthlyRecovery(e.target.value)}
-                className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" placeholder="how much to cut per month" />
+                className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" placeholder="Leave empty to repay it all next salary" />
             </div>
-          )}
-
-          {type === 'LOAN_REPAYMENT' && (
-            <PickerBlock label="Loan to repay" empty="You have no outstanding loans." value={loanId} onChange={setLoanId}
-              options={outstandingLoans.map((l) => ({ value: String(l.id), label: `Loan #${l.id} · balance ${inr(l.balance)}` }))} />
-          )}
-
-          {type === 'ADVANCE_REPAYMENT' && (
-            <PickerBlock label="Advance to repay" empty="You have no outstanding advances." value={advanceId} onChange={setAdvanceId}
-              options={outstandingAdvances.map((a) => ({ value: String(a.id), label: `Advance #${a.id} · balance ${inr(a.balance)}` }))} />
-          )}
-
-          {type === 'SET_RECOVERY' && (
-            <PickerBlock label="Set repay plan for" empty="You have no active loans or advances." value={recoveryTarget} onChange={setRecoveryTarget}
-              options={[
-                ...outstandingLoans.map((l) => ({ value: `L:${l.id}`, label: `Loan #${l.id} · balance ${inr(l.balance)}` })),
-                ...outstandingAdvances.map((a) => ({ value: `A:${a.id}`, label: `Advance #${a.id} · balance ${inr(a.balance)}` })),
-              ]} />
-          )}
-
-          {type === 'OTHER' && (
-            <div>
-              <label className="text-xs font-medium text-muted-foreground">This is</label>
-              <div className="mt-1 flex gap-2">
-                {[['DEBIT', 'A deduction (I pay)'], ['CREDIT', 'A reimbursement (owed to me)']].map(([v, l]) => (
-                  <button key={v} onClick={() => setDirection(v as 'DEBIT' | 'CREDIT')}
-                    className={`flex-1 rounded-full border px-3 py-1.5 text-xs font-medium ${direction === v ? 'border-primary bg-primary text-primary-foreground' : 'bg-card text-muted-foreground'}`}>
-                    {l}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {isMonthTargeted && (
+          ) : (
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs font-medium text-muted-foreground">Month</label>
+                <label className="text-xs font-medium text-muted-foreground">From salary of</label>
                 <select value={month} onChange={(e) => setMonth(Number(e.target.value))}
                   className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm">
                   {MONTHS.slice(1).map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
@@ -238,32 +185,16 @@ function RequestSheet({ loans, advances, onClose, onSaved }: { loans: MyLoan[]; 
               className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" placeholder="Optional note for HR" />
           </div>
 
+          <p className="text-[11px] leading-snug text-muted-foreground">
+            HR approves it when they make your payslip. It then shows on that month's payslip automatically.
+          </p>
+
           <button onClick={submit} disabled={saving}
-            className="mt-1 w-full rounded-lg bg-primary py-2.5 text-sm font-semibold text-primary-foreground active:scale-[0.99] disabled:opacity-60">
-            {saving ? 'Submitting…' : 'Submit Request'}
+            className="w-full rounded-lg bg-primary py-2.5 text-sm font-semibold text-primary-foreground active:scale-[0.99] disabled:opacity-60">
+            {saving ? 'Sending…' : 'Send request'}
           </button>
         </div>
       </div>
-    </div>
-  );
-}
-
-function PickerBlock({ label, empty, value, onChange, options }: {
-  label: string; empty: string; value: string; onChange: (v: string) => void;
-  options: { value: string; label: string }[];
-}) {
-  return (
-    <div>
-      <label className="text-xs font-medium text-muted-foreground">{label}</label>
-      {options.length === 0 ? (
-        <p className="mt-1 rounded-lg border bg-muted/40 p-2 text-xs text-muted-foreground">{empty}</p>
-      ) : (
-        <select value={value} onChange={(e) => onChange(e.target.value)}
-          className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm">
-          <option value="">Select…</option>
-          {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
-      )}
     </div>
   );
 }
@@ -279,13 +210,24 @@ export default function Salary() {
   const [me, setMe] = useState<{ name: string; code: string } | null>(null);
 
   const loadRequests = () => employeePortalApi.payrollRequests().then(setRequests).catch(() => setRequests([]));
+  const loadOwed = () => {
+    employeePortalApi.myLoans().then(setLoans).catch(() => setLoans([]));
+    employeePortalApi.myAdvances().then(setAdvances).catch(() => setAdvances([]));
+  };
+  // One "you owe" figure — open advances and loans together.
+  const debts = [
+    ...advances.filter((a) => a.balance > 0 && a.status !== 'RECOVERED' && a.status !== 'PENDING')
+      .map((a) => ({ key: `a-${a.id}`, date: a.advanceDate, amount: a.amount, balance: a.balance, perMonth: a.monthlyRecovery })),
+    ...loans.filter((l) => l.balance > 0 && l.status !== 'CLOSED')
+      .map((l) => ({ key: `l-${l.id}`, date: l.disbursedDate, amount: l.principal, balance: l.balance, perMonth: l.emiAmount })),
+  ];
+  const owed = debts.reduce((sum, d) => sum + Number(d.balance || 0), 0);
 
   useEffect(() => {
     employeePortalApi.me().then((p) => setMe({ name: `${p.firstName ?? ''} ${p.lastName ?? ''}`.trim(), code: p.employeeCode })).catch(() => {});
     employeePortalApi.bonuses().then(setBonuses).catch(() => setBonuses(null));
     employeePortalApi.monthlyEarnings().then(setMonths).catch(() => setMonths([]));
-    employeePortalApi.myLoans().then(setLoans).catch(() => setLoans([]));
-    employeePortalApi.myAdvances().then(setAdvances).catch(() => setAdvances([]));
+    loadOwed();
     loadRequests();
   }, []);
 
@@ -336,15 +278,15 @@ export default function Salary() {
 
       {/* Money requests — advance / loan repayment / other; admin approves */}
       <div className="flex items-center justify-between px-4 pb-1 pt-3">
-        <h3 className="text-xs font-semibold uppercase text-muted-foreground">My Money Requests</h3>
+        <h3 className="text-xs font-semibold uppercase text-muted-foreground">Borrow &amp; repay</h3>
         <button onClick={() => setSheetOpen(true)}
           className="flex h-8 items-center gap-1 rounded-full bg-primary px-3 text-xs font-semibold text-primary-foreground active:scale-95">
-          <Plus className="h-4 w-4" /> Raise
+          <Plus className="h-4 w-4" /> New request
         </button>
       </div>
       <div className="mx-3 mb-2 divide-y overflow-hidden rounded-xl border bg-card shadow-sm">
         {requests.length === 0 ? (
-          <EmptyState message="No requests yet. Tap Raise to ask for an advance or repay a loan." />
+          <EmptyState message="No requests yet. Tap New request to borrow money or repay what you owe." />
         ) : (
           requests.map((r) => (
             <div key={r.id} className="flex items-center justify-between gap-3 px-4 py-3">
@@ -362,58 +304,37 @@ export default function Salary() {
               </div>
               <div className="flex shrink-0 items-center gap-2 text-right">
                 <span className="text-sm font-semibold">{inr(r.amount)}</span>
-                <StatusPill status={r.status} />
+                <StatusPill status={r.status} label={REQ_STATUS[r.status]} />
               </div>
             </div>
           ))
         )}
       </div>
 
-      {/* Advances & loans — the employee's own balances, read-only */}
-      {(advances.length > 0 || loans.length > 0) && (
+      {/* What they owe — open advances and loans as one balance */}
+      {owed > 0 && (
         <>
-          <h3 className="px-4 pb-1 pt-3 text-xs font-semibold uppercase text-muted-foreground">Advances &amp; Loans</h3>
-          <div className="mx-3 mb-2 divide-y overflow-hidden rounded-xl border bg-card shadow-sm">
-            {advances.map((a) => (
-              <div key={`a-${a.id}`} className="flex items-center justify-between gap-3 px-4 py-3">
-                <div className="flex min-w-0 items-center gap-2">
-                  <Landmark className="h-4 w-4 shrink-0 text-amber-500" />
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium">Advance · {inr(a.amount)}</p>
-                    <p className="truncate text-xs text-muted-foreground">
-                      Recovered {inr(a.recoveredAmount || 0)}{a.monthlyRecovery ? ` · ${inr(a.monthlyRecovery)}/mo` : ''}{a.reason ? ` · ${a.reason}` : ''}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex shrink-0 items-center gap-2 text-right">
-                  <div>
-                    <p className="text-[10px] uppercase text-muted-foreground">Balance</p>
-                    <p className="text-sm font-semibold text-rose-600">{inr(a.balance)}</p>
-                  </div>
-                  {a.status && <StatusPill status={a.status} />}
+          <h3 className="px-4 pb-1 pt-3 text-xs font-semibold uppercase text-muted-foreground">You owe</h3>
+          <div className="mx-3 mb-2 overflow-hidden rounded-xl border bg-card shadow-sm">
+            <div className="flex items-center justify-between gap-3 px-4 py-3">
+              <div className="flex items-center gap-2">
+                <Landmark className="h-5 w-5 text-rose-500" />
+                <div>
+                  <p className="text-lg font-bold text-rose-600">{inr(owed)}</p>
+                  <p className="text-[11px] text-muted-foreground">Taken from your salary each month until it's paid back</p>
                 </div>
               </div>
-            ))}
-            {loans.map((l) => (
-              <div key={`l-${l.id}`} className="flex items-center justify-between gap-3 px-4 py-3">
-                <div className="flex min-w-0 items-center gap-2">
-                  <Landmark className="h-4 w-4 shrink-0 text-emerald-500" />
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium">Loan · {inr(l.principal)}</p>
-                    <p className="truncate text-xs text-muted-foreground">
-                      EMI {inr(l.emiAmount)} · Repaid {inr(l.recoveredAmount || 0)}
-                    </p>
-                  </div>
+            </div>
+            <div className="divide-y border-t">
+              {debts.map((d) => (
+                <div key={d.key} className="flex items-center justify-between gap-3 px-4 py-2 text-xs">
+                  <span className="text-muted-foreground">
+                    Borrowed {inr(d.amount)}{d.date ? ` · ${d.date}` : ''}{Number(d.perMonth) > 0 ? ` · ${inr(d.perMonth)}/mo` : ''}
+                  </span>
+                  <span className="font-semibold">{inr(d.balance)} left</span>
                 </div>
-                <div className="flex shrink-0 items-center gap-2 text-right">
-                  <div>
-                    <p className="text-[10px] uppercase text-muted-foreground">Balance</p>
-                    <p className="text-sm font-semibold text-rose-600">{inr(l.balance)}</p>
-                  </div>
-                  {l.status && <StatusPill status={l.status} />}
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </>
       )}
@@ -468,10 +389,9 @@ export default function Salary() {
 
       {sheetOpen && (
         <RequestSheet
-          loans={loans}
-          advances={advances}
+          owed={owed}
           onClose={() => setSheetOpen(false)}
-          onSaved={() => { setSheetOpen(false); loadRequests(); }}
+          onSaved={() => { setSheetOpen(false); loadRequests(); loadOwed(); }}
         />
       )}
     </div>

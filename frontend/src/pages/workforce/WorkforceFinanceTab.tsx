@@ -58,7 +58,7 @@ function EmployeeFinance({ fin, reload }: { fin: WorkforceFinance; reload: () =>
 
   // Route each request to the card it belongs with; SET_RECOVERY follows its target (loan vs advance).
   const advanceReqs = reqs.filter((r) =>
-    r.requestType === "ADVANCE" || r.requestType === "ADVANCE_REPAYMENT"
+    r.requestType === "ADVANCE" || r.requestType === "REPAY" || r.requestType === "ADVANCE_REPAYMENT"
     || (r.requestType === "SET_RECOVERY" && r.advanceId != null));
   const loanReqs = reqs.filter((r) =>
     r.requestType === "LOAN_REPAYMENT" || (r.requestType === "SET_RECOVERY" && r.loanId != null));
@@ -352,7 +352,7 @@ function Num({ label, v, on }: { label: string; v: number; on: (v: number) => vo
 }
 const REQ_MONTHS = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const REQ_TYPE_LABEL: Record<string, string> = {
-  ADVANCE: "Advance", LOAN_REPAYMENT: "Loan repayment", ADVANCE_REPAYMENT: "Advance repayment",
+  ADVANCE: "Borrow", REPAY: "Repay", LOAN_REPAYMENT: "Loan repayment", ADVANCE_REPAYMENT: "Advance repayment",
   SET_RECOVERY: "Recovery plan", OTHER: "Other",
 };
 const REQ_STATUS_TONE: Record<string, string> = {

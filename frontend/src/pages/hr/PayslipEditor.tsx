@@ -37,6 +37,7 @@ function toForm(r: SalaryRecord): Record<string, string> {
   [...DETAIL_FIELDS, ...EARNING_FIELDS, ...DEDUCTION_FIELDS].forEach(({ key }) => { f[key] = a[key] == null ? '' : String(a[key]); });
   if (split === 0 && num(a.bonus) > 0) f.manualBonus = String(a.bonus); // older payslips: one combined bonus
   f.otherDeductionsExtra = String(Math.max(0, num(a.otherDeductions) - num(a.manualDeduction)));
+  f.repayment = String(num(a.advanceRecovery) + num(a.loanRecovery));
   f.remarks = a.remarks ?? '';
   return f;
 }
@@ -46,7 +47,8 @@ function toForm(r: SalaryRecord): Record<string, string> {
  * payslip can be changed — earnings, deductions, hours and days — plus named extra lines and a note for
  * the employee. Totals preview live and recompute on the server when saved. Regenerate rebuilds the
  * payslip from current attendance / bonuses / leads (dropping edits); Delete removes it and releases
- * everything it used. Locked once the payslip is PAID.
+ * everything it used. "Repayment of what they owe" moves the real advance/loan balances. Waiting money
+ * requests can be approved here too. Locked once the payslip is PAID.
  */
 export default function PayslipEditor({
   employeeId, name, month, year, onClose, onChanged,
@@ -87,9 +89,9 @@ export default function PayslipEditor({
     const itemSum = (xs: PayslipLineItem[]) => xs.reduce((a, i) => a + num(i.amount), 0);
     const gross = EARNING_FIELDS.reduce((a, f) => a + num(form[f.key]), 0) + itemSum(earnItems);
     const ded = DEDUCTION_FIELDS.reduce((a, f) => a + num(form[f.key]), 0)
-      + num(rec?.advanceRecovery) + num(rec?.loanRecovery) + itemSum(dedItems);
+      + num(form.repayment) + itemSum(dedItems);
     return { gross, ded, net: gross - ded };
-  }, [form, earnItems, dedItems, rec]);
+  }, [form, earnItems, dedItems]);
 
   const set = (key: string, value: string) => { setForm((f) => ({ ...f, [key]: value })); setDirty(true); };
 
@@ -110,10 +112,15 @@ export default function PayslipEditor({
       toast.error('Amounts must be zero or more.');
       return;
     }
+    const repay = form.repayment === '' ? 0 : Number(form.repayment);
+    if (isNaN(repay) || repay < 0) { toast.error('Repayment must be zero or more.'); return; }
+    body.repayment = repay;
     body.remarks = form.remarks?.trim() || null;
     run(() => payrollApi.updatePayslipComponents(rec.id!, body), (v) => {
       setView(v); if (v.record) setForm(toForm(v.record)); setDirty(false);
-      toast.success('Payslip saved');
+      const took = num(v.record?.advanceRecovery) + num(v.record?.loanRecovery);
+      if (took < repay) toast.success(`Saved. Repayment set to ${inr(took)} — that's all they owe.`);
+      else toast.success('Payslip saved');
     });
   };
 
@@ -127,6 +134,12 @@ export default function PayslipEditor({
     if (!rec?.id) return;
     if (!confirm(`Delete this payslip for ${name || 'this employee'} (${MONTHS[month]} ${year})?\n\nBonuses, deductions, requests, advance/loan recoveries and leads it used are released, so you can generate it again.`)) return;
     run(() => payrollApi.deletePayslip(rec.id!), () => { toast.success('Payslip deleted'); onClose(); });
+  };
+
+  const decide = (id: number, approve: boolean) => {
+    if (!approve && !confirm('Reject this request?')) return;
+    run(() => (approve ? payrollApi.approvePayrollRequest(id) : payrollApi.rejectPayrollRequest(id)),
+      () => { toast.success(approve ? 'Approved — added to this payslip if it is for this month' : 'Request rejected'); load(); });
   };
 
   const generateNow = () => run(() => payrollApi.generatePayslip(employeeId, month, year), () => { toast.success('Payslip generated'); load(); });
@@ -189,6 +202,28 @@ export default function PayslipEditor({
               </div>
             )}
 
+            {(view?.pendingRequests ?? []).length > 0 && (
+              <Section title="Waiting money requests">
+                <div className="space-y-1.5">
+                  {(view?.pendingRequests ?? []).map((q) => (
+                    <div key={q.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm">
+                      <span className="text-amber-900">
+                        <b>{q.requestType === 'ADVANCE' ? 'Borrow' : q.requestType === 'REPAY' ? 'Repay' : q.requestType.replace(/_/g, ' ').toLowerCase()}</b> {inr(q.amount)}
+                        {q.targetMonth ? ` · ${MONTHS[q.targetMonth]} ${q.targetYear}` : ''}
+                        {q.reason ? <span className="text-amber-800"> — {q.reason}</span> : null}
+                      </span>
+                      {!paid && (
+                        <span className="flex gap-1.5">
+                          <Button size="sm" variant="outline" disabled={busy} onClick={() => decide(q.id, true)}>Approve</Button>
+                          <Button size="sm" variant="ghost" disabled={busy} onClick={() => decide(q.id, false)}>Reject</Button>
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </Section>
+            )}
+
             <Section title="Hours & days">
               <FieldGrid fields={DETAIL_FIELDS} form={form} onChange={set} disabled={locked} plain />
             </Section>
@@ -202,13 +237,22 @@ export default function PayslipEditor({
 
             <Section title="Deductions">
               <FieldGrid fields={DEDUCTION_FIELDS} form={form} onChange={set} disabled={locked} />
-              {(num(rec.advanceRecovery) > 0 || num(rec.loanRecovery) > 0) && (
-                <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
-                  <ReadOnly label="Advance recovery" value={num(rec.advanceRecovery)} />
-                  <ReadOnly label="Loan recovery" value={num(rec.loanRecovery)} />
-                  <p className="col-span-2 text-[11px] text-muted-foreground">Recovery moves the advance / loan balance, so change the plan and use Regenerate instead.</p>
+              <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                <label className="block">
+                  <span className="text-[11px] text-muted-foreground">Repayment of what they owe</span>
+                  <div className="relative mt-0.5">
+                    <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">₹</span>
+                    <BaseInput type="number" min={0} step="any" inputMode="decimal" value={form.repayment ?? ''} disabled={locked}
+                      onChange={(e) => set('repayment', e.target.value)}
+                      className="h-9 w-full rounded-md border pl-6 pr-2 text-right text-sm tabular-nums disabled:opacity-60" />
+                  </div>
+                </label>
+                <div className="col-span-1 flex items-end pb-1 text-[11px] text-muted-foreground sm:col-span-2">
+                  {view?.owedBalance != null && (
+                    <span>Still owes <b className="text-rose-600">{inr(view.owedBalance)}</b> after this payslip. Changing the repayment updates that balance.</span>
+                  )}
                 </div>
-              )}
+              </div>
               <ItemGroup items={dedItems} negative disabled={locked}
                 onEdit={(it, v) => applyItems(() => payrollApi.updatePayslipLineItem(it.id, { amount: Number(v) }))}
                 onDelete={(it) => applyItems(() => payrollApi.deletePayslipLineItem(it.id))} />
@@ -302,15 +346,6 @@ function FieldGrid({ fields, form, onChange, disabled, plain }: {
           </div>
         </label>
       ))}
-    </div>
-  );
-}
-
-function ReadOnly({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-md border bg-muted/30 px-2.5 py-1.5">
-      <div className="text-[11px] text-muted-foreground">{label}</div>
-      <div className="text-right text-sm tabular-nums">{inr(value)}</div>
     </div>
   );
 }

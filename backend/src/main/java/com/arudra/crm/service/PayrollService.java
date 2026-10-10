@@ -196,10 +196,16 @@ public class PayrollService {
             }
             r.setStatus("APPLIED");
         } else {
-            // LOAN_REPAYMENT / ADVANCE_REPAYMENT / OTHER — absorbed by the target month's payroll run.
+            // REPAY / LOAN_REPAYMENT / ADVANCE_REPAYMENT / OTHER — absorbed by the target month's payroll run.
             r.setStatus("APPROVED");
         }
         com.arudra.crm.entity.PayrollRequest saved = payrollRequestRepository.save(r);
+        // Approved after that month's payslip was generated (e.g. from the payslip editor)? Put it on now.
+        if ("APPROVED".equals(saved.getStatus()) && saved.getTargetMonth() != null && saved.getTargetYear() != null) {
+            salaryRepository.findByEmployeeIdAndMonthAndYear(saved.getEmployee().getId(), saved.getTargetMonth(), saved.getTargetYear())
+                    .filter(rec -> !"PAID".equalsIgnoreCase(rec.getStatus()))
+                    .ifPresent(this::absorbApprovedRequests);
+        }
         notifyEmployeeUser(r.getEmployee(), "Request Approved",
                 "Your " + prettyRequestType(r.getRequestType()) + " request of " + saved.getAmount() + " was approved.");
         return saved;
@@ -243,7 +249,12 @@ public class PayrollService {
             BigDecimal amt = nz(r.getAmount());
             if (amt.signum() <= 0) { markApplied(r, rec); continue; }
 
-            if ("LOAN_REPAYMENT".equals(type)) {
+            if ("REPAY".equals(type)) {
+                // "Repay money": pays down whatever they owe, oldest debt first (capped at the balance).
+                BigDecimal[] parts = repayOwed(employeeId, amt, rec);
+                advanceRec = advanceRec.add(parts[0]);
+                loanRec = loanRec.add(parts[1]);
+            } else if ("LOAN_REPAYMENT".equals(type)) {
                 EmployeeLoan loan = r.getLoanId() == null ? null : loanRepository.findById(r.getLoanId()).orElse(null);
                 if (loan != null && "ACTIVE".equalsIgnoreCase(loan.getStatus()) && nz(loan.getBalance()).signum() > 0) {
                     BigDecimal take = amt.min(loan.getBalance());
@@ -279,6 +290,128 @@ public class PayrollService {
         return new BigDecimal[]{loanRec, advanceRec, otherDed, otherEarn};
     }
 
+    /** Adds any approved, not-yet-applied requests for this payslip's month onto it and re-totals it. */
+    private void absorbApprovedRequests(SalaryRecord rec) {
+        BigDecimal[] req = applyPayrollRequests(rec.getEmployee().getId(), rec.getMonth(), rec.getYear(), rec);
+        rec.setLoanRecovery(nz(rec.getLoanRecovery()).add(req[0]));
+        rec.setAdvanceRecovery(nz(rec.getAdvanceRecovery()).add(req[1]));
+        rec.setOtherDeductions(nz(rec.getOtherDeductions()).add(req[2]));
+        rec.setOtherEarnings(nz(rec.getOtherEarnings()).add(req[3]));
+        PayslipEditService.applyTotals(rec, lineItemRepository.findBySalaryRecordIdAndIsDeletedFalseOrderByIdAsc(rec.getId()));
+        salaryRepository.save(rec);
+    }
+
+    /** Everything the employee still owes: open advances + active loans. */
+    public BigDecimal owedBalance(Long employeeId) {
+        BigDecimal total = BigDecimal.ZERO;
+        for (EmployeeAdvance a : advanceRepository.findByEmployeeIdAndStatusInAndBalanceGreaterThanOrderByIdAsc(
+                employeeId, ACTIVE_ADVANCE_STATES, BigDecimal.ZERO)) total = total.add(nz(a.getBalance()));
+        for (EmployeeLoan l : loanRepository.findByEmployeeIdAndStatusAndBalanceGreaterThanOrderByIdAsc(
+                employeeId, "ACTIVE", BigDecimal.ZERO)) total = total.add(nz(l.getBalance()));
+        return total;
+    }
+
+    private record Debt(LocalDate date, Long id, EmployeeAdvance adv, EmployeeLoan loan) {}
+
+    /**
+     * Pays {@code amount} off what the employee owes, oldest debt first (advances and loans together),
+     * writing a PayrollRecovery row per debt touched. Capped at what they owe.
+     * Returns {advancePart, loanPart}.
+     */
+    private BigDecimal[] repayOwed(Long employeeId, BigDecimal amount, SalaryRecord rec) {
+        List<Debt> debts = new ArrayList<>();
+        for (EmployeeAdvance a : advanceRepository.findByEmployeeIdAndStatusInAndBalanceGreaterThanOrderByIdAsc(
+                employeeId, ACTIVE_ADVANCE_STATES, BigDecimal.ZERO)) debts.add(new Debt(a.getAdvanceDate(), a.getId(), a, null));
+        for (EmployeeLoan l : loanRepository.findByEmployeeIdAndStatusAndBalanceGreaterThanOrderByIdAsc(
+                employeeId, "ACTIVE", BigDecimal.ZERO)) debts.add(new Debt(l.getDisbursedDate(), l.getId(), null, l));
+        debts.sort(Comparator.comparing(Debt::date, Comparator.nullsFirst(Comparator.naturalOrder()))
+                .thenComparing(Debt::id));
+        BigDecimal left = nz(amount), adv = BigDecimal.ZERO, loan = BigDecimal.ZERO;
+        for (Debt d : debts) {
+            if (left.signum() <= 0) break;
+            if (d.adv() != null) {
+                EmployeeAdvance a = d.adv();
+                BigDecimal take = left.min(nz(a.getBalance()));
+                a.setRecoveredAmount(nz(a.getRecoveredAmount()).add(take));
+                a.setBalance(nz(a.getBalance()).subtract(take));
+                a.setStatus(a.getBalance().signum() <= 0 ? "RECOVERED" : "RECOVERING");
+                advanceRepository.save(a);
+                recoveryRepository.save(recovery(rec, "ADVANCE", a.getId(), take));
+                adv = adv.add(take);
+                left = left.subtract(take);
+            } else {
+                EmployeeLoan l = d.loan();
+                BigDecimal take = left.min(nz(l.getBalance()));
+                l.setRecoveredAmount(nz(l.getRecoveredAmount()).add(take));
+                l.setBalance(nz(l.getBalance()).subtract(take));
+                if (l.getBalance().signum() <= 0) l.setStatus("CLOSED");
+                loanRepository.save(l);
+                recoveryRepository.save(recovery(rec, "LOAN", l.getId(), take));
+                loan = loan.add(take);
+                left = left.subtract(take);
+            }
+        }
+        return new BigDecimal[]{adv, loan};
+    }
+
+    /** Puts every recovery this payslip made back onto its advance / loan and removes the rows. */
+    private void reverseRecoveries(Long salaryRecordId) {
+        List<PayrollRecovery> recoveries = recoveryRepository.findBySalaryRecordId(salaryRecordId);
+        for (PayrollRecovery pr : recoveries) {
+            BigDecimal amt = nz(pr.getAmount());
+            if ("ADVANCE".equalsIgnoreCase(pr.getSourceType())) {
+                advanceRepository.findById(pr.getSourceId()).ifPresent(a -> {
+                    a.setBalance(nz(a.getBalance()).add(amt));
+                    a.setRecoveredAmount(nz(a.getRecoveredAmount()).subtract(amt).max(BigDecimal.ZERO));
+                    a.setStatus(nz(a.getRecoveredAmount()).signum() > 0 ? "RECOVERING" : "APPROVED");
+                    advanceRepository.save(a);
+                });
+            } else if ("LOAN".equalsIgnoreCase(pr.getSourceType())) {
+                loanRepository.findById(pr.getSourceId()).ifPresent(l -> {
+                    l.setBalance(nz(l.getBalance()).add(amt));
+                    l.setRecoveredAmount(nz(l.getRecoveredAmount()).subtract(amt).max(BigDecimal.ZERO));
+                    l.setStatus("ACTIVE");
+                    loanRepository.save(l);
+                });
+            }
+        }
+        recoveryRepository.deleteAll(recoveries);
+        recoveryRepository.flush();
+    }
+
+    /**
+     * HR changed the payslip's "Repayment of what they owe": undo this payslip's recoveries and take the
+     * new amount instead (oldest debt first, capped at what's owed). Sets advance/loan recovery on
+     * {@code rec}; the caller re-totals and saves. Returns the amount actually taken.
+     */
+    @Transactional
+    public BigDecimal setRepayment(SalaryRecord rec, BigDecimal amount) {
+        reverseRecoveries(rec.getId());
+        BigDecimal[] parts = repayOwed(rec.getEmployee().getId(), nz(amount).max(BigDecimal.ZERO), rec);
+        rec.setAdvanceRecovery(parts[0]);
+        rec.setLoanRecovery(parts[1]);
+        return parts[0].add(parts[1]);
+    }
+
+    /** Waiting (PENDING) money requests for an employee — approved/rejected from Generate or the editor. */
+    public List<Map<String, Object>> pendingRequests(Long employeeId) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (com.arudra.crm.entity.PayrollRequest r : payrollRequestRepository.findByEmployeeIdAndIsDeletedFalseOrderByIdDesc(employeeId)) {
+            if (!"PENDING".equalsIgnoreCase(r.getStatus())) continue;
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", r.getId());
+            m.put("requestType", r.getRequestType());
+            m.put("amount", r.getAmount());
+            m.put("reason", r.getReason());
+            m.put("direction", r.getDirection());
+            m.put("monthlyRecovery", r.getMonthlyRecovery());
+            m.put("targetMonth", r.getTargetMonth());
+            m.put("targetYear", r.getTargetYear());
+            out.add(m);
+        }
+        return out;
+    }
+
     private void markApplied(com.arudra.crm.entity.PayrollRequest r, SalaryRecord rec) {
         r.setStatus("APPLIED");
         r.setAppliedSalaryRecordId(rec.getId());
@@ -288,7 +421,8 @@ public class PayrollService {
     private static String prettyRequestType(String type) {
         if (type == null) return "payroll";
         switch (type.toUpperCase()) {
-            case "ADVANCE": return "salary advance";
+            case "ADVANCE": return "borrow";
+            case "REPAY": return "repayment";
             case "LOAN_REPAYMENT": return "loan repayment";
             case "ADVANCE_REPAYMENT": return "advance repayment";
             case "SET_RECOVERY": return "recovery-plan";
@@ -395,6 +529,8 @@ public class PayrollService {
         List<Map<String, Object>> out = new ArrayList<>();
         for (Employee e : employeeRepository.findByPayrollEnabledTrueAndIsDeletedFalse()) {
             Map<String, Object> m = previewRow(e, calculate(e, ym));
+            m.put("pendingRequests", pendingRequests(e.getId()));
+            m.put("owed", owedBalance(e.getId()));
             salaryRepository.findByEmployeeIdAndMonthAndYear(e.getId(), month, year).ifPresent(r -> {
                 m.put("recordId", r.getId());
                 m.put("status", r.getStatus());
@@ -728,27 +864,7 @@ public class PayrollService {
             r.setAppliedSalaryRecordId(null);
             payrollRequestRepository.save(r);
         }
-        // Put each recovery back on the advance / loan it paid down.
-        List<PayrollRecovery> recoveries = recoveryRepository.findBySalaryRecordId(id);
-        for (PayrollRecovery pr : recoveries) {
-            BigDecimal amt = nz(pr.getAmount());
-            if ("ADVANCE".equalsIgnoreCase(pr.getSourceType())) {
-                advanceRepository.findById(pr.getSourceId()).ifPresent(a -> {
-                    a.setBalance(nz(a.getBalance()).add(amt));
-                    a.setRecoveredAmount(nz(a.getRecoveredAmount()).subtract(amt).max(BigDecimal.ZERO));
-                    a.setStatus(nz(a.getRecoveredAmount()).signum() > 0 ? "RECOVERING" : "APPROVED");
-                    advanceRepository.save(a);
-                });
-            } else if ("LOAN".equalsIgnoreCase(pr.getSourceType())) {
-                loanRepository.findById(pr.getSourceId()).ifPresent(l -> {
-                    l.setBalance(nz(l.getBalance()).add(amt));
-                    l.setRecoveredAmount(nz(l.getRecoveredAmount()).subtract(amt).max(BigDecimal.ZERO));
-                    l.setStatus("ACTIVE");
-                    loanRepository.save(l);
-                });
-            }
-        }
-        recoveryRepository.deleteAll(recoveries);
+        reverseRecoveries(id); // put each recovery back on the advance / loan it paid down
         for (Lead l : leadRepository.findByLeadRewardSalaryRecordId(id)) {
             l.setLeadRewardSalaryRecordId(null);
             leadRepository.save(l);

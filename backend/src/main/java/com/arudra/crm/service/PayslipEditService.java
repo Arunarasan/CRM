@@ -26,6 +26,7 @@ public class PayslipEditService {
 
     @Autowired private SalaryRecordRepository salaryRepository;
     @Autowired private PayslipLineItemRepository lineItemRepository;
+    @Autowired private PayrollService payrollService;
 
     /** Preset labels the admin UI offers; free text is allowed too. */
     public static final List<String> EARNING_PRESETS = List.of(
@@ -80,8 +81,8 @@ public class PayslipEditService {
 
     /**
      * HR edits the payslip's own amounts and details (anything sent; fields left out are unchanged),
-     * then gross / deductions / net recompute. Advance and loan recovery aren't editable here because
-     * they move real balances — delete and regenerate the payslip to change those.
+     * then gross / deductions / net recompute. "repayment" (what's taken toward money they owe) moves the
+     * real advance/loan balances, oldest debt first.
      */
     @Transactional
     public Map<String, Object> updateComponents(Long salaryRecordId, Map<String, Object> body) {
@@ -109,6 +110,12 @@ public class PayslipEditService {
         r.setManualDeduction(money(body, "manualDeduction", oldManual));
         otherExtra = money(body, "otherDeductionsExtra", otherExtra);
         r.setOtherDeductions(nz(r.getManualDeduction()).add(otherExtra));
+        // "Repayment of what they owe" — moves real advance/loan balances, oldest debt first.
+        if (body.containsKey("repayment")) {
+            BigDecimal current = nz(r.getAdvanceRecovery()).add(nz(r.getLoanRecovery()));
+            BigDecimal wanted = money(body, "repayment", current);
+            if (wanted.compareTo(current) != 0) payrollService.setRepayment(r, wanted);
+        }
         // Details shown on the payslip
         r.setWorkedHours(money(body, "workedHours", r.getWorkedHours()));
         r.setOvertimeHours(money(body, "overtimeHours", r.getOvertimeHours()));
@@ -137,29 +144,31 @@ public class PayslipEditService {
 
     // --- core --------------------------------------------------------------
 
-    /** Recompute gross/net = stable auto base (from component fields) + Σ line items. Idempotent. */
+    /** Recompute gross/net from the component fields + Σ line items, and save. Idempotent. */
     private void recompute(SalaryRecord r) {
-        List<PayslipLineItem> items = lineItemRepository.findBySalaryRecordIdAndIsDeletedFalseOrderByIdAsc(r.getId());
+        applyTotals(r, lineItemRepository.findBySalaryRecordIdAndIsDeletedFalseOrderByIdAsc(r.getId()));
+        salaryRepository.save(r);
+    }
+
+    /** Sets gross / total deductions / net on {@code r} = its component fields + the given line items. */
+    public static void applyTotals(SalaryRecord r, List<PayslipLineItem> items) {
         BigDecimal earnAdd = BigDecimal.ZERO, dedAdd = BigDecimal.ZERO;
         for (PayslipLineItem it : items) {
             if ("DEDUCTION".equals(it.getCategory())) dedAdd = dedAdd.add(nz(it.getAmount()));
             else earnAdd = earnAdd.add(nz(it.getAmount()));
         }
-        // Auto base from the record's own component fields (unchanged by line-item edits).
         BigDecimal baseGross = nz(r.getBasic()).add(nz(r.getRegularEarnings())).add(nz(r.getOvertimeAmount()))
                 .add(nz(r.getHra())).add(nz(r.getAllowances())).add(nz(r.getBonus())).add(nz(r.getIncentive()))
                 .add(nz(r.getOtherEarnings()));
         BigDecimal baseDed = nz(r.getPfAmount()).add(nz(r.getEsiAmount())).add(nz(r.getProfessionalTax()))
                 .add(nz(r.getAdvanceRecovery())).add(nz(r.getLoanRecovery())).add(nz(r.getLeaveDeduction()))
                 .add(nz(r.getOtherDeductions()));
-
         BigDecimal gross = baseGross.add(earnAdd);
         BigDecimal totalDed = baseDed.add(dedAdd);
         r.setGrossEarnings(gross);
         r.setTotalDeductions(totalDed);
         r.setDeductions(totalDed);
         r.setNetSalary(gross.subtract(totalDed));
-        salaryRepository.save(r);
     }
 
     private SalaryRecord editable(Long salaryRecordId) {
@@ -175,6 +184,10 @@ public class PayslipEditService {
         m.put("record", rec);
         m.put("lineItems", rec == null ? List.of()
                 : lineItemRepository.findBySalaryRecordIdAndIsDeletedFalseOrderByIdAsc(rec.getId()));
+        if (rec != null && rec.getEmployee() != null) {
+            m.put("owedBalance", payrollService.owedBalance(rec.getEmployee().getId())); // left after this payslip
+            m.put("pendingRequests", payrollService.pendingRequests(rec.getEmployee().getId()));
+        }
         m.put("earningPresets", EARNING_PRESETS);
         m.put("deductionPresets", DEDUCTION_PRESETS);
         return m;

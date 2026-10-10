@@ -42,7 +42,7 @@ const DEDUCTION_LABEL: Record<string, string> = {
 };
 
 const REQUEST_LABEL: Record<string, string> = {
-  ADVANCE: "Salary Advance", LOAN_REPAYMENT: "Loan Repayment", ADVANCE_REPAYMENT: "Advance Repayment",
+  ADVANCE: "Borrow money", REPAY: "Repay money", LOAN_REPAYMENT: "Loan Repayment", ADVANCE_REPAYMENT: "Advance Repayment",
   SET_RECOVERY: "Recovery Plan", OTHER: "Other",
 };
 const MONTHS_SHORT = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];

@@ -572,7 +572,7 @@ export interface MyAdvance {
   advanceDate?: string;
 }
 
-export type PayrollRequestType = 'ADVANCE' | 'LOAN_REPAYMENT' | 'ADVANCE_REPAYMENT' | 'SET_RECOVERY' | 'OTHER';
+export type PayrollRequestType = 'ADVANCE' | 'REPAY' | 'LOAN_REPAYMENT' | 'ADVANCE_REPAYMENT' | 'SET_RECOVERY' | 'OTHER';
 
 /** One of the employee's money requests. */
 export interface PayrollRequestEntry {

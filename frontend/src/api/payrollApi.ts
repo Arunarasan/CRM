@@ -1,7 +1,7 @@
 import api from '../lib/api';
 import {
   SalaryRecord, EmployeeAdvance, EmployeeLoan, FinanceDashboard,
-  EmployeeDeduction, WageSettings, PayrollLine, PayrollSummary, PayrollRequest, PayrollPreviewRow,
+  EmployeeDeduction, WageSettings, PayrollLine, PayrollSummary, PayrollRequest, PayrollPreviewRow, PendingMoneyRequest,
 } from '../types/payroll';
 
 export interface PayslipLineItem {
@@ -16,6 +16,9 @@ export interface PayslipEditView {
   lineItems: PayslipLineItem[];
   earningPresets: string[];
   deductionPresets: string[];
+  /** What the employee still owes after this payslip's repayment. */
+  owedBalance?: number;
+  pendingRequests?: PendingMoneyRequest[];
 }
 
 // Employee payroll — /api/hr endpoints. These return raw bodies (HrController is not wrapped in

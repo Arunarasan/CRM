@@ -30,7 +30,7 @@ export function EmptyState({ message }: { message: string }) {
 }
 
 /** Small colored status pill. */
-export function StatusPill({ status }: { status: string }) {
+export function StatusPill({ status, label }: { status: string; label?: string }) {
   const tone: Record<string, string> = {
     PRESENT: 'bg-emerald-100 text-emerald-700',
     PAID: 'bg-emerald-100 text-emerald-700',
@@ -51,7 +51,7 @@ export function StatusPill({ status }: { status: string }) {
   };
   return (
     <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${tone[status] ?? 'bg-slate-100 text-slate-600'}`}>
-      {status.replace(/_/g, ' ')}
+      {label ?? status.replace(/_/g, ' ')}
     </span>
   );
 }

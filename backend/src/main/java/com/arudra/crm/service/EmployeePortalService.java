@@ -526,7 +526,7 @@ public class EmployeePortalService {
         if (type == null) throw new IllegalArgumentException("Request type is required.");
         type = type.toUpperCase();
         java.util.Set<String> allowed = java.util.Set.of(
-                "ADVANCE", "LOAN_REPAYMENT", "ADVANCE_REPAYMENT", "SET_RECOVERY", "OTHER");
+                "ADVANCE", "REPAY", "LOAN_REPAYMENT", "ADVANCE_REPAYMENT", "SET_RECOVERY", "OTHER");
         if (!allowed.contains(type)) {
             throw new IllegalArgumentException("Unsupported request type.");
         }
@@ -566,9 +566,19 @@ public class EmployeePortalService {
         }
 
         switch (type) {
-            case "ADVANCE":
+            case "ADVANCE": // "Borrow money"
                 r.setMonthlyRecovery(asDecimal(body.get("monthlyRecovery")));
                 break;
+            case "REPAY": { // "Repay money" — taken from that month's salary toward what they owe
+                java.math.BigDecimal owed = payrollService.owedBalance(emp.getId());
+                if (owed.signum() <= 0) throw new IllegalArgumentException("You don't owe anything right now.");
+                if (amount.compareTo(owed) > 0) {
+                    throw new IllegalArgumentException("You owe ₹" + owed.stripTrailingZeros().toPlainString()
+                            + " — enter that or less.");
+                }
+                setTargetMonth(r, body, now);
+                break;
+            }
             case "SET_RECOVERY":
                 // amount = the proposed monthly recovery / EMI; applied to the loan or advance on approval.
                 if (loanId == null && advanceId == null) {
