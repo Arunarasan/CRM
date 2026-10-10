@@ -241,6 +241,11 @@ public class Lead extends BaseEntity {
     @JoinColumn(name = "lead_owner_id")
     private User leadOwner;
 
+    /** Payslip that paid the collector's per-lead reward (0 = pre-feature, never paid; null = not yet). */
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    @Column(name = "lead_reward_salary_record_id")
+    private Long leadRewardSalaryRecordId;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "assigned_designer_id")
     private User assignedDesigner;

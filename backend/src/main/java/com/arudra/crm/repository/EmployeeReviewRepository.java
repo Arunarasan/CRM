@@ -28,4 +28,7 @@ public interface EmployeeReviewRepository extends JpaRepository<EmployeeReview, 
     List<EmployeeReview> findByGoogleVerifiedFalseAndRedirectedToGoogleTrueAndIsDeletedFalseOrderByCreatedAtAsc();
 
     long countByEmployeeIdAndGoogleVerifiedTrueAndIsDeletedFalse(Long employeeId);
+
+    /** Reviews whose reward raised one of these bonuses — lets a payslip count review rewards. */
+    List<EmployeeReview> findByRewardBonusIdIn(java.util.Collection<Long> bonusIds);
 }

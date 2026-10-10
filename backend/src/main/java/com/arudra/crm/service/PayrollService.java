@@ -48,6 +48,9 @@ public class PayrollService {
     @Autowired private com.arudra.crm.repository.PayrollRequestRepository payrollRequestRepository;
     @Autowired private EmployeeTimeService timeService;
     @Autowired private PayslipLineItemRepository lineItemRepository;
+    @Autowired private EmployeeReviewRepository employeeReviewRepository;
+    @Autowired private LeadRepository leadRepository;
+    @Autowired private SiteSettingRepository siteSettingRepository;
     @Autowired private com.arudra.crm.repository.TaskAssignmentRepository taskAssignmentRepository;
     @Autowired private com.arudra.crm.repository.TaskTimeLogRepository taskTimeLogRepository;
 
@@ -524,12 +527,23 @@ public class PayrollService {
         rec = salaryRepository.save(rec);
 
         // Approved, unpaid bonuses (project / manual / incentive) — absorb once, link to this payslip.
+        // Google-review (QR) rewards are INCENTIVE bonuses too, but get their own counted line.
         BigDecimal projectBonus = BigDecimal.ZERO, manualBonus = BigDecimal.ZERO, incentive = BigDecimal.ZERO;
+        List<BigDecimal> reviewRewards = new ArrayList<>();
         if (Boolean.TRUE.equals(employee.getBonusEligible())) {
-            for (EmployeeBonus bo : bonusRepository
-                    .findByEmployeeIdAndStatusAndPaidSalaryRecordIdIsNullAndIsDeletedFalse(employeeId, "APPROVED")) {
+            List<EmployeeBonus> approved = bonusRepository
+                    .findByEmployeeIdAndStatusAndPaidSalaryRecordIdIsNullAndIsDeletedFalse(employeeId, "APPROVED");
+            Set<Long> reviewBonusIds = new HashSet<>();
+            if (!approved.isEmpty()) {
+                for (EmployeeReview r : employeeReviewRepository
+                        .findByRewardBonusIdIn(approved.stream().map(EmployeeBonus::getId).toList())) {
+                    reviewBonusIds.add(r.getRewardBonusId());
+                }
+            }
+            for (EmployeeBonus bo : approved) {
                 BigDecimal amt = nz(bo.getAmount());
-                if ("INCENTIVE".equalsIgnoreCase(bo.getBonusType())) incentive = incentive.add(amt);
+                if (reviewBonusIds.contains(bo.getId())) reviewRewards.add(amt);
+                else if ("INCENTIVE".equalsIgnoreCase(bo.getBonusType())) incentive = incentive.add(amt);
                 else if (bo.getProject() != null || "PROJECT_COMPLETION".equalsIgnoreCase(bo.getBonusType()))
                     projectBonus = projectBonus.add(amt);
                 else manualBonus = manualBonus.add(amt);
@@ -563,8 +577,12 @@ public class PayrollService {
         BigDecimal reqOtherDed = req[2];
         BigDecimal reqOtherEarn = req[3];
 
+        // Counted reward lines (stored as payslip line items so the portal + PDF list them by name).
+        BigDecimal rewardLines = addCountedLine(rec, "Google reviews (QR)", "review", reviewRewards)
+                .add(addLeadRewardLine(employee, rec, ym));
+
         BigDecimal gross = regularEarnings.add(overtimeEarnings).add(projectBonus).add(manualBonus)
-                .add(incentive).add(reqOtherEarn);
+                .add(incentive).add(reqOtherEarn).add(rewardLines);
         BigDecimal totalDeductions = manualDeduction.add(advanceRecovery).add(loanRecovery).add(reqOtherDed);
         rec.setProjectBonus(projectBonus);
         rec.setManualBonus(manualBonus);
@@ -587,6 +605,59 @@ public class PayrollService {
             employeeRepository.save(employee);
         }
         return rec;
+    }
+
+    /**
+     * Pays the employee for each qualified lead they collected (own it, got past New, not Lost) up to the
+     * end of this month and not yet paid, at the configured per-lead rate. Marks each lead as paid by
+     * this payslip so it is never counted twice. Returns the amount added (0 when the rate is unset).
+     */
+    private BigDecimal addLeadRewardLine(Employee employee, SalaryRecord rec, YearMonth ym) {
+        BigDecimal rate = settingAmount("lead_collected_reward_amount");
+        if (rate.signum() <= 0 || employee.getEmail() == null) return BigDecimal.ZERO;
+        User owner = userRepository.findByEmail(employee.getEmail()).orElse(null);
+        if (owner == null) return BigDecimal.ZERO;
+        LocalDateTime before = ym.plusMonths(1).atDay(1).atStartOfDay();
+        org.springframework.data.jpa.domain.Specification<Lead> spec = (root, q, cb) -> cb.and(
+                cb.equal(root.get("leadOwner").get("id"), owner.getId()),
+                cb.isNull(root.get("leadRewardSalaryRecordId")),
+                cb.lessThan(root.get("createdAt"), before));
+        spec = spec.and(LeadSpecification.notDeleted())
+                .and(org.springframework.data.jpa.domain.Specification.not(
+                        LeadSpecification.journeyStage(LeadSpecification.STAGE_REQUIREMENT)))
+                .and(org.springframework.data.jpa.domain.Specification.not(
+                        LeadSpecification.journeyStage(LeadSpecification.STAGE_LOST)));
+        List<Lead> leads = leadRepository.findAll(spec);
+        if (leads.isEmpty()) return BigDecimal.ZERO;
+        for (Lead l : leads) l.setLeadRewardSalaryRecordId(rec.getId());
+        leadRepository.saveAll(leads);
+        return addCountedLine(rec, "Leads collected", "lead",
+                Collections.nCopies(leads.size(), rate));
+    }
+
+    /** Adds an AUTO earning line like "Leads collected — 12 × ₹50" (or "— 3 reviews" if amounts differ). */
+    private BigDecimal addCountedLine(SalaryRecord rec, String title, String noun, List<BigDecimal> amounts) {
+        if (amounts.isEmpty()) return BigDecimal.ZERO;
+        BigDecimal total = amounts.stream().map(PayrollService::nz).reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (total.signum() <= 0) return BigDecimal.ZERO;
+        int n = amounts.size();
+        boolean same = amounts.stream().map(a -> nz(a).stripTrailingZeros()).distinct().count() == 1;
+        PayslipLineItem item = new PayslipLineItem();
+        item.setSalaryRecord(rec);
+        item.setCategory("EARNING");
+        item.setLabel(title + " — " + (same ? n + " × " + inr(amounts.get(0)) : n + " " + noun + (n == 1 ? "" : "s")));
+        item.setAmount(total);
+        item.setSource("AUTO");
+        lineItemRepository.save(item);
+        return total;
+    }
+
+    private BigDecimal settingAmount(String key) {
+        return siteSettingRepository.findBySettingKeyAndIsDeletedFalse(key)
+                .map(SiteSetting::getSettingValue)
+                .filter(v -> v != null && !v.isBlank())
+                .map(v -> { try { return new BigDecimal(v.trim()); } catch (NumberFormatException ex) { return BigDecimal.ZERO; } })
+                .orElse(BigDecimal.ZERO);
     }
 
     /**

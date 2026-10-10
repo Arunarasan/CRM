@@ -4,7 +4,7 @@ import { ChevronRight, Gift, Plus, X, HandCoins, Landmark, Download } from 'luci
 import { employeePortalApi } from '@/api/employeePortalApi';
 import { Payslip, MyBonuses, MonthlyEarning, PayrollRequestEntry, MyLoan, MyAdvance, PayrollRequestType } from '@/types/employeePortal';
 import { PortalHeader, StatusPill, EmptyState, inr } from './_shared';
-import { printPayslip } from './printPayslip';
+import { printPayslip, payslipRows } from './printPayslip';
 
 const MONTHS = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -28,24 +28,17 @@ const BONUS_LABEL: Record<string, string> = {
 function PayslipDetail({ slip, onBack, employeeName, employeeCode }: { slip: Payslip; onBack: () => void; employeeName?: string; employeeCode?: string }) {
   const monthlyHours = slip.standardHours != null; // MONTHLY generated from hours
   const hourly = slip.payType === 'HOURLY' || monthlyHours;
-  const earnings: [string, number][] = hourly
-    ? [
-        [monthlyHours ? 'Salary for hours worked' : 'Regular earnings', slip.regularEarnings ?? 0], ['Overtime pay', slip.overtimeAmount],
-        ['Project bonus', slip.projectBonus ?? 0], ['Manual bonus', slip.manualBonus ?? 0],
-        ['Incentive', slip.incentive],
-      ]
-    : [
-        ['Basic', slip.basic], ['HRA', slip.hra], ['Overtime', slip.overtimeAmount],
-        ['Bonus', slip.bonus], ['Incentive', slip.incentive],
-      ];
-  const deductions: [string, number][] = hourly
-    ? [
-        ['Manual deduction', slip.manualDeduction ?? 0], ['Advance', slip.advanceRecovery], ['Loan', slip.loanRecovery],
-      ]
-    : [
-        ['PF', slip.pfAmount], ['ESI', slip.esiAmount], ['Professional Tax', slip.professionalTax],
-        ['Advance', slip.advanceRecovery], ['Loan', slip.loanRecovery], ['Leave (LOP)', slip.leaveDeduction],
-      ];
+  const { earnings, deductions } = payslipRows(slip); // same rows as the PDF
+  const [printing, setPrinting] = useState(false);
+  const download = () => {
+    setPrinting(true);
+    printPayslip(slip, { employeeName, employeeCode }).finally(() => setPrinting(false));
+  };
+  const rows = (list: [string, number][]) => list.length === 0
+    ? <div className="px-4 py-2.5 text-sm text-muted-foreground">None</div>
+    : list.map(([l, v], i) => (
+        <div key={`${l}-${i}`} className="flex justify-between gap-3 px-4 py-2.5 text-sm"><span className="text-muted-foreground">{l}</span><span className="shrink-0 font-medium">{inr(v)}</span></div>
+      ));
   return (
     <div className="flex flex-col">
       <div className="sticky top-0 z-10 flex items-center gap-2 border-b bg-card px-2 py-2.5">
@@ -53,8 +46,8 @@ function PayslipDetail({ slip, onBack, employeeName, employeeCode }: { slip: Pay
           <ChevronRight className="h-5 w-5 rotate-180" />
         </button>
         <h1 className="flex-1 text-base font-semibold">Payslip · {MONTHS[slip.month]} {slip.year}</h1>
-        <button onClick={() => printPayslip(slip, { employeeName, employeeCode })}
-          className="flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1.5 text-xs font-semibold text-primary-foreground active:scale-[0.98]">
+        <button onClick={download} disabled={printing}
+          className="flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1.5 text-xs font-semibold text-primary-foreground active:scale-[0.98] disabled:opacity-60">
           <Download className="h-4 w-4" /> PDF
         </button>
         <StatusPill status={slip.status} />
@@ -80,23 +73,13 @@ function PayslipDetail({ slip, onBack, employeeName, employeeCode }: { slip: Pay
 
       <h3 className="px-4 pb-1 text-xs font-semibold uppercase text-muted-foreground">Earnings</h3>
       <div className="mx-3 mb-3 divide-y overflow-hidden rounded-xl border bg-card shadow-sm">
-        {earnings.map(([l, v]) => (
-          <div key={l} className="flex justify-between px-4 py-2.5 text-sm"><span className="text-muted-foreground">{l}</span><span className="font-medium">{inr(v)}</span></div>
-        ))}
-        {(slip.lineItems ?? []).filter((it) => it.category === 'EARNING').map((it) => (
-          <div key={it.id} className="flex justify-between px-4 py-2.5 text-sm"><span className="text-muted-foreground">{it.label}</span><span className="font-medium">{inr(it.amount)}</span></div>
-        ))}
+        {rows(earnings)}
         <div className="flex justify-between bg-muted/40 px-4 py-2.5 text-sm font-semibold"><span>Gross</span><span>{inr(slip.grossEarnings)}</span></div>
       </div>
 
       <h3 className="px-4 pb-1 text-xs font-semibold uppercase text-muted-foreground">Deductions</h3>
       <div className="mx-3 mb-6 divide-y overflow-hidden rounded-xl border bg-card shadow-sm">
-        {deductions.map(([l, v]) => (
-          <div key={l} className="flex justify-between px-4 py-2.5 text-sm"><span className="text-muted-foreground">{l}</span><span className="font-medium">{inr(v)}</span></div>
-        ))}
-        {(slip.lineItems ?? []).filter((it) => it.category === 'DEDUCTION').map((it) => (
-          <div key={it.id} className="flex justify-between px-4 py-2.5 text-sm"><span className="text-muted-foreground">{it.label}</span><span className="font-medium">{inr(it.amount)}</span></div>
-        ))}
+        {rows(deductions)}
         <div className="flex justify-between bg-muted/40 px-4 py-2.5 text-sm font-semibold"><span>Total</span><span>{inr(slip.totalDeductions)}</span></div>
       </div>
     </div>
@@ -473,7 +456,7 @@ export default function Salary() {
         )}
       </div>
       <p className="mx-4 mb-6 -mt-3 text-[11px] leading-snug text-muted-foreground">
-        Preview months are auto-calculated from your attendance and incentives. Final payslips are issued by HR.
+        Preview months are auto-calculated from your attendance and incentives. A payslip appears here once HR approves it.
       </p>
 
       {sheetOpen && (

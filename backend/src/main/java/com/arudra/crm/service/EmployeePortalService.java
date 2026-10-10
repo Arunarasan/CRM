@@ -112,8 +112,8 @@ public class EmployeePortalService {
         dash.put("pendingLeaves", pendingLeaves.size());
         dash.put("leaveBalance", leaveBalanceRemaining(empId, today.getYear()));
 
-        // Salary status (latest record)
-        List<SalaryRecord> records = salaryRecordRepository.findByEmployeeIdOrderByYearDescMonthDesc(empId);
+        // Salary status (latest released payslip)
+        List<SalaryRecord> records = releasedPayslips(empId);
         SalaryRecord latest = records.isEmpty() ? null : records.get(0);
         dash.put("lastSalaryStatus", latest == null ? "NONE" : latest.getStatus());
         dash.put("lastSalaryMonth", latest == null ? null : latest.getMonth() + "/" + latest.getYear());
@@ -286,8 +286,21 @@ public class EmployeePortalService {
     // Salary
     // =====================================================================
 
+    /** Payslip statuses an employee may see — a PENDING one is still being edited by HR. */
+    private static final java.util.Set<String> RELEASED_PAYSLIP_STATUSES = java.util.Set.of("APPROVED", "PAID");
+
+    private static boolean released(SalaryRecord r) {
+        return r.getStatus() != null && RELEASED_PAYSLIP_STATUSES.contains(r.getStatus().toUpperCase());
+    }
+
+    /** The employee's approved/paid payslips, latest first. */
+    private List<SalaryRecord> releasedPayslips(Long employeeId) {
+        return salaryRecordRepository.findByEmployeeIdOrderByYearDescMonthDesc(employeeId)
+                .stream().filter(EmployeePortalService::released).toList();
+    }
+
     public List<SalaryRecord> getPayslips(User currentUser) {
-        return salaryRecordRepository.findByEmployeeIdOrderByYearDescMonthDesc(requireEmployee(currentUser).getId());
+        return releasedPayslips(requireEmployee(currentUser).getId());
     }
 
     public SalaryRecord getPayslip(User currentUser, Long recordId) {
@@ -296,6 +309,9 @@ public class EmployeePortalService {
                 .orElseThrow(() -> new IllegalStateException("Payslip not found."));
         if (record.getEmployee() == null || !record.getEmployee().getId().equals(employee.getId())) {
             throw new IllegalStateException("This payslip does not belong to you.");
+        }
+        if (!released(record)) {
+            throw new IllegalStateException("This payslip hasn't been approved yet.");
         }
         record.setLineItems(payslipLineItemRepository.findBySalaryRecordIdAndIsDeletedFalseOrderByIdAsc(record.getId()));
         return record;
@@ -307,7 +323,7 @@ public class EmployeePortalService {
         summary.put("baseSalary", employee.getBaseSalary());
         summary.put("salaryType", employee.getSalaryType());
         summary.put("hourlyRate", employee.getHourlyRate());
-        summary.put("payslips", salaryRecordRepository.findByEmployeeIdOrderByYearDescMonthDesc(employee.getId()));
+        summary.put("payslips", releasedPayslips(employee.getId()));
         summary.putAll(getMyBonuses(currentUser));
         return summary;
     }
@@ -372,9 +388,9 @@ public class EmployeePortalService {
 
         java.math.BigDecimal monthlyGross = nz(emp.getBaseSalary());
 
-        // Official payslips already generated, indexed by year*100+month (keep the latest per month).
+        // Approved/paid payslips, indexed by year*100+month (keep the latest per month).
         Map<Integer, SalaryRecord> official = new java.util.HashMap<>();
-        for (SalaryRecord r : salaryRecordRepository.findByEmployeeIdOrderByYearDescMonthDesc(emp.getId())) {
+        for (SalaryRecord r : releasedPayslips(emp.getId())) {
             if (r.getYear() != null && r.getMonth() != null) {
                 official.putIfAbsent(r.getYear() * 100 + r.getMonth(), r);
             }

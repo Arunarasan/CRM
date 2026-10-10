@@ -1,38 +1,52 @@
 import type { Payslip } from '@/types/employeePortal';
+import { fetchCompanyProfile } from '@/lib/companyProfile';
+
+export type PayslipRow = [string, number];
 
 /**
- * Opens a clean, print-ready payslip window and triggers the browser print dialog, so an employee can
- * save their payslip as a PDF from the portal (Print → Save as PDF works on desktop and mobile).
- * Self-contained inline styles so it prints without the app's chrome. Includes the auto-computed
- * breakdown plus any admin-added named line items (incentives / allowances / deductions).
+ * The payslip's earnings and deductions as named rows — the one list both the portal screen and the
+ * PDF render, so they always match and add up to Gross / Total. Zero rows are dropped; admin-added and
+ * auto lines (e.g. "Leads collected — 12 × ₹50") follow the computed ones.
  */
-export function printPayslip(slip: Payslip, opts?: { employeeName?: string; employeeCode?: string; company?: string }) {
-  const company = opts?.company || 'JB Decor';
+export function payslipRows(slip: Payslip): { earnings: PayslipRow[]; deductions: PayslipRow[] } {
+  const monthlyHours = slip.standardHours != null; // MONTHLY generated from hours
+  const hourly = slip.payType === 'HOURLY' || monthlyHours;
+  const items = slip.lineItems ?? [];
+  const nonZero = (rows: PayslipRow[]) => rows.filter(([, v]) => Number(v || 0) !== 0);
+
+  const earnings = nonZero([
+    ...(hourly
+      ? [[monthlyHours ? 'Salary for hours worked' : 'Regular earnings', slip.regularEarnings ?? 0], ['Overtime pay', slip.overtimeAmount],
+         ['Project bonus', slip.projectBonus ?? 0], ['Manual bonus', slip.manualBonus ?? 0], ['Incentive', slip.incentive]] as PayslipRow[]
+      : [['Basic', slip.basic], ['HRA', slip.hra], ['Overtime', slip.overtimeAmount], ['Bonus', slip.bonus], ['Incentive', slip.incentive]] as PayslipRow[]),
+    ...items.filter((i) => i.category === 'EARNING').map((i) => [i.label, i.amount] as PayslipRow),
+  ]);
+  const deductions = nonZero([
+    ['PF', slip.pfAmount], ['ESI', slip.esiAmount], ['Professional tax', slip.professionalTax],
+    ['Leave (LOP)', slip.leaveDeduction], ['Manual deduction', slip.manualDeduction ?? 0],
+    ['Advance recovery', slip.advanceRecovery], ['Loan recovery', slip.loanRecovery],
+    ...items.filter((i) => i.category === 'DEDUCTION').map((i) => [i.label, i.amount] as PayslipRow),
+  ]);
+  return { earnings, deductions };
+}
+
+/**
+ * Renders a clean A4 payslip into a hidden frame and opens the print dialog, so an employee can save
+ * it as a PDF (Print → Save as PDF on desktop and Android, Share → Print on iPhone). No pop-up window,
+ * so pop-up blockers can't stop it. Company name/address/phone come from Website › Settings.
+ */
+export async function printPayslip(slip: Payslip, opts?: { employeeName?: string; employeeCode?: string }) {
+  const company = await fetchCompanyProfile();
   const MONTHS = ['', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
   const inr = (n?: number | null) => '₹' + Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const esc = (s: unknown) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
 
-  const monthlyHours = slip.standardHours != null; // MONTHLY generated from hours
+  const monthlyHours = slip.standardHours != null;
   const hourly = slip.payType === 'HOURLY' || monthlyHours;
-  const items = slip.lineItems ?? [];
+  const { earnings, deductions } = payslipRows(slip);
 
-  const earnings: [string, number][] = [
-    ...(hourly
-      ? [[monthlyHours ? 'Salary for hours worked' : 'Regular earnings', slip.regularEarnings ?? 0], ['Overtime pay', slip.overtimeAmount],
-         ['Project bonus', slip.projectBonus ?? 0], ['Manual bonus', slip.manualBonus ?? 0], ['Incentive', slip.incentive]] as [string, number][]
-      : [['Basic', slip.basic], ['HRA', slip.hra], ['Overtime', slip.overtimeAmount], ['Bonus', slip.bonus], ['Incentive', slip.incentive]] as [string, number][]),
-    ...items.filter((i) => i.category === 'EARNING').map((i) => [i.label, i.amount] as [string, number]),
-  ];
-  const deductions: [string, number][] = [
-    ['PF', slip.pfAmount], ['ESI', slip.esiAmount], ['Professional tax', slip.professionalTax],
-    ['Leave (LOP)', slip.leaveDeduction], ['Manual deduction', slip.manualDeduction ?? 0],
-    ['Advance recovery', slip.advanceRecovery], ['Loan recovery', slip.loanRecovery],
-    ...items.filter((i) => i.category === 'DEDUCTION').map((i) => [i.label, i.amount] as [string, number]),
-  ];
-
-  const rowsHtml = (rows: [string, number][]) =>
-    rows.filter(([, v]) => Number(v) !== 0)
-      .map(([k, v]) => `<tr><td>${esc(k)}</td><td class="num">${inr(v)}</td></tr>`).join('') || '<tr><td class="mut">—</td><td></td></tr>';
+  const rowsHtml = (rows: PayslipRow[]) =>
+    rows.map(([k, v]) => `<tr><td>${esc(k)}</td><td class="num">${inr(v)}</td></tr>`).join('') || '<tr><td class="mut">—</td><td></td></tr>';
 
   const meta = hourly
     ? `<div><span>Attendance days</span><span>${slip.attendanceDays ?? '—'}</span></div>
@@ -44,14 +58,17 @@ export function printPayslip(slip: Payslip, opts?: { employeeName?: string; empl
        <div><span>Paid days</span><span>${slip.paidDays ?? '—'}</span></div>
        <div><span>LOP days</span><span>${slip.lopDays ?? '—'}</span></div>`;
 
+  const contact = [company.address, company.phone].filter(Boolean).map(esc).join(' · ');
+
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>Payslip ${esc(slip.payslipNumber || '')}</title>
   <style>
     *{box-sizing:border-box}
     @page{size:A4;margin:14mm}
     body{font-family:"Segoe UI",Roboto,Arial,sans-serif;color:#111;margin:0;font-size:13px}
-    .head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0f5132;padding-bottom:10px;margin-bottom:14px}
+    .head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;border-bottom:2px solid #0f5132;padding-bottom:10px;margin-bottom:14px}
     .co{font-size:22px;font-weight:800;color:#0f5132}
     .sub{color:#555;font-size:12px}
+    .addr{color:#666;font-size:11px;margin-top:2px;max-width:340px}
     .rt{text-align:right;font-size:12px}
     .rt .no{font-family:monospace;color:#666;font-size:11px}
     .rt .nm{font-weight:700;font-size:14px}
@@ -67,14 +84,15 @@ export function printPayslip(slip: Payslip, opts?: { employeeName?: string; empl
     .num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
     .mut{color:#999}
     .tot td{border-top:2px solid #333;font-weight:800;padding-top:6px}
-    .net{margin-top:16px;display:flex;justify-content:space-between;align-items:center;background:#0f5132;color:#fff;border-radius:10px;padding:12px 18px}
+    .net{margin-top:16px;display:flex;justify-content:space-between;align-items:center;background:#0f5132;color:#fff;border-radius:10px;padding:12px 18px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
     .net .lbl{font-weight:700}
     .net .amt{font-size:22px;font-weight:800}
     .foot{margin-top:10px;color:#888;font-size:11px}
   </style></head><body>
     <div class="head">
       <div>
-        <div class="co">${esc(company)}</div>
+        <div class="co">${esc(company.name)}</div>
+        ${contact ? `<div class="addr">${contact}</div>` : ''}
         <div class="sub">Payslip — ${MONTHS[slip.month]} ${slip.year}</div>
       </div>
       <div class="rt">
@@ -96,12 +114,19 @@ export function printPayslip(slip: Payslip, opts?: { employeeName?: string; empl
     </div>
     <div class="net"><span class="lbl">Net Pay</span><span class="amt">${inr(slip.netSalary)}</span></div>
     <div class="foot">Status: ${esc(slip.status)}${slip.paymentDate ? ` · Paid on ${esc(slip.paymentDate)}` : ''} · This is a computer-generated payslip.</div>
-    <script>window.onload=function(){window.print();setTimeout(function(){try{window.close()}catch(e){}},400)}</script>
   </body></html>`;
 
-  const w = window.open('', '_blank', 'width=800,height=900');
-  if (!w) { alert('Please allow pop-ups to download the payslip.'); return; }
-  w.document.open();
-  w.document.write(html);
-  w.document.close();
+  const frame = document.createElement('iframe');
+  frame.setAttribute('aria-hidden', 'true');
+  frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden';
+  document.body.appendChild(frame);
+  const doc = frame.contentWindow?.document;
+  if (!doc) { frame.remove(); return; }
+  doc.open();
+  doc.write(html);
+  doc.close();
+  const w = frame.contentWindow!;
+  // The browser keeps the frame until printing finishes; remove it afterwards.
+  w.addEventListener('afterprint', () => setTimeout(() => frame.remove(), 0));
+  setTimeout(() => { w.focus(); w.print(); }, 250);
 }
