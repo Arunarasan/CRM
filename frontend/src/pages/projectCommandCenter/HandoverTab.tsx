@@ -21,7 +21,7 @@ const STATUS_TONE: Record<string, string> = {
  * Customer-handover flow. Create stage tasks (Material, Stitching, Making, Works, Installation, or
  * custom), assign team members, set each task's completion %. The bar is the average of those tasks;
  * at 100% the "Handover to Customer" button marks the project completed and stamps the handover date.
- * Installation is auto-seeded and required.
+ * Installation is required — on workflow projects it is the shared "Execution & Installation" task.
  */
 export default function HandoverTab({ project, onChanged, onProgress }: { project: any; onChanged?: () => void; onProgress?: () => void }) {
   const canWrite = true; // the project team drives the handover flow
@@ -180,6 +180,19 @@ export default function HandoverTab({ project, onChanged, onProgress }: { projec
                     </div>
 
                     {/* Completion level */}
+                    {t.autoProgress ? (
+                      <div className="mt-3">
+                        <div className="flex items-center gap-3">
+                          <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
+                            <div className="h-full rounded-full bg-emerald-600" style={{ width: `${t.progress}%` }} />
+                          </div>
+                          <span className="w-12 text-right text-sm font-bold text-slate-700">{t.progress}%</span>
+                        </div>
+                        <p className="mt-1 flex items-center gap-1 text-[11px] text-slate-400">
+                          <Info className="h-3 w-3" /> Updates automatically from the Execution board
+                        </p>
+                      </div>
+                    ) : (
                     <div className="mt-3 flex items-center gap-3">
                       <BaseInput type="range" min={0} max={100} step={5} value={draft} disabled={handedOver}
                         onChange={(e) => setDrafts((d) => ({ ...d, [t.id]: Number(e.target.value) }))}
@@ -191,6 +204,7 @@ export default function HandoverTab({ project, onChanged, onProgress }: { projec
                         <Button size="sm" variant="outline" className="h-8" onClick={() => { setDrafts((d) => ({ ...d, [t.id]: 100 })); commitProgress(t.id, 100); }}>Done</Button>
                       )}
                     </div>
+                    )}
 
                     {/* Add team member */}
                     {canWrite && !handedOver && (

@@ -845,9 +845,40 @@ public class ProjectService {
         return i < 0 ? HANDOVER_STAGES.size() : i;
     }
 
-    /** Ensure the fixed "Installation" handover task exists for a project. */
+    /**
+     * Ensure the project has its required "Installation" handover stage. Projects run through the
+     * workflow already own an "Execution & Installation" task (or, on older projects, a separate
+     * Installation template task) — that task IS the Installation stage, so it is tagged rather than a
+     * second task being created. A blank stand-alone "Installation" task seeded before that link existed
+     * is retired. Only projects with neither get a plain Installation task.
+     */
     private void ensureInstallationTask(Project project) {
-        boolean has = taskRepository.findByProjectId(project.getId()).stream()
+        Long pid = project.getId();
+        Task owner = projectWorkService.findInstallationTask(pid);
+        if (owner == null) owner = projectWorkService.findExecutionTask(pid);
+        if (owner != null) {
+            if (!"Installation".equalsIgnoreCase(owner.getStage())) {
+                owner.setStage("Installation");
+                taskRepository.save(owner);
+            }
+            Long ownerId = owner.getId();
+            for (Task dup : taskRepository.findByProjectId(pid)) {
+                boolean blankSeed = !dup.getId().equals(ownerId)
+                        && !Boolean.TRUE.equals(dup.getIsDeleted())
+                        && dup.getTaskTemplate() == null
+                        && "Installation".equalsIgnoreCase(dup.getStage())
+                        && "Installation".equalsIgnoreCase(dup.getTaskName())
+                        && "PENDING".equalsIgnoreCase(dup.getStatus())
+                        && (dup.getProgress() == null || dup.getProgress() == 0);
+                if (blankSeed) {
+                    dup.setStatus("CANCELLED");
+                    dup.setIsDeleted(true);
+                    taskRepository.save(dup);
+                }
+            }
+            return;
+        }
+        boolean has = taskRepository.findByProjectId(pid).stream()
                 .anyMatch(t -> "Installation".equalsIgnoreCase(t.getStage()) && !Boolean.TRUE.equals(t.getIsDeleted()));
         if (has) return;
         Task t = new Task();
@@ -873,6 +904,8 @@ public class ProjectService {
                         .thenComparing(t -> t.getId() == null ? 0L : t.getId()))
                 .toList();
 
+        // The Execution & Installation task's % is computed from the Execution board, not set by hand.
+        boolean tracked = projectWorkService.hasWorkLines(projectId);
         List<Map<String, Object>> rows = new java.util.ArrayList<>();
         int sum = 0;
         for (Task t : tasks) {
@@ -886,6 +919,7 @@ public class ProjectService {
             m.put("status", t.getStatus());
             m.put("dueDate", t.getDueDate());
             m.put("required", "Installation".equalsIgnoreCase(t.getStage()));
+            m.put("autoProgress", tracked && (ProjectWorkService.isExecutionTask(t) || ProjectWorkService.isInstallationTask(t)));
             rows.add(m);
         }
         int pct = tasks.isEmpty() ? 0 : Math.round((float) sum / tasks.size());

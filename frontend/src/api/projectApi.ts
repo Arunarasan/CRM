@@ -21,6 +21,7 @@ export interface HandoverTask {
   status?: string;
   dueDate?: string | null;
   required?: boolean;
+  autoProgress?: boolean; // the Execution & Installation task — % follows the Execution board
 }
 
 /** Handover board for a project: stage tasks + rolled-up % + gate. */
