@@ -786,6 +786,7 @@ public class ProjectService {
         project.setProgress(100);
         project.setActualCompletionDate(java.time.LocalDate.now());
         project.setCompletionCertificateBase64(certificateBase64);
+        closeOpenProjectTasks(projectId);
         return projectRepository.save(project);
     }
 
@@ -819,6 +820,7 @@ public class ProjectService {
         String trimmed = notes == null ? "" : notes.trim();
         String summary = "Client approved · All products delivered" + (trimmed.isEmpty() ? "" : " — " + trimmed);
         project.setHandoverNotes(summary.length() > 500 ? summary.substring(0, 500) : summary);
+        closeOpenProjectTasks(projectId);
         Project saved = projectRepository.save(project);
 
         int photos = 0;
@@ -973,7 +975,27 @@ public class ProjectService {
         project.setStatus("COMPLETED");
         project.setProgress(100);
         if (project.getActualCompletionDate() == null) project.setActualCompletionDate(java.time.LocalDate.now());
+        closeOpenProjectTasks(projectId);
         return projectRepository.save(project);
+    }
+
+    /**
+     * Project completed / handed over → every still-open task on it closes (CANCELLED, as cancellation
+     * does) so it leaves the employees' To-Do. Service & warranty requests are post-completion work and stay.
+     */
+    private void closeOpenProjectTasks(Long projectId) {
+        for (Task t : taskRepository.findByProjectId(projectId)) {
+            String ts = t.getStatus() == null ? "" : t.getStatus().toUpperCase();
+            if (ts.equals("COMPLETED") || ts.equals("CANCELLED")) continue;
+            if ("SERVICE_REQUEST".equals(t.getSource())) continue;
+            if (t.getProgress() != null && t.getProgress() >= 100) {
+                t.setStatus("COMPLETED"); // finished handover stage work counts as done
+                if (t.getCompletedDate() == null) t.setCompletedDate(java.time.LocalDate.now());
+            } else {
+                t.setStatus("CANCELLED");
+            }
+            taskRepository.save(t);
+        }
     }
 
     /** Readiness report for the completion gate (drives the UI checklist). */

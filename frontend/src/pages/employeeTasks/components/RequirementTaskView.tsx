@@ -125,6 +125,7 @@ export default function RequirementTaskView({ task, lead, canEdit, takeFirst, on
       ? String(lead.googleMapLocation)
       : fullAddr ? 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(fullAddr) : null;
 
+  const pct = Math.max(0, Math.min(100, Number(lead.requirementPercent) || 0));
   const categories = list(lead.requirementCategory);
   const products = list(lead.requirementProduct);
   const budget = money(lead.estimatedBudget)
@@ -207,6 +208,29 @@ export default function RequirementTaskView({ task, lead, canEdit, takeFirst, on
         {showMore && more && <div className="mt-3">{more}</div>}
       </div>
       {hint && <p className="-mt-1 rounded-lg bg-[#FDF3E2] px-3 py-2 text-[12.5px] text-[#8A5A1E]">{hint}</p>}
+
+      {/* How much is collected + quick links to each part of the requirement form */}
+      <div className="rounded-2xl border border-[#ECEAE5] bg-white p-3.5 shadow-[0_2px_10px_rgba(0,35,22,0.04)]">
+        <div className="flex items-center justify-between">
+          <h3 className="text-[13px] font-bold uppercase tracking-wide text-[#1A211E]">Requirement collected</h3>
+          <span className="text-[15px] font-bold text-[#0A573B]">{pct}%</span>
+        </div>
+        <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-[#EFEBE0]">
+          <div className="h-full rounded-full bg-gradient-to-r from-[#0A573B] to-[#0F6E56]" style={{ width: `${pct}%` }} />
+        </div>
+        {showActions && (
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <button onClick={edit('requirement')} className={btn}><Layers className="h-4 w-4" /> What they want</button>
+            <button onClick={edit('address')} className={btn}><MapPin className="h-4 w-4" /> Site address</button>
+            <button onClick={edit('budget')} className={btn}><Wallet className="h-4 w-4" /> Budget &amp; dates</button>
+            {navHref ? <a href={navHref} target="_blank" rel="noopener noreferrer" className={btn}><Navigation className="h-4 w-4" /> Navigate</a>
+              : <span className={`${btn} opacity-40`}><Navigation className="h-4 w-4" /> Navigate</span>}
+          </div>
+        )}
+        <p className="mt-2.5 text-[12px] leading-snug text-[#6B726E]">
+          Submit when done — the <b>Site Visit, Measure &amp; Quote</b> task opens for you and this one leaves your To-Do.
+        </p>
+      </div>
 
       {/* Where — site location, navigate, and save my live location */}
       <div className="rounded-2xl border border-[#ECEAE5] bg-white p-2 shadow-[0_2px_10px_rgba(0,35,22,0.04)]">

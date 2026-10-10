@@ -150,7 +150,9 @@ public class EmployeeTaskService {
         List<TaskAssignment> mine = activeAssignments(employee.getId());
         LocalDate today = LocalDate.now();
 
-        List<Task> tasks = mine.stream().map(TaskAssignment::getTask).distinct().collect(Collectors.toList());
+        TodoFilter todo = new TodoFilter();
+        List<Task> tasks = mine.stream().map(TaskAssignment::getTask).distinct()
+                .filter(todo::shows).collect(Collectors.toList());
         long overdue = tasks.stream().filter(t -> isOverdue(t, today)).count();
         long dueToday = tasks.stream().filter(t -> today.equals(t.getDueDate()) && !"COMPLETED".equals(t.getStatus())).count();
         long upcoming = tasks.stream().filter(t -> t.getDueDate() != null && t.getDueDate().isAfter(today)).count();
@@ -189,6 +191,7 @@ public class EmployeeTaskService {
                 .map(TaskAssignment::getTask)
                 .distinct()
                 .filter(t -> stillMine.contains(t.getId()))
+                .filter(new TodoFilter()::shows)
                 .filter(t -> status == null || status.isBlank() || status.equalsIgnoreCase(t.getStatus()))
                 .filter(t -> search == null || search.isBlank()
                         || t.getTaskName().toLowerCase().contains(search.toLowerCase())
@@ -635,8 +638,10 @@ public class EmployeeTaskService {
         for (String st : List.of("PENDING", "IN_PROGRESS")) {
             taskRepository.findByStatus(st).stream().filter(this::isWorkTask).forEach(candidates::add);
         }
+        TodoFilter todo = new TodoFilter();
         return candidates.stream()
                 .filter(t -> !Boolean.TRUE.equals(t.getIsDeleted()))
+                .filter(todo::shows)
                 .filter(this::isUnassigned)
                 .filter(t -> taskEligibilityService.isEligible(employee, t))
                 .sorted(Comparator.comparing(Task::getDueDate, Comparator.nullsLast(Comparator.naturalOrder())))
@@ -789,6 +794,7 @@ public class EmployeeTaskService {
         // Who
         m.put("id", l.getId());
         m.put("leadNumber", l.getLeadNumber());
+        m.put("requirementPercent", l.getRequirementPercent());
         m.put("name", l.getName());
         m.put("companyName", l.getCompanyName());
         m.put("contactPerson", l.getContactPerson());
@@ -2062,6 +2068,45 @@ public class EmployeeTaskService {
         return assignmentRepository.findByEmployeeId(employeeId).stream()
                 .filter(a -> ACTIVE_ASSIGNMENT_STATUSES.contains(a.getStatus()))
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * What the employee To-Do hides even while the task is still open:
+     * <ul>
+     *   <li>Collect Requirement under 10% collected, or once the lead's quote task exists;</li>
+     *   <li>any lead task once the lead is a project;</li>
+     *   <li>project tasks once the project is COMPLETED (handover) or CANCELLED — service requests excepted.</li>
+     * </ul>
+     * Closed tasks always pass (they are history). One instance per request — it caches lead lookups.
+     */
+    /** The Measure & Quote stage tasks — once one is open, Collect Requirement leaves the To-Do. */
+    private static final Set<String> QUOTE_STAGE_CODES = Set.of("TT_MEASURE_QUOTE", "TT_VISIT_MEASURE",
+            "TT_BOQ_QUOTE", "TT_GENERATE_QUOTE", "TT_SCHEDULE_VISIT", "TT_CONDUCT_VISIT", "TT_MEASURE_SITE");
+
+    private class TodoFilter {
+        private final Map<Long, com.arudra.crm.entity.Lead> leads = new HashMap<>();
+        private final Map<Long, List<Task>> leadTasks = new HashMap<>();
+
+        boolean shows(Task t) {
+            if (isClosed(t)) return true;
+            if (t.getProject() != null) {
+                if ("SERVICE_REQUEST".equals(t.getSource())) return true;
+                String ps = t.getProject().getStatus() == null ? "" : t.getProject().getStatus().toUpperCase();
+                return !ps.equals("COMPLETED") && !ps.equals("CANCELLED");
+            }
+            if (t.getLeadId() == null || t.getTaskTemplate() == null) return true;
+            com.arudra.crm.entity.Lead lead = leads.computeIfAbsent(t.getLeadId(),
+                    id -> leadRepository.findById(id).orElse(null));
+            if (lead == null) return true;
+            if (Boolean.TRUE.equals(lead.getIsConverted())) return false;
+            if (!COLLECT_REQUIREMENT_CODE.equals(t.getTaskTemplate().getCode())) return true;
+            if (lead.getRequirementPercent() < 10) return false;
+            boolean quoteTaskOpen = leadTasks.computeIfAbsent(t.getLeadId(), taskRepository::findByLeadId).stream()
+                    .anyMatch(o -> !Boolean.TRUE.equals(o.getIsDeleted()) && !isClosed(o)
+                            && o.getProject() == null && o.getTaskTemplate() != null
+                            && QUOTE_STAGE_CODES.contains(o.getTaskTemplate().getCode()));
+            return !quoteTaskOpen;
+        }
     }
 
     private static boolean isClosed(Task t) {

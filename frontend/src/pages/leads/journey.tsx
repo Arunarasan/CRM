@@ -103,7 +103,11 @@ export function resolveJourney(
       id: "requirement",
       label: "Collect Requirement",
       done: hasRequirement,
-      summary: hasRequirement ? "Requirement captured" : "Capture what the customer wants",
+      summary: (() => {
+        const pct = Number((lead as any)?.requirementPercent);
+        const tail = Number.isFinite(pct) ? ` · ${pct}% collected` : "";
+        return (hasRequirement ? "Requirement captured" : "Capture what the customer wants") + tail;
+      })(),
       actionLabel: "Add Requirement Details",
     },
     {

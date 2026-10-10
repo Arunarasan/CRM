@@ -186,6 +186,8 @@ export interface LeadFormPayload {
 export interface LeadInfo {
   id?: number;
   leadNumber?: string | null;
+  /** 0-100 — how much of the requirement is collected (ten checks × 10%). */
+  requirementPercent?: number | null;
   name?: string | null;
   companyName?: string | null;
   contactPerson?: string | null;

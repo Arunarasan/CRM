@@ -409,4 +409,32 @@ public class Lead extends BaseEntity {
     @Column(name = "win_back_note", length = 500)
     private String winBackNote;
 
+
+    /**
+     * How much of the requirement has been collected, 0-100: ten checks worth 10% each. Contact details
+     * aren't counted — every lead has them. The employee To-Do shows Collect Requirement from 10%.
+     */
+    @Transient
+    public int getRequirementPercent() {
+        int hits = 0;
+        if (has(siteAddress) || has(address)) hits++;
+        if (has(googleMapLocation)) hits++;
+        if (has(propertyType)) hits++;
+        if (areaSqft != null || expectedWorkArea != null) hits++;
+        if (has(requirementCategory) || has(requirementService) || has(requirementOther)) hits++;
+        if (has(requirementProduct)) hits++;
+        if (has(customerRequirements) || has(projectDescription) || has(specialRequests)) hits++;
+        if (has(roomsRequired) || Boolean.TRUE.equals(reqKitchen) || Boolean.TRUE.equals(reqWardrobe)
+                || Boolean.TRUE.equals(reqTvUnit) || Boolean.TRUE.equals(reqFalseCeiling)
+                || Boolean.TRUE.equals(reqPainting) || Boolean.TRUE.equals(reqFlooring)
+                || Boolean.TRUE.equals(reqElectrical) || Boolean.TRUE.equals(reqPlumbing)
+                || Boolean.TRUE.equals(reqWoodFinish)) hits++;
+        if (estimatedBudget != null || minimumBudget != null || maximumBudget != null) hits++;
+        if (expectedStartDate != null || preferredCompletionDate != null || has(estimatedDuration)) hits++;
+        return hits * 10;
+    }
+
+    private static boolean has(String v) {
+        return v != null && !v.isBlank();
+    }
 }

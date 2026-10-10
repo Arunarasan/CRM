@@ -38,6 +38,23 @@ public class RequirementTaskBackfill implements CommandLineRunner {
     }
 
     private void backfill() {
+        // Projects already completed (handed over) still carrying open tasks → close them, like completion
+        // now does: finished stage work counts as done, the rest is cancelled. Service requests stay.
+        int doneTasks = jdbcTemplate.update("""
+                UPDATE tasks t JOIN projects p ON p.id = t.project_id
+                SET t.status = 'COMPLETED', t.completed_date = COALESCE(t.completed_date, CURDATE())
+                WHERE p.status = 'COMPLETED' AND t.progress >= 100
+                  AND t.status NOT IN ('COMPLETED', 'CANCELLED') AND t.source <> 'SERVICE_REQUEST'
+                """);
+        int cancelled = jdbcTemplate.update("""
+                UPDATE tasks t JOIN projects p ON p.id = t.project_id
+                SET t.status = 'CANCELLED'
+                WHERE p.status IN ('COMPLETED', 'CANCELLED')
+                  AND t.status NOT IN ('COMPLETED', 'CANCELLED') AND t.source <> 'SERVICE_REQUEST'
+                """);
+        if (doneTasks + cancelled > 0) {
+            logger.info("Closed {} open task(s) on completed/cancelled projects", doneTasks + cancelled);
+        }
         List<Long> leadIds = jdbcTemplate.queryForList("""
                 SELECT DISTINCT t.lead_id
                 FROM tasks t
