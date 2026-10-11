@@ -48,8 +48,10 @@ export function OrderStepBar({ status, labels = true }: { status?: string | null
 /** "Cushion fabric × 3 Mtr — Cushion Cover · 16 × 16 in · 6 pcs" → product line + material line. */
 function itemLines(it: OrderView['items'][number]) {
   const spec = formatSpec(parseSpec(it.workSpec));
-  const material = [it.description, it.quantity != null ? `${qty(it.quantity)} ${it.unit ?? ''}`.trim() : null].filter(Boolean).join(' · ');
-  return { main: spec || it.description || 'Item', sub: spec ? material : null };
+  const amount = it.quantity != null ? `${qty(it.quantity)} ${it.unit ?? ''}`.trim() : null;
+  if (spec) return { main: spec, sub: [it.description, amount].filter(Boolean).join(' · ') || null };
+  // No work spec: the bill line itself, with how many.
+  return { main: it.description || 'Item', sub: amount ? `Qty ${amount}` : null };
 }
 
 /**

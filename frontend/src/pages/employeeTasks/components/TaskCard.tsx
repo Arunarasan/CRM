@@ -1,9 +1,13 @@
 import { useNavigate } from 'react-router-dom';
-import { Play, Pause, CheckCircle2, MapPin, Users, Package, Tag, CalendarDays } from 'lucide-react';
+import { Play, Pause, CheckCircle2, MapPin, Users, Package, Tag, CalendarDays, Scissors, Wrench } from 'lucide-react';
 import { TaskCard as TaskCardType } from '@/types/employeeTask';
 import { humanizeDue, shortDue, statusMeta } from '../taskUtils';
 import SwipeActions, { SwipeAction } from './SwipeActions';
 import HoldTimer from './HoldTimer';
+import { OrderStepBar, stepLabel, workLabel } from './OrderTaskView';
+
+const inr = (n: number) => `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+const qty = (n?: number | null) => (n == null ? '' : Number(n).toLocaleString('en-IN', { maximumFractionDigits: 2 }));
 
 /** Small coloured type badge so a mixed list reads Project / Order / Lead at a glance. */
 function laneMeta(category?: string | null, label?: string | null): { label: string; cls: string } | null {
@@ -75,6 +79,72 @@ export default function TaskCard({
   const variant = first(task.requirementProduct) || task.room || null;
   const title = task.customer || task.taskName;
   const lane = laneMeta(task.category, task.categoryLabel);
+
+  // Orders lane — the order code, who it's for, what to make and where it is in Order → Delivered.
+  if (task.order) {
+    const o = task.order;
+    const late = due.tone === 'overdue' && o.status !== 'COMPLETED' && o.status !== 'DELIVERED';
+    return (
+      <SwipeActions actions={swipe} onTap={open}>
+        <div className={`rounded-2xl border border-l-4 border-[#ECEAE5] ${late ? 'border-l-[#D64541]' : o.status === 'PROCESS' ? 'border-l-[#2563A8]' : 'border-l-[#C58A1B]'} bg-white px-4 py-3.5 shadow-[0_2px_10px_rgba(0,35,22,0.05)] active:bg-[#F7F8F6]`}>
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              <p className="flex items-baseline gap-1.5 text-[17px] font-bold leading-snug text-[#111817]">
+                <span className="font-mono">{o.code}</span>
+                {o.bundleTotal && o.bundleTotal > 1 && <span className="text-[11px] font-medium text-[#8A918C]">{o.bundleNo}/{o.bundleTotal}</span>}
+              </p>
+              <p className="truncate text-[14px] text-[#2F3632]">{o.customerName || task.customer || 'Customer'}</p>
+            </div>
+            <span className={`flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold ${late ? 'bg-[#FDEBEA] text-[#C9302C]' : 'bg-[#F0F1EF] text-[#5B625E]'}`}>
+              <CalendarDays className="h-3.5 w-3.5" /> {shortDue(task.dueDate, task.status)}
+            </span>
+          </div>
+          <p className="mt-1.5 flex items-center gap-1.5 text-[13px] text-[#6B726E]">
+            <Scissors className="h-4 w-4 shrink-0 text-[#9B6B32]" />
+            {workLabel(o.workType)} · {o.itemCount} item{o.itemCount === 1 ? '' : 's'}
+            {o.totalQuantity ? ` · ${qty(o.totalQuantity)} qty` : ''}
+            {shared && <span className="ml-auto flex items-center gap-1 text-[11px]"><Users className="h-3.5 w-3.5" /> {task.assignedEmployees!.length}</span>}
+          </p>
+          <div className="mt-2.5"><OrderStepBar status={o.status} labels={false} /></div>
+          <p className="mt-1.5 text-[11.5px] text-[#6B726E]">
+            <span className="font-semibold text-[#1A211E]">{stepLabel(o.status)}</span>
+            {o.nextStatus && o.nextStatus !== 'DELIVERED' ? ` · next: ${stepLabel(o.nextStatus)}` : o.status === 'COMPLETED' ? ' · ready for handover' : ''}
+          </p>
+          {task.holdExpiresAt && (
+            <div className="mt-2"><HoldTimer expiresAt={task.holdExpiresAt} onExtend={onExtend ? () => onExtend(task.id) : undefined} /></div>
+          )}
+        </div>
+      </SwipeActions>
+    );
+  }
+
+  if (task.installOrder) {
+    const io = task.installOrder;
+    const owed = Number(io.balanceDue ?? 0);
+    const tag = io.installed ? { t: 'Installed', c: 'bg-[#E6F2EC] text-[#0A573B]' }
+      : io.ready ? { t: 'Ready', c: 'bg-[#E6F2EC] text-[#0A573B]' } : { t: 'Being made', c: 'bg-[#FFF3DD] text-[#8A5A12]' };
+    return (
+      <SwipeActions actions={swipe} onTap={open}>
+        <div className={`rounded-2xl border border-l-4 border-[#ECEAE5] ${io.ready && !io.installed ? 'border-l-[#0A7A4B]' : 'border-l-[#C58A1B]'} bg-white px-4 py-3.5 shadow-[0_2px_10px_rgba(0,35,22,0.05)] active:bg-[#F7F8F6]`}>
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[17px] font-bold leading-snug text-[#111817]">Install{io.invoiceNumber ? ` · ${io.invoiceNumber}` : ''}</p>
+              <p className="truncate text-[14px] text-[#2F3632]">{io.customerName || task.customer || 'Customer'}</p>
+            </div>
+            <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ${tag.c}`}>{tag.t}</span>
+          </div>
+          <p className="mt-1.5 flex items-center gap-1.5 text-[13px] text-[#6B726E]">
+            <Wrench className="h-4 w-4 shrink-0 text-[#0A573B]" />
+            {io.orders.length} order{io.orders.length === 1 ? '' : 's'}
+            {!io.installed && <> · {owed > 0 ? <span className="font-semibold text-[#8A5A12]">{inr(owed)} to collect</span> : 'paid'}</>}
+            <span className={`ml-auto flex shrink-0 items-center gap-1 text-[11px] font-semibold ${dueCls}`}>
+              <CalendarDays className="h-3.5 w-3.5" /> {shortDue(task.dueDate, task.status)}
+            </span>
+          </p>
+        </div>
+      </SwipeActions>
+    );
+  }
 
   return (
     <SwipeActions actions={swipe} onTap={open}>
