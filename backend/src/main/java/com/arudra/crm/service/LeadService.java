@@ -1323,6 +1323,21 @@ public class LeadService {
         return out;
     }
 
+    /** Re-credits the lead to another employee (admin correction of "Lead by"); logged on the timeline. */
+    @Transactional
+    public Lead changeLeadCreator(Long leadId, Long userId, User changedBy) {
+        Lead lead = getLeadById(leadId);
+        User newOwner = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
+        User oldOwner = lead.getLeadOwner();
+        if (oldOwner != null && oldOwner.getId().equals(newOwner.getId())) return lead;
+        String before = oldOwner != null ? oldOwner.getName() : (lead.getCreatedBy() != null ? lead.getCreatedBy() : "—");
+        lead.setLeadOwner(newOwner);
+        leadRepository.save(lead);
+        logActivity(lead, "CREATOR_CHANGED", "Lead by changed from " + before + " to " + newOwner.getName(), changedBy);
+        return lead;
+    }
+
     public void logActivity(Lead lead, String action, String description, User performedBy) {
         LeadActivity activity = new LeadActivity();
         activity.setLead(lead);

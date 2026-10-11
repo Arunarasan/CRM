@@ -556,7 +556,7 @@ export default function OverviewTab({
                   <ul className="space-y-1.5 text-xs text-slate-600">
                     <li className="flex items-start gap-1.5">
                       <Clock className="h-3.5 w-3.5 mt-px shrink-0 text-slate-400" />
-                      <span>Created {formatDateTime(lead.createdAt)}{lead.createdBy ? ` by ${lead.createdBy}` : ""}</span>
+                      <span>Created {formatDateTime(lead.createdAt)}{(lead.leadOwner?.name || lead.createdBy) ? ` by ${lead.leadOwner?.name || lead.createdBy}` : ""}</span>
                     </li>
                     <li className="pl-5">{lead.followUpCount ?? 0} follow-up{lead.followUpCount === 1 ? "" : "s"} logged</li>
                     {lead.lastContactAt && <li className="pl-5">Last contact {formatDate(lead.lastContactAt)}</li>}

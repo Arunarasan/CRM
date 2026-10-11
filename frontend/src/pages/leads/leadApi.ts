@@ -42,6 +42,8 @@ export const leadApi = {
 
   get: (id: string | number) => api.get<Lead>(`/leads/${id}`),
   createdBy: (id: string | number) => api.get<LeadCreator>(`/leads/${id}/created-by`),
+  /** Admin only — re-credit the lead to another employee. */
+  changeCreatedBy: (id: string | number, userId: number) => api.put<LeadCreator>(`/leads/${id}/created-by`, { userId }),
   create: (payload: Partial<Lead>) => api.post<Lead>("/leads", payload),
   update: (id: number, payload: Partial<Lead>) => api.put<Lead>(`/leads/${id}`, payload),
   remove: (id: number) => api.delete(`/leads/${id}`),

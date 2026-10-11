@@ -23,6 +23,7 @@ import {
 } from "./leads/constants";
 import { SelectField, TextAreaField, selectClass } from "./leads/fields";
 import { useGoBack } from "@/hooks/useGoBack";
+import { useAuth } from "@/hooks/useAuth";
 import LeadFormDialog from "./leads/LeadFormDialog";
 import ConvertLeadDialog from "./leads/ConvertLeadDialog";
 import { useLeadJourney, type JourneyStepId } from "./leads/journey";
@@ -89,6 +90,8 @@ export default function LeadProfile() {
   const [lostOpen, setLostOpen] = useState(false);
   const [reopenOpen, setReopenOpen] = useState(false);
   const [winBackOpen, setWinBackOpen] = useState(false);
+  const [creatorOpen, setCreatorOpen] = useState(false);
+  const { isAdmin } = useAuth();
   // Phones: once the content is scrolled, the pinned header folds to name + tabs so the page itself has
   // room (the full header is ~40% of a phone screen). Tablet / desktop keep the full header — the
   // fold only ever applies through max-sm: classes. The chevron opens it again by hand.
@@ -347,7 +350,14 @@ export default function LeadProfile() {
                 <Mail className="h-3.5 w-3.5 text-sky-600" /> <span className="text-slate-800">{lead.email}</span>
               </a>
             )}
-            {addedBy && (
+            {isAdmin ? (
+              <button type="button" onClick={() => setCreatorOpen(true)} title="Change who brought this lead in"
+                className={`${CHIP_SM} hover:border-emerald-300`}>
+                <UserCheck className="h-3.5 w-3.5 text-amber-500" />
+                <span className="text-slate-400">Lead by</span> <span className="font-semibold text-slate-800">{addedBy || "—"}</span>
+                <Pencil className="h-3 w-3 text-slate-400" />
+              </button>
+            ) : addedBy && (
               <span className={CHIP_SM} title="Who brought this lead in">
                 <UserCheck className="h-3.5 w-3.5 text-amber-500" />
                 <span className="text-slate-400">Lead by</span> <span className="font-semibold text-slate-800">{addedBy}</span>
@@ -452,7 +462,58 @@ export default function LeadProfile() {
       <MarkLostDialog open={lostOpen} onOpenChange={setLostOpen} lead={lead} onChanged={fetchLead} />
       <WinBackDialog open={winBackOpen} onOpenChange={setWinBackOpen} lead={lead} onChanged={fetchLead} />
       <ReopenDialog open={reopenOpen} onOpenChange={setReopenOpen} lead={lead} users={users} onChanged={fetchLead} />
+      {isAdmin && (
+        <ChangeCreatorDialog open={creatorOpen} onOpenChange={setCreatorOpen} leadId={lead.id} users={users}
+          currentUserId={creator?.userId ?? lead.leadOwner?.id}
+          onChanged={(c) => { setCreator(c); fetchLead(); }} />
+      )}
     </Tabs>
+  );
+}
+
+function ChangeCreatorDialog({
+  open, onOpenChange, leadId, users, currentUserId, onChanged,
+}: {
+  open: boolean; onOpenChange: (o: boolean) => void; leadId: number; users: UserSummary[];
+  currentUserId?: number; onChanged: (c: LeadCreator) => void;
+}) {
+  const [userId, setUserId] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => { if (open) setUserId(currentUserId ? String(currentUserId) : ""); }, [open, currentUserId]);
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userId) return;
+    setSaving(true);
+    leadApi.changeCreatedBy(leadId, Number(userId))
+      .then((res) => { toast.success("Lead by updated"); onOpenChange(false); onChanged(res.data); })
+      .catch((err) => toast.error(err?.response?.data?.message || "Couldn't change who created this lead."))
+      .finally(() => setSaving(false));
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader><DialogTitle>Change Lead By</DialogTitle></DialogHeader>
+        <form onSubmit={submit} className="space-y-4">
+          <p className="text-sm text-slate-500">Credit this lead to a different employee. The change is recorded on the timeline.</p>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Employee</label>
+            <select className={selectClass} required value={userId} onChange={(e) => setUserId(e.target.value)}>
+              <option value="">Select employee...</option>
+              {users.map((u) => <option key={u.id} value={u.id}>{u.name} ({u.email})</option>)}
+            </select>
+          </div>
+          <div className="flex justify-end gap-2 pt-2 border-t">
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button type="submit" disabled={saving || !userId || userId === String(currentUserId ?? "")}>
+              {saving ? "Saving..." : "Save"}
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 

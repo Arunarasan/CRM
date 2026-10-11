@@ -164,6 +164,16 @@ public class LeadController {
         return ResponseEntity.ok(leadService.getLeadCreator(id));
     }
 
+    /** Admin only: change who the lead is credited to ("Lead by") — body {userId}. */
+    @PutMapping("/{id}/created-by")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<Map<String, Object>> changeLeadCreator(@PathVariable Long id, @RequestBody Map<String, Long> body) {
+        Long userId = body.get("userId");
+        if (userId == null) throw new IllegalArgumentException("userId is required");
+        leadService.changeLeadCreator(id, userId, currentUserService.getCurrentUser());
+        return ResponseEntity.ok(leadService.getLeadCreator(id));
+    }
+
     @PostMapping
     @PreAuthorize(WRITE)
     public ResponseEntity<Lead> createLead(@RequestBody Lead lead) {
