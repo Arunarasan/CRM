@@ -349,6 +349,25 @@ public class EmployeeTaskController {
         return ResponseEntity.ok(ApiResponse.success(employeeTaskService.saveSiteLocation(id, me(), lat, lng, address)));
     }
 
+    /** Stitching task: move its order to the next step ({note, photoUrl} optional). */
+    @PostMapping("/{id}/order/next")
+    @PreAuthorize(EXECUTE)
+    public ResponseEntity<ApiResponse<com.arudra.crm.dto.BundleView>> advanceOrder(@PathVariable Long id,
+            @RequestBody(required = false) Map<String, Object> body) {
+        String note = body != null && body.get("note") != null ? String.valueOf(body.get("note")) : null;
+        String photo = body != null && body.get("photoUrl") != null ? String.valueOf(body.get("photoUrl")) : null;
+        return ResponseEntity.ok(ApiResponse.success(employeeTaskService.advanceOrder(id, me(), note, photo)));
+    }
+
+    /** Stitching task: tick one item of its order as made ({done}). */
+    @PostMapping("/{id}/order/items/{itemId}")
+    @PreAuthorize(EXECUTE)
+    public ResponseEntity<ApiResponse<com.arudra.crm.dto.BundleView>> setOrderItemDone(@PathVariable Long id,
+            @PathVariable Long itemId, @RequestBody Map<String, Object> body) {
+        boolean done = Boolean.TRUE.equals(body.get("done"));
+        return ResponseEntity.ok(ApiResponse.success(employeeTaskService.setOrderItemDone(id, itemId, done, me())));
+    }
+
     /** Photos on this task's lead (its Documents tab), newest first. */
     @GetMapping("/{id}/lead-photos")
     @PreAuthorize(EXECUTE)

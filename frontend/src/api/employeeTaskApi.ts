@@ -117,6 +117,13 @@ export const employeeTaskApi = {
   logMaterialUsage: (id: number, productId: number, quantity: number, remarks?: string) =>
     api.post(`${BASE}/${id}/material-usage`, { productId, quantity, remarks }).then((r) => r.data),
 
+  /** Stitching task: move its order to the next step (Order → Process → Completed). */
+  advanceOrder: (id: number, payload?: { note?: string; photoUrl?: string }) =>
+    api.post(`${BASE}/${id}/order/next`, payload ?? {}).then((r) => r.data),
+  /** Stitching task: tick one item of its order as made. */
+  setOrderItemDone: (id: number, itemId: number, done: boolean) =>
+    api.post(`${BASE}/${id}/order/items/${itemId}`, { done }).then((r) => r.data),
+
   /** Save the employee's current GPS position as the lead's site map pin. The optional address parts
    *  (looked up for that spot) fill only the lead's blank address fields. */
   saveSiteLocation: (id: number, payload: { latitude: number; longitude: number } & Partial<Record<'address' | 'city' | 'district' | 'state' | 'pincode', string>>) =>

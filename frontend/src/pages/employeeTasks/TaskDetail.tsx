@@ -37,6 +37,9 @@ import HoldTimer from './components/HoldTimer';
 import { formatTime } from '@/pages/leads/constants';
 import { humanizeDue, dueToneClass, priorityMeta, statusMeta } from './taskUtils';
 import AudioPlayer from "@/components/AudioPlayer";
+import OrderTaskView from './components/OrderTaskView';
+import InstallTaskView from './components/InstallTaskView';
+import OrderStepSheet from './components/OrderStepSheet';
 
 /** A quiet disclosure row — keeps history/team/notes tucked away until wanted. Designed to sit
  *  inside a grouped card with `divide-y`, so it carries no border of its own (spec §6). */
@@ -366,7 +369,7 @@ export default function TaskDetail() {
   const [task, setTask] = useState<TaskDetailType | null>(null);
   const [note, setNote] = useState('');
   const [voice, setVoice] = useState<CapturedAudio[]>([]);
-  const [sheet, setSheet] = useState<'progress' | 'issue' | 'material' | 'complete' | 'payment' | 'installed' | null>(null);
+  const [sheet, setSheet] = useState<'progress' | 'issue' | 'material' | 'complete' | 'payment' | 'installed' | 'orderstep' | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [formFocus, setFormFocus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -465,7 +468,11 @@ export default function TaskDetail() {
 
   // An AVAILABLE task the employee hasn't taken yet — they can pick it up straight from here.
   // Pool tasks carry a backend-only 'AVAILABLE' status not in the TaskStatus union — compare as string.
-  const canPick = !mine && !locked && !moduleDriven && (task.status as string) === 'AVAILABLE';
+  // An order's task status follows the order (it can read "In progress" with nobody on it yet), so for
+  // orders "can take" means nobody holds it.
+  const nobodyOnIt = !task.team.some((m) => !['CANCELLED', 'REJECTED', 'COMPLETED'].includes(m.status as string));
+  const canPick = !mine && !locked && !moduleDriven
+    && ((task.status as string) === 'AVAILABLE' || ((!!task.order || !!task.installOrder) && nobodyOnIt));
   const pickUp = async () => {
     setBusy(true);
     setActionErr('');
@@ -482,6 +489,17 @@ export default function TaskDetail() {
   // Collect Requirement on a lead gets the card layout (who / where / what / budget / remarks).
   const reqView = isLeadForm && task.formType === 'REQUIREMENT' && !isCallTask && !!task.lead;
   const openForm = (section: string | null) => { setFormFocus(section); setFormOpen(true); };
+  // Orders lane: a stitching / making order's task, or an installation task — each gets its own layout.
+  const orderView = !!task.order;
+  const installView = !!task.installOrder && !isProjectTask;
+  const orderTask = orderView || installView;
+  const orderNext = task.order?.nextStatus && task.order.nextStatus !== 'DELIVERED' ? task.order.nextStatus : null;
+  const advanceOrderNow = async () => {
+    setBusy(true); setActionErr('');
+    try { await employeeTaskApi.advanceOrder(taskId); load(); }
+    catch (e: any) { setActionErr(e?.response?.data?.message || 'Could not update the order.'); }
+    finally { setBusy(false); }
+  };
 
   const place = [task.floor, task.room, task.itemName].filter(Boolean).join(' · ');
   const photoCount = task.progress.reduce((n, p) => n + p.media.filter((m) => m.mediaType === 'PHOTO').length, 0);
@@ -519,7 +537,7 @@ export default function TaskDetail() {
 
         {/* Summary — what to do, where, when. The centrepiece: a soft card with a slim gold accent. */}
         {isProjectTask && <ProjectTaskHero task={task} />}
-        {!reqView && !isProjectTask && <div className="overflow-hidden rounded-2xl border border-[#EDE6D8] bg-white shadow-[0_4px_16px_rgba(80,55,20,0.06)]">
+        {!reqView && !isProjectTask && !orderTask && <div className="overflow-hidden rounded-2xl border border-[#EDE6D8] bg-white shadow-[0_4px_16px_rgba(80,55,20,0.06)]">
           <div className="h-1 bg-gradient-to-r from-[#0A573B] via-[#0A573B] to-[#BC8748]" />
           <div className="p-4">
             <div className="flex items-center gap-2">
@@ -559,14 +577,18 @@ export default function TaskDetail() {
 
         {/* The original lead picture — who the customer is and what they asked for at capture. Shown for
             any task tied to a lead so the field employee has full context before collecting/confirming. */}
-        {reqView || isProjectTask ? null : task.lead ? <LeadDetailsCard lead={task.lead} />
+        {reqView || isProjectTask || orderTask ? null : task.lead ? <LeadDetailsCard lead={task.lead} />
           : task.contact && !isCallTask && (
             <CustomerContactCard contact={task.contact}
               requirement={task.category === 'ENQUIRY' || task.category === 'INSTALLATION' ? task.description : null} />
           )}
 
         {/* Installing a stitched order from a counter sale: its status + what to collect. */}
-        {task.installOrder && <InstallOrderCard info={task.installOrder} />}
+        {task.installOrder && !installView && <InstallOrderCard info={task.installOrder} />}
+
+        {/* Orders lane — the order itself (what to make, its step) or the installation job. */}
+        {orderView && task.order && <OrderTaskView task={task} order={task.order} canWork={!!mine && !locked} onChanged={load} />}
+        {installView && task.installOrder && <InstallTaskView task={task} info={task.installOrder} locked={locked || !mine} onChanged={load} />}
 
         {/* Shared project task — customer + project side by side, then the numbered items to make. */}
         {isProjectTask && <ProjectInfoCards task={task} />}
@@ -698,15 +720,15 @@ export default function TaskDetail() {
         {mine && <TimeTracker taskId={taskId} disabled={locked} />}
 
         {/* Site check-in is for single field visits — not the long-running shared project task. */}
-        {!isProjectTask && <CheckInBar taskId={taskId} checkins={task.checkins} onChanged={load} locked={locked} />}
+        {!isProjectTask && !orderTask && <CheckInBar taskId={taskId} checkins={task.checkins} onChanged={load} locked={locked} />}
 
-        {!workTracking && !(isProjectTask && task.projectInfo) && (
+        {!workTracking && !orderTask && !(isProjectTask && task.projectInfo) && (
           <ChecklistPanel taskId={taskId} checklist={task.checklist} onChanged={load} locked={locked}
             title={isProjectExec ? 'Work Items' : 'Work to Complete'} />
         )}
 
         {/* One-tap progress while the work is live (tracked project tasks compute their own %). */}
-        {showQuickProgress && !workTracking && (
+        {showQuickProgress && !workTracking && !orderTask && (
           <div className="rounded-2xl border border-[#EDE6D8] bg-white p-4 shadow-[0_2px_10px_rgba(80,55,20,0.05)]">
             <div className="mb-2.5 flex items-center justify-between">
               <h3 className="text-[14px] font-semibold text-[#1A211E]">Progress</h3>
@@ -858,7 +880,48 @@ export default function TaskDetail() {
       )}
 
       {/* Bottom action bar with field-work buttons — hidden for lead forms (their CTA card is at top). */}
-      {!isLeadForm && !isCallTask && (
+      {/* Orders lane: one clear action — take it, start / complete the order, or mark it installed. */}
+      {orderTask && (
+        <div className="fixed bottom-16 left-1/2 z-20 w-full max-w-md -translate-x-1/2 border-t border-[#EEE7DA] bg-[#FDFCF9]/95 px-3.5 pb-3 pt-2.5 backdrop-blur shadow-[0_-4px_16px_rgba(80,55,20,0.07)]">
+          {actionErr && <p className="mb-2 rounded-lg bg-[#FBE7E4] p-2.5 text-[12px] text-[#B94B45]">{actionErr}</p>}
+          {canPick ? (
+            <button onClick={pickUp} disabled={busy} className={`${solid} bg-[#0A573B] text-white`}>
+              <ThumbsUp className="h-4 w-4" /> Take this task
+            </button>
+          ) : !mine ? null : orderView ? (
+            orderNext === 'PROCESS' ? (
+              <button onClick={advanceOrderNow} disabled={busy} className={`${solid} bg-[#0A573B] text-white`}>
+                <Play className="h-4 w-4" /> Start work
+              </button>
+            ) : orderNext ? (
+              <button onClick={() => setSheet('orderstep')} disabled={busy} className={`${solid} bg-[#0A573B] text-white`}>
+                <CheckCircle2 className="h-4 w-4" /> {orderNext === 'COMPLETED' ? 'Mark completed' : `Move to ${orderNext.toLowerCase()}`}
+              </button>
+            ) : (
+              <p className="flex items-center justify-center gap-1.5 py-2 text-[13px] font-medium text-[#0A573B]">
+                <CheckCircle2 className="h-4 w-4" /> Order completed — the counter hands it over
+              </p>
+            )
+          ) : task.installOrder && !task.installOrder.installed ? (
+            <button onClick={() => setSheet('installed')} disabled={busy || !task.installOrder.ready}
+              className={`${solid} bg-[#0A573B] text-white disabled:opacity-50`}>
+              <CheckCircle2 className="h-4 w-4" />
+              {!task.installOrder.ready ? 'Waiting for the order to be completed'
+                : Number(task.installOrder.balanceDue ?? 0) > 0 ? 'Mark installed + collect' : 'Mark installed'}
+            </button>
+          ) : (
+            <p className="flex items-center justify-center gap-1.5 py-2 text-[13px] font-medium text-[#0A573B]">
+              <CheckCircle2 className="h-4 w-4" /> Installed
+            </p>
+          )}
+        </div>
+      )}
+      {task.order && orderNext && (
+        <OrderStepSheet taskId={taskId} code={task.order.code} nextStatus={orderNext} open={sheet === 'orderstep'}
+          onOpenChange={(o) => setSheet(o ? 'orderstep' : null)} onDone={load} />
+      )}
+
+      {!isLeadForm && !isCallTask && !orderTask && (
       <div className="fixed bottom-16 left-1/2 z-20 w-full max-w-md -translate-x-1/2 border-t border-[#EEE7DA] bg-[#FDFCF9]/95 px-3.5 pb-3 pt-2.5 backdrop-blur shadow-[0_-4px_16px_rgba(80,55,20,0.07)]">
         {locked ? (
           <p className="flex items-center justify-center gap-1.5 py-2 text-[12px] font-medium text-[#8A8F86]">

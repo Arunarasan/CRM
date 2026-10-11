@@ -729,7 +729,12 @@ public class EmployeeTaskService {
         detail.put("projectId", task.getProject() != null ? task.getProject().getId() : null);
         detail.put("closingTask", projectWorkService.isClosingTask(task));
         // A bill's installation task that installs stitched orders: their status + what is still owed.
-        detail.put("installOrder", bundleService.installInfo(task.getId()));
+        Map<String, Object> installOrder = bundleService.installInfo(task.getId());
+        detail.put("installOrder", installOrder);
+        // Installer's on-site steps (seeded once; ticked like any checklist).
+        if (installOrder != null) taskChecklistService.seedNamedChecklist(task, INSTALL_STEPS_CHECKLIST, INSTALL_STEPS);
+        // A stitching / making order's board task: the order itself (items, specs, steps, history).
+        detail.put("order", "BUNDLE".equals(task.getSource()) ? bundleService.orderForTask(task.getId()) : null);
         detail.put("viewerId", employee != null ? employee.getId() : null); // lets the chat tell "my" messages apart
         if ((projectExecution || projectInstallation) && task.getProject() != null) {
             if (!detail.containsKey("lead") && task.getProject().getLead() != null) {
@@ -1943,6 +1948,56 @@ public class EmployeeTaskService {
         return leadId != null ? leadRepository.findById(leadId).orElse(null) : null;
     }
 
+    // ---------------------------------------------------------------- Orders (stitching / installation)
+
+    @Autowired @org.springframework.context.annotation.Lazy
+    private TaskChecklistService taskChecklistService;
+
+    static final String INSTALL_STEPS_CHECKLIST = "Installation steps";
+    static final List<String> INSTALL_STEPS = List.of(
+            "Fitted as per the order", "Checked with the customer", "Work area cleaned", "Completion photo taken");
+
+    /** The tailor on a stitching task moves its order one step on (Order → Process → Completed) from the task. */
+    @Transactional
+    public com.arudra.crm.dto.BundleView advanceOrder(Long taskId, User employee, String note, String photoUrl) {
+        com.arudra.crm.dto.BundleView order = orderOnTask(taskId, employee);
+        String next = order.nextStatus;
+        if (next == null || BundleService.DELIVERED.equals(next)) {
+            throw new IllegalStateException("Order " + order.code + " is completed — it is handed over from Orders.");
+        }
+        com.arudra.crm.dto.BundleRequests.Move move = new com.arudra.crm.dto.BundleRequests.Move();
+        move.status = next;
+        move.note = note;
+        move.photoUrl = photoUrl;
+        return bundleService.move(order.id, move, employee, false);
+    }
+
+    /** Ticks (or unticks) one item of the task's order as made. */
+    @Transactional
+    public com.arudra.crm.dto.BundleView setOrderItemDone(Long taskId, Long itemId, boolean done, User employee) {
+        com.arudra.crm.dto.BundleView order = orderOnTask(taskId, employee);
+        com.arudra.crm.dto.BundleRequests.ItemUpdate u = new com.arudra.crm.dto.BundleRequests.ItemUpdate();
+        u.id = itemId;
+        u.done = done;
+        com.arudra.crm.dto.BundleRequests.Update req = new com.arudra.crm.dto.BundleRequests.Update();
+        req.items = List.of(u);
+        return bundleService.update(order.id, req, employee);
+    }
+
+    /** The task's order, when the employee works this task (managers may act on any). */
+    private com.arudra.crm.dto.BundleView orderOnTask(Long taskId, User employee) {
+        Task task = getTask(taskId);
+        com.arudra.crm.dto.BundleView order = bundleService.orderForTask(taskId);
+        if (order == null) throw new IllegalStateException("This task has no order.");
+        boolean manager = employee != null && employee.getRoles() != null && employee.getRoles().stream()
+                .anyMatch(r -> "ROLE_ADMIN".equals(r.getName()) || "ROLE_MANAGER".equals(r.getName()));
+        boolean onTask = employee != null && assignmentRepository.findByTaskId(task.getId()).stream()
+                .anyMatch(a -> a.getEmployee() != null && a.getEmployee().getId().equals(employee.getId())
+                        && ACTIVE_ASSIGNMENT_STATUSES.contains(a.getStatus()));
+        if (!manager && !onTask) throw new IllegalStateException("Take this task first to update the order.");
+        return order;
+    }
+
     // ---------------------------------------------------------------- Lead photos (from the task page)
 
     private static final java.util.Set<String> IMAGE_EXT =
@@ -2203,6 +2258,9 @@ public class EmployeeTaskService {
         card.put("progressPercent", latestProgressPercent(t.getId()));
         card.put("closedByOffice", "COMPLETED".equals(t.getStatus())
                 && commentRepository.existsByTaskIdAndRole(t.getId(), OFFICE_CLOSE_ROLE));
+        // Orders lane: the order (stitching/making) or the orders to install, summarised for the list card.
+        if ("BUNDLE".equals(t.getSource())) card.put("order", bundleService.orderCard(t.getId()));
+        else if (t.getInvoiceId() != null) card.put("installOrder", bundleService.installInfo(t.getId()));
 
         // Who & where — so a pool card tells the employee the customer and site before they pick it up.
         com.arudra.crm.entity.Lead lead = t.getLeadId() != null ? leadRepository.findById(t.getLeadId()).orElse(null) : null;

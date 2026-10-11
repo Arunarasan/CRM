@@ -414,7 +414,44 @@ public class BundleService {
         List<Long> invoiceIds = orders.stream().map(Bundle::getInvoiceId).filter(Objects::nonNull).distinct().sorted().toList();
         out.put("invoiceNumber", invoiceIds.isEmpty() ? null : invoiceNumber(invoiceIds.get(0)));
         out.put("balanceDue", totalDue(invoiceIds));
+        // Who and where — the installer calls and navigates from the task.
+        Long customerId = orders.stream().map(Bundle::getCustomerId).filter(Objects::nonNull).findFirst().orElse(null);
+        Customer customer = customerId == null ? null : customerRepository.findById(customerId).orElse(null);
+        if (customer != null) {
+            out.put("customerName", customer.getName());
+            out.put("customerPhone", customer.getPhone());
+            String address = customer.getSiteAddress() != null && !customer.getSiteAddress().isBlank()
+                    ? customer.getSiteAddress() : customer.getBillingAddress();
+            out.put("customerAddress", address);
+            out.put("mapLink", customer.getGoogleMapLocation());
+        }
         return out;
+    }
+
+    /** The order a stitching / making board task works on (full view, with items and history), or null. */
+    public BundleView orderForTask(Long taskId) {
+        if (taskId == null) return null;
+        return bundleRepository.findFirstByTaskIdAndIsDeletedFalse(taskId).map(b -> toView(b, true)).orElse(null);
+    }
+
+    /** One-line order summary for the employee's task list card, or null when the task has no order. */
+    public Map<String, Object> orderCard(Long taskId) {
+        if (taskId == null) return null;
+        return bundleRepository.findFirstByTaskIdAndIsDeletedFalse(taskId).map(b -> {
+            BundleView v = toView(b, false);
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", v.id);
+            m.put("code", v.code);
+            m.put("bundleNo", v.bundleNo);
+            m.put("bundleTotal", v.bundleTotal);
+            m.put("status", v.status);
+            m.put("nextStatus", v.nextStatus);
+            m.put("workType", v.workType);
+            m.put("customerName", v.customerName);
+            m.put("itemCount", v.itemCount);
+            m.put("totalQuantity", v.totalQuantity);
+            return m;
+        }).orElse(null);
     }
 
     /** True when the task installs orders that are not all delivered yet (it closes through Mark Installed). */

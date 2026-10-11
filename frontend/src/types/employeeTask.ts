@@ -43,6 +43,51 @@ export interface TaskCard {
   requirementCategory?: string | null; // lead tasks: comma-separated catalog categories ("Mosquito Net")
   requirementProduct?: string | null; // lead tasks: comma-separated catalog products ("Door Type")
   closedByOffice?: boolean; // completed by the office on the employee's behalf
+  /** Orders lane — a stitching / making task's order, summarised for the card. */
+  order?: OrderCardInfo | null;
+  /** Orders lane — an installation task's orders. */
+  installOrder?: InstallOrderInfo | null;
+}
+
+/** Order flow on the shop floor: Order → Process → Completed → Delivered. */
+export type OrderStep = 'ORDER' | 'PROCESS' | 'COMPLETED' | 'DELIVERED' | 'CANCELLED';
+
+export interface OrderCardInfo {
+  id: number;
+  code: string;
+  bundleNo?: number | null;
+  bundleTotal?: number | null;
+  status: OrderStep;
+  nextStatus?: OrderStep | null;
+  workType?: string | null; // STITCHING | MAKING | FITTING | OTHER
+  customerName?: string | null;
+  itemCount: number;
+  totalQuantity?: number | null;
+}
+
+/** A stitching / making task's order in full (items with work specs, history). */
+export interface OrderView extends OrderCardInfo {
+  customerPhone?: string | null;
+  dueDate?: string | null;
+  overdue?: boolean;
+  priority?: string | null;
+  handoverMode?: string | null; // PICKUP | DELIVERY | INSTALL
+  rackLocation?: string | null;
+  notes?: string | null;
+  invoiceNumber?: string | null;
+  balanceDue?: number | null;
+  items: {
+    id: number;
+    description: string | null;
+    quantity: number | null;
+    unit: string | null;
+    workSpec: string | null; // JSON text
+    notes: string | null;
+    photoUrls: string | null; // comma-separated
+    done: boolean;
+  }[];
+  events: { id: number; fromStatus: string | null; toStatus: string | null; userName: string | null; note: string | null; photoUrl: string | null; at: string }[];
+  siblings?: { id: number; code: string; bundleNo: number | null; status: string }[];
 }
 
 /** Active-task capacity for the current employee. */
@@ -322,6 +367,10 @@ export interface InstallOrderInfo {
   invoiceNumber?: string | null;
   /** Still owed on the bill — the installer collects it on site. */
   balanceDue: number;
+  customerName?: string | null;
+  customerPhone?: string | null;
+  customerAddress?: string | null;
+  mapLink?: string | null;
 }
 
 export interface TaskDetail extends Omit<TaskCard, 'closedByOffice'> {
@@ -342,6 +391,8 @@ export interface TaskDetail extends Omit<TaskCard, 'closedByOffice'> {
   closingTask?: boolean;
   /** A counter-sale installation task that installs stitched orders — closes through Mark Installed. */
   installOrder?: InstallOrderInfo | null;
+  /** A stitching / making task's order (items, specs, steps, history). */
+  order?: OrderView | null;
   /** The signed-in user's id — tells "my" chat messages apart. */
   viewerId?: number | null;
   projectInfo?: ProjectExecutionInfo | null;
