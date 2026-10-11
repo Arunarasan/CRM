@@ -6,6 +6,8 @@ import {
   CheckCircle2, RotateCcw, Printer, Ban, Clock, User as UserIcon, MessageCircle,
 } from "lucide-react";
 import { financeApi } from "@/api/financeApi";
+import { smartAssignmentApi, type RosterRow } from "@/api/smartAssignmentApi";
+import SearchableSelect from "@/components/ui/searchable-select";
 import type { Invoice, InvoiceType, CustomerPayment } from "@/types/finance";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -514,8 +516,15 @@ function RecordPaymentDialog({ projectId, customerId, onClose, onSaved }: {
   const [method, setMethod] = useState("CASH");
   const [date, setDate] = useState(today());
   const [reference, setReference] = useState("");
+  // Who received the money (an employee who collected it on site); blank = the logged-in user.
+  const [collectedBy, setCollectedBy] = useState("");
+  const [employees, setEmployees] = useState<RosterRow[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    smartAssignmentApi.roster().then((r) => setEmployees((r || []).filter((e) => e.userId != null))).catch(() => setEmployees([]));
+  }, []);
 
   const save = async () => {
     const amt = Number(amount);
@@ -526,6 +535,7 @@ function RecordPaymentDialog({ projectId, customerId, onClose, onSaved }: {
         customer: { id: customerId }, project: { id: projectId },
         amount: amt, paymentMethod: method, paymentDate: date,
         referenceNumber: reference || undefined, paymentType: "PARTIAL", status: "CONFIRMED",
+        ...(collectedBy ? { collectedBy: { id: Number(collectedBy) } } : {}),
       });
       toast.success("Payment recorded");
       onSaved();
@@ -561,6 +571,18 @@ function RecordPaymentDialog({ projectId, customerId, onClose, onSaved }: {
             <label className="space-y-1 text-sm"><span className="font-medium">Date</span><Input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label>
             <label className="space-y-1 text-sm"><span className="font-medium">Reference</span><Input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="Txn / ref" /></label>
           </div>
+          {employees.length > 0 && (
+            <div className="space-y-1 text-sm">
+              <span className="font-medium">Collected by</span>
+              <SearchableSelect
+                value={collectedBy}
+                onChange={setCollectedBy}
+                options={employees.map((e) => ({ value: String(e.userId), label: e.name, hint: [e.employeeCode, e.designation].filter(Boolean).join(" · ") }))}
+                placeholder="Select the employee who received it…"
+                clearLabel="Me (office / no employee)"
+              />
+            </div>
+          )}
           {error && <p className="text-sm text-destructive">{error}</p>}
         </div>
         <DialogFooter>
