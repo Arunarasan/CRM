@@ -65,7 +65,6 @@ export default function TaskList() {
   const [capacity, setCapacity] = useState<Capacity | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');
-  const [showSearch, setShowSearch] = useState(false);
   const search = params.get('search') === '1' ? '' : (params.get('search') ?? '');
   const { tab, view } = readParams(params);
 
@@ -80,15 +79,13 @@ export default function TaskList() {
   const setView = (v: View) => update({ tab, view: v === 'ACTIVE' ? null : v });
   const setSearch = (v: string) => update({ search: v || null });
 
-  useEffect(() => { if (search || params.get('search') === '1') setShowSearch(true); }, [search, params]);
-
   const load = useCallback(() => {
     employeeTaskApi.capacity().then(setCapacity).catch(() => {});
     Promise.allSettled([
       employeeTaskApi.pool().then(setPool),
-      employeeTaskApi.myTasks({ search: search || undefined }).then(setMine),
+      employeeTaskApi.myTasks().then(setMine),
     ]).finally(() => setLoaded(true));
-  }, [search]);
+  }, []);
 
   useEffect(() => { load(); }, [load]);
 
@@ -108,15 +105,20 @@ export default function TaskList() {
   const onComplete = (id: number) => withRefresh(() => runOrQueue({ method: 'post', url: `/employee-tasks/${id}/complete`, description: 'Complete task' }));
   const onExtend = (id: number) => withRefresh(() => employeeTaskApi.extendHold(id));
 
+  // Search matches customer name, site location, task and project name — across my tasks and the pool.
+  const q = search.trim().toLowerCase();
+  const matches = (t: TaskCardType) => !q
+    || [t.customer, t.location, t.taskName, t.project?.name].some((v) => (v ?? '').toLowerCase().includes(q));
+
   // Per-tab counts for the tab bar (active work assigned to me).
-  const activeMine = mine.filter(isActive);
+  const activeMine = mine.filter(matches).filter(isActive);
   const tabCount = (t: Tab) => activeMine.filter(inTab(t)).length;
   const tabOverdue = (t: Tab) => activeMine.filter(inTab(t)).some((x) => bucket(x) === 'overdue');
 
   // Everything below is scoped to the selected tab.
   const active = activeMine.filter(inTab(tab));
-  const available = pool.filter(inTab(tab));
-  const completed = mine.filter((t) => t.status === 'COMPLETED').filter(inTab(tab));
+  const available = pool.filter(matches).filter(inTab(tab));
+  const completed = mine.filter(matches).filter((t) => t.status === 'COMPLETED').filter(inTab(tab));
   const overdue = active.filter((t) => bucket(t) === 'overdue');
   const now = active.filter((t) => bucket(t) === 'now');
   const today = active.filter((t) => bucket(t) === 'today');
@@ -183,7 +185,7 @@ export default function TaskList() {
 
   return (
     <div className="flex flex-col gap-3.5 p-3.5">
-      {/* Title + capacity + search toggle */}
+      {/* Title + capacity */}
       <div className="flex items-center justify-between px-0.5">
         <div className="min-w-0">
           <h1 className="text-[24px] font-bold leading-tight tracking-tight text-[#111817]">Tasks to Do</h1>
@@ -195,27 +197,22 @@ export default function TaskList() {
             </p>
           )}
         </div>
-        <button
-          onClick={() => { setShowSearch((s) => { const n = !s; if (!n) setSearch(''); return n; }); }}
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-[#0A573B] shadow-[0_2px_10px_rgba(0,35,22,0.08)] active:scale-95"
-          aria-label={showSearch ? 'Close search' : 'Search tasks'}
-        >
-          {showSearch ? <X className="h-5 w-5" /> : <Search className="h-5 w-5" />}
-        </button>
       </div>
 
-      {showSearch && (
-        <div className="flex items-center gap-2 rounded-xl border border-[#DDE2DE] bg-white px-3 py-2.5 shadow-sm">
-          <Search className="h-4 w-4 text-[#7A817C]" />
-          <BaseInput
-            autoFocus
-            defaultValue={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search customer, task or site…"
-            className="flex-1 bg-transparent text-sm text-[#111817] outline-none"
-          />
-        </div>
-      )}
+      <div className="flex items-center gap-2 rounded-xl border border-[#DDE2DE] bg-white px-3 py-2.5 shadow-sm">
+        <Search className="h-4 w-4 shrink-0 text-[#7A817C]" />
+        <BaseInput
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by customer name or location…"
+          className="min-w-0 flex-1 bg-transparent text-sm text-[#111817] outline-none"
+        />
+        {search && (
+          <button onClick={() => setSearch('')} aria-label="Clear search" className="shrink-0 text-[#7A817C]">
+            <X className="h-4 w-4" />
+          </button>
+        )}
+      </div>
 
       {/* Type tabs — My Tasks / Projects / Orders / Leads */}
       <div className="sticky top-0 z-10 -mx-3.5 bg-[#F7F7F5]/95 px-3.5 pb-1 pt-0.5 backdrop-blur" role="tablist">
