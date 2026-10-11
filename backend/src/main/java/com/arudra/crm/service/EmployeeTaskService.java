@@ -670,16 +670,34 @@ public class EmployeeTaskService {
     @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
     public void assignProjectTeamToExecution(Long projectId) {
         if (projectId == null) return;
-        Task exec = taskRepository.findByProjectId(projectId).stream()
-                .filter(t -> !Boolean.TRUE.equals(t.getIsDeleted()))
-                .filter(t -> t.getTaskTemplate() != null && "TT_PM_EXECUTION".equals(t.getTaskTemplate().getCode()))
+        List<Task> open = taskRepository.findByProjectId(projectId).stream()
+                .filter(t -> !Boolean.TRUE.equals(t.getIsDeleted()) && t.getTaskTemplate() != null)
                 .filter(t -> !"COMPLETED".equals(t.getStatus()) && !"CANCELLED".equals(t.getStatus()))
-                .findFirst().orElse(null);
+                .toList();
+        // Older projects (separate main tasks, no shared Execution task) use their Installation task.
+        Task exec = open.stream().filter(t -> "TT_PM_EXECUTION".equals(t.getTaskTemplate().getCode())).findFirst()
+                .or(() -> open.stream().filter(t -> "TT_PM_INSTALLATION".equals(t.getTaskTemplate().getCode())).findFirst())
+                .orElse(null);
         if (exec == null || exec.getProject() == null) return;
         Project project = exec.getProject();
         List<User> team = new ArrayList<>();
         if (project.getProjectManager() != null) team.add(project.getProjectManager());
         if (project.getAssistantManager() != null) team.add(project.getAssistantManager());
+        // …and whoever worked the lead (requirement, visit & quote): once the lead is a project their lead
+        // tasks close, so the project's Execution task is what they carry on with in the To-Do.
+        if (project.getLead() != null) {
+            java.util.Set<Long> seen = team.stream().map(User::getId).collect(Collectors.toCollection(HashSet::new));
+            taskRepository.findByLeadId(project.getLead().getId()).stream()
+                    .filter(t -> t.getProject() == null && !Boolean.TRUE.equals(t.getIsDeleted()))
+                    .sorted(Comparator.comparing(Task::getId))
+                    .flatMap(t -> assignmentRepository.findByTaskId(t.getId()).stream())
+                    .filter(a -> a.getEmployee() != null
+                            && !"CANCELLED".equals(a.getStatus()) && !"REJECTED".equals(a.getStatus()))
+                    .map(TaskAssignment::getEmployee)
+                    .filter(u -> seen.add(u.getId()))
+                    .forEach(team::add);
+        }
+        if (team.isEmpty()) return;
         List<AssignResourceRequest> add = team.stream()
                 .filter(u -> assignmentRepository.findByTaskIdAndResourceTypeAndResourceId(
                         exec.getId(), ResourceType.EMPLOYEE, u.getId()).isEmpty())
