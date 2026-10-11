@@ -157,6 +157,7 @@ export interface ProjectModuleDashboard {
   expenses: number;
   profit: number;
   pendingPayments: number;
+  pendingToCollect?: number;
 }
 
 export interface GenerateFromBoqResult {

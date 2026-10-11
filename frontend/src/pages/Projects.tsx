@@ -3,7 +3,7 @@ import api from "@/lib/api";
 import { projectApi } from "@/api/projectApi";
 import { ProjectModuleDashboard } from "@/types/project";
 import {
-  Search, Activity, AlertTriangle, ListChecks, LayoutGrid, List,
+  Search, Activity, AlertTriangle, IndianRupee, LayoutGrid, List,
   Filter, Plus, MoreHorizontal, ChevronRight, ChevronLeft, FolderKanban, ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -268,12 +268,12 @@ export default function Projects() {
 
   // KPI tiles double as quick filters — clicking one drives the list segment (or navigates).
   const kpis: {
-    label: string; value: number; icon: typeof Activity; tint: string; ring: string;
+    label: string; value: number; money?: boolean; icon: typeof Activity; tint: string; ring: string;
     segment?: SegmentKey; onClick?: () => void;
   }[] = [
     { label: "Active Projects", value: dashboard?.activeProjects ?? 0, icon: Activity, tint: "bg-emerald-500/10 text-emerald-500", ring: "ring-emerald-500", segment: "all" },
     { label: "Delayed", value: dashboard?.delayedProjects ?? 0, icon: AlertTriangle, tint: "bg-rose-500/10 text-rose-500", ring: "ring-rose-500", segment: "delayed" },
-    { label: "Pending Tasks", value: dashboard?.pendingTasks ?? 0, icon: ListChecks, tint: "bg-amber-500/10 text-amber-500", ring: "ring-amber-500", onClick: () => navigate("/tasks") },
+    { label: "Pending to Collect", value: dashboard?.pendingToCollect ?? 0, money: true, icon: IndianRupee, tint: "bg-amber-500/10 text-amber-500", ring: "ring-amber-500", onClick: () => navigate("/billing/invoices") },
   ];
 
   const onKpiClick = (kpi: (typeof kpis)[number]) => {
@@ -371,7 +371,7 @@ export default function Projects() {
       {/* KPI row — tiles double as quick filters */}
       <div className="grid grid-cols-3 gap-3 sm:gap-4">
         {kpis.map((kpi) => {
-          const { label, value, icon: Icon, tint, ring, segment: seg } = kpi;
+          const { label, value, money, icon: Icon, tint, ring, segment: seg } = kpi;
           const active = seg ? segment === seg : false;
           return (
             <button
@@ -384,7 +384,7 @@ export default function Projects() {
             >
               <div className={`p-2.5 sm:p-3 rounded-lg ${tint}`}><Icon className="h-5 w-5" /></div>
               <div>
-                <div className="text-xl sm:text-2xl font-bold">{value}</div>
+                <div className="text-xl sm:text-2xl font-bold">{money ? `₹${Math.round(value).toLocaleString("en-IN")}` : value}</div>
                 <div className="text-xs font-medium text-muted-foreground">{label}</div>
               </div>
             </button>
