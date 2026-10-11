@@ -178,24 +178,24 @@ export default function ProductDetail() {
       <Section tone="ivory">
         <div className="grid gap-8 lg:grid-cols-2 lg:gap-10">
           {/* Gallery */}
-          <div>
-            <div className="group relative aspect-square overflow-hidden border border-forest/10 bg-white">
+          <div className="min-w-0 lg:sticky lg:top-24 lg:self-start">
+            <div className="group relative aspect-square w-full max-w-full overflow-hidden border border-forest/10 bg-white lg:max-h-[80vh]">
               <SmartImage
                 src={heroSrc}
                 alt={`${view.name} view ${activeImg + 1}`}
                 className="h-full w-full"
-                imgClassName="transition-transform duration-500 group-hover:scale-125"
+                imgClassName="!object-contain md:!object-cover md:transition-transform md:duration-500 md:group-hover:scale-110"
               />
             </div>
             {gallery.length > 1 && (
-              <div className="no-scrollbar mt-4 flex gap-3 overflow-x-auto">
+              <div className="no-scrollbar mt-3 flex max-w-full gap-2 overflow-x-auto sm:mt-4 sm:gap-3">
                 {gallery.map((src, i) => (
                   <button
                     key={src + i}
                     onClick={() => setActiveImg(i)}
                     aria-label={`View image ${i + 1}`}
                     className={cn(
-                      'h-20 w-20 shrink-0 overflow-hidden border transition-colors',
+                      'h-16 w-16 shrink-0 overflow-hidden sm:h-20 sm:w-20 border transition-colors',
                       activeImg === i ? 'border-gold' : 'border-forest/15 hover:border-forest/40',
                     )}
                   >
@@ -207,7 +207,7 @@ export default function ProductDetail() {
           </div>
 
           {/* Info */}
-          <div>
+          <div className="min-w-0">
             <div className="flex items-center gap-3">
               <Rating value={view.rating} count={view.reviewCount} />
               {view.sku && <span className="text-xs text-forest/40">SKU: {view.sku}</span>}
