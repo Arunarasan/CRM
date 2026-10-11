@@ -59,6 +59,28 @@ public class EmployeeTimeService {
         return attendanceRepository.findFirstByEmployeeIdAndDateOrderByIdDesc(employeeId, LocalDate.now()).orElse(null);
     }
 
+    /** How long after its check-in a session left open from yesterday still counts as a live overnight shift. */
+    private static final long OVERNIGHT_SHIFT_HOURS = 16;
+
+    /**
+     * The day row clock actions apply to: yesterday's row while an overnight shift that started there is
+     * still open (so the employee can take breaks and clock out after midnight), otherwise today's row.
+     * A session open longer than {@link #OVERNIGHT_SHIFT_HOURS} is treated as forgotten, not live.
+     */
+    private Attendance activeRow(Long employeeId) {
+        Attendance today = todayRow(employeeId);
+        if (today != null && openSession(today) != null) return today;
+        LocalDate yesterday = LocalDate.now().minusDays(1);
+        Attendance prev = attendanceRepository.findFirstByEmployeeIdAndDateOrderByIdDesc(employeeId, yesterday).orElse(null);
+        AttendanceSession open = prev == null ? null : openSession(prev);
+        if (open != null && open.getCheckInTime() != null
+                && Duration.between(yesterday.atTime(open.getCheckInTime()), java.time.LocalDateTime.now()).toHours()
+                        < OVERNIGHT_SHIFT_HOURS) {
+            return prev;
+        }
+        return today;
+    }
+
     private List<AttendanceSession> sessionsOf(Attendance att) {
         return att == null ? List.of() : sessionRepository.findByAttendanceIdOrderByIdAsc(att.getId());
     }
@@ -84,6 +106,10 @@ public class EmployeeTimeService {
                               String deviceInfo, boolean biometricVerified, DeviceBindingService.DeviceCheck deviceCheck,
                               String fieldNote) {
         Employee employee = requireEmployee(user);
+        Attendance live = activeRow(employee.getId());
+        if (live != null && openSession(live) != null) {
+            throw new IllegalStateException("You're already clocked in. Clock out before clocking in again.");
+        }
         Attendance att = todayRow(employee.getId());
         if (att == null) {
             att = new Attendance();
@@ -126,7 +152,7 @@ public class EmployeeTimeService {
     public Attendance clockOut(User user, DeviceBindingService.DeviceCheck deviceCheck,
                               BigDecimal lat, BigDecimal lng, Integer accuracyMeters, String fieldNote) {
         Employee employee = requireEmployee(user);
-        Attendance att = todayRow(employee.getId());
+        Attendance att = activeRow(employee.getId());
         AttendanceSession s = att == null ? null : openSession(att);
         if (s == null) throw new IllegalStateException("You are not clocked in.");
         if (s.getBreakStart() != null) closeBreak(s, LocalTime.now()); // auto-close a still-open break
@@ -152,7 +178,7 @@ public class EmployeeTimeService {
     @Transactional
     public Attendance startBreak(User user) {
         Employee employee = requireEmployee(user);
-        Attendance att = todayRow(employee.getId());
+        Attendance att = activeRow(employee.getId());
         AttendanceSession s = att == null ? null : openSession(att);
         if (s == null) throw new IllegalStateException("You are not clocked in.");
         if (s.getBreakStart() != null) throw new IllegalStateException("A break is already running.");
@@ -166,7 +192,7 @@ public class EmployeeTimeService {
     @Transactional
     public Attendance endBreak(User user) {
         Employee employee = requireEmployee(user);
-        Attendance att = todayRow(employee.getId());
+        Attendance att = activeRow(employee.getId());
         AttendanceSession s = att == null ? null : openSession(att);
         if (s == null) throw new IllegalStateException("You are not clocked in.");
         if (s.getBreakStart() == null) throw new IllegalStateException("No break is currently running.");
@@ -177,7 +203,7 @@ public class EmployeeTimeService {
     }
 
     private void closeBreak(AttendanceSession s, LocalTime now) {
-        long mins = Math.max(0, Duration.between(s.getBreakStart(), now).toMinutes());
+        long mins = minutesBetween(s.getBreakStart(), now, true); // a break can run past midnight
         s.setBreakMinutes((s.getBreakMinutes() == null ? 0 : s.getBreakMinutes()) + (int) mins);
         s.setBreakEnd(now.withNano(0));
         s.setBreakStart(null);
@@ -209,7 +235,7 @@ public class EmployeeTimeService {
     /** Live clock status + earnings snapshot for the dashboard. */
     public Map<String, Object> getStatus(User user) {
         Employee employee = requireEmployee(user);
-        Attendance today = todayRow(employee.getId());
+        Attendance today = activeRow(employee.getId()); // yesterday's row during a live overnight shift
         List<AttendanceSession> sessions = sessionsOf(today);
         AttendanceSession open = today == null ? null : openSession(today);
         AttendanceSession last = sessions.isEmpty() ? null : sessions.get(sessions.size() - 1);
@@ -313,46 +339,114 @@ public class EmployeeTimeService {
     // --- timesheet ---------------------------------------------------------
 
     public Map<String, Object> getTimesheet(User user, String period) {
+        return getTimesheet(user, period, null, null);
+    }
+
+    /** Longest range a custom timesheet may span (keeps the per-day session lookups bounded). */
+    private static final int MAX_CUSTOM_DAYS = 366;
+
+    /**
+     * Timesheet + earnings for a preset period (DAILY / WEEKLY / MONTHLY / LAST_MONTH) or a CUSTOM
+     * {@code from}..{@code to} range. Each day is recomputed from the wage config, split into regular
+     * vs overtime pay; flagged punches still awaiting admin approval are reported but never paid.
+     */
+    public Map<String, Object> getTimesheet(User user, String period, LocalDate customFrom, LocalDate customTo) {
         Employee employee = requireEmployee(user);
         LocalDate today = LocalDate.now();
+        String p = period == null || period.isBlank() ? "MONTHLY" : period.trim().toUpperCase();
         LocalDate from, to;
-        switch (period == null ? "MONTHLY" : period.toUpperCase()) {
+        switch (p) {
             case "DAILY" -> { from = today; to = today; }
             case "WEEKLY" -> { from = startOfWeek(today); to = today; }
-            default -> { from = today.withDayOfMonth(1); to = today; }
+            case "LAST_MONTH" -> {
+                from = today.minusMonths(1).withDayOfMonth(1);
+                to = from.withDayOfMonth(from.lengthOfMonth());
+            }
+            case "CUSTOM" -> {
+                if (customFrom == null || customTo == null) {
+                    throw new IllegalStateException("Pick both a start and an end date.");
+                }
+                from = customFrom;
+                to = customTo.isAfter(today) ? today : customTo;
+                if (from.isAfter(to)) throw new IllegalStateException("Start date must be on or before the end date.");
+                if (java.time.temporal.ChronoUnit.DAYS.between(from, to) + 1 > MAX_CUSTOM_DAYS) {
+                    throw new IllegalStateException("Pick a range of " + MAX_CUSTOM_DAYS + " days or less.");
+                }
+            }
+            default -> { p = "MONTHLY"; from = today.withDayOfMonth(1); to = today; }
         }
         List<Attendance> rows = attendanceRepository.findByEmployeeIdAndDateBetween(employee.getId(), from, to);
         rows.sort((a, b) -> b.getDate().compareTo(a.getDate()));
 
+        LocalTime now = LocalTime.now();
         List<Map<String, Object>> lines = new ArrayList<>();
-        BigDecimal totalHours = BigDecimal.ZERO, totalOt = BigDecimal.ZERO, totalEarn = BigDecimal.ZERO;
+        BigDecimal totalHours = BigDecimal.ZERO, totalOt = BigDecimal.ZERO;
+        BigDecimal regEarn = BigDecimal.ZERO, otEarn = BigDecimal.ZERO;
+        BigDecimal weekendHours = BigDecimal.ZERO, weekendEarn = BigDecimal.ZERO;
+        long pendingMin = 0;
+        int daysWorked = 0;
         for (Attendance a : rows) {
-            BigDecimal[] f = computeFigures(a, employee, LocalTime.now()); // closed sessions ignore asOf
+            BigDecimal[] b = computeBreakdown(a, employee, now); // closed sessions ignore asOf
+            BigDecimal dayEarn = b[2].add(b[3]).setScale(2, RoundingMode.HALF_UP);
+            long dayPending = pendingMinutes(a, now);
+            boolean weekend = a.getDate().getDayOfWeek() == DayOfWeek.SATURDAY
+                    || a.getDate().getDayOfWeek() == DayOfWeek.SUNDAY;
 
             Map<String, Object> line = new LinkedHashMap<>();
             line.put("date", a.getDate());
             line.put("status", a.getStatus());
             line.put("checkIn", a.getCheckInTime());
             line.put("checkOut", a.getCheckOutTime());
-            line.put("sessions", sessionRepository.findByAttendanceIdOrderByIdAsc(a.getId()).size());
+            line.put("sessions", sessionsOf(a).size());
             line.put("breakMinutes", a.getBreakMinutes());
-            line.put("hours", f[0]);
-            line.put("overtime", f[1]);
-            line.put("earnings", f[2]);
+            line.put("hours", b[0]);
+            line.put("overtime", b[1]);
+            line.put("regularEarnings", b[2]);
+            line.put("overtimeEarnings", b[3]);
+            line.put("earnings", dayEarn);
+            line.put("weekend", weekend);
+            line.put("pendingHours", hours(dayPending));
             lines.add(line);
-            totalHours = totalHours.add(f[0]);
-            totalOt = totalOt.add(f[1]);
-            totalEarn = totalEarn.add(f[2]);
+
+            totalHours = totalHours.add(b[0]);
+            totalOt = totalOt.add(b[1]);
+            regEarn = regEarn.add(b[2]);
+            otEarn = otEarn.add(b[3]);
+            pendingMin += dayPending;
+            if (b[0].signum() > 0) {
+                daysWorked++;
+                if (weekend) { weekendHours = weekendHours.add(b[0]); weekendEarn = weekendEarn.add(dayEarn); }
+            }
         }
+        BigDecimal totalEarn = regEarn.add(otEarn);
+        BigDecimal pendingHours = hours(pendingMin);
+
         Map<String, Object> out = new LinkedHashMap<>();
-        out.put("period", period == null ? "MONTHLY" : period.toUpperCase());
+        out.put("period", p);
         out.put("from", from);
         out.put("to", to);
         out.put("hourlyRate", employee.getHourlyRate());
+        out.put("overtimeRate", employee.getHourlyRate() == null ? null : overtimeRate(employee).setScale(2, RoundingMode.HALF_UP));
+        out.put("weekendRate", employee.getHourlyRate() == null ? null : regularRate(employee, true).setScale(2, RoundingMode.HALF_UP));
+        out.put("standardDailyHours", nz(employee.getStandardDailyHours(), new BigDecimal("8")));
         out.put("lines", lines);
+        out.put("daysWorked", daysWorked);
         out.put("totalHours", totalHours.setScale(2, RoundingMode.HALF_UP));
+        out.put("regularHours", totalHours.subtract(totalOt).max(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP));
         out.put("totalOvertime", totalOt.setScale(2, RoundingMode.HALF_UP));
+        out.put("weekendHours", weekendHours.setScale(2, RoundingMode.HALF_UP));
+        out.put("regularEarnings", regEarn.setScale(2, RoundingMode.HALF_UP));
+        out.put("overtimeEarnings", otEarn.setScale(2, RoundingMode.HALF_UP));
+        out.put("weekendEarnings", weekendEarn.setScale(2, RoundingMode.HALF_UP));
         out.put("totalEarnings", totalEarn.setScale(2, RoundingMode.HALF_UP));
+        out.put("avgDailyEarnings", daysWorked == 0 ? BigDecimal.ZERO.setScale(2)
+                : totalEarn.divide(BigDecimal.valueOf(daysWorked), 2, RoundingMode.HALF_UP));
+        out.put("avgDailyHours", daysWorked == 0 ? BigDecimal.ZERO.setScale(2)
+                : totalHours.divide(BigDecimal.valueOf(daysWorked), 2, RoundingMode.HALF_UP));
+        // Flagged punches waiting on an admin — NOT in the totals above; shown so the employee knows.
+        out.put("pendingHours", pendingHours);
+        out.put("pendingEarningsEstimate", employee.getHourlyRate() == null ? BigDecimal.ZERO.setScale(2)
+                : pendingHours.multiply(employee.getHourlyRate()).setScale(2, RoundingMode.HALF_UP));
         return out;
     }
 
@@ -376,7 +470,7 @@ public class EmployeeTimeService {
         List<AttendanceSession> sessions = sessionsOf(att);
         long payableMin;
         if (sessions.isEmpty()) {
-            payableMin = payableMinutes(att.getCheckInTime(), att.getCheckOutTime(), att.getBreakStart(),
+            payableMin = payableMinutes(att.getDate(), att.getCheckInTime(), att.getCheckOutTime(), att.getBreakStart(),
                     att.getBreakMinutes(), asOf);
         } else {
             // Only payable sessions count: a flagged session waits for admin approval and a rejected
@@ -384,7 +478,7 @@ public class EmployeeTimeService {
             long sum = 0;
             for (AttendanceSession s : sessions) {
                 if (!s.isPayable()) continue;
-                sum += payableMinutes(s.getCheckInTime(), s.getCheckOutTime(), s.getBreakStart(), s.getBreakMinutes(), asOf);
+                sum += payableMinutes(att.getDate(), s.getCheckInTime(), s.getCheckOutTime(), s.getBreakStart(), s.getBreakMinutes(), asOf);
             }
             payableMin = sum;
         }
@@ -414,7 +508,7 @@ public class EmployeeTimeService {
         long sum = 0;
         for (AttendanceSession s : sessionsOf(att)) {
             if (!s.isAwaitingApproval()) continue;
-            sum += payableMinutes(s.getCheckInTime(), s.getCheckOutTime(), s.getBreakStart(), s.getBreakMinutes(), asOf);
+            sum += payableMinutes(att.getDate(), s.getCheckInTime(), s.getCheckOutTime(), s.getBreakStart(), s.getBreakMinutes(), asOf);
         }
         return sum;
     }
@@ -423,17 +517,28 @@ public class EmployeeTimeService {
         return BigDecimal.valueOf(minutes).divide(BigDecimal.valueOf(60), 2, RoundingMode.HALF_UP);
     }
 
-    /** Payable minutes of a single session: (out|asOf − in) minus break (accumulated + any open break). */
-    private static long payableMinutes(LocalTime in, LocalTime out, LocalTime openBreakStart, Integer breakMinutes, LocalTime asOf) {
+    /** Payable minutes of a session on {@code day}: (out|asOf − in) minus break (accumulated + any open break). */
+    private static long payableMinutes(LocalDate day, LocalTime in, LocalTime out, LocalTime openBreakStart,
+                                       Integer breakMinutes, LocalTime asOf) {
         if (in == null) return 0;
         LocalTime end = out != null ? out : asOf;
-        if (end.isBefore(in)) end = in;
-        long gross = Duration.between(in, end).toMinutes();
+        // An end earlier than the start means the shift ran past midnight — true for any clocked-out
+        // session, and for a still-open one only when it started yesterday (an overnight shift).
+        // An open session from an older day is abandoned: it stays at 0 until an admin corrects it.
+        boolean overnight = out != null || (day != null && day.equals(LocalDate.now().minusDays(1)));
+        long gross = minutesBetween(in, end, overnight);
         int brk = breakMinutes == null ? 0 : breakMinutes;
         if (out == null && openBreakStart != null) {
-            brk += Math.max(0, Duration.between(openBreakStart, end).toMinutes());
+            brk += minutesBetween(openBreakStart, end, overnight);
         }
         return Math.max(0, gross - brk);
+    }
+
+    /** Minutes from {@code start} to {@code end}; when {@code wrap}, an earlier end counts as the next day. */
+    private static long minutesBetween(LocalTime start, LocalTime end, boolean wrap) {
+        long m = Duration.between(start, end).toMinutes();
+        if (m >= 0) return m;
+        return wrap ? m + 24 * 60 : 0;
     }
 
     /** Regular per-hour rate — explicit weekend_rate on weekends, else hourly_rate × weekend multiplier. */

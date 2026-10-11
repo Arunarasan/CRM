@@ -398,8 +398,10 @@ public class EmployeePortalController {
     @GetMapping("/timesheet")
     @PreAuthorize(PORTAL)
     public ResponseEntity<ApiResponse<Map<String, Object>>> timesheet(
-            @RequestParam(required = false, defaultValue = "MONTHLY") String period) {
-        return ResponseEntity.ok(ApiResponse.success(timeService.getTimesheet(me(), period)));
+            @RequestParam(required = false, defaultValue = "MONTHLY") String period,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        return ResponseEntity.ok(ApiResponse.success(timeService.getTimesheet(me(), period, from, to)));
     }
 
     // --- Leave --------------------------------------------------------------

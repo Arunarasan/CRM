@@ -175,18 +175,39 @@ export interface TimesheetLine {
   breakMinutes: number;
   hours: number;
   overtime: number;
+  regularEarnings: number;
+  overtimeEarnings: number;
   earnings: number;
+  weekend: boolean;
+  sessions: number;
+  pendingHours: number;
 }
 
+export type TimesheetPeriod = 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'LAST_MONTH' | 'CUSTOM';
+
 export interface Timesheet {
-  period: string; // DAILY | WEEKLY | MONTHLY
+  period: TimesheetPeriod;
   from: string;
   to: string;
   hourlyRate: number | null;
+  overtimeRate: number | null;
+  weekendRate: number | null;
+  standardDailyHours: number;
   lines: TimesheetLine[];
+  daysWorked: number;
   totalHours: number;
+  regularHours: number;
   totalOvertime: number;
+  weekendHours: number;
+  regularEarnings: number;
+  overtimeEarnings: number;
+  weekendEarnings: number;
   totalEarnings: number;
+  avgDailyEarnings: number;
+  avgDailyHours: number;
+  /** Flagged punches awaiting admin approval — not included in the totals. */
+  pendingHours: number;
+  pendingEarningsEstimate: number;
 }
 
 export interface AttendanceEntry {

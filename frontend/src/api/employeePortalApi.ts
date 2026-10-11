@@ -2,7 +2,7 @@ import api from '../lib/api';
 import {
   EmployeeProfile, EmployeeDashboard, AttendanceEntry, LeaveRequestEntry,
   LeaveBalance, Payslip, SalarySummary, EmployeeDocumentEntry, MyProject, OtherProject, PickableTask,
-  TimeStatus, Timesheet, MaterialOption, MaterialRequestEntry, MaterialRequestCreateBody,
+  TimeStatus, Timesheet, TimesheetPeriod, MaterialOption, MaterialRequestEntry, MaterialRequestCreateBody,
   LeadSummary, LeadCreateBody, ManpowerRequestEntry, ManpowerRequestCreateBody,
   DailyReportEntry, DailyReportCreateBody, PersonalReminderEntry, ReminderCreateBody,
   MyBonuses, MonthlyEarning, PayrollRequestEntry, PayrollRequestCreateBody, MyLoan, MyAdvance,
@@ -82,8 +82,8 @@ export const employeePortalApi = {
     api.post<TimeStatus>(`${BASE}/attendance/clock-out`, payload ?? {}).then((r) => r.data),
   startBreak: () => api.post<TimeStatus>(`${BASE}/attendance/break/start`).then((r) => r.data),
   endBreak: () => api.post<TimeStatus>(`${BASE}/attendance/break/end`).then((r) => r.data),
-  timesheet: (period: 'DAILY' | 'WEEKLY' | 'MONTHLY') =>
-    api.get<Timesheet>(`${BASE}/timesheet?period=${period}`).then((r) => r.data),
+  timesheet: (period: TimesheetPeriod, range?: { from: string; to: string }) =>
+    api.get<Timesheet>(`${BASE}/timesheet`, { params: { period, ...(range ?? {}) } }).then((r) => r.data),
 
   // Goods receipt — receive & approve incoming purchase-order goods
   incomingReceipts: () => api.get<IncomingReceiptPo[]>(`${BASE}/goods-receipts/incoming`).then((r) => r.data),
