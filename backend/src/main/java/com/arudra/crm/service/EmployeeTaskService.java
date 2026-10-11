@@ -55,6 +55,9 @@ public class EmployeeTaskService {
     private ProjectRoomItemRepository roomItemRepository;
     @Autowired
     private ProjectRepository projectRepository;
+
+    @Autowired
+    private com.arudra.crm.repository.ProjectConversionRequestRepository conversionRequestRepository;
     @Autowired
     private ProductRepository productRepository;
     @Autowired
@@ -696,6 +699,15 @@ public class EmployeeTaskService {
                     .map(TaskAssignment::getEmployee)
                     .filter(u -> seen.add(u.getId()))
                     .forEach(team::add);
+            // The employee who sent the customer's advance / conversion request, and the lead's sales
+            // executive — even when their lead-task row was released or reassigned along the way.
+            conversionRequestRepository.findFirstByLeadIdAndIsDeletedFalseOrderByIdDesc(project.getLead().getId())
+                    .map(com.arudra.crm.entity.ProjectConversionRequest::getRequestedById)
+                    .flatMap(userRepository::findById)
+                    .filter(u -> seen.add(u.getId()))
+                    .ifPresent(team::add);
+            User sales = project.getLead().getAssignedSalesExecutive();
+            if (sales != null && seen.add(sales.getId())) team.add(sales);
         }
         if (team.isEmpty()) return;
         List<AssignResourceRequest> add = team.stream()
