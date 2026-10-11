@@ -17,9 +17,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useNavigate } from "react-router-dom";
 
-type SegmentKey = "all" | "new" | "inProgress" | "completed" | "onHold" | "unassigned" | "delayed";
+type SegmentKey = "all" | "new" | "inProgress" | "completed" | "onHold" | "unassigned" | "delayed" | "pendingCollection";
 
 interface SegmentCounts {
+  pendingCollection?: number;
   all: number;
   new: number;
   inProgress: number;
@@ -42,6 +43,7 @@ interface ProjectRow {
   endDate?: string;
   taskTotal?: number;
   taskDone?: number;
+  outstandingAmount?: number;
 }
 
 // Tab key -> backend `category` param (empty for "all").
@@ -53,6 +55,7 @@ const SEGMENT_CATEGORY: Record<SegmentKey, string> = {
   onHold: "ON_HOLD",
   unassigned: "UNASSIGNED",
   delayed: "DELAYED",
+  pendingCollection: "PENDING_COLLECTION",
 };
 
 const SEGMENTS: { key: SegmentKey; label: string }[] = [
@@ -273,7 +276,7 @@ export default function Projects() {
   }[] = [
     { label: "Active Projects", value: dashboard?.activeProjects ?? 0, icon: Activity, tint: "bg-emerald-500/10 text-emerald-500", ring: "ring-emerald-500", segment: "all" },
     { label: "Delayed", value: dashboard?.delayedProjects ?? 0, icon: AlertTriangle, tint: "bg-rose-500/10 text-rose-500", ring: "ring-rose-500", segment: "delayed" },
-    { label: "Pending to Collect", value: dashboard?.pendingToCollect ?? 0, money: true, icon: IndianRupee, tint: "bg-amber-500/10 text-amber-500", ring: "ring-amber-500", onClick: () => navigate("/billing/invoices") },
+    { label: "Pending to Collect", value: dashboard?.pendingToCollect ?? 0, money: true, icon: IndianRupee, tint: "bg-amber-500/10 text-amber-500", ring: "ring-amber-500", segment: "pendingCollection" },
   ];
 
   const onKpiClick = (kpi: (typeof kpis)[number]) => {
@@ -298,6 +301,14 @@ export default function Projects() {
         </span>
       ),
     },
+    ...(segment === "pendingCollection" ? [{
+      key: "outstanding", header: "Outstanding", cellClassName: "whitespace-nowrap",
+      cell: (p: ProjectRow) => (
+        <span className="text-sm font-semibold tabular-nums text-amber-600">
+          ₹{Math.round(p.outstandingAmount ?? 0).toLocaleString("en-IN")}
+        </span>
+      ),
+    }] : []),
     {
       key: "actions", header: "", headClassName: "text-right", cellClassName: "text-right",
       cell: (p) => (
@@ -385,7 +396,9 @@ export default function Projects() {
               <div className={`p-2.5 sm:p-3 rounded-lg ${tint}`}><Icon className="h-5 w-5" /></div>
               <div>
                 <div className="text-xl sm:text-2xl font-bold">{money ? `₹${Math.round(value).toLocaleString("en-IN")}` : value}</div>
-                <div className="text-xs font-medium text-muted-foreground">{label}</div>
+                <div className="text-xs font-medium text-muted-foreground">
+                  {label}{seg === "pendingCollection" && counts?.pendingCollection != null ? ` · ${counts.pendingCollection} projects` : ""}
+                </div>
               </div>
             </button>
           );

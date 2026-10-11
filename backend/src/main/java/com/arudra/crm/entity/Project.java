@@ -236,4 +236,8 @@ public class Project extends BaseEntity {
 
     @Transient
     private Long taskDone;
+
+    /** Populated on the portfolio list: unpaid balance across this project's live invoices. */
+    @Transient
+    private java.math.BigDecimal outstandingAmount;
 }

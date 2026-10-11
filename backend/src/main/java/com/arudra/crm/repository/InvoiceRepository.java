@@ -20,6 +20,8 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
     Page<Invoice> findByCustomerIdOrderByDateDesc(Long customerId, Pageable pageable);
     List<Invoice> findByProjectId(Long projectId);
 
+    List<Invoice> findByProjectIdIn(java.util.Collection<Long> projectIds);
+
     // --- Finance module ---
     Optional<Invoice> findTopByOrderByIdDesc();
 

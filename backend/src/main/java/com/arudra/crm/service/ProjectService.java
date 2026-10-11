@@ -233,13 +233,32 @@ public class ProjectService {
             case "DELAYED":
                 result = projectRepository.findDelayed(java.time.LocalDate.now(), s, pageRequest);
                 break;
+            case "PENDING_COLLECTION":
+                result = projectRepository.findWithOutstanding(s, pageRequest);
+                break;
             default:
                 result = s.isEmpty()
                         ? projectRepository.findAll(pageRequest)
                         : projectRepository.searchProjects(s, pageRequest);
         }
         attachTaskTallies(result.getContent());
+        attachOutstanding(result.getContent());
         return result;
+    }
+
+    /** Fills outstandingAmount on each listed project from its live invoices (one query for the page). */
+    private void attachOutstanding(List<Project> projects) {
+        if (projects.isEmpty()) return;
+        Map<Long, BigDecimal> owed = new java.util.HashMap<>();
+        for (Project p : projects) owed.put(p.getId(), BigDecimal.ZERO);
+        for (var inv : invoiceRepository.findByProjectIdIn(owed.keySet())) {
+            if ("PAID".equalsIgnoreCase(inv.getStatus()) || "CANCELLED".equalsIgnoreCase(inv.getStatus())) continue;
+            BigDecimal bal = inv.getBalanceDue() != null ? inv.getBalanceDue()
+                    : (inv.getTotalAmount() != null ? inv.getTotalAmount() : BigDecimal.ZERO)
+                        .subtract(inv.getAmountPaid() != null ? inv.getAmountPaid() : BigDecimal.ZERO);
+            if (bal.signum() > 0) owed.merge(inv.getProject().getId(), bal, BigDecimal::add);
+        }
+        for (Project p : projects) p.setOutstandingAmount(owed.get(p.getId()));
     }
 
     /** Fills taskTotal/taskDone on each project in one grouped query, so the portfolio Tasks column has real numbers. */
@@ -270,6 +289,7 @@ public class ProjectService {
         counts.put("completed", projectRepository.countByStatusCategory(STATUS_COMPLETED));
         counts.put("unassigned", projectRepository.countUnassignedTeam());
         counts.put("delayed", projectRepository.countDelayed(java.time.LocalDate.now()));
+        counts.put("pendingCollection", projectRepository.countWithOutstanding());
         return counts;
     }
 
