@@ -283,7 +283,7 @@ public class EmployeeTaskService {
                 .filter(t -> !"COMPLETED".equals(t.getStatus()) && !"CANCELLED".equals(t.getStatus()))
                 .filter(t -> !"LOCKED".equals(t.getStatus()))
                 .filter(this::isUnassigned)
-                .filter(t -> taskEligibilityService.isEligible(employee, t))
+                .filter(t -> canTake(employee, t))
                 .sorted(Comparator.comparing(Task::getDueDate, Comparator.nullsLast(Comparator.naturalOrder())))
                 .map(t -> toCard(t, employee.getId()))
                 .collect(Collectors.toList());
@@ -306,7 +306,7 @@ public class EmployeeTaskService {
         if ("LOCKED".equals(task.getStatus())) {
             throw new IllegalStateException("This task is locked until the work it depends on is completed.");
         }
-        if (!taskEligibilityService.isEligible(employee, task)) {
+        if (!canTake(employee, task)) {
             throw new IllegalStateException(taskEligibilityService.ineligibleReason(employee, task));
         }
         if (!isUnassigned(task)) {
@@ -365,7 +365,7 @@ public class EmployeeTaskService {
         if (isUnassigned(task)) {
             throw new IllegalStateException("No one has started this task yet — use Pick & Start instead.");
         }
-        if (!taskEligibilityService.isEligible(employee, task)) {
+        if (!canTake(employee, task)) {
             throw new IllegalStateException(taskEligibilityService.ineligibleReason(employee, task));
         }
 
@@ -642,11 +642,13 @@ public class EmployeeTaskService {
             taskRepository.findByStatus(st).stream().filter(this::isWorkTask).forEach(candidates::add);
         }
         TodoFilter todo = new TodoFilter();
+        Set<Long> myProjects = projectIdsOnTeam(employee);
         return candidates.stream()
                 .filter(t -> !Boolean.TRUE.equals(t.getIsDeleted()))
                 .filter(todo::shows)
                 .filter(this::isUnassigned)
-                .filter(t -> taskEligibilityService.isEligible(employee, t))
+                .filter(t -> taskEligibilityService.isEligible(employee, t)
+                        || (t.getProject() != null && myProjects.contains(t.getProject().getId())))
                 .sorted(Comparator.comparing(Task::getDueDate, Comparator.nullsLast(Comparator.naturalOrder())))
                 .map(t -> {
                     Map<String, Object> card = toCard(t, employee.getId());
@@ -655,6 +657,33 @@ public class EmployeeTaskService {
                     return card;
                 })
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * Projects the employee works on: they hold (or held) a task there, or they're its Project Manager /
+     * Assistant Manager. Project team members may take ANY open task on their project — the role gate
+     * only applies to people outside it.
+     */
+    private Set<Long> projectIdsOnTeam(User employee) {
+        Set<Long> ids = new HashSet<>();
+        for (TaskAssignment a : assignmentRepository.findByEmployeeId(employee.getId())) {
+            if (a.getTask() == null || a.getTask().getProject() == null) continue;
+            if ("CANCELLED".equals(a.getStatus()) || "REJECTED".equals(a.getStatus())) continue;
+            ids.add(a.getTask().getProject().getId());
+        }
+        for (Project p : projectRepository.findAll()) {
+            if ((p.getProjectManager() != null && employee.getId().equals(p.getProjectManager().getId()))
+                    || (p.getAssistantManager() != null && employee.getId().equals(p.getAssistantManager().getId()))) {
+                ids.add(p.getId());
+            }
+        }
+        return ids;
+    }
+
+    /** May this employee take the task? Eligible by role/skill, or on the task's project team. */
+    private boolean canTake(User employee, Task t) {
+        return taskEligibilityService.isEligible(employee, t)
+                || (t.getProject() != null && projectIdsOnTeam(employee).contains(t.getProject().getId()));
     }
 
     /** Project, order or installation work (not a lead / call task) — what the Projects & Orders tabs show. */

@@ -121,6 +121,11 @@ export default function TaskList() {
   const now = active.filter((t) => bucket(t) === 'now');
   const today = active.filter((t) => bucket(t) === 'today');
   const upcoming = active.filter((t) => bucket(t) === 'upcoming');
+  // The rest of the work on projects I'm on — unassigned tasks I can pick up straight from here.
+  const myProjectIds = new Set(mine.map((t) => t.project?.id).filter((id): id is number => id != null));
+  const projectOpen = tab === 'MINE' || tab === 'PROJECTS'
+    ? available.filter((t) => t.project != null && myProjectIds.has(t.project.id))
+    : [];
   const inProgress = active.filter((t) => t.myAssignmentStatus === 'IN_PROGRESS').length;
   const meta = TABS.find((t) => t.key === tab)!;
 
@@ -278,7 +283,7 @@ export default function TaskList() {
       {!loaded ? skeleton : (
         <>
           {view === 'ACTIVE' && (
-            active.length === 0
+            active.length === 0 && projectOpen.length === 0
               ? empty(available.length
                   ? `No ${meta.empty} in hand — ${available.length} available to pick up.`
                   : `No ${meta.empty} need your attention right now.`, true)
@@ -288,6 +293,7 @@ export default function TaskList() {
                   <Group icon={Flame} tone="text-[#EA6A2D]" title="Do Now" list={now} />
                   <Group icon={CalendarDays} tone="text-[#0A573B]" title="Today" list={today} />
                   <Group icon={Clock} tone="text-[#7A817C]" title="Upcoming" list={upcoming} />
+                  <Group icon={FolderKanban} tone="text-[#9B6B32]" title="Open in your projects — tap to take" list={projectOpen} />
                 </div>
               )
           )}
