@@ -72,7 +72,7 @@ export const employeeTaskApi = {
   resume: (id: number) => api.post(`${BASE}/${id}/resume`).then((r) => r.data),
   complete: (id: number, remarks?: string) => api.post(`${BASE}/${id}/complete`, { remarks }).then((r) => r.data),
   // Record how much the customer paid on a project execution task → PENDING_APPROVAL payment (admin verifies).
-  collectPayment: (id: number, payload: { amount: number | string; method?: string; note?: string }) =>
+  collectPayment: (id: number, payload: { amount: number | string; method?: string; note?: string; reference?: string; receiptUrl?: string }) =>
     api.post(`${BASE}/${id}/collect-payment`, payload).then((r) => r.data),
   // Installer on site: collect the balance, mark the bill's stitched orders installed (closes the task).
   markInstalled: (id: number, payload: { payments?: { method: string; amount: number }[]; deliveredTo?: string; note?: string; photoUrl?: string }) =>

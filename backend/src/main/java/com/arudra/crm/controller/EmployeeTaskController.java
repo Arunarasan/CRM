@@ -214,7 +214,10 @@ public class EmployeeTaskController {
         }
         String method = body != null && body.get("method") != null ? String.valueOf(body.get("method")) : null;
         String note = body != null && body.get("note") != null ? String.valueOf(body.get("note")) : null;
-        return ResponseEntity.ok(ApiResponse.success(employeeTaskService.collectPayment(id, me(), amount, method, note)));
+        String reference = body != null && body.get("reference") != null ? String.valueOf(body.get("reference")) : null;
+        String receiptUrl = body != null && body.get("receiptUrl") != null ? String.valueOf(body.get("receiptUrl")) : null;
+        return ResponseEntity.ok(ApiResponse.success(
+                employeeTaskService.collectPayment(id, me(), amount, method, note, reference, receiptUrl)));
     }
 
     /**

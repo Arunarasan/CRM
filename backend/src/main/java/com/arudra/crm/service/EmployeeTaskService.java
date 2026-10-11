@@ -1794,6 +1794,11 @@ public class EmployeeTaskService {
     @Transactional
     public Map<String, Object> collectPayment(Long taskId, User employee, java.math.BigDecimal amount,
                                               String method, String note) {
+        return collectPayment(taskId, employee, amount, method, note, null, null);
+    }
+
+    public Map<String, Object> collectPayment(Long taskId, User employee, java.math.BigDecimal amount,
+                                              String method, String note, String reference, String receiptUrl) {
         assertTaskEditableBy(taskId, employee);
         Task task = getTask(taskId);
         if (task.getProject() == null || task.getProject().getCustomer() == null) {
@@ -1811,8 +1816,10 @@ public class EmployeeTaskService {
         payment.setPaymentDate(LocalDate.now());
         payment.setPaymentMethod(method != null && !method.isBlank() ? method : "CASH");
         payment.setCollectedBy(employee);
-        payment.setRemarks("Collected on the project execution task by " + employee.getName()
-                + (note != null && !note.isBlank() ? " — " + note : ""));
+        // The employee's own note, as typed — the report shows it back, so no boilerplate wrapped around it.
+        payment.setRemarks(note != null && !note.isBlank() ? note.trim() : null);
+        if (reference != null && !reference.isBlank()) payment.setReferenceNumber(reference.trim());
+        if (receiptUrl != null && !receiptUrl.isBlank()) payment.setProofUrl(receiptUrl.trim());
         CustomerPayment saved = financeService.recordPayment(payment, employee);
         Map<String, Object> m = new HashMap<>();
         m.put("id", saved.getId());

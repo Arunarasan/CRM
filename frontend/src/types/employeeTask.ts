@@ -348,8 +348,15 @@ export interface ProjectExecutionInfo {
     length?: number | null; width?: number | null; height?: number | null; floorArea?: number | null;
   }>;
   payments?: Array<{
+    id?: number | null;
     amount?: number | string | null; status?: string | null; date?: string | null;
+    recordedAt?: string | null;
     method?: string | null; collectedBy?: string | null;
+    /** UPI / transaction reference. */
+    reference?: string | null;
+    /** The employee's note when they recorded it. */
+    note?: string | null;
+    receiptUrl?: string | null;
   }>;
   collectedPending?: number | string | null;
   collectedConfirmed?: number | string | null;
@@ -357,6 +364,8 @@ export interface ProjectExecutionInfo {
   contractValue?: number | string | null;
   /** Order value minus confirmed payments. */
   balanceDue?: number | string | null;
+  /** Order value minus confirmed AND awaiting-check payments — what is still to ask the customer for. */
+  pendingToCollect?: number | string | null;
 }
 
 export interface InstallOrderInfo {

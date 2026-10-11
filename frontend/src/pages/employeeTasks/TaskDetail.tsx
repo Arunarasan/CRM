@@ -594,13 +594,11 @@ export default function TaskDetail() {
         {isProjectTask && <ProjectInfoCards task={task} />}
         {isProjectTask && task.projectInfo && <ItemsToMakeCard info={task.projectInfo} />}
 
-        {/* Payments (record one or request it on WhatsApp) beside the work-items checklist; tracked projects
+        {/* Customer payments report (collected / pending, every entry, record one) beside the work-items checklist; tracked projects
             have their own work board below, so payments take the full width there. */}
         {isProjectTask && task.projectInfo && (
           <div className={`grid grid-cols-1 gap-3.5 ${workTracking ? '' : 'min-[380px]:grid-cols-2'}`}>
             <PaymentBox info={task.projectInfo} compact
-              phone={task.lead?.whatsappNumber || task.lead?.mobileNumber || task.contact?.whatsappNumber
-                || task.contact?.phone || task.projectInfo.customer?.phone}
               canRecord={canRecordPayment} onRecord={() => setSheet('payment')} />
             {!workTracking && (
               <ChecklistPanel taskId={taskId} checklist={task.checklist} onChanged={load} locked={locked} compact

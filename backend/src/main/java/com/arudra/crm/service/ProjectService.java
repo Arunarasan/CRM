@@ -1971,7 +1971,20 @@ public class ProjectService {
                 .map(inv -> inv.getTotalAmount() != null ? inv.getTotalAmount() : BigDecimal.ZERO)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
+        // Money still to collect on project invoices (outstanding balance, so part-payments count).
+        BigDecimal pendingToCollect = invoiceRepository.findAll().stream()
+                .filter(inv -> inv.getProject() != null
+                        && !"PAID".equalsIgnoreCase(inv.getStatus()) && !"CANCELLED".equalsIgnoreCase(inv.getStatus()))
+                .map(inv -> {
+                    BigDecimal bal = inv.getBalanceDue() != null ? inv.getBalanceDue()
+                            : (inv.getTotalAmount() != null ? inv.getTotalAmount() : BigDecimal.ZERO)
+                                .subtract(inv.getAmountPaid() != null ? inv.getAmountPaid() : BigDecimal.ZERO);
+                    return bal.signum() > 0 ? bal : BigDecimal.ZERO;
+                })
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
         Map<String, Object> dashboard = new java.util.LinkedHashMap<>();
+        dashboard.put("pendingToCollect", pendingToCollect);
         dashboard.put("totalProjects", total);
         dashboard.put("runningProjects", running);
         dashboard.put("activeProjects", active);
@@ -2358,17 +2371,23 @@ public class ProjectService {
         }
         info.put("measurements", measRooms);
 
-        // Payments collected against the project — pending ones show as "entered, awaiting verification".
+        // Customer payments on the project, newest first — with the date, mode, reference, the employee's note
+        // and the receipt, so the task can show a full "what the customer paid" report. Rejected ones stay in
+        // the list (marked) but don't count towards any total.
         List<Map<String, Object>> payments = new java.util.ArrayList<>();
         java.math.BigDecimal collectedPending = java.math.BigDecimal.ZERO;
         java.math.BigDecimal collectedConfirmed = java.math.BigDecimal.ZERO;
         for (CustomerPayment pay : customerPaymentRepository.findByProjectIdAndIsDeletedFalseOrderByPaymentDateDesc(projectId)) {
-            if ("REJECTED".equalsIgnoreCase(pay.getStatus())) continue;
             Map<String, Object> pm = new java.util.LinkedHashMap<>();
+            pm.put("id", pay.getId());
             pm.put("amount", pay.getAmount());
             pm.put("status", pay.getStatus());
             pm.put("date", pay.getPaymentDate());
+            pm.put("recordedAt", pay.getCreatedAt());
             pm.put("method", pay.getPaymentMethod());
+            pm.put("reference", pay.getReferenceNumber());
+            pm.put("note", pay.getRemarks());
+            pm.put("receiptUrl", pay.getProofUrl());
             pm.put("collectedBy", pay.getCollectedBy() != null ? pay.getCollectedBy().getName() : null);
             payments.add(pm);
             if (pay.getAmount() != null) {
@@ -2379,13 +2398,16 @@ public class ProjectService {
         info.put("payments", payments);
         info.put("collectedPending", collectedPending);
         info.put("collectedConfirmed", collectedConfirmed);
-        // Order value (approved quote, else the project budget) and what's still to collect after the
-        // confirmed payments — so the team knows how much to ask the customer for.
+        // Order value (approved quote, else the project budget); balanceDue = after verified payments only,
+        // pendingToCollect = still to ask the customer for, also counting money already handed over and
+        // waiting for the office to verify.
         java.math.BigDecimal contractValue = project.getQuotation() != null && project.getQuotation().getGrandTotal() != null
                 && project.getQuotation().getGrandTotal().signum() > 0
                 ? project.getQuotation().getGrandTotal() : project.getBudget();
         info.put("contractValue", contractValue);
         info.put("balanceDue", contractValue != null ? contractValue.subtract(collectedConfirmed).max(java.math.BigDecimal.ZERO) : null);
+        info.put("pendingToCollect", contractValue != null
+                ? contractValue.subtract(collectedConfirmed).subtract(collectedPending).max(java.math.BigDecimal.ZERO) : null);
         return info;
     }
 
