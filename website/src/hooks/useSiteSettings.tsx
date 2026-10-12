@@ -26,6 +26,7 @@ export interface SiteConfig {
   geoLng: string
   crmUrl: string
   businessHours: string
+  catalogPdf: string
   social: { instagram: string; facebook: string; pinterest: string; linkedin: string }
 }
 
@@ -51,6 +52,7 @@ function merge(s: Record<string, string>): SiteConfig {
     geoLat: g('contact.geoLat', base.geoLat),
     geoLng: g('contact.geoLng', base.geoLng),
     businessHours: g('contact.businessHours', base.businessHours),
+    catalogPdf: g('site.catalogPdf', base.catalogPdf),
     social: {
       instagram: g('social.instagram', base.social.instagram),
       facebook: g('social.facebook', base.social.facebook),

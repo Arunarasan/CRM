@@ -1,9 +1,10 @@
 import { BaseInput } from '@/components/ui/input';
 import { useEffect, useMemo, useState } from 'react';
-import { Loader2, Save, Building2, Phone, Share2, MapPin, ShieldCheck, Star, Globe, Settings as SettingsIcon } from 'lucide-react';
+import { Loader2, Save, Building2, Phone, Share2, MapPin, ShieldCheck, Star, Globe, BookOpen, Settings as SettingsIcon } from 'lucide-react';
 import { settingsApi, SiteSetting } from '@/api/websiteAdminApi';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/toast';
+import FileUploadField from '@/components/FileUploadField';
 
 const GROUP_META: Record<string, { icon: typeof Building2; description: string }> = {
   Brand: { icon: Building2, description: 'Your business name and tagline, shown across the site.' },
@@ -12,6 +13,7 @@ const GROUP_META: Record<string, { icon: typeof Building2; description: string }
   Social: { icon: Share2, description: 'Links to your social profiles, shown in the footer.' },
   Warranty: { icon: ShieldCheck, description: 'Default service and product warranty applied to completed projects.' },
   General: { icon: Star, description: 'Google review link and the reward paid per verified review.' },
+  Catalog: { icon: BookOpen, description: 'Your catalog PDF — customers can preview and download it from every product page.' },
   Portal: { icon: Globe, description: 'Turn the customer portal on or off (true / false).' },
 };
 const HINTS: Record<string, string> = {
@@ -21,7 +23,7 @@ const HINTS: Record<string, string> = {
   'contact.geoLat': 'From Google Maps: right-click your shop → copy the first number.',
   'contact.geoLng': 'From Google Maps: the second number.',
 };
-const GROUP_ORDER = ['Brand', 'Contact', 'Location', 'Social', 'Warranty', 'General', 'Portal'];
+const GROUP_ORDER = ['Brand', 'Contact', 'Location', 'Social', 'Catalog', 'Warranty', 'General', 'Portal'];
 
 /**
  * Site settings editor — brand, contact and social values that used to be hardcoded in the website.
@@ -109,9 +111,18 @@ export default function SettingsAdmin() {
             </div>
             <div className="grid gap-4 p-5 sm:grid-cols-2">
               {rows.map((s) => (
-                <label key={s.key} className={s.inputType === 'textarea' ? 'sm:col-span-2 block' : 'block'}>
+                <label key={s.key} className={s.inputType === 'textarea' || s.inputType === 'file' ? 'sm:col-span-2 block' : 'block'}>
                   <span className="mb-1 block text-xs font-medium text-slate-600">{s.label || s.key}</span>
-                  {s.inputType === 'textarea' ? (
+                  {s.inputType === 'file' ? (
+                    <FileUploadField
+                      module="WEBSITE"
+                      label="Upload PDF"
+                      accept="application/pdf"
+                      allowUrl
+                      value={values[s.key] ?? ''}
+                      onChange={({ url }) => setValues((v) => ({ ...v, [s.key]: url }))}
+                    />
+                  ) : s.inputType === 'textarea' ? (
                     <textarea
                       value={values[s.key] ?? ''}
                       onChange={(e) => setValues((v) => ({ ...v, [s.key]: e.target.value }))}

@@ -708,6 +708,7 @@ public class DataSeeder {
                 i = seedSetting(settingRepo, "Social", "social.facebook", "Facebook URL", "https://facebook.com", "url", i);
                 i = seedSetting(settingRepo, "Social", "social.pinterest", "Pinterest URL", "https://pinterest.com", "url", i);
                 i = seedSetting(settingRepo, "Social", "social.linkedin", "LinkedIn URL", "https://linkedin.com", "url", i);
+                i = seedSetting(settingRepo, "Catalog", "site.catalogPdf", "Catalog PDF", "", "file", i);
                 i = seedSetting(settingRepo, "Portal", "portal.enabled", "Customer portal enabled", "true", "text", i);
                 // Structured location — powers Google local-search signals (LocalBusiness schema) on the website.
                 i = seedSetting(settingRepo, "Location", "contact.city", "City", "Chidambaram", "text", i);

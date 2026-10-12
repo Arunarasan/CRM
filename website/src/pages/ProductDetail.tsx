@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useParams } from 'react-router-dom'
-import { MessageCircle, Truck, ShieldCheck, Ruler, Check, X, CheckCircle2 } from 'lucide-react'
+import { MessageCircle, FileText, Images, Download, ExternalLink, Truck, ShieldCheck, Ruler, Check, X, CheckCircle2 } from 'lucide-react'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { Section, SectionHeading } from '@/components/ui/Section'
 import { SmartImage } from '@/components/ui/SmartImage'
@@ -41,6 +41,7 @@ export default function ProductDetail() {
   const [activeImg, setActiveImg] = useState(0)
   const [activeColor, setActiveColor] = useState(0)
   const [quoteOpen, setQuoteOpen] = useState(false)
+  const [catalogOpen, setCatalogOpen] = useState(false)
   const site = useSite()
 
   // Live catalog (falls back to seed) — used for related products + the category name.
@@ -257,6 +258,16 @@ export default function ProductDetail() {
                 Request a Quote
               </Button>
             </div>
+            <div className={cn('mt-3 grid gap-3', site.catalogPdf && 'sm:grid-cols-2')}>
+              {site.catalogPdf && (
+                <Button onClick={() => setCatalogOpen(true)} variant="outlineForest" size="lg" className="w-full">
+                  <FileText className="h-4 w-4" /> Preview Catalog
+                </Button>
+              )}
+              <Button to="/portfolio" variant="outlineForest" size="lg" className="w-full">
+                <Images className="h-4 w-4" /> Our Portfolio
+              </Button>
+            </div>
             <p className="mt-3 text-xs text-forest/50">
               Made to order · Our design team will confirm availability, finishes, and pricing for your space.
             </p>
@@ -302,6 +313,8 @@ export default function ProductDetail() {
         </Section>
       )}
 
+      <CatalogDialog open={catalogOpen} onClose={() => setCatalogOpen(false)} url={site.catalogPdf} />
+
       <QuoteDialog
         open={quoteOpen}
         onClose={() => setQuoteOpen(false)}
@@ -311,6 +324,37 @@ export default function ProductDetail() {
         colour={view.colors.length ? view.colors[activeColor]?.name : undefined}
       />
     </>
+  )
+}
+
+/** In-page PDF preview of the catalog. Phones can't embed PDFs reliably, so they get open/download links. */
+function CatalogDialog({ open, onClose, url }: { open: boolean; onClose: () => void; url: string }) {
+  if (!open || !url) return null
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-forest/60 p-0 backdrop-blur-sm sm:p-6" onClick={onClose}>
+      <div className="flex h-full w-full max-w-5xl flex-col bg-white shadow-card sm:h-[90vh] sm:rounded" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between gap-3 border-b border-forest/10 px-4 py-3">
+          <h2 className="font-serif text-lg font-semibold text-forest">Catalog</h2>
+          <div className="flex items-center gap-2">
+            <a href={url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs font-semibold text-forest/70 hover:text-gold">
+              <ExternalLink className="h-4 w-4" /> <span className="hidden sm:inline">Open</span>
+            </a>
+            <a href={url} download className="inline-flex items-center gap-1.5 text-xs font-semibold text-forest/70 hover:text-gold">
+              <Download className="h-4 w-4" /> <span className="hidden sm:inline">Download</span>
+            </a>
+            <button onClick={onClose} aria-label="Close" className="flex h-8 w-8 items-center justify-center rounded-full text-forest/50 hover:bg-forest/5 hover:text-forest">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+        <iframe src={url} title="Catalog PDF" className="hidden min-h-0 w-full flex-1 sm:block" />
+        <div className="flex flex-1 flex-col items-center justify-center gap-4 p-6 text-center sm:hidden">
+          <FileText className="h-12 w-12 text-gold" />
+          <p className="text-sm text-forest/70">Tap below to view our catalog.</p>
+          <Button to={url} external variant="primary" className="w-full">Open Catalog</Button>
+        </div>
+      </div>
+    </div>
   )
 }
 

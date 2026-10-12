@@ -49,6 +49,7 @@ export const site = {
   postalCode: import.meta.env.VITE_CONTACT_POSTAL || '608001',
   country: import.meta.env.VITE_CONTACT_COUNTRY || 'IN',
   geoLat: import.meta.env.VITE_CONTACT_GEO_LAT || '',
+  catalogPdf: '',
   geoLng: import.meta.env.VITE_CONTACT_GEO_LNG || '',
   crmUrl: import.meta.env.VITE_CRM_URL || '/crm',
   businessHours: 'Mon – Sat · 10:00 AM – 7:00 PM',
