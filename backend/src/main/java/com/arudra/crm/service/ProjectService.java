@@ -682,6 +682,39 @@ public class ProjectService {
         projectRepository.save(project);
     }
     
+    private static final java.util.Set<String> MOVE_TO_STATUSES = java.util.Set.of("PLANNING", "RUNNING", "ON_HOLD", "PAUSED", "COMPLETED");
+
+    /** Moves a project to another status — including back from Completed / Cancelled — with a required remark. */
+    @Transactional
+    public Project changeStatus(Long id, String status, String remarks, User user) {
+        String target = status == null ? "" : status.trim().toUpperCase();
+        if (!MOVE_TO_STATUSES.contains(target)) throw new IllegalArgumentException("Can't move a project to " + target + ".");
+        if (remarks == null || remarks.isBlank()) throw new IllegalArgumentException("Please give a remark for changing the status.");
+        Project project = getProjectById(id);
+        String old = project.getStatus() == null ? "" : project.getStatus().toUpperCase();
+        if (old.equals(target)) return project;
+        if ("CANCELLED".equals(old)) {
+            project.setCancelledAt(null);
+            project.setCancelledBy(null);
+            project.setCancellationReason(null);
+        }
+        if ("COMPLETED".equals(old) || "CLOSED".equals(old)) {
+            if (!"COMPLETED".equals(target)) project.setActualCompletionDate(null);
+        }
+        if ("COMPLETED".equals(target) && project.getActualCompletionDate() == null) {
+            project.setActualCompletionDate(java.time.LocalDate.now());
+        }
+        project.setStatus(target);
+        Project saved = projectRepository.save(project);
+        ProjectActivityLog log = new ProjectActivityLog();
+        log.setProject(saved);
+        log.setUser(user);
+        log.setRole("Admin");
+        log.setDescription("Status changed " + old + " → " + target + ". Remark: " + remarks.trim());
+        activityLogRepository.save(log);
+        return saved;
+    }
+
     public ProjectStage addStage(Long projectId, ProjectStage stage) {
         Project project = getProjectById(projectId);
         stage.setProject(project);

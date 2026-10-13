@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { leadApi } from "./leads/leadApi";
 import { toast } from "@/components/ui/toast";
+import api from "@/lib/api";
 import {
   LEAD_STATUSES,
   formatDate, statusStyle, JOURNEY_STAGE_META,
@@ -91,6 +92,7 @@ export default function LeadProfile() {
   const [assignOpen, setAssignOpen] = useState(false);
   const [lostOpen, setLostOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [undoOpen, setUndoOpen] = useState(false);
   const [reopenOpen, setReopenOpen] = useState(false);
   const [winBackOpen, setWinBackOpen] = useState(false);
   const [creatorOpen, setCreatorOpen] = useState(false);
@@ -327,6 +329,7 @@ export default function LeadProfile() {
                     <DropdownMenuItem onSelect={() => setConvertOpen(true)}><UserPlus className="h-4 w-4 mr-2" /> Convert to customer only</DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onSelect={() => setLostOpen(true)} className="text-destructive"><XCircle className="h-4 w-4 mr-2" /> Mark as lost</DropdownMenuItem>
+                    {lead.isConverted && <DropdownMenuItem onSelect={() => setUndoOpen(true)}><RotateCcw className="h-4 w-4 mr-2" /> Undo conversion</DropdownMenuItem>}
                     <DropdownMenuItem onSelect={() => setDeleteOpen(true)} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" /> Delete lead</DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -463,6 +466,9 @@ export default function LeadProfile() {
       <LeadFormDialog open={editOpen} onOpenChange={setEditOpen} lead={lead} users={users} onSaved={() => fetchLead()} />
       <ConvertLeadDialog open={convertOpen} onOpenChange={setConvertOpen} lead={lead} />
       <AssignDialog open={assignOpen} onOpenChange={setAssignOpen} lead={lead} users={users} onChanged={fetchLead} />
+      <DeleteWithRemarkDialog open={undoOpen} title="Undo conversion" subject="Conversion" action="Undo" success="Conversion undone."
+        hint="The project made from this lead is removed and the lead goes back to its earlier status."
+        onClose={() => setUndoOpen(false)} onConfirm={(remarks) => api.post(`/leads/${lead.id}/undo-conversion`, { remarks })} onDone={fetchLead} />
       <DeleteWithRemarkDialog open={deleteOpen} title="Delete lead" subject="Lead" onClose={() => setDeleteOpen(false)}
         onConfirm={(reason) => leadApi.remove(lead.id, reason)} onDone={() => navigate("/leads")} />
       <MarkLostDialog open={lostOpen} onOpenChange={setLostOpen} lead={lead} onChanged={fetchLead} />

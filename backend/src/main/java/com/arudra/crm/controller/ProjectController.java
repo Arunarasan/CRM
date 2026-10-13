@@ -108,6 +108,12 @@ public class ProjectController {
         return ResponseEntity.ok().build();
     }
     
+    @PostMapping("/{id}/status")
+    @PreAuthorize(WRITE)
+    public ResponseEntity<Project> changeStatus(@PathVariable Long id, @RequestBody Map<String, String> body) {
+        return ResponseEntity.ok(projectService.changeStatus(id, body.get("status"), body.get("remarks"), currentUserService.getCurrentUser()));
+    }
+
     @PostMapping("/{id}/stages")
     @PreAuthorize(WRITE)
     public ResponseEntity<ProjectStage> addStage(@PathVariable Long id, @RequestBody ProjectStage stage) {

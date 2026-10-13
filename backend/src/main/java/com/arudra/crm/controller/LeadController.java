@@ -476,6 +476,13 @@ public class LeadController {
                 parseDate(payload.get("followUpDate")), currentUserService.getCurrentUser()));
     }
 
+    /** Undo a lead's conversion to a project and move it back to its earlier status. */
+    @PostMapping("/{id}/undo-conversion")
+    @PreAuthorize(WRITE)
+    public ResponseEntity<Lead> undoConversion(@PathVariable Long id, @RequestBody Map<String, String> payload) {
+        return ResponseEntity.ok(leadService.undoConversion(id, payload.get("remarks"), currentUserService.getCurrentUser()));
+    }
+
     private static java.time.LocalDate parseDate(String value) {
         return value == null || value.isBlank() ? null : java.time.LocalDate.parse(value);
     }

@@ -54,6 +54,7 @@ public class LeadService {
     @Autowired private org.springframework.context.ApplicationEventPublisher eventPublisher;
     @Autowired private CustomerRepository customerRepository;
     @Autowired private ProjectRepository projectRepository;
+    @Autowired @org.springframework.context.annotation.Lazy private ProjectService projectService;
     @Autowired private UserRepository userRepository;
     @Autowired private EmployeeRepository employeeRepository;
     @Autowired private LeadActivityRepository leadActivityRepository;
@@ -1035,6 +1036,41 @@ public class LeadService {
             leadReminderRepository.save(reminder);
         }
         return reopened;
+    }
+
+    /**
+     * Undo a conversion: the project(s) made from this lead are deleted (blocked while they hold payments or
+     * live invoices), converted quotations go back to Approved, and the lead returns to the status it had
+     * before it became a project.
+     */
+    @Transactional
+    public Lead undoConversion(Long leadId, String remarks, User user) {
+        Lead lead = getLeadById(leadId);
+        if (!Boolean.TRUE.equals(lead.getIsConverted())) throw new IllegalStateException("This lead has not been converted.");
+        if (remarks == null || remarks.isBlank()) throw new IllegalArgumentException("Please give a remark for undoing the conversion.");
+        String note = remarks.trim();
+        for (Project p : projectRepository.findByLeadIdOrderByIdDesc(leadId)) {
+            projectService.deleteProject(p.getId(), "Conversion undone: " + note, user);
+        }
+        for (Quotation q : quotationRepository.findByLeadIdOrderByCreatedAtDesc(leadId)) {
+            if ("CONVERTED".equals(q.getStatus())) { q.setStatus("APPROVED"); quotationRepository.save(q); }
+        }
+        String target = "Quotation Approved";
+        for (LeadStatusHistory h : leadStatusHistoryRepository.findByLeadIdOrderByChangedAtDesc(leadId)) {
+            if (List.of("Project Confirmed", "Project Started", "Completed").contains(h.getNewStatus())) {
+                String before = h.getOldStatus();
+                if (before != null && !List.of("Project Confirmed", "Project Started", "Completed", "Lost", "Cancelled").contains(before)) target = before;
+                break;
+            }
+        }
+        lead.setIsConverted(false);
+        lead.setConvertedToProject(null);
+        lead.setConvertedBy(null);
+        lead.setConvertedDate(null);
+        leadRepository.save(lead);
+        Lead moved = updateLeadStatus(leadId, target, "Conversion undone: " + note, user);
+        logActivity(moved, "CONVERSION_UNDONE", "Conversion undone, moved back to " + target + ". Remark: " + note, user);
+        return moved;
     }
 
     /** The status a lead had just before it was last marked Lost ("Contacted" when unknown). */

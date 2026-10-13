@@ -30,7 +30,7 @@ import {
   ChevronDown, ChevronRight, ShoppingCart, ClipboardCheck,
   Play, History, RotateCcw, Lock,
   MoreHorizontal, MapPin, Wallet, Users,
-  Pencil, Check, Trash2,
+  Pencil, Check, Trash2, Undo2,
   Calendar, Clock, Flag, Building2, FileText, IndianRupee,
   FileBarChart, Home, Settings, ClipboardList,
   ArrowRight, Zap, Navigation, Ban,
@@ -755,6 +755,8 @@ export default function ProjectCommandCenter() {
   // Cancel (any stage before completion, optional partial advance refund) / refund more once cancelled.
   const [cancelMode, setCancelMode] = useState<null | 'cancel' | 'refund'>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [statusOpen, setStatusOpen] = useState(false);
+  const [newStatus, setNewStatus] = useState("RUNNING");
   const [cancelRefresh, setCancelRefresh] = useState(0);
 
   const handleStartExecution = () => {
@@ -948,6 +950,7 @@ export default function ProjectCommandCenter() {
                       {!isClosed && (
                         <DropdownMenuItem onSelect={() => setCancelMode('cancel')} className="text-rose-600 focus:text-rose-700"><Ban className="w-4 h-4 mr-2"/> Cancel Project</DropdownMenuItem>
                       )}
+                      <DropdownMenuItem onSelect={() => { setNewStatus(project.status === "RUNNING" ? "PLANNING" : "RUNNING"); setStatusOpen(true); }}><Undo2 className="w-4 h-4 mr-2"/> Change status</DropdownMenuItem>
                       <DropdownMenuItem onSelect={() => setDeleteOpen(true)} className="text-rose-600 focus:text-rose-700"><Trash2 className="w-4 h-4 mr-2"/> Delete Project</DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -1023,7 +1026,8 @@ export default function ProjectCommandCenter() {
                         <DropdownMenuItem onSelect={() => setCancelMode('cancel')} className="text-rose-600 focus:text-rose-700"><Ban className="w-4 h-4 mr-2"/> Cancel Project</DropdownMenuItem>
                       </>
                     )}
-                    <DropdownMenuItem onSelect={() => setDeleteOpen(true)} className="text-rose-600 focus:text-rose-700"><Trash2 className="w-4 h-4 mr-2"/> Delete Project</DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => { setNewStatus(project.status === "RUNNING" ? "PLANNING" : "RUNNING"); setStatusOpen(true); }}><Undo2 className="w-4 h-4 mr-2"/> Change status</DropdownMenuItem>
+                      <DropdownMenuItem onSelect={() => setDeleteOpen(true)} className="text-rose-600 focus:text-rose-700"><Trash2 className="w-4 h-4 mr-2"/> Delete Project</DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
@@ -1039,6 +1043,19 @@ export default function ProjectCommandCenter() {
       </div>
       <CancelProjectDialog projectId={projectId} mode={cancelMode || 'cancel'} open={cancelMode !== null} onClose={() => setCancelMode(null)}
         onDone={async () => { setCancelRefresh((n) => n + 1); await fetchProjectData(); fetchCore(); }} />
+      <DeleteWithRemarkDialog open={statusOpen} title="Change project status" subject="Status" action="Change" success="Status updated."
+        hint="Moving a cancelled project back does not reopen its cancelled tasks or refunds."
+        onClose={() => setStatusOpen(false)} onConfirm={(remarks) => api.post(`/projects/${projectId}/status`, { status: newStatus, remarks })}
+        onDone={async () => { await fetchProjectData(); fetchCore(); }}>
+        <div>
+          <label className="text-xs font-semibold text-slate-600">Move to</label>
+          <select value={newStatus} onChange={(e) => setNewStatus(e.target.value)}
+            className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-2 text-sm text-slate-700">
+            {[["PLANNING", "Planning"], ["RUNNING", "In progress"], ["ON_HOLD", "On hold"], ["PAUSED", "Paused"], ["COMPLETED", "Completed"]]
+              .map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
+        </div>
+      </DeleteWithRemarkDialog>
       <DeleteWithRemarkDialog open={deleteOpen} title="Delete project" subject="Project" onClose={() => setDeleteOpen(false)}
         onConfirm={(reason) => api.delete(`/projects/${projectId}`, { data: { reason } })} onDone={() => navigate('/projects')} />
       <TrackingLinkDialog projectId={Number(projectId)} open={trackingOpen} onOpenChange={setTrackingOpen} />
