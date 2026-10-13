@@ -121,7 +121,7 @@ public class EmployeePortalController {
     @PreAuthorize(PORTAL)
     public ResponseEntity<ApiResponse<com.arudra.crm.dto.BundleView>> deliver(@PathVariable Long id,
             @RequestBody com.arudra.crm.dto.BundleRequests.Handover req) {
-        return ResponseEntity.ok(ApiResponse.success(bundleService.deliverFromPortal(id, req, me())));
+        return ResponseEntity.ok(ApiResponse.success(bundleService.deliverFromPortal(id, req, me(), true)));
     }
 
     @GetMapping("/goods-receipts/incoming")

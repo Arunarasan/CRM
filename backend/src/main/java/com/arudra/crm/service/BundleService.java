@@ -666,12 +666,12 @@ public class BundleService {
     }
 
     /**
-     * An employee hands one order to the customer: collects the pending amount (all of it — a balance can
+     * An employee (or the office, from the Orders screen) hands one order to the customer: collects the pending amount (all of it — a balance can
      * only be left by a manager from the Orders screen) and marks it Delivered. An order still in Process
      * can be delivered too, but it needs a remark saying why; admins are told.
      */
     @Transactional
-    public BundleView deliverFromPortal(Long id, BundleRequests.Handover req, User user) {
+    public BundleView deliverFromPortal(Long id, BundleRequests.Handover req, User user, boolean canCollect) {
         Bundle b = find(id);
         if (CLOSED.contains(b.getStatus())) throw new IllegalStateException(b.getCode() + " is already " + b.getStatus().toLowerCase());
         if (INSTALL.equals(b.getHandoverMode())) throw new IllegalStateException(b.getCode() + " is installed by its installer (Mark Installed)");
@@ -692,7 +692,7 @@ public class BundleService {
         h.bundleIds = List.of(id);
         h.allowBalanceDue = false;
         h.note = early ? "Delivered while still in process — " + remark : remark;
-        BundleView out = handover(h, user, true, true).get(0);
+        BundleView out = handover(h, user, true, canCollect).get(0);
         if (early) {
             String who = user == null ? "An employee" : user.getName() != null ? user.getName() : user.getEmail();
             notificationService.dispatchToAdmins("Order " + b.getCode() + " delivered while in process",

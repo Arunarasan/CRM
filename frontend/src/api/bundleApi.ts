@@ -186,6 +186,12 @@ export const bundleApi = {
   search: (p: { status?: string; overdue?: boolean; openOnly?: boolean; q?: string; resourceType?: string; resourceId?: number; page?: number; size?: number } = {}) =>
     api.get<PageResp<Bundle>>(`/bundles${qs({ page: 0, size: 100, ...p })}`).then((r) => r.data),
   summary: () => api.get<BundleSummary>('/bundles/summary').then((r) => r.data),
+  /** Orders waiting to go to the customer: Completed + in Process (Goods Delivery). */
+  deliveries: () => api.get<Bundle[]>('/bundles/deliveries').then((r) => r.data),
+  deliver: (id: number, body: {
+    deliveredTo?: string; note?: string; photoUrl?: string;
+    payments?: { method: string; amount: number; referenceNumber?: string }[];
+  }) => api.post<Bundle>(`/bundles/${id}/deliver`, body).then((r) => r.data),
   byCode: (code: string) => api.get<Bundle>(`/bundles/code/${encodeURIComponent(code.trim())}`).then((r) => r.data),
   /** Scan box: bundle code, group code or bill number → matching bundles. */
   lookup: (q: string) => api.get<Bundle[]>(`/bundles/lookup${qs({ q: q.trim() })}`).then((r) => r.data),

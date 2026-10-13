@@ -13,7 +13,7 @@ import { toast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
 import { BaseInput, Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/useAuth";
-import { Camera, ScanLine, LayoutGrid, List, AlertTriangle, Search, ChevronRight, Printer, X, HandCoins } from "lucide-react";
+import { Camera, ScanLine, LayoutGrid, List, AlertTriangle, Search, ChevronRight, Printer, X, HandCoins, Truck } from "lucide-react";
 
 const VIEW_KEY = "bundles.view";
 const BOARD_COLUMNS = BUNDLE_FLOW.filter((s) => s !== "DELIVERED");
@@ -124,6 +124,9 @@ export default function BundlesPage() {
           <h1 className="text-xl font-bold text-slate-900">Orders</h1>
           <p className="text-sm text-slate-500">Stitching &amp; making work — scan a sticker to see the items and move it on.</p>
         </div>
+        <Link to="/bundles/delivery" className="inline-flex items-center gap-1.5 rounded-lg border bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+          <Truck className="w-4 h-4" /> Goods Delivery
+        </Link>
         <div className="inline-flex rounded-lg border bg-white p-0.5">
           <button onClick={() => switchView("board")} className={`px-3 py-1.5 rounded-md text-sm flex items-center gap-1.5 ${view === "board" ? "bg-slate-800 text-white" : "text-slate-600"}`}><LayoutGrid className="w-4 h-4" /> Board</button>
           <button onClick={() => switchView("list")} className={`px-3 py-1.5 rounded-md text-sm flex items-center gap-1.5 ${view === "list" ? "bg-slate-800 text-white" : "text-slate-600"}`}><List className="w-4 h-4" /> List</button>

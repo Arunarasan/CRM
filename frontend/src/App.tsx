@@ -87,6 +87,7 @@ const FinanceInvoiceFormPage = lazy(() => import("./pages/finance/InvoiceFormPag
 const FinanceCounterSalePage = lazy(() => import("./pages/finance/CounterSalePage"));
 const BundlesPage = lazy(() => import("./pages/bundles/BundlesPage"));
 const BundleDetailPage = lazy(() => import("./pages/bundles/BundleDetailPage"));
+const GoodsDeliveryPage = lazy(() => import("./pages/bundles/GoodsDeliveryPage"));
 const FinanceInvoiceDetailPage = lazy(() => import("./pages/finance/InvoiceDetailPage"));
 const FinancePaymentsPage = lazy(() => import("./pages/finance/PaymentsPage"));
 const FinanceAccountsPage = lazy(() => import("./pages/finance/AccountsPage"));
@@ -205,6 +206,7 @@ function App() {
                 so the /bundles URLs stay and /orders just points there. */}
             <Route path="orders" element={<Navigate to="/bundles" replace />} />
             <Route path="bundles" element={<BundlesPage />} />
+            <Route path="bundles/delivery" element={<GoodsDeliveryPage />} />
             <Route path="bundles/code/:code" element={<BundleDetailPage />} />
             <Route path="bundles/:id" element={<BundleDetailPage />} />
             {/* Website / CMS — manage the public marketing site's catalog and content. */}

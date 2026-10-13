@@ -76,6 +76,20 @@ public class BundleController {
         return ResponseEntity.ok(bundleService.handover(req, currentUserService.getCurrentUser(), canOverride(), canCollect()));
     }
 
+    /** The delivery queue: Completed orders and ones still in Process (Orders → Goods Delivery). */
+    @GetMapping("/deliveries")
+    @PreAuthorize(READ)
+    public ResponseEntity<List<BundleView>> deliveries() {
+        return ResponseEntity.ok(bundleService.deliveryQueue());
+    }
+
+    /** Deliver one order: collect the full pending amount, mark it Delivered (Process orders need a remark). */
+    @PostMapping("/{id}/deliver")
+    @PreAuthorize(MOVE)
+    public ResponseEntity<BundleView> deliver(@PathVariable Long id, @RequestBody BundleRequests.Handover req) {
+        return ResponseEntity.ok(bundleService.deliverFromPortal(id, req, currentUserService.getCurrentUser(), canCollect()));
+    }
+
     @GetMapping("/invoice/{invoiceId}")
     @PreAuthorize(READ)
     public ResponseEntity<List<BundleView>> forInvoice(@PathVariable Long invoiceId) {
