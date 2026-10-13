@@ -27,6 +27,9 @@ import java.time.LocalTime;
 })
 public class Lead extends BaseEntity {
 
+    @Column(name = "delete_reason", length = 500)
+    private String deleteReason;
+
     // --- Basic Information ---
     @Column(name = "lead_number", unique = true, length = 50)
     private String leadNumber;

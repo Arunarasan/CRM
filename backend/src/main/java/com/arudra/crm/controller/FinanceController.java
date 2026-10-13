@@ -191,6 +191,13 @@ public class FinanceController {
         return ResponseEntity.ok(financeService.recordPayment(payment, currentUserService.getCurrentUser()));
     }
 
+    @DeleteMapping("/payments/{id}")
+    @PreAuthorize(WRITE)
+    public ResponseEntity<Void> deletePayment(@PathVariable Long id, @RequestBody(required = false) java.util.Map<String, String> body) {
+        financeService.deletePayment(id, body == null ? null : body.get("reason"), currentUserService.getCurrentUser());
+        return ResponseEntity.ok().build();
+    }
+
     @PostMapping("/payments/{id}/approve")
     @PreAuthorize(APPROVE)
     public ResponseEntity<CustomerPayment> approvePayment(@PathVariable Long id) {

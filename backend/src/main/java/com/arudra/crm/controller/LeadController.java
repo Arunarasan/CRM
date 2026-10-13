@@ -188,8 +188,8 @@ public class LeadController {
 
     @DeleteMapping("/{id}")
     @PreAuthorize(DELETE)
-    public ResponseEntity<Void> deleteLead(@PathVariable Long id) {
-        leadService.deleteLead(id, currentUserService.getCurrentUser());
+    public ResponseEntity<Void> deleteLead(@PathVariable Long id, @RequestBody(required = false) java.util.Map<String, String> body) {
+        leadService.deleteLead(id, body == null ? null : body.get("reason"), currentUserService.getCurrentUser());
         return ResponseEntity.ok().build();
     }
 

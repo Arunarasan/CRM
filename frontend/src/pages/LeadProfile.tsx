@@ -1,13 +1,14 @@
 import { BaseInput } from '@/components/ui/input';
 import { useCallback, useEffect, useState } from "react";
-import { useParams, Link, useSearchParams } from "react-router-dom";
+import { useParams, Link, useSearchParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft, CheckCircle2, MoreVertical, XCircle, Check, CalendarClock, CalendarPlus,
   LayoutGrid, ListChecks, Activity as ActivityIcon, FileText, Route, Clock, RotateCcw, Star,
   ChevronDown, ChevronRight, ChevronUp, FolderKanban, UserPlus, Phone, MessageCircle, Mail, MapPin, Navigation,
-  NotebookPen, Pencil, Crown, Tag, PhoneCall, XOctagon, UserCheck, Package, ClipboardList, ClipboardCheck, Calculator, Rocket,
+  NotebookPen, Trash2, Pencil, Crown, Tag, PhoneCall, XOctagon, UserCheck, Package, ClipboardList, ClipboardCheck, Calculator, Rocket,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import DeleteWithRemarkDialog from "@/components/DeleteWithRemarkDialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -68,6 +69,7 @@ type PrimaryAction =
 
 export default function LeadProfile() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const goBack = useGoBack("/leads");
   const [lead, setLead] = useState<Lead | null>(null);
@@ -88,6 +90,7 @@ export default function LeadProfile() {
   const [convertOpen, setConvertOpen] = useState(false);
   const [assignOpen, setAssignOpen] = useState(false);
   const [lostOpen, setLostOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [reopenOpen, setReopenOpen] = useState(false);
   const [winBackOpen, setWinBackOpen] = useState(false);
   const [creatorOpen, setCreatorOpen] = useState(false);
@@ -324,6 +327,7 @@ export default function LeadProfile() {
                     <DropdownMenuItem onSelect={() => setConvertOpen(true)}><UserPlus className="h-4 w-4 mr-2" /> Convert to customer only</DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onSelect={() => setLostOpen(true)} className="text-destructive"><XCircle className="h-4 w-4 mr-2" /> Mark as lost</DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setDeleteOpen(true)} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" /> Delete lead</DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               )}
@@ -459,6 +463,8 @@ export default function LeadProfile() {
       <LeadFormDialog open={editOpen} onOpenChange={setEditOpen} lead={lead} users={users} onSaved={() => fetchLead()} />
       <ConvertLeadDialog open={convertOpen} onOpenChange={setConvertOpen} lead={lead} />
       <AssignDialog open={assignOpen} onOpenChange={setAssignOpen} lead={lead} users={users} onChanged={fetchLead} />
+      <DeleteWithRemarkDialog open={deleteOpen} title="Delete lead" subject="Lead" onClose={() => setDeleteOpen(false)}
+        onConfirm={(reason) => leadApi.remove(lead.id, reason)} onDone={() => navigate("/leads")} />
       <MarkLostDialog open={lostOpen} onOpenChange={setLostOpen} lead={lead} onChanged={fetchLead} />
       <WinBackDialog open={winBackOpen} onOpenChange={setWinBackOpen} lead={lead} onChanged={fetchLead} />
       <ReopenDialog open={reopenOpen} onOpenChange={setReopenOpen} lead={lead} users={users} onChanged={fetchLead} />

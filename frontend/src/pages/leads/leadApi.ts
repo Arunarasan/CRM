@@ -46,7 +46,7 @@ export const leadApi = {
   changeCreatedBy: (id: string | number, userId: number) => api.put<LeadCreator>(`/leads/${id}/created-by`, { userId }),
   create: (payload: Partial<Lead>) => api.post<Lead>("/leads", payload),
   update: (id: number, payload: Partial<Lead>) => api.put<Lead>(`/leads/${id}`, payload),
-  remove: (id: number) => api.delete(`/leads/${id}`),
+  remove: (id: number, reason?: string) => api.delete(`/leads/${id}`, { data: { reason } }),
 
   updateStatus: (id: number, status: string, remarks?: string) =>
     api.put(`/leads/${id}/status?status=${encodeURIComponent(status)}${remarks ? `&remarks=${encodeURIComponent(remarks)}` : ""}`),

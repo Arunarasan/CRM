@@ -13,12 +13,16 @@ import java.util.Set;
 @Getter
 @Setter
 @Entity
+@org.hibernate.annotations.SQLRestriction("is_deleted = false")
 @Table(name = "projects", indexes = {
     @Index(name = "idx_project_status", columnList = "status"),
     @Index(name = "idx_project_customer", columnList = "customer_id"),
     @Index(name = "idx_project_code", columnList = "project_code")
 })
 public class Project extends BaseEntity {
+
+    @Column(name = "delete_reason", length = 500)
+    private String deleteReason;
 
     @Column(name = "project_code", unique = true, length = 50)
     private String projectCode;

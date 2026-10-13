@@ -664,9 +664,22 @@ public class ProjectService {
         return saved;
     }
 
-    public void deleteProject(Long id) {
+    public void deleteProject(Long id, String reason, User user) {
+        if (reason == null || reason.isBlank()) throw new IllegalArgumentException("Please give a remark for deleting this project.");
         Project project = getProjectById(id);
-        projectRepository.delete(project);
+        if (!customerPaymentRepository.findByProjectIdAndIsDeletedFalseOrderByPaymentDateDesc(id).isEmpty()) {
+            throw new IllegalStateException("This project has recorded payments. Delete those payments first, then delete the project.");
+        }
+        boolean liveInvoice = invoiceRepository.findByProjectId(id).stream()
+                .anyMatch(i -> !Boolean.TRUE.equals(i.getIsDeleted()) && !"CANCELLED".equalsIgnoreCase(i.getStatus()));
+        if (liveInvoice) {
+            throw new IllegalStateException("This project has invoices. Cancel them first, then delete the project.");
+        }
+        project.setDeleteReason(reason.trim());
+        project.setIsDeleted(true);
+        project.setDeletedAt(java.time.LocalDateTime.now());
+        project.setDeletedBy(user != null ? user.getEmail() : "system");
+        projectRepository.save(project);
     }
     
     public ProjectStage addStage(Long projectId, ProjectStage stage) {

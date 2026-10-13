@@ -1024,6 +1024,28 @@ public class FinanceService {
         return paymentRepository.save(payment);
     }
 
+    /** Deletes a recorded payment (soft delete with a remark). A confirmed one is reversed in the ledger and the invoice recalculated. */
+    @Transactional
+    public CustomerPayment deletePayment(Long id, String reason, User user) {
+        if (reason == null || reason.isBlank()) throw new RuntimeException("Please give a remark for deleting this payment.");
+        CustomerPayment p = paymentRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Payment not found: " + id));
+        if (Boolean.TRUE.equals(p.getIsDeleted())) throw new RuntimeException("Payment is already deleted");
+        if ("CONFIRMED".equals(p.getStatus())
+                && !ledgerRepository.existsByReferenceTypeAndReferenceIdAndEntryType("PAYMENT_REVERSAL", p.getId(), "REVERSAL")) {
+            postLedger(p.getCustomer(), p.getProject(), LocalDate.now(), "REVERSAL", "PAYMENT_REVERSAL", p.getId(),
+                    p.getPaymentNumber(), "Reversal of payment " + p.getPaymentNumber() + " (deleted: " + reason.trim() + ")",
+                    p.getAmount(), BigDecimal.ZERO);
+        }
+        p.setDeleteReason(reason.trim());
+        p.setIsDeleted(true);
+        p.setDeletedAt(java.time.LocalDateTime.now());
+        p.setDeletedBy(user != null ? user.getEmail() : "system");
+        CustomerPayment saved = paymentRepository.save(p);
+        if (saved.getInvoice() != null && saved.getInvoice().getId() != null) recalculateInvoice(saved.getInvoice().getId());
+        return saved;
+    }
+
     private void applyConfirmedPayment(CustomerPayment payment) {
         if (!ledgerRepository.existsByReferenceTypeAndReferenceIdAndEntryType("PAYMENT", payment.getId(), "PAYMENT")) {
             postLedger(payment.getCustomer(), payment.getProject(), payment.getPaymentDate(), "PAYMENT",

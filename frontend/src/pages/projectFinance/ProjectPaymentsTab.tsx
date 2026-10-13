@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/components/ui/toast";
+import DeleteWithRemarkDialog from "@/components/DeleteWithRemarkDialog";
 import { openInvoicePdf } from "./printInvoice";
 import { MoneySection } from "./MoneySection";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -327,6 +328,7 @@ function PaymentsSection({ projectId, customerId, canWrite, canCollect, onChange
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [recordOpen, setRecordOpen] = useState(false);
+  const [deleting, setDeleting] = useState<CustomerPayment | null>(null);
 
   const load = () => {
     setLoading(true);
@@ -449,6 +451,10 @@ function PaymentsSection({ projectId, customerId, canWrite, canCollect, onChange
                       </div>
                     </div>
                     <span className={`text-sm font-semibold tabular-nums shrink-0 ${rejected ? "line-through text-slate-400" : "text-slate-900"}`}>{inr(p.amount)}</span>
+                    {canWrite && (
+                              <button type="button" title="Delete payment" onClick={() => setDeleting(p)}
+                                className=" rounded-lg p-1 text-slate-300 hover:bg-rose-50 hover:text-rose-600"><Trash2 className="h-3.5 w-3.5" /></button>
+                            )}
                   </div>
                 );
               })}
@@ -481,6 +487,10 @@ function PaymentsSection({ projectId, customerId, canWrite, canCollect, onChange
                             <span className={`text-base font-bold ${rejected ? "line-through text-slate-400" : "text-slate-900"}`}>{inr(p.amount)}</span>
                             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">{methodLabel(p.paymentMethod)}</span>
                             <span className={`ml-auto inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${st.cls}`}>{st.icon} {st.text}</span>
+                            {canWrite && (
+                              <button type="button" title="Delete payment" onClick={() => setDeleting(p)}
+                                className="ml-1 rounded-lg p-1 text-slate-300 hover:bg-rose-50 hover:text-rose-600"><Trash2 className="h-3.5 w-3.5" /></button>
+                            )}
                           </div>
                           <div className="mt-1 text-[11px] text-slate-400 flex flex-wrap gap-x-2">
                             <span>{p.paymentDate ? format(new Date(p.paymentDate), "EEE, dd MMM") : "—"}</span>
@@ -504,6 +514,8 @@ function PaymentsSection({ projectId, customerId, canWrite, canCollect, onChange
         <RecordPaymentDialog projectId={projectId} customerId={customerId}
           onClose={() => setRecordOpen(false)} onSaved={() => { setRecordOpen(false); load(); onChanged(); }} />
       )}
+      <DeleteWithRemarkDialog open={!!deleting} title="Delete payment" subject="Payment" onClose={() => setDeleting(null)}
+        onConfirm={(reason) => financeApi.deletePayment(deleting!.id, reason)} onDone={() => { load(); onChanged(); }} />
     </MoneySection>
   );
 }

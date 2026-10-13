@@ -17,6 +17,9 @@ import java.time.LocalDate;
 })
 public class CustomerPayment extends BaseEntity {
 
+    @Column(name = "delete_reason", length = 500)
+    private String deleteReason;
+
     @Column(name = "payment_number", nullable = false, unique = true, length = 50)
     private String paymentNumber;
 

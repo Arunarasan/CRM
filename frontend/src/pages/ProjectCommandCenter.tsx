@@ -17,6 +17,7 @@ import ProjectPaymentsTab from "@/pages/projectFinance/ProjectPaymentsTab";
 import CommercialSummary from "@/pages/projectFinance/CommercialSummary";
 import BulkWorkUpdateDialog from "@/pages/projectCommandCenter/BulkWorkUpdateDialog";
 import CompleteProjectDialog from "@/pages/projectCommandCenter/CompleteProjectDialog";
+import DeleteWithRemarkDialog from "@/components/DeleteWithRemarkDialog";
 import CancelProjectDialog, { CancelledBanner } from "@/pages/projectCommandCenter/CancelProjectDialog";
 import ProjectPurchaseOrdersTab from "@/pages/projectCommandCenter/tabs/ProjectPurchaseOrdersTab";
 import ProjectGoodsReceivedTab from "@/pages/projectCommandCenter/tabs/ProjectGoodsReceivedTab";
@@ -753,6 +754,7 @@ export default function ProjectCommandCenter() {
   const handleCompleteProject = () => setCompleteOpen(true);
   // Cancel (any stage before completion, optional partial advance refund) / refund more once cancelled.
   const [cancelMode, setCancelMode] = useState<null | 'cancel' | 'refund'>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [cancelRefresh, setCancelRefresh] = useState(0);
 
   const handleStartExecution = () => {
@@ -946,6 +948,7 @@ export default function ProjectCommandCenter() {
                       {!isClosed && (
                         <DropdownMenuItem onSelect={() => setCancelMode('cancel')} className="text-rose-600 focus:text-rose-700"><Ban className="w-4 h-4 mr-2"/> Cancel Project</DropdownMenuItem>
                       )}
+                      <DropdownMenuItem onSelect={() => setDeleteOpen(true)} className="text-rose-600 focus:text-rose-700"><Trash2 className="w-4 h-4 mr-2"/> Delete Project</DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                   {(stats?.health === 'WARNING' || stats?.health === 'CRITICAL') && (
@@ -1020,6 +1023,7 @@ export default function ProjectCommandCenter() {
                         <DropdownMenuItem onSelect={() => setCancelMode('cancel')} className="text-rose-600 focus:text-rose-700"><Ban className="w-4 h-4 mr-2"/> Cancel Project</DropdownMenuItem>
                       </>
                     )}
+                    <DropdownMenuItem onSelect={() => setDeleteOpen(true)} className="text-rose-600 focus:text-rose-700"><Trash2 className="w-4 h-4 mr-2"/> Delete Project</DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
@@ -1035,6 +1039,8 @@ export default function ProjectCommandCenter() {
       </div>
       <CancelProjectDialog projectId={projectId} mode={cancelMode || 'cancel'} open={cancelMode !== null} onClose={() => setCancelMode(null)}
         onDone={async () => { setCancelRefresh((n) => n + 1); await fetchProjectData(); fetchCore(); }} />
+      <DeleteWithRemarkDialog open={deleteOpen} title="Delete project" subject="Project" onClose={() => setDeleteOpen(false)}
+        onConfirm={(reason) => api.delete(`/projects/${projectId}`, { data: { reason } })} onDone={() => navigate('/projects')} />
       <TrackingLinkDialog projectId={Number(projectId)} open={trackingOpen} onOpenChange={setTrackingOpen} />
 
       <div className="flex flex-col">

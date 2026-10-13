@@ -103,8 +103,8 @@ public class ProjectController {
 
     @DeleteMapping("/{id}")
     @PreAuthorize(DELETE)
-    public ResponseEntity<Void> deleteProject(@PathVariable Long id) {
-        projectService.deleteProject(id);
+    public ResponseEntity<Void> deleteProject(@PathVariable Long id, @RequestBody(required = false) Map<String, String> body) {
+        projectService.deleteProject(id, body == null ? null : body.get("reason"), currentUserService.getCurrentUser());
         return ResponseEntity.ok().build();
     }
     

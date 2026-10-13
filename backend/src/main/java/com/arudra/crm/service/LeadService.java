@@ -1050,13 +1050,15 @@ public class LeadService {
 
     /** Soft delete: the lead and its full history remain in the database. */
     @Transactional
-    public void deleteLead(Long id, User currentUser) {
+    public void deleteLead(Long id, String reason, User currentUser) {
+        if (reason == null || reason.isBlank()) throw new IllegalArgumentException("Please give a remark for deleting this lead.");
         Lead lead = getLeadById(id);
+        lead.setDeleteReason(reason.trim());
         lead.setIsDeleted(true);
         lead.setDeletedAt(LocalDateTime.now());
         lead.setDeletedBy(currentUser != null ? currentUser.getEmail() : "system");
         leadRepository.save(lead);
-        logActivity(lead, "DELETED", "Lead soft-deleted.", currentUser);
+        logActivity(lead, "DELETED", "Lead deleted. Remark: " + reason.trim(), currentUser);
     }
 
     // =====================================================================
