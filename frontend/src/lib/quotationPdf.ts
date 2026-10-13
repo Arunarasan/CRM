@@ -154,8 +154,8 @@ async function loadDocAssets(imageUrls: string[], upiAmount: number, upiNote: st
 /** The letterhead banner (frontend/public/quote-header.jpg), carried in the images map under this key. */
 const HEADER_KEY = "__quote_header__";
 const HEADER_URL = `${import.meta.env.BASE_URL}quote-header.jpg`;
-/** Banner width : height (1536 × 434). */
-const HEADER_RATIO = 434 / 1536;
+/** Banner width : height (1536 × 292). */
+const HEADER_RATIO = 292 / 1536;
 
 async function loadHeader(): Promise<string | null> {
   try {
