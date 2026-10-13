@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Image as ImageIcon, Loader2, PencilRuler } from "lucide-react";
+import { Image as ImageIcon, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
 import { resolveFileUrl, uploadFile } from "@/lib/uploadFile";
@@ -20,10 +20,9 @@ const isImage = (type?: string, url?: string) => {
 const isDrawingCategory = (c?: string) => /drawing/i.test(c || "");
 
 const PHOTO_CATEGORY = "Site Photos";
-const DRAWING_CATEGORY = "Drawings";
 
 /**
- * Site photos and drawing images for a lead's quote: add them here (camera or gallery — they are filed in
+ * Site photos and drawing images for a lead's quote, in one list: add them here (camera or gallery — they are filed in
  * the lead's Documents) and tap any thumbnail for the full-screen viewer. Drawings already captured on
  * the lead's measurement show up too.
  */
@@ -33,7 +32,7 @@ export default function PhotosDrawingsPanel({ leadId, measurement, fieldMode }: 
   fieldMode?: boolean;
 }) {
   const [files, setFiles] = useState<ProjectFile[] | null>(null);
-  const [busy, setBusy] = useState<"photo" | "drawing" | null>(null);
+  const [busy, setBusy] = useState(false);
   const [viewer, setViewer] = useState<{ list: ProjectFile[]; index: number } | null>(null);
 
   const load = useCallback(async () => {
@@ -56,57 +55,48 @@ export default function PhotosDrawingsPanel({ leadId, measurement, fieldMode }: 
   }, [leadId, measurement?.id]);
   useEffect(() => { load(); }, [load]);
 
-  const add = async (kind: "photo" | "drawing", picked: File[]) => {
-    setBusy(kind);
+  const add = async (picked: File[]) => {
+    setBusy(true);
     try {
       for (const f of picked) {
         const { fileUrl, fileName } = await uploadFile(f, "LEAD");
         await leadApi.addDocument(leadId, {
-          fileUrl, fileName: fileName || f.name || (kind === "photo" ? "Site photo" : "Drawing"),
-          category: kind === "photo" ? PHOTO_CATEGORY : DRAWING_CATEGORY, documentType: "Image", description: "",
+          fileUrl, fileName: fileName || f.name || "Site photo", category: PHOTO_CATEGORY, documentType: "Image", description: "",
         });
       }
-      toast.success(picked.length > 1 ? `${picked.length} ${kind}s added` : `${kind === "photo" ? "Photo" : "Drawing"} added`);
+      toast.success(picked.length > 1 ? `${picked.length} images added` : "Image added");
       await load();
     } catch {
       toast.error("Couldn't add that. Please try again.");
-    } finally { setBusy(null); }
+    } finally { setBusy(false); }
   };
 
   if (files === null) return <div className="flex justify-center p-6"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
 
-  const photos = files.filter((f) => f.category === "PHOTO");
-  const drawings = files.filter((f) => f.category === "DRAWING");
-
-  const section = (kind: "photo" | "drawing", title: string, list: ProjectFile[], Icon: typeof ImageIcon) => (
-    <section className="rounded-lg border p-3">
-      <div className="mb-2.5 flex items-center gap-2">
-        <Icon className="h-4 w-4 text-muted-foreground" />
-        <h3 className="flex-1 text-sm font-semibold">{title}</h3>
-        <span className="text-xs text-muted-foreground">{list.length}</span>
-      </div>
-      {list.length === 0 ? (
-        <p className="mb-2.5 text-xs text-muted-foreground">No {title.toLowerCase()} yet.</p>
-      ) : (
-        <div className="mb-2.5 grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
-          {list.map((f, i) => (
-            <button key={f.key} type="button" onClick={() => setViewer({ list, index: i })}
-              className="relative aspect-square overflow-hidden rounded-lg border bg-muted">
-              <ImageIcon className="absolute inset-0 m-auto h-5 w-5 text-muted-foreground/50" />
-              <img src={resolveFileUrl(f.fileUrl)} alt={f.fileName} loading="lazy" className="relative h-full w-full object-cover"
-                onError={(e) => { e.currentTarget.style.visibility = "hidden"; }} />
-            </button>
-          ))}
-        </div>
-      )}
-      <PhotoPickButtons busy={busy === kind} onPicked={(picked) => add(kind, picked)} />
-    </section>
-  );
-
   return (
     <div className="space-y-3">
-      {section("photo", "Photos", photos, ImageIcon)}
-      {section("drawing", "Drawings", drawings, PencilRuler)}
+      <section className="rounded-lg border p-3">
+        <div className="mb-2.5 flex items-center gap-2">
+          <ImageIcon className="h-4 w-4 text-muted-foreground" />
+          <h3 className="flex-1 text-sm font-semibold">Photos &amp; drawings</h3>
+          <span className="text-xs text-muted-foreground">{files.length}</span>
+        </div>
+        {files.length === 0 ? (
+          <p className="mb-2.5 text-xs text-muted-foreground">Nothing added yet.</p>
+        ) : (
+          <div className="mb-2.5 grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
+            {files.map((f, i) => (
+              <button key={f.key} type="button" onClick={() => setViewer({ list: files, index: i })}
+                className="relative aspect-square overflow-hidden rounded-lg border bg-muted">
+                <ImageIcon className="absolute inset-0 m-auto h-5 w-5 text-muted-foreground/50" />
+                <img src={resolveFileUrl(f.fileUrl)} alt={f.fileName} loading="lazy" className="relative h-full w-full object-cover"
+                  onError={(e) => { e.currentTarget.style.visibility = "hidden"; }} />
+              </button>
+            ))}
+          </div>
+        )}
+        <PhotoPickButtons busy={busy} onPicked={add} />
+      </section>
       {!fieldMode && (
         <Link to={`/leads/${leadId}?tab=documents`}>
           <Button variant="outline" size="sm">Open Documents</Button>

@@ -7,6 +7,17 @@ const fmtDate = (s?: string | null) =>
   has(s) ? new Date(s as string).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : null;
 const digits = (s?: string | null) => (s || '').replace(/[^\d+]/g, '');
 
+/**
+ * Just the customer's name: the contact person when there is one, else the lead's name — and for a lead
+ * titled "Something (Customer Name)" only the part in brackets.
+ */
+function customerName(lead: any, fallback?: string | null): string {
+  if (has(lead?.contactPerson)) return String(lead.contactPerson).trim();
+  const name = String(lead?.name ?? '').trim();
+  const bracket = name.match(/^.+\(([^()]+)\)\s*$/);
+  return (bracket ? bracket[1].trim() : name) || fallback || 'Customer';
+}
+
 /** Google Maps directions to the saved pin, else a search for the address. */
 function navigateHref(lead: any, place: string): string | null {
   const g = lead?.googleMapLocation as string | undefined;
@@ -50,12 +61,13 @@ export default function LeadDetailsCard({ lead, fallbackName, onEdit, more }: {
       <div className="rounded-2xl border border-[#ECEAE5] bg-white p-3.5 shadow-[0_2px_10px_rgba(0,35,22,0.04)]">
         <div className="flex items-center gap-3">
           <div className="min-w-0 flex-1">
-            <p className="truncate text-[15px] font-bold text-[#111817]">{lead?.name || fallbackName || 'Customer'}</p>
+            <p className="truncate text-[15px] font-bold text-[#111817]">{customerName(lead, fallbackName)}</p>
+            {has(lead?.companyName) && <p className="truncate text-[12.5px] font-medium text-[#33392F]">{String(lead.companyName).trim()}</p>}
             {(place || phone) && (
               <p className="mt-0.5 truncate text-[12px] text-[#7A817C]">{[place, phone].filter(Boolean).join(' · ')}</p>
             )}
           </div>
-          {phone && <a href={'tel:' + digits(phone)} className={roundBtn} aria-label={`Call ${lead?.name || 'customer'}`}><Phone className="h-4 w-4" /></a>}
+          {phone && <a href={'tel:' + digits(phone)} className={roundBtn} aria-label={`Call ${customerName(lead, fallbackName)}`}><Phone className="h-4 w-4" /></a>}
           {wa && (
             <a href={'https://wa.me/' + digits(wa).replace('+', '')} target="_blank" rel="noopener noreferrer" className={roundBtn} aria-label="WhatsApp">
               <MessageCircle className="h-4 w-4" />
