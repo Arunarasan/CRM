@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   UserRound, Star, Phone, MessageCircle, Mail, MoreHorizontal, MapPin, Navigation, Crosshair, Loader2,
-  ClipboardList, Layers, Box, Pencil, Wallet, IndianRupee, CalendarDays, Hourglass, MessageSquare, ListChecks,
+  ClipboardList, Layers, Box, Pencil, Wallet, IndianRupee, CalendarDays, Hourglass, MessageSquare, 
 } from 'lucide-react';
 import { employeeTaskApi } from '@/api/employeeTaskApi';
 import { getBestPosition, locationErrorMessage, reverseGeocode } from '@/lib/geo';
@@ -333,13 +333,6 @@ export default function RequirementTaskView({ task, lead, canEdit, takeFirst, on
           {remarks || 'No remarks yet. Add customer notes, discussion points, requirements, etc.'}
         </p>
       </Card>
-
-      {/* What to do */}
-      {task.description && (
-        <Card icon={<ListChecks className="h-4 w-4" />} iconCls="bg-[#C58A1B] text-white" title="What to do" tone="warm">
-          <p className="text-[13.5px] leading-relaxed text-[#33392F]">{task.description}</p>
-        </Card>
-      )}
     </div>
   );
 }

@@ -557,12 +557,6 @@ export default function TaskDetail() {
                 <span>{[place, task.location].filter(Boolean).join(' · ')}</span>
               </p>
             )}
-            {task.description && (
-              <div className="mt-3.5 rounded-xl bg-[#F6F4EC] p-3.5">
-                <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-[#A07E38]">What to do</p>
-                <p className="text-[14px] leading-relaxed text-[#33392F]">{task.description}</p>
-              </div>
-            )}
             {task.mapUrl && (
               <a
                 href={task.mapUrl}

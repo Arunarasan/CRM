@@ -115,18 +115,6 @@ export function ProjectTaskHero({ task }: { task: TaskDetail }) {
             ))}
           </div>
         )}
-
-        {task.description && (
-          <div className="mt-3.5 flex gap-3 rounded-xl bg-[#F8F4EC] p-3.5">
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-[#B07A2E] text-white">
-              <Layers className="h-4 w-4" />
-            </span>
-            <div className="min-w-0">
-              <p className="text-[12px] font-bold uppercase tracking-wide text-[#9B6B32]">What to do</p>
-              <p className="mt-0.5 text-[13.5px] leading-relaxed text-[#33392F]">{task.description}</p>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
