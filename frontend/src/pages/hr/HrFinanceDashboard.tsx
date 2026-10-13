@@ -7,6 +7,7 @@ import { useAuth } from "@/hooks/useAuth";
 import QuickPayDialog from "./QuickPayDialog";
 import PayslipEditor from "./PayslipEditor";
 import PayRun from "./PayRun";
+import PayRulesTab from "./PayRulesTab";
 import WageSettingsDialog from "@/components/hr/WageSettingsDialog";
 import api from "@/lib/api";
 import { toast } from "@/components/ui/toast";
@@ -70,7 +71,7 @@ export default function HrFinanceDashboard() {
   const [searchParams] = useSearchParams();
   const [tab, setTab] = useState(() => {
     const t = searchParams.get("tab");
-    return t && ["run", "adjustments", "requests", "contractors"].includes(t) ? t : "run";
+    return t && ["run", "adjustments", "requests", "contractors", "rules"].includes(t) ? t : "run";
   });
   const [runKey, setRunKey] = useState(0); // bump to make the pay run reload
   const [editSlip, setEditSlip] = useState<{ employeeId: number; name?: string } | null>(null);
@@ -287,6 +288,7 @@ export default function HrFinanceDashboard() {
             <TabsTrigger value="adjustments" className="py-1.5">Bonuses &amp; deductions {pendingAdjustments > 0 && <CountPill n={pendingAdjustments} tone="amber" />}</TabsTrigger>
             <TabsTrigger value="requests" className="py-1.5">Requests {pendingReqCount > 0 && <CountPill n={pendingReqCount} tone="amber" />}</TabsTrigger>
             <TabsTrigger value="contractors" className="py-1.5">Contractors <CountPill n={conLines.length} /></TabsTrigger>
+            <TabsTrigger value="rules" className="py-1.5">Pay rules</TabsTrigger>
           </TabsList>
         </div>
 
@@ -298,6 +300,11 @@ export default function HrFinanceDashboard() {
             onOpenSlip={(employeeId, name) => setEditSlip({ employeeId, name })}
             onEditWage={canProcess ? openWage : undefined}
           />
+        </TabsContent>
+
+        {/* ===================== PAY RULES ===================== */}
+        <TabsContent value="rules" className="mt-4">
+          <PayRulesTab canEdit={canProcess} />
         </TabsContent>
 
         {/* ===================== CONTRACTORS ===================== */}

@@ -4,6 +4,19 @@ import {
   EmployeeDeduction, WageSettings, PayrollLine, PayrollSummary, PayrollRequest, PayrollPreviewRow, PendingMoneyRequest,
 } from '../types/payroll';
 
+/** Wage defaults + incentive amounts (0 = that incentive is off). */
+export interface PayRules {
+  dailyHours: number;
+  workingDays: number;
+  projectIncentive: number;
+  leadReward: number;
+  reviewReward: number;
+  attendanceBonus: number;
+  attendanceMinPercent: number;
+  performanceBonus: number;
+  performanceMinScore: number;
+}
+
 export interface PayslipLineItem {
   id: number;
   category: 'EARNING' | 'DEDUCTION';
@@ -43,6 +56,8 @@ export const payrollApi = {
   // chosen basis (omitted ⇒ the employee's usual basis).
   payrollPreview: (month: number, year: number) =>
     api.get<PayrollPreviewRow[]>(`/hr/payroll/preview?month=${month}&year=${year}`).then((r) => r.data),
+  payRules: () => api.get<PayRules>('/hr/payroll/rules').then((r) => r.data),
+  savePayRules: (body: Partial<PayRules>) => api.put<PayRules>('/hr/payroll/rules', body).then((r) => r.data),
   generatePayslip: (employeeId: number, month: number, year: number, basis?: 'HOURLY' | 'MONTHLY') =>
     api.post<SalaryRecord>(`/hr/payroll/generate?employeeId=${employeeId}&month=${month}&year=${year}${basis ? `&basis=${basis}` : ''}`).then((r) => r.data),
   generatePayslips: (month: number, year: number, choices: Record<number, 'HOURLY' | 'MONTHLY'>) =>

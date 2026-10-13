@@ -51,6 +51,8 @@ public class PayrollService {
     @Autowired private EmployeeReviewRepository employeeReviewRepository;
     @Autowired private LeadRepository leadRepository;
     @Autowired private SiteSettingRepository siteSettingRepository;
+    @Autowired private HrService hrService;
+    @Autowired private org.springframework.jdbc.core.JdbcTemplate jdbc;
     @Autowired private com.arudra.crm.repository.TaskAssignmentRepository taskAssignmentRepository;
     @Autowired private com.arudra.crm.repository.TaskTimeLogRepository taskTimeLogRepository;
 
@@ -471,8 +473,7 @@ public class PayrollService {
         c.pendingHours = (BigDecimal) sum.getOrDefault("pendingHours", BigDecimal.ZERO);
         c.pendingSessions = (int) sum.getOrDefault("pendingSessions", 0);
 
-        BigDecimal stdDaily = e.getStandardDailyHours() != null && e.getStandardDailyHours().signum() > 0
-                ? e.getStandardDailyHours() : new BigDecimal("8");
+        BigDecimal stdDaily = stdDailyHours(e);
         BigDecimal otMult = e.getOvertimeMultiplier() != null && e.getOvertimeMultiplier().signum() > 0
                 ? e.getOvertimeMultiplier() : new BigDecimal("1.5");
         BigDecimal explicitOt = e.getOvertimeRate() != null && e.getOvertimeRate().signum() > 0 ? e.getOvertimeRate() : null;
@@ -595,9 +596,17 @@ public class PayrollService {
         return m;
     }
 
-    private static int workingDays(Employee e) {
-        return e.getWorkingDaysPerMonth() != null && e.getWorkingDaysPerMonth() > 0
-                ? e.getWorkingDaysPerMonth() : STANDARD_WORKING_DAYS;
+    private int workingDays(Employee e) {
+        if (e.getWorkingDaysPerMonth() != null && e.getWorkingDaysPerMonth() > 0) return e.getWorkingDaysPerMonth();
+        int d = settingAmount(K_WORKING_DAYS).intValue();
+        return d > 0 ? d : STANDARD_WORKING_DAYS;
+    }
+
+    /** Standard hours/day: the employee's own, else the Pay rules default, else 8. */
+    private BigDecimal stdDailyHours(Employee e) {
+        if (e.getStandardDailyHours() != null && e.getStandardDailyHours().signum() > 0) return e.getStandardDailyHours();
+        BigDecimal d = settingAmount(K_DAILY_HOURS);
+        return d.signum() > 0 ? d : new BigDecimal("8");
     }
 
     /**
@@ -716,6 +725,11 @@ public class PayrollService {
         // Counted reward lines (stored as payslip line items so the portal + PDF list them by name).
         BigDecimal rewardLines = addCountedLine(rec, "Google reviews (QR)", "review", reviewRewards)
                 .add(addLeadRewardLine(employee, rec, ym));
+        if (Boolean.TRUE.equals(employee.getBonusEligible())) {
+            rewardLines = rewardLines.add(addProjectIncentiveLine(employee, rec, ym))
+                    .add(addAttendanceBonusLine(employee, rec, ym))
+                    .add(addPerformanceBonusLine(employee, rec));
+        }
 
         BigDecimal gross = regularEarnings.add(overtimeEarnings).add(projectBonus).add(manualBonus)
                 .add(incentive).add(reqOtherEarn).add(rewardLines);
@@ -769,6 +783,145 @@ public class PayrollService {
         leadRepository.saveAll(leads);
         return addCountedLine(rec, "Leads collected", "lead",
                 Collections.nCopies(leads.size(), rate));
+    }
+
+    /**
+     * Pays the configured incentive for each project completed this month where the employee was the
+     * project manager or assistant manager. Each (project, employee) is paid once, ever.
+     */
+    private BigDecimal addProjectIncentiveLine(Employee employee, SalaryRecord rec, YearMonth ym) {
+        BigDecimal rate = settingAmount(K_PROJECT_INCENTIVE);
+        if (rate.signum() <= 0 || employee.getEmail() == null) return BigDecimal.ZERO;
+        User u = userRepository.findByEmail(employee.getEmail()).orElse(null);
+        if (u == null) return BigDecimal.ZERO;
+        int paid = 0;
+        for (Project p : projectRepository.findByActualCompletionDateBetween(ym.atDay(1), ym.atEndOfMonth())) {
+            if (Boolean.TRUE.equals(p.getIsDeleted()) || !"COMPLETED".equalsIgnoreCase(p.getStatus())) continue;
+            boolean mine = (p.getProjectManager() != null && u.getId().equals(p.getProjectManager().getId()))
+                    || (p.getAssistantManager() != null && u.getId().equals(p.getAssistantManager().getId()));
+            if (!mine) continue;
+            Integer already = jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM project_completion_incentives WHERE project_id = ? AND employee_id = ?",
+                    Integer.class, p.getId(), employee.getId());
+            if (already != null && already > 0) continue;
+            jdbc.update("INSERT INTO project_completion_incentives (project_id, employee_id, salary_record_id, amount) VALUES (?,?,?,?)",
+                    p.getId(), employee.getId(), rec.getId(), rate);
+            paid++;
+        }
+        return addCountedLine(rec, "Projects completed", "project", Collections.nCopies(paid, rate));
+    }
+
+    /** Flat bonus when this month's attendance (present = 1, half day = ½, absent = 0; leave ignored) meets the minimum %. */
+    private BigDecimal addAttendanceBonusLine(Employee employee, SalaryRecord rec, YearMonth ym) {
+        BigDecimal amount = settingAmount(K_ATTENDANCE_BONUS);
+        if (amount.signum() <= 0) return BigDecimal.ZERO;
+        double countable = 0, credited = 0;
+        for (Attendance a : attendanceRepository.findByEmployeeIdAndDateBetween(
+                employee.getId(), ym.atDay(1), ym.atEndOfMonth())) {
+            String s = a.getStatus() == null ? "" : a.getStatus().toUpperCase();
+            switch (s) {
+                case "PRESENT": countable++; credited += 1.0; break;
+                case "HALF_DAY": countable++; credited += 0.5; break;
+                case "ABSENT": countable++; break;
+                default: break;
+            }
+        }
+        if (countable == 0) return BigDecimal.ZERO;
+        double pct = credited / countable * 100.0;
+        if (pct + 0.0001 < settingAmount(K_ATTENDANCE_MIN_PERCENT).doubleValue()) return BigDecimal.ZERO;
+        return addFlatLine(rec, "Attendance bonus — " + Math.round(pct) + "% attendance", amount);
+    }
+
+    /** Flat bonus when the auto-calculated performance score meets the minimum. */
+    private BigDecimal addPerformanceBonusLine(Employee employee, SalaryRecord rec) {
+        BigDecimal amount = settingAmount(K_PERFORMANCE_BONUS);
+        if (amount.signum() <= 0) return BigDecimal.ZERO;
+        Object score = hrService.computePerformance(employee.getId()).get("score");
+        if (!(score instanceof Number) || ((Number) score).doubleValue() + 0.0001
+                < settingAmount(K_PERFORMANCE_MIN_SCORE).doubleValue()) return BigDecimal.ZERO;
+        return addFlatLine(rec, "Performance bonus — score " + Math.round(((Number) score).doubleValue()), amount);
+    }
+
+    private BigDecimal addFlatLine(SalaryRecord rec, String label, BigDecimal amount) {
+        PayslipLineItem item = new PayslipLineItem();
+        item.setSalaryRecord(rec);
+        item.setCategory("EARNING");
+        item.setLabel(label);
+        item.setAmount(amount);
+        item.setSource("AUTO");
+        lineItemRepository.save(item);
+        return amount;
+    }
+
+    // ============================================================ pay rules (settings)
+
+    private static final String K_DAILY_HOURS = "payroll.default_daily_hours";
+    private static final String K_WORKING_DAYS = "payroll.default_working_days";
+    private static final String K_PROJECT_INCENTIVE = "payroll.project_incentive_amount";
+    private static final String K_ATTENDANCE_BONUS = "payroll.attendance_bonus_amount";
+    private static final String K_ATTENDANCE_MIN_PERCENT = "payroll.attendance_bonus_min_percent";
+    private static final String K_PERFORMANCE_BONUS = "payroll.performance_bonus_amount";
+    private static final String K_PERFORMANCE_MIN_SCORE = "payroll.performance_bonus_min_score";
+    private static final String K_REVIEW_REWARD = "google_review_reward_amount";
+    private static final String K_LEAD_REWARD = "lead_collected_reward_amount";
+
+    /** API field → setting key, in display order. */
+    private static final Map<String, String> RULE_KEYS = new LinkedHashMap<>();
+    static {
+        RULE_KEYS.put("dailyHours", K_DAILY_HOURS);
+        RULE_KEYS.put("workingDays", K_WORKING_DAYS);
+        RULE_KEYS.put("projectIncentive", K_PROJECT_INCENTIVE);
+        RULE_KEYS.put("leadReward", K_LEAD_REWARD);
+        RULE_KEYS.put("reviewReward", K_REVIEW_REWARD);
+        RULE_KEYS.put("attendanceBonus", K_ATTENDANCE_BONUS);
+        RULE_KEYS.put("attendanceMinPercent", K_ATTENDANCE_MIN_PERCENT);
+        RULE_KEYS.put("performanceBonus", K_PERFORMANCE_BONUS);
+        RULE_KEYS.put("performanceMinScore", K_PERFORMANCE_MIN_SCORE);
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> getPayRules() {
+        Map<String, Object> m = new LinkedHashMap<>();
+        RULE_KEYS.forEach((field, key) -> m.put(field, settingAmount(key)));
+        return m;
+    }
+
+    /** Saves any of the rule fields present in {@code body}; each must be a non-negative number. */
+    @Transactional
+    public Map<String, Object> savePayRules(Map<String, Object> body) {
+        Map<String, BigDecimal> parsed = new LinkedHashMap<>();
+        for (Map.Entry<String, String> e : RULE_KEYS.entrySet()) {
+            Object raw = body == null ? null : body.get(e.getKey());
+            if (raw == null) continue;
+            BigDecimal v;
+            try { v = new BigDecimal(raw.toString().trim()); }
+            catch (NumberFormatException ex) { throw new IllegalArgumentException("'" + e.getKey() + "' must be a number."); }
+            if (v.signum() < 0) throw new IllegalArgumentException("'" + e.getKey() + "' can't be negative.");
+            parsed.put(e.getKey(), v);
+        }
+        BigDecimal hrs = parsed.get("dailyHours"), days = parsed.get("workingDays");
+        if (hrs != null && (hrs.signum() == 0 || hrs.compareTo(BigDecimal.valueOf(24)) > 0))
+            throw new IllegalArgumentException("Standard hours per day must be between 1 and 24.");
+        if (days != null && (days.signum() == 0 || days.compareTo(BigDecimal.valueOf(31)) > 0))
+            throw new IllegalArgumentException("Working days per month must be between 1 and 31.");
+        for (String pct : List.of("attendanceMinPercent", "performanceMinScore")) {
+            BigDecimal v = parsed.get(pct);
+            if (v != null && v.compareTo(BigDecimal.valueOf(100)) > 0)
+                throw new IllegalArgumentException("'" + pct + "' can't be above 100.");
+        }
+        parsed.forEach((field, v) -> {
+            String key = RULE_KEYS.get(field);
+            SiteSetting s = siteSettingRepository.findBySettingKeyAndIsDeletedFalse(key).orElseGet(() -> {
+                SiteSetting n = new SiteSetting();
+                n.setSettingKey(key);
+                n.setGroupName("Payroll");
+                n.setLabel(field);
+                return n;
+            });
+            s.setSettingValue(v.stripTrailingZeros().toPlainString());
+            siteSettingRepository.save(s);
+        });
+        return getPayRules();
     }
 
     /** Adds an AUTO earning line like "Leads collected — 12 × ₹50" (or "— 3 reviews" if amounts differ). */
@@ -869,6 +1022,7 @@ public class PayrollService {
             l.setLeadRewardSalaryRecordId(null);
             leadRepository.save(l);
         }
+        jdbc.update("DELETE FROM project_completion_incentives WHERE salary_record_id = ?", id);
         lineItemRepository.deleteAll(lineItemRepository.findBySalaryRecordId(id));
         salaryRepository.delete(rec);
         salaryRepository.flush();
@@ -986,8 +1140,7 @@ public class PayrollService {
         String rateSource = effRate.signum() > 0 ? "EXPLICIT" : "NONE";
         if (effRate.signum() <= 0) {
             BigDecimal monthlyGross = nz(e.getBaseSalary());
-            BigDecimal stdDaily = e.getStandardDailyHours() != null && e.getStandardDailyHours().signum() > 0
-                    ? e.getStandardDailyHours() : new BigDecimal("8");
+            BigDecimal stdDaily = stdDailyHours(e);
             BigDecimal denom = stdDaily.multiply(BigDecimal.valueOf(workingDays(e)));
             if (monthlyGross.signum() > 0 && denom.signum() > 0) {
                 effRate = monthlyGross.divide(denom, 2, RoundingMode.HALF_UP);

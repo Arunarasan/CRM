@@ -78,6 +78,7 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
     long countWithOutstanding();
 
     java.util.List<Project> findByStatus(String status);
+    java.util.List<Project> findByActualCompletionDateBetween(java.time.LocalDate from, java.time.LocalDate to);
     java.util.List<Project> findByCustomerId(Long customerId);
     Page<Project> findByCustomerId(Long customerId, Pageable pageable);
     java.util.List<Project> findByLeadIdOrderByIdDesc(Long leadId);

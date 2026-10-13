@@ -28,6 +28,8 @@ public class WebsiteContentService {
     private final ContentBlockRepository contentRepo;
 
     private static final String BANK_PREFIX = "bank.";
+    /** Payroll rules (incentive amounts etc.) — never on the public site or the Website settings form. */
+    private static final String PAYROLL_PREFIX = "payroll.";
 
     public WebsiteContentService(SiteSettingRepository settingRepo, ContentBlockRepository contentRepo) {
         this.settingRepo = settingRepo;
@@ -42,6 +44,7 @@ public class WebsiteContentService {
     public List<SettingDto> listSettings() {
         List<SettingDto> out = new ArrayList<>();
         for (SiteSetting s : settingRepo.findByIsDeletedFalseOrderByDisplayOrderAscIdAsc()) {
+            if (s.getSettingKey().startsWith(PAYROLL_PREFIX)) continue; // edited on the HR Pay rules tab
             out.add(toSettingDto(s));
         }
         return out;
@@ -53,7 +56,7 @@ public class WebsiteContentService {
         Map<String, String> map = new LinkedHashMap<>();
         for (SiteSetting s : settingRepo.findByIsDeletedFalseOrderByDisplayOrderAscIdAsc()) {
             // Bank details are for printed quotations/invoices only — never on the public endpoint.
-            if (s.getSettingKey().startsWith(BANK_PREFIX)) continue;
+            if (s.getSettingKey().startsWith(BANK_PREFIX) || s.getSettingKey().startsWith(PAYROLL_PREFIX)) continue;
             map.put(s.getSettingKey(), s.getSettingValue());
         }
         return map;

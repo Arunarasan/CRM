@@ -477,6 +477,19 @@ public class HrController {
         return ResponseEntity.ok(payrollService.payrollPreview(month, year));
     }
 
+    /** Pay rules: wage defaults + incentive amounts (project, lead, review, attendance, performance). */
+    @GetMapping("/payroll/rules")
+    @PreAuthorize(PAYROLL_READ)
+    public ResponseEntity<Map<String, Object>> payRules() {
+        return ResponseEntity.ok(payrollService.getPayRules());
+    }
+
+    @PutMapping("/payroll/rules")
+    @PreAuthorize(PAYROLL_PROCESS)
+    public ResponseEntity<Map<String, Object>> savePayRules(@RequestBody Map<String, Object> body) {
+        return ResponseEntity.ok(payrollService.savePayRules(body));
+    }
+
     /** Generate one employee's payslip; basis HOURLY | MONTHLY, omitted means their usual basis. */
     @PostMapping("/payroll/generate")
     @PreAuthorize(PAYROLL_PROCESS)
