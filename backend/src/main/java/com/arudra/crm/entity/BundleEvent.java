@@ -33,4 +33,7 @@ public class BundleEvent extends BaseEntity {
 
     @Column(name = "photo_url", length = 1000)
     private String photoUrl;
+
+    @Column(name = "audio_url", length = 1000)
+    private String audioUrl;
 }

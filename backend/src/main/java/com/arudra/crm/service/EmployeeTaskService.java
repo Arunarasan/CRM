@@ -2038,16 +2038,25 @@ public class EmployeeTaskService {
         return bundleService.move(order.id, move, employee, false);
     }
 
-    /** Ticks (or unticks) one item of the task's order as made. */
+    /** Finishes / reopens one item of the task's order, or sets its progress (0-100; 100 = done). */
     @Transactional
-    public com.arudra.crm.dto.BundleView setOrderItemDone(Long taskId, Long itemId, boolean done, User employee) {
+    public com.arudra.crm.dto.BundleView setOrderItemDone(Long taskId, Long itemId, Boolean done, Integer progress, User employee) {
         com.arudra.crm.dto.BundleView order = orderOnTask(taskId, employee);
         com.arudra.crm.dto.BundleRequests.ItemUpdate u = new com.arudra.crm.dto.BundleRequests.ItemUpdate();
         u.id = itemId;
         u.done = done;
+        u.progress = progress;
         com.arudra.crm.dto.BundleRequests.Update req = new com.arudra.crm.dto.BundleRequests.Update();
         req.items = List.of(u);
         return bundleService.update(order.id, req, employee);
+    }
+
+    /** Adds a remark (text and/or comma-separated photo URLs) to the task's order. */
+    @Transactional
+    public com.arudra.crm.dto.BundleView addOrderRemark(Long taskId, User employee, String note, String photoUrls, String audioUrl) {
+        com.arudra.crm.dto.BundleView order = orderOnTask(taskId, employee);
+        bundleService.addRemark(order.id, employee, note, photoUrls, audioUrl);
+        return bundleService.orderForTask(taskId);
     }
 
     /** The task's order, when the employee works this task (managers may act on any). */

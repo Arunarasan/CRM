@@ -313,7 +313,9 @@ export default function BundleDetailPage() {
                   {e.note && <span className="text-slate-600">{e.fromStatus && e.fromStatus !== e.toStatus ? " · " : (e.fromStatus ? "" : " · ")}{e.note}</span>}
                 </div>
                 <div className="text-xs text-slate-400">{fmtTime(e.at)}{e.userName ? ` · ${e.userName}` : ""}</div>
-                {e.photoUrl && <a href={resolveFileUrl(e.photoUrl)} target="_blank" rel="noreferrer"><img src={resolveFileUrl(e.photoUrl)} className="mt-1.5 w-20 h-20 rounded object-cover border" /></a>}
+                {e.photoUrl && <div className="mt-1.5 flex flex-wrap gap-1.5">{e.photoUrl.split(",").map((u) => u.trim()).filter(Boolean).map((u) => (
+                  <a key={u} href={resolveFileUrl(u)} target="_blank" rel="noreferrer"><img src={resolveFileUrl(u)} className="w-20 h-20 rounded object-cover border" /></a>))}</div>}
+                {e.audioUrl && <audio controls src={resolveFileUrl(e.audioUrl)} className="mt-1.5 h-9 w-full max-w-xs" />}
               </div>
             </li>
           ))}

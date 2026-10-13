@@ -46,4 +46,8 @@ public class BundleItem extends BaseEntity {
 
     @Column(name = "is_done", nullable = false)
     private Boolean done = false;
+
+    /** 0-100; 100 means the item is done. */
+    @Column(nullable = false)
+    private Integer progress = 0;
 }

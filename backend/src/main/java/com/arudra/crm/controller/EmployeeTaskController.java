@@ -367,8 +367,20 @@ public class EmployeeTaskController {
     @PreAuthorize(EXECUTE)
     public ResponseEntity<ApiResponse<com.arudra.crm.dto.BundleView>> setOrderItemDone(@PathVariable Long id,
             @PathVariable Long itemId, @RequestBody Map<String, Object> body) {
-        boolean done = Boolean.TRUE.equals(body.get("done"));
-        return ResponseEntity.ok(ApiResponse.success(employeeTaskService.setOrderItemDone(id, itemId, done, me())));
+        Boolean done = body.get("done") == null ? null : Boolean.TRUE.equals(body.get("done"));
+        Integer progress = body.get("progress") instanceof Number n ? n.intValue() : null;
+        return ResponseEntity.ok(ApiResponse.success(employeeTaskService.setOrderItemDone(id, itemId, done, progress, me())));
+    }
+
+    /** Order task: add a remark with optional photos ({note, photoUrls: comma-separated}). */
+    @PostMapping("/{id}/order/remarks")
+    @PreAuthorize(EXECUTE)
+    public ResponseEntity<ApiResponse<com.arudra.crm.dto.BundleView>> addOrderRemark(@PathVariable Long id,
+            @RequestBody Map<String, Object> body) {
+        String note = body.get("note") != null ? String.valueOf(body.get("note")) : null;
+        String photos = body.get("photoUrls") != null ? String.valueOf(body.get("photoUrls")) : null;
+        String audio = body.get("audioUrl") != null ? String.valueOf(body.get("audioUrl")) : null;
+        return ResponseEntity.ok(ApiResponse.success(employeeTaskService.addOrderRemark(id, me(), note, photos, audio)));
     }
 
     /** Photos on this task's lead (its Documents tab), newest first. */

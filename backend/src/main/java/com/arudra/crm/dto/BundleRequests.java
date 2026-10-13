@@ -89,5 +89,6 @@ public final class BundleRequests {
         public String notes;
         public String photoUrls;
         public Boolean done;
+        public Integer progress;       // 0-100; 100 = done
     }
 }

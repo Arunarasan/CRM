@@ -1,7 +1,13 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Phone, MessageCircle, Check, ChevronDown, History, StickyNote, Scissors, Package, Store, Truck, Wrench,
+  Copy, MessageSquare, X, CheckCircle2, AlertTriangle, RotateCcw,
 } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { toast } from '@/components/ui/toast';
+import PhotoPickButtons from './PhotoPickButtons';
+import AudioCaptureField, { type CapturedAudio } from '@/components/AudioCaptureField';
+import AudioPlayer from '@/components/AudioPlayer';
 import type { OrderStep, OrderView, TaskDetail } from '@/types/employeeTask';
 import { employeeTaskApi } from '@/api/employeeTaskApi';
 import { formatSpec, parseSpec } from '@/components/bundles/workSpec';
@@ -59,12 +65,14 @@ function itemLines(it: OrderView['items'][number]) {
  * one tickable row per item (with its size / pieces spec and photos). The step button lives in the task's
  * bottom bar; this view only reads and ticks items.
  */
-export default function OrderTaskView({ task, order, canWork, onChanged }: {
+export default function OrderTaskView({ task, order, canWork, onChanged, onMarkCompleted }: {
   task: TaskDetail;
   order: OrderView;
   /** The employee holds this task — items can be ticked. */
   canWork: boolean;
   onChanged: () => void;
+  /** Opens the "mark completed" sheet (only offered while the order is in process). */
+  onMarkCompleted?: () => void;
 }) {
   const [busyItem, setBusyItem] = useState<number | null>(null);
   const [err, setErr] = useState('');
@@ -74,12 +82,26 @@ export default function OrderTaskView({ task, order, canWork, onChanged }: {
   const phone = order.customerPhone;
   const closed = order.status === 'COMPLETED' || order.status === 'DELIVERED' || order.status === 'CANCELLED';
 
-  const toggle = async (itemId: number, done: boolean) => {
-    if (!canWork) { setErr('Take this task first, then tick items as you finish them.'); return; }
+  // In-flight slider values, so the bar follows the finger before the save lands.
+  const [draft, setDraft] = useState<Record<number, number>>({});
+  const [allDoneOpen, setAllDoneOpen] = useState(false);
+  const [problem, setProblem] = useState(false);
+  const remarks = order.events.filter((e) => e.toStatus === 'REMARK');
+  const history = order.events.filter((e) => e.toStatus !== 'REMARK');
+  const pctOf = (it: OrderView['items'][number]) => draft[it.id] ?? (it.done ? 100 : it.progress ?? 0);
+  const overall = order.items.length
+    ? Math.round(order.items.reduce((n, it) => n + pctOf(it), 0) / order.items.length) : 0;
+
+  const setProgress = async (itemId: number, progress: number) => {
+    if (!canWork) { setErr('Take this task first, then update items as you work.'); return; }
     setBusyItem(itemId); setErr('');
-    try { await employeeTaskApi.setOrderItemDone(task.id, itemId, done); onChanged(); }
-    catch (e: any) { setErr(e?.response?.data?.message || 'Could not update the item.'); }
-    finally { setBusyItem(null); }
+    try {
+      await employeeTaskApi.setOrderItemProgress(task.id, itemId, progress);
+      const everyDone = progress >= 100 && order.items.every((i) => i.id === itemId || i.done);
+      onChanged();
+      if (everyDone && order.status === 'PROCESS' && onMarkCompleted) setAllDoneOpen(true);
+    } catch (e: any) { setErr(e?.response?.data?.message || 'Could not update the item.'); }
+    finally { setBusyItem(null); setDraft((d) => { const n = { ...d }; delete n[itemId]; return n; }); }
   };
 
   const HandIcon = order.handoverMode === 'INSTALL' ? Wrench : order.handoverMode === 'DELIVERY' ? Truck : Store;
@@ -96,11 +118,17 @@ export default function OrderTaskView({ task, order, canWork, onChanged }: {
           <div className="min-w-0 flex-1">
             <p className="flex flex-wrap items-baseline gap-x-1.5 text-[18px] font-bold text-[#1A211E]">
               <span className="font-mono">{order.code}</span>
+              <button type="button" aria-label="Copy order code"
+                onClick={() => { navigator.clipboard?.writeText(order.code).then(() => toast.success('Order code copied')).catch(() => {}); }}
+                className="self-center rounded-md p-1 text-[#9A9E96] active:scale-90"><Copy className="h-3.5 w-3.5" /></button>
               {order.bundleTotal && order.bundleTotal > 1 && (
                 <span className="text-[12px] font-medium text-[#7A817C]">{order.bundleNo} of {order.bundleTotal}</span>
               )}
             </p>
             <p className="truncate text-[14px] text-[#33392F]">{order.customerName || task.customer || 'Customer'}</p>
+            {order.createdAt && (
+              <p className="text-[11px] text-[#8A918C]">Ordered {new Date(order.createdAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })}</p>
+            )}
           </div>
           <div className="shrink-0 text-right">
             <p className={`text-[12px] font-semibold ${due.tone === 'overdue' ? 'text-[#C9302C]' : due.tone === 'soon' ? 'text-[#B27A12]' : 'text-[#6B726E]'}`}>{due.text}</p>
@@ -130,34 +158,53 @@ export default function OrderTaskView({ task, order, canWork, onChanged }: {
         <div className="mb-2.5 flex items-center gap-2">
           <Package className="h-4 w-4 text-[#9B6B32]" />
           <h3 className="flex-1 text-[13px] font-bold uppercase tracking-wide text-[#1A211E]">What to make</h3>
-          <span className="text-[12px] font-semibold text-[#7A817C]">{doneCount}/{order.items.length} done</span>
+          <span className="text-[12px] font-semibold text-[#7A817C]">{doneCount}/{order.items.length} done · {overall}%</span>
+        </div>
+        <div className="mb-3 h-1.5 overflow-hidden rounded-full bg-[#E3E6E2]">
+          <div className="h-full rounded-full bg-[#1E9E5E] transition-all" style={{ width: `${overall}%` }} />
         </div>
         <ul className="flex flex-col gap-2">
           {order.items.map((it) => {
             const { main, sub } = itemLines(it);
-            const photos = (it.photoUrls || '').split(',').map((x) => x.trim()).filter(Boolean);
+            const photos = [it.productImageUrl, ...(it.photoUrls || '').split(',')].map((x) => (x || '').trim()).filter(Boolean);
             return (
-              <li key={it.id} className={`flex gap-3 rounded-xl border p-2.5 ${it.done ? 'border-[#CFE6D8] bg-[#F3FAF6]' : 'border-[#EEEDE9]'}`}>
+              <li key={it.id} className={`rounded-xl border p-2.5 ${it.done ? 'border-[#CFE6D8] bg-[#F3FAF6]' : 'border-[#EEEDE9]'}`}>
+               <div className="flex gap-3">
                 {photos[0] ? (
-                  <a href={resolveFileUrl(photos[0])} target="_blank" rel="noopener noreferrer" className="h-12 w-12 shrink-0 overflow-hidden rounded-lg border border-[#ECEAE5]">
+                  <a href={resolveFileUrl(photos[0])} target="_blank" rel="noopener noreferrer" className="h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-[#ECEAE5]">
                     <img src={resolveFileUrl(photos[0])} alt="" className="h-full w-full object-cover" />
                   </a>
                 ) : (
-                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-[#F5F3EE] text-[#C9C2B2]"><Scissors className="h-5 w-5" /></span>
+                  <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg bg-[#F5F3EE] text-[#C9C2B2]"><Scissors className="h-5 w-5" /></span>
                 )}
                 <div className="min-w-0 flex-1">
                   <p className={`text-[14px] font-semibold leading-snug ${it.done ? 'text-[#4F6B5A] line-through decoration-[#9CC7AE]' : 'text-[#1A211E]'}`}>{main}</p>
                   {sub && <p className="mt-0.5 text-[12px] text-[#6B726E]">{sub}</p>}
                   {it.notes && <p className="mt-1 text-[12px] italic text-[#8A5A12]">{it.notes}</p>}
                 </div>
-                {!closed && (
-                  <button type="button" onClick={() => toggle(it.id, !it.done)} disabled={busyItem === it.id}
-                    aria-label={it.done ? 'Mark not done' : 'Mark done'}
-                    className={`flex h-8 w-8 shrink-0 items-center justify-center self-center rounded-lg border-2 transition active:scale-90 disabled:opacity-50 ${
-                      it.done ? 'border-[#1E9E5E] bg-[#1E9E5E] text-white' : 'border-[#CBD2CD] bg-white text-transparent'}`}>
-                    <Check className="h-4 w-4" />
-                  </button>
-                )}
+               </div>
+               {!closed && (
+                <div className="mt-2.5 flex items-center gap-2.5">
+                  <input type="range" min={0} max={100} step={5} value={pctOf(it)} disabled={busyItem === it.id}
+                    aria-label={`Progress of ${main}`}
+                    onChange={(e) => setDraft((d) => ({ ...d, [it.id]: Number(e.target.value) }))}
+                    onPointerUp={() => { const v = draft[it.id]; if (v != null && v !== (it.progress ?? 0)) setProgress(it.id, v); }}
+                    onKeyUp={() => { const v = draft[it.id]; if (v != null && v !== (it.progress ?? 0)) setProgress(it.id, v); }}
+                    className="h-2 min-w-0 flex-1 accent-[#1E9E5E]" />
+                  <span className="w-9 text-right text-[12px] font-semibold tabular-nums text-[#33392F]">{pctOf(it)}%</span>
+                  {it.done ? (
+                    <button type="button" onClick={() => setProgress(it.id, 80)} disabled={busyItem === it.id}
+                      className="flex shrink-0 items-center gap-1 rounded-lg border border-[#CBD2CD] bg-white px-2.5 py-1.5 text-[12px] font-semibold text-[#5B625E] active:scale-95 disabled:opacity-50">
+                      <RotateCcw className="h-3.5 w-3.5" /> Reopen
+                    </button>
+                  ) : (
+                    <button type="button" onClick={() => setProgress(it.id, 100)} disabled={busyItem === it.id}
+                      className="flex shrink-0 items-center gap-1 rounded-lg bg-[#0A573B] px-2.5 py-1.5 text-[12px] font-semibold text-white active:scale-95 disabled:opacity-50">
+                      <Check className="h-3.5 w-3.5" /> Finish
+                    </button>
+                  )}
+                </div>
+               )}
               </li>
             );
           })}
@@ -172,18 +219,43 @@ export default function OrderTaskView({ task, order, canWork, onChanged }: {
         </p>
       )}
 
+      <RemarksPanel taskId={task.id} remarks={remarks} legacy={task.comments} canWork={canWork} onChanged={onChanged}
+        problem={problem} onProblemDone={() => setProblem(false)} />
+
+      <Dialog open={allDoneOpen} onOpenChange={setAllDoneOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>All items finished</DialogTitle></DialogHeader>
+          <p className="text-sm text-[#5B625E]">Every item on {order.code} is done. What next?</p>
+          <div className="flex flex-col gap-2">
+            <button type="button" onClick={() => { setAllDoneOpen(false); onMarkCompleted?.(); }}
+              className="flex items-center gap-2 rounded-xl bg-[#0A573B] px-3.5 py-3 text-left text-[14px] font-semibold text-white">
+              <CheckCircle2 className="h-4 w-4" /> Mark order completed
+            </button>
+            <button type="button" onClick={() => { setAllDoneOpen(false); document.getElementById('order-remarks')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }}
+              className="flex items-center gap-2 rounded-xl border border-[#DDE2DE] px-3.5 py-3 text-left text-[14px] font-semibold text-[#0A573B]">
+              <MessageSquare className="h-4 w-4" /> Add a remark or photo first
+            </button>
+            <button type="button" onClick={() => { setAllDoneOpen(false); setProblem(true); document.getElementById('order-remarks')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }}
+              className="flex items-center gap-2 rounded-xl border border-[#F0D3CF] px-3.5 py-3 text-left text-[14px] font-semibold text-[#B94B45]">
+              <AlertTriangle className="h-4 w-4" /> Report a problem
+            </button>
+            <button type="button" onClick={() => setAllDoneOpen(false)} className="py-2 text-[13px] font-medium text-[#7A817C]">Not now</button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* History: every step, who moved it, notes and photos */}
-      {order.events.length > 0 && (
+      {history.length > 0 && (
         <div className="overflow-hidden rounded-2xl border border-[#ECEAE5] bg-white">
           <button type="button" onClick={() => setHistoryOpen((o) => !o)} className="flex w-full items-center gap-2.5 px-3.5 py-3 text-left">
             <History className="h-4 w-4 text-[#9B6B32]" />
             <span className="flex-1 text-[14px] font-medium text-[#22271F]">History</span>
-            <span className="rounded-full bg-[#F3EEE2] px-2 py-0.5 text-[11px] font-medium text-[#8A6A2E]">{order.events.length}</span>
+            <span className="rounded-full bg-[#F3EEE2] px-2 py-0.5 text-[11px] font-medium text-[#8A6A2E]">{history.length}</span>
             <ChevronDown className={`h-4 w-4 text-[#B4B0A4] transition-transform ${historyOpen ? 'rotate-180' : ''}`} />
           </button>
           {historyOpen && (
             <ul className="flex flex-col gap-2.5 border-t border-[#F1ECE2] px-3.5 py-3">
-              {order.events.map((e) => (
+              {history.map((e) => (
                 <li key={e.id} className="flex gap-2.5 text-[12.5px]">
                   <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[#0A573B]" />
                   <div className="min-w-0 flex-1">
@@ -205,6 +277,108 @@ export default function OrderTaskView({ task, order, canWork, onChanged }: {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+/** Remarks on the order: free text plus photos, saved with the employee's name and time. */
+function RemarksPanel({ taskId, remarks, legacy, canWork, onChanged, problem, onProblemDone }: {
+  taskId: number;
+  remarks: OrderView['events'];
+  /** Older task notes written before orders had their own Remarks list. */
+  legacy: TaskDetail['comments'];
+  canWork: boolean;
+  onChanged: () => void;
+  problem: boolean;
+  onProblemDone: () => void;
+}) {
+  const [text, setText] = useState('');
+  const [photos, setPhotos] = useState<string[]>([]);
+  const [voice, setVoice] = useState<CapturedAudio[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+  useEffect(() => { if (problem) setText((t) => (t.startsWith('Problem: ') ? t : 'Problem: ' + t)); }, [problem]);
+
+  const upload = async (files: File[]) => {
+    setUploading(true); setErr('');
+    try {
+      const urls: string[] = [];
+      for (const f of files) urls.push((await employeeTaskApi.uploadFile(f, 'BUNDLE')).fileUrl);
+      setPhotos((p) => [...p, ...urls]);
+    } catch { setErr('Photo upload failed. Try again.'); }
+    finally { setUploading(false); }
+  };
+  const save = async () => {
+    if (!canWork) { setErr('Take this task first, then add remarks.'); return; }
+    setSaving(true); setErr('');
+    try {
+      await employeeTaskApi.addOrderRemark(taskId, { note: text.trim() || undefined, photoUrls: photos.join(',') || undefined, audioUrl: voice[0]?.url });
+      setText(''); setPhotos([]); setVoice([]); onProblemDone(); onChanged();
+    } catch (e: any) { setErr(e?.response?.data?.message || 'Could not save the remark.'); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div id="order-remarks" className="rounded-2xl border border-[#ECEAE5] bg-white p-3.5 shadow-[0_2px_10px_rgba(0,35,22,0.04)]">
+      <div className="mb-2.5 flex items-center gap-2">
+        <MessageSquare className="h-4 w-4 text-[#9B6B32]" />
+        <h3 className="flex-1 text-[13px] font-bold uppercase tracking-wide text-[#1A211E]">Remarks</h3>
+        {remarks.length + legacy.length > 0 && <span className="text-[12px] font-semibold text-[#7A817C]">{remarks.length + legacy.length}</span>}
+      </div>
+      {remarks.length + legacy.length > 0 && (
+        <ul className="mb-3 flex flex-col gap-2.5">
+          {[...remarks].reverse().map((r) => (
+            <li key={r.id} className="rounded-xl bg-[#F8F6F1] px-3 py-2.5 text-[13px]">
+              {r.note && <p className="whitespace-pre-wrap text-[#1A211E]">{r.note}</p>}
+              {r.photoUrl && (
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {r.photoUrl.split(',').map((u) => u.trim()).filter(Boolean).map((u) => (
+                    <a key={u} href={resolveFileUrl(u)} target="_blank" rel="noopener noreferrer" className="h-16 w-16 overflow-hidden rounded-lg border border-[#ECEAE5]">
+                      <img src={resolveFileUrl(u)} alt="" className="h-full w-full object-cover" />
+                    </a>
+                  ))}
+                </div>
+              )}
+              {r.audioUrl && <AudioPlayer src={resolveFileUrl(r.audioUrl)} className="mt-1.5 w-full max-w-[260px]" />}
+              <p className="mt-1 text-[11px] text-[#8A918C]">
+                {r.userName || 'Employee'} · {new Date(r.at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}
+              </p>
+            </li>
+          ))}
+          {legacy.map((c) => (
+            <li key={`c${c.id}`} className="rounded-xl bg-[#F8F6F1] px-3 py-2.5 text-[13px]">
+              {c.content !== '🎤 Voice note' && <p className="whitespace-pre-wrap text-[#1A211E]">{c.content}</p>}
+              {c.audioUrl && <AudioPlayer src={resolveFileUrl(c.audioUrl)} className="mt-1.5 w-full max-w-[260px]" />}
+              <p className="mt-1 text-[11px] text-[#8A918C]">{c.authorName}</p>
+            </li>
+          ))}
+        </ul>
+      )}
+      <textarea value={text} onChange={(e) => setText(e.target.value)} rows={2} placeholder="Write a remark…"
+        className="w-full rounded-md border px-3 py-2 text-sm" />
+      {photos.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {photos.map((u) => (
+            <div key={u} className="relative h-16 w-16">
+              <img src={resolveFileUrl(u)} alt="" className="h-full w-full rounded-lg border object-cover" />
+              <button type="button" aria-label="Remove photo" onClick={() => setPhotos((p) => p.filter((x) => x !== u))}
+                className="absolute -right-1.5 -top-1.5 rounded-full bg-black/70 p-1 text-white"><X className="h-3 w-3" /></button>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="mt-2">
+        <AudioCaptureField value={voice} onChange={(next) => setVoice(next.slice(-1))} module="task-remark" label="Add a voice note" />
+      </div>
+      <div className="mt-2 flex items-center gap-2">
+        <div className="min-w-0 flex-1"><PhotoPickButtons onPicked={upload} busy={uploading} /></div>
+        <button type="button" onClick={save} disabled={saving || uploading || (!text.trim() && photos.length === 0 && voice.length === 0)}
+          className="shrink-0 rounded-lg bg-[#0A573B] px-4 py-2 text-[13px] font-semibold text-white disabled:opacity-40">
+          {saving ? 'Saving…' : 'Add remark'}
+        </button>
+      </div>
+      {err && <p className="mt-2 rounded-lg bg-[#FBE7E4] px-2.5 py-2 text-[12px] text-[#B94B45]">{err}</p>}
     </div>
   );
 }

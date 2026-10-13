@@ -14,6 +14,7 @@ export const BUNDLE_STATUS_LABELS: Record<string, string> = {
   COMPLETED: 'Completed',
   DELIVERED: 'Delivered',
   CANCELLED: 'Cancelled',
+  REMARK: 'Remark',
   RECEIVED: 'Received',
   CUTTING: 'Cutting',
   STITCHING: 'Stitching',
@@ -79,6 +80,7 @@ export interface BundleEvent {
   userName?: string | null;
   note?: string | null;
   photoUrl?: string | null;
+  audioUrl?: string | null;
   at: string;
 }
 

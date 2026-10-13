@@ -123,6 +123,12 @@ export const employeeTaskApi = {
   /** Stitching task: tick one item of its order as made. */
   setOrderItemDone: (id: number, itemId: number, done: boolean) =>
     api.post(`${BASE}/${id}/order/items/${itemId}`, { done }).then((r) => r.data),
+  /** Order task: set one item's progress (0-100; 100 finishes it). */
+  setOrderItemProgress: (id: number, itemId: number, progress: number) =>
+    api.post(`${BASE}/${id}/order/items/${itemId}`, { progress }).then((r) => r.data),
+  /** Order task: add a remark with optional photos (comma-separated URLs). */
+  addOrderRemark: (id: number, payload: { note?: string; photoUrls?: string; audioUrl?: string }) =>
+    api.post(`${BASE}/${id}/order/remarks`, payload).then((r) => r.data),
 
   /** Save the employee's current GPS position as the lead's site map pin. The optional address parts
    *  (looked up for that spot) fill only the lead's blank address fields. */

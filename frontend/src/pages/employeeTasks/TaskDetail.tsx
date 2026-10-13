@@ -587,7 +587,8 @@ export default function TaskDetail() {
         {task.installOrder && !installView && <InstallOrderCard info={task.installOrder} />}
 
         {/* Orders lane — the order itself (what to make, its step) or the installation job. */}
-        {orderView && task.order && <OrderTaskView task={task} order={task.order} canWork={!!mine && !locked} onChanged={load} />}
+        {orderView && task.order && <OrderTaskView task={task} order={task.order} canWork={!!mine && !locked} onChanged={load}
+          onMarkCompleted={orderNext === 'COMPLETED' ? () => setSheet('orderstep') : undefined} />}
         {installView && task.installOrder && <InstallTaskView task={task} info={task.installOrder} locked={locked || !mine} onChanged={load} />}
 
         {/* Shared project task — customer + project side by side, then the numbered items to make. */}
@@ -715,7 +716,7 @@ export default function TaskDetail() {
 
         {/* Field-execution tools — only for real field/site tasks, not lead "collect info" forms. */}
         {!isLeadForm && !isCallTask && (<>
-        {mine && <TimeTracker taskId={taskId} disabled={locked} />}
+        {mine && !orderTask && <TimeTracker taskId={taskId} disabled={locked} />}
 
         {/* Site check-in is for single field visits — not the long-running shared project task. */}
         {!isProjectTask && !orderTask && <CheckInBar taskId={taskId} checkins={task.checkins} onChanged={load} locked={locked} />}
@@ -813,7 +814,7 @@ export default function TaskDetail() {
         </>)}
 
         {/* Remarks — shown for every task type (including lead forms); tracked project tasks use Team chat. */}
-        {!workTracking && <div className="overflow-hidden rounded-2xl border border-[#EDE6D8] bg-white shadow-[0_2px_10px_rgba(80,55,20,0.05)]">
+        {!workTracking && !orderView && <div className="overflow-hidden rounded-2xl border border-[#EDE6D8] bg-white shadow-[0_2px_10px_rgba(80,55,20,0.05)]">
           <Disclosure defaultOpen={reqView} title={reqView ? 'Task notes & photos' : isProjectTask ? 'Remarks & Notes' : 'Remarks'} count={task.comments.length}
             meta={isProjectTask ? (task.comments.length ? `${task.comments.length} note${task.comments.length === 1 ? '' : 's'}` : 'Add notes…') : undefined}
             icon={<MessageSquare className="h-4 w-4" />}>

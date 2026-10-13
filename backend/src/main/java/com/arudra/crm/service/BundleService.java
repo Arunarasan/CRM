@@ -61,6 +61,7 @@ public class BundleService {
     @Autowired private BundleRepository bundleRepository;
     @Autowired private BundleItemRepository itemRepository;
     @Autowired private BundleEventRepository eventRepository;
+    @Autowired private ProductRepository productRepository;
     @Autowired private InvoiceRepository invoiceRepository;
     @Autowired private InvoiceItemRepository invoiceItemRepository;
     @Autowired private CustomerRepository customerRepository;
@@ -551,7 +552,14 @@ public class BundleService {
                 if (u.workSpec != null) item.setWorkSpec(blankToNull(u.workSpec));
                 if (u.notes != null) item.setNotes(blankToNull(u.notes));
                 if (u.photoUrls != null) item.setPhotoUrls(blankToNull(u.photoUrls));
-                if (u.done != null) item.setDone(u.done);
+                if (u.progress != null) {
+                    int pct = Math.max(0, Math.min(100, u.progress));
+                    item.setProgress(pct);
+                    item.setDone(pct >= 100);
+                } else if (u.done != null) {
+                    item.setDone(u.done);
+                    item.setProgress(u.done ? 100 : 0);
+                }
                 itemRepository.save(item);
             }
         }
@@ -684,6 +692,21 @@ public class BundleService {
         return bundleRepository.findById(id)
                 .filter(b -> !Boolean.TRUE.equals(b.getIsDeleted()))
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found: " + id));
+    }
+
+    /** A free-form remark (text and/or photos) on the order's history, shown in the portal's Remarks list. */
+    @Transactional
+    public void addRemark(Long bundleId, User user, String note, String photoUrls, String audioUrl) {
+        boolean noNote = note == null || note.isBlank();
+        boolean noPhoto = photoUrls == null || photoUrls.isBlank();
+        boolean noAudio = audioUrl == null || audioUrl.isBlank();
+        if (noNote && noPhoto && noAudio) throw new IllegalArgumentException("Write a remark, add a photo or a voice note");
+        Bundle b = find(bundleId);
+        logEvent(b, null, "REMARK", user, noNote ? null : note.trim(), noPhoto ? null : photoUrls);
+        if (!noAudio) {
+            eventRepository.findByBundleIdAndIsDeletedFalseOrderByCreatedAtAsc(b.getId()).stream()
+                    .reduce((first, second) -> second).ifPresent(e -> { e.setAudioUrl(audioUrl.trim()); eventRepository.save(e); });
+        }
     }
 
     private void logEvent(Bundle b, String from, String to, User user, String note, String photoUrl) {
@@ -845,6 +868,15 @@ public class BundleService {
         BundleView v = fill(b, customer, invoice, items);
         if (!detail) return v;
 
+        Map<Long, String> productImages = new HashMap<>();
+        List<Long> productIds = items.stream().map(BundleItem::getProductId).filter(Objects::nonNull).distinct().toList();
+        if (!productIds.isEmpty()) {
+            productRepository.findAllById(productIds).forEach(pr -> {
+                String img = pr.getImageUrl() != null && !pr.getImageUrl().isBlank() ? pr.getImageUrl()
+                        : (pr.getImageUrls() != null && !pr.getImageUrls().isEmpty() ? pr.getImageUrls().get(0) : null);
+                if (img != null) productImages.put(pr.getId(), img);
+            });
+        }
         v.items = items.stream().map(i -> {
             BundleView.Item x = new BundleView.Item();
             x.id = i.getId();
@@ -856,7 +888,9 @@ public class BundleService {
             x.workSpec = i.getWorkSpec();
             x.notes = i.getNotes();
             x.photoUrls = i.getPhotoUrls();
+            x.productImageUrl = i.getProductId() == null ? null : productImages.get(i.getProductId());
             x.done = Boolean.TRUE.equals(i.getDone());
+            x.progress = x.done ? 100 : (i.getProgress() == null ? 0 : i.getProgress());
             return x;
         }).toList();
         v.events = eventRepository.findByBundleIdAndIsDeletedFalseOrderByCreatedAtAsc(b.getId()).stream().map(e -> {
@@ -867,6 +901,7 @@ public class BundleService {
             x.userName = e.getUserName();
             x.note = e.getNote();
             x.photoUrl = e.getPhotoUrl();
+            x.audioUrl = e.getAudioUrl();
             x.at = e.getCreatedAt();
             return x;
         }).toList();

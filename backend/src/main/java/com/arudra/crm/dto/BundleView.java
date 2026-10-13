@@ -62,7 +62,10 @@ public class BundleView {
         public String workSpec;
         public String notes;
         public String photoUrls;
+        /** The catalogue product's own image, for items billed from a product. */
+        public String productImageUrl;
         public boolean done;
+        public int progress;
     }
 
     public static class Event {
@@ -72,6 +75,7 @@ public class BundleView {
         public String userName;
         public String note;
         public String photoUrl;
+        public String audioUrl;
         public LocalDateTime at;
     }
 

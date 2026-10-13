@@ -75,6 +75,7 @@ export interface OrderView extends OrderCardInfo {
   rackLocation?: string | null;
   notes?: string | null;
   invoiceNumber?: string | null;
+  createdAt?: string | null;
   balanceDue?: number | null;
   items: {
     id: number;
@@ -84,9 +85,11 @@ export interface OrderView extends OrderCardInfo {
     workSpec: string | null; // JSON text
     notes: string | null;
     photoUrls: string | null; // comma-separated
+    productImageUrl?: string | null;
     done: boolean;
+    progress?: number; // 0-100
   }[];
-  events: { id: number; fromStatus: string | null; toStatus: string | null; userName: string | null; note: string | null; photoUrl: string | null; at: string }[];
+  events: { id: number; fromStatus: string | null; toStatus: string | null; userName: string | null; note: string | null; photoUrl: string | null; audioUrl?: string | null; at: string }[];
   siblings?: { id: number; code: string; bundleNo: number | null; status: string }[];
 }
 
