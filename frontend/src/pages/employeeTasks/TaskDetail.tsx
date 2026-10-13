@@ -389,7 +389,25 @@ export default function TaskDetail() {
     if (isCallTask) callRecordingApi.forTask(taskId).then(setCall).catch(() => {});
   }, [isCallTask, taskId]);
 
+  // Site Visit, Measure & Quote: the quote page IS the task — skip this page, take the task if it is still
+  // open to pick, and go straight there. Back from the quote page returns to the task list.
+  const quoteLink = task?.moduleLink && task.moduleLink.startsWith('/employee/quote/new') ? task.moduleLink : null;
+  useEffect(() => {
+    if (!task || !quoteLink) return;
+    let cancelled = false;
+    (async () => {
+      const gone = task.myAssignmentStatus === 'CANCELLED' || task.myAssignmentStatus === 'REJECTED';
+      const closed = ['WAITING_APPROVAL', 'COMPLETED', 'CANCELLED'].includes(task.status);
+      if ((!task.myAssignmentStatus || gone) && !closed && (task.status as string) === 'AVAILABLE') {
+        try { await employeeTaskApi.pick(taskId); } catch { /* at capacity / taken — still open the quote */ }
+      }
+      if (!cancelled) navigate(quoteLink, { replace: true });
+    })();
+    return () => { cancelled = true; };
+  }, [task?.id, quoteLink]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (!task) return <div className="p-6 text-center text-sm text-muted-foreground">Loading…</div>;
+  if (quoteLink) return <div className="p-6 text-center text-sm text-muted-foreground">Opening the quote…</div>;
 
   // A released/declined assignment (e.g. the data-entry hold ran out) no longer makes the task "mine" —
   // the employee can pick it up again.

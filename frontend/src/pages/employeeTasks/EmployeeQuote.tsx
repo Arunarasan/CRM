@@ -1,7 +1,7 @@
 import { BaseInput } from '@/components/ui/input';
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { CheckCircle2, ChevronDown, ChevronRight, Image as ImageIcon, Loader2, MapPin, MessageCircle, Phone, X } from 'lucide-react';
+import { CheckCircle2, ChevronDown, ChevronRight, Image as ImageIcon, Loader2, MapPin, X } from 'lucide-react';
 import api from '@/lib/api';
 import { resolveFileUrl, uploadFile } from '@/lib/uploadFile';
 import { leadApi } from '../leads/leadApi';
@@ -10,6 +10,7 @@ import QuoteWorkspace from '../leads/quote/QuoteWorkspace';
 import type { LeadProjectStatus } from '@/api/boqApi';
 import ConvertProjectSheet from './components/ConvertProjectSheet';
 import { CARD } from './components/moduleUi';
+import LeadDetailsCard from './components/LeadDetailsCard';
 import FileViewer from '../projectCommandCenter/documents/FileViewer';
 import type { ProjectFile } from '../projectCommandCenter/documents/fileTypes';
 
@@ -25,6 +26,7 @@ export default function EmployeeQuote() {
   const leadId = Number(params.get('leadId'));
   const navigate = useNavigate();
   const [lead, setLead] = useState<any>(null);
+  const [creatorName, setCreatorName] = useState<string | null>(null);
   const [convertOpen, setConvertOpen] = useState(false);
   // The lead's existing project (from an earlier quote): the sheet then updates it instead of creating one.
   const [leadProject, setLeadProject] = useState<LeadProjectStatus | null>(null);
@@ -34,7 +36,10 @@ export default function EmployeeQuote() {
   const [sheetKey, setSheetKey] = useState(0);
 
   useEffect(() => {
-    if (leadId) api.get(`/leads/${leadId}`).then((r) => setLead(r.data)).catch(() => {});
+    if (!leadId) return;
+    api.get(`/leads/${leadId}`).then((r) => setLead(r.data)).catch(() => {});
+    // "Lead by" — the lead record only carries the creator's login, so ask for their name.
+    leadApi.createdBy(leadId).then((r) => setCreatorName(r.data?.name || null)).catch(() => {});
   }, [leadId]);
 
   if (!leadId) return <p className="p-4 text-sm text-muted-foreground">No lead selected.</p>;
@@ -47,7 +52,7 @@ export default function EmployeeQuote() {
           Wide (xl): that context becomes a sticky left rail beside the sheet, which then has room for its table view. */}
       <div className="mx-auto w-full max-w-[1600px] p-3 md:p-4 xl:grid xl:grid-cols-[300px_minmax(0,1fr)] xl:items-start xl:gap-4">
         <aside className="flex flex-col gap-3 md:grid md:grid-cols-2 md:items-start xl:sticky xl:top-[4.25rem] xl:flex xl:max-h-[calc(100vh-11rem)] xl:overflow-y-auto">
-          <CustomerCard lead={lead} />
+          <LeadDetailsCard lead={lead && creatorName ? { ...lead, capturedByName: creatorName } : lead} fallbackName="Loading…" />
           <div className="md:col-start-2 md:row-span-2 md:row-start-1 xl:contents">
             <SitePhotosCard leadId={leadId} refreshKey={photosKey} />
           </div>
@@ -59,32 +64,6 @@ export default function EmployeeQuote() {
       </div>
       <ConvertProjectSheet leadId={leadId} leadProject={leadProject} open={convertOpen} onOpenChange={setConvertOpen}
         onDone={() => navigate('/employee/tasks')} onRequested={() => setSheetKey((k) => k + 1)} />
-    </div>
-  );
-}
-
-const waHref = (s: string) => 'https://wa.me/' + s.replace(/[^\d]/g, '');
-
-/** Who the quote is for, with one-tap Call / WhatsApp — the employee is usually on the phone with them. */
-function CustomerCard({ lead }: { lead: any }) {
-  const phone: string | undefined = lead?.mobileNumber || lead?.phone;
-  const wa: string | undefined = lead?.whatsappNumber || phone;
-  const place = [lead?.address, lead?.city].filter(Boolean).join(', ');
-  const btn = 'flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#E4E2DC] text-[#0A573B] active:bg-[#F1F3F1]';
-  return (
-    <div className={`${CARD} flex items-center gap-3 p-3.5`}>
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-[15px] font-bold text-[#111817]">{lead?.name ?? 'Loading…'}</p>
-        {(place || phone) && (
-          <p className="mt-0.5 truncate text-[12px] text-[#7A817C]">{[place, phone].filter(Boolean).join(' · ')}</p>
-        )}
-      </div>
-      {phone && <a href={`tel:${phone}`} className={btn} aria-label={`Call ${lead?.name || 'customer'}`}><Phone className="h-4 w-4" /></a>}
-      {wa && (
-        <a href={waHref(wa)} target="_blank" rel="noopener noreferrer" className={btn} aria-label="WhatsApp">
-          <MessageCircle className="h-4 w-4" />
-        </a>
-      )}
     </div>
   );
 }
@@ -143,7 +122,7 @@ function SitePhotosCard({ leadId, refreshKey }: { leadId: number; refreshKey: nu
         <span className="text-[12px] text-[#7A817C]">{files.length}</span>
       </div>
       {files.length === 0 ? (
-        <p className="text-[12px] text-[#7A817C]">No photos on this lead yet. Add them with the site visit below.</p>
+        <p className="text-[12px] text-[#7A817C]">No photos on this lead yet. Add them in the Photos & Drawings tab.</p>
       ) : (
         <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 md:flex-wrap md:overflow-visible">
           {files.map((f, i) => (

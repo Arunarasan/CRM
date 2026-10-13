@@ -30,6 +30,7 @@ import { fetchCompanyProfile } from "@/lib/companyProfile";
 import { uploadFile } from "@/lib/uploadFile";
 import { NumCell } from "./cells";
 import ProjectRequestBanner from "./ProjectRequestBanner";
+import PhotosDrawingsPanel from "./PhotosDrawingsPanel";
 import { projectRequestApi, type ProjectRequest } from "@/api/projectRequestApi";
 
 /**
@@ -101,7 +102,7 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
   // Phones show the "lead already has a project" notice as one line; "More" opens the full text.
   const [projectNoticeOpen, setProjectNoticeOpen] = useState(false);
   const [view, setView] = useState<"items" | "cost" | "photos" | "history">(() => {
-    try { return localStorage.getItem("quoteShowBreakdown") === "1" ? "cost" : "items"; } catch { return "items"; }
+    try { return !fieldMode && localStorage.getItem("quoteShowBreakdown") === "1" ? "cost" : "items"; } catch { return "items"; }
   });
   useEffect(() => {
     if (view !== "items" && view !== "cost") return;
@@ -458,8 +459,10 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
   return (
     <section className="quote-layout quote-neutral space-y-3">
       {/* ---- Which quote, in what state — one line ---- */}
-      <QuoteHeading quote={quote} boq={boq} measurement={measurement}
-        customer={customerName !== "—" ? customerName : undefined} />
+      {!fieldMode && (
+        <QuoteHeading quote={quote} boq={boq} measurement={measurement}
+          customer={customerName !== "—" ? customerName : undefined} />
+      )}
 
       {/* Customer pressed "Accept" on the shared link — the approval itself is still ours to confirm. */}
       {quote?.customerAcceptedAt && !approved && (
@@ -625,7 +628,7 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
                 <div className="flex flex-wrap items-center gap-x-2 border-b px-2">
                 <div role="tablist" aria-label="Quote view" className="flex items-center overflow-x-auto overflow-y-hidden">
                   <ViewTab active={view === "items"} icon={Layers} onClick={() => setView("items")}>Items</ViewTab>
-                  <ViewTab active={view === "cost"} icon={Calculator} onClick={() => setView("cost")}>Cost Breakdown</ViewTab>
+                  {!fieldMode && <ViewTab active={view === "cost"} icon={Calculator} onClick={() => setView("cost")}>Cost Breakdown</ViewTab>}
                   <ViewTab active={view === "photos"} icon={ImageIcon} onClick={() => setView("photos")}>Photos & Drawings</ViewTab>
                   <ViewTab active={view === "history"} icon={History} onClick={() => setView("history")}>
                     History{history.length > 0 && <span className="ml-1 rounded-full bg-muted px-1.5 text-[11px] tabular-nums">{history.length}</span>}
@@ -636,12 +639,12 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
 
                 <div className="p-3">
                   {(view === "items" || view === "cost") && (
-                    <BoqSheet boq={boq} canEdit={editable} onBoqChanged={setBoq} showBreakdown={view === "cost"}
+                    <BoqSheet boq={boq} canEdit={editable} onBoqChanged={setBoq} showBreakdown={view === "cost" && !fieldMode}
                       actionsTarget={actionsEl}
                       onSaveState={(pending, lastSaved) => setSaveState({ pending, lastSaved })} />
                   )}
                   {view === "photos" && (
-                    <PhotosPanel measurement={measurement} leadId={leadId} fieldMode={fieldMode} />
+                    <PhotosDrawingsPanel measurement={measurement} leadId={leadId} fieldMode={fieldMode} />
                   )}
                   {view === "history" && <HistoryPanel quotes={history} onOpen={(id) => setPrintId(id)} />}
                 </div>
@@ -1145,26 +1148,6 @@ function ViewTab({ active, icon: Icon, onClick, children }: {
         ? "border-foreground font-medium text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
       <Icon className="h-4 w-4" /> {children}
     </button>
-  );
-}
-
-/** Drawings & photos are kept with the lead — this points there instead of copying them. */
-function PhotosPanel({ measurement, leadId, fieldMode }: { measurement?: any; leadId: string; fieldMode?: boolean }) {
-  return (
-    <div className="rounded-lg border border-dashed p-6 text-center text-sm">
-      <ImageIcon className="mx-auto mb-2 h-6 w-6 text-muted-foreground" />
-      <p className="font-medium">Photos & drawings</p>
-      <p className="mt-1 text-muted-foreground">
-        {measurement
-          ? `Site photos and drawings for ${measurement.measurementNumber || "this measurement"} are kept in the lead's Documents.`
-          : "No measurement yet — photos and drawings added to the lead show up in its Documents."}
-      </p>
-      {!fieldMode && (
-        <Link to={`/leads/${leadId}?tab=documents`}>
-          <Button variant="outline" size="sm" className="mt-3">Open Documents</Button>
-        </Link>
-      )}
-    </div>
   );
 }
 
