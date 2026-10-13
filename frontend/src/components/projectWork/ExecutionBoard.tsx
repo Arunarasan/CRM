@@ -337,6 +337,7 @@ function AddProductDialog({ open, onOpenChange, board, onChange }: {
 }) {
   const [form, setForm] = useState({ category: '', itemName: '', color: '', quantity: '', unit: '', location: '' });
   const [busy, setBusy] = useState(false);
+  const [imageUrl, setImageUrl] = useState('');
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
   const save = async () => {
@@ -344,9 +345,10 @@ function AddProductDialog({ open, onOpenChange, board, onChange }: {
     setBusy(true);
     try {
       onChange(await projectWorkApi.addLine(board.projectId, {
-        ...form, quantity: form.quantity || undefined, category: form.category || undefined,
+        ...form, quantity: form.quantity || undefined, category: form.category || undefined, imageUrl: imageUrl || undefined,
       }));
       setForm({ category: '', itemName: '', color: '', quantity: '', unit: '', location: '' });
+      setImageUrl('');
       onOpenChange(false);
     } catch (e) {
       toast.error(errMsg(e, 'Could not add the product'));
@@ -369,6 +371,19 @@ function AddProductDialog({ open, onOpenChange, board, onChange }: {
             <input value={form.unit} onChange={set('unit')} placeholder="Unit" className={INPUT} />
           </div>
           <input value={form.location} onChange={set('location')} placeholder="Location / room" className={INPUT} />
+          <div className="flex items-center gap-3">
+            {imageUrl && (
+              <div className="relative h-16 w-16 shrink-0">
+                <img src={resolveFileUrl(imageUrl)} alt="" className="h-full w-full rounded-lg object-cover ring-1 ring-[#E4DECF]" />
+                <button type="button" aria-label="Remove image" onClick={() => setImageUrl('')}
+                  className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/70 text-[11px] text-white">×</button>
+              </div>
+            )}
+            <div className="min-w-0 flex-1">
+              <p className="mb-1 text-[11.5px] font-medium text-[#8A8F86]">{imageUrl ? 'Change image' : 'Product image (optional)'}</p>
+              <PhotoPicker onUploaded={setImageUrl} />
+            </div>
+          </div>
           <p className="text-[11.5px] text-[#8A8F86]">Steps are picked from the category — change them on the product after adding.</p>
           <button onClick={save} disabled={busy} className={PRIMARY}>Add product</button>
         </div>

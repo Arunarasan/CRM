@@ -11,7 +11,7 @@ export const projectWorkApi = {
 
   addLine: (projectId: number, body: {
     category?: string; itemName: string; color?: string; location?: string;
-    quantity?: number | string; unit?: string; productId?: number; steps?: WorkStepType[];
+    quantity?: number | string; unit?: string; productId?: number; steps?: WorkStepType[]; imageUrl?: string;
   }) => api.post<WorkBoard>(`${BASE}/projects/${projectId}/lines`, body).then((r) => r.data),
   updateLine: (lineId: number, body: { productId?: number | null; location?: string; itemName?: string }) =>
     api.put<WorkBoard>(`${BASE}/lines/${lineId}`, body).then((r) => r.data),

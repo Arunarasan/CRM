@@ -23,7 +23,7 @@ import RequirementSummaryCard from './components/RequirementSummaryCard';
 import { toast } from '@/components/ui/toast';
 import LeadPhotosCard from './components/LeadPhotosCard';
 import RequirementTaskView from './components/RequirementTaskView';
-import { ItemsToMakeCard, ProjectInfoCards, ProjectTaskHero } from './components/ProjectTaskLayout';
+import { ItemsToMakeCard, ProjectTaskHero } from './components/ProjectTaskLayout';
 import ProjectWorkTaskView, { WorkTab } from '@/components/projectWork/ProjectWorkTaskView';
 import CompleteSheet from './components/CompleteSheet';
 import CallLeadPanel from '@/components/callRecordings/CallLeadPanel';
@@ -603,21 +603,16 @@ export default function TaskDetail() {
           onMarkCompleted={orderNext === 'COMPLETED' ? () => setSheet('orderstep') : undefined} />}
         {installView && task.installOrder && <InstallTaskView task={task} info={task.installOrder} locked={locked || !mine} onChanged={load} />}
 
-        {/* Shared project task — customer + project side by side, then the numbered items to make. */}
-        {isProjectTask && <ProjectInfoCards task={task} />}
-        {isProjectTask && task.projectInfo && <ItemsToMakeCard info={task.projectInfo} />}
-
-        {/* Customer payments report (collected / pending, every entry, record one) beside the work-items checklist; tracked projects
-            have their own work board below, so payments take the full width there. */}
+        {/* Shared project task — customer payments right under the project details, then the numbered items to
+            make and the work-items checklist (tracked projects have their own work board below). */}
         {isProjectTask && task.projectInfo && (
-          <div className={`grid grid-cols-1 gap-3.5 ${workTracking ? '' : 'min-[380px]:grid-cols-2'}`}>
-            <PaymentBox info={task.projectInfo} compact
-              canRecord={canRecordPayment} onRecord={() => setSheet('payment')} />
-            {!workTracking && (
-              <ChecklistPanel taskId={taskId} checklist={task.checklist} onChanged={load} locked={locked} compact
-                title={isProjectExec ? 'Work Items' : 'Work to Complete'} />
-            )}
-          </div>
+          <PaymentBox info={task.projectInfo} compact
+            canRecord={canRecordPayment} onRecord={() => setSheet('payment')} />
+        )}
+        {isProjectTask && task.projectInfo && <ItemsToMakeCard info={task.projectInfo} />}
+        {isProjectTask && task.projectInfo && !workTracking && (
+          <ChecklistPanel taskId={taskId} checklist={task.checklist} onChanged={load} locked={locked} compact
+            title={isProjectExec ? 'Work Items' : 'Work to Complete'} />
         )}
 
         {/* The project page's Execution tab: Execution / Installation / Daily log / Team chat / History. On a
@@ -728,7 +723,7 @@ export default function TaskDetail() {
 
         {/* Field-execution tools — only for real field/site tasks, not lead "collect info" forms. */}
         {!isLeadForm && !isCallTask && (<>
-        {mine && !orderTask && <TimeTracker taskId={taskId} disabled={locked} />}
+        {mine && !orderTask && !isProjectTask && <TimeTracker taskId={taskId} disabled={locked} />}
 
         {/* Site check-in is for single field visits — not the long-running shared project task. */}
         {!isProjectTask && !orderTask && <CheckInBar taskId={taskId} checkins={task.checkins} onChanged={load} locked={locked} />}

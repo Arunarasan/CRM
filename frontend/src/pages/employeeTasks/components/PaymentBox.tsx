@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Clock, IndianRupee, Paperclip, Plus, Wallet } from 'lucide-react';
+import { IndianRupee, Paperclip, Plus, Wallet } from 'lucide-react';
 import { ProjectExecutionInfo } from '@/types/employeeTask';
 import { resolveFileUrl } from '@/lib/uploadFile';
 import { HeadLink, SectionHead } from './ProjectTaskLayout';
@@ -51,9 +51,8 @@ export default function PaymentBox({ info, canRecord, onRecord, compact = false 
           </p>
         )}
 
-        <div className={`grid gap-2 ${compact && !expanded ? 'grid-cols-1' : 'grid-cols-2'}`}>
+        <div className="grid grid-cols-2 gap-2">
           <Stat label="Collected" value={money(confirmed)} tone="text-[#2C7050]" />
-          <Stat label="Awaiting check" value={money(pending)} tone="text-[#9B6B32]" icon />
           {full && value != null && <Stat label="Order value" value={money(value)} tone="text-[#1A211E]" />}
           {toCollect != null && (
             <Stat label="Pending to collect" value={money(toCollect)} tone={toCollect > 0 ? 'text-[#B94B45]' : 'text-[#2C7050]'} />
@@ -65,7 +64,7 @@ export default function PaymentBox({ info, canRecord, onRecord, compact = false 
             <div className="h-2 w-full overflow-hidden rounded-full bg-[#EFEBE0]">
               <div className="h-full rounded-full bg-gradient-to-r from-[#0A573B] to-[#0F6E56]" style={{ width: `${paidPct}%` }} />
             </div>
-            <p className="mt-1 text-[11px] text-[#8A8F86]">{paidPct}% of the order value paid{pending > 0 ? ' (incl. awaiting check)' : ''}</p>
+            <p className="mt-1 text-[11px] text-[#8A8F86]">{paidPct}% of the order value paid</p>
           </div>
         )}
 
@@ -117,11 +116,11 @@ export default function PaymentBox({ info, canRecord, onRecord, compact = false 
   );
 }
 
-function Stat({ label, value, tone, icon }: { label: string; value: string; tone: string; icon?: boolean }) {
+function Stat({ label, value, tone }: { label: string; value: string; tone: string }) {
   return (
     <div className="rounded-xl bg-[#FBFAF6] px-3 py-2 ring-1 ring-[#EFE9DC]">
       <p className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-[#A6A99E]">
-        {icon ? <Clock className="h-2.5 w-2.5" /> : <IndianRupee className="h-2.5 w-2.5" />} {label}
+        <IndianRupee className="h-2.5 w-2.5" /> {label}
       </p>
       <p className={`text-[15px] font-bold ${tone}`}>{value}</p>
     </div>

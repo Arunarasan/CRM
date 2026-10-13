@@ -69,7 +69,8 @@ export function ProjectTaskHero({ task }: { task: TaskDetail }) {
   const prio = priorityMeta(task.priority);
   const due = humanizeDue(task.dueDate, task.status);
   const ct = contactOf(task);
-  const title = info?.projectName || task.project?.name || task.taskName;
+  // The card is headed by the customer's name — not the "Project for …" project title.
+  const title = (has(ct.name) ? String(ct.name) : '') || info?.projectName || task.project?.name || task.taskName;
   const place = [task.floor, task.room, task.itemName].filter(Boolean).join(' · ');
   const where = [place, ct.city].filter(has).join(' · ');
 
@@ -89,7 +90,6 @@ export function ProjectTaskHero({ task }: { task: TaskDetail }) {
           </span>
           <div className="min-w-0 flex-1">
             <h2 className="text-[18px] font-bold leading-snug text-[#1A211E]">{title}</h2>
-            {has(ct.name) && <p className="truncate text-[13.5px] text-[#5E655D]">{ct.name}</p>}
             {has(where) && (
               <p className="mt-1 flex items-center gap-1.5 text-[12.5px] text-[#6B7169]">
                 <MapPin className="h-3.5 w-3.5 shrink-0 text-[#B07A2E]" /> <span className="truncate">{where}</span>

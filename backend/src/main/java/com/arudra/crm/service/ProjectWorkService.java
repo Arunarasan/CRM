@@ -787,6 +787,7 @@ public class ProjectWorkService {
             line.setQuantity(new BigDecimal(String.valueOf(body.get("quantity"))));
         }
         line.setUnit(blankToNull(body.get("unit")));
+        line.setImageUrl(blankToNull(body.get("imageUrl")));
         if (body.get("productId") != null) line.setProductId(Long.valueOf(String.valueOf(body.get("productId"))));
         line.setSortOrder(lineRepository.findByProjectIdAndIsDeletedFalseOrderBySortOrderAscIdAsc(projectId).size());
         line = lineRepository.save(line);
