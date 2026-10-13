@@ -244,4 +244,15 @@ public class Project extends BaseEntity {
     /** Populated on the portfolio list: unpaid balance across this project's live invoices. */
     @Transient
     private java.math.BigDecimal outstandingAmount;
+
+    /** Portfolio list only: distinct categories / product names of the project's work lines. */
+    @Transient
+    private java.util.List<String> workCategories;
+
+    @Transient
+    private java.util.List<String> workProducts;
+
+    /** Portfolio list only: EXECUTION, READY_TO_FIT or COMPLETED (null when the project has no work lines). */
+    @Transient
+    private String workStage;
 }

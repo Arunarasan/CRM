@@ -243,7 +243,27 @@ public class ProjectService {
         }
         attachTaskTallies(result.getContent());
         attachOutstanding(result.getContent());
+        attachWorkSummary(result.getContent());
         return result;
+    }
+
+    /** Fills category / product names and the 3-stage state on each listed project. */
+    @SuppressWarnings("unchecked")
+    private void attachWorkSummary(List<Project> projects) {
+        for (Project p : projects) {
+            try {
+                Map<String, Object> s = projectWorkService.portfolioSummary(p.getId());
+                p.setWorkCategories((List<String>) s.get("categories"));
+                p.setWorkProducts((List<String>) s.get("products"));
+                String stage = (String) s.get("stage");
+                if (stage != null && ("COMPLETED".equalsIgnoreCase(p.getStatus()) || "CLOSED".equalsIgnoreCase(p.getStatus()))) {
+                    stage = "COMPLETED";
+                }
+                p.setWorkStage(stage);
+            } catch (RuntimeException ignored) {
+                // a bad work line must not break the whole portfolio list
+            }
+        }
     }
 
     /** Fills outstandingAmount on each listed project from its live invoices (one query for the page). */

@@ -623,6 +623,34 @@ public class ProjectWorkService {
         return out;
     }
 
+    /**
+     * Portfolio row summary: active categories + products, and the 3-stage state —
+     * EXECUTION (products not all at site), READY_TO_FIT (execution done, installation open), COMPLETED.
+     */
+    @Transactional(readOnly = true)
+    public Map<String, Object> portfolioSummary(Long projectId) {
+        Calc c = calculate(projectId);
+        List<String> categories = new ArrayList<>();
+        List<String> products = new ArrayList<>();
+        for (ProjectWorkLine l : c.lines) {
+            if (!Boolean.TRUE.equals(l.getActive())) continue;
+            if (l.getCategory() != null && !categories.contains(l.getCategory())) categories.add(l.getCategory());
+            if (l.getItemName() != null && !products.contains(l.getItemName())) products.add(l.getItemName());
+        }
+        String stage = null;
+        if (!categories.isEmpty()) {
+            boolean hasInstall = c.installCategories.stream().anyMatch(ic -> Boolean.TRUE.equals(ic.getActive()));
+            if (c.executionPercent < 100) stage = "EXECUTION";
+            else if (hasInstall && c.installationPercent < 100) stage = "READY_TO_FIT";
+            else stage = "COMPLETED";
+        }
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("categories", categories);
+        out.put("products", products);
+        out.put("stage", stage);
+        return out;
+    }
+
     private int overall(Calc c) {
         boolean hasInstall = c.installCategories.stream().anyMatch(ic -> Boolean.TRUE.equals(ic.getActive()));
         if (!hasInstall) return c.executionPercent;

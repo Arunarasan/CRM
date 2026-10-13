@@ -41,6 +41,9 @@ interface ProjectRow {
   progress: number;
   startDate?: string;
   endDate?: string;
+  workCategories?: string[];
+  workProducts?: string[];
+  workStage?: "EXECUTION" | "READY_TO_FIT" | "COMPLETED" | null;
   taskTotal?: number;
   taskDone?: number;
   outstandingAmount?: number;
@@ -67,55 +70,26 @@ const SEGMENTS: { key: SegmentKey; label: string }[] = [
   { key: "unassigned", label: "Team Not Assigned" },
 ];
 
-// Status pill styling — soft tints that read the same in light and dark.
-const statusStyle = (status: string): string => {
-  switch (status?.toUpperCase()) {
-    case "PLANNING":
-    case "PENDING":
-    case "APPROVED":
-      return "bg-violet-500/10 text-violet-600 dark:text-violet-400";
-    case "RUNNING":
-      return "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400";
-    case "PAUSED":
-    case "ON_HOLD":
-      return "bg-amber-500/10 text-amber-600 dark:text-amber-400";
-    case "COMPLETED":
-    case "CLOSED":
-      return "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400";
-    case "CANCELLED":
-      return "bg-rose-500/10 text-rose-600 dark:text-rose-400";
-    default:
-      return "bg-muted text-muted-foreground";
-  }
-};
-
-const humanize = (s?: string) =>
-  (s || "").split("_").map((w) => w.charAt(0) + w.slice(1).toLowerCase()).join(" ");
-
 const initials = (name?: string) =>
   (name || "?").trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? "").join("") || "?";
 
-function StatusBadge({ status }: { status: string }) {
-  return (
-    <Badge className={`${statusStyle(status)} border-transparent`}>{humanize(status)}</Badge>
-  );
+const STAGES: Record<string, { label: string; cls: string }> = {
+  EXECUTION: { label: "Execution", cls: "bg-amber-500/10 text-amber-600 dark:text-amber-400" },
+  READY_TO_FIT: { label: "Ready to Fit", cls: "bg-violet-500/10 text-violet-600 dark:text-violet-400" },
+  COMPLETED: { label: "Completed", cls: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" },
+};
+
+function StageBadge({ stage }: { stage?: string | null }) {
+  const st = stage ? STAGES[stage] : undefined;
+  if (!st) return <span className="text-sm text-muted-foreground">—</span>;
+  return <Badge className={`${st.cls} border-transparent whitespace-nowrap`}>{st.label}</Badge>;
 }
 
-function ProgressBar({ value }: { value: number }) {
-  const v = Math.max(0, Math.min(100, value ?? 0));
-  return (
-    <div className="w-full">
-      <div className="flex justify-between text-xs mb-1">
-        <span className="text-muted-foreground">{v}%</span>
-      </div>
-      <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
-        <div
-          className={`h-1.5 rounded-full transition-all ${v >= 100 ? "bg-emerald-500" : "bg-emerald-500"}`}
-          style={{ width: `${v}%` }}
-        />
-      </div>
-    </div>
-  );
+/** Comma list that stays on one line and shows the full text on hover. */
+function NameList({ items }: { items?: string[] }) {
+  if (!items?.length) return <span className="text-sm text-muted-foreground">—</span>;
+  const text = items.join(", ");
+  return <span className="text-sm block max-w-[220px] truncate" title={text}>{text}</span>;
 }
 
 function Owner({ pm }: { pm?: { name?: string } }) {
@@ -139,12 +113,11 @@ function ProjectInfo({ p }: { p: ProjectRow }) {
           <div className="font-bold text-slate-800 truncate">{p.projectName}</div>
           {p.projectCode && <div className="font-mono text-[11px] text-slate-400">{p.projectCode}</div>}
         </div>
-        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${statusStyle(p.status)}`}>{humanize(p.status)}</span>
+        <StageBadge stage={p.workStage} />
       </div>
       <div className="divide-y divide-slate-100">
         <div className="pb-1.5">
           <InfoRow label="Customer" value={p.customer?.name} />
-          <InfoRow label="Company" value={p.customer?.companyName} />
           <InfoRow label="City" value={p.customer?.city} />
           <InfoRow label="Type" value={p.projectType} />
         </div>
@@ -154,8 +127,8 @@ function ProjectInfo({ p }: { p: ProjectRow }) {
           <InfoRow label="End" value={p.endDate} />
         </div>
         <div className="pt-1.5">
-          <InfoRow label="Progress" value={`${p.progress ?? 0}%`} accent="text-slate-900 font-bold" />
-          <InfoRow label="Tasks done" value={`${p.taskDone ?? 0} / ${p.taskTotal ?? 0}`} />
+          <InfoRow label="Category" value={p.workCategories?.join(", ")} />
+          <InfoRow label="Product" value={p.workProducts?.join(", ")} />
         </div>
       </div>
     </div>
@@ -288,19 +261,10 @@ export default function Projects() {
 
   const columns: Column<ProjectRow>[] = [
     { key: "customer", header: "Customer", cell: (p) => <span className="text-sm">{p.customer?.name || "—"}</span> },
-    { key: "company", header: "Company", cell: (p) => <span className="text-sm text-muted-foreground">{p.customer?.companyName || "—"}</span> },
     { key: "city", header: "City", cell: (p) => <span className="text-sm text-muted-foreground">{p.customer?.city || "—"}</span> },
-    { key: "status", header: "Status", cell: (p) => <StatusBadge status={p.status} /> },
-    { key: "progress", header: "Progress", headClassName: "w-40", cellClassName: "w-40", cell: (p) => <ProgressBar value={p.progress} /> },
-    {
-      key: "tasks", header: "Tasks", cellClassName: "whitespace-nowrap",
-      cell: (p) => (
-        <span className="text-sm tabular-nums">
-          <span className="font-medium text-foreground">{p.taskDone ?? 0}</span>
-          <span className="text-muted-foreground"> / {p.taskTotal ?? 0}</span>
-        </span>
-      ),
-    },
+    { key: "category", header: "Category", cell: (p) => <NameList items={p.workCategories} /> },
+    { key: "product", header: "Product", cell: (p) => <NameList items={p.workProducts} /> },
+    { key: "stage", header: "Stage", cell: (p) => <StageBadge stage={p.workStage} /> },
     ...(segment === "pendingCollection" ? [{
       key: "outstanding", header: "Outstanding", cellClassName: "whitespace-nowrap",
       cell: (p: ProjectRow) => (
@@ -334,12 +298,12 @@ export default function Projects() {
   const from = totalElements === 0 ? 0 : page * size + 1;
   const to = page * size + projects.length;
 
-  // Board columns group the loaded page by status category.
-  const boardColumns: { key: SegmentKey; label: string; match: (s: string) => boolean }[] = [
-    { key: "new", label: "New", match: (s) => ["PLANNING", "PENDING", "APPROVED"].includes(s) },
-    { key: "inProgress", label: "In Progress", match: (s) => ["RUNNING"].includes(s) },
-    { key: "onHold", label: "On Hold", match: (s) => ["PAUSED", "ON_HOLD"].includes(s) },
-    { key: "completed", label: "Completed", match: (s) => ["COMPLETED", "CLOSED"].includes(s) },
+  // Board columns group the loaded page by the 3-stage work state.
+  const boardColumns: { key: string; label: string; match: (stage?: string | null) => boolean }[] = [
+    { key: "none", label: "Not Started", match: (st) => !st },
+    { key: "execution", label: "Execution", match: (st) => st === "EXECUTION" },
+    { key: "fit", label: "Ready to Fit", match: (st) => st === "READY_TO_FIT" },
+    { key: "done", label: "Completed", match: (st) => st === "COMPLETED" },
   ];
 
   return (
@@ -467,20 +431,16 @@ export default function Projects() {
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 space-y-1.5 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <StatusBadge status={p.status} />
+                  <StageBadge stage={p.workStage} />
                 </div>
                 {p.customer?.name && <div className="font-semibold text-foreground truncate">{p.customer.name}</div>}
-                {(p.customer?.companyName || p.customer?.city) && (
-                  <div className="text-xs text-muted-foreground truncate">
-                    {[p.customer?.companyName, p.customer?.city].filter(Boolean).join(" · ")}
-                  </div>
+                {p.customer?.city && <div className="text-xs text-muted-foreground truncate">{p.customer.city}</div>}
+                {!!p.workCategories?.length && (
+                  <div className="text-xs text-muted-foreground truncate">Category: {p.workCategories.join(", ")}</div>
                 )}
-                <ProgressBar value={p.progress} />
-                <div className="flex items-center justify-end gap-2 pt-1">
-                  <span className="text-xs text-muted-foreground whitespace-nowrap">
-                    Tasks {p.taskDone ?? 0}/{p.taskTotal ?? 0}
-                  </span>
-                </div>
+                {!!p.workProducts?.length && (
+                  <div className="text-xs text-muted-foreground truncate">Product: {p.workProducts.join(", ")}</div>
+                )}
               </div>
               <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
             </div>
@@ -489,7 +449,7 @@ export default function Projects() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
           {boardColumns.map((col) => {
-            const items = visible.filter((p) => col.match((p.status || "").toUpperCase()));
+            const items = visible.filter((p) => col.match(p.workStage));
             return (
               <div key={col.key} className="bg-muted/40 rounded-xl border p-3 flex flex-col">
                 <div className="flex items-center justify-between px-1 pb-2 mb-1 border-b">
@@ -506,11 +466,9 @@ export default function Projects() {
                       {p.projectCode && <div className="text-[11px] font-mono text-muted-foreground">{p.projectCode}</div>}
                       <div className="font-medium text-sm truncate">{p.projectName}</div>
                       {p.customer?.name && <div className="text-xs text-muted-foreground truncate mb-2">{p.customer.name}</div>}
-                      <ProgressBar value={p.progress} />
-                      <div className="flex items-center justify-between mt-2">
-                        <Owner pm={p.projectManager} />
-                        <span className="text-[11px] text-muted-foreground whitespace-nowrap">{p.taskDone ?? 0}/{p.taskTotal ?? 0}</span>
-                      </div>
+                      {!!p.workCategories?.length && <div className="text-[11px] text-muted-foreground truncate">{p.workCategories.join(", ")}</div>}
+                      {!!p.workProducts?.length && <div className="text-[11px] text-muted-foreground truncate mb-2">{p.workProducts.join(", ")}</div>}
+                      <Owner pm={p.projectManager} />
                     </button>
                   ))}
                   {items.length === 0 && <div className="text-xs text-muted-foreground text-center py-6">No projects</div>}
