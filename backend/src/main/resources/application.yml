@@ -21,6 +21,7 @@ spring:
     enabled: true
     baseline-on-migrate: true
     baseline-version: 1
+    out-of-order: true
     baseline-description: "Schema as managed by Hibernate ddl-auto before Flyway was introduced"
   # SMTP for password-reset OTP emails. Leave MAIL_USERNAME blank to keep dev in console-log
   # mode (EmailService prints the OTP instead of sending). For Gmail use an App Password.
