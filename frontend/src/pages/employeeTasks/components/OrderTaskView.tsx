@@ -1,13 +1,18 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Phone, MessageCircle, Check, ChevronDown, History, StickyNote, Scissors, Package, Store, Truck, Wrench,
-  Copy, MessageSquare, X, CheckCircle2, AlertTriangle, RotateCcw,
+  Copy, MessageSquare, X, CheckCircle2, AlertTriangle, RotateCcw, Printer, Hammer, Ruler,
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from '@/components/ui/toast';
 import PhotoPickButtons from './PhotoPickButtons';
 import AudioCaptureField, { type CapturedAudio } from '@/components/AudioCaptureField';
 import AudioPlayer from '@/components/AudioPlayer';
+import type { Bundle } from '@/api/bundleApi';
+import { fetchCompanyProfile, type CompanyProfile } from '@/lib/companyProfile';
+import {
+  LABEL_SIZES, getLabelSize, printBundleStickers, printPackingStickers, setLabelSize, type LabelSize,
+} from '@/components/bundles/printStickers';
 import type { OrderStep, OrderView, TaskDetail } from '@/types/employeeTask';
 import { employeeTaskApi } from '@/api/employeeTaskApi';
 import { formatSpec, parseSpec } from '@/components/bundles/workSpec';
@@ -23,6 +28,7 @@ export const ORDER_STEPS: { key: OrderStep; label: string }[] = [
 ];
 export const stepLabel = (s?: string | null) => ORDER_STEPS.find((x) => x.key === s)?.label ?? s ?? '';
 const WORK_LABEL: Record<string, string> = { STITCHING: 'Stitching', MAKING: 'Making', FITTING: 'Fitting', OTHER: 'Work' };
+const WORK_ICON: Record<string, typeof Scissors> = { STITCHING: Scissors, MAKING: Hammer, FITTING: Ruler };
 export const workLabel = (w?: string | null) => WORK_LABEL[(w ?? '').toUpperCase()] ?? 'Stitching';
 const digits = (s?: string | null) => (s || '').replace(/[^\d+]/g, '');
 const qty = (n?: number | null) => (n == null ? '' : Number(n).toLocaleString('en-IN', { maximumFractionDigits: 2 }));
@@ -60,6 +66,37 @@ function itemLines(it: OrderView['items'][number]) {
   return { main: it.description || 'Item', sub: amount ? `Qty ${amount}` : null };
 }
 
+/** The order task's data in the shape the sticker printer expects. */
+function toBundle(order: OrderView): Bundle {
+  return {
+    id: order.id, code: order.code, groupCode: order.code, bundleNo: order.bundleNo ?? 1, bundleTotal: order.bundleTotal ?? 1,
+    status: order.status, workType: order.workType ?? 'STITCHING', handoverMode: order.handoverMode ?? 'PICKUP',
+    dueDate: order.dueDate, priority: order.priority ?? 'NORMAL', notes: order.notes, overdue: !!order.overdue,
+    invoiceId: order.invoiceNumber ? 1 : null, invoiceNumber: order.invoiceNumber, balanceDue: order.balanceDue,
+    customerName: order.customerName, customerPhone: order.customerPhone,
+    itemCount: order.items.length, totalQuantity: order.items.reduce((n, i) => n + Number(i.quantity ?? 0), 0),
+    items: order.items.map((i) => ({
+      id: i.id, description: i.description ?? 'Item', quantity: i.quantity ?? 1, unit: i.unit, workSpec: i.workSpec,
+      notes: i.notes, photoUrls: i.photoUrls, done: i.done,
+    })),
+  } as unknown as Bundle;
+}
+
+/** Sticker printing for the order: label size, company name, and the three print actions. */
+function useStickerPrint(order: OrderView) {
+  const [size, setSizeState] = useState<LabelSize>(getLabelSize());
+  const [company, setCompany] = useState<CompanyProfile | undefined>();
+  useEffect(() => { fetchCompanyProfile().then(setCompany).catch(() => {}); }, []);
+  const bundle = useMemo(() => toBundle(order), [order]);
+  const done = (ok: boolean) => { if (!ok) toast.error('Allow pop-ups for this site to print stickers.'); };
+  return {
+    size, setSize: (v: LabelSize) => { setLabelSize(v); setSizeState(v); },
+    printOrder: () => done(printBundleStickers([bundle], size, company)),
+    printAllProducts: () => done(printPackingStickers(bundle, size, company)),
+    printProduct: (index: number) => done(printPackingStickers(bundle, size, company, [bundle.items![index]])),
+  };
+}
+
 /**
  * Stitching / making task body: who it's for, where the order is in its flow, and exactly what to make —
  * one tickable row per item (with its size / pieces spec and photos). The step button lives in the task's
@@ -74,6 +111,8 @@ export default function OrderTaskView({ task, order, canWork, onChanged, onMarkC
   /** Opens the "mark completed" sheet (only offered while the order is in process). */
   onMarkCompleted?: () => void;
 }) {
+  const print = useStickerPrint(order);
+  const [detail, setDetail] = useState<OrderView['items'][number] | null>(null);
   const [busyItem, setBusyItem] = useState<number | null>(null);
   const [err, setErr] = useState('');
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -113,7 +152,7 @@ export default function OrderTaskView({ task, order, canWork, onChanged, onMarkC
       <div className="rounded-2xl border border-[#ECEAE5] bg-white p-3.5 shadow-[0_2px_10px_rgba(0,35,22,0.04)]">
         <div className="flex items-start gap-3">
           <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#F6ECDD] text-[#9B6B32]">
-            <Scissors className="h-5 w-5" />
+            {(() => { const WorkIcon = WORK_ICON[(order.workType ?? '').toUpperCase()] ?? Scissors; return <WorkIcon className="h-5 w-5" />; })()}
           </span>
           <div className="min-w-0 flex-1">
             <p className="flex flex-wrap items-baseline gap-x-1.5 text-[18px] font-bold text-[#1A211E]">
@@ -169,11 +208,12 @@ export default function OrderTaskView({ task, order, canWork, onChanged, onMarkC
             const photos = [it.productImageUrl, ...(it.photoUrls || '').split(',')].map((x) => (x || '').trim()).filter(Boolean);
             return (
               <li key={it.id} className={`rounded-xl border p-2.5 ${it.done ? 'border-[#CFE6D8] bg-[#F3FAF6]' : 'border-[#EEEDE9]'}`}>
-               <div className="flex gap-3">
+               <div className="flex cursor-pointer gap-3" role="button" tabIndex={0} aria-label={`View details of ${main}`}
+                 onClick={() => setDetail(it)} onKeyDown={(e) => { if (e.key === 'Enter') setDetail(it); }}>
                 {photos[0] ? (
-                  <a href={resolveFileUrl(photos[0])} target="_blank" rel="noopener noreferrer" className="h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-[#ECEAE5]">
+                  <span className="h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-[#ECEAE5]">
                     <img src={resolveFileUrl(photos[0])} alt="" className="h-full w-full object-cover" />
-                  </a>
+                  </span>
                 ) : (
                   <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg bg-[#F5F3EE] text-[#C9C2B2]"><Scissors className="h-5 w-5" /></span>
                 )}
@@ -182,6 +222,10 @@ export default function OrderTaskView({ task, order, canWork, onChanged, onMarkC
                   {sub && <p className="mt-0.5 text-[12px] text-[#6B726E]">{sub}</p>}
                   {it.notes && <p className="mt-1 text-[12px] italic text-[#8A5A12]">{it.notes}</p>}
                 </div>
+                <button type="button" onClick={(e) => { e.stopPropagation(); print.printProduct(order.items.indexOf(it)); }} aria-label="Print packing sticker for this product"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[#DDE2DE] bg-white text-[#0A573B] active:scale-90">
+                  <Printer className="h-4 w-4" />
+                </button>
                </div>
                {!closed && (
                 <div className="mt-2.5 flex items-center gap-2.5">
@@ -212,6 +256,29 @@ export default function OrderTaskView({ task, order, canWork, onChanged, onMarkC
         {err && <p className="mt-2 rounded-lg bg-[#FBE7E4] px-2.5 py-2 text-[12px] text-[#B94B45]">{err}</p>}
       </div>
 
+      {/* Stickers: the whole order, or one packing sticker per product */}
+      <div className="rounded-2xl border border-[#ECEAE5] bg-white p-3.5 shadow-[0_2px_10px_rgba(0,35,22,0.04)]">
+        <div className="mb-2.5 flex items-center gap-2">
+          <Printer className="h-4 w-4 text-[#9B6B32]" />
+          <h3 className="flex-1 text-[13px] font-bold uppercase tracking-wide text-[#1A211E]">Print stickers</h3>
+          <select value={print.size} onChange={(e) => print.setSize(e.target.value as LabelSize)} aria-label="Label size"
+            className="rounded-lg border border-[#DDE2DE] bg-white px-2 py-1 text-[12px] text-[#33392F]">
+            {LABEL_SIZES.map((l) => <option key={l.v} value={l.v}>{l.label}</option>)}
+          </select>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <button type="button" onClick={print.printOrder}
+            className="flex items-center justify-center gap-1.5 rounded-xl border border-[#DDE2DE] py-2.5 text-[13px] font-semibold text-[#0A573B] active:scale-[0.98]">
+            <Printer className="h-4 w-4" /> Whole order
+          </button>
+          <button type="button" onClick={print.printAllProducts} disabled={order.items.length === 0}
+            className="flex items-center justify-center gap-1.5 rounded-xl bg-[#0A573B] py-2.5 text-[13px] font-semibold text-white active:scale-[0.98] disabled:opacity-50">
+            <Printer className="h-4 w-4" /> Each product ({order.items.length})
+          </button>
+        </div>
+        <p className="mt-2 text-[11.5px] text-[#8A8F86]">Packing stickers read “1 of {order.items.length}” and list what is inside each pack. The printer icon on a product prints just that one.</p>
+      </div>
+
       {/* The customer's / counter's note */}
       {order.notes && (
         <p className="flex items-start gap-2 rounded-2xl border border-[#F0E3C8] bg-[#FDF6E7] px-3.5 py-3 text-[13.5px] text-[#7A5414]">
@@ -221,6 +288,9 @@ export default function OrderTaskView({ task, order, canWork, onChanged, onMarkC
 
       <RemarksPanel taskId={task.id} remarks={remarks} legacy={task.comments} canWork={canWork} onChanged={onChanged}
         problem={problem} onProblemDone={() => setProblem(false)} />
+
+      <ItemDetailDialog item={detail} order={order} onClose={() => setDetail(null)}
+        onPrint={detail ? () => print.printProduct(order.items.indexOf(detail)) : undefined} />
 
       <Dialog open={allDoneOpen} onOpenChange={setAllDoneOpen}>
         <DialogContent className="max-w-sm">
@@ -380,5 +450,80 @@ function RemarksPanel({ taskId, remarks, legacy, canWork, onChanged, problem, on
       </div>
       {err && <p className="mt-2 rounded-lg bg-[#FBE7E4] px-2.5 py-2 text-[12px] text-[#B94B45]">{err}</p>}
     </div>
+  );
+}
+
+/** Read-only card for one product: its picture(s), what it is, the work to do on it, notes and progress. */
+function ItemDetailDialog({ item, order, onClose, onPrint }: {
+  item: OrderView['items'][number] | null;
+  order: OrderView;
+  onClose: () => void;
+  onPrint?: () => void;
+}) {
+  if (!item) return null;
+  const spec = parseSpec(item.workSpec);
+  const isWindow = !spec.type || ['Curtain', 'Roman Blind', 'Blind'].includes(spec.type);
+  const specRows: [string, string][] = ([
+    ['Type', spec.type],
+    ['Width', spec.width ? `${spec.width} in` : ''],
+    ['Height', spec.height ? `${spec.height} in` : ''],
+    [isWindow ? 'Panels' : 'Pieces', spec.panels],
+    ['Pleat', spec.pleat && spec.pleat !== 'None' ? spec.pleat : ''],
+    ['Lining', spec.lining && spec.lining !== 'None' ? spec.lining : ''],
+  ] as [string, string | undefined][]).filter(([, v]) => v && String(v).trim() !== '') as [string, string][];
+  const photos = [item.productImageUrl, ...(item.photoUrls || '').split(',')].map((x) => (x || '').trim()).filter(Boolean);
+  const pct = item.done ? 100 : item.progress ?? 0;
+  const qtyText = item.quantity != null ? `${qty(item.quantity)} ${item.unit ?? ''}`.trim() : '';
+  const Row = ({ label, value }: { label: string; value: string }) => (
+    <div className="flex items-start justify-between gap-3 border-b border-[#F1ECE2] py-2 text-[13.5px] last:border-0">
+      <span className="shrink-0 text-[#7A817C]">{label}</span>
+      <span className="min-w-0 text-right font-semibold text-[#1A211E]">{value}</span>
+    </div>
+  );
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-h-[88dvh] max-w-sm overflow-y-auto">
+        <DialogHeader><DialogTitle className="pr-6 leading-snug">{item.description || 'Product'}</DialogTitle></DialogHeader>
+
+        {photos.length > 0 && (
+          <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+            {photos.map((u) => (
+              <a key={u} href={resolveFileUrl(u)} target="_blank" rel="noopener noreferrer"
+                className="h-36 w-36 shrink-0 overflow-hidden rounded-xl border border-[#ECEAE5] bg-[#F5F3EE]">
+                <img src={resolveFileUrl(u)} alt="" className="h-full w-full object-cover" />
+              </a>
+            ))}
+          </div>
+        )}
+
+        <div>
+          <p className="mb-0.5 text-[11px] font-bold uppercase tracking-wide text-[#9B6B32]">Product</p>
+          <Row label="Order" value={order.code} />
+          <Row label="Item" value={item.description || '—'} />
+          {qtyText && <Row label="Quantity" value={qtyText} />}
+          <Row label="Status" value={item.done ? 'Finished' : pct > 0 ? `In progress · ${pct}%` : 'Not started'} />
+        </div>
+
+        <div>
+          <p className="mb-0.5 text-[11px] font-bold uppercase tracking-wide text-[#9B6B32]">Work to do · {workLabel(order.workType)}</p>
+          {specRows.length > 0 ? specRows.map(([l, v]) => <Row key={l} label={l} value={v} />)
+            : <p className="py-2 text-[13px] text-[#8A918C]">No work details were entered for this product.</p>}
+          {spec.notes && <p className="mt-1.5 rounded-lg bg-[#FDF6E7] px-3 py-2 text-[13px] text-[#7A5414]">{spec.notes}</p>}
+          {item.notes && <p className="mt-1.5 rounded-lg bg-[#FDF6E7] px-3 py-2 text-[13px] italic text-[#7A5414]">{item.notes}</p>}
+        </div>
+
+        <div>
+          <div className="mb-1 flex items-center justify-between text-[12px] font-semibold text-[#7A817C]"><span>Progress</span><span>{pct}%</span></div>
+          <div className="h-2 overflow-hidden rounded-full bg-[#E3E6E2]"><div className="h-full rounded-full bg-[#1E9E5E]" style={{ width: `${pct}%` }} /></div>
+        </div>
+
+        {onPrint && (
+          <button type="button" onClick={onPrint}
+            className="flex items-center justify-center gap-1.5 rounded-xl border border-[#DDE2DE] py-2.5 text-[13px] font-semibold text-[#0A573B] active:scale-[0.98]">
+            <Printer className="h-4 w-4" /> Print packing sticker
+          </button>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }

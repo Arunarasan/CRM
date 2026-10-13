@@ -102,27 +102,8 @@ function largeLabel(b: Bundle, co: CompanyProfile | undefined, cls: string, maxI
   </div>`;
 }
 
-/**
- * Opens a print-ready window with one sticker per bundle and triggers the print dialog.
- * Returns false when the pop-up was blocked (caller decides whether to tell the user).
- */
-export function printBundleStickers(bundles: Bundle[], size: LabelSize, company?: CompanyProfile): boolean {
-  if (!bundles.length) return true;
-  let page = "";
-  let body = "";
-  if (size === "50x25") {
-    page = "@page { size: 50mm 25mm; margin: 0; }";
-    body = bundles.map(smallLabel).join("");
-  } else if (size === "100x150") {
-    page = "@page { size: 100mm 150mm; margin: 0; }";
-    body = bundles.map((b) => largeLabel(b, company, "l", 8)).join("");
-  } else {
-    page = "@page { size: A4; margin: 8mm; }";
-    body = `<div class="sheet">${bundles.map((b) => largeLabel(b, company, "a", 3)).join("")}</div>`;
-  }
-
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Order stickers</title>
-  <style>
+/** The sticker CSS shared by the order stickers and the packing stickers. */
+const labelCss = (page: string) => `
     ${page}
     * { box-sizing: border-box; }
     body { margin: 0; font-family: "Segoe UI", Roboto, Arial, sans-serif; color: #000; }
@@ -162,6 +143,36 @@ export function printBundleStickers(bundles: Bundle[], size: LabelSize, company?
     .a .cust { font-size: 10pt; font-weight: 700; }
     .a .txt { font-size: 8pt; }
     .a .bc { height: 9mm; }
+    /* packing sticker: the product being packed */
+    .l .prod { font-size: 15pt; font-weight: 800; line-height: 1.2; border: 1.5px solid #000; border-radius: 1.5mm; padding: 2.5mm; }
+    .l .prod span { display: block; font-size: 9pt; font-weight: 400; margin-top: 1mm; }
+    .a .prod { font-size: 10.5pt; font-weight: 800; line-height: 1.2; border: 1.5px solid #000; border-radius: 1.5mm; padding: 1.5mm; }
+    .a .prod span { display: block; font-size: 8pt; font-weight: 400; margin-top: .5mm; }
+    .l .of, .a .of { font-weight: 900; }
+`;
+
+/**
+ * Opens a print-ready window with one sticker per bundle and triggers the print dialog.
+ * Returns false when the pop-up was blocked (caller decides whether to tell the user).
+ */
+export function printBundleStickers(bundles: Bundle[], size: LabelSize, company?: CompanyProfile): boolean {
+  if (!bundles.length) return true;
+  let page = "";
+  let body = "";
+  if (size === "50x25") {
+    page = "@page { size: 50mm 25mm; margin: 0; }";
+    body = bundles.map(smallLabel).join("");
+  } else if (size === "100x150") {
+    page = "@page { size: 100mm 150mm; margin: 0; }";
+    body = bundles.map((b) => largeLabel(b, company, "l", 8)).join("");
+  } else {
+    page = "@page { size: A4; margin: 8mm; }";
+    body = `<div class="sheet">${bundles.map((b) => largeLabel(b, company, "a", 3)).join("")}</div>`;
+  }
+
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Order stickers</title>
+  <style>
+    ${labelCss(page)}
   </style></head><body>${body}
   <script>window.onload = function(){ window.print(); setTimeout(function(){ try { window.close(); } catch(e){} }, 300); };</script>
   </body></html>`;
@@ -237,6 +248,63 @@ export function printJobCard(b: Bundle, company?: CompanyProfile): boolean {
   </body></html>`;
 
   const w = window.open("", "_blank", "width=820,height=900");
+  if (!w) return false;
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
+  return true;
+}
+
+type PackItem = NonNullable<Bundle["items"]>[number];
+
+function packLabel(b: Bundle, it: PackItem, i: number, n: number, cls: "s" | "l" | "a", co?: CompanyProfile) {
+  const spec = formatSpec(parseSpec(it.workSpec));
+  const qty = `${esc(Number(it.quantity))}${it.unit ? " " + esc(it.unit) : ""}`;
+  if (cls === "s") {
+    return `<div class="lbl s">
+      <div class="qr">${qrSvg(bundleScanUrl(b.code))}</div>
+      <div class="txt">
+        <div class="code">${esc(b.code)}</div>
+        <div class="ln"><b>${i}/${n}</b> ${esc(it.description)} × ${qty}</div>
+        <div class="ln mut">${esc(b.customerName || "Walk-in")}</div>
+      </div>
+    </div>`;
+  }
+  return `<div class="lbl ${cls}">
+    <div class="top"><span class="shop">${esc(co?.name || "")}</span><span class="wt">PACKING <span class="of">${i} of ${n}</span></span></div>
+    <div class="mid">
+      <div class="qr">${qrSvg(bundleScanUrl(b.code))}</div>
+      <div class="txt">
+        <div class="code">${esc(b.code)}</div>
+        <div class="cust">${esc(b.customerName || "Walk-in")}</div>
+        ${b.customerPhone ? `<div class="mut">${esc(b.customerPhone)}</div>` : ""}
+        <div class="mut">${b.invoiceNumber ? `Bill ${esc(b.invoiceNumber)}` : ""}${b.dueDate ? ` · Due ${d(b.dueDate)}` : ""}</div>
+        <div class="mut">${b.handoverMode === "INSTALL" ? "<b>INSTALL</b>" : b.handoverMode === "DELIVERY" ? "Delivery" : "Pickup"}</div>
+      </div>
+    </div>
+    <div class="prod">${esc(it.description)} × ${qty}${spec ? `<span>${esc(spec)}</span>` : ""}</div>
+    <div class="bc">${barcodeSvg(b.code)}</div>
+  </div>`;
+}
+
+/**
+ * One packing sticker per product of an order ("2 of 5" + what is inside), printed in a pop-up window.
+ * Pass `only` to print just those items (item numbering still counts the whole order).
+ */
+export function printPackingStickers(b: Bundle, size: LabelSize, company?: CompanyProfile, only?: PackItem[]): boolean {
+  const all = b.items ?? [];
+  const list = only ?? all;
+  if (!list.length) return true;
+  const cls = size === "50x25" ? "s" : size === "100x150" ? "l" : "a";
+  const labels = list.map((it) => packLabel(b, it, all.indexOf(it) + 1 || 1, all.length || list.length, cls, company)).join("");
+  const page = size === "50x25" ? "@page { size: 50mm 25mm; margin: 0; }"
+    : size === "100x150" ? "@page { size: 100mm 150mm; margin: 0; }" : "@page { size: A4; margin: 8mm; }";
+  const body = size === "a4" ? `<div class="sheet">${labels}</div>` : labels;
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Packing stickers ${esc(b.code)}</title>
+  <style>${labelCss(page)}</style></head><body>${body}
+  <script>window.onload = function(){ window.print(); setTimeout(function(){ try { window.close(); } catch(e){} }, 300); };</script>
+  </body></html>`;
+  const w = window.open("", "_blank", "width=480,height=640");
   if (!w) return false;
   w.document.open();
   w.document.write(html);

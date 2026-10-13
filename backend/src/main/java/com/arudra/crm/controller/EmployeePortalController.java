@@ -42,6 +42,7 @@ public class EmployeePortalController {
     private final EmployeeTimeService timeService;
     private final CurrentUserService currentUserService;
     private final PurchaseService purchaseService;
+    private final com.arudra.crm.service.BundleService bundleService;
     private final ProfileChangeRequestService profileChangeRequestService;
     private final WebAuthnService webAuthnService;
     private final AttendanceCorrectionService correctionService;
@@ -50,6 +51,7 @@ public class EmployeePortalController {
 
     public EmployeePortalController(EmployeePortalService portalService, EmployeeTimeService timeService,
                                     CurrentUserService currentUserService, PurchaseService purchaseService,
+                                    com.arudra.crm.service.BundleService bundleService,
                                     ProfileChangeRequestService profileChangeRequestService,
                                     WebAuthnService webAuthnService, AttendanceCorrectionService correctionService,
                                     com.arudra.crm.service.EmployeeReviewService employeeReviewService,
@@ -58,6 +60,7 @@ public class EmployeePortalController {
         this.timeService = timeService;
         this.currentUserService = currentUserService;
         this.purchaseService = purchaseService;
+        this.bundleService = bundleService;
         this.profileChangeRequestService = profileChangeRequestService;
         this.webAuthnService = webAuthnService;
         this.correctionService = correctionService;
@@ -104,6 +107,22 @@ public class EmployeePortalController {
     // Goods receipt — any employee can receive & approve incoming goods; the
     // approval is logged for the admin (see PurchaseService.approveGrn).
     // =====================================================================
+
+    // ---- Goods delivery: hand ready / in-process orders to the customer and collect the pending amount ----
+
+    @GetMapping("/deliveries")
+    @PreAuthorize(PORTAL)
+    public ResponseEntity<ApiResponse<List<com.arudra.crm.dto.BundleView>>> deliveryQueue() {
+        me();
+        return ResponseEntity.ok(ApiResponse.success(bundleService.deliveryQueue()));
+    }
+
+    @PostMapping("/deliveries/{id}/deliver")
+    @PreAuthorize(PORTAL)
+    public ResponseEntity<ApiResponse<com.arudra.crm.dto.BundleView>> deliver(@PathVariable Long id,
+            @RequestBody com.arudra.crm.dto.BundleRequests.Handover req) {
+        return ResponseEntity.ok(ApiResponse.success(bundleService.deliverFromPortal(id, req, me())));
+    }
 
     @GetMapping("/goods-receipts/incoming")
     @PreAuthorize(PORTAL)

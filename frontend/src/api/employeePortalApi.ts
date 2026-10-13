@@ -1,4 +1,5 @@
 import api from '../lib/api';
+import type { Bundle } from './bundleApi';
 import {
   EmployeeProfile, EmployeeDashboard, AttendanceEntry, LeaveRequestEntry,
   LeaveBalance, Payslip, SalarySummary, EmployeeDocumentEntry, MyProject, OtherProject, PickableTask,
@@ -91,6 +92,13 @@ export const employeePortalApi = {
   receiveGoods: (payload: GoodsReceiptSubmission) =>
     api.post<MyReceipt>(`${BASE}/goods-receipts/receive`, payload).then((r) => r.data),
   myReceipts: () => api.get<MyReceipt[]>(`${BASE}/goods-receipts/mine`).then((r) => r.data),
+
+  // Goods delivery — hand ready / in-process orders to the customer and collect the pending amount
+  deliveries: () => api.get<Bundle[]>(`${BASE}/deliveries`).then((r) => r.data),
+  deliverOrder: (id: number, body: {
+    deliveredTo?: string; note?: string; photoUrl?: string;
+    payments?: { method: string; amount: number; referenceNumber?: string }[];
+  }) => api.post<Bundle>(`${BASE}/deliveries/${id}/deliver`, body).then((r) => r.data),
 
   leaves: () => api.get<LeaveRequestEntry[]>(`${BASE}/leaves`).then((r) => r.data),
   leaveBalance: () => api.get<LeaveBalance>(`${BASE}/leaves/balance`).then((r) => r.data),

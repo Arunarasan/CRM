@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import {
-  Boxes, Users, UserPlus, ClipboardList, Plane, ChevronRight, PackageCheck,
+  Boxes, Users, UserPlus, ClipboardList, Plane, ChevronRight, PackageCheck, Truck,
 } from 'lucide-react';
 
 /**
@@ -17,6 +17,7 @@ const ITEMS: {
   soon?: boolean;
 }[] = [
   { to: '/employee/goods-receipts', label: 'Goods Receipt', hint: 'Receive & approve incoming goods', icon: PackageCheck, color: 'text-blue-600' },
+  { to: '/employee/deliveries', label: 'Goods Delivery', hint: 'Deliver orders to customers & collect pending amount', icon: Truck, color: 'text-rose-600' },
   { to: '/employee/requests/material', label: 'Material Requests', hint: 'Request materials for a task', icon: Boxes, color: 'text-orange-600' },
   { to: '/employee/requests/manpower', label: 'Manpower Requests', hint: 'Request additional workers', icon: Users, color: 'text-emerald-600' },
   { to: '/employee/leads', label: 'My Leads', hint: 'Add a new customer lead', icon: UserPlus, color: 'text-emerald-600' },

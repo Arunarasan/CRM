@@ -46,6 +46,7 @@ import java.util.stream.Collectors;
 public class BundleService {
 
     public static final List<String> FLOW = List.of("ORDER", "PROCESS", "COMPLETED", "DELIVERED");
+    public static final String PROCESS = "PROCESS";
     public static final String COMPLETED = "COMPLETED";
     public static final String DELIVERED = "DELIVERED";
     public static final String CANCELLED = "CANCELLED";
@@ -317,7 +318,10 @@ public class BundleService {
         bundleRepository.save(b);
 
         String note = blankToNull(req.note);
-        if (!nextStep) note = (toIdx < fromIdx ? "Moved back" : "Skipped ahead") + " by manager" + (note == null ? "" : " — " + note);
+        if (!nextStep) {
+            String who = user == null ? "manager" : user.getName() != null ? user.getName() : user.getEmail();
+            note = (toIdx < fromIdx ? "Moved back" : "Skipped ahead") + " by " + who + (note == null ? "" : " — " + note);
+        }
         if (DELIVERED.equals(to) && b.getDeliveredTo() != null) {
             note = (note == null ? "" : note + " · ") + (INSTALL.equals(b.getHandoverMode()) ? "Installed for " : "Handed to ")
                     + b.getDeliveredTo();
@@ -643,6 +647,57 @@ public class BundleService {
             mv.photoUrl = req.photoUrl;
             mv.deliveredTo = req.deliveredTo;
             out.add(move(b.getId(), mv, user, canOverride || stillDue.signum() == 0));
+        }
+        return out;
+    }
+
+    // =====================================================================
+    // Delivery from the employee portal (Requests → Goods Delivery)
+    // =====================================================================
+
+    /** Orders a delivery person can hand over now: Completed ones, and ones still in Process (needs a remark). */
+    public List<BundleView> deliveryQueue() {
+        return search(null, null, null, false, true, null, 0, 200).getContent().stream()
+                .filter(v -> (COMPLETED.equals(v.status) || PROCESS.equals(v.status)) && !INSTALL.equals(v.handoverMode))
+                .sorted(Comparator.comparing((BundleView v) -> PROCESS.equals(v.status) ? 1 : 0)
+                        .thenComparing(v -> v.dueDate == null ? LocalDate.MAX : v.dueDate))
+                .map(v -> get(v.id)) // full view: the delivery sheet lists the items
+                .toList();
+    }
+
+    /**
+     * An employee hands one order to the customer: collects the pending amount (all of it — a balance can
+     * only be left by a manager from the Orders screen) and marks it Delivered. An order still in Process
+     * can be delivered too, but it needs a remark saying why; admins are told.
+     */
+    @Transactional
+    public BundleView deliverFromPortal(Long id, BundleRequests.Handover req, User user) {
+        Bundle b = find(id);
+        if (CLOSED.contains(b.getStatus())) throw new IllegalStateException(b.getCode() + " is already " + b.getStatus().toLowerCase());
+        if (INSTALL.equals(b.getHandoverMode())) throw new IllegalStateException(b.getCode() + " is installed by its installer (Mark Installed)");
+        boolean early = !COMPLETED.equals(b.getStatus());
+        if (early && !PROCESS.equals(b.getStatus())) throw new IllegalStateException(b.getCode() + " has not been started yet");
+        BundleRequests.Handover h = req == null ? new BundleRequests.Handover() : req;
+        String remark = blankToNull(h.note);
+        if (early && remark == null) throw new IllegalArgumentException("Add a remark — this order is still in process");
+
+        BigDecimal paying = (h.payments == null ? List.<BundleRequests.Payment>of() : h.payments).stream()
+                .filter(p -> p != null && p.amount != null && p.amount.signum() > 0)
+                .map(p -> p.amount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal stillDue = balanceDue(b.getInvoiceId()).subtract(paying);
+        if (stillDue.signum() > 0) {
+            throw new IllegalStateException("Collect the full pending amount to deliver — " + rupees(stillDue) + " is still due.");
+        }
+
+        h.bundleIds = List.of(id);
+        h.allowBalanceDue = false;
+        h.note = early ? "Delivered while still in process — " + remark : remark;
+        BundleView out = handover(h, user, true, true).get(0);
+        if (early) {
+            String who = user == null ? "An employee" : user.getName() != null ? user.getName() : user.getEmail();
+            notificationService.dispatchToAdmins("Order " + b.getCode() + " delivered while in process",
+                    who + " delivered it early: " + remark + customerSuffix(b), "BUNDLE_DELIVERED_EARLY",
+                    "/bundles/" + b.getId(), user != null ? user.getId() : null);
         }
         return out;
     }

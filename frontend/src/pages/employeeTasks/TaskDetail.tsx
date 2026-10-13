@@ -723,7 +723,7 @@ export default function TaskDetail() {
 
         {/* Field-execution tools — only for real field/site tasks, not lead "collect info" forms. */}
         {!isLeadForm && !isCallTask && (<>
-        {mine && !orderTask && !isProjectTask && <TimeTracker taskId={taskId} disabled={locked} />}
+        {mine && !orderTask && !isProjectTask && !['STITCHING', 'INSTALLATION'].includes(task.category as string) && <TimeTracker taskId={taskId} disabled={locked} />}
 
         {/* Site check-in is for single field visits — not the long-running shared project task. */}
         {!isProjectTask && !orderTask && <CheckInBar taskId={taskId} checkins={task.checkins} onChanged={load} locked={locked} />}

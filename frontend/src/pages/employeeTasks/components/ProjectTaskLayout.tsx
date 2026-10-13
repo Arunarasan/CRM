@@ -74,12 +74,13 @@ export function ProjectTaskHero({ task }: { task: TaskDetail }) {
   const place = [task.floor, task.room, task.itemName].filter(Boolean).join(' · ');
   const where = [place, ct.city].filter(has).join(' · ');
 
-  const actions = [
-    ct.phone && { label: 'Call', icon: Phone, href: telHref(ct.phone) },
-    ct.wa && { label: 'WhatsApp', icon: MessageCircle, href: waHref(ct.wa), ext: true },
-    ct.email && { label: 'Email', icon: Mail, href: 'mailto:' + ct.email },
-    ct.mapUrl && { label: 'Navigate', icon: Navigation, href: ct.mapUrl, ext: true },
-  ].filter(Boolean) as { label: string; icon: typeof Phone; href: string; ext?: boolean }[];
+  // Call, WhatsApp and Navigate always show — greyed out when the customer has no number / address yet.
+  const actions: { label: string; icon: typeof Phone; href?: string | null; ext?: boolean }[] = [
+    { label: 'Call', icon: Phone, href: ct.phone ? telHref(ct.phone) : null },
+    { label: 'WhatsApp', icon: MessageCircle, href: ct.wa ? waHref(ct.wa) : null, ext: true },
+    ...(ct.email ? [{ label: 'Email', icon: Mail, href: 'mailto:' + ct.email }] : []),
+    { label: 'Navigate', icon: Navigation, href: ct.mapUrl, ext: true },
+  ];
 
   return (
     <div className={cardCls}>
@@ -105,16 +106,17 @@ export function ProjectTaskHero({ task }: { task: TaskDetail }) {
           </div>
         </div>
 
-        {actions.length > 0 && (
-          <div className="mt-3.5 grid gap-2" style={{ gridTemplateColumns: `repeat(${actions.length}, minmax(0, 1fr))` }}>
-            {actions.map((a) => (
-              <a key={a.label} href={a.href} {...(a.ext ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
-                className="flex min-w-0 flex-col items-center justify-center gap-1 rounded-xl border border-[#D7DED8] bg-white px-1 py-2 text-[12px] font-semibold text-[#0A573B] active:scale-[0.98] min-[460px]:flex-row min-[460px]:gap-1.5 min-[460px]:py-2.5 min-[460px]:text-[13px]">
-                <a.icon className="h-4 w-4 shrink-0" /> <span className="truncate">{a.label}</span>
-              </a>
-            ))}
-          </div>
-        )}
+        <div className="mt-3.5 grid gap-2" style={{ gridTemplateColumns: `repeat(${actions.length}, minmax(0, 1fr))` }}>
+          {actions.map((a) => {
+            const cls = 'flex min-w-0 flex-col items-center justify-center gap-1 rounded-xl border border-[#D7DED8] bg-white px-1 py-2 text-[12px] font-semibold text-[#0A573B] active:scale-[0.98] min-[460px]:flex-row min-[460px]:gap-1.5 min-[460px]:py-2.5 min-[460px]:text-[13px]';
+            const inner = <><a.icon className="h-4 w-4 shrink-0" /> <span className="truncate">{a.label}</span></>;
+            return a.href ? (
+              <a key={a.label} href={a.href} {...(a.ext ? { target: '_blank', rel: 'noopener noreferrer' } : {})} className={cls}>{inner}</a>
+            ) : (
+              <span key={a.label} aria-disabled="true" className={`${cls} opacity-40`}>{inner}</span>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
