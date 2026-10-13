@@ -177,6 +177,7 @@ function Home() {
         <Button asChild variant="outline" size="sm"><Link to="/workforce/people"><Users className="mr-1 h-4 w-4" /> Directory</Link></Button>
         <Button asChild variant="outline" size="sm"><Link to="/workforce/leave"><Palmtree className="mr-1 h-4 w-4" /> Leave</Link></Button>
         <Button asChild variant="outline" size="sm"><Link to="/workforce/daily-reports"><ClipboardList className="mr-1 h-4 w-4" /> Daily reports</Link></Button>
+        <Button asChild variant="outline" size="sm"><Link to="/workforce/payroll?tab=rules"><BadgeIndianRupee className="mr-1 h-4 w-4" /> Pay rules &amp; incentives</Link></Button>
       </section>
     </div>
   );

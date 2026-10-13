@@ -273,6 +273,7 @@ export default function HrFinanceDashboard() {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56">
                   <DropdownMenuItem onClick={() => openWage()}><Settings2 className="mr-2 h-4 w-4" /> Wage &amp; pay basis</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setTab("rules")}><Gift className="mr-2 h-4 w-4" /> Pay rules &amp; incentives</DropdownMenuItem>
                   <DropdownMenuItem onClick={runAlerts}><Bell className="mr-2 h-4 w-4" /> Send payment alerts</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
