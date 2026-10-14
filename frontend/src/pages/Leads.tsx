@@ -317,6 +317,12 @@ export default function Leads() {
     setViewMode("table");
   };
 
+  // Header follows the selected stage / category card ("Quote Building · Curtains").
+  const pageTitle = [
+    stats.find((st) => isStatActive(st.patch) && Object.keys(st.patch).length > 0)?.label,
+    CATEGORY_GROUPS.find((g) => g.key === filters.categoryGroup)?.label,
+  ].filter(Boolean).join(" · ") || "Lead Management";
+
   const activeFilterCount = Object.values(filters).filter((v) => v !== "").length;
 
   const tempPill = (t?: string) =>
@@ -424,7 +430,7 @@ export default function Leads() {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Lead Management</h1>
+          <h1 className="text-3xl font-bold tracking-tight">{pageTitle}</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Manage and track leads across all stages
             {dashboard && <> · <span className="font-semibold text-foreground">{dashboard.totalLeads}</span> total</>}
