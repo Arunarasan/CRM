@@ -5,7 +5,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ScanFace, Loader2, UserRound, ShieldAlert, CheckCircle2, Clock3, Tablet } from 'lucide-react';
+import { ScanFace, Loader2, UserRound, ShieldAlert, CheckCircle2, Clock3, Tablet, Fingerprint } from 'lucide-react';
 import { attendanceApi, PendingAttendance } from '@/api/attendanceApi';
 import { resolveFileUrl } from '@/lib/uploadFile';
 import { BaseInput } from '@/components/ui/input';
@@ -43,6 +43,18 @@ export function FaceBadge({ distance }: { distance?: number | null }) {
   );
 }
 
+/** Fingerprint match score (SourceAFIS): 70 and above is trusted, 50 to 70 was held for review. */
+export function FingerBadge({ score }: { score?: number | null }) {
+  if (score == null) return null;
+  const strong = score >= 70;
+  return (
+    <span title="Fingerprint match score: higher is closer"
+      className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-semibold ${strong ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800'}`}>
+      <Fingerprint className="h-3 w-3" /> {strong ? 'Strong' : 'Weak'} fingerprint {Math.round(score)}
+    </span>
+  );
+}
+
 function statusChip(r: PendingAttendance) {
   if (r.approvalStatus === 'REJECTED') return <span className="rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700">Rejected</span>;
   if (r.approvalStatus === 'APPROVED') return <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">Approved</span>;
@@ -53,8 +65,8 @@ function statusChip(r: PendingAttendance) {
 const iso = (d: Date) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 
 /** Which half of a session came from the kiosk, with its selfie, match score and liveness. */
-function Half({ title, time, kiosk, selfie, distance, liveness }: {
-  title: string; time?: string | null; kiosk: boolean; selfie?: string | null; distance?: number | null; liveness?: string | null;
+function Half({ title, time, kiosk, selfie, distance, score, liveness }: {
+  title: string; time?: string | null; kiosk: boolean; selfie?: string | null; distance?: number | null; score?: number | null; liveness?: string | null;
 }) {
   return (
     <div className="flex min-w-0 items-center gap-3">
@@ -65,6 +77,7 @@ function Half({ title, time, kiosk, selfie, distance, liveness }: {
         {kiosk && (
           <p className="mt-0.5 flex flex-wrap items-center gap-1.5">
             <FaceBadge distance={distance} />
+            <FingerBadge score={score} />
             {liveness && <span className="text-[11px] text-muted-foreground">{liveness === 'BLINK' ? 'blinked' : 'turned head'}</span>}
           </p>
         )}
@@ -97,7 +110,8 @@ export function KioskLog() {
   useEffect(load, [from, to, employeeId]);
 
   const shown = weakOnly
-    ? rows.filter((r) => (r.faceDistanceIn ?? 0) > 0.42 || (r.faceDistanceOut ?? 0) > 0.42)
+    ? rows.filter((r) => (r.faceDistanceIn ?? 0) > 0.42 || (r.faceDistanceOut ?? 0) > 0.42
+        || (r.fingerScoreIn != null && r.fingerScoreIn < 70) || (r.fingerScoreOut != null && r.fingerScoreOut < 70))
     : rows;
 
   return (
@@ -145,8 +159,8 @@ export function KioskLog() {
                 <span className="ml-auto">{statusChip(r)}</span>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
-                <Half title="Check in" time={r.checkInTime} kiosk={r.checkInSource === 'KIOSK'} selfie={r.selfieInUrl} distance={r.faceDistanceIn} liveness={r.livenessIn} />
-                <Half title="Check out" time={r.checkOutTime} kiosk={r.checkOutSource === 'KIOSK'} selfie={r.selfieOutUrl} distance={r.faceDistanceOut} liveness={r.livenessOut} />
+                <Half title="Check in" time={r.checkInTime} kiosk={r.checkInSource === 'KIOSK'} selfie={r.selfieInUrl} distance={r.faceDistanceIn} score={r.fingerScoreIn} liveness={r.livenessIn} />
+                <Half title="Check out" time={r.checkOutTime} kiosk={r.checkOutSource === 'KIOSK'} selfie={r.selfieOutUrl} distance={r.faceDistanceOut} score={r.fingerScoreOut} liveness={r.livenessOut} />
               </div>
               {r.flagReason && <p className="text-sm text-amber-700">{r.flagReason}</p>}
             </li>
@@ -164,17 +178,18 @@ export function KioskLog() {
 export function FaceEnrolmentOverview() {
   const [emps, setEmps] = useState<{ id: number; firstName: string; lastName: string; employeeCode: string }[]>([]);
   const [enrolled, setEnrolled] = useState<Record<number, { samples: number; enrolledAt: string | null }>>({});
+  const [fingers, setFingers] = useState<Record<number, { fingers: number; enrolledAt: string | null }>>({});
   const [loading, setLoading] = useState(true);
   const [missingOnly, setMissingOnly] = useState(true);
 
   useEffect(() => {
-    Promise.all([attendanceApi.listEmployees().catch(() => []), attendanceApi.faceSummary().catch(() => ({}))])
-      .then(([list, summary]) => { setEmps(list); setEnrolled(summary as typeof enrolled); })
+    Promise.all([attendanceApi.listEmployees().catch(() => []), attendanceApi.faceSummary().catch(() => ({})), attendanceApi.fingerprintSummary().catch(() => ({}))])
+      .then(([list, summary, fp]) => { setEmps(list); setEnrolled(summary as typeof enrolled); setFingers(fp as typeof fingers); })
       .finally(() => setLoading(false));
   }, []);
 
-  const done = emps.filter((e) => enrolled[e.id]).length;
-  const list = (missingOnly ? emps.filter((e) => !enrolled[e.id]) : emps)
+  const done = emps.filter((e) => enrolled[e.id] || fingers[e.id]).length;
+  const list = (missingOnly ? emps.filter((e) => !enrolled[e.id] && !fingers[e.id]) : emps)
     .slice().sort((a, b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`));
 
   return (
@@ -182,12 +197,12 @@ export function FaceEnrolmentOverview() {
       <header className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3 sm:px-5 sm:py-4">
         <div className="flex items-center gap-2">
           <ScanFace className="h-5 w-5 text-primary" />
-          <h2 className="text-base font-semibold">Face enrolment</h2>
+          <h2 className="text-base font-semibold">Kiosk enrolment</h2>
           {!loading && <span className="text-xs text-muted-foreground">{done} of {emps.length} enrolled</span>}
         </div>
         <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <input type="checkbox" className="h-4 w-4" checked={missingOnly} onChange={(e) => setMissingOnly(e.target.checked)} />
-          Not enrolled only
+          Not enrolled at all
         </label>
       </header>
       {loading ? (
@@ -198,21 +213,24 @@ export function FaceEnrolmentOverview() {
         <ul className="max-h-96 divide-y overflow-y-auto">
           {list.map((e) => {
             const en = enrolled[e.id];
+            const fp = fingers[e.id];
             return (
               <li key={e.id} className="flex items-center justify-between gap-3 px-4 py-2.5 sm:px-5">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium">{`${e.firstName ?? ''} ${e.lastName ?? ''}`.trim() || `#${e.id}`}</p>
                   <p className="text-xs text-muted-foreground">{e.employeeCode}</p>
                 </div>
-                {en
-                  ? <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">Enrolled · {en.samples}</span>
-                  : <Link to={`/hr/employees/${e.id}`} className="shrink-0 text-xs font-medium text-primary hover:underline">Enrol face →</Link>}
+                <div className="flex shrink-0 items-center gap-1.5">
+                  {en && <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700"><ScanFace className="h-3 w-3" /> Face</span>}
+                  {fp && <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700"><Fingerprint className="h-3 w-3" /> Finger{fp.fingers > 1 ? ` x${fp.fingers}` : ''}</span>}
+                  {!en && !fp && <Link to={`/hr/employees/${e.id}`} className="text-xs font-medium text-primary hover:underline">Enrol →</Link>}
+                </div>
               </li>
             );
           })}
         </ul>
       )}
-      <p className="border-t px-4 py-2 text-xs text-muted-foreground sm:px-5">Enrol a face from the employee's profile (Face for kiosk check-in).</p>
+      <p className="border-t px-4 py-2 text-xs text-muted-foreground sm:px-5">Enrol a face or fingerprint from the employee's profile.</p>
     </section>
   );
 }

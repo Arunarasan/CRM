@@ -48,7 +48,11 @@ export interface PendingAttendance {
   faceDistanceOut?: number | null;
   livenessIn?: string | null;       // BLINK | TURN
   livenessOut?: string | null;
+  fingerScoreIn?: number | null;    // higher = closer match
+  fingerScoreOut?: number | null;
 }
+
+export type KioskVerifyMode = 'FACE' | 'FINGER' | 'EITHER';
 
 // --- Office kiosks (shared face-attendance phone) ---------------------------------------------
 export interface AttendanceKioskRow {
@@ -57,6 +61,7 @@ export interface AttendanceKioskRow {
   officeLocationId: number | null;
   officeLocationName: string | null;
   active: boolean;
+  verifyMode: KioskVerifyMode;
   paired: boolean;
   pairedAt: string | null;
   deviceInfo: string | null;
@@ -76,6 +81,24 @@ export interface FaceStatus {
   enrolledAt: string | null;
   photoUrl: string | null;
   enrolledBy: string | null;
+}
+
+// --- Fingerprint enrolment for the office kiosk ------------------------------------------------
+export interface FingerprintStatus {
+  enrolled: boolean;
+  fingers: { finger: number; name: string; samples: number }[];
+  enrolledAt: string | null;
+  consentAt: string | null;
+  enrolledBy: string | null;
+}
+
+/** One sensor capture as the kiosk app returns it: an image (PNG/JPEG/RAW grayscale) or an ISO template, base64. */
+export interface FingerCapture {
+  format: 'PNG' | 'JPEG' | 'RAW' | 'ISO';
+  width?: number;
+  height?: number;
+  dpi?: number;
+  data: string;
 }
 
 // --- Attendance phone binding (one approved phone per login) ---------------------------------
@@ -171,7 +194,7 @@ export const attendanceApi = {
   listKiosks: () => api.get<AttendanceKioskRow[]>(`${BASE}/kiosks`).then((r) => r.data),
   createKiosk: (body: { name: string; officeLocationId?: number | null }) =>
     api.post<AttendanceKioskRow>(`${BASE}/kiosks`, body).then((r) => r.data),
-  updateKiosk: (id: number, body: { name?: string; officeLocationId?: number | null; active?: boolean }) =>
+  updateKiosk: (id: number, body: { name?: string; officeLocationId?: number | null; active?: boolean; verifyMode?: KioskVerifyMode }) =>
     api.put<AttendanceKioskRow>(`${BASE}/kiosks/${id}`, body).then((r) => r.data),
   repairKiosk: (id: number) => api.post<AttendanceKioskRow>(`${BASE}/kiosks/${id}/repair`).then((r) => r.data),
   deleteKiosk: (id: number) => api.delete(`${BASE}/kiosks/${id}`).then((r) => r.data),
@@ -185,6 +208,14 @@ export const attendanceApi = {
   enrollFace: (employeeId: number, body: { descriptors: number[][]; qualities?: number[]; photoUrl?: string }) =>
     api.put<FaceStatus>(`${BASE}/faces/employees/${employeeId}`, body).then((r) => r.data),
   removeFace: (employeeId: number) => api.delete(`${BASE}/faces/employees/${employeeId}`).then((r) => r.data),
+
+  // Fingerprint enrolment
+  fingerprintSummary: () => api.get<Record<number, { fingers: number; enrolledAt: string | null }>>(`${BASE}/fingerprints`).then((r) => r.data),
+  fingerprintStatus: (employeeId: number) => api.get<FingerprintStatus>(`${BASE}/fingerprints/employees/${employeeId}`).then((r) => r.data),
+  enrollFingerprint: (employeeId: number, finger: number, body: { consent: boolean; captures: FingerCapture[] }) =>
+    api.put<FingerprintStatus>(`${BASE}/fingerprints/employees/${employeeId}/fingers/${finger}`, body).then((r) => r.data),
+  removeFingerprint: (employeeId: number, finger?: number) =>
+    api.delete(finger == null ? `${BASE}/fingerprints/employees/${employeeId}` : `${BASE}/fingerprints/employees/${employeeId}/fingers/${finger}`).then((r) => r.data),
 
   listMethodRequests: () => api.get<MethodRequest[]>(`${BASE}/method-requests`).then((r) => r.data),
   approveMethodRequest: (employeeId: number) => api.post(`${BASE}/method-requests/${employeeId}/approve`).then((r) => r.data),

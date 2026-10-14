@@ -50,6 +50,8 @@ public class KioskPunchService {
     @Autowired private EmployeeFaceTemplateRepository templateRepository;
     @Autowired private EmployeeTimeService timeService;
     @Autowired private StorageService storageService;
+    @Autowired private FingerprintService fingerprintService;
+    @Autowired private com.arudra.crm.repository.EmployeeRepository employeeRepository;
 
     /**
      * @param action     IN or OUT
@@ -58,11 +60,8 @@ public class KioskPunchService {
      */
     public Map<String, Object> punch(AttendanceKiosk kiosk, String action, String descriptor, String liveness,
                                      byte[] selfie, String selfieType) {
-        boolean checkIn = switch (action == null ? "" : action.trim().toUpperCase()) {
-            case "IN" -> true;
-            case "OUT" -> false;
-            default -> throw new IllegalArgumentException("Choose Check In or Check Out.");
-        };
+        boolean checkIn = parseAction(action);
+        requireMode(kiosk, "FACE");
         double[] live = parse(descriptor);
         if (live == null) throw new IllegalArgumentException("Invalid face capture. Try again.");
         throttleCheck(kiosk.getId());
@@ -89,17 +88,63 @@ public class KioskPunchService {
         boolean weak = match.verdict() == FaceMatcher.Verdict.WEAK;
         String cleanLiveness = liveness == null ? null : liveness.trim().toUpperCase();
         if (cleanLiveness != null && !cleanLiveness.equals("BLINK") && !cleanLiveness.equals("TURN")) cleanLiveness = null;
+        return record(kiosk, checkIn, employee, "FACE", match.distance(), weak, cleanLiveness, selfie, selfieType);
+    }
 
+    /**
+     * A fingerprint punch: the sensor's capture from the kiosk app. The server builds a template and
+     * identifies the employee itself (1:N); the selfie is only evidence, it is not matched.
+     */
+    public Map<String, Object> punchFinger(AttendanceKiosk kiosk, String action, FingerprintService.Capture capture,
+                                           byte[] selfie, String selfieType) {
+        boolean checkIn = parseAction(action);
+        requireMode(kiosk, "FINGER");
+        throttleCheck(kiosk.getId());
+
+        FingerprintPolicy.Decision d = fingerprintService.identify(capture);
+        if (!d.matched()) {
+            recordFailure(kiosk.getId());
+            log.info("Kiosk {} fingerprint not matched: {} (best score {})", kiosk.getId(), d.verdict(), d.score());
+            return outcome(d.verdict() == FingerprintPolicy.Verdict.AMBIGUOUS ? "AMBIGUOUS" : "NOT_RECOGNISED", null, null, null, null, null);
+        }
+        Employee employee = employeeRepository.findById(d.employeeId()).orElse(null);
+        if (employee == null || !"ACTIVE".equalsIgnoreCase(employee.getStatus())) {
+            recordFailure(kiosk.getId());
+            return outcome("NOT_RECOGNISED", null, null, null, null, null);
+        }
+        return record(kiosk, checkIn, employee, "FINGER", d.score(), d.verdict() == FingerprintPolicy.Verdict.WEAK, null, selfie, selfieType);
+    }
+
+    /** Records the identified employee's punch and builds the reply. */
+    private Map<String, Object> record(AttendanceKiosk kiosk, boolean checkIn, Employee employee, String method, double value,
+                                       boolean weak, String liveness, byte[] selfie, String selfieType) {
         // The selfie is stored only if the punch is recorded (no orphan files for "already checked in" etc.).
         String[] stored = new String[1];
-        EmployeeTimeService.KioskPunchOutcome res = timeService.kioskPunch(employee, kiosk, checkIn,
-                match.distance(), weak, () -> stored[0] = storeSelfie(selfie, selfieType), cleanLiveness);
+        EmployeeTimeService.KioskPunchOutcome res = timeService.kioskPunch(employee, kiosk, checkIn, method,
+                value, weak, () -> stored[0] = storeSelfie(selfie, selfieType), liveness);
         String selfieUrl = stored[0];
-        log.info("Kiosk {} {} employee={} outcome={} distance={} weak={} liveness={}", kiosk.getId(), checkIn ? "IN" : "OUT",
-                employee.getId(), res.outcome(), String.format(java.util.Locale.ROOT, "%.3f", match.distance()), weak, cleanLiveness);
+        log.info("Kiosk {} {} employee={} method={} outcome={} value={} weak={} liveness={}", kiosk.getId(), checkIn ? "IN" : "OUT",
+                employee.getId(), method, res.outcome(), String.format(java.util.Locale.ROOT, "%.3f", value), weak, liveness);
         boolean recorded = res.outcome().equals("CHECKED_IN") || res.outcome().equals("CHECKED_OUT");
         return outcome(res.outcome(), employee, res.time() == null ? null : res.time().toString(),
                 res.minutesWorked(), recorded ? selfieUrl : null, recorded && weak);
+    }
+
+    private static boolean parseAction(String action) {
+        return switch (action == null ? "" : action.trim().toUpperCase()) {
+            case "IN" -> true;
+            case "OUT" -> false;
+            default -> throw new IllegalArgumentException("Choose Check In or Check Out.");
+        };
+    }
+
+    /** A kiosk set to FACE refuses fingerprints and the other way round; EITHER accepts both. */
+    private static void requireMode(AttendanceKiosk kiosk, String method) {
+        String mode = kiosk.getVerifyMode() == null ? "FACE" : kiosk.getVerifyMode();
+        if (!mode.equals("EITHER") && !mode.equals(method)) {
+            throw new IllegalArgumentException(method.equals("FACE")
+                    ? "This kiosk checks fingerprints, not faces." : "This kiosk checks faces, not fingerprints.");
+        }
     }
 
     // --- helpers -----------------------------------------------------------

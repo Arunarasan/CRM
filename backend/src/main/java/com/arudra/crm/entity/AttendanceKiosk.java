@@ -28,6 +28,10 @@ public class AttendanceKiosk extends BaseEntity {
     @Column(nullable = false)
     private Boolean active = true;
 
+    /** What this kiosk accepts: FACE | FINGER | EITHER. */
+    @Column(name = "verify_mode", nullable = false, length = 10)
+    private String verifyMode = "FACE";
+
     @JsonIgnore
     @Column(name = "pairing_code_hash", length = 64)
     private String pairingCodeHash;

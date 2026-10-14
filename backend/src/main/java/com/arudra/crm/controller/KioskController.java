@@ -2,6 +2,7 @@ package com.arudra.crm.controller;
 
 import com.arudra.crm.dto.ApiResponse;
 import com.arudra.crm.entity.AttendanceKiosk;
+import com.arudra.crm.service.FingerprintService;
 import com.arudra.crm.service.KioskPunchService;
 import com.arudra.crm.service.KioskService;
 import com.arudra.crm.util.RequestIp;
@@ -61,5 +62,23 @@ public class KioskController {
         byte[] bytes = selfie == null ? null : selfie.getBytes();
         String type = selfie == null ? null : selfie.getContentType();
         return ResponseEntity.ok(ApiResponse.success(punchService.punch(kiosk, action, descriptor, liveness, bytes, type)));
+    }
+
+    /**
+     * A fingerprint punch: the sensor capture (image or ISO template, as JSON) + a selfie as evidence.
+     * Like the face punch, the server identifies the employee itself.
+     */
+    @PostMapping(value = "/punch-finger", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> punchFinger(
+            @RequestHeader(value = TOKEN_HEADER, required = false) String token,
+            @RequestParam("action") String action,
+            @RequestParam("capture") String captureJson,
+            @RequestPart(value = "selfie", required = false) org.springframework.web.multipart.MultipartFile selfie,
+            HttpServletRequest request) throws java.io.IOException {
+        AttendanceKiosk kiosk = kioskService.authenticate(token, RequestIp.of(request));
+        FingerprintService.Capture capture = FingerprintAdminController.parseCapture(captureJson);
+        byte[] bytes = selfie == null ? null : selfie.getBytes();
+        String type = selfie == null ? null : selfie.getContentType();
+        return ResponseEntity.ok(ApiResponse.success(punchService.punchFinger(kiosk, action, capture, bytes, type)));
     }
 }

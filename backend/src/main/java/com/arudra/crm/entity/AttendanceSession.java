@@ -140,6 +140,13 @@ public class AttendanceSession extends BaseEntity {
     @Column(name = "face_distance_out")
     private Double faceDistanceOut;
 
+    /** Fingerprint match score of the kiosk check-in / check-out (higher is closer; null unless FINGER). */
+    @Column(name = "finger_score_in")
+    private Double fingerScoreIn;
+
+    @Column(name = "finger_score_out")
+    private Double fingerScoreOut;
+
     /** Selfie taken by the kiosk at check-in / check-out (audit evidence). */
     @Column(name = "selfie_in_url", length = 500)
     private String selfieInUrl;

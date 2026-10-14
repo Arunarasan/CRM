@@ -1,4 +1,5 @@
 import axios from 'axios';
+import type { FingerCapture } from '@/api/attendanceApi';
 
 /**
  * The kiosk phone's API client. Deliberately separate from the shared `api` instance: a kiosk has
@@ -29,6 +30,8 @@ export interface KioskInfo {
   name: string;
   officeLocationId: number | null;
   officeLocationName: string | null;
+  /** What this kiosk accepts: FACE | FINGER | EITHER. */
+  verifyMode: 'FACE' | 'FINGER' | 'EITHER';
   serverTime: string;
 }
 
@@ -65,6 +68,15 @@ export const kioskApi = {
     if (selfie) form.append('selfie', selfie, 'selfie.jpg');
     return http
       .post('/public/kiosk/punch', form, { headers: { 'X-Kiosk-Token': kioskToken.get() ?? '', 'Content-Type': 'multipart/form-data' } })
+      .then((r) => unwrap<KioskPunchResult>(r.data));
+  },
+  punchFinger: (action: 'IN' | 'OUT', capture: FingerCapture, selfie: Blob | null) => {
+    const form = new FormData();
+    form.append('action', action);
+    form.append('capture', JSON.stringify(capture));
+    if (selfie) form.append('selfie', selfie, 'selfie.jpg');
+    return http
+      .post('/public/kiosk/punch-finger', form, { headers: { 'X-Kiosk-Token': kioskToken.get() ?? '', 'Content-Type': 'multipart/form-data' } })
       .then((r) => unwrap<KioskPunchResult>(r.data));
   },
 };

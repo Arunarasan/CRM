@@ -155,6 +155,55 @@ public class HrService {
         return saved;
     }
 
+    /**
+     * Deactivate / reactivate. Inactive employees are skipped by Smart Assign (status != ACTIVE) and
+     * their login is blocked (unverified account is treated as disabled); history is kept intact.
+     */
+    @Transactional
+    public Employee setEmployeeActive(Long id, boolean active) {
+        Employee employee = employeeRepository.findById(id)
+                .orElseThrow(() -> new com.arudra.crm.exception.ResourceNotFoundException("Employee not found with id: " + id));
+        employee.setStatus(active ? "ACTIVE" : "INACTIVE");
+        Employee saved = employeeRepository.save(employee);
+        Workforce header = saved.getWorkforce();
+        if (header != null) {
+            header.setStatus(active ? "AVAILABLE" : "INACTIVE");
+            workforceRepository.save(header);
+        }
+        if (saved.getEmail() != null && !saved.getEmail().isBlank()) {
+            userRepository.findByEmail(saved.getEmail()).ifPresent(u -> {
+                u.setEmailVerified(active);
+                userRepository.save(u);
+            });
+        }
+        return saved;
+    }
+
+    /**
+     * Permanently removes an employee. Throws DataIntegrityViolationException when attendance,
+     * payroll, tasks etc. still reference them — the caller should then suggest marking inactive.
+     * The login account is disabled, not deleted, because other records may point at it.
+     */
+    @Transactional
+    public void deleteEmployee(Long id) {
+        Employee employee = employeeRepository.findById(id)
+                .orElseThrow(() -> new com.arudra.crm.exception.ResourceNotFoundException("Employee not found with id: " + id));
+        Workforce header = employee.getWorkforce();
+        String email = employee.getEmail();
+        employeeRepository.delete(employee);
+        employeeRepository.flush();
+        if (header != null) {
+            workforceRepository.delete(header);
+            workforceRepository.flush();
+        }
+        if (email != null && !email.isBlank()) {
+            userRepository.findByEmail(email).ifPresent(u -> {
+                u.setEmailVerified(false);
+                userRepository.save(u);
+            });
+        }
+    }
+
     // --- Attendance ---
     public List<Attendance> getAttendanceForEmployee(Long employeeId) {
         return attendanceRepository.findByEmployeeId(employeeId);

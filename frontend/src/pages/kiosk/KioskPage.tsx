@@ -9,7 +9,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Loader2, Tablet, LogIn, LogOut, CheckCircle2, AlertTriangle, XCircle, UserRound } from 'lucide-react';
 import { kioskApi, kioskToken, KioskInfo, KioskPunchResult } from '@/lib/kioskApi';
 import { loadFaceEngine } from '@/lib/faceEngine';
+import { fingerprintSensorAvailable } from '@/lib/fingerprintBridge';
 import KioskScan, { ScanAction, ScanDone, ScanFail } from './KioskScan';
+import KioskFingerScan from './KioskFingerScan';
 
 type Phase = 'loading' | 'unpaired' | 'ready';
 
@@ -20,7 +22,7 @@ const RESULT_MS = 6000;
 
 type View =
   | { kind: 'home' }
-  | { kind: 'scan'; action: ScanAction }
+  | { kind: 'scan'; action: ScanAction; method: 'FACE' | 'FINGER' }
   | { kind: 'result'; action: ScanAction; done: ScanDone }
   | { kind: 'error'; message: string };
 
@@ -99,18 +101,40 @@ export default function KioskPage() {
       <Shell>
         {view.kind === 'result' ? <ResultCard action={view.action} done={view.done} onClose={() => setView({ kind: 'home' })} />
           : view.kind === 'error' ? <ErrorCard message={view.message} onClose={() => setView({ kind: 'home' })} />
-          : <KioskHome kiosk={kiosk} offline={offline} onChoose={(action) => setView({ kind: 'scan', action })} />}
+          : <KioskHome kiosk={kiosk} offline={offline} onChoose={(action) => setView({ kind: 'scan', action, method: firstMethod(kiosk) })} />}
       </Shell>
-      {view.kind === 'scan' && (
+      {view.kind === 'scan' && view.method === 'FACE' && (
         <KioskScan
           action={view.action}
           onCancel={() => setView({ kind: 'home' })}
           onFail={onFail}
           onDone={(done) => setView({ kind: 'result', action: view.action, done })}
+          onSwitch={canSwitch(kiosk) ? () => setView({ kind: 'scan', action: view.action, method: 'FINGER' }) : undefined}
+        />
+      )}
+      {view.kind === 'scan' && view.method === 'FINGER' && (
+        <KioskFingerScan
+          action={view.action}
+          onCancel={() => setView({ kind: 'home' })}
+          onFail={onFail}
+          onDone={(done) => setView({ kind: 'result', action: view.action, done })}
+          onSwitch={kiosk?.verifyMode === 'EITHER' ? () => setView({ kind: 'scan', action: view.action, method: 'FACE' }) : undefined}
         />
       )}
     </>
   );
+}
+
+/** Which check a tap starts: a FINGER-only kiosk uses the sensor, EITHER prefers it when it is connected. */
+function firstMethod(kiosk: KioskInfo | null): 'FACE' | 'FINGER' {
+  if (kiosk?.verifyMode === 'FINGER') return 'FINGER';
+  if (kiosk?.verifyMode === 'EITHER' && fingerprintSensorAvailable()) return 'FINGER';
+  return 'FACE';
+}
+
+/** The face screen offers "use fingerprint" only when the kiosk accepts it and the sensor is there. */
+function canSwitch(kiosk: KioskInfo | null): boolean {
+  return kiosk?.verifyMode === 'EITHER' && fingerprintSensorAvailable();
 }
 
 function Shell({ children }: { children: React.ReactNode }) {
@@ -190,7 +214,7 @@ function KioskHome({ kiosk, offline, onChoose }: { kiosk: KioskInfo | null; offl
           <LogOut className="h-9 w-9" /><span className="text-lg font-bold">Check Out</span>
         </button>
       </div>
-      <p className="mt-4 text-xs text-emerald-200">Tap one, then look at the camera.</p>
+      <p className="mt-4 text-xs text-emerald-200">{kiosk?.verifyMode === 'FINGER' ? 'Tap one, then place your finger on the sensor.' : 'Tap one, then look at the camera.'}</p>
       {offline && <p className="mt-3 rounded-lg bg-amber-400/20 px-3 py-2 text-xs text-amber-100">Can’t reach the server. Retrying…</p>}
     </div>
   );
@@ -228,8 +252,8 @@ function ResultCard({ action, done, onClose }: { action: ScanAction; done: ScanD
     case 'ALREADY_IN': tone = 'warn'; title = `${first}, you're already checked in`; detail = `Since ${hm(r.time)}. Use Check Out when you leave.`; break;
     case 'NOT_IN': tone = 'warn'; title = `${first}, you're not checked in`; detail = 'Use Check In first.'; break;
     case 'TOO_SOON': tone = 'warn'; title = `${first}, you just checked in`; detail = `At ${hm(r.time)}. Wait a couple of minutes before checking out.`; break;
-    case 'AMBIGUOUS': tone = 'bad'; title = 'Could not tell who this is'; detail = 'Look straight at the camera and try again.'; break;
-    default: tone = 'bad'; title = 'Face not recognised'; detail = 'Try again in better light. If it keeps failing, ask HR to enrol your face.'; break;
+    case 'AMBIGUOUS': tone = 'bad'; title = 'Could not tell who this is'; detail = 'Try again. If it keeps happening, ask HR.'; break;
+    default: tone = 'bad'; title = 'Not recognised'; detail = 'Try again: face the camera in good light, or press your finger flat. If it keeps failing, ask HR to enrol you.'; break;
   }
   const Icon = tone === 'ok' ? CheckCircle2 : tone === 'warn' ? AlertTriangle : XCircle;
   const color = tone === 'ok' ? 'text-emerald-600' : tone === 'warn' ? 'text-amber-500' : 'text-red-600';

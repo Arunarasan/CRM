@@ -33,11 +33,13 @@ const TOTAL_MS = 45000;
 
 const nextFrame = () => new Promise<void>((res) => requestAnimationFrame(() => res()));
 
-export default function KioskScan({ action, onDone, onFail, onCancel }: {
+export default function KioskScan({ action, onDone, onFail, onCancel, onSwitch }: {
   action: ScanAction;
   onDone: (d: ScanDone) => void;
   onFail: (f: ScanFail) => void;
   onCancel: () => void;
+  /** Shown when the kiosk also accepts fingerprints and the sensor is connected. */
+  onSwitch?: () => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [stage, setStage] = useState<Stage>('loading');
@@ -154,6 +156,9 @@ export default function KioskScan({ action, onDone, onFail, onCancel }: {
       <div className="px-4 pb-8 pt-4 text-center">
         <p className="text-2xl font-bold">{stage === 'loading' || stage === 'sending' ? '' : hint}</p>
         {stage === 'challenge' && <p className="mt-1 text-sm text-white/70">This makes sure it is a real person</p>}
+        {onSwitch && stage !== 'sending' && (
+          <button onClick={onSwitch} className="mt-3 rounded-full bg-white/15 px-5 py-2 text-sm font-semibold">Use fingerprint instead</button>
+        )}
       </div>
     </div>
   );

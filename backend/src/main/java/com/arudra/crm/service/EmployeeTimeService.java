@@ -182,15 +182,18 @@ public class EmployeeTimeService {
     private static final long KIOSK_MIN_SESSION_SECONDS = 120;
 
     /**
-     * Records a face-verified punch from an office kiosk for an already-identified employee. Mirrors the
+     * Records a face- or fingerprint-verified punch from an office kiosk for an already-identified employee. Mirrors the
      * phone clock-in/out (same sessions, same hours and pay maths) but needs no login: the kiosk device
      * is the trust anchor. A weak face match never blocks the punch, it flags the session for HR approval.
      * The selfie is only stored (the supplier only runs) when the punch is actually recorded.
      */
     @Transactional
     public KioskPunchOutcome kioskPunch(Employee employee, com.arudra.crm.entity.AttendanceKiosk kiosk, boolean checkIn,
-                                        double distance, boolean weakMatch, java.util.function.Supplier<String> selfieUrl, String liveness) {
-        String weakReason = String.format(Locale.ROOT, "Weak face match on the kiosk (distance %.2f), needs admin approval", distance);
+                                        String method, double value, boolean weakMatch, java.util.function.Supplier<String> selfieUrl, String liveness) {
+        boolean finger = "FINGER".equals(method);
+        String weakReason = finger
+                ? String.format(Locale.ROOT, "Weak fingerprint match on the kiosk (score %.0f), needs admin approval", value)
+                : String.format(Locale.ROOT, "Weak face match on the kiosk (distance %.2f), needs admin approval", value);
         Attendance live = activeRow(employee.getId());
         AttendanceSession open = live == null ? null : openSession(live);
 
@@ -211,10 +214,10 @@ public class EmployeeTimeService {
             s.setCheckInSource(AttendanceSession.SOURCE_KIOSK);
             s.setKiosk(kiosk);
             s.setOfficeLocation(kiosk.getOfficeLocation());
-            s.setFaceDistanceIn(distance);
+            if (finger) s.setFingerScoreIn(value); else s.setFaceDistanceIn(value);
             s.setSelfieInUrl(selfieUrl.get());
             s.setLivenessIn(liveness);
-            verificationService.applyFace(s, employee, weakMatch, weakReason, true);
+            verificationService.applyBiometric(s, employee, method, weakMatch, weakReason, true);
             sessionRepository.save(s);
             att.setStatus("PRESENT");
             syncAggregate(att, employee);
@@ -232,10 +235,10 @@ public class EmployeeTimeService {
         LocalTime now = LocalTime.now().withNano(0);
         open.setCheckOutTime(now);
         open.setCheckOutSource(AttendanceSession.SOURCE_KIOSK);
-        open.setFaceDistanceOut(distance);
+        if (finger) open.setFingerScoreOut(value); else open.setFaceDistanceOut(value);
         open.setSelfieOutUrl(selfieUrl.get());
         open.setLivenessOut(liveness);
-        verificationService.applyFace(open, employee, weakMatch, weakReason, false);
+        verificationService.applyBiometric(open, employee, method, weakMatch, weakReason, false);
         sessionRepository.save(open);
         syncAggregate(live, employee);
         attendanceRepository.save(live);

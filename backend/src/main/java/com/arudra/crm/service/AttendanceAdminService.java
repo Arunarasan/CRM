@@ -214,6 +214,8 @@ public class AttendanceAdminService {
         m.put("selfieOutUrl", s.getSelfieOutUrl());
         m.put("faceDistanceIn", s.getFaceDistanceIn());
         m.put("faceDistanceOut", s.getFaceDistanceOut());
+        m.put("fingerScoreIn", s.getFingerScoreIn());
+        m.put("fingerScoreOut", s.getFingerScoreOut());
         m.put("livenessIn", s.getLivenessIn());
         m.put("livenessOut", s.getLivenessOut());
         return m;

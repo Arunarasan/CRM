@@ -15,7 +15,7 @@ import { Button } from '@/components/ui/button';
 import SearchableSelect from '@/components/ui/searchable-select';
 import { DeviceRequests } from './deviceAdmin';
 import { KioskSetup } from './kioskAdmin';
-import { KioskLog, FaceEnrolmentOverview, SelfieThumb, FaceBadge } from './kioskLog';
+import { KioskLog, FaceEnrolmentOverview, SelfieThumb, FaceBadge, FingerBadge } from './kioskLog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import AttendanceRegister from './AttendanceRegister';
 
@@ -432,12 +432,12 @@ function PendingApprovals() {
                       <span className="inline-flex items-center gap-1 rounded bg-sky-100 px-1.5 py-0.5 text-[11px] font-semibold text-sky-700">
                         <MapPin className="h-3 w-3" /> Field punch
                       </span>
-                    ) : r.verificationMethod === 'FACE' ? null : (
+                    ) : r.verificationMethod === 'FACE' || r.verificationMethod === 'FINGER' ? null : (
                       <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">{r.verificationMethod ?? '—'}</span>
                     )}
-                    {r.verificationMethod === 'FACE' && (
+                    {(r.verificationMethod === 'FACE' || r.verificationMethod === 'FINGER') && (
                       <span className="inline-flex items-center gap-1 rounded bg-violet-100 px-1.5 py-0.5 text-[11px] font-semibold text-violet-700">
-                        Face kiosk{r.kioskName ? ` · ${r.kioskName}` : ''}
+                        {r.verificationMethod === 'FINGER' ? 'Fingerprint kiosk' : 'Face kiosk'}{r.kioskName ? ` · ${r.kioskName}` : ''}
                       </span>
                     )}
                     {r.deviceMismatchReason && (
@@ -451,10 +451,10 @@ function PendingApprovals() {
                   {(r.selfieInUrl || r.selfieOutUrl) && (
                     <div className="mt-2 flex flex-wrap items-center gap-3">
                       {r.checkInSource === 'KIOSK' && (
-                        <div className="flex items-center gap-2"><SelfieThumb url={r.selfieInUrl} label="Check-in" /><FaceBadge distance={r.faceDistanceIn} /></div>
+                        <div className="flex items-center gap-2"><SelfieThumb url={r.selfieInUrl} label="Check-in" /><FaceBadge distance={r.faceDistanceIn} /><FingerBadge score={r.fingerScoreIn} /></div>
                       )}
                       {r.checkOutSource === 'KIOSK' && (
-                        <div className="flex items-center gap-2"><SelfieThumb url={r.selfieOutUrl} label="Check-out" /><FaceBadge distance={r.faceDistanceOut} /></div>
+                        <div className="flex items-center gap-2"><SelfieThumb url={r.selfieOutUrl} label="Check-out" /><FaceBadge distance={r.faceDistanceOut} /><FingerBadge score={r.fingerScoreOut} /></div>
                       )}
                     </div>
                   )}

@@ -68,11 +68,12 @@ public class KioskService {
     }
 
     @Transactional
-    public Map<String, Object> update(Long id, String name, Long officeLocationId, Boolean active) {
+    public Map<String, Object> update(Long id, String name, Long officeLocationId, Boolean active, String verifyMode) {
         AttendanceKiosk k = require(id);
         if (name != null) k.setName(cleanName(name));
         k.setOfficeLocation(location(officeLocationId));
         if (active != null) k.setActive(active);
+        if (verifyMode != null) k.setVerifyMode(cleanMode(verifyMode));
         return view(kioskRepository.save(k), null);
     }
 
@@ -154,6 +155,7 @@ public class KioskService {
         AttendanceLocation loc = k.getOfficeLocation();
         m.put("officeLocationId", loc == null ? null : loc.getId());
         m.put("officeLocationName", loc == null ? null : loc.getName());
+        m.put("verifyMode", k.getVerifyMode());
         m.put("serverTime", LocalDateTime.now().toString());
         return m;
     }
@@ -171,6 +173,7 @@ public class KioskService {
         m.put("officeLocationId", loc == null ? null : loc.getId());
         m.put("officeLocationName", loc == null ? null : loc.getName());
         m.put("active", Boolean.TRUE.equals(k.getActive()));
+        m.put("verifyMode", k.getVerifyMode());
         m.put("paired", paired);
         m.put("pairedAt", k.getPairedAt());
         m.put("deviceInfo", k.getDeviceInfo());
@@ -208,6 +211,12 @@ public class KioskService {
         if (id == null) return null;
         return locationRepository.findById(id).filter(l -> !Boolean.TRUE.equals(l.getIsDeleted()))
                 .orElseThrow(() -> new IllegalArgumentException("Office location not found."));
+    }
+
+    private static String cleanMode(String mode) {
+        String m = mode.trim().toUpperCase();
+        if (!m.equals("FACE") && !m.equals("FINGER") && !m.equals("EITHER")) throw new IllegalArgumentException("Choose Face, Fingerprint or Either.");
+        return m;
     }
 
     private static String cleanName(String name) {

@@ -89,6 +89,13 @@
             <version>0.25.0.RELEASE</version>
         </dependency>
 
+        <!-- Fingerprint matching (office kiosk with an external USB sensor) -->
+        <dependency>
+            <groupId>com.machinezoo.sourceafis</groupId>
+            <artifactId>sourceafis</artifactId>
+            <version>3.18.1</version>
+        </dependency>
+
         <!-- JWT -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>

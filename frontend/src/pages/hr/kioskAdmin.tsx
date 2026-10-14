@@ -5,7 +5,7 @@
  */
 import { useEffect, useState } from 'react';
 import { Tablet, Plus, Loader2, Copy, RefreshCw, Trash2, Power, ExternalLink } from 'lucide-react';
-import { attendanceApi, AttendanceKioskRow, AttendanceLocation } from '@/api/attendanceApi';
+import { attendanceApi, AttendanceKioskRow, AttendanceLocation, KioskVerifyMode } from '@/api/attendanceApi';
 import { Button } from '@/components/ui/button';
 import { BaseInput } from '@/components/ui/input';
 import { toast } from '@/components/ui/toast';
@@ -90,7 +90,7 @@ export function KioskSetup() {
       <header className="flex items-center justify-between border-b px-4 py-3 sm:px-5 sm:py-4">
         <div className="flex items-center gap-2">
           <Tablet className="h-5 w-5 text-primary" />
-          <h2 className="text-base font-semibold">Office kiosk (face attendance)</h2>
+          <h2 className="text-base font-semibold">Office kiosk (face / fingerprint)</h2>
         </div>
         {!adding && <Button size="sm" onClick={() => setAdding(true)}><Plus className="h-4 w-4" /> Add kiosk</Button>}
       </header>
@@ -151,6 +151,13 @@ export function KioskSetup() {
                   {k.paired && k.deviceInfo && <p className="truncate text-[11px] text-muted-foreground" title={k.deviceInfo}>{k.deviceInfo}</p>}
                 </div>
                 <div className="flex gap-1.5">
+                  <select aria-label="What this kiosk accepts" value={k.verifyMode} disabled={busy === k.id}
+                    onChange={(e) => act(k.id, () => attendanceApi.updateKiosk(k.id, { name: k.name, officeLocationId: k.officeLocationId, active: k.active, verifyMode: e.target.value as KioskVerifyMode }), 'Kiosk updated')}
+                    className="h-8 rounded-md border border-input bg-card px-2 text-xs">
+                    <option value="FACE">Face only</option>
+                    <option value="FINGER">Fingerprint only</option>
+                    <option value="EITHER">Face or fingerprint</option>
+                  </select>
                   <Button size="sm" variant="outline" disabled={busy === k.id} onClick={() => repair(k)}>
                     <RefreshCw className="h-3.5 w-3.5" /> {k.paired ? 'Re-pair' : 'New code'}
                   </Button>

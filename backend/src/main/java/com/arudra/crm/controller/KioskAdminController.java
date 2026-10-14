@@ -39,7 +39,7 @@ public class KioskAdminController {
     @PreAuthorize(HR_WRITE)
     public ResponseEntity<Map<String, Object>> update(@PathVariable Long id, @RequestBody Map<String, Object> body) {
         Boolean active = body.get("active") == null ? null : Boolean.valueOf(String.valueOf(body.get("active")));
-        return ResponseEntity.ok(kioskService.update(id, str(body.get("name")), num(body.get("officeLocationId")), active));
+        return ResponseEntity.ok(kioskService.update(id, str(body.get("name")), num(body.get("officeLocationId")), active, str(body.get("verifyMode"))));
     }
 
     @PostMapping("/{id}/repair")

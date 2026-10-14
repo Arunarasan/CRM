@@ -126,6 +126,24 @@ public class HrController {
         return ResponseEntity.ok(hrService.updateEmployee(id, employee));
     }
 
+    @PutMapping("/employees/{id}/active")
+    @PreAuthorize(HR_WRITE)
+    public ResponseEntity<Employee> setEmployeeActive(@PathVariable Long id, @RequestParam boolean active) {
+        return ResponseEntity.ok(hrService.setEmployeeActive(id, active));
+    }
+
+    @DeleteMapping("/employees/{id}")
+    @PreAuthorize(HR_WRITE)
+    public ResponseEntity<?> deleteEmployee(@PathVariable Long id) {
+        try {
+            hrService.deleteEmployee(id);
+            return ResponseEntity.noContent().build();
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            return ResponseEntity.status(409).body(java.util.Map.of("message",
+                    "This employee has attendance, payroll or task history and can't be deleted. Mark them Inactive instead."));
+        }
+    }
+
     // --- Attendance ---
     @GetMapping("/employees/{id}/attendance")
     @PreAuthorize(HR_READ)

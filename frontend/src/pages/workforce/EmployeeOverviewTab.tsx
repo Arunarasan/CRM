@@ -8,6 +8,7 @@ import { workforceApi } from "@/api/workforceApi";
 import type { WorkforceDetail, WorkforceMeta, WorkforceRequest } from "@/types/workforce";
 import { AttendancePhoneCard } from "@/pages/hr/deviceAdmin";
 import { FaceEnrollmentCard } from "@/pages/hr/faceAdmin";
+import { FingerprintEnrollmentCard } from "@/pages/hr/fingerprintAdmin";
 
 // The employee-profile Overview tab renders the person's master record as a set of cards, each of
 // which can be edited in place — the same interaction the Lead profile uses. Editing keeps the
@@ -197,6 +198,7 @@ export default function EmployeeOverviewTab({
       <EmploymentCard detail={detail} meta={meta} canEdit={canEdit} save={save} />
       {detail.employee?.id != null && <AttendancePhoneCard employeeId={detail.employee.id} canEdit={canEdit} />}
       {detail.employee?.id != null && <FaceEnrollmentCard employeeId={detail.employee.id} canEdit={canEdit} />}
+      {detail.employee?.id != null && <FingerprintEnrollmentCard employeeId={detail.employee.id} canEdit={canEdit} />}
       <BankCard detail={detail} canEdit={canEdit} save={save} />
     </div>
   );

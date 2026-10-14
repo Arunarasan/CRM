@@ -10,7 +10,7 @@ import { format } from "date-fns";
 import {
   ArrowLeft, Briefcase, FileText, CalendarClock, HandCoins, Award, Plus, Download, Pencil,
   Mail, Phone, Calendar, IdCard, CheckSquare, FolderKanban, ChevronRight, ChevronDown, ListChecks,
-  Target, ClipboardList,
+  Target, ClipboardList, UserX, UserCheck, Trash2,
 } from "lucide-react";
 import { dailyReportApi, type AdminDailyReport, type EmployeeLeadSummary } from "@/api/dailyReportApi";
 import DailyReportCard from "@/components/hr/DailyReportCard";
@@ -170,6 +170,24 @@ export default function EmployeeProfile() {
       .finally(() => setSavingReview(false));
   };
 
+  const toggleActive = () => {
+    const makeActive = employee.status === "INACTIVE";
+    const msg = makeActive
+      ? "Reactivate this employee? They can log in and be assigned work again."
+      : "Mark this employee Inactive? They will be blocked from logging in and skipped for new assignments. Their history is kept.";
+    if (!window.confirm(msg)) return;
+    api.put(`/hr/employees/${id}/active`, null, { params: { active: makeActive } })
+      .then(() => { toast.success(makeActive ? "Employee reactivated." : "Employee marked inactive."); loadEmployee(); })
+      .catch((e) => toast.error(e?.response?.data?.message || "Could not update status."));
+  };
+
+  const deleteEmployee = () => {
+    if (!window.confirm("Permanently delete this employee? This cannot be undone. (If you only want to stop their access, use Mark Inactive instead.)")) return;
+    api.delete(`/hr/employees/${id}`)
+      .then(() => { toast.success("Employee deleted."); goBack(); })
+      .catch((e) => toast.error(e?.response?.data?.message || "Could not delete this employee."));
+  };
+
   if (!employee) return <div className="p-8 font-bold text-slate-500">Loading profile…</div>;
 
   const w = employee.workforce || {};
@@ -204,6 +222,11 @@ export default function EmployeeProfile() {
               <div className="flex shrink-0 items-center gap-2">
                 <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusTone}`}>{String(employee.status || "").replace(/_/g, " ").toLowerCase().replace(/^./, (c: string) => c.toUpperCase())}</span>
                 <Button variant="outline" size="sm" onClick={openEdit}><Pencil className="mr-1.5 h-4 w-4" /> Edit</Button>
+                <Button variant="outline" size="sm" onClick={toggleActive}>
+                  {employee.status === "INACTIVE" ? <UserCheck className="mr-1.5 h-4 w-4" /> : <UserX className="mr-1.5 h-4 w-4" />}
+                  {employee.status === "INACTIVE" ? "Activate" : "Mark Inactive"}
+                </Button>
+                <Button variant="outline" size="sm" onClick={deleteEmployee} className="text-red-600 hover:text-red-700"><Trash2 className="mr-1.5 h-4 w-4" /> Delete</Button>
               </div>
             </div>
 

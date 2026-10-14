@@ -180,13 +180,13 @@ public class AttendanceVerificationService {
     }
 
     /**
-     * Kiosk face punch result. A confident match leaves the session verified; a weak one flags it for
-     * HR approval (never blocks the punch). Works for both the check-in and the check-out half: a flag
-     * from either half keeps the whole session waiting.
+     * Kiosk punch result (method FACE or FINGER). A confident match leaves the session verified; a weak
+     * one flags it for HR approval (never blocks the punch). Works for both the check-in and the
+     * check-out half: a flag from either half keeps the whole session waiting.
      */
-    public void applyFace(AttendanceSession session, Employee employee, boolean weakMatch, String reason, boolean isCheckIn) {
+    public void applyBiometric(AttendanceSession session, Employee employee, String method, boolean weakMatch, String reason, boolean isCheckIn) {
         if (isCheckIn) {
-            session.setVerificationMethod("FACE");
+            session.setVerificationMethod(method);
             session.setVerified(!weakMatch);
             session.setFlagged(weakMatch);
             session.setFlagReason(weakMatch ? clip(reason, 255) : null);
