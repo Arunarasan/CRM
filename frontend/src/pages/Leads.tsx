@@ -304,6 +304,9 @@ export default function Leads() {
     SEGMENT_KEYS.every((k) => (filters[k] || "") === ((patch[k] as string) || ""));
 
   const onStatClick = (patch: Partial<LeadFilters>) => {
+    // Project stages live in Project Management — open it with the matching filter.
+    if (patch.journeyStage === "PROJECT") { navigate("/projects?segment=inProgress"); return; }
+    if (patch.journeyStage === "COMPLETED") { navigate("/projects?segment=completed"); return; }
     // Clicking the active card toggles back to all leads.
     const target = isStatActive(patch) ? {} : patch;
     setFilters((f) => {

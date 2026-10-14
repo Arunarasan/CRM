@@ -15,7 +15,7 @@ import { useHoverInfo, InfoRow } from "@/components/ui/hover-info";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 type SegmentKey = "all" | "new" | "inProgress" | "completed" | "onHold" | "unassigned" | "delayed" | "pendingCollection";
 
@@ -174,7 +174,11 @@ export default function Projects() {
   const [totalElements, setTotalElements] = useState(0);
   const [dashboard, setDashboard] = useState<ProjectModuleDashboard | null>(null);
   const [viewMode, setViewMode] = useState<"list" | "board">("list");
-  const [segment, setSegment] = useState<SegmentKey>("all");
+  const [searchParams] = useSearchParams();
+  const [segment, setSegment] = useState<SegmentKey>(() => {
+    const s = searchParams.get("segment") as SegmentKey | null;
+    return s && s in SEGMENT_CATEGORY ? s : "all";
+  });
   const [counts, setCounts] = useState<SegmentCounts | null>(null);
   const [showFilters, setShowFilters] = useState(false);
 
