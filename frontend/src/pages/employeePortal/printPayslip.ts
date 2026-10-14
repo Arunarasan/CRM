@@ -37,11 +37,10 @@ export function payslipRows(slip: Payslip): { earnings: PayslipRow[]; deductions
 }
 
 /**
- * Renders a clean A4 payslip into a hidden frame and opens the print dialog, so an employee can save
- * it as a PDF (Print → Save as PDF on desktop and Android, Share → Print on iPhone). No pop-up window,
- * so pop-up blockers can't stop it. Company name/address/phone come from Website › Settings.
+ * The one A4 payslip document, used by the employee portal PDF and the HR preview/print so they can't
+ * drift apart. Company name/address/phone come from Website › Settings.
  */
-export async function printPayslip(slip: Payslip, opts?: { employeeName?: string; employeeCode?: string }) {
+export async function buildPayslipHtml(slip: Payslip, opts?: { employeeName?: string; employeeCode?: string }): Promise<string> {
   const company = await fetchCompanyProfile();
   const MONTHS = ['', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
   const inr = (n?: number | null) => '₹' + Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -57,9 +56,11 @@ export async function printPayslip(slip: Payslip, opts?: { employeeName?: string
   const meta = hourly
     ? `<div><span>Attendance days</span><span>${slip.attendanceDays ?? '—'}</span></div>
        <div><span>Worked hrs</span><span>${slip.workedHours ?? '—'}</span></div>
+       <div><span>Overtime hrs</span><span>${slip.overtimeHours ?? '—'}</span></div>
        ${monthlyHours
          ? `<div><span>Monthly salary</span><span>${inr(slip.monthlySalary)} ÷ ${slip.standardHours} hrs</span></div>`
-         : `<div><span>Hourly rate</span><span>${slip.hourlyRate != null ? inr(slip.hourlyRate) : '—'}</span></div>`}`
+         : `<div><span>Hourly rate</span><span>${slip.hourlyRate != null ? inr(slip.hourlyRate) : '—'}</span></div>`}
+       <div><span>OT rate</span><span>${slip.overtimeRate != null ? inr(slip.overtimeRate) : '—'}</span></div>`
     : `<div><span>Working days</span><span>${slip.workingDays ?? '—'}</span></div>
        <div><span>Paid days</span><span>${slip.paidDays ?? '—'}</span></div>
        <div><span>LOP days</span><span>${slip.lopDays ?? '—'}</span></div>`;
@@ -123,7 +124,16 @@ export async function printPayslip(slip: Payslip, opts?: { employeeName?: string
     ${slip.remarks ? `<div class="note"><b>Note:</b> ${esc(slip.remarks)}</div>` : ''}
     <div class="foot">Status: ${esc(slip.status)}${slip.paymentDate ? ` · Paid on ${esc(slip.paymentDate)}` : ''} · This is a computer-generated payslip.</div>
   </body></html>`;
+  return html;
+}
 
+/**
+ * Renders the shared A4 payslip into a hidden frame and opens the print dialog, so an employee (or HR)
+ * can save it as a PDF (Print → Save as PDF on desktop and Android, Share → Print on iPhone). No pop-up
+ * window, so pop-up blockers can't stop it.
+ */
+export async function printPayslip(slip: Payslip, opts?: { employeeName?: string; employeeCode?: string }) {
+  const html = await buildPayslipHtml(slip, opts);
   const frame = document.createElement('iframe');
   frame.setAttribute('aria-hidden', 'true');
   frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden';

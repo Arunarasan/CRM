@@ -2,115 +2,56 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { payrollApi } from "@/api/payrollApi";
 import { useGoBack } from "@/hooks/useGoBack";
-import type { SalaryRecord } from "@/types/payroll";
 import type { Payslip } from "@/types/employeePortal";
-import { payslipRows } from "@/pages/employeePortal/printPayslip";
-import { inr } from "@/pages/workforce/WorkforceFinanceTab";
+import { buildPayslipHtml, printPayslip } from "@/pages/employeePortal/printPayslip";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Printer } from "lucide-react";
 
-const MONTHS = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
+/** HR view of a payslip: previews the exact document the employee gets (shared builder) and prints it. */
 export default function PayslipPrint() {
   const { id } = useParams();
   const goBack = useGoBack("/workforce/payroll");
-  const [rec, setRec] = useState<SalaryRecord | null>(null);
+  const [slip, setSlip] = useState<Payslip | null>(null);
+  const [opts, setOpts] = useState<{ employeeName: string; employeeCode?: string }>({ employeeName: "Employee" });
+  const [html, setHtml] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!id) return;
-    payrollApi.payslip(Number(id)).then((r) => setRec(r.record)).catch(console.error).finally(() => setLoading(false));
+    payrollApi.payslip(Number(id))
+      .then(async (r) => {
+        const rec = r.record;
+        const emp = rec.employee || {};
+        const o = {
+          employeeName: [emp.firstName, emp.lastName].filter(Boolean).join(" ") || "Employee",
+          employeeCode: emp.employeeCode || undefined,
+        };
+        const s = rec as unknown as Payslip;
+        setSlip(s);
+        setOpts(o);
+        setHtml(await buildPayslipHtml(s, o));
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
   }, [id]);
 
   if (loading) return <div className="p-8 text-center text-muted-foreground">Loading…</div>;
-  if (!rec) return <div className="p-8 text-center text-muted-foreground">Payslip not found.</div>;
-
-  const emp = rec.employee || {};
-  const name = [emp.firstName, emp.lastName].filter(Boolean).join(" ") || "Employee";
-  // Hours-based payslips: HOURLY, and MONTHLY generated from hours (carry standardHours). Older
-  // fixed-salary payslips keep the Basic/HRA/PF layout.
-  const monthlyHours = rec.standardHours != null;
-  const hourly = rec.payType === "HOURLY" || monthlyHours;
-
-  // Same rows the employee sees on their portal and PDF (every non-zero amount + extra lines).
-  const { earnings, deductions } = payslipRows(rec as unknown as Payslip);
+  if (!slip) return <div className="p-8 text-center text-muted-foreground">Payslip not found.</div>;
 
   return (
-    <div className="p-4 md:p-8 max-w-3xl mx-auto">
-      <div className="flex items-center justify-between mb-4 print:hidden">
+    <div className="p-4 md:p-8 max-w-4xl mx-auto">
+      <div className="flex items-center justify-between mb-4">
         <button type="button" onClick={goBack} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-primary">
           <ArrowLeft className="w-4 h-4" /> Back
         </button>
-        <Button onClick={() => window.print()}><Printer className="w-4 h-4 mr-1" /> Print / Save PDF</Button>
+        <Button onClick={() => printPayslip(slip, opts)}><Printer className="w-4 h-4 mr-1" /> Print / Save PDF</Button>
       </div>
-
-      <div className="bg-white border rounded-2xl shadow-sm p-8">
-        <div className="flex items-center justify-between border-b pb-4 mb-4">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">JB Decor</h1>
-            <p className="text-sm text-muted-foreground">Payslip — {MONTHS[rec.month]} {rec.year}</p>
-          </div>
-          <div className="text-right text-sm">
-            <div className="font-mono text-xs text-slate-500">{rec.payslipNumber}</div>
-            <div className="font-semibold">{name}</div>
-            <div className="text-muted-foreground">{emp.employeeCode || ""}</div>
-          </div>
-        </div>
-
-        {hourly ? (
-          <div className="grid grid-cols-3 md:grid-cols-5 gap-3 text-sm mb-6">
-            <KV label="Attendance days" value={rec.attendanceDays ?? "—"} />
-            <KV label="Worked hrs" value={rec.workedHours ?? "—"} />
-            <KV label="Overtime hrs" value={rec.overtimeHours ?? "—"} />
-            {monthlyHours
-              ? <KV label={`Monthly salary ÷ ${rec.standardHours} std hrs`} value={`${inr(rec.monthlySalary)} → ${inr(rec.hourlyRate)}/hr`} />
-              : <KV label="Hourly rate" value={rec.hourlyRate != null ? inr(rec.hourlyRate) : "—"} />}
-            <KV label="OT rate" value={rec.overtimeRate != null ? inr(rec.overtimeRate) : "—"} />
-          </div>
-        ) : (
-          <div className="grid grid-cols-3 gap-3 text-sm mb-6">
-            <KV label="Working days" value={rec.workingDays ?? "—"} />
-            <KV label="Paid days" value={rec.paidDays ?? "—"} />
-            <KV label="LOP days" value={rec.lopDays ?? "—"} />
-          </div>
-        )}
-
-        <div className="grid grid-cols-2 gap-6">
-          <Column title="Earnings" rows={earnings} total={rec.grossEarnings} />
-          <Column title="Deductions" rows={deductions} total={rec.totalDeductions} />
-        </div>
-
-        <div className="mt-6 flex items-center justify-between bg-slate-50 border rounded-xl p-4">
-          <span className="font-bold text-slate-800">Net Pay</span>
-          <span className="text-2xl font-bold text-emerald-700">{inr(rec.netSalary)}</span>
-        </div>
-        {rec.remarks && (
-          <p className="mt-3 whitespace-pre-wrap rounded-lg border px-3 py-2 text-sm"><b>Note:</b> {rec.remarks}</p>
-        )}
-        <p className="text-xs text-muted-foreground mt-2">
-          Status: {rec.status}{rec.paymentDate ? ` · Paid on ${rec.paymentDate}` : ""}
-        </p>
-      </div>
+      <iframe
+        title="Payslip preview"
+        srcDoc={html}
+        className="w-full bg-white border rounded-2xl shadow-sm"
+        style={{ height: "1100px" }}
+      />
     </div>
   );
-}
-
-function Column({ title, rows, total }: { title: string; rows: [string, number][]; total: number }) {
-  return (
-    <div>
-      <h3 className="font-bold text-slate-700 mb-2">{title}</h3>
-      <table className="w-full text-sm">
-        <tbody className="divide-y">
-          {rows.map(([k, v], i) => (
-            <tr key={`${k}-${i}`}><td className="py-1.5 text-slate-600">{k}</td><td className="py-1.5 text-right font-medium">{inr(v)}</td></tr>
-          ))}
-        </tbody>
-        <tfoot><tr className="border-t-2"><td className="py-2 font-bold">Total</td><td className="py-2 text-right font-bold">{inr(total)}</td></tr></tfoot>
-      </table>
-    </div>
-  );
-}
-
-function KV({ label, value }: { label: string; value: React.ReactNode }) {
-  return <div><div className="text-xs text-slate-500">{label}</div><div className="font-semibold">{value}</div></div>;
 }
