@@ -8,6 +8,7 @@ import api from "@/lib/api";
 import { resolveFileUrl } from "@/lib/uploadFile";
 import { fetchBankDetails, fetchCompanyProfile, type BankDetails } from "@/lib/companyProfile";
 import type { Invoice, InvoiceItem } from "@/types/finance";
+import { fetchDocDesign, parseDesign, type DocKind } from "@/lib/docDesign";
 
 const n = (v?: number | null) => Number(v ?? 0) || 0;
 
@@ -99,17 +100,17 @@ export function quotationPdfUrl(quotation: Quotation, sel: PdfSelection = {}): s
  */
 export async function loadPdfImages(quotation: Quotation): Promise<Record<string, string>> {
   const urls = (quotation.items || []).map((i) => i.imageUrl).filter((u): u is string => !!u);
-  return loadDocAssets(urls, n(quotation.grandTotal), quotation.quotationNumber || "Quotation");
+  return loadDocAssets(urls, n(quotation.grandTotal), quotation.quotationNumber || "Quotation", "quotation");
 }
 
 /** Letterhead, fonts and the bank box (UPI QR asking for `upiAmount`) for an invoice PDF. */
 export function loadInvoicePdfAssets(invoice: Invoice, lines: InvoiceItem[] = []): Promise<Record<string, string>> {
   const urls = lines.map((l) => l.imageUrl).filter((u): u is string => !!u);
-  return loadDocAssets(urls, n(invoice.balanceDue ?? invoice.totalAmount), invoice.invoiceNumber || "Invoice");
+  return loadDocAssets(urls, n(invoice.balanceDue ?? invoice.totalAmount), invoice.invoiceNumber || "Invoice", "invoice");
 }
 
 /** Everything a document PDF draws that has to be fetched first: line photos, letterhead, fonts, bank box. */
-async function loadDocAssets(imageUrls: string[], upiAmount: number, upiNote: string): Promise<Record<string, string>> {
+async function loadDocAssets(imageUrls: string[], upiAmount: number, upiNote: string, kind: DocKind): Promise<Record<string, string>> {
   const urls = [...new Set(imageUrls)];
   const out: Record<string, string> = {};
   const header = loadHeader().then((h) => { if (h) out[HEADER_KEY] = h; });
@@ -118,7 +119,8 @@ async function loadDocAssets(imageUrls: string[], upiAmount: number, upiNote: st
     if (b64) out[FONT_KEY + f.file] = b64;
   }));
   const bank = loadBank(upiAmount, upiNote).then((b) => Object.assign(out, b));
-  await Promise.all([header, fonts, bank, ...urls.map(async (url) => {
+  const design = fetchDocDesign(kind).then((d) => { out[DESIGN_KEY] = JSON.stringify(d); });
+  await Promise.all([header, fonts, bank, design, ...urls.map(async (url) => {
     try {
       // Our own stored photos come through the API (the storage bucket sends no CORS headers, so
       // a canvas can't read them directly); other links are tried as-is.
@@ -153,6 +155,8 @@ async function loadDocAssets(imageUrls: string[], upiAmount: number, upiNote: st
 
 /** The letterhead banner (frontend/public/quote-header.jpg), carried in the images map under this key. */
 const HEADER_KEY = "__quote_header__";
+/** The saved document design (Website › Document Design), as JSON. */
+const DESIGN_KEY = "__design__";
 const HEADER_URL = `${import.meta.env.BASE_URL}quote-header.jpg`;
 /** Banner width : height (1536 × 292). */
 const HEADER_RATIO = 292 / 1536;
@@ -417,13 +421,14 @@ interface DocSpec {
 /** Draws a document in the shared quotation / invoice design. */
 function renderDocPdf(spec: DocSpec, assets: Record<string, string>): jsPDF {
   const blocks = buildCategoryBlocks(spec.items);
+  const D = parseDesign(assets[DESIGN_KEY]);
   const doc = new jsPDF("p", "mm", "a4");
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
   const M = 10;
   const W = pageW - 2 * M;
   const rx = pageW - M;
-  const bottom = pageH - 14;
+  const bottom = pageH - (D.footerText.trim() ? 19 : 14);
   let y = 14;
 
   // ---- Fonts: embedded (with ₹) when loaded, else Helvetica with "Rs." ----
@@ -482,7 +487,7 @@ function renderDocPdf(spec: DocSpec, assets: Record<string, string>): jsPDF {
   const ensure = (needed: number) => { if (y + needed > bottom) newPage(); };
 
   // ---- Letterhead ----
-  const header = assets[HEADER_KEY];
+  const header = D.letterhead ? assets[HEADER_KEY] : undefined;
   if (header) {
     const h = pageW * HEADER_RATIO;
     try { doc.addImage(header, "JPEG", 0, 0, pageW, h); y = h + 5; } catch { /* plain header */ }
@@ -490,13 +495,16 @@ function renderDocPdf(spec: DocSpec, assets: Record<string, string>): jsPDF {
 
   // ---- Title + number · info cards ----
   font("serif", 23); color(INK);
-  doc.text(spec.title, M + 1, y + 9);
+  doc.text(D.titleText.trim() || spec.title, M + 1, y + 9);
   font("semi", 11);
   doc.text(spec.number, M + 1, y + 15.5);
 
   const cardX = M + 64, gap = 2.5, cardH = 17;
-  const cardW = (rx - cardX - 2 * gap) / 3;
-  const cards = spec.cards;
+  // spec.cards is [date, customer, site]; the design decides which are printed.
+  const cards = spec.cards
+    .filter((_, i) => [D.showDateCard, D.showCustomerCard, D.showSiteCard][i] !== false)
+    .map((c) => (c.label === "Customer" || c.label === "Bill To") && !D.showCustomerDetail ? { ...c, sub: undefined } : c);
+  const cardW = cards.length ? (rx - cardX - (cards.length - 1) * gap) / cards.length : 0;
   cards.forEach((c, i) => {
     const x = cardX + i * (cardW + gap);
     doc.setDrawColor(...LINE).setLineWidth(0.25).setFillColor(255, 255, 255);
@@ -521,8 +529,13 @@ function renderDocPdf(spec: DocSpec, assets: Record<string, string>): jsPDF {
   }
 
   // ---- Categories ----
-  const COLS = { no: 8, photo: 12, qty: 14, unit: 14, rate: 20, disc: 16, amt: 25 };
-  const descW = W - (COLS.no + COLS.photo + COLS.qty + COLS.unit + COLS.rate + COLS.disc + COLS.amt);
+  type ColKey = "no" | "photo" | "desc" | "qty" | "unit" | "rate" | "disc" | "amt";
+  const WIDTH: Record<ColKey, number> = { no: 8, photo: 12, desc: 0, qty: 14, unit: 14, rate: 20, disc: 16, amt: 25 };
+  const colKeys: ColKey[] = (["no", "photo", "desc", "qty", "unit", "rate", "disc", "amt"] as ColKey[]).filter((k) =>
+    k === "photo" ? D.colPhoto : k === "qty" ? D.colQty : k === "unit" ? D.colUnit : k === "rate" ? D.colRate
+      : k === "disc" ? D.colExtra : true);
+  const descW = W - colKeys.reduce((sum, k) => sum + WIDTH[k], 0);
+  const withTags = spec.tags && D.colTag;
   let rowNo = 0;
 
   blocks.forEach((block, bi) => {
@@ -532,29 +545,40 @@ function renderDocPdf(spec: DocSpec, assets: Record<string, string>): jsPDF {
     // Each product's description lines, measured up front so the row is tall enough for them.
     font("sans", 6.8);
     const subs = block.items.map((it) => {
-      const sub = [it.description?.split(/\r?\n/)[0], it.color, it.location || it.roomName].filter(Boolean).join("  ·  ");
+      const sub = !D.colDescription ? "" : [it.description?.split(/\r?\n/)[0], it.color, it.location || it.roomName].filter(Boolean).join("  ·  ");
       return sub ? (doc.splitTextToSize(sub, descW - 4) as string[]).slice(0, 2) : [];
     });
 
     ensure(8 + 7 + 12 + 10);
-    // Header (top corners rounded; its lower edge sits under the column titles)
-    doc.setFillColor(...tone.bg).setDrawColor(...tone.bar).setLineWidth(0.3);
-    shape(M, y, W, 10, 1.8, { tl: true, tr: true }, "FD");
-    font("serif", 11); color(INK);
-    const name = block.category.toUpperCase();
-    doc.text(name, M + 5, y + 5.6);
-    const nameW = doc.getTextWidth(name);
-    font("sans", 7.5); color(MUTED);
-    doc.text(count, M + 5 + nameW + 3, y + 5.6);
-    y += 8;
+    if (D.categoryHeader) {
+      // Header (top corners rounded; its lower edge sits under the column titles)
+      doc.setFillColor(...tone.bg).setDrawColor(...tone.bar).setLineWidth(0.3);
+      shape(M, y, W, 10, 1.8, { tl: true, tr: true }, "FD");
+      font("serif", 11); color(INK);
+      const name = block.category.toUpperCase();
+      doc.text(name, M + 5, y + 5.6);
+      const nameW = doc.getTextWidth(name);
+      font("sans", 7.5); color(MUTED);
+      doc.text(count, M + 5 + nameW + 3, y + 5.6);
+      y += 8;
+    }
 
     autoTable(doc, {
       startY: y,
-      head: [["#", { content: "Description", colSpan: 2, styles: { halign: "left" } }, "Qty", "Unit",
-        `Rate (${R.trim()})`, spec.extraColumn.header, { content: `Amount (${R.trim()})`, styles: { halign: "right" } }]],
+      head: [colKeys.flatMap((k): any[] => {
+        if (k === "no") return ["#"];
+        if (k === "photo") return [{ content: "Description", colSpan: 2, styles: { halign: "left" } }];
+        if (k === "desc") return colKeys.includes("photo") ? [] : [{ content: "Description", styles: { halign: "left" } }];
+        if (k === "qty") return ["Qty"];
+        if (k === "unit") return ["Unit"];
+        if (k === "rate") return [`Rate (${R.trim()})`];
+        if (k === "disc") return [spec.extraColumn.header];
+        return [{ content: `Amount (${R.trim()})`, styles: { halign: "right" } }];
+      })],
       body: block.items.map((it) => {
         rowNo += 1;
-        return [String(rowNo), "", "", fmt(it.quantity), unitLabel(it.unit), fmt(it.rate), spec.extraColumn.cell(it), fmt(it.totalAmount)];
+        return colKeys.map((k) => k === "no" ? String(rowNo) : k === "qty" ? fmt(it.quantity) : k === "unit" ? unitLabel(it.unit)
+          : k === "rate" ? fmt(it.rate) : k === "disc" ? spec.extraColumn.cell(it) : k === "amt" ? fmt(it.totalAmount) : "");
       }),
       theme: "grid",
       margin: { left: M, right: M },
@@ -568,16 +592,12 @@ function renderDocPdf(spec: DocSpec, assets: Record<string, string>): jsPDF {
         font: embedded ? "JBSansSemi" : "helvetica", fontStyle: embedded ? "normal" : "bold",
         fillColor: [251, 252, 253], textColor: INK, fontSize: 7.8, cellPadding: { top: 1.8, bottom: 1.8, left: 2, right: 2 },
       },
-      columnStyles: {
-        0: { cellWidth: COLS.no, textColor: MUTED },
-        1: { cellWidth: COLS.photo },
-        2: { cellWidth: descW, halign: "left" },
-        3: { cellWidth: COLS.qty },
-        4: { cellWidth: COLS.unit },
-        5: { cellWidth: COLS.rate },
-        6: { cellWidth: COLS.disc },
-        7: { cellWidth: COLS.amt, halign: "right", fontStyle: "bold" },
-      },
+      columnStyles: Object.fromEntries(colKeys.map((k, i) => [i, {
+        cellWidth: k === "desc" ? descW : WIDTH[k],
+        ...(k === "no" ? { textColor: MUTED } : {}),
+        ...(k === "desc" ? { halign: "left" } : {}),
+        ...(k === "amt" ? { halign: "right", fontStyle: "bold" } : {}),
+      }])),
       didParseCell: (d) => {
         if (d.section !== "body") return;
         const lines = subs[d.row.index]?.length ?? 0;
@@ -588,17 +608,18 @@ function renderDocPdf(spec: DocSpec, assets: Record<string, string>): jsPDF {
         const it = block.items[d.row.index];
         if (!it) return;
         const { x, y: cy, width: cw, height: ch } = d.cell;
-        if (d.column.index === 1) {
+        const key = colKeys[d.column.index];
+        if (key === "photo") {
           const size = 8.5;
           const ix = x + (cw - size) / 2, iy = cy + (ch - size) / 2;
           const src = it.imageUrl ? assets[it.imageUrl] : undefined;
           if (src) {
             try { doc.addImage(src, "JPEG", ix, iy, size, size); return; } catch { /* placeholder */ }
           }
-          if (!spec.tags) return; // invoices carry no photos — leave the cell empty
+          if (!withTags) return; // invoices carry no photos — leave the cell empty
           doc.setFillColor(241, 239, 233);
           doc.roundedRect(ix, iy, size, size, 0.8, 0.8, "F");
-        } else if (d.column.index === 2) {
+        } else if (key === "desc") {
           const lines = subs[d.row.index] || [];
           const blockH = 4 + lines.length * 3;
           let ty = cy + (ch - blockH) / 2 + 3;
@@ -607,7 +628,7 @@ function renderDocPdf(spec: DocSpec, assets: Record<string, string>): jsPDF {
           doc.text(name, x + 2, ty);
           // CUSTOM / INVENTORY tag
           const inv = it.productId != null;
-          if (spec.tags) {
+          if (withTags) {
           const tag = inv ? "INVENTORY" : "CUSTOM";
           const tx = x + 2 + doc.getTextWidth(name) + 2.5;
           font("semi", 5.6);
@@ -628,6 +649,7 @@ function renderDocPdf(spec: DocSpec, assets: Record<string, string>): jsPDF {
     y = (doc as any).lastAutoTable.finalY;
 
     // Category total (bottom corners rounded)
+    if (!D.categoryTotal) { y += 5; return; }
     if (y + 9 > bottom) newPage();
     doc.setFillColor(...tone.bg).setDrawColor(...tone.bar).setLineWidth(0.3);
     shape(M, y, W, 9, 1.8, { bl: true, br: true }, "FD");
@@ -651,13 +673,13 @@ function renderDocPdf(spec: DocSpec, assets: Record<string, string>): jsPDF {
   const sumH = rows.length * rowH + 4 + 11 + (after.length ? 2 + after.length * rowH : 0);
 
   const leftW = sumX - M - 5;
-  const terms = (spec.terms || "").split(/\r?\n/).map((t) => t.trim()).filter(Boolean);
+  const terms = (!D.showTerms ? "" : spec.terms || "").split(/\r?\n/).map((t) => t.trim()).filter(Boolean);
   font("sans", 7.6);
   const termLines = terms.flatMap((t, i) => (doc.splitTextToSize(`${i + 1}. ${t}`, leftW - 10) as string[]));
   const termsH = terms.length ? 11 + termLines.length * 3.6 + 3 : 0;
   let bank: BankDetails | null = null;
-  try { bank = assets[BANK_KEY] ? JSON.parse(assets[BANK_KEY]) : null; } catch { bank = null; }
-  const qr = assets[QR_KEY];
+  try { bank = D.showBank && assets[BANK_KEY] ? JSON.parse(assets[BANK_KEY]) : null; } catch { bank = null; }
+  const qr = D.showQr ? assets[QR_KEY] : undefined;
   const bankRows = bank ? ([
     ["Account Name", bank.accountName], ["Bank", bank.bankName], ["A/C No.", bank.accountNumber],
     ["IFSC", bank.ifsc], ["Branch", bank.branch], ["UPI ID", bank.upiId],
@@ -738,6 +760,11 @@ function renderDocPdf(spec: DocSpec, assets: Record<string, string>): jsPDF {
   const pages = doc.getNumberOfPages();
   for (let i = 1; i <= pages; i++) {
     doc.setPage(i);
+    if (D.footerText.trim()) {
+      font("sans", 7.2); color(MUTED);
+      doc.text((doc.splitTextToSize(D.footerText.trim(), W) as string[]).slice(0, 2), M, pageH - 14);
+    }
+    if (!D.showFooter) continue;
     doc.setDrawColor(201, 154, 62).setLineWidth(0.3);
     doc.line(M, pageH - 9, rx, pageH - 9);
     font("sans", 7); color(MUTED);

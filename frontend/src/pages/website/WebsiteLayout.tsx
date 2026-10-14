@@ -1,7 +1,7 @@
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   Images, LayoutGrid, ShoppingBag, Wrench, FolderKanban, Layers, Quote, ExternalLink, Inbox,
-  FileText, Settings, Star,
+  FileText, Settings, Star, FileSignature,
 } from 'lucide-react';
 
 type Tab = { to: string; label: string; icon: typeof Images; end?: boolean };
@@ -33,6 +33,7 @@ const GROUPS: { label: string; tabs: Tab[] }[] = [
     tabs: [
       { to: '/website/content', label: 'Content', icon: FileText },
       { to: '/website/settings', label: 'Settings', icon: Settings },
+      { to: '/website/document-design', label: 'Document Design', icon: FileSignature },
     ],
   },
 ];

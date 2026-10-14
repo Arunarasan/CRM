@@ -18,6 +18,7 @@ import { colorsOf, useLineProducts } from "@/pages/leads/quote/productCells";
 import { fetchBankDetails, fetchCompanyProfile, type BankDetails, type CompanyProfile } from "@/lib/companyProfile";
 import { lineTotal, pricingPatch, quoteTotals, readPricing, type QuotePricing } from "./quotationPricing";
 import { unitDef } from "@/lib/units";
+import { DEFAULT_DESIGN, fetchDocDesign, type DocDesign } from "@/lib/docDesign";
 
 /**
  * Print-optimised, branded quotation (JB Decor banner, meta cards, Category → Product table with photo,
@@ -63,7 +64,8 @@ export function QuotationPrintView({ quotationId, onClose, onSaved, readOnly }: 
 
   const [company, setCompany] = useState<CompanyProfile>({ name: "JB Decor" });
   const [bank, setBank] = useState<BankDetails>({});
-  useEffect(() => { fetchCompanyProfile().then(setCompany); fetchBankDetails().then(setBank); }, []);
+  const [D, setD] = useState<DocDesign>(DEFAULT_DESIGN);
+  useEffect(() => { fetchCompanyProfile().then(setCompany); fetchBankDetails().then(setBank); fetchDocDesign("quotation").then(setD); }, []);
 
   useEffect(() => {
     quotationApi.get(quotationId).then(adopt).catch(console.error).finally(() => setLoading(false));
@@ -151,7 +153,8 @@ export function QuotationPrintView({ quotationId, onClose, onSaved, readOnly }: 
   const terms = (quotation.termsAndConditions || "").split(/\r?\n/)
     .map((t) => t.replace(/^\s*(\d+[.)]|[-•*])\s*/, "").trim()).filter(Boolean);
   let rowNo = 0;
-  const hasBank = !!(bank.accountNumber || bank.upiId);
+  const hasBank = D.showBank && !!(bank.accountNumber || bank.upiId);
+  const nCols = 3 + [D.colQty, D.colUnit, D.colRate, D.colExtra].filter(Boolean).length;
   const grandDue = Math.round(Number(shown.grand ?? 0) * 100) / 100;
   const upiLink = bank.upiId
     ? `upi://pay?pa=${encodeURIComponent(bank.upiId)}&pn=${encodeURIComponent(bank.accountName || company.name)}`
@@ -198,18 +201,20 @@ export function QuotationPrintView({ quotationId, onClose, onSaved, readOnly }: 
       <div className="qp-scroll">
         <div id="quotation-print" className="qp">
           {/* Letterhead: brand, address & contact, services (frontend/public/quote-header.jpg) */}
-          <header className="qp-banner">
-            <img src={QUOTE_HEADER} alt={`${company.name} — Interior & Decor Solutions`} />
-          </header>
+          {D.letterhead && (
+            <header className="qp-banner">
+              <img src={QUOTE_HEADER} alt={`${company.name} — Interior & Decor Solutions`} />
+            </header>
+          )}
 
           <div className="qp-body">
             {/* Title + meta cards */}
             <div className="qp-head">
               <div className="qp-title">
-                <h1>QUOTATION</h1>
+                <h1>{D.titleText.trim() || "QUOTATION"}</h1>
                 <p className="qp-no">{quotation.quotationNumber}{quotation.revisionNumber ? ` · v${quotation.revisionNumber}` : ""}</p>
               </div>
-              <div className="qp-card">
+              {D.showDateCard && <div className="qp-card">
                 <CalendarDays className="qp-ico" />
                 <div>
                   <small>Date</small>
@@ -226,69 +231,73 @@ export function QuotationPrintView({ quotationId, onClose, onSaved, readOnly }: 
                     ? <span title={`Valid till ${fmtDate(xDate)}`}>Valid for {validDays} day{validDays === 1 ? "" : "s"}</span>
                     : xDate ? <span>Valid till {fmtDate(xDate)}</span> : null}
                 </div>
-              </div>
-              <div className="qp-card">
+              </div>}
+              {D.showCustomerCard && <div className="qp-card">
                 <User className="qp-ico" />
                 <div className="min-w-0">
                   <small>Customer</small>
                   <b>{client || "—"}</b>
-                  {(clientArea || clientCode) && <span>{clientArea || clientCode}</span>}
+                  {D.showCustomerDetail && (clientArea || clientCode) && <span>{clientArea || clientCode}</span>}
                 </div>
-              </div>
-              <div className="qp-card qp-card-wide">
+              </div>}
+              {D.showSiteCard && <div className="qp-card qp-card-wide">
                 <MapPin className="qp-ico" />
                 <div className="min-w-0">
                   <small>Site / Project</small>
                   <span className="qp-site">{site || "—"}</span>
                 </div>
-              </div>
+              </div>}
             </div>
 
             {/* Items, grouped by category: header · column titles · products · category total */}
             <table className="qp-table">
               <colgroup>
-                <col style={{ width: "5%" }} /><col /><col style={{ width: "8%" }} /><col style={{ width: "8%" }} />
-                <col style={{ width: "11%" }} /><col style={{ width: "9%" }} /><col style={{ width: "13%" }} />
+                <col style={{ width: "5%" }} /><col />
+                {D.colQty && <col style={{ width: "8%" }} />}{D.colUnit && <col style={{ width: "8%" }} />}
+                {D.colRate && <col style={{ width: "11%" }} />}{D.colExtra && <col style={{ width: "9%" }} />}
+                <col style={{ width: "13%" }} />
               </colgroup>
               {blocks.map((block, bi) => {
                 const tone = TONES[bi % TONES.length];
                 const count = `${block.items.length} item${block.items.length === 1 ? "" : "s"}`;
                 return (
                   <tbody key={block.category} className="qp-block" style={{ ["--tone-bg" as any]: tone.bg, ["--tone-bar" as any]: tone.bar }}>
-                    <tr className="qp-cat">
-                      <td colSpan={7}>
+                    {D.categoryHeader && <tr className="qp-cat">
+                      <td colSpan={nCols}>
                         <div className="qp-cat-row">
                           <Package className="qp-cat-ico" />
                           <span className="qp-cat-name">{block.category.toUpperCase()}</span>
                           <span className="qp-cat-count">{count}</span>
                         </div>
                       </td>
-                    </tr>
+                    </tr>}
                     <tr className="qp-colhead">
-                      <th>#</th><th className="qp-left">Description</th><th>Qty</th><th>Unit</th>
-                      <th>Rate (₹)</th><th>Disc. (%)</th><th className="qp-right">Amount (₹)</th>
+                      <th>#</th><th className="qp-left">Description</th>
+                      {D.colQty && <th>Qty</th>}{D.colUnit && <th>Unit</th>}
+                      {D.colRate && <th>Rate (₹)</th>}{D.colExtra && <th>Disc. (%)</th>}
+                      <th className="qp-right">Amount (₹)</th>
                     </tr>
                     {block.items.map((it) => {
                       rowNo += 1;
                       const hex = swatchOf(it);
-                      const sub = [it.description?.split(/\r?\n/)[0], it.color, it.location || it.roomName].filter(Boolean);
+                      const sub = !D.colDescription ? [] : [it.description?.split(/\r?\n/)[0], it.color, it.location || it.roomName].filter(Boolean);
                       return (
                         <tr key={it.id} className="qp-row">
                           <td>{rowNo}</td>
                           <td className="qp-left">
                             <div className="qp-item">
-                              <div className="qp-thumb">
+                              {D.colPhoto && <div className="qp-thumb">
                                 {it.imageUrl ? (
                                   <img src={resolveFileUrl(it.imageUrl)} alt=""
                                     onError={(e) => { e.currentTarget.style.visibility = "hidden"; }} />
                                 ) : <Package className="h-4 w-4" />}
-                              </div>
+                              </div>}
                               <div className="min-w-0">
                                 <p className="qp-name">
                                   {it.itemName}
-                                  <span className={it.productId != null ? "qp-badge qp-badge-inv" : "qp-badge"}>
+                                  {D.colTag && <span className={it.productId != null ? "qp-badge qp-badge-inv" : "qp-badge"}>
                                     {it.productId != null ? "INVENTORY" : "CUSTOM"}
-                                  </span>
+                                  </span>}
                                 </p>
                                 {sub.length > 0 && (
                                   <p className="qp-sub">
@@ -299,23 +308,23 @@ export function QuotationPrintView({ quotationId, onClose, onSaved, readOnly }: 
                               </div>
                             </div>
                           </td>
-                          <td>{fmtNum(it.quantity)}</td>
-                          <td>{unitLabel(it.unit)}</td>
-                          <td>
+                          {D.colQty && <td>{fmtNum(it.quantity)}</td>}
+                          {D.colUnit && <td>{unitLabel(it.unit)}</td>}
+                          {D.colRate && <td>
                             {editing ? (
                               <span className="block w-24 ml-auto">
                                 <NumCell value={rateOf(it) != null ? Math.round(Number(rateOf(it)) * 100) / 100 : null} col="printRate" className="h-7 text-xs border-slate-300 bg-amber-50"
                                   onCommit={(v) => setRates((r) => ({ ...r, [it.id!]: v ?? 0 }))} />
                               </span>
                             ) : fmtNum(it.rate)}
-                          </td>
-                          <td>{discLabel(it)}</td>
+                          </td>}
+                          {D.colExtra && <td>{discLabel(it)}</td>}
                           <td className="qp-right qp-amt">{fmtNum(it.totalAmount)}</td>
                         </tr>
                       );
                     })}
-                    <tr className="qp-cat-foot">
-                      <td colSpan={7}>
+                    {D.categoryTotal && <tr className="qp-cat-foot">
+                      <td colSpan={nCols}>
                         <div className="qp-cat-sum">
                           <Package className="qp-cat-ico" />
                           <span className="qp-cat-sum-label">Category Total</span>
@@ -323,8 +332,8 @@ export function QuotationPrintView({ quotationId, onClose, onSaved, readOnly }: 
                           <span className="qp-cat-sum-val">{fmtMoney(block.total)}</span>
                         </div>
                       </td>
-                    </tr>
-                    <tr className="qp-gap"><td colSpan={7} /></tr>
+                    </tr>}
+                    <tr className="qp-gap"><td colSpan={nCols} /></tr>
                   </tbody>
                 );
               })}
@@ -333,8 +342,8 @@ export function QuotationPrintView({ quotationId, onClose, onSaved, readOnly }: 
             {/* Terms + summary */}
             <div className="qp-bottom">
               <div className="qp-left-col">
-              <div className={editing || terms.length > 0 ? "qp-terms qp-terms-box" : "qp-terms"}>
-                {(editing || terms.length > 0) && (
+              <div className={(editing || terms.length > 0) && D.showTerms ? "qp-terms qp-terms-box" : "qp-terms"}>
+                {(editing || terms.length > 0) && D.showTerms && (
                   <>
                     <h3><Package className="qp-terms-ico" /> Terms &amp; Conditions</h3>
                     {editing ? (
@@ -360,7 +369,7 @@ export function QuotationPrintView({ quotationId, onClose, onSaved, readOnly }: 
                       {bank.upiId && <><dt>UPI ID</dt><dd>{bank.upiId}</dd></>}
                     </dl>
                   </div>
-                  {upiLink && (
+                  {upiLink && D.showQr && (
                     <div className="qp-bank-qr">
                       <QRCodeSVG value={upiLink} size={92} level="M" />
                       <span>Scan to pay via UPI</span>
@@ -417,28 +426,29 @@ export function QuotationPrintView({ quotationId, onClose, onSaved, readOnly }: 
             </div>
 
             {/* Footer */}
-            <footer className="qp-foot">
+            {D.footerText.trim() && <p className="qp-footnote">{D.footerText.trim()}</p>}
+            {D.showFooter && <footer className="qp-foot">
               <div className="qp-thanks">
                 <p className="qp-script">Thank You!</p>
                 <p>We look forward to working with you.</p>
               </div>
-              <div className="qp-sign">
+              {D.showSignatures && <div className="qp-sign">
                 {quotation.customerSignatureBase64 && <img src={quotation.customerSignatureBase64} alt="" />}
                 <span>Customer Signature</span>
-              </div>
-              <div className="qp-sign">
+              </div>}
+              {D.showSignatures && <div className="qp-sign">
                 <span>Authorised Signature<br />{company.name}</span>
-              </div>
-              <div className="qp-contact">
+              </div>}
+              {D.showContact && <div className="qp-contact">
                 {company.phone && <p><Phone /> {company.phone}</p>}
                 {company.email && <p><Mail /> {company.email}</p>}
                 <p><Globe /> {WEBSITE.replace(/^https?:\/\//, "")}</p>
-              </div>
-              <div className="qp-qr">
+              </div>}
+              {D.showContact && <div className="qp-qr">
                 <QRCodeSVG value={WEBSITE} size={64} level="M" />
                 <span>Scan to<br />view online</span>
-              </div>
-            </footer>
+              </div>}
+            </footer>}
           </div>
         </div>
       </div>
@@ -599,6 +609,7 @@ const QP_CSS = `
 .qp-final-ico { width:26px; height:26px; border-radius:50%; background:#fff; color:#0b2a35; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14px; }
 .qp-final-label { flex:1; font-family:"Playfair Display",Georgia,serif; font-size:20px; font-weight:600; }
 .qp-final-val { font-family:"Playfair Display",Georgia,serif; font-size:24px; font-weight:700; white-space:nowrap; }
+.qp-footnote { margin:18px 0 0; font-size:12px; color:var(--muted); white-space:pre-line; }
 .qp-foot { display:flex; align-items:flex-end; gap:20px; margin-top:auto; padding-top:26px; break-inside:avoid; page-break-inside:avoid; }
 .qp-thanks { flex: 1.3; }
 .qp-script { font-family:"Playfair Display",Georgia,serif; font-style:italic; font-size:30px; color:var(--gold); margin:0; transform: rotate(-4deg); transform-origin:left; }

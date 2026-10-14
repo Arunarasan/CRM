@@ -30,6 +30,7 @@ const MaterialsAdmin = lazy(() => import("./pages/website/MaterialsAdmin"));
 const TestimonialsAdmin = lazy(() => import("./pages/website/TestimonialsAdmin"));
 const EnquiriesAdmin = lazy(() => import("./pages/website/EnquiriesAdmin"));
 const SettingsAdmin = lazy(() => import("./pages/website/SettingsAdmin"));
+const DocumentDesignAdmin = lazy(() => import("./pages/website/DocumentDesignAdmin"));
 const ContentAdmin = lazy(() => import("./pages/website/ContentAdmin"));
 const ReviewsAdmin = lazy(() => import("./pages/website/ReviewsAdmin"));
 const BoqList = lazy(() => import("./pages/boq/BoqList"));
@@ -225,6 +226,7 @@ function App() {
               <Route path="content" element={<ContentAdmin />} />
               <Route path="reviews" element={<ReviewsAdmin />} />
               <Route path="settings" element={<SettingsAdmin />} />
+              <Route path="document-design" element={<DocumentDesignAdmin />} />
             </Route>
             {/* Workflow Console + Smart Assignment are merged into the Tasks screen. */}
             <Route path="workflow" element={<Navigate to="/tasks" replace />} />

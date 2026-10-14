@@ -30,6 +30,8 @@ public class WebsiteContentService {
     private static final String BANK_PREFIX = "bank.";
     /** Payroll rules (incentive amounts etc.) — never on the public site or the Website settings form. */
     private static final String PAYROLL_PREFIX = "payroll.";
+    /** Printed quotation / invoice layouts (JSON) — edited in Website › Document Design, not in the settings form. */
+    private static final String DOC_PREFIX = "doc.";
 
     public WebsiteContentService(SiteSettingRepository settingRepo, ContentBlockRepository contentRepo) {
         this.settingRepo = settingRepo;
@@ -44,7 +46,7 @@ public class WebsiteContentService {
     public List<SettingDto> listSettings() {
         List<SettingDto> out = new ArrayList<>();
         for (SiteSetting s : settingRepo.findByIsDeletedFalseOrderByDisplayOrderAscIdAsc()) {
-            if (s.getSettingKey().startsWith(PAYROLL_PREFIX)) continue; // edited on the HR Pay rules tab
+            if (s.getSettingKey().startsWith(PAYROLL_PREFIX) || s.getSettingKey().startsWith(DOC_PREFIX)) continue; // own editors
             out.add(toSettingDto(s));
         }
         return out;
@@ -56,7 +58,8 @@ public class WebsiteContentService {
         Map<String, String> map = new LinkedHashMap<>();
         for (SiteSetting s : settingRepo.findByIsDeletedFalseOrderByDisplayOrderAscIdAsc()) {
             // Bank details are for printed quotations/invoices only — never on the public endpoint.
-            if (s.getSettingKey().startsWith(BANK_PREFIX) || s.getSettingKey().startsWith(PAYROLL_PREFIX)) continue;
+            if (s.getSettingKey().startsWith(BANK_PREFIX) || s.getSettingKey().startsWith(PAYROLL_PREFIX)
+                    || s.getSettingKey().startsWith(DOC_PREFIX)) continue;
             map.put(s.getSettingKey(), s.getSettingValue());
         }
         return map;
@@ -68,6 +71,16 @@ public class WebsiteContentService {
         Map<String, String> map = new LinkedHashMap<>();
         for (SiteSetting s : settingRepo.findByIsDeletedFalseOrderByDisplayOrderAscIdAsc()) {
             if (s.getSettingKey().startsWith(BANK_PREFIX)) map.put(s.getSettingKey(), s.getSettingValue());
+        }
+        return map;
+    }
+
+    /** Printed-document layouts ({@code doc.*} settings); signed-in users only. */
+    @Transactional(readOnly = true)
+    public Map<String, String> documentDesign() {
+        Map<String, String> map = new LinkedHashMap<>();
+        for (SiteSetting s : settingRepo.findByIsDeletedFalseOrderByDisplayOrderAscIdAsc()) {
+            if (s.getSettingKey().startsWith(DOC_PREFIX)) map.put(s.getSettingKey(), s.getSettingValue());
         }
         return map;
     }
