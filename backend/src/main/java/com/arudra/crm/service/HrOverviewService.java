@@ -173,6 +173,8 @@ public class HrOverviewService {
                 m.put("overtimeHours", a.getOvertimeHours());
                 m.put("punches", Math.max(1, sessions.size()));
                 m.put("pending", pending);
+                m.put("sessions", sessionRows(sessions, date.equals(today)));
+                m.put("day24", day24(sessions, date.equals(today)));
                 waiting += pending;
                 if ("IN".equals(status)) in++; else done++;
             } else if (leaveType.containsKey(e.getId())) {
@@ -200,5 +202,63 @@ public class HrOverviewService {
         out.put("counts", counts);
         out.put("rows", rows);
         return out;
+    }
+
+    /** Minute of day (0–1440) a session edge falls on; an open session ends "now" today, else at midnight. */
+    private static int endMinute(AttendanceSession s, boolean today) {
+        if (s.getCheckOutTime() != null) return s.getCheckOutTime().toSecondOfDay() / 60;
+        return today ? java.time.LocalTime.now().toSecondOfDay() / 60 : s.getCheckInTime().toSecondOfDay() / 60;
+    }
+
+    /** Each clock-in→clock-out of the day with its own gross, break and net minutes. */
+    private List<Map<String, Object>> sessionRows(List<AttendanceSession> sessions, boolean today) {
+        List<Map<String, Object>> list = new ArrayList<>();
+        for (AttendanceSession s : sessions) {
+            if (s.getCheckInTime() == null) continue;
+            int start = s.getCheckInTime().toSecondOfDay() / 60;
+            int end = Math.min(1440, Math.max(start, endMinute(s, today)));
+            int brk = s.getBreakMinutes() == null ? 0 : s.getBreakMinutes();
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("checkIn", s.getCheckInTime());
+            m.put("checkOut", s.getCheckOutTime());
+            m.put("running", s.getCheckOutTime() == null && today);
+            m.put("grossMinutes", end - start);
+            m.put("breakMinutes", Math.min(brk, end - start));
+            m.put("netMinutes", Math.max(0, end - start - brk));
+            m.put("payable", s.isPayable());
+            m.put("flagged", Boolean.TRUE.equals(s.getFlagged()));
+            m.put("approvalStatus", s.getApprovalStatus());
+            list.add(m);
+        }
+        return list;
+    }
+
+    /**
+     * Splits the 24 hours (1440 min) of the day into worked / break / away (out between sessions) /
+     * off (before the first in and after the last out). The four always add up to 1440.
+     */
+    private Map<String, Object> day24(List<AttendanceSession> sessions, boolean today) {
+        int worked = 0, brk = 0, gross = 0, first = -1, last = 0;
+        for (AttendanceSession s : sessions) {
+            if (s.getCheckInTime() == null) continue;
+            int start = s.getCheckInTime().toSecondOfDay() / 60;
+            int end = Math.min(1440, Math.max(start, endMinute(s, today)));
+            int b = Math.min(s.getBreakMinutes() == null ? 0 : s.getBreakMinutes(), end - start);
+            gross += end - start;
+            brk += b;
+            worked += end - start - b;
+            if (first < 0 || start < first) first = start;
+            last = Math.max(last, end);
+        }
+        int span = first < 0 ? 0 : Math.max(0, last - first);
+        int away = Math.max(0, span - gross);
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("workedMinutes", worked);
+        m.put("breakMinutes", brk);
+        m.put("awayMinutes", away);
+        m.put("offMinutes", Math.max(0, 1440 - worked - brk - away));
+        m.put("firstMinute", Math.max(first, 0));
+        m.put("lastMinute", last);
+        return m;
     }
 }

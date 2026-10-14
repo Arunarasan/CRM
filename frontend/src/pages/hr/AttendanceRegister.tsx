@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Clock, Pencil } from "lucide-react";
 import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,14 @@ interface DayRow {
   id: number; name: string; code?: string; designation?: string; status: RowStatus;
   checkIn?: string | null; checkOut?: string | null; workedHours?: number | null; overtimeHours?: number | null;
   punches?: number; pending?: number; leaveType?: string;
+  sessions?: DaySession[]; day24?: Day24;
 }
+interface DaySession {
+  checkIn: string; checkOut?: string | null; running: boolean;
+  grossMinutes: number; breakMinutes: number; netMinutes: number;
+  payable: boolean; flagged: boolean; approvalStatus?: string | null;
+}
+interface Day24 { workedMinutes: number; breakMinutes: number; awayMinutes: number; offMinutes: number }
 interface DayResponse {
   date: string; today: boolean;
   counts: { staff: number; in: number; done: number; leave: number; notIn: number; waiting: number };
@@ -43,6 +50,8 @@ export default function AttendanceRegister({ onFix }: {
   const [error, setError] = useState(false);
   const [filter, setFilter] = useState<Filter>("ALL");
   const [q, setQ] = useState("");
+  const [openId, setOpenId] = useState<number | null>(null);
+  const toggle = (r: DayRow) => r.sessions?.length && setOpenId((cur) => (cur === r.id ? null : r.id));
 
   const load = () => {
     setLoading(true);
@@ -144,21 +153,32 @@ export default function AttendanceRegister({ onFix }: {
                     </thead>
                     <tbody className="divide-y">
                       {visible.map((r) => (
-                        <tr key={r.id} className="hover:bg-slate-50/60">
-                          <td className="px-3 py-2.5"><PersonChip name={r.name} sub={[r.code, r.designation].filter(Boolean).join(" · ")} to={`/hr/employees/${r.id}`} size="sm" /></td>
-                          <td className="px-3 py-2.5"><StatusCell r={r} /></td>
-                          <td className="px-3 py-2.5 tabular-nums text-slate-700">{hm(r.checkIn)}</td>
-                          <td className="px-3 py-2.5 tabular-nums text-slate-700"><OutCell r={r} /></td>
-                          <td className="px-3 py-2.5 text-right tabular-nums">
-                            <span className="text-slate-900">{hrs(r.workedHours)}</span>
-                            {Number(r.overtimeHours || 0) > 0 && <div className="text-[11px] text-slate-500">{hrs(r.overtimeHours)} OT</div>}
-                          </td>
-                          <td className="px-3 py-2.5 text-right">
-                            {r.status !== "UPCOMING" && (
-                              <Button size="sm" variant="ghost" onClick={() => fix(r)} aria-label={`Fix time for ${r.name}`}><Pencil className="mr-1 h-3.5 w-3.5" /> Fix time</Button>
-                            )}
-                          </td>
-                        </tr>
+                        <Fragment key={r.id}>
+                          <tr className="hover:bg-slate-50/60">
+                            <td className="px-3 py-2.5"><PersonChip name={r.name} sub={[r.code, r.designation].filter(Boolean).join(" · ")} to={`/hr/employees/${r.id}`} size="sm" /></td>
+                            <td className="px-3 py-2.5"><StatusCell r={r} /></td>
+                            <td className="px-3 py-2.5 tabular-nums text-slate-700">{hm(r.checkIn)}</td>
+                            <td className="px-3 py-2.5 tabular-nums text-slate-700"><OutCell r={r} /></td>
+                            <td className="px-3 py-2.5 text-right tabular-nums">
+                              <span className="text-slate-900">{hrs(r.workedHours)}</span>
+                              {Number(r.overtimeHours || 0) > 0 && <div className="text-[11px] text-slate-500">{hrs(r.overtimeHours)} OT</div>}
+                              {(r.sessions?.length ?? 0) > 0 && (
+                                <button type="button" onClick={() => toggle(r)} aria-expanded={openId === r.id}
+                                  className="mt-0.5 block w-full text-right text-[11px] font-medium text-emerald-700 hover:underline">
+                                  {r.sessions!.length} session{r.sessions!.length > 1 ? "s" : ""} {openId === r.id ? "▲" : "▼"}
+                                </button>
+                              )}
+                            </td>
+                            <td className="px-3 py-2.5 text-right">
+                              {r.status !== "UPCOMING" && (
+                                <Button size="sm" variant="ghost" onClick={() => fix(r)} aria-label={`Fix time for ${r.name}`}><Pencil className="mr-1 h-3.5 w-3.5" /> Fix time</Button>
+                              )}
+                            </td>
+                          </tr>
+                          {openId === r.id && (
+                            <tr className="bg-slate-50/50"><td colSpan={6} className="px-4 py-3"><DayDetail r={r} /></td></tr>
+                          )}
+                        </Fragment>
                       ))}
                     </tbody>
                   </table>
@@ -177,6 +197,15 @@ export default function AttendanceRegister({ onFix }: {
                           <Mini label="Hours" value={hrs(r.workedHours)} />
                         </div>
                       )}
+                      {(r.sessions?.length ?? 0) > 0 && (
+                        <>
+                          <button type="button" onClick={() => toggle(r)} aria-expanded={openId === r.id}
+                            className="text-sm font-medium text-emerald-700">
+                            {r.sessions!.length} session{r.sessions!.length > 1 ? "s" : ""} · full 24 h {openId === r.id ? "▲" : "▼"}
+                          </button>
+                          {openId === r.id && <DayDetail r={r} />}
+                        </>
+                      )}
                       {r.status !== "UPCOMING" && (
                         <div className="flex justify-end">
                           <Button size="sm" variant="outline" onClick={() => fix(r)}><Pencil className="mr-1 h-3.5 w-3.5" /> Fix time</Button>
@@ -194,7 +223,72 @@ export default function AttendanceRegister({ onFix }: {
   );
 }
 
-/** Last clock-out — "In now" while they're still clocked in today, "Missing" if a past day never closed. */
+const dur = (min: number) => {
+  const h = Math.floor(min / 60), m = min % 60;
+  return h ? (m ? `${h}h ${m}m` : `${h}h`) : `${m}m`;
+};
+
+/**
+ * One employee's whole day: the 24 h split (worked / break / away between sessions / not clocked)
+ * as a bar with a legend — the four always add up to 24 h — plus each clock-in→clock-out session.
+ */
+function DayDetail({ r }: { r: DayRow }) {
+  const d = r.day24;
+  if (!d) return null;
+  const parts = [
+    { key: "Worked", min: d.workedMinutes, bar: "bg-emerald-500", dot: "bg-emerald-500" },
+    { key: "Break", min: d.breakMinutes, bar: "bg-amber-400", dot: "bg-amber-400" },
+    { key: "Away (between sessions)", min: d.awayMinutes, bar: "bg-sky-300", dot: "bg-sky-300" },
+    { key: "Not clocked in", min: d.offMinutes, bar: "bg-slate-200", dot: "bg-slate-200" },
+  ];
+  return (
+    <div className="space-y-3">
+      <div>
+        <div className="flex h-3 w-full overflow-hidden rounded-full bg-slate-100" role="img"
+          aria-label={parts.map((p) => `${p.key} ${dur(p.min)}`).join(", ")}>
+          {parts.map((p) => p.min > 0 && <div key={p.key} className={p.bar} style={{ width: `${(p.min / 1440) * 100}%` }} title={`${p.key}: ${dur(p.min)}`} />)}
+        </div>
+        <div className="mt-1 flex justify-between text-[10px] text-slate-400"><span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span></div>
+        <ul className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs sm:grid-cols-4">
+          {parts.map((p) => (
+            <li key={p.key} className="flex items-center gap-1.5 text-slate-600">
+              <span className={`h-2 w-2 shrink-0 rounded-full ${p.dot}`} />
+              <span className="truncate">{p.key}</span>
+              <span className="ml-auto font-semibold tabular-nums text-slate-900">{dur(p.min)}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+      <table className="w-full text-xs">
+        <thead className="text-slate-500">
+          <tr>
+            <th className="py-1 text-left font-medium">#</th>
+            <th className="py-1 text-left font-medium">In</th>
+            <th className="py-1 text-left font-medium">Out</th>
+            <th className="py-1 text-right font-medium">Break</th>
+            <th className="py-1 text-right font-medium">Worked</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y tabular-nums">
+          {(r.sessions ?? []).map((s, i) => (
+            <tr key={i}>
+              <td className="py-1.5 text-slate-500">{i + 1}</td>
+              <td className="py-1.5 text-slate-800">{hm(s.checkIn)}</td>
+              <td className="py-1.5 text-slate-800">{s.running ? <span className="text-emerald-700">Running</span> : s.checkOut ? hm(s.checkOut) : <span className="font-medium text-amber-700">Missing</span>}</td>
+              <td className="py-1.5 text-right text-slate-600">{s.breakMinutes ? dur(s.breakMinutes) : "—"}</td>
+              <td className="py-1.5 text-right text-slate-900">
+                {dur(s.netMinutes)}
+                {!s.payable && <span className="ml-1 text-[10px] text-amber-700">{s.approvalStatus === "REJECTED" ? "rejected" : "awaiting approval"}</span>}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/** Last clock-out —"In now" while they're still clocked in today, "Missing" if a past day never closed. */
 function OutCell({ r }: { r: DayRow }) {
   if (r.status === "IN") return <span className="text-emerald-700">In now</span>;
   if (r.status === "DONE" && !r.checkOut) return <span className="font-medium text-amber-700">Missing</span>;
