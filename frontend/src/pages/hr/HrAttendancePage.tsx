@@ -5,7 +5,8 @@ import { BaseInput } from '@/components/ui/input';
  *  - Pending approvals: clock-ins that failed their auto-check (outside the fence / unverified),
  *    recorded but held for HR to approve or reject (soft enforcement).
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import api from '@/lib/api';
 import { MapPin, Plus, Trash2, Crosshair, Loader2, ShieldAlert, Check, X, ExternalLink, Fingerprint, Clock3, Smartphone } from 'lucide-react';
 import { attendanceApi, AttendanceLocation, PendingAttendance, MethodRequest, CorrectionRequest } from '@/api/attendanceApi';
 import { getBestPosition } from '@/lib/geo';
@@ -17,7 +18,7 @@ import { DeviceRequests } from './deviceAdmin';
 import { KioskSetup } from './kioskAdmin';
 import { KioskLog, FaceEnrolmentOverview, SelfieThumb, FaceBadge, FingerBadge } from './kioskLog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import AttendanceRegister from './AttendanceRegister';
+import AttendanceRegister, { type DaySession } from './AttendanceRegister';
 
 /**
  * The attendance admin body, mounted both as the Workforce → Attendance page and as the
@@ -87,20 +88,56 @@ export function AttendanceAdmin() {
 
 /* --------------------------- Admin direct time correction --------------------------- */
 
-export type CorrectionPrefill = { employeeId?: string; date?: string; checkIn?: string; checkOut?: string; nonce: number };
+export type CorrectionPrefill = { employeeId?: string; date?: string; sessions?: DaySession[]; nonce: number };
 
-/** Set any day's clock-in/out. `prefill` (from the day register's "Fix time") opens it filled in. */
+type SessionDraft = { id?: number; checkIn: string; checkOut: string };
+const hm5 = (t?: string | null) => (t ? t.slice(0, 5) : '');
+const toDrafts = (list?: DaySession[]): SessionDraft[] =>
+  list && list.length ? list.map((s) => ({ id: s.id, checkIn: hm5(s.checkIn), checkOut: hm5(s.checkOut) })) : [{ checkIn: '', checkOut: '' }];
+const mins = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+const fmtDur = (m: number) => `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`;
+
+/**
+ * Set any day's sessions — every clock-in → clock-out of the day, so a person who came and went
+ * several times is fixed one session at a time. Add a missed session, edit a time, or remove a
+ * wrong one; hours and pay recompute. `prefill` (the register's "Fix time") opens it filled in.
+ */
 export function DirectCorrection({ prefill, onApplied }: { prefill?: CorrectionPrefill | null; onApplied?: () => void } = {}) {
   const [emps, setEmps] = useState<{ value: string; label: string; hint?: string }[]>([]);
   const [open, setOpen] = useState(!!prefill);
-  const [form, setForm] = useState({ employeeId: '', date: '', checkIn: '', checkOut: '' });
+  const [form, setForm] = useState({ employeeId: '', date: '' });
+  const [sessions, setSessions] = useState<SessionDraft[]>([{ checkIn: '', checkOut: '' }]);
+  const [loadingDay, setLoadingDay] = useState(false);
   const [saving, setSaving] = useState(false);
+  const prefilled = useRef(false); // skip the auto-load once right after a prefill (it already has the sessions)
 
   useEffect(() => {
     if (!prefill) return;
-    setForm({ employeeId: prefill.employeeId ?? '', date: prefill.date ?? '', checkIn: prefill.checkIn ?? '', checkOut: prefill.checkOut ?? '' });
+    prefilled.current = true;
+    setForm({ employeeId: prefill.employeeId ?? '', date: prefill.date ?? '' });
+    setSessions(toDrafts(prefill.sessions));
     setOpen(true);
   }, [prefill?.nonce]);
+
+  // Picked an employee + date by hand → load that day's existing sessions to edit.
+  useEffect(() => {
+    if (!open || !form.employeeId || !form.date) return;
+    if (prefilled.current) { prefilled.current = false; return; }
+    let cancelled = false;
+    setLoadingDay(true);
+    api.get('/hr/attendance/day', { params: { date: form.date } })
+      .then((r) => {
+        if (cancelled) return;
+        const row = (r.data.rows ?? []).find((x: any) => String(x.id) === form.employeeId);
+        setSessions(toDrafts(row?.sessions));
+      })
+      .catch(() => { if (!cancelled) setSessions(toDrafts()); })
+      .finally(() => { if (!cancelled) setLoadingDay(false); });
+    return () => { cancelled = true; };
+  }, [form.employeeId, form.date, open]);
+
+  const setSess = (i: number, patch: Partial<SessionDraft>) => setSessions((l) => l.map((s, j) => (j === i ? { ...s, ...patch } : s)));
+  const totalMin = sessions.reduce((sum, s) => (s.checkIn && s.checkOut && mins(s.checkOut) > mins(s.checkIn) ? sum + mins(s.checkOut) - mins(s.checkIn) : sum), 0);
 
   useEffect(() => {
     if (!open || emps.length) return;
@@ -114,15 +151,18 @@ export function DirectCorrection({ prefill, onApplied }: { prefill?: CorrectionP
   const apply = async () => {
     if (!form.employeeId) return toast.error('Pick an employee.');
     if (!form.date) return toast.error('Pick a date.');
-    if (!form.checkIn && !form.checkOut) return toast.error('Enter a clock-in and/or clock-out.');
+    const filled = sessions.filter((s) => s.checkIn || s.checkOut);
+    if (filled.length === 0) return toast.error('Enter at least one session.');
+    if (filled.some((s) => !s.checkIn)) return toast.error('Every session needs a clock-in time.');
     setSaving(true);
     try {
-      await attendanceApi.applyCorrection({
+      await attendanceApi.applySessions({
         employeeId: Number(form.employeeId), date: form.date,
-        checkIn: form.checkIn || undefined, checkOut: form.checkOut || undefined,
+        sessions: filled.map((s) => ({ id: s.id, checkIn: s.checkIn, checkOut: s.checkOut || undefined })),
       });
       toast.success('Applied — attendance & hours updated');
-      setForm({ employeeId: '', date: '', checkIn: '', checkOut: '' });
+      setForm({ employeeId: '', date: '' });
+      setSessions(toDrafts());
       setOpen(false);
       onApplied?.();
     } catch (e: any) {
@@ -144,7 +184,7 @@ export function DirectCorrection({ prefill, onApplied }: { prefill?: CorrectionP
       {open && (
         <div className="p-4 sm:p-5">
           <p className="mb-3 text-xs text-muted-foreground">
-            Set a day's clock-in/out for any employee (fixes a wrong time, adds a missed clock-out, or a whole missed day). Hours & pay recompute.
+            Edit every session of a day for any employee — fix a wrong time, add a missed clock-out, add a session they forgot, or remove a wrong one. Hours & pay recompute.
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
@@ -156,14 +196,38 @@ export function DirectCorrection({ prefill, onApplied }: { prefill?: CorrectionP
               <span className="mb-1 block text-xs font-medium text-muted-foreground">Date</span>
               <BaseInput type="date" className={INPUT} value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} />
             </label>
-            <label className="block">
-              <span className="mb-1 block text-xs font-medium text-muted-foreground">Clock-in</span>
-              <BaseInput type="time" className={INPUT} value={form.checkIn} onChange={(e) => setForm((f) => ({ ...f, checkIn: e.target.value }))} />
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-xs font-medium text-muted-foreground">Clock-out</span>
-              <BaseInput type="time" className={INPUT} value={form.checkOut} onChange={(e) => setForm((f) => ({ ...f, checkOut: e.target.value }))} />
-            </label>
+          </div>
+
+          <div className="mt-4">
+            <div className="mb-1.5 flex items-center justify-between">
+              <span className="text-xs font-medium text-muted-foreground">
+                Sessions {loadingDay && <Loader2 className="ml-1 inline h-3 w-3 animate-spin" />}
+              </span>
+              {totalMin > 0 && <span className="text-xs font-semibold tabular-nums text-slate-700">Total {fmtDur(totalMin)}</span>}
+            </div>
+            <ul className="space-y-2">
+              {sessions.map((s, i) => (
+                <li key={s.id ?? `new-${i}`} className="grid grid-cols-[1.5rem_1fr_1fr_auto] items-end gap-2">
+                  <span className="pb-2.5 text-center text-xs font-medium text-muted-foreground">{i + 1}</span>
+                  <label className="block">
+                    {i === 0 && <span className="mb-1 block text-[11px] text-muted-foreground">Clock-in</span>}
+                    <BaseInput type="time" className={INPUT} value={s.checkIn} onChange={(e) => setSess(i, { checkIn: e.target.value })} aria-label={`Session ${i + 1} clock-in`} />
+                  </label>
+                  <label className="block">
+                    {i === 0 && <span className="mb-1 block text-[11px] text-muted-foreground">Clock-out</span>}
+                    <BaseInput type="time" className={INPUT} value={s.checkOut} onChange={(e) => setSess(i, { checkOut: e.target.value })} aria-label={`Session ${i + 1} clock-out`} />
+                  </label>
+                  <button type="button" onClick={() => setSessions((l) => (l.length > 1 ? l.filter((_, j) => j !== i) : [{ checkIn: '', checkOut: '' }]))}
+                    className="mb-0.5 grid h-10 w-10 place-items-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive" aria-label={`Remove session ${i + 1}`} title="Remove this session">
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <Button variant="outline" size="sm" className="mt-2" onClick={() => setSessions((l) => [...l, { checkIn: '', checkOut: '' }])}>
+              <Plus className="h-4 w-4" /> Add session
+            </Button>
+            <p className="mt-2 text-[11px] text-muted-foreground">Leave clock-out empty only for a session still running today. Sessions can't overlap.</p>
           </div>
           <div className="mt-4 flex justify-end gap-2">
             <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>Cancel</Button>

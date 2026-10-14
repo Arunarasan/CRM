@@ -160,7 +160,8 @@ public class HrOverviewService {
             Attendance a = byEmp.get(e.getId());
             String status;
             if (a != null && a.getCheckInTime() != null) {
-                List<AttendanceSession> sessions = sessionRepository.findByAttendanceIdOrderByIdAsc(a.getId());
+                List<AttendanceSession> sessions = new ArrayList<>(sessionRepository.findByAttendanceIdOrderByIdAsc(a.getId()));
+                sessions.sort(Comparator.comparing(AttendanceSession::getCheckInTime, Comparator.nullsLast(Comparator.naturalOrder())));
                 boolean open = sessions.isEmpty() ? a.getCheckOutTime() == null
                         : sessions.get(sessions.size() - 1).getCheckOutTime() == null;
                 int pending = (int) sessions.stream()
@@ -219,6 +220,8 @@ public class HrOverviewService {
             int end = Math.min(1440, Math.max(start, endMinute(s, today)));
             int brk = s.getBreakMinutes() == null ? 0 : s.getBreakMinutes();
             Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", s.getId());
+            m.put("awaiting", s.isAwaitingApproval());
             m.put("checkIn", s.getCheckInTime());
             m.put("checkOut", s.getCheckOutTime());
             m.put("running", s.getCheckOutTime() == null && today);

@@ -1,7 +1,9 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Clock, Pencil } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Clock, Loader2, Pencil } from "lucide-react";
 import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import { toast } from "@/components/ui/toast";
+import { attendanceApi } from "@/api/attendanceApi";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FilterChips, PersonChip, SearchField } from "@/pages/workforce/hrUi";
 
@@ -12,7 +14,8 @@ interface DayRow {
   punches?: number; pending?: number; leaveType?: string;
   sessions?: DaySession[]; day24?: Day24;
 }
-interface DaySession {
+export interface DaySession {
+  id: number; awaiting: boolean;
   checkIn: string; checkOut?: string | null; running: boolean;
   grossMinutes: number; breakMinutes: number; netMinutes: number;
   payable: boolean; flagged: boolean; approvalStatus?: string | null;
@@ -42,7 +45,7 @@ const STATUS: Record<RowStatus, { label: string; cls: string }> = {
  * filled in for that person and day.
  */
 export default function AttendanceRegister({ onFix }: {
-  onFix: (p: { employeeId: string; date: string; checkIn?: string; checkOut?: string }) => void;
+  onFix: (p: { employeeId: string; date: string; sessions?: DaySession[] }) => void;
 }) {
   const [date, setDate] = useState(() => iso(new Date()));
   const [data, setData] = useState<DayResponse | null>(null);
@@ -84,7 +87,24 @@ export default function AttendanceRegister({ onFix }: {
 
   const c = data?.counts;
   const label = new Date(date + "T00:00:00").toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
-  const fix = (r: DayRow) => onFix({ employeeId: String(r.id), date, checkIn: r.checkIn?.slice(0, 5), checkOut: r.checkOut?.slice(0, 5) });
+  const fix = (r: DayRow) => onFix({ employeeId: String(r.id), date, sessions: r.sessions });
+
+  // Approve every punch of this person's day that's waiting on HR (the same call as the To-approve tab).
+  const [approving, setApproving] = useState<number | null>(null);
+  const approve = async (r: DayRow) => {
+    const ids = (r.sessions ?? []).filter((s) => s.awaiting).map((s) => s.id);
+    if (ids.length === 0) return;
+    setApproving(r.id);
+    try {
+      await attendanceApi.approveMany(ids);
+      toast.success(ids.length === 1 ? 'Punch approved' : `${ids.length} punches approved`);
+      load();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Could not approve');
+    } finally {
+      setApproving(null);
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -170,9 +190,16 @@ export default function AttendanceRegister({ onFix }: {
                               )}
                             </td>
                             <td className="px-3 py-2.5 text-right">
-                              {r.status !== "UPCOMING" && (
-                                <Button size="sm" variant="ghost" onClick={() => fix(r)} aria-label={`Fix time for ${r.name}`}><Pencil className="mr-1 h-3.5 w-3.5" /> Fix time</Button>
-                              )}
+                              <div className="flex items-center justify-end gap-1">
+                                {(r.pending ?? 0) > 0 && (
+                                  <Button size="sm" variant="forest" disabled={approving === r.id} onClick={() => approve(r)} aria-label={`Approve punches for ${r.name}`}>
+                                    {approving === r.id ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1 h-3.5 w-3.5" />} Approve
+                                  </Button>
+                                )}
+                                {r.status !== "UPCOMING" && (
+                                  <Button size="sm" variant="ghost" onClick={() => fix(r)} aria-label={`Fix time for ${r.name}`}><Pencil className="mr-1 h-3.5 w-3.5" /> Fix time</Button>
+                                )}
+                              </div>
                             </td>
                           </tr>
                           {openId === r.id && (
@@ -207,7 +234,12 @@ export default function AttendanceRegister({ onFix }: {
                         </>
                       )}
                       {r.status !== "UPCOMING" && (
-                        <div className="flex justify-end">
+                        <div className="flex justify-end gap-2">
+                          {(r.pending ?? 0) > 0 && (
+                            <Button size="sm" variant="forest" disabled={approving === r.id} onClick={() => approve(r)}>
+                              {approving === r.id ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1 h-3.5 w-3.5" />} Approve
+                            </Button>
+                          )}
                           <Button size="sm" variant="outline" onClick={() => fix(r)}><Pencil className="mr-1 h-3.5 w-3.5" /> Fix time</Button>
                         </div>
                       )}

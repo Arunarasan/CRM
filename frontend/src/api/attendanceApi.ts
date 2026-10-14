@@ -227,6 +227,10 @@ export const attendanceApi = {
   applyCorrection: (body: { employeeId: number; date: string; checkIn?: string; checkOut?: string }) =>
     api.post(`${BASE}/corrections/apply`, body).then((r) => r.data),
 
+  /** Set ALL of a day's sessions: ones with an id are edited, ones without are added, missing ones are removed. */
+  applySessions: (body: { employeeId: number; date: string; sessions: { id?: number; checkIn: string; checkOut?: string }[] }) =>
+    api.post(`${BASE}/corrections/apply-sessions`, body).then((r) => r.data),
+
   // Phone binding
   listDeviceRequests: () => api.get<DeviceRequest[]>(`${BASE}/devices`).then((r) => r.data),
   employeeDevices: (employeeId: number) => api.get<EmployeeDevices>(`${BASE}/devices/employee/${employeeId}`).then((r) => r.data),

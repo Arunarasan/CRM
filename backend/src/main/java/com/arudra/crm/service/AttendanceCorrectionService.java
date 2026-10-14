@@ -132,6 +132,96 @@ public class AttendanceCorrectionService {
         applyDay(emp, date, reqIn, reqOut);
     }
 
+    /** One session of a day as the admin wants it. {@code id} null = a new session; {@code checkOut} null = still open. */
+    public record SessionEdit(Long id, LocalTime checkIn, LocalTime checkOut) {}
+
+    /**
+     * Admin sets a day's FULL list of sessions: existing ones (by id) get the new times, ones without an
+     * id are added, and existing ones left out of the list are removed. Hours and pay recompute from the
+     * result. Sessions must not overlap, and only today's last session may be left open.
+     */
+    @Transactional
+    public void adminApplySessions(Long employeeId, LocalDate date, List<SessionEdit> edits) {
+        Employee emp = employeeRepository.findById(employeeId)
+                .orElseThrow(() -> new IllegalArgumentException("Employee not found."));
+        if (date == null) throw new IllegalArgumentException("Pick a date.");
+        if (edits == null || edits.isEmpty()) throw new IllegalArgumentException("Add at least one session.");
+
+        List<SessionEdit> sorted = new ArrayList<>(edits);
+        for (SessionEdit e : sorted) {
+            if (e.checkIn() == null) throw new IllegalArgumentException("Every session needs a clock-in time.");
+            if (e.checkOut() != null && !e.checkOut().isAfter(e.checkIn()))
+                throw new IllegalArgumentException("Clock-out must be after clock-in (" + e.checkIn().toString().substring(0, 5) + ").");
+        }
+        sorted.sort(java.util.Comparator.comparing(SessionEdit::checkIn));
+        for (int i = 0; i < sorted.size(); i++) {
+            SessionEdit e = sorted.get(i);
+            if (e.checkOut() == null) {
+                if (i != sorted.size() - 1)
+                    throw new IllegalArgumentException("Only the last session can be left open (no clock-out).");
+                if (!date.equals(LocalDate.now()))
+                    throw new IllegalArgumentException("Past days need a clock-out on every session.");
+            }
+            if (i > 0 && sorted.get(i - 1).checkOut().isAfter(e.checkIn()))
+                throw new IllegalArgumentException("Sessions overlap around " + e.checkIn().toString().substring(0, 5) + ".");
+        }
+
+        Attendance att = attendanceRepository.findFirstByEmployeeIdAndDateOrderByIdDesc(emp.getId(), date).orElse(null);
+        if (att == null) {
+            att = new Attendance();
+            att.setEmployee(emp);
+            att.setDate(date);
+            att.setStatus("PRESENT");
+            att = attendanceRepository.save(att);
+        }
+        Map<Long, AttendanceSession> existing = new LinkedHashMap<>();
+        for (AttendanceSession s : sessionRepository.findByAttendanceIdOrderByIdAsc(att.getId())) existing.put(s.getId(), s);
+
+        java.util.Set<Long> keep = new java.util.HashSet<>();
+        for (SessionEdit e : sorted) {
+            if (e.id() == null) continue;
+            if (!existing.containsKey(e.id())) throw new IllegalArgumentException("A session no longer belongs to this day — reload and try again.");
+            if (!keep.add(e.id())) throw new IllegalArgumentException("The same session was listed twice.");
+        }
+        for (AttendanceSession s : existing.values()) {
+            if (!keep.contains(s.getId())) sessionRepository.delete(s);
+        }
+
+        for (SessionEdit e : sorted) {
+            AttendanceSession s;
+            if (e.id() == null) {
+                s = new AttendanceSession();
+                s.setAttendance(att);
+                s.setVerified(true);
+                s.setFlagged(false);
+                s.setVerificationMethod("MANUAL");
+                s.setCheckInSource(AttendanceSession.SOURCE_MANUAL);
+                s.setCheckInTime(e.checkIn());
+                s.setCheckOutTime(e.checkOut());
+                if (e.checkOut() != null) s.setCheckOutSource(AttendanceSession.SOURCE_MANUAL);
+            } else {
+                s = existing.get(e.id());
+                // The form only carries HH:mm, so a time that is unchanged to the minute keeps its seconds and source.
+                if (!sameMinute(e.checkIn(), s.getCheckInTime())) {
+                    s.setCheckInTime(e.checkIn());
+                    s.setCheckInSource(AttendanceSession.SOURCE_MANUAL);
+                }
+                if (!sameMinute(e.checkOut(), s.getCheckOutTime())) {
+                    s.setCheckOutTime(e.checkOut());
+                    s.setCheckOutSource(e.checkOut() == null ? null : AttendanceSession.SOURCE_MANUAL);
+                }
+            }
+            if (e.checkOut() != null) { // a closed session can't still be on a break; breaks can't exceed it
+                s.setBreakStart(null);
+                long gross = java.time.Duration.between(e.checkIn(), e.checkOut()).toMinutes();
+                if (s.getBreakMinutes() != null && s.getBreakMinutes() > gross) s.setBreakMinutes((int) gross);
+            }
+            sessionRepository.save(s);
+        }
+        att.setStatus("PRESENT");
+        timeService.recomputeAggregate(att);
+    }
+
     // --- core apply --------------------------------------------------------
 
     /**
@@ -207,4 +297,9 @@ public class AttendanceCorrectionService {
     }
 
     private static String nz(String s) { return s == null ? "" : s; }
+
+    private static boolean sameMinute(LocalTime a, LocalTime b) {
+        if (a == null || b == null) return a == b;
+        return a.truncatedTo(java.time.temporal.ChronoUnit.MINUTES).equals(b.truncatedTo(java.time.temporal.ChronoUnit.MINUTES));
+    }
 }

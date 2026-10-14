@@ -152,6 +152,24 @@ public class AttendanceAdminController {
         return ResponseEntity.noContent().build();
     }
 
+    public record SessionBody(Long id, String checkIn, String checkOut) {}
+    public record ApplySessionsBody(Long employeeId, String date, List<SessionBody> sessions) {}
+
+    /** Admin sets all of a day's sessions (edit / add / remove) — no request. */
+    @PostMapping("/corrections/apply-sessions")
+    @PreAuthorize(HR_WRITE)
+    public ResponseEntity<Void> applySessions(@RequestBody ApplySessionsBody body) {
+        if (body == null || body.employeeId() == null || body.date() == null)
+            throw new IllegalArgumentException("Pick an employee and a date.");
+        List<com.arudra.crm.service.AttendanceCorrectionService.SessionEdit> edits = new java.util.ArrayList<>();
+        for (SessionBody s : body.sessions() == null ? List.<SessionBody>of() : body.sessions()) {
+            edits.add(new com.arudra.crm.service.AttendanceCorrectionService.SessionEdit(s.id(),
+                    EmployeePortalController.parseTime(s.checkIn()), EmployeePortalController.parseTime(s.checkOut())));
+        }
+        correctionService.adminApplySessions(body.employeeId(), java.time.LocalDate.parse(body.date().trim()), edits);
+        return ResponseEntity.noContent().build();
+    }
+
     // --- attendance phone binding --------------------------------------------
 
     @GetMapping("/devices")

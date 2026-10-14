@@ -82,7 +82,12 @@ public class EmployeeTimeService {
     }
 
     private List<AttendanceSession> sessionsOf(Attendance att) {
-        return att == null ? List.of() : sessionRepository.findByAttendanceIdOrderByIdAsc(att.getId());
+        if (att == null) return List.of();
+        // By clock-in time (id breaks ties) — an HR-added session can have a later id but an earlier time.
+        List<AttendanceSession> list = new java.util.ArrayList<>(sessionRepository.findByAttendanceIdOrderByIdAsc(att.getId()));
+        list.sort(java.util.Comparator.comparing(AttendanceSession::getCheckInTime,
+                java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder())));
+        return list;
     }
 
     /** The session that's been clocked in but not yet clocked out, if any. */
