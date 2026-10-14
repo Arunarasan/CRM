@@ -4,6 +4,7 @@ import { useT, dateLocale } from '@/i18n';
 import { ChevronRight, Gift, Plus, X, HandCoins, Landmark, Download } from 'lucide-react';
 import { employeePortalApi } from '@/api/employeePortalApi';
 import { Payslip, MyBonuses, MonthlyEarning, PayrollRequestEntry, MyLoan, MyAdvance, PayrollRequestType } from '@/types/employeePortal';
+import { toast } from '@/components/ui/toast';
 import { PortalHeader, StatusPill, EmptyState, inr } from './_shared';
 import { printPayslip, payslipRows, type PayslipEmployee } from './printPayslip';
 
@@ -46,8 +47,13 @@ function PayslipDetail({ slip, onBack, employee }: { slip: Payslip; onBack: () =
           className="flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1.5 text-xs font-semibold text-primary-foreground active:scale-[0.98] disabled:opacity-60">
           <Download className="h-4 w-4" /> {t('pw.sal.pdf')}
         </button>
-        <StatusPill status={slip.status} />
+        <StatusPill status={slip.status} label={slip.status === 'PREVIEW' ? t('pw.sal.preview') : undefined} />
       </div>
+      {slip.status === 'PREVIEW' && (
+        <p className="mx-3 mt-3 rounded-lg border border-dashed border-amber-400 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+          {t('pw.sal.previewBanner')}
+        </p>
+      )}
 
       <div className="m-3 rounded-xl border bg-card p-4 text-center shadow-sm">
         <p className="text-xs text-muted-foreground">{t('pw.sal.netPay')}</p>
@@ -240,6 +246,11 @@ export default function Salary() {
     employeePortalApi.payslip(id).then(setSelected).catch(() => {});
   };
 
+  const openPreview = (month: number, year: number) => {
+    employeePortalApi.previewPayslip(month, year).then(setSelected)
+      .catch((e) => toast.error(e?.response?.data?.message || e?.message || 'Could not build the preview.'));
+  };
+
   if (selected) return <PayslipDetail slip={selected} onBack={() => setSelected(null)} employee={me ?? undefined} />;
 
   return (
@@ -351,12 +362,12 @@ export default function Salary() {
           <EmptyState message={t('pw.sal.noEarnings')} />
         ) : (
           months.map((m) => {
-            const tappable = !!m.official;
+            const tappable = true; // official payslip, or a computed preview
             const Row: any = tappable ? 'button' : 'div';
             return (
               <Row
                 key={`${m.year}-${m.month}`}
-                {...(tappable ? { onClick: () => openOfficial(m.official!.id) } : {})}
+                {...(tappable ? { onClick: () => (m.official ? openOfficial(m.official.id) : openPreview(m.month, m.year)) } : {})}
                 className={`flex w-full items-center justify-between px-4 py-3 text-left ${tappable ? 'active:bg-accent/40' : ''}`}
               >
                 <div className="min-w-0">

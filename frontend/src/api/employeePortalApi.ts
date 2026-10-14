@@ -117,6 +117,9 @@ export const employeePortalApi = {
   myLoans: () => api.get<MyLoan[]>(`${BASE}/loans`).then((r) => r.data),
   myAdvances: () => api.get<MyAdvance[]>(`${BASE}/advances`).then((r) => r.data),
   payslips: () => api.get<Payslip[]>(`${BASE}/payslips`).then((r) => r.data),
+  /** Dry-run payslip for a month HR hasn't generated yet (computed, never saved). */
+  previewPayslip: (month: number, year: number) =>
+    api.get<Payslip>(`${BASE}/payslips/preview`, { params: { month, year } }).then((r) => r.data),
   payslip: (id: number) => api.get<Payslip>(`${BASE}/payslips/${id}`).then((r) => r.data),
 
   documents: () => api.get<EmployeeDocumentEntry[]>(`${BASE}/documents`).then((r) => r.data),

@@ -13,6 +13,12 @@ public interface AttendanceSessionRepository extends JpaRepository<AttendanceSes
     /** Still clocked-in sessions not yet flagged for the "no clock-out" alert. */
     List<AttendanceSession> findByCheckOutTimeIsNullAndOvertimeAlertSentFalse();
 
+    /** Sessions still open on a day before {@code today}, not yet flagged — the "forgot to check out" sweep. */
+    @org.springframework.data.jpa.repository.Query("select s from AttendanceSession s join fetch s.attendance a join fetch a.employee e "
+            + "where s.checkOutTime is null and s.checkInTime is not null and (s.flagged is null or s.flagged = false) "
+            + "and a.date < :today and a.date >= :since")
+    List<AttendanceSession> findUnflaggedOpenBefore(java.time.LocalDate today, java.time.LocalDate since);
+
     /** Flagged clock-ins awaiting HR review (attendance verification, newest first). */
     List<AttendanceSession> findByFlaggedTrueAndApprovalStatusOrderByIdDesc(String approvalStatus);
 

@@ -463,6 +463,13 @@ public class EmployeePortalController {
         return ResponseEntity.ok(ApiResponse.success(portalService.getPayslip(me(), id)));
     }
 
+    /** Dry-run payslip for a month HR hasn't generated yet — computed, never saved. */
+    @GetMapping("/payslips/preview")
+    @PreAuthorize(PORTAL)
+    public ResponseEntity<ApiResponse<SalaryRecord>> previewPayslip(@RequestParam int month, @RequestParam int year) {
+        return ResponseEntity.ok(ApiResponse.success(portalService.previewMyPayslip(me(), month, year)));
+    }
+
     @GetMapping("/rewards")
     @PreAuthorize(PORTAL)
     public ResponseEntity<ApiResponse<Map<String, Object>>> rewards() {

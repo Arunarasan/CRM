@@ -317,6 +317,16 @@ public class EmployeePortalService {
         return record;
     }
 
+    /** Dry-run payslip for the signed-in employee's own month (nothing is saved). */
+    public SalaryRecord previewMyPayslip(User currentUser, int month, int year) {
+        Employee employee = requireEmployee(currentUser);
+        java.time.YearMonth ym = java.time.YearMonth.of(year, month);
+        if (ym.isAfter(java.time.YearMonth.now())) {
+            throw new IllegalStateException("A future month can't be previewed.");
+        }
+        return payrollService.previewPayslip(employee.getId(), month, year);
+    }
+
     public Map<String, Object> getSalarySummary(User currentUser) {
         Employee employee = requireEmployee(currentUser);
         Map<String, Object> summary = new LinkedHashMap<>();

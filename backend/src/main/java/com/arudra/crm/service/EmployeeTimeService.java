@@ -555,7 +555,11 @@ public class EmployeeTimeService {
 
         List<AttendanceSession> sessions = sessionsOf(att);
         long payableUnits; // minutes, or seconds when precise
+        // A past day with no clock-out has no real end time, so it can't be priced (the live clock,
+        // `precise`, still runs an overnight shift). It counts again once an admin sets a check-out.
+        boolean pastDay = !precise && att.getDate() != null && att.getDate().isBefore(LocalDate.now());
         if (sessions.isEmpty()) {
+            if (pastDay && att.getCheckOutTime() == null) return new BigDecimal[]{zero, zero, zero, zero};
             payableUnits = payable(precise, att.getDate(), att.getCheckInTime(), att.getCheckOutTime(), att.getBreakStart(),
                     att.getBreakMinutes(), asOf);
         } else {
@@ -564,6 +568,7 @@ public class EmployeeTimeService {
             long sum = 0;
             for (AttendanceSession s : sessions) {
                 if (!s.isPayable()) continue;
+                if (pastDay && s.getCheckOutTime() == null) continue;
                 sum += payable(precise, att.getDate(), s.getCheckInTime(), s.getCheckOutTime(), s.getBreakStart(), s.getBreakMinutes(), asOf);
             }
             payableUnits = sum;
@@ -621,6 +626,7 @@ public class EmployeeTimeService {
         long sum = 0;
         for (AttendanceSession s : sessionsOf(att)) {
             if (!s.isAwaitingApproval()) continue;
+            if (s.getCheckOutTime() == null && att.getDate() != null && att.getDate().isBefore(LocalDate.now())) continue;
             sum += payableMinutes(att.getDate(), s.getCheckInTime(), s.getCheckOutTime(), s.getBreakStart(), s.getBreakMinutes(), asOf);
         }
         return sum;

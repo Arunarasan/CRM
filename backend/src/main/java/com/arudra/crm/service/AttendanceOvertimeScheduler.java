@@ -66,5 +66,37 @@ public class AttendanceOvertimeScheduler {
         if (alerted > 0) log.info("Attendance overtime alert: notified admins about {} open session(s).", alerted);
     }
 
+    /**
+     * "Forgot to check out" sweep: an employee still clocked in on a day that has ended can't be paid for
+     * it (no end time). Flag the session PENDING with reason "No check-out" — it lands in HR's attendance
+     * approvals — and tell the admins once. HR sets the check-out time (Fix a time), which approves it and
+     * brings the day into pay; until then the day is left out of the payslip. Only the last 31 days are
+     * swept so long-forgotten legacy sessions don't flood the inbox.
+     */
+    @Scheduled(cron = "0 15 * * * *")
+    @Transactional
+    public void flagMissedCheckouts() {
+        LocalDate today = LocalDate.now();
+        int flagged = 0;
+        for (AttendanceSession s : sessionRepository.findUnflaggedOpenBefore(today, today.minusDays(31))) {
+            Attendance att = s.getAttendance();
+            Employee emp = att.getEmployee();
+            s.setFlagged(true);
+            s.setFlagReason(AttendanceSession.MISSED_CHECKOUT_REASON);
+            s.setApprovalStatus("PENDING");
+            sessionRepository.save(s);
+
+            String name = emp == null ? "An employee" : (nz(emp.getFirstName()) + " " + nz(emp.getLastName())).trim();
+            if (name.isBlank()) name = "An employee";
+            notificationService.dispatchToAdmins(
+                    "Missed check-out — approval needed",
+                    name + " did not check out on " + att.getDate() + " (checked in at " + s.getCheckInTime().toString().substring(0, 5)
+                            + "). That day is not counted in the payslip. Set the check-out time in Attendance to approve it.",
+                    "ATTENDANCE", "/hr/attendance", null);
+            flagged++;
+        }
+        if (flagged > 0) log.info("Missed check-out sweep: flagged {} open session(s) from past days.", flagged);
+    }
+
     private static String nz(String s) { return s == null ? "" : s; }
 }

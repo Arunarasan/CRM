@@ -107,6 +107,10 @@ public class AttendanceAdminService {
     public Map<String, Object> resolve(Long sessionId, boolean approve, String username, String note) {
         AttendanceSession s = sessionRepository.findById(sessionId)
                 .orElseThrow(() -> new IllegalArgumentException("Attendance session not found."));
+        if (approve && s.getCheckOutTime() == null && s.getAttendance() != null && s.getAttendance().getDate() != null
+                && s.getAttendance().getDate().isBefore(java.time.LocalDate.now())) {
+            throw new IllegalStateException("This session has no check-out. Set the check-out time first (Fix a time) — that approves it.");
+        }
         s.setApprovalStatus(approve ? "APPROVED" : "REJECTED");
         s.setApprovedBy(username);
         s.setApprovedAt(LocalDateTime.now());

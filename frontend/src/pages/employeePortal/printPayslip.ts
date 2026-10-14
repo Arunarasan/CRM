@@ -146,6 +146,7 @@ export async function buildPayslipHtml(slip: Payslip, opts?: PayslipEmployee): P
     .net .lbl{font-weight:700}
     .net .amt{font-size:22px;font-weight:800}
     .note{margin-top:10px;font-size:12px;color:#333;border:1px solid #e5e7eb;border-radius:8px;padding:8px 12px;white-space:pre-wrap}
+    .prev{margin-bottom:10px;padding:6px 12px;border:1px dashed #b45309;border-radius:8px;background:#fffbeb;color:#92400e;font-size:12px;font-weight:600}
     .foot{margin-top:10px;color:#888;font-size:11px}
   </style></head><body>
     <div class="head">
@@ -160,6 +161,7 @@ export async function buildPayslipHtml(slip: Payslip, opts?: PayslipEmployee): P
         ${opts?.employeeCode ? `<div class="sub">${esc(opts.employeeCode)}</div>` : ''}
       </div>
     </div>
+    ${slip.status === 'PREVIEW' ? '<div class="prev">PREVIEW — not final. Figures may change until HR generates and approves this month’s payroll.</div>' : ''}
     ${detailsHtml}
     <div class="meta">${meta}</div>
     <div class="cols">
@@ -175,7 +177,7 @@ export async function buildPayslipHtml(slip: Payslip, opts?: PayslipEmployee): P
     <div class="net"><span class="lbl">Net Pay</span><span class="amt">${inr(slip.netSalary)}</span></div>
     <div class="words"><b>Net pay in words:</b> ${esc(amountInWords(slip.netSalary))}</div>
     ${slip.remarks ? `<div class="note"><b>Note:</b> ${esc(slip.remarks)}</div>` : ''}
-    <div class="foot">Status: ${esc(slip.status)}${slip.paymentDate ? ` · Paid on ${esc(slip.paymentDate)}` : ''} · This is a computer-generated payslip.</div>
+    <div class="foot">Status: ${slip.status === 'PREVIEW' ? 'Preview (not final)' : esc(slip.status)}${slip.paymentDate ? ` · Paid on ${esc(slip.paymentDate)}` : ''} · This is a computer-generated payslip.</div>
     <div class="sign"><div>Employee signature</div><div>Authorised signatory</div></div>
   </body></html>`;
   return html;

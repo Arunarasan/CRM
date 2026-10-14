@@ -1,6 +1,7 @@
 import { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft } from 'lucide-react';
+import { useT } from '@/i18n';
 
 /** Rupee formatter shared across the employee portal screens. */
 export const inr = (v: number | undefined | null) =>
@@ -9,12 +10,13 @@ export const inr = (v: number | undefined | null) =>
 /** Sticky sub-page header with a back button — used by every portal detail screen. */
 export function PortalHeader({ title, action }: { title: string; action?: ReactNode }) {
   const navigate = useNavigate();
+  const { t } = useT();
   return (
     <div className="sticky top-0 z-10 flex items-center gap-2 border-b bg-card px-2 py-2.5">
       <button
         onClick={() => navigate(-1)}
         className="flex h-9 w-9 items-center justify-center rounded-full active:bg-accent"
-        aria-label="Back"
+        aria-label={t('pw.back')}
       >
         <ChevronLeft className="h-5 w-5" />
       </button>
@@ -49,9 +51,12 @@ export function StatusPill({ status, label }: { status: string; label?: string }
     RECOVERED: 'bg-emerald-100 text-emerald-700',
     CLOSED: 'bg-slate-200 text-slate-700',
   };
+  const { t } = useT();
+  const key = `pw.status.${status}`;
+  const tr = t(key);
   return (
     <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${tone[status] ?? 'bg-slate-100 text-slate-600'}`}>
-      {label ?? status.replace(/_/g, ' ')}
+      {label ?? (tr === key ? status.replace(/_/g, ' ') : tr)}
     </span>
   );
 }

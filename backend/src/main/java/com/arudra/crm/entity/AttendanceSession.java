@@ -169,6 +169,9 @@ public class AttendanceSession extends BaseEntity {
     @Column(name = "approval_note", length = 255)
     private String approvalNote;
 
+    /** Flag reason for a session the employee never clocked out of (set by the missed-check-out sweep). */
+    public static final String MISSED_CHECKOUT_REASON = "No check-out";
+
     public static final String SOURCE_PHONE = "PHONE";
     public static final String SOURCE_KIOSK = "KIOSK";
     public static final String SOURCE_MANUAL = "MANUAL";
@@ -180,6 +183,11 @@ public class AttendanceSession extends BaseEntity {
     public boolean isPayable() {
         if (!Boolean.TRUE.equals(flagged)) return true;
         return "APPROVED".equals(approvalStatus);
+    }
+
+    /** Flagged because the employee never clocked out. */
+    public boolean isMissedCheckout() {
+        return Boolean.TRUE.equals(flagged) && MISSED_CHECKOUT_REASON.equals(flagReason);
     }
 
     /** Flagged and still waiting for an admin decision. */

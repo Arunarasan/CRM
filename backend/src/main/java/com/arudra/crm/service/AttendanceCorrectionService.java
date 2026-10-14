@@ -216,10 +216,20 @@ public class AttendanceCorrectionService {
                 long gross = java.time.Duration.between(e.checkIn(), e.checkOut()).toMinutes();
                 if (s.getBreakMinutes() != null && s.getBreakMinutes() > gross) s.setBreakMinutes((int) gross);
             }
+            settleMissedCheckout(s);
             sessionRepository.save(s);
         }
         att.setStatus("PRESENT");
         timeService.recomputeAggregate(att);
+    }
+
+    /** An admin setting the check-out of a "No check-out" session is the approval — it now counts toward pay. */
+    private static void settleMissedCheckout(AttendanceSession s) {
+        if (s.getCheckOutTime() != null && s.isMissedCheckout() && "PENDING".equals(s.getApprovalStatus())) {
+            s.setApprovalStatus("APPROVED");
+            s.setApprovedBy("HR (check-out set)");
+            s.setApprovedAt(LocalDateTime.now());
+        }
     }
 
     // --- core apply --------------------------------------------------------
@@ -262,6 +272,7 @@ public class AttendanceCorrectionService {
                 AttendanceSession last = sessions.get(sessions.size() - 1);
                 last.setCheckOutTime(reqOut);
                 last.setCheckOutSource(AttendanceSession.SOURCE_MANUAL);
+                settleMissedCheckout(last);
                 sessionRepository.save(last);
             }
         }

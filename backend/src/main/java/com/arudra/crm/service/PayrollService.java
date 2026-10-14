@@ -48,6 +48,7 @@ public class PayrollService {
     @Autowired private com.arudra.crm.repository.PayrollRequestRepository payrollRequestRepository;
     @Autowired private EmployeeTimeService timeService;
     @Autowired private PayslipLineItemRepository lineItemRepository;
+    @Autowired private org.springframework.transaction.PlatformTransactionManager transactionManager;
     @Autowired private EmployeeReviewRepository employeeReviewRepository;
     @Autowired private LeadRepository leadRepository;
     @Autowired private SiteSettingRepository siteSettingRepository;
@@ -755,6 +756,25 @@ public class PayrollService {
             employeeRepository.save(employee);
         }
         return rec;
+    }
+
+    /**
+     * A dry-run payslip for a month that has none yet: runs the real {@link #generatePayslip} logic (so
+     * the figures match what HR's payroll run will produce) inside a transaction that is always rolled
+     * back — no payslip, bonus/deduction/recovery link or balance change survives. Returned with status
+     * PREVIEW and no payslip number. Throws if the month already has a payslip or pay isn't set up.
+     */
+    public SalaryRecord previewPayslip(Long employeeId, int month, int year) {
+        org.springframework.transaction.support.TransactionTemplate tx =
+                new org.springframework.transaction.support.TransactionTemplate(transactionManager);
+        return tx.execute(status -> {
+            status.setRollbackOnly();
+            SalaryRecord rec = generatePayslip(employeeId, month, year, null);
+            rec.setLineItems(lineItemRepository.findBySalaryRecordIdAndIsDeletedFalseOrderByIdAsc(rec.getId()));
+            rec.setStatus("PREVIEW");
+            rec.setPayslipNumber(null);
+            return rec;
+        });
     }
 
     /**
