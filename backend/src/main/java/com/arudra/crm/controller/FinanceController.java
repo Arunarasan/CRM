@@ -191,6 +191,12 @@ public class FinanceController {
         return ResponseEntity.ok(financeService.recordPayment(payment, currentUserService.getCurrentUser()));
     }
 
+    @PutMapping("/payments/{id}")
+    @PreAuthorize(WRITE)
+    public ResponseEntity<CustomerPayment> updatePayment(@PathVariable Long id, @RequestBody CustomerPayment payment) {
+        return ResponseEntity.ok(financeService.updatePayment(id, payment, currentUserService.getCurrentUser()));
+    }
+
     @DeleteMapping("/payments/{id}")
     @PreAuthorize(WRITE)
     public ResponseEntity<Void> deletePayment(@PathVariable Long id, @RequestBody(required = false) java.util.Map<String, String> body) {

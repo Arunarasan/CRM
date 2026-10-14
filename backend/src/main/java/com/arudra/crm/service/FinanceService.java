@@ -1024,6 +1024,44 @@ public class FinanceService {
         return paymentRepository.save(payment);
     }
 
+    /**
+     * Edits a recorded payment (amount, method, date, reference, remarks, collector). The ledger is
+     * append-only, so a changed amount on a confirmed payment posts an adjustment entry for the
+     * difference and the invoice is recalculated.
+     */
+    @Transactional
+    public CustomerPayment updatePayment(Long id, CustomerPayment in, User user) {
+        CustomerPayment p = paymentRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Payment not found: " + id));
+        if (Boolean.TRUE.equals(p.getIsDeleted())) throw new RuntimeException("A deleted payment can't be edited");
+        if ("REJECTED".equals(p.getStatus())) throw new RuntimeException("A rejected payment can't be edited");
+        if (in.getAmount() == null || in.getAmount().signum() <= 0) {
+            throw new RuntimeException("Payment amount must be positive");
+        }
+        java.math.BigDecimal old = p.getAmount();
+        java.math.BigDecimal delta = in.getAmount().subtract(old);
+        p.setAmount(in.getAmount());
+        if (in.getPaymentMethod() != null && !in.getPaymentMethod().isBlank()) p.setPaymentMethod(in.getPaymentMethod());
+        if (in.getPaymentDate() != null) p.setPaymentDate(in.getPaymentDate());
+        p.setReferenceNumber(in.getReferenceNumber() == null || in.getReferenceNumber().isBlank() ? null : in.getReferenceNumber().trim());
+        p.setRemarks(in.getRemarks());
+        if (in.getCollectedBy() != null && in.getCollectedBy().getId() != null) p.setCollectedBy(in.getCollectedBy());
+        CustomerPayment saved = paymentRepository.save(p);
+        if ("CONFIRMED".equals(saved.getStatus()) && delta.signum() != 0) {
+            String why = "Payment " + saved.getPaymentNumber() + " edited by " + (user != null ? user.getEmail() : "system")
+                    + " (" + old + " → " + in.getAmount() + ")";
+            if (delta.signum() > 0) {
+                postLedger(saved.getCustomer(), saved.getProject(), LocalDate.now(), "PAYMENT", "PAYMENT_EDIT",
+                        saved.getId(), saved.getPaymentNumber(), why, BigDecimal.ZERO, delta);
+            } else {
+                postLedger(saved.getCustomer(), saved.getProject(), LocalDate.now(), "REVERSAL", "PAYMENT_EDIT",
+                        saved.getId(), saved.getPaymentNumber(), why, delta.negate(), BigDecimal.ZERO);
+            }
+        }
+        if (saved.getInvoice() != null && saved.getInvoice().getId() != null) recalculateInvoice(saved.getInvoice().getId());
+        return saved;
+    }
+
     /** Deletes a recorded payment (soft delete with a remark). A confirmed one is reversed in the ledger and the invoice recalculated. */
     @Transactional
     public CustomerPayment deletePayment(Long id, String reason, User user) {

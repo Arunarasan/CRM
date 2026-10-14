@@ -64,6 +64,8 @@ export const financeApi = {
     api.get<CustomerPayment[]>(`${BASE}/payments/pending-approval`).then((r) => r.data),
   recordPayment: (payment: Record<string, unknown>) =>
     api.post<CustomerPayment>(`${BASE}/payments`, payment).then((r) => r.data),
+  updatePayment: (id: number, payment: Record<string, unknown>) =>
+    api.put<CustomerPayment>(`${BASE}/payments/${id}`, payment).then((r) => r.data),
   deletePayment: (id: number, reason: string) =>
     api.delete(`${BASE}/payments/${id}`, { data: { reason } }).then(() => undefined),
   approvePayment: (id: number) => api.post<CustomerPayment>(`${BASE}/payments/${id}/approve`).then((r) => r.data),

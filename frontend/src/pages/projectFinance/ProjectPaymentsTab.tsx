@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import GstModeToggle from "@/components/ui/gst-mode-toggle";
 import { format } from "date-fns";
 import {
-  Plus, Trash2, FileText, Loader2, IndianRupee, AlertCircle,
+  Plus, Trash2, Pencil, FileText, Loader2, IndianRupee, AlertCircle,
   CheckCircle2, RotateCcw, Printer, Ban, Clock, User as UserIcon, MessageCircle,
 } from "lucide-react";
 import { financeApi } from "@/api/financeApi";
@@ -329,6 +329,7 @@ function PaymentsSection({ projectId, customerId, canWrite, canCollect, onChange
   const [busyId, setBusyId] = useState<number | null>(null);
   const [recordOpen, setRecordOpen] = useState(false);
   const [deleting, setDeleting] = useState<CustomerPayment | null>(null);
+  const [editing, setEditing] = useState<CustomerPayment | null>(null);
 
   const load = () => {
     setLoading(true);
@@ -451,6 +452,10 @@ function PaymentsSection({ projectId, customerId, canWrite, canCollect, onChange
                       </div>
                     </div>
                     <span className={`text-sm font-semibold tabular-nums shrink-0 ${rejected ? "line-through text-slate-400" : "text-slate-900"}`}>{inr(p.amount)}</span>
+                    {canWrite && !rejected && (
+                      <button type="button" title="Edit payment" onClick={() => setEditing(p)}
+                        className="rounded-lg p-1 text-slate-300 hover:bg-emerald-50 hover:text-emerald-700"><Pencil className="h-3.5 w-3.5" /></button>
+                    )}
                     {canWrite && (
                               <button type="button" title="Delete payment" onClick={() => setDeleting(p)}
                                 className=" rounded-lg p-1 text-slate-300 hover:bg-rose-50 hover:text-rose-600"><Trash2 className="h-3.5 w-3.5" /></button>
@@ -487,9 +492,13 @@ function PaymentsSection({ projectId, customerId, canWrite, canCollect, onChange
                             <span className={`text-base font-bold ${rejected ? "line-through text-slate-400" : "text-slate-900"}`}>{inr(p.amount)}</span>
                             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">{methodLabel(p.paymentMethod)}</span>
                             <span className={`ml-auto inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${st.cls}`}>{st.icon} {st.text}</span>
+                            {canWrite && !rejected && (
+                              <button type="button" title="Edit payment" onClick={() => setEditing(p)}
+                                className="ml-1 rounded-lg p-1 text-slate-300 hover:bg-emerald-50 hover:text-emerald-700"><Pencil className="h-3.5 w-3.5" /></button>
+                            )}
                             {canWrite && (
                               <button type="button" title="Delete payment" onClick={() => setDeleting(p)}
-                                className="ml-1 rounded-lg p-1 text-slate-300 hover:bg-rose-50 hover:text-rose-600"><Trash2 className="h-3.5 w-3.5" /></button>
+                                className="ml-1rounded-lg p-1 text-slate-300 hover:bg-rose-50 hover:text-rose-600"><Trash2 className="h-3.5 w-3.5" /></button>
                             )}
                           </div>
                           <div className="mt-1 text-[11px] text-slate-400 flex flex-wrap gap-x-2">
@@ -514,6 +523,10 @@ function PaymentsSection({ projectId, customerId, canWrite, canCollect, onChange
         <RecordPaymentDialog projectId={projectId} customerId={customerId}
           onClose={() => setRecordOpen(false)} onSaved={() => { setRecordOpen(false); load(); onChanged(); }} />
       )}
+      {editing && (
+        <RecordPaymentDialog projectId={projectId} customerId={customerId ?? editing.customer?.id as number} editing={editing}
+          onClose={() => setEditing(null)} onSaved={() => { setEditing(null); load(); onChanged(); }} />
+      )}
       <DeleteWithRemarkDialog open={!!deleting} title="Delete payment" subject="Payment" onClose={() => setDeleting(null)}
         onConfirm={(reason) => financeApi.deletePayment(deleting!.id, reason)} onDone={() => { load(); onChanged(); }} />
     </MoneySection>
@@ -521,15 +534,15 @@ function PaymentsSection({ projectId, customerId, canWrite, canCollect, onChange
 }
 
 /** Record an office-collected payment directly (CONFIRMED). */
-function RecordPaymentDialog({ projectId, customerId, onClose, onSaved }: {
-  projectId: number; customerId: number; onClose: () => void; onSaved: () => void;
+function RecordPaymentDialog({ projectId, customerId, editing, onClose, onSaved }: {
+  projectId: number; customerId: number; editing?: CustomerPayment; onClose: () => void; onSaved: () => void;
 }) {
-  const [amount, setAmount] = useState<string>("");
-  const [method, setMethod] = useState("CASH");
-  const [date, setDate] = useState(today());
-  const [reference, setReference] = useState("");
+  const [amount, setAmount] = useState<string>(editing ? String(editing.amount) : "");
+  const [method, setMethod] = useState(editing?.paymentMethod || "CASH");
+  const [date, setDate] = useState(editing?.paymentDate ? String(editing.paymentDate).slice(0, 10) : today());
+  const [reference, setReference] = useState(editing?.referenceNumber || "");
   // Who received the money (an employee who collected it on site); blank = the logged-in user.
-  const [collectedBy, setCollectedBy] = useState("");
+  const [collectedBy, setCollectedBy] = useState(editing?.collectedBy?.id != null ? String(editing.collectedBy.id) : "");
   const [employees, setEmployees] = useState<RosterRow[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -543,6 +556,14 @@ function RecordPaymentDialog({ projectId, customerId, onClose, onSaved }: {
     if (!amt || amt <= 0) { setError("Enter an amount."); return; }
     setSaving(true); setError(null);
     try {
+      if (editing) {
+        await financeApi.updatePayment(editing.id, {
+          amount: amt, paymentMethod: method, paymentDate: date,
+          referenceNumber: reference || undefined, remarks: editing.remarks,
+          ...(collectedBy ? { collectedBy: { id: Number(collectedBy) } } : {}),
+        });
+        toast.success("Payment updated");
+      } else {
       await financeApi.recordPayment({
         customer: { id: customerId }, project: { id: projectId },
         amount: amt, paymentMethod: method, paymentDate: date,
@@ -550,6 +571,7 @@ function RecordPaymentDialog({ projectId, customerId, onClose, onSaved }: {
         ...(collectedBy ? { collectedBy: { id: Number(collectedBy) } } : {}),
       });
       toast.success("Payment recorded");
+      }
       onSaved();
     } catch (e: any) {
       setError(e?.response?.data?.message || "Failed to record payment.");
@@ -560,8 +582,8 @@ function RecordPaymentDialog({ projectId, customerId, onClose, onSaved }: {
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2"><IndianRupee className="h-5 w-5 text-emerald-600" /> Record Payment</DialogTitle>
-          <DialogDescription>Money received for this project. It's confirmed immediately.</DialogDescription>
+          <DialogTitle className="flex items-center gap-2"><IndianRupee className="h-5 w-5 text-emerald-600" /> {editing ? `Edit ${editing.paymentNumber || "Payment"}` : "Record Payment"}</DialogTitle>
+          <DialogDescription>{editing ? "Correct the amount, method, date or reference. A changed amount is adjusted in the ledger." : "Money received for this project. It's confirmed immediately."}</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
@@ -599,7 +621,7 @@ function RecordPaymentDialog({ projectId, customerId, onClose, onSaved }: {
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
-          <Button onClick={save} disabled={saving}>{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Record</Button>
+          <Button onClick={save} disabled={saving}>{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null} {editing ? "Save changes" : "Record"}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
