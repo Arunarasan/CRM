@@ -15,7 +15,7 @@ import { useAuth } from "@/hooks/useAuth";
 import Logo from "@/components/brand/Logo";
 import { getCurrentUser } from "@/lib/currentUser";
 import { useT } from "@/i18n";
-import { usePendingAttendanceCount } from "@/pages/hr/machineAdmin";
+import { usePendingAttendanceCount } from "@/hooks/usePendingAttendanceCount";
 
 /**
  * Sidebar entries gated by the authority needed to actually use the module (matching the

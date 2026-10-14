@@ -75,6 +75,19 @@ public class AttendanceAdminService {
         return out;
     }
 
+    /** The kiosk punch log: every session with a kiosk check-in or check-out, with selfies and match scores. */
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> kioskLog(java.time.LocalDate from, java.time.LocalDate to, Long employeeId, int limit) {
+        java.time.LocalDate end = to == null ? java.time.LocalDate.now() : to;
+        java.time.LocalDate start = from == null ? end.minusDays(6) : from;
+        int size = Math.max(1, Math.min(500, limit));
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (AttendanceSession s : sessionRepository.findKioskSessions(start, end, employeeId, org.springframework.data.domain.PageRequest.of(0, size))) {
+            out.add(toReviewRow(s));
+        }
+        return out;
+    }
+
     /** How many clock-ins are waiting for an admin — drives the menu badge. */
     @Transactional(readOnly = true)
     public long countPending() {
@@ -182,7 +195,6 @@ public class AttendanceAdminService {
         m.put("outLat", s.getCheckOutLat());
         m.put("outLng", s.getCheckOutLng());
         m.put("outAccuracyMeters", s.getCheckOutAccuracy());
-        m.put("machineName", s.getMachine() == null ? null : s.getMachine().getName());
         m.put("approvalNote", s.getApprovalNote());
         m.put("verificationMethod", s.getVerificationMethod());
         m.put("flagReason", s.getFlagReason());
@@ -195,6 +207,15 @@ public class AttendanceAdminService {
         m.put("lng", s.getCheckInLng());
         m.put("deviceInfo", s.getDeviceInfo());
         m.put("approvalStatus", s.getApprovalStatus());
+        m.put("flagged", Boolean.TRUE.equals(s.getFlagged()));
+        // Office-kiosk evidence (null for phone / HR punches)
+        m.put("kioskName", s.getKiosk() == null ? null : s.getKiosk().getName());
+        m.put("selfieInUrl", s.getSelfieInUrl());
+        m.put("selfieOutUrl", s.getSelfieOutUrl());
+        m.put("faceDistanceIn", s.getFaceDistanceIn());
+        m.put("faceDistanceOut", s.getFaceDistanceOut());
+        m.put("livenessIn", s.getLivenessIn());
+        m.put("livenessOut", s.getLivenessOut());
         return m;
     }
 

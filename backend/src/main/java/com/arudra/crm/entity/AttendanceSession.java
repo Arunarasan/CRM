@@ -110,19 +110,13 @@ public class AttendanceSession extends BaseEntity {
     @Column(name = "device_mismatch_reason", length = 255)
     private String deviceMismatchReason;
 
-    /** Where the clock-in came from: PHONE (portal) | MACHINE (fingerprint machine) | MANUAL (HR). */
+    /** Where the clock-in came from: PHONE (portal) | KIOSK (office face kiosk) | MANUAL (HR). */
     @Column(name = "check_in_source", nullable = false, length = 20)
     private String checkInSource = SOURCE_PHONE;
 
     /** Where the clock-out came from (same values); null while the session is still open. */
     @Column(name = "check_out_source", length = 20)
     private String checkOutSource;
-
-    /** The fingerprint machine that produced this session, for MACHINE sessions. */
-    @JsonIgnore
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "machine_id")
-    private AttendanceMachine machine;
 
     @Column(name = "check_out_lat", precision = 10, scale = 6)
     private BigDecimal checkOutLat;
@@ -133,6 +127,33 @@ public class AttendanceSession extends BaseEntity {
     @Column(name = "check_out_accuracy")
     private Integer checkOutAccuracy;
 
+    /** The office kiosk that recorded this session, for KIOSK punches. */
+    @JsonIgnore
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "kiosk_id")
+    private AttendanceKiosk kiosk;
+
+    /** Face-match distance of the kiosk check-in / check-out (lower is closer; null for other sources). */
+    @Column(name = "face_distance_in")
+    private Double faceDistanceIn;
+
+    @Column(name = "face_distance_out")
+    private Double faceDistanceOut;
+
+    /** Selfie taken by the kiosk at check-in / check-out (audit evidence). */
+    @Column(name = "selfie_in_url", length = 500)
+    private String selfieInUrl;
+
+    @Column(name = "selfie_out_url", length = 500)
+    private String selfieOutUrl;
+
+    /** Liveness challenge passed on the kiosk (BLINK | TURN); reported by the kiosk, not verifiable server-side. */
+    @Column(name = "liveness_in", length = 20)
+    private String livenessIn;
+
+    @Column(name = "liveness_out", length = 20)
+    private String livenessOut;
+
     /** Employee's "where I am" note on a field punch. */
     @Column(name = "field_note", length = 255)
     private String fieldNote;
@@ -142,7 +163,7 @@ public class AttendanceSession extends BaseEntity {
     private String approvalNote;
 
     public static final String SOURCE_PHONE = "PHONE";
-    public static final String SOURCE_MACHINE = "MACHINE";
+    public static final String SOURCE_KIOSK = "KIOSK";
     public static final String SOURCE_MANUAL = "MANUAL";
 
     /**

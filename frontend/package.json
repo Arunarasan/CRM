@@ -20,6 +20,7 @@
     "@radix-ui/react-tabs": "^1.1.17",
     "@types/qrcode.react": "^1.0.5",
     "@types/react-signature-canvas": "^1.0.7",
+    "@vladmandic/face-api": "^1.7.15",
     "@zxing/browser": "^0.2.1",
     "axios": "^1.18.1",
     "class-variance-authority": "^0.7.1",

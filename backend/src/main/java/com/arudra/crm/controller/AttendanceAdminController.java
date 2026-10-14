@@ -60,6 +60,16 @@ public class AttendanceAdminController {
         return ResponseEntity.ok(adminService.listPending());
     }
 
+    @GetMapping("/kiosk-log")
+    @PreAuthorize(HR_READ)
+    public ResponseEntity<List<Map<String, Object>>> kioskLog(
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate from,
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate to,
+            @RequestParam(required = false) Long employeeId,
+            @RequestParam(defaultValue = "200") int limit) {
+        return ResponseEntity.ok(adminService.kioskLog(from, to, employeeId, limit));
+    }
+
     @GetMapping("/pending/count")
     @PreAuthorize(HR_READ)
     public ResponseEntity<Map<String, Object>> pendingCount() {

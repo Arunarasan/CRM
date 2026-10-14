@@ -43,7 +43,7 @@ export interface TimeSession {
   deviceMismatchReason?: string | null;
   payable?: boolean;               // counts toward pay (verified, or approved)
   approvalNote?: string | null;    // admin's reason when rejecting
-  checkInSource?: string | null;   // PHONE | MACHINE | MANUAL
+  checkInSource?: string | null;   // PHONE | MANUAL
   checkOutSource?: string | null;
   fieldNote?: string | null;
 }
@@ -77,7 +77,7 @@ export interface TimeStatus {
   standardDailyHours: number;
   dailyTargetEarnings: number | null;
   sessions: TimeSession[];
-  attendanceMethod?: string; // GEO | OFFICE_DEVICE | ANY | MACHINE
+  attendanceMethod?: string; // GEO | OFFICE_DEVICE | ANY
   todayPendingHours?: number; // waiting for admin approval — not in todayHours yet
   attendanceMethodRequested?: string | null; // pending admin-approved switch
   biometricRegistered?: boolean;

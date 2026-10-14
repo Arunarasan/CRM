@@ -87,13 +87,6 @@ public class AttendanceVerificationService {
         String reason = null;
 
         switch (method) {
-            case "MACHINE" -> {
-                // Office punches come from the fingerprint machine; a punch from their own phone is a
-                // field punch and always waits for an admin. Location is recorded as evidence.
-                verificationMethod = "FIELD";
-                verified = false;
-                reason = FIELD_PUNCH_REASON + fieldWhere(geo, hasCoords, coarse, acc);
-            }
             case "OFFICE_DEVICE" -> {
                 verificationMethod = "BIOMETRIC";
                 verified = biometricVerified;
@@ -186,34 +179,28 @@ public class AttendanceVerificationService {
         return s == null || s.length() <= max ? s : s.substring(0, max);
     }
 
-    static final String FIELD_PUNCH_REASON = "Field punch — needs admin approval";
-
-    /** Where a field punch was made, for the approver: distance from the nearest office, or why it's unknown. */
-    private static String fieldWhere(GeoMatch geo, boolean hasCoords, boolean coarse, Integer acc) {
-        if (!hasCoords) return " (no location shared)";
-        if (coarse) return " (rough location ±" + acc + " m)";
-        if (geo == null) return "";
-        String d = geo.distanceMeters() >= 1000
-                ? String.format(java.util.Locale.ROOT, "%.1f km", geo.distanceMeters() / 1000.0)
-                : geo.distanceMeters() + " m";
-        return " (" + d + " from " + geo.location().getName() + ")";
-    }
-
     /**
-     * A clock-out from the phone by a fingerprint-machine employee. The whole session then waits for
-     * an admin (even if it started on the machine), because its end time wasn't verified.
+     * Kiosk face punch result. A confident match leaves the session verified; a weak one flags it for
+     * HR approval (never blocks the punch). Works for both the check-in and the check-out half: a flag
+     * from either half keeps the whole session waiting.
      */
-    public void markFieldClockOut(AttendanceSession session, Employee employee) {
-        if (!"MACHINE".equals(employee.getAttendanceMethod())) return;
-        if ("FIELD".equals(session.getVerificationMethod())) return; // started as a field punch: already waiting
-        String reason = "Clock-out from phone — needs admin approval";
+    public void applyFace(AttendanceSession session, Employee employee, boolean weakMatch, String reason, boolean isCheckIn) {
+        if (isCheckIn) {
+            session.setVerificationMethod("FACE");
+            session.setVerified(!weakMatch);
+            session.setFlagged(weakMatch);
+            session.setFlagReason(weakMatch ? clip(reason, 255) : null);
+            session.setApprovalStatus(weakMatch ? "PENDING" : null);
+            if (weakMatch) notifyFlagged(employee, reason);
+            return;
+        }
+        if (!weakMatch) return; // a clean check-out does not clear an earlier flag
         boolean alreadyWaiting = session.isAwaitingApproval();
         session.setVerified(false);
         session.setFlagged(true);
         session.setApprovalStatus("PENDING");
         String prior = session.getFlagReason();
-        String merged = prior == null || prior.isBlank() ? reason : (prior.contains(reason) ? prior : prior + " · " + reason);
-        session.setFlagReason(merged.length() > 255 ? merged.substring(0, 255) : merged);
+        session.setFlagReason(clip(prior == null || prior.isBlank() ? reason : prior + " · " + reason, 255));
         if (!alreadyWaiting) notifyFlagged(employee, reason);
     }
 

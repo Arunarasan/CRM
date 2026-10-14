@@ -17,4 +17,11 @@ public interface AttendanceSessionRepository extends JpaRepository<AttendanceSes
     List<AttendanceSession> findByFlaggedTrueAndApprovalStatusOrderByIdDesc(String approvalStatus);
 
     long countByFlaggedTrueAndApprovalStatus(String approvalStatus);
+
+    /** Sessions punched on an office kiosk (either half), newest first, optionally for one employee. */
+    @org.springframework.data.jpa.repository.Query("select s from AttendanceSession s join fetch s.attendance a join fetch a.employee e "
+            + "where (s.checkInSource = 'KIOSK' or s.checkOutSource = 'KIOSK') and a.date between :from and :to "
+            + "and (:employeeId is null or e.id = :employeeId) order by a.date desc, s.id desc")
+    List<AttendanceSession> findKioskSessions(java.time.LocalDate from, java.time.LocalDate to, Long employeeId,
+                                              org.springframework.data.domain.Pageable page);
 }

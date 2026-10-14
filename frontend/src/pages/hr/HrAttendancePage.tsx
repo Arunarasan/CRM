@@ -14,14 +14,15 @@ import { toast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import SearchableSelect from '@/components/ui/searchable-select';
 import { DeviceRequests } from './deviceAdmin';
-import { FingerprintMachines, UnmatchedMachineIds, MachinePunchLog } from './machineAdmin';
+import { KioskSetup } from './kioskAdmin';
+import { KioskLog, FaceEnrolmentOverview, SelfieThumb, FaceBadge } from './kioskLog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import AttendanceRegister from './AttendanceRegister';
 
 /**
  * The attendance admin body, mounted both as the Workforce → Attendance page and as the
  * Tasks → Attendance tab. Split by job: the day's register first, then what's waiting for
- * approval (with counts), fixing a time, the raw punch log, and one-time setup.
+ * approval (with counts), fixing a time, the kiosk log, and one-time setup.
  */
 export function AttendanceAdmin() {
   const [tab, setTab] = useState('register');
@@ -48,7 +49,7 @@ export function AttendanceAdmin() {
             To approve {waiting > 0 && <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 text-[11px] font-semibold text-amber-800">{waiting}</span>}
           </TabsTrigger>
           <TabsTrigger value="fix" className="py-1.5">Fix a time</TabsTrigger>
-          <TabsTrigger value="log" className="py-1.5">Punch log</TabsTrigger>
+          <TabsTrigger value="kiosk" className="py-1.5">Kiosk log</TabsTrigger>
           <TabsTrigger value="setup" className="py-1.5">Setup</TabsTrigger>
         </TabsList>
       </div>
@@ -71,14 +72,14 @@ export function AttendanceAdmin() {
         <DirectCorrection prefill={prefill} onApplied={() => setTab('register')} />
       </TabsContent>
 
-      <TabsContent value="log" className="mt-4">
-        <MachinePunchLog />
+      <TabsContent value="kiosk" className="mt-4">
+        <KioskLog />
       </TabsContent>
 
       <TabsContent value="setup" className="mt-4 space-y-6">
         <OfficeLocations />
-        <FingerprintMachines />
-        <UnmatchedMachineIds />
+        <KioskSetup />
+        <FaceEnrolmentOverview />
       </TabsContent>
     </Tabs>
   );
@@ -431,8 +432,13 @@ function PendingApprovals() {
                       <span className="inline-flex items-center gap-1 rounded bg-sky-100 px-1.5 py-0.5 text-[11px] font-semibold text-sky-700">
                         <MapPin className="h-3 w-3" /> Field punch
                       </span>
-                    ) : (
+                    ) : r.verificationMethod === 'FACE' ? null : (
                       <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">{r.verificationMethod ?? '—'}</span>
+                    )}
+                    {r.verificationMethod === 'FACE' && (
+                      <span className="inline-flex items-center gap-1 rounded bg-violet-100 px-1.5 py-0.5 text-[11px] font-semibold text-violet-700">
+                        Face kiosk{r.kioskName ? ` · ${r.kioskName}` : ''}
+                      </span>
                     )}
                     {r.deviceMismatchReason && (
                       <span className="inline-flex items-center gap-1 rounded bg-red-100 px-1.5 py-0.5 text-[11px] font-semibold text-red-700"
@@ -442,11 +448,21 @@ function PendingApprovals() {
                     )}
                   </div>
                   <p className="mt-1 text-sm text-amber-700">{r.flagReason}</p>
+                  {(r.selfieInUrl || r.selfieOutUrl) && (
+                    <div className="mt-2 flex flex-wrap items-center gap-3">
+                      {r.checkInSource === 'KIOSK' && (
+                        <div className="flex items-center gap-2"><SelfieThumb url={r.selfieInUrl} label="Check-in" /><FaceBadge distance={r.faceDistanceIn} /></div>
+                      )}
+                      {r.checkOutSource === 'KIOSK' && (
+                        <div className="flex items-center gap-2"><SelfieThumb url={r.selfieOutUrl} label="Check-out" /><FaceBadge distance={r.faceDistanceOut} /></div>
+                      )}
+                    </div>
+                  )}
                   {r.fieldNote && <p className="mt-0.5 text-sm">“{r.fieldNote}”</p>}
                   <p className="mt-0.5 flex flex-wrap items-center gap-x-3 text-xs text-muted-foreground">
                     <span>
-                      {r.date} · {r.checkInTime?.slice(0, 5)} <Src s={r.checkInSource} machine={r.machineName} />
-                      {' → '}{r.checkOutTime ? <>{r.checkOutTime.slice(0, 5)} <Src s={r.checkOutSource} machine={r.machineName} /></> : 'still open'}
+                      {r.date} · {r.checkInTime?.slice(0, 5)} <Src s={r.checkInSource} />
+                      {' → '}{r.checkOutTime ? <>{r.checkOutTime.slice(0, 5)} <Src s={r.checkOutSource} /></> : 'still open'}
                     </span>
                     {r.distanceMeters != null && r.verificationMethod !== 'FIELD' && (
                       <span>{r.distanceMeters} m from {r.officeLocation ?? 'office'}{r.accuracyMeters != null ? ` · ±${r.accuracyMeters} m GPS` : ''}</span>
@@ -483,11 +499,10 @@ function PendingApprovals() {
 }
 
 /** Where one half of a session came from, as a tiny tag. */
-function Src({ s, machine }: { s?: string | null; machine?: string | null }) {
+function Src({ s }: { s?: string | null }) {
   if (!s) return null;
-  const label = s === 'MACHINE' ? 'machine' : s === 'PHONE' ? 'phone' : s === 'MANUAL' ? 'HR' : s.toLowerCase();
-  return <span className="rounded bg-muted px-1 py-px text-[10px] uppercase tracking-wide"
-               title={s === 'MACHINE' && machine ? machine : undefined}>{label}</span>;
+  const label = s === 'KIOSK' ? 'kiosk' : s === 'PHONE' ? 'phone' : s === 'MANUAL' ? 'HR' : s.toLowerCase();
+  return <span className="rounded bg-muted px-1 py-px text-[10px] uppercase tracking-wide">{label}</span>;
 }
 
 /* -------------------------------- Office locations -------------------------------- */

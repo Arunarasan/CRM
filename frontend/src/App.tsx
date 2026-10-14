@@ -150,6 +150,8 @@ const Users = lazy(() => import("./pages/Users"));
 
 // Admin settings — company profile, preferences, notifications, assignment rules, security.
 const Settings = lazy(() => import("./pages/Settings"));
+// Office kiosk (shared face-attendance phone) — public, authenticated by its own pairing token.
+const KioskPage = lazy(() => import("./pages/kiosk/KioskPage"));
 
 // Fallback loader
 const PageLoader = () => (
@@ -171,6 +173,7 @@ function App() {
           {/* Single sign-in lives on the public website — /crm/login just hands off to it. */}
           <Route path="/login" element={<RedirectToSignIn />} />
           <Route path="/forgot-password" element={<RedirectToSignIn />} />
+          <Route path="/kiosk" element={<KioskPage />} />
           
           {/* Protected Routes Wrapper — desktop ERP, blocked for portal-only field employees */}
           <Route path="/" element={<DesktopGuard><DashboardLayout /></DesktopGuard>}>

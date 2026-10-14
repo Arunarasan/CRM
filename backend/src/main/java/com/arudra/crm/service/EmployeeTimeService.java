@@ -166,12 +166,80 @@ public class EmployeeTimeService {
             String merged = s.getFieldNote() == null ? "Out: " + outNote : s.getFieldNote() + " · Out: " + outNote;
             s.setFieldNote(merged.length() > 255 ? merged.substring(0, 255) : merged);
         }
-        verificationService.markFieldClockOut(s, employee);
         verificationService.applyDevice(s, employee, deviceCheck, "Clock-out");
         sessionRepository.save(s);
 
         syncAggregate(att, employee);
         return attendanceRepository.save(att);
+    }
+
+    // --- office kiosk (face) punches ------------------------------------------
+
+    /** What a kiosk punch did: CHECKED_IN | CHECKED_OUT | ALREADY_IN | NOT_IN | TOO_SOON. */
+    public record KioskPunchOutcome(String outcome, LocalTime time, Long minutesWorked) {}
+
+    /** A check-out this soon after the check-in is treated as an accidental double tap. */
+    private static final long KIOSK_MIN_SESSION_SECONDS = 120;
+
+    /**
+     * Records a face-verified punch from an office kiosk for an already-identified employee. Mirrors the
+     * phone clock-in/out (same sessions, same hours and pay maths) but needs no login: the kiosk device
+     * is the trust anchor. A weak face match never blocks the punch, it flags the session for HR approval.
+     * The selfie is only stored (the supplier only runs) when the punch is actually recorded.
+     */
+    @Transactional
+    public KioskPunchOutcome kioskPunch(Employee employee, com.arudra.crm.entity.AttendanceKiosk kiosk, boolean checkIn,
+                                        double distance, boolean weakMatch, java.util.function.Supplier<String> selfieUrl, String liveness) {
+        String weakReason = String.format(Locale.ROOT, "Weak face match on the kiosk (distance %.2f), needs admin approval", distance);
+        Attendance live = activeRow(employee.getId());
+        AttendanceSession open = live == null ? null : openSession(live);
+
+        if (checkIn) {
+            if (open != null) return new KioskPunchOutcome("ALREADY_IN", open.getCheckInTime(), null);
+            Attendance att = todayRow(employee.getId());
+            if (att == null) {
+                att = new Attendance();
+                att.setEmployee(employee);
+                att.setDate(LocalDate.now());
+                att.setStatus("PRESENT");
+                att = attendanceRepository.save(att); // need the id before attaching a session
+            }
+            AttendanceSession s = new AttendanceSession();
+            s.setAttendance(att);
+            LocalTime now = LocalTime.now().withNano(0);
+            s.setCheckInTime(now);
+            s.setCheckInSource(AttendanceSession.SOURCE_KIOSK);
+            s.setKiosk(kiosk);
+            s.setOfficeLocation(kiosk.getOfficeLocation());
+            s.setFaceDistanceIn(distance);
+            s.setSelfieInUrl(selfieUrl.get());
+            s.setLivenessIn(liveness);
+            verificationService.applyFace(s, employee, weakMatch, weakReason, true);
+            sessionRepository.save(s);
+            att.setStatus("PRESENT");
+            syncAggregate(att, employee);
+            attendanceRepository.save(att);
+            return new KioskPunchOutcome("CHECKED_IN", now, null);
+        }
+
+        if (open == null) return new KioskPunchOutcome("NOT_IN", null, null);
+        java.time.LocalDateTime inAt = live.getDate().atTime(open.getCheckInTime());
+        long sinceIn = Duration.between(inAt, java.time.LocalDateTime.now()).getSeconds();
+        if (sinceIn >= 0 && sinceIn < KIOSK_MIN_SESSION_SECONDS) {
+            return new KioskPunchOutcome("TOO_SOON", open.getCheckInTime(), null);
+        }
+        if (open.getBreakStart() != null) closeBreak(open, LocalTime.now()); // auto-close a still-open break
+        LocalTime now = LocalTime.now().withNano(0);
+        open.setCheckOutTime(now);
+        open.setCheckOutSource(AttendanceSession.SOURCE_KIOSK);
+        open.setFaceDistanceOut(distance);
+        open.setSelfieOutUrl(selfieUrl.get());
+        open.setLivenessOut(liveness);
+        verificationService.applyFace(open, employee, weakMatch, weakReason, false);
+        sessionRepository.save(open);
+        syncAggregate(live, employee);
+        attendanceRepository.save(live);
+        return new KioskPunchOutcome("CHECKED_OUT", now, Math.max(0, sinceIn / 60));
     }
 
     @LogActivity(module = "ATTENDANCE", action = "BREAK_START")

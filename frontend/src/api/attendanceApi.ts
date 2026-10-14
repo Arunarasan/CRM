@@ -32,76 +32,50 @@ export interface PendingAttendance {
   deviceVerified?: boolean;
   deviceMismatchReason?: string | null; // set when the punch didn't come from the registered phone
   checkOutTime?: string | null;
-  checkInSource?: string | null;  // PHONE | MACHINE | MANUAL
+  checkInSource?: string | null;  // PHONE | MANUAL
   checkOutSource?: string | null;
   fieldNote?: string | null;      // employee's "where I am" note
   outLat?: number | null;
   outLng?: number | null;
   outAccuracyMeters?: number | null;
-  machineName?: string | null;
   approvalNote?: string | null;
+  flagged?: boolean;
+  // Office-kiosk evidence (null for phone / HR punches)
+  kioskName?: string | null;
+  selfieInUrl?: string | null;
+  selfieOutUrl?: string | null;
+  faceDistanceIn?: number | null;   // lower = closer match
+  faceDistanceOut?: number | null;
+  livenessIn?: string | null;       // BLINK | TURN
+  livenessOut?: string | null;
 }
 
-// --- Office fingerprint machines (ZKTeco / eSSL, ADMS push) ---------------------------------
-export interface AttendanceMachine {
+// --- Office kiosks (shared face-attendance phone) ---------------------------------------------
+export interface AttendanceKioskRow {
   id: number;
-  serialNumber: string;
   name: string;
   officeLocationId: number | null;
   officeLocationName: string | null;
-  timeZone: string;
   active: boolean;
-  useInOutKeys: boolean;
-  allowedIp: string | null;
-  model: string | null;
-  pushVersion: string | null;
+  paired: boolean;
+  pairedAt: string | null;
+  deviceInfo: string | null;
   lastSeenAt: string | null;
   lastIp: string | null;
-  lastPunchAt: string | null;
   online: boolean;
-  punchesToday?: number;
+  waitingForPairing: boolean;
+  pairingExpiresAt: string | null;
+  /** Present only in the response to create / re-pair. */
+  pairingCode: string | null;
 }
 
-export interface MachineInput {
-  serialNumber: string;
-  name: string;
-  officeLocationId?: number | null;
-  timeZone?: string;
-  active?: boolean;
-  useInOutKeys?: boolean;
-  allowedIp?: string | null;
-  model?: string | null;
-}
-
-export interface MachineConnectionRequest {
-  id: number;
-  serialNumber: string;
-  lastIp: string | null;
-  pushVersion: string | null;
-  attempts: number;
-  firstSeenAt: string | null;
-  lastSeenAt: string | null;
-}
-
-export interface UnmatchedMachineId {
-  machinePin: string;
-  punches: number;
-  firstPunchAt: string | null;
-  lastPunchAt: string | null;
-}
-
-export interface MachinePunchRow {
-  id: number;
-  machineId: number;
-  machineName: string;
-  machinePin: string;
-  employeeId: number | null;
-  employeeName: string | null;
-  punchTime: string;
-  verifyMethod: string | null; // FINGER | FACE | CARD | PASSWORD | OTHER
-  statusCode: number | null;
-  result: string; // USED | DUPLICATE_TAP | UNMATCHED | AFTER_CORRECTION | IGNORED | OUT_OF_RANGE | PENDING
-  receivedAt: string | null;
+// --- Face enrolment for the office kiosk -------------------------------------------------------
+export interface FaceStatus {
+  enrolled: boolean;
+  samples: number;
+  enrolledAt: string | null;
+  photoUrl: string | null;
+  enrolledBy: string | null;
 }
 
 // --- Attendance phone binding (one approved phone per login) ---------------------------------
@@ -193,22 +167,24 @@ export const attendanceApi = {
     api.post<{ approved: number }>(`${BASE}/sessions/approve-many`, { sessionIds }).then((r) => r.data),
   pendingCount: () => api.get<{ count: number }>(`${BASE}/pending/count`).then((r) => r.data.count),
 
-  // Fingerprint machines
-  listMachines: () => api.get<AttendanceMachine[]>(`${BASE}/machines`).then((r) => r.data),
-  createMachine: (body: MachineInput) => api.post<AttendanceMachine>(`${BASE}/machines`, body).then((r) => r.data),
-  updateMachine: (id: number, body: MachineInput) => api.put<AttendanceMachine>(`${BASE}/machines/${id}`, body).then((r) => r.data),
-  deleteMachine: (id: number) => api.delete(`${BASE}/machines/${id}`).then((r) => r.data),
-  machineConnectionRequests: () =>
-    api.get<MachineConnectionRequest[]>(`${BASE}/machines/connection-requests`).then((r) => r.data),
-  dismissMachineRequest: (id: number) => api.post(`${BASE}/machines/connection-requests/${id}/dismiss`).then((r) => r.data),
-  unmatchedMachineIds: () => api.get<UnmatchedMachineId[]>(`${BASE}/machines/unmatched`).then((r) => r.data),
-  setMachinePin: (employeeId: number, machinePin: string) =>
-    api.put<{ employeeId: number; machinePin: string; linkedPunches: number }>(
-      `${BASE}/machines/employees/${employeeId}/pin`, { machinePin }).then((r) => r.data),
-  machinePunches: (params: { machineId?: number; employeeId?: number; from?: string; to?: string; limit?: number }) =>
-    api.get<MachinePunchRow[]>(`${BASE}/machines/punches`, { params }).then((r) => r.data),
-  reprocessMachinePunches: (employeeId: number, from: string, to: string) =>
-    api.post(`${BASE}/machines/reprocess`, { employeeId: String(employeeId), from, to }).then((r) => r.data),
+  // Office kiosks
+  listKiosks: () => api.get<AttendanceKioskRow[]>(`${BASE}/kiosks`).then((r) => r.data),
+  createKiosk: (body: { name: string; officeLocationId?: number | null }) =>
+    api.post<AttendanceKioskRow>(`${BASE}/kiosks`, body).then((r) => r.data),
+  updateKiosk: (id: number, body: { name?: string; officeLocationId?: number | null; active?: boolean }) =>
+    api.put<AttendanceKioskRow>(`${BASE}/kiosks/${id}`, body).then((r) => r.data),
+  repairKiosk: (id: number) => api.post<AttendanceKioskRow>(`${BASE}/kiosks/${id}/repair`).then((r) => r.data),
+  deleteKiosk: (id: number) => api.delete(`${BASE}/kiosks/${id}`).then((r) => r.data),
+
+  kioskLog: (params: { from?: string; to?: string; employeeId?: number; limit?: number }) =>
+    api.get<PendingAttendance[]>(`${BASE}/kiosk-log`, { params }).then((r) => r.data),
+
+  // Face enrolment
+  faceSummary: () => api.get<Record<number, { samples: number; enrolledAt: string | null }>>(`${BASE}/faces`).then((r) => r.data),
+  faceStatus: (employeeId: number) => api.get<FaceStatus>(`${BASE}/faces/employees/${employeeId}`).then((r) => r.data),
+  enrollFace: (employeeId: number, body: { descriptors: number[][]; qualities?: number[]; photoUrl?: string }) =>
+    api.put<FaceStatus>(`${BASE}/faces/employees/${employeeId}`, body).then((r) => r.data),
+  removeFace: (employeeId: number) => api.delete(`${BASE}/faces/employees/${employeeId}`).then((r) => r.data),
 
   listMethodRequests: () => api.get<MethodRequest[]>(`${BASE}/method-requests`).then((r) => r.data),
   approveMethodRequest: (employeeId: number) => api.post(`${BASE}/method-requests/${employeeId}/approve`).then((r) => r.data),

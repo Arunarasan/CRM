@@ -109,6 +109,26 @@ public class GlobalExceptionHandler {
         return new ResponseEntity<>(apiError, HttpStatus.FORBIDDEN);
     }
 
+    /**
+     * Keeps the status a service chose (401/403/404/429...) instead of letting the generic handler
+     * turn it into an opaque 500. The reason is the user-facing message.
+     */
+    @ExceptionHandler(org.springframework.web.server.ResponseStatusException.class)
+    public ResponseEntity<ApiError> handleResponseStatus(
+            org.springframework.web.server.ResponseStatusException ex, HttpServletRequest request) {
+
+        HttpStatus status = HttpStatus.resolve(ex.getStatusCode().value());
+        if (status == null) status = HttpStatus.INTERNAL_SERVER_ERROR;
+        log.warn("{} {}: {}", status.value(), request.getRequestURI(), ex.getReason());
+        ApiError apiError = new ApiError(
+                status.value(),
+                status.getReasonPhrase(),
+                ex.getReason() != null ? ex.getReason() : status.getReasonPhrase(),
+                request.getRequestURI()
+        );
+        return new ResponseEntity<>(apiError, status);
+    }
+
     @ExceptionHandler({IllegalArgumentException.class, IllegalStateException.class})
     public ResponseEntity<ApiError> handleBadRequest(
             RuntimeException ex, HttpServletRequest request) {
