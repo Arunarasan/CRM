@@ -3,7 +3,7 @@ import { useParams } from "react-router-dom";
 import { payrollApi } from "@/api/payrollApi";
 import { useGoBack } from "@/hooks/useGoBack";
 import type { Payslip } from "@/types/employeePortal";
-import { buildPayslipHtml, printPayslip } from "@/pages/employeePortal/printPayslip";
+import { buildPayslipHtml, printPayslip, type PayslipEmployee } from "@/pages/employeePortal/printPayslip";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Printer } from "lucide-react";
 
@@ -12,7 +12,7 @@ export default function PayslipPrint() {
   const { id } = useParams();
   const goBack = useGoBack("/workforce/payroll");
   const [slip, setSlip] = useState<Payslip | null>(null);
-  const [opts, setOpts] = useState<{ employeeName: string; employeeCode?: string }>({ employeeName: "Employee" });
+  const [opts, setOpts] = useState<PayslipEmployee>({ employeeName: "Employee" });
   const [html, setHtml] = useState("");
   const [loading, setLoading] = useState(true);
 
@@ -25,6 +25,13 @@ export default function PayslipPrint() {
         const o = {
           employeeName: [emp.firstName, emp.lastName].filter(Boolean).join(" ") || "Employee",
           employeeCode: emp.employeeCode || undefined,
+          designation: emp.designation,
+          department: emp.department?.name,
+          dateOfJoining: emp.dateOfJoining,
+          bankAccount: emp.bankAccount,
+          uan: emp.uan,
+          pfNumber: emp.pfNumber,
+          esiNumber: emp.esiNumber,
         };
         const s = rec as unknown as Payslip;
         setSlip(s);

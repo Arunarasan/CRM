@@ -3,6 +3,44 @@ import { fetchCompanyProfile } from '@/lib/companyProfile';
 
 export type PayslipRow = [string, number];
 
+/** Who the payslip is for. Everything but the name is optional and shown only when present. */
+export interface PayslipEmployee {
+  employeeName?: string;
+  employeeCode?: string;
+  designation?: string | null;
+  department?: string | null;
+  dateOfJoining?: string | null;
+  bankAccount?: string | null;
+  uan?: string | null;
+  pfNumber?: string | null;
+  esiNumber?: string | null;
+}
+
+const ONES = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+const TENS = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+const below100 = (n: number) => (n < 20 ? ONES[n] : TENS[Math.floor(n / 10)] + (n % 10 ? ' ' + ONES[n % 10] : ''));
+const below1000 = (n: number) => (n >= 100 ? ONES[Math.floor(n / 100)] + ' Hundred' + (n % 100 ? ' ' + below100(n % 100) : '') : below100(n));
+
+/** Rupee amount in words, Indian grouping (Lakh / Crore): 125000.5 → "Rupees One Lakh Twenty Five Thousand and Fifty Paise Only". */
+export function amountInWords(amount: number): string {
+  const total = Math.round(Math.abs(Number(amount) || 0) * 100);
+  const rupees = Math.floor(total / 100);
+  const paise = total % 100;
+  if (rupees === 0 && paise === 0) return 'Rupees Zero Only';
+  const parts: string[] = [];
+  const crore = Math.floor(rupees / 10000000);
+  const lakh = Math.floor((rupees % 10000000) / 100000);
+  const thousand = Math.floor((rupees % 100000) / 1000);
+  const rest = rupees % 1000;
+  if (crore) parts.push(below1000(crore) + ' Crore');
+  if (lakh) parts.push(below100(lakh) + ' Lakh');
+  if (thousand) parts.push(below100(thousand) + ' Thousand');
+  if (rest) parts.push(below1000(rest));
+  let words = rupees ? 'Rupees ' + parts.join(' ') : '';
+  if (paise) words += (rupees ? ' and ' : 'Rupees ') + below100(paise) + ' Paise';
+  return words.trim() + ' Only';
+}
+
 /**
  * The payslip's earnings and deductions as named rows — the one list both the portal screen and the
  * PDF render, so they always match and add up to Gross / Total. Zero rows are dropped; admin-added and
@@ -40,7 +78,7 @@ export function payslipRows(slip: Payslip): { earnings: PayslipRow[]; deductions
  * The one A4 payslip document, used by the employee portal PDF and the HR preview/print so they can't
  * drift apart. Company name/address/phone come from Website › Settings.
  */
-export async function buildPayslipHtml(slip: Payslip, opts?: { employeeName?: string; employeeCode?: string }): Promise<string> {
+export async function buildPayslipHtml(slip: Payslip, opts?: PayslipEmployee): Promise<string> {
   const company = await fetchCompanyProfile();
   const MONTHS = ['', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
   const inr = (n?: number | null) => '₹' + Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -65,6 +103,16 @@ export async function buildPayslipHtml(slip: Payslip, opts?: { employeeName?: st
        <div><span>Paid days</span><span>${slip.paidDays ?? '—'}</span></div>
        <div><span>LOP days</span><span>${slip.lopDays ?? '—'}</span></div>`;
 
+  const fmtDate = (d?: string | null) => (d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '');
+  const acct = opts?.bankAccount ? 'XXXX' + String(opts.bankAccount).replace(/\s/g, '').slice(-4) : '';
+  const details = ([
+    ['Designation', opts?.designation], ['Department', opts?.department], ['Date of joining', fmtDate(opts?.dateOfJoining)],
+    ['Bank a/c', acct], ['UAN', opts?.uan], ['PF no.', opts?.pfNumber], ['ESI no.', opts?.esiNumber],
+  ] as [string, string | null | undefined][]).filter(([, v]) => v);
+  const detailsHtml = details.length
+    ? `<div class="meta emp">${details.map(([k, v]) => `<div><span>${k}</span><span>${esc(v)}</span></div>`).join('')}</div>`
+    : '';
+
   const contact = [company.address, company.phone].filter(Boolean).map(esc).join(' · ');
 
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>Payslip ${esc(slip.payslipNumber || '')}</title>
@@ -83,6 +131,9 @@ export async function buildPayslipHtml(slip: Payslip, opts?: { employeeName?: st
     .meta div{display:flex;flex-direction:column}
     .meta span:first-child{font-size:10px;text-transform:uppercase;color:#888;letter-spacing:.4px}
     .meta span:last-child{font-weight:700}
+    .words{margin-top:8px;font-size:12px;color:#333}
+    .sign{display:flex;justify-content:space-between;margin-top:48px;font-size:11px;color:#555}
+    .sign div{border-top:1px solid #999;padding-top:4px;min-width:150px;text-align:center}
     .cols{display:flex;gap:24px}
     .col{flex:1}
     h3{font-size:13px;color:#0f5132;border-bottom:1px solid #ddd;padding-bottom:4px;margin:0 0 6px}
@@ -109,6 +160,7 @@ export async function buildPayslipHtml(slip: Payslip, opts?: { employeeName?: st
         ${opts?.employeeCode ? `<div class="sub">${esc(opts.employeeCode)}</div>` : ''}
       </div>
     </div>
+    ${detailsHtml}
     <div class="meta">${meta}</div>
     <div class="cols">
       <div class="col">
@@ -121,8 +173,10 @@ export async function buildPayslipHtml(slip: Payslip, opts?: { employeeName?: st
       </div>
     </div>
     <div class="net"><span class="lbl">Net Pay</span><span class="amt">${inr(slip.netSalary)}</span></div>
+    <div class="words"><b>Net pay in words:</b> ${esc(amountInWords(slip.netSalary))}</div>
     ${slip.remarks ? `<div class="note"><b>Note:</b> ${esc(slip.remarks)}</div>` : ''}
     <div class="foot">Status: ${esc(slip.status)}${slip.paymentDate ? ` · Paid on ${esc(slip.paymentDate)}` : ''} · This is a computer-generated payslip.</div>
+    <div class="sign"><div>Employee signature</div><div>Authorised signatory</div></div>
   </body></html>`;
   return html;
 }
@@ -132,7 +186,7 @@ export async function buildPayslipHtml(slip: Payslip, opts?: { employeeName?: st
  * can save it as a PDF (Print → Save as PDF on desktop and Android, Share → Print on iPhone). No pop-up
  * window, so pop-up blockers can't stop it.
  */
-export async function printPayslip(slip: Payslip, opts?: { employeeName?: string; employeeCode?: string }) {
+export async function printPayslip(slip: Payslip, opts?: PayslipEmployee) {
   const html = await buildPayslipHtml(slip, opts);
   const frame = document.createElement('iframe');
   frame.setAttribute('aria-hidden', 'true');
