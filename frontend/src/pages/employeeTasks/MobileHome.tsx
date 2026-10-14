@@ -3,12 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import {
   ChevronDown, CalendarDays, CalendarCheck, ListChecks,
   Plane, Wallet, FolderKanban, ChevronRight,
-  UserPlus, Boxes, Users, ClipboardList, TrendingUp, Activity,
+  UserPlus, Boxes, Users, ClipboardList, TrendingUp, Activity, Gift,
 } from 'lucide-react';
 import { employeeTaskApi } from '@/api/employeeTaskApi';
 import { employeePortalApi } from '@/api/employeePortalApi';
 import { HomeSummary } from '@/types/employeeTask';
-import { EmployeeDashboard } from '@/types/employeePortal';
+import { EmployeeDashboard, MyRewards } from '@/types/employeePortal';
 import { StatusPill, inr } from '../employeePortal/_shared';
 import ClockWidget from '../employeePortal/ClockWidget';
 import { useT } from '@/i18n';
@@ -82,12 +82,14 @@ function SectionHead({ title, icon: Icon, onViewAll }: {
 export default function MobileHome() {
   const [home, setHome] = useState<HomeSummary | null>(null);
   const [dash, setDash] = useState<EmployeeDashboard | null>(null);
+  const [rewards, setRewards] = useState<MyRewards | null>(null);
   const navigate = useNavigate();
   const { t } = useT();
 
   const load = useCallback(() => {
     employeeTaskApi.home().then(setHome).catch(() => {});
     employeePortalApi.dashboard().then(setDash).catch(() => setDash(null));
+    employeePortalApi.rewards().then(setRewards).catch(() => setRewards(null));
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -121,6 +123,48 @@ export default function MobileHome() {
 
         {/* Today's earnings + live session time — the money-forward hero of the home screen */}
         <ClockWidget onChange={load} />
+
+        {/* My Rewards — what lead collection, completed projects and Google reviews have earned */}
+        {rewards && (
+          <div>
+            <SectionHead title={t('portal.home.myRewards')} icon={Gift} onViewAll={() => navigate('/employee/salary')} />
+            <div className={`${CARD} p-4`}>
+              <div className="flex items-end justify-between">
+                <div>
+                  <p className="text-xs text-[#858B87]">{t('portal.home.totalEarned')}</p>
+                  <p className="text-[26px] font-bold leading-none text-[#111817] tabular-nums">{inr(rewards.earnedTotal)}</p>
+                </div>
+                <div className="text-right text-[11px] font-medium">
+                  <p className="text-[#28704F]">{t('portal.home.rewardPaid')}: {inr(rewards.paidTotal)}</p>
+                  <p className="text-[#B27A12]">{t('portal.home.rewardPending')}: {inr(rewards.pendingTotal)}</p>
+                </div>
+              </div>
+              <div className="mt-3 divide-y divide-[#ECEAE5]">
+                {[
+                  { label: t('portal.home.rewardLeads'), r: rewards.leads,
+                    sub: [rewards.leads.convertedCount ? t('portal.home.rewardConverted', { count: rewards.leads.convertedCount }) : null,
+                          rewards.leads.rate ? t('portal.home.rewardPerUnit', { rate: rewards.leads.rate }) : null].filter(Boolean).join(' · ') },
+                  { label: t('portal.home.rewardProjects'), r: rewards.projects,
+                    sub: rewards.projects.rate ? t('portal.home.rewardPerUnit', { rate: rewards.projects.rate }) : '' },
+                  { label: t('portal.home.rewardReviews'), r: rewards.reviews, sub: '' },
+                ].map(({ label, r, sub }) => (
+                  <div key={label} className="flex items-center justify-between py-2.5">
+                    <div>
+                      <p className="text-[13px] font-semibold text-[#111817]">
+                        {label} <span className="text-[#858B87]">× {r.paidCount + r.pendingCount}</span>
+                      </p>
+                      {sub && <p className="text-[10.5px] text-[#858B87]">{sub}</p>}
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-bold tabular-nums text-[#111817]">{inr(r.paidAmount + r.pendingAmount)}</p>
+                      {r.pendingAmount > 0 && <p className="text-[10.5px] text-[#B27A12]">{inr(r.pendingAmount)} {t('portal.home.rewardPending')}</p>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* KPI grid */}
         <div className="grid grid-cols-2 gap-3.5">

@@ -758,6 +758,105 @@ public class PayrollService {
     }
 
     /**
+     * Read-only "what I earned" summary for the employee home page: leads collected, projects completed
+     * and Google-review rewards, each split into paid (already on a payslip) and pending (earned, will
+     * land on the next payslip). Rates are the same site settings the payslip run uses.
+     */
+    public Map<String, Object> rewardSummary(Employee employee) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        User u = employee.getEmail() == null ? null : userRepository.findByEmail(employee.getEmail()).orElse(null);
+
+        // Leads collected (qualified = past New, not Lost)
+        BigDecimal leadRate = settingAmount("lead_collected_reward_amount");
+        int leadPaid = 0, leadPending = 0, leadConverted = 0;
+        if (u != null) {
+            Long uid = u.getId();
+            org.springframework.data.jpa.domain.Specification<Lead> base = (root, q, cb) ->
+                    cb.equal(root.get("leadOwner").get("id"), uid);
+            base = base.and(LeadSpecification.notDeleted())
+                    .and(org.springframework.data.jpa.domain.Specification.not(
+                            LeadSpecification.journeyStage(LeadSpecification.STAGE_REQUIREMENT)))
+                    .and(org.springframework.data.jpa.domain.Specification.not(
+                            LeadSpecification.journeyStage(LeadSpecification.STAGE_LOST)));
+            for (Lead l : leadRepository.findAll(base)) {
+                Long rid = l.getLeadRewardSalaryRecordId();
+                if (rid == null) leadPending++;
+                else if (rid > 0) leadPaid++;   // 0 = legacy lead, never paid
+            }
+            org.springframework.data.jpa.domain.Specification<Lead> conv = (root, q, cb) ->
+                    cb.equal(root.get("leadOwner").get("id"), uid);
+            conv = conv.and(LeadSpecification.notDeleted()).and(
+                    LeadSpecification.journeyStage(LeadSpecification.STAGE_PROJECT).or(
+                            LeadSpecification.journeyStage(LeadSpecification.STAGE_COMPLETED)));
+            leadConverted = (int) leadRepository.count(conv);
+        }
+        out.put("leads", rewardRow(leadRate, leadPaid, leadPending, "convertedCount", leadConverted));
+
+        // Projects completed as PM / assistant manager
+        BigDecimal projRate = settingAmount(K_PROJECT_INCENTIVE);
+        Integer projPaid = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM project_completion_incentives WHERE employee_id = ?", Integer.class, employee.getId());
+        BigDecimal projPaidAmt = jdbc.queryForObject(
+                "SELECT COALESCE(SUM(amount),0) FROM project_completion_incentives WHERE employee_id = ?",
+                BigDecimal.class, employee.getId());
+        int projPending = 0;
+        if (u != null && projRate.signum() > 0) {
+            for (Project p : projectRepository.findAll()) {
+                if (Boolean.TRUE.equals(p.getIsDeleted()) || !"COMPLETED".equalsIgnoreCase(p.getStatus())) continue;
+                boolean mine = (p.getProjectManager() != null && u.getId().equals(p.getProjectManager().getId()))
+                        || (p.getAssistantManager() != null && u.getId().equals(p.getAssistantManager().getId()));
+                if (!mine) continue;
+                Integer already = jdbc.queryForObject(
+                        "SELECT COUNT(*) FROM project_completion_incentives WHERE project_id = ? AND employee_id = ?",
+                        Integer.class, p.getId(), employee.getId());
+                if (already == null || already == 0) projPending++;
+            }
+        }
+        Map<String, Object> proj = rewardRow(projRate, projPaid == null ? 0 : projPaid, projPending, null, 0);
+        proj.put("paidAmount", projPaidAmt == null ? BigDecimal.ZERO : projPaidAmt);
+        out.put("projects", proj);
+
+        // Google reviews: each rewarded review raised a bonus; PAID bonus = on a payslip already
+        int revCount = 0, revPaid = 0, revPending = 0;
+        BigDecimal revPaidAmt = BigDecimal.ZERO, revPendingAmt = BigDecimal.ZERO;
+        for (EmployeeReview r : employeeReviewRepository.findByEmployeeIdAndIsDeletedFalseOrderByCreatedAtDesc(employee.getId())) {
+            if (Boolean.TRUE.equals(r.getGoogleVerified())) revCount++;
+            if (r.getRewardBonusId() == null) continue;
+            EmployeeBonus bo = bonusRepository.findById(r.getRewardBonusId()).orElse(null);
+            BigDecimal amt = nz(r.getRewardAmount());
+            if (bo != null && "PAID".equals(bo.getStatus())) { revPaid++; revPaidAmt = revPaidAmt.add(amt); }
+            else { revPending++; revPendingAmt = revPendingAmt.add(amt); }
+        }
+        Map<String, Object> rev = new LinkedHashMap<>();
+        rev.put("verifiedCount", revCount);
+        rev.put("paidCount", revPaid);
+        rev.put("pendingCount", revPending);
+        rev.put("paidAmount", revPaidAmt);
+        rev.put("pendingAmount", revPendingAmt);
+        out.put("reviews", rev);
+
+        BigDecimal paidTotal = ((BigDecimal) ((Map<String, Object>) out.get("leads")).get("paidAmount"))
+                .add((BigDecimal) proj.get("paidAmount")).add(revPaidAmt);
+        BigDecimal pendingTotal = ((BigDecimal) ((Map<String, Object>) out.get("leads")).get("pendingAmount"))
+                .add((BigDecimal) proj.get("pendingAmount")).add(revPendingAmt);
+        out.put("paidTotal", paidTotal);
+        out.put("pendingTotal", pendingTotal);
+        out.put("earnedTotal", paidTotal.add(pendingTotal));
+        return out;
+    }
+
+    private Map<String, Object> rewardRow(BigDecimal rate, int paid, int pending, String extraKey, int extra) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("rate", rate);
+        m.put("paidCount", paid);
+        m.put("pendingCount", pending);
+        m.put("paidAmount", rate.multiply(BigDecimal.valueOf(paid)));
+        m.put("pendingAmount", rate.multiply(BigDecimal.valueOf(pending)));
+        if (extraKey != null) m.put(extraKey, extra);
+        return m;
+    }
+
+    /**
      * Pays the employee for each qualified lead they collected (own it, got past New, not Lost) up to the
      * end of this month and not yet paid, at the configured per-lead rate. Marks each lead as paid by
      * this payslip so it is never counted twice. Returns the amount added (0 when the rate is unset).

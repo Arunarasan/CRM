@@ -332,6 +332,11 @@ public class EmployeePortalService {
      * The employee's own bonus ledger (project-completion / performance / other), as compact maps so the
      * account view never leaks other employees' data or trips Jackson on lazy relations. Totals included.
      */
+    /** Home-page "My rewards": leads / projects / Google reviews, paid vs pending. */
+    public Map<String, Object> getMyRewards(User currentUser) {
+        return payrollService.rewardSummary(requireEmployee(currentUser));
+    }
+
     public Map<String, Object> getMyBonuses(User currentUser) {
         Employee employee = requireEmployee(currentUser);
         List<EmployeeBonus> list = bonusRepository.findByEmployeeIdAndIsDeletedFalseOrderByIdDesc(employee.getId());

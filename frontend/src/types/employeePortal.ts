@@ -542,6 +542,15 @@ export interface BonusEntry {
   projectName: string | null;
 }
 
+export interface RewardRow {
+  rate?: number; paidCount: number; pendingCount: number; paidAmount: number; pendingAmount: number;
+  convertedCount?: number; verifiedCount?: number;
+}
+export interface MyRewards {
+  leads: RewardRow; projects: RewardRow; reviews: RewardRow;
+  paidTotal: number; pendingTotal: number; earnedTotal: number;
+}
+
 export interface MyBonuses {
   bonuses: BonusEntry[];
   bonusPaidTotal: number;

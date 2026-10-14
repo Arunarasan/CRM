@@ -463,6 +463,12 @@ public class EmployeePortalController {
         return ResponseEntity.ok(ApiResponse.success(portalService.getPayslip(me(), id)));
     }
 
+    @GetMapping("/rewards")
+    @PreAuthorize(PORTAL)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> rewards() {
+        return ResponseEntity.ok(ApiResponse.success(portalService.getMyRewards(me())));
+    }
+
     @GetMapping("/bonuses")
     @PreAuthorize(PORTAL)
     public ResponseEntity<ApiResponse<Map<String, Object>>> bonuses() {
