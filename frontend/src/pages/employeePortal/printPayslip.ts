@@ -161,7 +161,7 @@ export async function buildPayslipHtml(slip: Payslip, opts?: PayslipEmployee): P
         ${opts?.employeeCode ? `<div class="sub">${esc(opts.employeeCode)}</div>` : ''}
       </div>
     </div>
-    ${slip.status === 'PREVIEW' ? '<div class="prev">PREVIEW — not final. Figures may change until HR generates and approves this month’s payroll.</div>' : ''}
+    ${slip.status === 'PREVIEW' ? '<div class="prev">PREVIEW — not final. Figures may change until HR generates and approves this month’s payroll.</div>' : slip.status === 'PENDING' ? '<div class="prev">Generated, awaiting HR approval — figures may still change.</div>' : ''}
     ${detailsHtml}
     <div class="meta">${meta}</div>
     <div class="cols">

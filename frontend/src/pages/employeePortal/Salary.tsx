@@ -49,9 +49,9 @@ function PayslipDetail({ slip, onBack, employee }: { slip: Payslip; onBack: () =
         </button>
         <StatusPill status={slip.status} label={slip.status === 'PREVIEW' ? t('pw.sal.preview') : undefined} />
       </div>
-      {slip.status === 'PREVIEW' && (
+      {(slip.status === 'PREVIEW' || slip.status === 'PENDING') && (
         <p className="mx-3 mt-3 rounded-lg border border-dashed border-amber-400 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
-          {t('pw.sal.previewBanner')}
+          {slip.status === 'PENDING' ? t('pw.sal.pendingBanner') : t('pw.sal.previewBanner')}
         </p>
       )}
 

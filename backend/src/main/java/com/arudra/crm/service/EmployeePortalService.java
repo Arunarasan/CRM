@@ -286,8 +286,9 @@ public class EmployeePortalService {
     // Salary
     // =====================================================================
 
-    /** Payslip statuses an employee may see — a PENDING one is still being edited by HR. */
-    private static final java.util.Set<String> RELEASED_PAYSLIP_STATUSES = java.util.Set.of("APPROVED", "PAID");
+    /** Payslip statuses an employee may see. A PENDING one is visible as soon as HR generates it, but
+     *  still open to HR edits until approved, so the portal labels it "not final". */
+    private static final java.util.Set<String> RELEASED_PAYSLIP_STATUSES = java.util.Set.of("PENDING", "APPROVED", "PAID");
 
     private static boolean released(SalaryRecord r) {
         return r.getStatus() != null && RELEASED_PAYSLIP_STATUSES.contains(r.getStatus().toUpperCase());
@@ -311,7 +312,7 @@ public class EmployeePortalService {
             throw new IllegalStateException("This payslip does not belong to you.");
         }
         if (!released(record)) {
-            throw new IllegalStateException("This payslip hasn't been approved yet.");
+            throw new IllegalStateException("This payslip isn't available.");
         }
         record.setLineItems(payslipLineItemRepository.findBySalaryRecordIdAndIsDeletedFalseOrderByIdAsc(record.getId()));
         return record;
