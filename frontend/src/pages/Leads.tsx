@@ -17,7 +17,7 @@ import api from "@/lib/api";
 import { leadApi } from "./leads/leadApi";
 import LeadFormDialog from "./leads/LeadFormDialog";
 import { selectClass } from "./leads/fields";
-import { CATEGORY_GROUPS, EnquiryTag, categoryGroupOf, enquiryDetails, enquiryTypeOf, splitList } from "./leads/enquiry";
+import { CATEGORY_GROUPS, categoryGroupOf, enquiryDetails, splitList } from "./leads/enquiry";
 import {
   BOARD_DROP_STATUS, EMPTY_FILTERS, ENQUIRY_TYPES, formatFollowUp, LEAD_SOURCES, LEAD_TYPES,
   PRIORITIES, TEMPERATURES, TEMPERATURE_STYLES, avatarColor, followUpTone,
@@ -332,19 +332,20 @@ export default function Leads() {
   // lead form, plus any legacy scope checkboxes the lead ticked.
   const requirementPills = (l: Lead) => {
     const products = (l.requirementProduct || "").split(",").map((s) => s.trim()).filter(Boolean);
-    const reqs = [
-      ...splitList(l.requirementCategory).map((c) => ({ key: `category-${c}`, label: c })),
+    // Just the item name when there is one, otherwise the category — no type tag.
+    const named = [
       ...products.map((p) => ({ key: `product-${p}`, label: p })),
       ...enquiryDetails(l).map((d) => ({ key: `service-${d}`, label: d })),
+    ];
+    const reqs = named.length > 0 ? named : [
+      ...splitList(l.requirementCategory).map((c) => ({ key: `category-${c}`, label: c })),
       ...REQUIREMENT_CATEGORIES.filter(({ key }) => l[key]),
     ];
-    const tag = enquiryTypeOf(l);
-    if (reqs.length === 0 && !tag) return <span className="text-xs text-muted-foreground">—</span>;
+    if (reqs.length === 0) return <span className="text-xs text-muted-foreground">—</span>;
     // With more than 2 requirements, lay them out in a 2-column grid so they wrap onto 2 lines.
     const layout = reqs.length > 2 ? "grid grid-cols-2 max-w-[14rem]" : "flex flex-wrap";
     return (
       <div className={`gap-1 ${layout}`}>
-        {tag && <EnquiryTag type={tag} className="text-center" />}
         {reqs.map(({ key, label }) => (
           <span key={key} className="px-2 py-0.5 text-xs rounded-full font-medium whitespace-nowrap bg-emerald-100 text-emerald-700 text-center">
             {label}
