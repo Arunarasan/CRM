@@ -331,12 +331,13 @@ public class EmployeeTimeService {
         m.put("deviceRegistered", userDeviceRepository.countByUserIdAndStatusAndIsDeletedFalse(user.getId(), UserDevice.ACTIVE) > 0);
         m.put("devicePending", userDeviceRepository.countByUserIdAndStatusAndIsDeletedFalse(user.getId(), UserDevice.PENDING) > 0);
 
-        BigDecimal[] live = today == null ? new BigDecimal[]{BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO}
-                : computeFigures(today, employee, asOf);
+        // Second-accurate so a refresh re-syncs to the same running time the screen was already showing
+        // (whole-minute figures made the timer/earnings jump back by up to a minute on every reload).
+        BigDecimal[] live = today == null ? new BigDecimal[]{BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO}
+                : computeBreakdown(today, employee, asOf, true);
         m.put("todayHours", live[0]);
-        m.put("todayOvertime", live[1]);
-        m.put("todayEarnings", live[2]);
-        // Time waiting for admin approval — not in todayHours/earnings until approved.
+        m.put("todayOvertime", live[1].setScale(2, RoundingMode.HALF_UP));
+        m.put("todayEarnings", live[2].add(live[3]).setScale(4, RoundingMode.HALF_UP));        // Time waiting for admin approval — not in todayHours/earnings until approved.
         m.put("todayPendingHours", hours(pendingMinutes(today, asOf)));
         m.put("weekEarnings", earningsBetween(employee, startOfWeek(LocalDate.now()), LocalDate.now(), asOf));
         m.put("monthEarnings", earningsBetween(employee, LocalDate.now().withDayOfMonth(1), LocalDate.now(), asOf));
@@ -535,13 +536,22 @@ public class EmployeeTimeService {
      * not per session, so short sessions that together exceed 8h still earn overtime.
      */
     private BigDecimal[] computeBreakdown(Attendance att, Employee employee, LocalTime asOf) {
+        return computeBreakdown(att, employee, asOf, false);
+    }
+
+    /**
+     * @param precise count time to the second instead of whole minutes (hours kept to 6 places). Used
+     *                only for the live clock display, so a page refresh re-syncs to exactly the same
+     *                running time; payroll keeps the whole-minute figures.
+     */
+    private BigDecimal[] computeBreakdown(Attendance att, Employee employee, LocalTime asOf, boolean precise) {
         BigDecimal zero = BigDecimal.ZERO;
         if (att == null) return new BigDecimal[]{zero, zero, zero, zero};
 
         List<AttendanceSession> sessions = sessionsOf(att);
-        long payableMin;
+        long payableUnits; // minutes, or seconds when precise
         if (sessions.isEmpty()) {
-            payableMin = payableMinutes(att.getDate(), att.getCheckInTime(), att.getCheckOutTime(), att.getBreakStart(),
+            payableUnits = payable(precise, att.getDate(), att.getCheckInTime(), att.getCheckOutTime(), att.getBreakStart(),
                     att.getBreakMinutes(), asOf);
         } else {
             // Only payable sessions count: a flagged session waits for admin approval and a rejected
@@ -549,28 +559,55 @@ public class EmployeeTimeService {
             long sum = 0;
             for (AttendanceSession s : sessions) {
                 if (!s.isPayable()) continue;
-                sum += payableMinutes(att.getDate(), s.getCheckInTime(), s.getCheckOutTime(), s.getBreakStart(), s.getBreakMinutes(), asOf);
+                sum += payable(precise, att.getDate(), s.getCheckInTime(), s.getCheckOutTime(), s.getBreakStart(), s.getBreakMinutes(), asOf);
             }
-            payableMin = sum;
+            payableUnits = sum;
         }
-        if (payableMin <= 0) return new BigDecimal[]{zero, zero, zero, zero};
+        if (payableUnits <= 0) return new BigDecimal[]{zero, zero, zero, zero};
 
-        BigDecimal workedHours = BigDecimal.valueOf(payableMin).divide(BigDecimal.valueOf(60), 2, RoundingMode.HALF_UP);
+        BigDecimal workedHours = precise
+                ? BigDecimal.valueOf(payableUnits).divide(BigDecimal.valueOf(3600), 6, RoundingMode.HALF_UP)
+                : BigDecimal.valueOf(payableUnits).divide(BigDecimal.valueOf(60), 2, RoundingMode.HALF_UP);
         if (employee.getMaxDailyHours() != null && workedHours.compareTo(employee.getMaxDailyHours()) > 0) {
             workedHours = employee.getMaxDailyHours(); // safety cap
         }
 
         BigDecimal std = nz(employee.getStandardDailyHours(), new BigDecimal("8"));
-        BigDecimal overtime = workedHours.subtract(std).max(zero).setScale(2, RoundingMode.HALF_UP);
+        int hScale = precise ? 6 : 2, mScale = precise ? 4 : 2;
+        BigDecimal overtime = workedHours.subtract(std).max(zero).setScale(hScale, RoundingMode.HALF_UP);
         BigDecimal regular = workedHours.subtract(overtime).max(zero);
 
         if (employee.getHourlyRate() == null) return new BigDecimal[]{workedHours, overtime, zero, zero};
 
         boolean weekend = att.getDate().getDayOfWeek() == DayOfWeek.SATURDAY
                 || att.getDate().getDayOfWeek() == DayOfWeek.SUNDAY;
-        BigDecimal regularEarnings = regular.multiply(regularRate(employee, weekend)).setScale(2, RoundingMode.HALF_UP);
-        BigDecimal overtimeEarnings = overtime.multiply(overtimeRate(employee)).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal regularEarnings = regular.multiply(regularRate(employee, weekend)).setScale(mScale, RoundingMode.HALF_UP);
+        BigDecimal overtimeEarnings = overtime.multiply(overtimeRate(employee)).setScale(mScale, RoundingMode.HALF_UP);
         return new BigDecimal[]{workedHours, overtime, regularEarnings, overtimeEarnings};
+    }
+
+    private static long payable(boolean precise, LocalDate day, LocalTime in, LocalTime out, LocalTime openBreakStart,
+                                Integer breakMinutes, LocalTime asOf) {
+        return precise ? payableSeconds(day, in, out, openBreakStart, breakMinutes, asOf)
+                : payableMinutes(day, in, out, openBreakStart, breakMinutes, asOf);
+    }
+
+    /** Same as {@link #payableMinutes} but to the second: (out|asOf − in) minus break (accumulated + open). */
+    private static long payableSeconds(LocalDate day, LocalTime in, LocalTime out, LocalTime openBreakStart,
+                                       Integer breakMinutes, LocalTime asOf) {
+        if (in == null) return 0;
+        LocalTime end = out != null ? out : asOf;
+        boolean overnight = out != null || (day != null && day.equals(LocalDate.now().minusDays(1)));
+        long gross = secondsBetween(in, end, overnight);
+        long brk = (breakMinutes == null ? 0 : breakMinutes) * 60L;
+        if (out == null && openBreakStart != null) brk += secondsBetween(openBreakStart, end, overnight);
+        return Math.max(0, gross - brk);
+    }
+
+    private static long secondsBetween(LocalTime start, LocalTime end, boolean wrap) {
+        long s = Duration.between(start, end).getSeconds();
+        if (s >= 0) return s;
+        return wrap ? s + 24 * 3600 : 0;
     }
 
     /** Minutes of a day's sessions still waiting for admin approval (not paid until approved). */

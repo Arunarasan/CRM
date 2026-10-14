@@ -31,8 +31,15 @@ export default function ClockWidget({ onChange }: { onChange?: () => void }) {
   const syncAtRef = useRef<number>(cached?.at ?? Date.now());
 
   const load = useCallback(() => {
+    const sent = Date.now();
     employeePortalApi.timeStatus()
-      .then((s) => { syncAtRef.current = Date.now(); setStatus(s); writeCache(s); })
+      .then((s) => {
+        // The server computed the figures about halfway through the round trip, so anchor there —
+        // otherwise every sync would lose the network latency from the running timer.
+        const now = Date.now();
+        syncAtRef.current = now - Math.round((now - sent) / 2);
+        setStatus(s); writeCache(s, syncAtRef.current);
+      })
       .catch(() => { /* keep the last known status — a failed refresh must never look like a reset */ });
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -299,8 +306,8 @@ function readCache(): { status: TimeStatus; at: number } | null {
   } catch { return null; }
 }
 
-function writeCache(status: TimeStatus) {
-  try { localStorage.setItem(CACHE_KEY, JSON.stringify({ owner: cacheOwner(), at: Date.now(), status })); } catch { /* ignore */ }
+function writeCache(status: TimeStatus, at: number) {
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify({ owner: cacheOwner(), at, status })); } catch { /* ignore */ }
 }
 
 /** Total seconds → HH:MM:SS (zero-padded). */
