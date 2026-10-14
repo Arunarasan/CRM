@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import ResponsiveList, { type Column } from "@/components/ui/responsive-list";
 import FilterSheet from "@/components/ui/filter-sheet";
-import { Plus, RefreshCw, SlidersHorizontal, Users, Phone, Mail, Briefcase } from "lucide-react";
+import { Plus, RefreshCw, SlidersHorizontal, Users, Phone, Mail, Briefcase, UserX, UserCheck, Trash2 } from "lucide-react";
 import AddWorkforceDialog from "./AddWorkforceDialog";
 import api from "@/lib/api";
 import { toast } from "@/components/ui/toast";
@@ -76,6 +76,39 @@ export default function WorkforceDirectoryPage() {
   const activeFilters = [skill, status, department, company].filter(Boolean).length;
   const clearFilters = () => { setSkill(""); setStatus(""); setDepartment(""); setCompany(""); };
 
+  // Employee-only row actions (contractors have their own module).
+  const toggleActive = (w: WorkforceListRow) => {
+    const makeActive = w.status === "INACTIVE";
+    const msg = makeActive
+      ? `Reactivate ${w.fullName}? They can log in and be assigned work again.`
+      : `Mark ${w.fullName} Inactive? They will be blocked from logging in and skipped for new assignments. Their history is kept.`;
+    if (!window.confirm(msg)) return;
+    api.put(`/hr/employees/${w.employeeId}/active`, null, { params: { active: makeActive } })
+      .then(() => { toast.success(makeActive ? "Employee reactivated." : "Employee marked inactive."); load(); })
+      .catch((e) => toast.error(e?.response?.data?.message || "Could not update status."));
+  };
+  const deleteEmployee = (w: WorkforceListRow) => {
+    if (!window.confirm(`Permanently delete ${w.fullName}? This cannot be undone. (To just stop their access, use Mark Inactive.)`)) return;
+    api.delete(`/hr/employees/${w.employeeId}`)
+      .then(() => { toast.success("Employee deleted."); load(); })
+      .catch((e) => toast.error(e?.response?.data?.message || "Could not delete this employee."));
+  };
+  const rowActions = (w: WorkforceListRow) => {
+    if (!w.employeeId) return null;
+    const inactive = w.status === "INACTIVE";
+    return (
+      <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
+        <Button variant="outline" size="sm" onClick={() => toggleActive(w)} title={inactive ? "Activate" : "Mark Inactive"}>
+          {inactive ? <UserCheck className="h-4 w-4" /> : <UserX className="h-4 w-4" />}
+          <span className="ml-1.5">{inactive ? "Activate" : "Inactive"}</span>
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => deleteEmployee(w)} title="Delete" aria-label={`Delete ${w.fullName}`} className="text-red-600 hover:text-red-700">
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </div>
+    );
+  };
+
   const columns: Column<WorkforceListRow>[] = [
     {
       key: "name", header: "Name",
@@ -98,6 +131,7 @@ export default function WorkforceDirectoryPage() {
         </div>
       ),
     },
+    { key: "actions", header: "Actions", cell: (w) => rowActions(w) },
   ];
 
   const select = "h-10 w-full rounded-md border border-input bg-card px-3 text-sm";
@@ -163,6 +197,7 @@ export default function WorkforceDirectoryPage() {
                 )}
               </div>
             )}
+            {w.employeeId && <div className="pl-[2.875rem]">{rowActions(w)}</div>}
           </div>
         )}
       />
