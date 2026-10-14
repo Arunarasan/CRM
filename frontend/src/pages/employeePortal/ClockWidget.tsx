@@ -5,6 +5,7 @@ import { TimeStatus } from '@/types/employeePortal';
 import { assert as webauthnAssert } from '@/lib/webauthn';
 import { getBestPosition } from '@/lib/geo';
 import { inr } from './_shared';
+import { getCurrentUser } from '@/lib/currentUser';
 import { useDeviceBinding, PhoneStatusStrip, errMsg } from './phoneBinding';
 
 /**
@@ -16,19 +17,33 @@ import { useDeviceBinding, PhoneStatusStrip, errMsg } from './phoneBinding';
  * (re-syncing on every clock action) so the numbers "boost the mind" without drifting from payroll.
  */
 export default function ClockWidget({ onChange }: { onChange?: () => void }) {
-  const [status, setStatus] = useState<TimeStatus | null>(null);
+  // Seed from the last known server status (same user, same day) so reopening the app shows the
+  // running timer/earnings immediately instead of flashing 00:00:00 / ₹0 / "Clock In" until the
+  // network answers. The server response then replaces it.
+  const cached = useRef(readCache()).current;
+  const [status, setStatus] = useState<TimeStatus | null>(cached?.status ?? null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [geoAccuracy, setGeoAccuracy] = useState<number | null>(null); // live best-fix accuracy while locating
   const [, forceTick] = useState(0);
   const tickRef = useRef<number | null>(null);
   // Wall-clock instant of the last server sync — the running timer/earnings project forward from here.
-  const syncAtRef = useRef<number>(Date.now());
+  const syncAtRef = useRef<number>(cached?.at ?? Date.now());
 
   const load = useCallback(() => {
-    employeePortalApi.timeStatus().then((s) => { syncAtRef.current = Date.now(); setStatus(s); }).catch(() => setStatus(null));
+    employeePortalApi.timeStatus()
+      .then((s) => { syncAtRef.current = Date.now(); setStatus(s); writeCache(s); })
+      .catch(() => { /* keep the last known status — a failed refresh must never look like a reset */ });
   }, []);
   useEffect(() => { load(); }, [load]);
+
+  // Re-sync whenever the app comes back to the foreground (PWA resume, tab switch).
+  useEffect(() => {
+    const onVisible = () => { if (document.visibilityState === 'visible') load(); };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    return () => { document.removeEventListener('visibilitychange', onVisible); window.removeEventListener('focus', onVisible); };
+  }, [load]);
 
   // Phone binding — only loaded once the server says it's enforced for this employee.
   const bindingMode = status?.deviceBindingMode ?? 'OFF';
@@ -198,7 +213,7 @@ export default function ClockWidget({ onChange }: { onChange?: () => void }) {
         {/* Actions */}
         <div className="mt-3 grid grid-cols-2 gap-2">
           {!clockedIn && (
-            <button onClick={() => act('in', clockInWithGeo)} disabled={!!busy || phoneBlocked}
+            <button onClick={() => act('in', clockInWithGeo)} disabled={!!busy || phoneBlocked || !status}
               className="col-span-2 flex items-center justify-center gap-2 rounded-xl bg-white py-3 text-sm font-bold text-emerald-700 shadow-sm active:scale-[0.99] disabled:opacity-60">
               {busy === 'in'
                 ? <><Loader2 className="h-4 w-4 animate-spin" /> Locating…{geoAccuracy != null ? ` ±${geoAccuracy}m` : ''}</>
@@ -265,6 +280,27 @@ export default function ClockWidget({ onChange }: { onChange?: () => void }) {
       </div>
     </div>
   );
+}
+
+const CACHE_KEY = 'clockStatusCache';
+
+function cacheOwner(): string {
+  return getCurrentUser().name;
+}
+
+/** Last server status for this user, only if saved today (a stale day would show wrong totals). */
+function readCache(): { status: TimeStatus; at: number } | null {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    const c = JSON.parse(raw);
+    if (c.owner !== cacheOwner() || new Date(c.at).toDateString() !== new Date().toDateString()) return null;
+    return { status: c.status, at: c.at };
+  } catch { return null; }
+}
+
+function writeCache(status: TimeStatus) {
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify({ owner: cacheOwner(), at: Date.now(), status })); } catch { /* ignore */ }
 }
 
 /** Total seconds → HH:MM:SS (zero-padded). */
