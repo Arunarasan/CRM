@@ -29,6 +29,10 @@ export default function CancelTaskButton({ taskId, canRequest, pending, targetTy
   const [reason, setReason] = useState('');
   const [saving, setSaving] = useState(false);
 
+  // Only project / lead tasks get this - the cancel is for the project or the lead, never the single task.
+  if (targetType === 'TASK') return null;
+  const isLead = targetType === 'LEAD';
+  const buttonLabel = isLead ? tr('pw.cancel.buttonLead', 'Cancel lead (mark Lost)') : tr('pw.cancel.buttonProject', 'Cancel project');
   const what = targetType === 'LEAD' ? tr('pw.cancel.lead', 'mark the lead as Lost')
     : targetType === 'PROJECT' ? tr('pw.cancel.project', 'cancel the project')
     : tr('pw.cancel.task', 'cancel this task');
@@ -62,11 +66,11 @@ export default function CancelTaskButton({ taskId, canRequest, pending, targetTy
     <>
       <button onClick={() => setOpen(true)}
         className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#E9C4C0] bg-white py-3 text-[14px] font-semibold text-[#B94B45] active:scale-[0.99]">
-        <Ban className="h-4 w-4" /> {tr('pw.cancel.button', 'Cancel task')}
+        <Ban className="h-4 w-4" /> {buttonLabel}
       </button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle className="text-[#B94B45]">{tr('pw.cancel.title', 'Request cancellation')}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="text-[#B94B45]">{isLead ? tr('pw.cancel.titleLead', 'Request to mark lead Lost') : tr('pw.cancel.titleProject', 'Request to cancel project')}</DialogTitle></DialogHeader>
           <div className="flex flex-col gap-4">
             <p className="text-[13px] text-[#5E655D]">
               {tr('pw.cancel.intro', 'An admin must approve this. If approved, it will')} <b>{what}</b>.
