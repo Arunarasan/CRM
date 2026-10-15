@@ -2,6 +2,17 @@ import type { Rows } from './build';
 
 // Shared chrome, navigation, notifications, requests hub, status pills.
 const rows: Rows = {
+  // Home profile bar (replaces the date selector)
+  'portal.home.prof.empId': ['Employee ID', 'कर्मचारी आईडी', 'ஊழியர் எண்', 'ఉద్యోగి ఐడి'],
+  'portal.home.prof.department': ['Department', 'विभाग', 'துறை', 'విభాగం'],
+  'portal.home.prof.shift': ['Shift', 'शिफ्ट', 'ஷிஃப்ட்', 'షిఫ్ట్'],
+  'portal.home.prof.joined': ['Joined', 'जुड़ने की तिथि', 'சேர்ந்த தேதி', 'చేరిన తేదీ'],
+  'portal.home.prof.phone': ['Phone', 'फ़ोन', 'தொலைபேசி', 'ఫోన్'],
+  'portal.home.prof.email': ['Email', 'ईमेल', 'மின்னஞ்சல்', 'ఇమెయిల్'],
+  'portal.home.prof.checkIn': ['Check-in', 'चेक-इन', 'உள்நுழைவு', 'చెక్-ఇన్'],
+  'portal.home.prof.checkOut': ['Check-out', 'चेक-आउट', 'வெளியேறல்', 'చెక్-అవుట్'],
+  'portal.home.prof.completion': ['Profile {{pct}}% complete', 'प्रोफ़ाइल {{pct}}% पूर्ण', 'சுயவிவரம் {{pct}}% முடிந்தது', 'ప్రొఫైల్ {{pct}}% పూర్తి'],
+  'portal.home.prof.view': ['View full profile', 'पूरी प्रोफ़ाइल देखें', 'முழு சுயவிவரத்தைப் பார்க்க', 'పూర్తి ప్రొఫైల్ చూడండి'],
   // Today's plan on Home
   'portal.home.plan.title': ["Today's Plan", 'आज की योजना', 'இன்றைய திட்டம்', 'నేటి ప్రణాళిక'],
   'portal.home.plan.summary': ['{{count}} to do · {{overdue}} overdue · {{fit}} ready to fit', '{{count}} काम · {{overdue}} विलंबित · {{fit}} फिटिंग के लिए तैयार', '{{count}} பணிகள் · {{overdue}} தாமதம் · {{fit}} பொருத்த தயார்', '{{count}} పనులు · {{overdue}} ఆలస్యం · {{fit}} ఫిట్టింగ్‌కు సిద్ధం'],

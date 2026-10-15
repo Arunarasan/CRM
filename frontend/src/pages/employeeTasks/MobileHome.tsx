@@ -12,6 +12,7 @@ import { EmployeeDashboard, MyRewards } from '@/types/employeePortal';
 import { StatusPill, inr } from '../employeePortal/_shared';
 import ClockWidget from '../employeePortal/ClockWidget';
 import TodayPlan from './components/TodayPlan';
+import { resolveFileUrl } from '@/lib/uploadFile';
 import { useT } from '@/i18n';
 
 // Premium card surface shared across the dashboard.
@@ -80,6 +81,83 @@ function SectionHead({ title, icon: Icon, onViewAll }: {
   );
 }
 
+/** Floating bar that opens/closes the employee's profile summary (replaces the old date selector). */
+function ProfileBar({ dash, today }: { dash: EmployeeDashboard | null; today: string }) {
+  const [open, setOpen] = useState(false);
+  const navigate = useNavigate();
+  const { t } = useT();
+  const e = dash?.employee;
+  const name = e ? `${e.firstName ?? ''} ${e.lastName ?? ''}`.trim() : '';
+  const initials = (name || 'Me').split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase()).join('');
+  const time = (v: string | null | undefined) => {
+    if (!v) return '—';
+    const d = new Date(v);
+    return isNaN(d.getTime()) ? v : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+  const joined = e?.dateOfJoining ? new Date(e.dateOfJoining).toLocaleDateString(undefined, { month: 'short', year: 'numeric' }) : '—';
+  const rows: { label: string; value: React.ReactNode }[] = e ? [
+    { label: t('portal.home.prof.empId'), value: e.employeeCode || '—' },
+    { label: t('portal.home.prof.department'), value: e.department?.name || '—' },
+    { label: t('portal.home.prof.shift'), value: e.shift || '—' },
+    { label: t('portal.home.prof.joined'), value: joined },
+    { label: t('portal.home.prof.phone'), value: e.phone || '—' },
+    { label: t('portal.home.prof.email'), value: e.email || '—' },
+    { label: t('portal.home.prof.checkIn'), value: time(dash?.todayCheckIn) },
+    { label: t('portal.home.prof.checkOut'), value: time(dash?.todayCheckOut) },
+  ] : [];
+  const pct = Math.max(0, Math.min(100, Math.round(dash?.profileCompletion ?? 0)));
+  return (
+    <div className="overflow-hidden rounded-2xl border border-[#DCDDD9] bg-white shadow-[0_4px_16px_rgba(0,35,22,0.08)]">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="flex min-h-[60px] w-full items-center gap-3 px-4 py-2.5 text-left active:bg-[#F7F7F5]"
+      >
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#06452F] text-[13px] font-bold text-white">
+          {e?.profilePhotoUrl ? <img src={resolveFileUrl(e.profilePhotoUrl)} alt="" className="h-full w-full object-cover" /> : initials}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[15px] font-semibold text-[#111817]">{name || today}</span>
+          <span className="block truncate text-[12px] text-[#7A817C]">
+            {name ? `${e?.designation ? e.designation + ' · ' : ''}${today}` : ''}
+          </span>
+        </span>
+        <ChevronDown className={`h-5 w-5 shrink-0 text-[#06452F] transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div className="border-t border-[#ECEAE5] px-4 pb-4 pt-3">
+          <div className="mb-4 flex flex-col items-center">
+            <span className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-full bg-[#06452F] text-[28px] font-bold text-white ring-4 ring-[#E7F2EC]">
+              {e?.profilePhotoUrl ? <img src={resolveFileUrl(e.profilePhotoUrl)} alt={name} className="h-full w-full object-cover" /> : initials}
+            </span>
+            {name && <span className="mt-2 text-[16px] font-semibold text-[#111817]">{name}</span>}
+            {e?.designation && <span className="text-[12px] text-[#7A817C]">{e.designation}</span>}
+          </div>
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <span className="text-[13px] font-medium text-[#4B524E]">{t('portal.home.todaysAttendance')}</span>
+            <StatusPill status={dash?.todayAttendance ?? 'NOT_MARKED'} />
+          </div>
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
+            {rows.map((r) => (
+              <div key={r.label} className="min-w-0">
+                <dt className="text-[11px] text-[#858B87]">{r.label}</dt>
+                <dd className="truncate text-[13px] font-medium text-[#111817]">{r.value}</dd>
+              </div>
+            ))}
+          </dl>
+          <div className="mt-4">
+            <div className="mb-1 text-[11px] text-[#7A817C]">{t('portal.home.prof.completion', { pct })}</div>
+            <div className="h-1.5 overflow-hidden rounded-full bg-[#E4E7E4]"><div className="h-full rounded-full bg-[#C48A16]" style={{ width: `${pct}%` }} /></div>
+          </div>
+          <button onClick={() => navigate('/employee/profile')} className="mt-4 flex w-full items-center justify-center gap-1 rounded-xl bg-[#06452F] py-2.5 text-[13px] font-semibold text-white active:opacity-90">
+            {t('portal.home.prof.view')} <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function MobileHome() {
   const [home, setHome] = useState<HomeSummary | null>(null);
   const [dash, setDash] = useState<EmployeeDashboard | null>(null);
@@ -115,12 +193,8 @@ export default function MobileHome() {
       </div>
 
       <div className="-mt-7 flex flex-col gap-6 px-5 pb-6">
-        {/* Floating date selector */}
-        <div className="flex h-[60px] items-center gap-3 rounded-2xl border border-[#DCDDD9] bg-white px-4 shadow-[0_4px_16px_rgba(0,35,22,0.08)]">
-          <CalendarDays className="h-5 w-5 text-[#06452F]" />
-          <span className="flex-1 text-[15px] font-semibold text-[#111817]">{today}</span>
-          <ChevronDown className="h-5 w-5 text-[#06452F]" />
-        </div>
+        {/* Profile bar — today's date + who I am; opens to show my details, closes again */}
+        <ProfileBar dash={dash} today={today} />
 
         {/* Today's earnings + live session time — the money-forward hero of the home screen */}
         <ClockWidget onChange={load} />
