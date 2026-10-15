@@ -56,4 +56,22 @@ public class RecurringExpense extends BaseEntity {
     @JoinColumn(name = "recorded_by_id")
     @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "roles", "refreshTokens", "password"})
     private User recordedBy;
+
+    // ---- Computed on read by CompanyTransactionService (not stored) ----
+
+    /** Date of the most recent payment recorded against this head. */
+    @Transient
+    private java.time.LocalDate lastPaidDate;
+
+    /** Next date this bill is expected to be paid. */
+    @Transient
+    private java.time.LocalDate nextDueDate;
+
+    /** Negative when overdue. */
+    @Transient
+    private Integer daysUntilDue;
+
+    /** OVERDUE, DUE_SOON (within 7 days), UPCOMING, or INACTIVE. */
+    @Transient
+    private String dueStatus;
 }

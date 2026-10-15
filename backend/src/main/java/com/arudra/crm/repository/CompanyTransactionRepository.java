@@ -24,6 +24,11 @@ public interface CompanyTransactionRepository extends JpaRepository<CompanyTrans
     /** Payment history recorded against one recurring expense head. */
     List<CompanyTransaction> findByRecurringExpenseIdAndIsDeletedFalseOrderByTxnDateDescIdDesc(Long recurringExpenseId);
 
+    /** Latest payment date per recurring head, for due-date tracking: [recurringExpenseId, maxTxnDate]. */
+    @Query("select t.recurringExpenseId, max(t.txnDate) from CompanyTransaction t " +
+           "where t.recurringExpenseId is not null and t.isDeleted = false group by t.recurringExpenseId")
+    List<Object[]> lastPaidDatePerRecurringHead();
+
     @Query("select t from CompanyTransaction t where t.isDeleted = false " +
            "and (:direction is null or t.direction = :direction) " +
            "and (:category is null or t.category = :category) " +

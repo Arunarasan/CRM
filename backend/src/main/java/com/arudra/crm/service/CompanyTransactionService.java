@@ -13,7 +13,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
+import java.time.temporal.ChronoUnit;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Records and lists company-level cash transactions — "other income" and overhead / "other charges"
@@ -75,9 +79,52 @@ public class CompanyTransactionService {
     // =====================================================================
 
     public List<RecurringExpense> listRecurring(boolean activeOnly) {
-        return activeOnly
+        List<RecurringExpense> heads = activeOnly
                 ? recurringExpenseRepository.findByActiveTrueAndIsDeletedFalseOrderByNameAsc()
                 : recurringExpenseRepository.findByIsDeletedFalseOrderByActiveDescNameAsc();
+        applyDueStatus(heads, LocalDate.now());
+        return heads;
+    }
+
+    /**
+     * Fills the computed due fields. The next due date is one period after the month of the last
+     * recorded payment (or, if never paid, the first due day on/after the head was created), so a
+     * missed month stays OVERDUE until it is recorded. Nothing is stored.
+     */
+    public void applyDueStatus(List<RecurringExpense> heads, LocalDate today) {
+        Map<Long, LocalDate> lastPaid = new HashMap<>();
+        for (Object[] row : repository.lastPaidDatePerRecurringHead()) {
+            lastPaid.put(((Number) row[0]).longValue(), (LocalDate) row[1]);
+        }
+        for (RecurringExpense h : heads) {
+            LocalDate paid = lastPaid.get(h.getId());
+            h.setLastPaidDate(paid);
+            int day = h.getDayOfMonth() == null ? 1 : Math.max(1, Math.min(31, h.getDayOfMonth()));
+            int months = periodMonths(h.getFrequency());
+            LocalDate due;
+            if (paid != null) {
+                due = onDay(YearMonth.from(paid).plusMonths(months), day);
+            } else {
+                LocalDate created = h.getCreatedAt() != null ? h.getCreatedAt().toLocalDate() : today;
+                due = onDay(YearMonth.from(created), day);
+                if (due.isBefore(created)) due = onDay(YearMonth.from(created).plusMonths(1), day);
+            }
+            int days = (int) ChronoUnit.DAYS.between(today, due);
+            h.setNextDueDate(due);
+            h.setDaysUntilDue(days);
+            h.setDueStatus(!Boolean.TRUE.equals(h.getActive()) ? "INACTIVE"
+                    : days < 0 ? "OVERDUE" : days <= 7 ? "DUE_SOON" : "UPCOMING");
+        }
+    }
+
+    private static int periodMonths(String frequency) {
+        if ("QUARTERLY".equals(frequency)) return 3;
+        if ("YEARLY".equals(frequency)) return 12;
+        return 1;
+    }
+
+    private static LocalDate onDay(YearMonth ym, int day) {
+        return ym.atDay(Math.min(day, ym.lengthOfMonth()));
     }
 
     public List<CompanyTransaction> recurringHistory(Long recurringExpenseId) {

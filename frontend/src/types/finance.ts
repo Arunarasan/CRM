@@ -237,6 +237,11 @@ export interface RecurringExpense {
   dayOfMonth?: number | null;
   active?: boolean;
   notes?: string | null;
+  lastPaidDate?: string | null;
+  nextDueDate?: string | null;
+  /** Negative when overdue. */
+  daysUntilDue?: number | null;
+  dueStatus?: "OVERDUE" | "DUE_SOON" | "UPCOMING" | "INACTIVE";
 }
 
 /** One line in the consolidated Cash Book — a single inflow or outflow from any module. */

@@ -224,7 +224,9 @@ function ProjectExpenses() {
 
 const todayStr = () => new Date().toISOString().slice(0, 10);
 const monthStartStr = () => { const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10); };
-const PAY_METHODS = ["CASH", "UPI", "BANK_TRANSFER", "CHEQUE", "CARD"];
+const dueLabel = (d: number) =>
+  d < 0 ? `Overdue ${-d}d` : d === 0 ? "Due today" : d === 1 ? "Due tomorrow" : `Due in ${d}d`;
+const PAY_METHODS =["CASH", "UPI", "BANK_TRANSFER", "CHEQUE", "CARD"];
 
 function CompanyExpenses() {
   const [heads, setHeads] = useState<RecurringExpense[]>([]);
@@ -258,6 +260,7 @@ function CompanyExpenses() {
   const [hParty, setHParty] = useState("");
   const [hMethod, setHMethod] = useState("BANK_TRANSFER");
   const [hDay, setHDay] = useState("");
+  const [hFreq, setHFreq] = useState("MONTHLY");
   const [hActive, setHActive] = useState(true);
   const [hNotes, setHNotes] = useState("");
 
@@ -313,12 +316,12 @@ function CompanyExpenses() {
 
   const openNewHead = () => {
     setHId(null); setHName(""); setHCategory("RENT"); setHAmount(""); setHParty("");
-    setHMethod("BANK_TRANSFER"); setHDay(""); setHActive(true); setHNotes(""); setShowHead(true);
+    setHMethod("BANK_TRANSFER"); setHDay(""); setHFreq("MONTHLY"); setHActive(true); setHNotes(""); setShowHead(true);
   };
   const openEditHead = (h: RecurringExpense) => {
     setHId(h.id); setHName(h.name); setHCategory(h.category); setHAmount(h.defaultAmount != null ? String(h.defaultAmount) : "");
     setHParty(h.partyName ?? ""); setHMethod(h.paymentMethod || "BANK_TRANSFER");
-    setHDay(h.dayOfMonth != null ? String(h.dayOfMonth) : ""); setHActive(h.active ?? true);
+    setHDay(h.dayOfMonth != null ? String(h.dayOfMonth) : ""); setHFreq(h.frequency || "MONTHLY"); setHActive(h.active ?? true);
     setHNotes(h.notes ?? ""); setShowHead(true);
   };
   const saveHead = async () => {
@@ -328,7 +331,7 @@ function CompanyExpenses() {
       name: hName.trim(), category: hCategory.trim() || "MISC",
       defaultAmount: hAmount ? Number(hAmount) : null, partyName: hParty.trim() || null,
       paymentMethod: hMethod || null, dayOfMonth: hDay ? Number(hDay) : null,
-      active: hActive, notes: hNotes.trim() || null,
+      frequency: hFreq, active: hActive, notes: hNotes.trim() || null,
     };
     try {
       if (hId) await financeApi.updateRecurringExpense(hId, body);
@@ -384,9 +387,24 @@ function CompanyExpenses() {
                     <Pencil className="w-4 h-4" />
                   </button>
                 </div>
-                <div className="mt-1.5 font-semibold text-slate-700">
-                  {h.defaultAmount != null ? currency(h.defaultAmount) : <span className="text-slate-400">Variable</span>}
+                <div className="mt-1.5 flex items-center justify-between gap-2">
+                  <span className="font-semibold text-slate-700">
+                    {h.defaultAmount != null ? currency(h.defaultAmount) : <span className="text-slate-400">Variable</span>}
+                  </span>
+                  {h.active && h.dueStatus && h.dueStatus !== "INACTIVE" && (
+                    <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold whitespace-nowrap ${
+                      h.dueStatus === "OVERDUE" ? "bg-rose-100 text-rose-700"
+                        : h.dueStatus === "DUE_SOON" ? "bg-amber-100 text-amber-700"
+                        : "bg-slate-100 text-slate-600"}`}>
+                      {dueLabel(h.daysUntilDue ?? 0)}
+                    </span>
+                  )}
                 </div>
+                {h.active && h.nextDueDate && (
+                  <div className="text-[11px] text-muted-foreground">
+                    Next due {h.nextDueDate}{h.lastPaidDate ? ` · last paid ${h.lastPaidDate}` : " · never paid"}
+                  </div>
+                )}
                 {h.active && (
                   <Button size="sm" className="mt-2 w-full" onClick={() => openHeadPayment(h)}>Record Payment</Button>
                 )}
@@ -576,6 +594,14 @@ function CompanyExpenses() {
               <label className="text-sm block">
                 <span className="font-semibold text-slate-700">Due Day <span className="font-normal text-muted-foreground">(1–31)</span></span>
                 <BaseInput type="number" min={1} max={31} className="mt-1 w-full border rounded-lg px-3 py-2" value={hDay} onChange={(e) => setHDay(e.target.value)} placeholder="e.g. 5" />
+              </label>
+              <label className="text-sm block">
+                <span className="font-semibold text-slate-700">Repeats</span>
+                <select className="mt-1 w-full border rounded-lg px-3 py-2" value={hFreq} onChange={(e) => setHFreq(e.target.value)}>
+                  <option value="MONTHLY">Monthly</option>
+                  <option value="QUARTERLY">Quarterly</option>
+                  <option value="YEARLY">Yearly</option>
+                </select>
               </label>
               <label className="text-sm flex items-center gap-2 mt-6">
                 <BaseInput type="checkbox" className="w-4 h-4" checked={hActive} onChange={(e) => setHActive(e.target.checked)} />
