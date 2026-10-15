@@ -201,6 +201,24 @@ export function QuotationPrintView({ quotationId, onClose, onSaved, readOnly, em
         </div>
       </div>}
 
+      {embedded && (
+        <div className="no-print flex flex-wrap items-center gap-1.5 bg-white border-b px-3 py-2">
+          <span className="mr-1 text-xs font-semibold text-slate-500">Quote view</span>
+          {VIEW_OPTIONS.map(([keys, label]) => {
+            const on = keys.some((k) => D[k]);
+            return (
+              <button key={label} type="button" aria-pressed={on}
+                onClick={() => setD((d) => ({ ...d, ...Object.fromEntries(keys.map((k) => [k, !on])) }))}
+                className={`rounded-full border px-2.5 py-1 text-xs font-medium transition ${on ? "border-emerald-700 bg-emerald-50 text-emerald-900" : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"}`}>
+                {label}
+              </button>
+            );
+          })}
+          <button type="button" onClick={() => fetchDocDesign("quotation").then(setD)}
+            className="ml-auto text-xs font-medium text-slate-500 hover:text-emerald-800">Reset</button>
+        </div>
+      )}
+
       <div className="qp-scroll">
         <div id="quotation-print" className="qp">
           {/* Letterhead: brand, address & contact, services (frontend/public/quote-header.jpg) */}
@@ -468,6 +486,21 @@ function SumRow({ icon, label, value, strong }: { icon: ReactNode; label: ReactN
     </div>
   );
 }
+
+/** Simple view switches on the embedded sheet (this screen only — the saved design is edited in Website › Document Design). */
+const VIEW_OPTIONS: [(keyof DocDesign)[], string][] = [
+  [["letterhead"], "Letterhead"],
+  [["colPhoto"], "Photos"],
+  [["colDescription"], "Description"],
+  [["colQty", "colUnit"], "Qty & unit"],
+  [["colRate"], "Rate"],
+  [["colExtra"], "Discount"],
+  [["categoryTotal"], "Category totals"],
+  [["showTerms"], "Terms"],
+  [["showBank", "showQr"], "Bank & QR"],
+  [["showSignatures"], "Signatures"],
+  [["showContact"], "Contact"],
+];
 
 const WEBSITE = "https://jbdecorcdm.com";
 /** The letterhead banner at the top of the quotation (also used by the PDF and the customer link page). */
