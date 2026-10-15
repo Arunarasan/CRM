@@ -2366,6 +2366,9 @@ public class EmployeeTaskService {
             if (isClosed(t)) return true;
             // Retired steps never appear in the employee To-Do (the office still sees them).
             if (t.getTaskTemplate() != null && EMPLOYEE_HIDDEN_CODES.contains(t.getTaskTemplate().getCode())) return false;
+            // The plain handover-stage "Installation" task (no template) is retired from the employee tab too.
+            if (t.getTaskTemplate() == null && t.getProject() != null && t.getTaskName() != null
+                    && "Installation".equalsIgnoreCase(t.getTaskName().trim())) return false;
             if (t.getProject() != null) {
                 if ("SERVICE_REQUEST".equals(t.getSource())) return true;
                 String ps = t.getProject().getStatus() == null ? "" : t.getProject().getStatus().toUpperCase();
