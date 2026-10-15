@@ -1,7 +1,6 @@
 import { Suspense, lazy } from 'react'
 import { Routes, Route, Navigate, useParams } from 'react-router-dom'
 import { PublicLayout } from '@/components/layout/PublicLayout'
-import Placeholder from '@/pages/Placeholder'
 import { getProduct } from '@/data/products'
 
 const Home = lazy(() => import('@/pages/Home'))
@@ -18,6 +17,8 @@ const Contact = lazy(() => import('@/pages/Contact'))
 const Consultation = lazy(() => import('@/pages/Consultation'))
 const DesignStudio = lazy(() => import('@/pages/DesignStudio'))
 const ProductDetail = lazy(() => import('@/pages/ProductDetail'))
+const Legal = lazy(() => import('@/pages/Legal'))
+const NotFound = lazy(() => import('@/pages/NotFound'))
 
 // Public, no-login project tracking (link-only). Replaces the old login-based customer portal.
 const TrackProject = lazy(() => import('@/pages/TrackProject'))
@@ -96,10 +97,10 @@ export default function App() {
           {/* Retired customer portal + self-signup → home (tracking is now link-only, no login) */}
           <Route path="register" element={<Navigate to="/" replace />} />
           <Route path="portal/*" element={<Navigate to="/" replace />} />
-          <Route path="privacy" element={<Placeholder title="Privacy Policy" />} />
-          <Route path="terms" element={<Placeholder title="Terms of Service" />} />
-          <Route path="refund" element={<Placeholder title="Refund Policy" />} />
-          <Route path="*" element={<Placeholder title="Page Not Found" note="The page you’re looking for doesn’t exist — but our portfolio does." />} />
+          <Route path="privacy" element={<Legal doc="privacy" />} />
+          <Route path="terms" element={<Legal doc="terms" />} />
+          <Route path="refund" element={<Legal doc="refund" />} />
+          <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>
     </Suspense>

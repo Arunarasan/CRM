@@ -72,7 +72,10 @@ export function Footer() {
               { name: 'instagram', href: site.social.instagram, label: 'Instagram' },
               { name: 'facebook', href: site.social.facebook, label: 'Facebook' },
               { name: 'linkedin', href: site.social.linkedin, label: 'LinkedIn' },
-            ] as const).map(({ name, href, label }) => (
+            ] as const).filter(({ href }) => {
+              // Hide icons whose URL is unset or just a bare domain (a placeholder, not a real profile)
+              try { return new URL(href).pathname.replace(/\/+$/, '').length > 0 } catch { return false }
+            }).map(({ name, href, label }) => (
               <a
                 key={label}
                 href={href}

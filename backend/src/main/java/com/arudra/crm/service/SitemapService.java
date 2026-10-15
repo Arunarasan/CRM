@@ -39,6 +39,9 @@ public class SitemapService {
             {"/consultation", "monthly", "0.8"},
             {"/about", "yearly", "0.7"},
             {"/contact", "yearly", "0.7"},
+            {"/privacy", "yearly", "0.2"},
+            {"/terms", "yearly", "0.2"},
+            {"/refund", "yearly", "0.2"},
     };
 
     public String buildXml() {

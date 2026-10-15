@@ -27,6 +27,20 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    // Never ship source maps to production (keeps source out of devtools, smaller deploy).
+    sourcemap: false,
+    // Split the framework into its own long-cached chunk so app deploys don't bust it.
+    rollupOptions: {
+      output: {
+        manualChunks(id: string) {
+          if (!id.includes('node_modules')) return undefined
+          if (/node_modules\/(react|react-dom|react-router|react-router-dom|scheduler)\//.test(id)) return 'react-vendor'
+          return undefined
+        },
+      },
+    },
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
