@@ -29,6 +29,12 @@ const rows: Rows = {
   'portal.search.delivered': ['Delivered', 'डिलीवर', 'வழங்கப்பட்டது', 'డెలివరీ అయింది'],
   'portal.search.openTask': ['Open task', 'काम खोलें', 'பணியைத் திற', 'పనిని తెరవండి'],
   // Clock card details + combined earnings card
+  'pw.leave.when': ['When do you need leave?', 'छुट्टी कब चाहिए?', 'எப்போது விடுப்பு வேண்டும்?', 'సెలవు ఎప్పుడు కావాలి?'],
+  'pw.leave.today': ['Today', 'आज', 'இன்று', 'ఈ రోజు'],
+  'pw.leave.tomorrow': ['Tomorrow', 'कल', 'நாளை', 'రేపు'],
+  'pw.leave.custom': ['Custom', 'अपनी तारीख', 'தனிப்பயன்', 'కస్టమ్'],
+  'pw.leave.daysCount': ['{{count}} day(s)', '{{count}} दिन', '{{count}} நாள்', '{{count}} రోజులు'],
+  'pw.clock.requestLeave': ['Request leave', 'छुट्टी का अनुरोध', 'விடுப்பு கோரிக்கை', 'సెలవు అభ్యర్థన'],
   'pw.clock.locationRequired': ['Location is required to clock in. Allow location access for this site, then try again.', 'क्लॉक-इन के लिए लोकेशन ज़रूरी है। इस साइट के लिए लोकेशन की अनुमति दें और फिर कोशिश करें।', 'உள்நுழைய இருப்பிடம் தேவை. இந்தத் தளத்திற்கு இருப்பிட அனுமதி அளித்து மீண்டும் முயலவும்.', 'క్లాక్-ఇన్ కోసం లొకేషన్ అవసరం. ఈ సైట్‌కు లొకేషన్ అనుమతి ఇచ్చి మళ్లీ ప్రయత్నించండి.'],
   'pw.clock.boostLevel': ['Bonus level {{level}} · goal {{goal}}h', 'बोनस लेवल {{level}} · लक्ष्य {{goal}} घंटे', 'போனஸ் நிலை {{level}} · இலக்கு {{goal}} மணி', 'బోనస్ లెవల్ {{level}} · లక్ష్యం {{goal}} గం'],
   'pw.clock.boostMore': ['{{time}} to go · +{{amount}}', '{{time}} बाकी · +{{amount}}', '{{time}} மீதம் · +{{amount}}', '{{time}} మిగిలింది · +{{amount}}'],

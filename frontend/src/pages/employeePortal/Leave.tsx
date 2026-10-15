@@ -1,5 +1,6 @@
 import { BaseInput } from '@/components/ui/input';
 import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Plus, X } from 'lucide-react';
 import { employeePortalApi } from '@/api/employeePortalApi';
 import { LeaveRequestEntry, LeaveBalance } from '@/types/employeePortal';
@@ -8,14 +9,22 @@ import { useT } from '@/i18n';
 
 const LEAVE_TYPES = ['CASUAL', 'SICK', 'EARNED', 'MATERNITY'];
 
+type When = 'TODAY' | 'TOMORROW' | 'CUSTOM';
+/** yyyy-mm-dd in the device's local day (toISOString would shift it to UTC). */
+const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const dayOffset = (n: number) => { const d = new Date(); d.setDate(d.getDate() + n); return ymd(d); };
+const emptyForm = () => ({ type: 'CASUAL', startDate: dayOffset(0), endDate: dayOffset(0), reason: '' });
+
 export default function Leave() {
   const { t } = useT();
   const [balance, setBalance] = useState<LeaveBalance | null>(null);
   const [leaves, setLeaves] = useState<LeaveRequestEntry[]>([]);
-  const [open, setOpen] = useState(false);
+  const [params] = useSearchParams();
+  const [open, setOpen] = useState(params.get('new') === '1');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [form, setForm] = useState({ type: 'CASUAL', startDate: '', endDate: '', reason: '' });
+  const [when, setWhen] = useState<When>('TODAY');
+  const [form, setForm] = useState(emptyForm);
 
   const load = useCallback(() => {
     employeePortalApi.leaveBalance().then(setBalance).catch(() => {});
@@ -23,14 +32,23 @@ export default function Leave() {
   }, []);
   useEffect(() => { load(); }, [load]);
 
+  const choose = (w: When) => {
+    setWhen(w);
+    if (w === 'TODAY') setForm((f) => ({ ...f, startDate: dayOffset(0), endDate: dayOffset(0) }));
+    if (w === 'TOMORROW') setForm((f) => ({ ...f, startDate: dayOffset(1), endDate: dayOffset(1) }));
+  };
+  const dayCount = form.startDate && form.endDate && form.endDate >= form.startDate
+    ? Math.round((new Date(form.endDate).getTime() - new Date(form.startDate).getTime()) / 86400000) + 1 : 0;
+
   const submit = async () => {
     setError('');
-    if (!form.startDate || !form.endDate) { setError(t('pw.leave.pickDates')); return; }
+    if (!form.startDate || !form.endDate || form.endDate < form.startDate) { setError(t('pw.leave.pickDates')); return; }
     setSaving(true);
     try {
       await employeePortalApi.applyLeave(form);
       setOpen(false);
-      setForm({ type: 'CASUAL', startDate: '', endDate: '', reason: '' });
+      setForm(emptyForm());
+      setWhen('TODAY');
       load();
     } catch (e: any) {
       setError(e?.message || t('pw.leave.submitFailed'));
@@ -101,15 +119,33 @@ export default function Leave() {
                   ))}
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground">{t('pw.from')}</label>
-                  <BaseInput type="date" value={form.startDate} onChange={(e) => setForm((f) => ({ ...f, startDate: e.target.value }))} className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" />
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">{t('pw.leave.when')}</label>
+                <div className="mt-1 grid grid-cols-3 gap-2">
+                  {(['TODAY', 'TOMORROW', 'CUSTOM'] as When[]).map((w) => (
+                    <button key={w} onClick={() => choose(w)}
+                      className={`h-11 rounded-xl border text-sm font-semibold active:scale-[0.98] ${when === w ? 'border-primary bg-primary text-primary-foreground' : 'bg-card text-foreground'}`}>
+                      {t(`pw.leave.${w.toLowerCase()}`)}
+                    </button>
+                  ))}
                 </div>
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground">{t('pw.to')}</label>
-                  <BaseInput type="date" value={form.endDate} onChange={(e) => setForm((f) => ({ ...f, endDate: e.target.value }))} className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" />
-                </div>
+                {when === 'CUSTOM' && (
+                  <div className="mt-3 grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground">{t('pw.from')}</label>
+                      <BaseInput type="date" min={dayOffset(0)} value={form.startDate}
+                        onChange={(e) => setForm((f) => ({ ...f, startDate: e.target.value, endDate: f.endDate < e.target.value ? e.target.value : f.endDate }))}
+                        className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground">{t('pw.to')}</label>
+                      <BaseInput type="date" min={form.startDate || dayOffset(0)} value={form.endDate}
+                        onChange={(e) => setForm((f) => ({ ...f, endDate: e.target.value }))}
+                        className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" />
+                    </div>
+                  </div>
+                )}
+                {dayCount > 0 && <p className="mt-2 text-xs text-muted-foreground">{t('pw.leave.daysCount', { count: dayCount })}</p>}
               </div>
               <div>
                 <label className="text-xs font-medium text-muted-foreground">{t('pw.att.reason')}</label>

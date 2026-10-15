@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { LogIn, LogOut, Coffee, Play, Loader2, TrendingUp, ArrowRight, MapPin, ShieldCheck, ShieldAlert, X, Clock3, ChevronDown } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { LogIn, LogOut, Coffee, Play, Loader2, TrendingUp, ArrowRight, MapPin, ShieldCheck, ShieldAlert, X, Clock3, ChevronDown, CalendarOff } from 'lucide-react';
 import { employeePortalApi } from '@/api/employeePortalApi';
 import { TimeStatus, MyRewards, RewardRow } from '@/types/employeePortal';
 import { assert as webauthnAssert } from '@/lib/webauthn';
@@ -28,6 +29,7 @@ export default function ClockWidget({ onChange }: { onChange?: () => void }) {
   const [error, setError] = useState('');
   const [geoAccuracy, setGeoAccuracy] = useState<number | null>(null); // live best-fix accuracy while locating
   const [, forceTick] = useState(0);
+  const navigate = useNavigate();
   const [showDetails, setShowDetails] = useState(false);
   const [rewards, setRewards] = useState<MyRewards | null>(null);
   useEffect(() => {
@@ -267,6 +269,14 @@ export default function ClockWidget({ onChange }: { onChange?: () => void }) {
           )}
         </div>
       </div>
+
+      {/* Simple leave shortcut — opens the leave form */}
+      <button
+        onClick={() => navigate('/employee/leave?new=1')}
+        className="flex w-full items-center justify-center gap-1.5 border-t border-white/15 bg-black/10 py-2.5 text-[12px] font-semibold text-emerald-50 active:bg-black/20"
+      >
+        <CalendarOff className="h-3.5 w-3.5" /> {t('pw.clock.requestLeave')}
+      </button>
 
       {/* Details toggle + panel — on a light surface for readability */}
       <div className="bg-card text-foreground">
