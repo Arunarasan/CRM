@@ -18,6 +18,7 @@ import { employeeTaskApi } from "@/api/employeeTaskApi";
 import { TimeLogSummary } from "@/types/employeeTask";
 import ResourceSelect, { ResourceSelection } from "@/components/workforce/ResourceSelect";
 import { Button } from "@/components/ui/button";
+import { toast } from "@/components/ui/toast";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -202,6 +203,13 @@ export default function Tasks() {
   const rejectTask = () => {
     const remarks = window.prompt("Rework remarks for the team:") || "";
     api.post(`/employee-tasks/${currentTask.id}/reject`, { remarks }).then(() => { setIsDialogOpen(false); loadBoard(); }).catch(() => alert("Failed to send task back"));
+  };
+  const deleteTask = () => {
+    if (!currentTask.id) return;
+    if (!window.confirm(`Delete "${currentTask.taskName || "this task"}"? It disappears for everyone it is assigned to.`)) return;
+    api.delete(`/tasks/${currentTask.id}`)
+      .then(() => { toast.success("Task deleted"); setIsDialogOpen(false); setCurrentTask({}); loadBoard(); })
+      .catch((e) => toast.error(e?.response?.data?.message || "Could not delete the task"));
   };
   const handleSave = () => {
     const call = currentTask.id ? api.put(`/tasks/${currentTask.id}`, currentTask) : api.post(`/tasks`, currentTask);
@@ -415,6 +423,9 @@ export default function Tasks() {
               </div>
             )}
             <Button onClick={handleSave} className="w-full">Save Task</Button>
+            {currentTask.id && isAdmin && (
+              <Button onClick={deleteTask} variant="outline" className="w-full border-destructive/40 text-destructive hover:bg-destructive/10">Delete Task</Button>
+            )}
           </div>
         </DialogContent>
       </Dialog>

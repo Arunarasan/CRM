@@ -183,9 +183,82 @@ public class TaskService {
         }
     }
 
+    @Autowired
+    private org.springframework.jdbc.core.JdbcTemplate jdbc;
+
+    /** Tables holding money records — a task linked to one of these can be cancelled but never deleted. */
+    private static final java.util.regex.Pattern FINANCIAL_TABLE = java.util.regex.Pattern.compile(
+            "(?i).*(payment|invoice|ledger|salary|payslip|expense|bonus|incentive|refund|receipt|bill).*");
+
+    /**
+     * Deletes the task together with everything that hangs off it (assignments, checklists, comments,
+     * time logs, issues, media…), so it vanishes for the admin and for every assigned employee. Links
+     * from other tasks (sub-tasks, dependencies) are detached rather than deleted. Refuses when money
+     * records point at the task.
+     */
+    @org.springframework.transaction.annotation.Transactional
     public void deleteTask(Long id) {
-        Task task = getTaskById(id);
-        taskRepository.delete(task);
+        getTaskById(id); // 404 when it doesn't exist
+        List<String> blocked = new java.util.ArrayList<>();
+        collectFinancialLinks("tasks", List.of(id), blocked, 0);
+        if (!blocked.isEmpty()) {
+            throw new IllegalStateException("This task has linked financial records (" + String.join(", ", blocked)
+                    + ") and can't be deleted. Cancel it instead.");
+        }
+        removeReferencing("tasks", List.of(id), 0);
+        jdbc.update("DELETE FROM tasks WHERE id = ?", id);
+    }
+
+    private record Fk(String table, String column, boolean nullable) {}
+
+    private List<Fk> referrers(String parentTable) {
+        return jdbc.query(
+                "SELECT k.TABLE_NAME, k.COLUMN_NAME, c.IS_NULLABLE FROM information_schema.KEY_COLUMN_USAGE k "
+                        + "JOIN information_schema.COLUMNS c ON c.TABLE_SCHEMA = k.TABLE_SCHEMA AND c.TABLE_NAME = k.TABLE_NAME "
+                        + "AND c.COLUMN_NAME = k.COLUMN_NAME "
+                        + "WHERE k.REFERENCED_TABLE_SCHEMA = DATABASE() AND k.REFERENCED_TABLE_NAME = ?",
+                (rs, i) -> new Fk(rs.getString(1), rs.getString(2), "YES".equalsIgnoreCase(rs.getString(3))), parentTable);
+    }
+
+    private static String in(List<Long> ids) {
+        return ids.stream().map(String::valueOf).collect(java.util.stream.Collectors.joining(","));
+    }
+
+    private boolean hasIdColumn(String table) {
+        Integer n = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = 'id'",
+                Integer.class, table);
+        return n != null && n > 0;
+    }
+
+    /** Dry run: names of money tables that would lose rows (through any depth of cascade). */
+    private void collectFinancialLinks(String parent, List<Long> ids, List<String> out, int depth) {
+        if (ids.isEmpty() || depth > 6) return;
+        for (Fk fk : referrers(parent)) {
+            if (fk.table().equals(parent) || fk.nullable()) continue; // nullable links are detached, not deleted
+            List<Long> childIds = hasIdColumn(fk.table())
+                    ? jdbc.queryForList("SELECT id FROM " + fk.table() + " WHERE " + fk.column() + " IN (" + in(ids) + ")", Long.class)
+                    : List.of();
+            Integer rows = jdbc.queryForObject("SELECT COUNT(*) FROM " + fk.table() + " WHERE " + fk.column() + " IN (" + in(ids) + ")", Integer.class);
+            if (rows != null && rows > 0 && FINANCIAL_TABLE.matcher(fk.table()).matches() && !out.contains(fk.table())) out.add(fk.table());
+            collectFinancialLinks(fk.table(), childIds, out, depth + 1);
+        }
+    }
+
+    private void removeReferencing(String parent, List<Long> ids, int depth) {
+        if (ids.isEmpty() || depth > 6) return;
+        for (Fk fk : referrers(parent)) {
+            String where = fk.column() + " IN (" + in(ids) + ")";
+            if (fk.nullable() || fk.table().equals(parent)) {
+                jdbc.update("UPDATE " + fk.table() + " SET " + fk.column() + " = NULL WHERE " + where);
+                continue;
+            }
+            if (hasIdColumn(fk.table())) {
+                List<Long> childIds = jdbc.queryForList("SELECT id FROM " + fk.table() + " WHERE " + where, Long.class);
+                removeReferencing(fk.table(), childIds, depth + 1);
+            }
+            jdbc.update("DELETE FROM " + fk.table() + " WHERE " + where);
+        }
     }
 
     /**

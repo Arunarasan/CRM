@@ -81,6 +81,15 @@ export default function TodayPlan({ refreshKey }: { refreshKey?: number }) {
   }, []);
   useEffect(() => { load(); }, [load, refreshKey]);
 
+  // The office can assign, re-assign or delete a task at any time: refresh when the employee returns to
+  // the app and quietly every 30s while Home is open, so the plan matches what the admin just did.
+  useEffect(() => {
+    const onVisible = () => { if (document.visibilityState === 'visible') load(); };
+    document.addEventListener('visibilitychange', onVisible);
+    const timer = window.setInterval(() => { if (document.visibilityState === 'visible') load(); }, 30_000);
+    return () => { document.removeEventListener('visibilitychange', onVisible); window.clearInterval(timer); };
+  }, [load]);
+
   const plan = useMemo(() => mine.filter(isActive).sort(planOrder), [mine]);
   const newLeads = useMemo(
     () => pool.filter((p) => rankTier(p) === 0 && p.canPick !== false).sort(byPlanRank).slice(0, MAX_NEW_LEADS),
