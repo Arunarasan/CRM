@@ -30,7 +30,11 @@ interface ProductView {
   gallery: string[]
   specifications: { label: string; value: string }[]
   colors: ColorVariant[]
+  catalogueUrl: string
 }
+
+const API_ORIGIN = (import.meta.env.VITE_API_URL || '').replace(/\/api\/?$/, '')
+const fileUrl = (u?: string | null) => (!u ? '' : u.startsWith('/uploads/') ? API_ORIGIN + u : u)
 
 const titleCase = (slug: string) =>
   slug.split('-').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
@@ -79,6 +83,7 @@ export default function ProductDetail() {
         gallery: gallery.filter(Boolean),
         specifications: apiProduct.specifications?.length ? apiProduct.specifications : (dt?.specifications ?? []),
         colors: apiProduct.colors?.length ? apiProduct.colors : (dt?.colors ?? []),
+        catalogueUrl: fileUrl(apiProduct.catalogueUrl),
       }
     }
     if (seed) {
@@ -93,10 +98,13 @@ export default function ProductDetail() {
         gallery: dt.gallery,
         specifications: dt.specifications,
         colors: dt.colors,
+        catalogueUrl: '',
       }
     }
     return null
   }, [apiProduct, seed])
+
+  const catalogUrl = view?.catalogueUrl || fileUrl(site.catalogPdf)
 
   useSeo(
     view
@@ -258,8 +266,8 @@ export default function ProductDetail() {
                 Request a Quote
               </Button>
             </div>
-            <div className={cn('mt-3 grid gap-3', site.catalogPdf && 'sm:grid-cols-2')}>
-              {site.catalogPdf && (
+            <div className={cn('mt-3 grid gap-3', catalogUrl && 'sm:grid-cols-2')}>
+              {catalogUrl && (
                 <Button onClick={() => setCatalogOpen(true)} variant="outlineForest" size="lg" className="w-full">
                   <FileText className="h-4 w-4" /> Preview Catalog
                 </Button>
@@ -313,7 +321,7 @@ export default function ProductDetail() {
         </Section>
       )}
 
-      <CatalogDialog open={catalogOpen} onClose={() => setCatalogOpen(false)} url={site.catalogPdf} />
+      <CatalogDialog open={catalogOpen} onClose={() => setCatalogOpen(false)} url={catalogUrl} />
 
       <QuoteDialog
         open={quoteOpen}

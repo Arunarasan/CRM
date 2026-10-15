@@ -93,7 +93,7 @@ public class WebsiteCatalogService {
                 p.getStock() != null && p.getStock() > 0,
                 p.getMaterial(), p.getDimensions(),
                 parseStringList(p.getGalleryJson()), parseJson(p.getSpecificationsJson()),
-                parseJson(p.getColorsJson()));
+                parseJson(p.getColorsJson()), p.getCatalogueUrl());
     }
 
     // ---- Services ----

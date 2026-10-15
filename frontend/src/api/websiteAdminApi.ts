@@ -24,6 +24,7 @@ export interface Product {
   rating?: number; reviewCount?: number; featured?: boolean; active?: boolean;
   material?: string; dimensions?: string;
   gallery?: string[]; specifications?: SpecRow[]; colors?: ColorVariant[];
+  catalogueUrl?: string;
 }
 
 export interface Service {

@@ -1,16 +1,18 @@
 import { BaseInput } from '@/components/ui/input';
 import { useEffect, useState } from 'react';
-import { ArrowRight, Star, Image as ImageIcon, Plus, Trash2 } from 'lucide-react';
+import { ArrowRight, Star, Image as ImageIcon, Plus, Trash2, Upload, Loader2 } from 'lucide-react';
 import ResourceManager from './ResourceManager';
-import { Field, TextInput, TextArea, StringListEditor, PairListEditor, Toggle, Group } from './ui';
+import { Field, TextInput, TextArea, PairListEditor, Toggle, Group } from './ui';
 import FileUploadField from '@/components/FileUploadField';
+import { uploadFile, resolveFileUrl } from '@/lib/uploadFile';
+import { compressImageFile } from '@/lib/imageProcessing';
 import SearchableSelect from '@/components/ui/searchable-select';
 import { websiteAdminApi, Product, Category, SpecRow, ColorVariant } from '@/api/websiteAdminApi';
 
 const EMPTY: Product = {
   name: '', slug: '', sku: '', categoryId: null, shortDescription: '', description: '', imageUrl: '',
   price: 0, discountPrice: null, stock: 0, rating: 0, reviewCount: 0, featured: false, active: true,
-  material: '', dimensions: '', gallery: [], specifications: [], colors: [],
+  material: '', dimensions: '', gallery: [], specifications: [], colors: [], catalogueUrl: '',
 };
 
 /** Editor for colour/finish variants: swatch colour + name + optional image URL. */
@@ -32,7 +34,7 @@ function ColorListEditor({ value, onChange }: { value: ColorVariant[]; onChange:
           />
           <div className="flex-1 space-y-1.5">
             <TextInput value={c.name} placeholder="Colour name (e.g. Forest Green)" onChange={(e) => set(i, { name: e.target.value })} />
-            <TextInput value={c.image ?? ''} placeholder="Image URL for this colour (optional)" onChange={(e) => set(i, { image: e.target.value })} />
+            <FileUploadField module="WEBSITE" label="Colour image (optional)" value={c.image ?? ''} accept="image/*" onChange={({ url }) => set(i, { image: url })} />
           </div>
           <button type="button" onClick={() => remove(i)} className="mt-1 shrink-0 rounded-md p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10" aria-label="Remove">
             <Trash2 className="h-4 w-4" />
@@ -42,6 +44,54 @@ function ColorListEditor({ value, onChange }: { value: ColorVariant[]; onChange:
       <button type="button" onClick={add} className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
         <Plus className="h-3.5 w-3.5" /> Add colour
       </button>
+    </div>
+  );
+}
+
+/** Multi-image uploader for the gallery: pick several photos at once, thumbnails with remove. */
+function GalleryUploader({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
+  const list = value ?? [];
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const pick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = '';
+    if (!files.length) return;
+    setBusy(true); setErr(null);
+    const added: string[] = [];
+    try {
+      for (const f of files) {
+        const up = await uploadFile(f.type.startsWith('image/') ? await compressImageFile(f) : f, 'WEBSITE');
+        added.push(up.fileUrl);
+      }
+    } catch (ex: any) {
+      setErr(ex?.message || 'Upload failed');
+    } finally {
+      setBusy(false);
+      if (added.length) onChange([...list, ...added]);
+    }
+  };
+  return (
+    <div className="space-y-2">
+      {list.length > 0 && (
+        <div className="grid grid-cols-4 gap-2">
+          {list.map((u, i) => (
+            <div key={`${u}-${i}`} className="group relative aspect-square overflow-hidden rounded-md border bg-slate-100">
+              <img src={resolveFileUrl(u)} alt="" className="h-full w-full object-cover" />
+              <button type="button" onClick={() => onChange(list.filter((_, j) => j !== i))} aria-label="Remove image"
+                className="absolute right-1 top-1 rounded-full bg-black/60 p-1 text-white opacity-90 hover:bg-destructive">
+                <Trash2 className="h-3 w-3" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <label className="flex cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed border-input px-3 py-3 text-sm font-medium text-muted-foreground hover:border-primary hover:text-primary">
+        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+        {busy ? 'Uploading…' : 'Upload images (select multiple)'}
+        <BaseInput type="file" accept="image/*" multiple className="hidden" disabled={busy} onChange={pick} />
+      </label>
+      {err && <p className="text-xs text-destructive">{err}</p>}
     </div>
   );
 }
@@ -159,7 +209,8 @@ export default function ProductsAdmin() {
                 <Field label="Material"><TextInput value={d.material} placeholder="Solid oak" onChange={(e) => patch({ material: e.target.value })} /></Field>
                 <Field label="Dimensions"><TextInput value={d.dimensions} placeholder="120 × 60 × 75 cm" onChange={(e) => patch({ dimensions: e.target.value })} /></Field>
               </div>
-              <Field label="Gallery images"><StringListEditor value={d.gallery ?? []} onChange={(v) => patch({ gallery: v })} placeholder="https://…" /></Field>
+              <Field label="Gallery images"><GalleryUploader value={d.gallery ?? []} onChange={(v) => patch({ gallery: v })} /></Field>
+              <FileUploadField module="WEBSITE" label="Product catalogue (PDF)" value={d.catalogueUrl} accept="application/pdf,.pdf,.doc,.docx" onChange={({ url }) => patch({ catalogueUrl: url })} />
             </Group>
 
             <Group label="Specifications">

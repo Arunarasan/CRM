@@ -32,7 +32,8 @@ public final class WebsiteAdminDto {
             BigDecimal price, BigDecimal discountPrice, Integer stock,
             Double rating, Integer reviewCount, Boolean featured, Boolean active,
             String material, String dimensions,
-            List<String> gallery, List<SpecRow> specifications, List<ColorVariant> colors) {}
+            List<String> gallery, List<SpecRow> specifications, List<ColorVariant> colors,
+            String catalogueUrl) {}
 
     public record ServiceDto(
             Long id, String title, String slug, String shortDescription, String imageUrl, String icon,

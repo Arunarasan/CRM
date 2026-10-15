@@ -62,6 +62,10 @@ public class ShopProduct extends BaseEntity {
     @Column(length = 200)
     private String dimensions;
 
+    /** Downloadable catalogue / brochure file (PDF etc.) shown on the public product page. */
+    @Column(name = "catalogue_url", length = 500)
+    private String catalogueUrl;
+
     /** JSON array of extra image URLs. */
     @Column(name = "gallery_json", columnDefinition = "TEXT")
     private String galleryJson;
