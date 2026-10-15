@@ -39,6 +39,8 @@ public class FileUploadController {
     );
     // Fallback allow-list by extension for files browsers report with an unhelpful content type.
     private static final Set<String> ALLOWED_EXTENSIONS = Set.of(
+            "jpg", "jpeg", "png", "gif", "webp", "heic", "heif", "bmp", "avif",
+            "mp4", "mov", "m4v", "mkv", "avi",
             "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "csv", "zip", "dwg", "dxf",
             "mp3", "m4a", "aac", "amr", "3gp", "3ga", "awb", "wav", "ogg", "opus", "webm", "wma", "flac");
     private static final long MAX_SIZE_BYTES = 25L * 1024 * 1024;
@@ -137,6 +139,24 @@ public class FileUploadController {
         return imageProxyHosts.stream().map(String::trim).anyMatch(host::equalsIgnoreCase);
     }
 
+    /** Cheap magic-byte check for the common image types so a renamed script/HTML file can't pose as one. */
+    private static boolean magicMatchesExtension(byte[] b, String ext) {
+        switch (ext) {
+            case "jpg": case "jpeg":
+                return b.length > 3 && (b[0] & 0xFF) == 0xFF && (b[1] & 0xFF) == 0xD8;
+            case "png":
+                return b.length > 8 && (b[0] & 0xFF) == 0x89 && b[1] == 'P' && b[2] == 'N' && b[3] == 'G';
+            case "gif":
+                return b.length > 6 && b[0] == 'G' && b[1] == 'I' && b[2] == 'F';
+            case "webp":
+                return b.length > 12 && b[0] == 'R' && b[1] == 'I' && b[2] == 'F' && b[3] == 'F' && b[8] == 'W' && b[9] == 'E';
+            case "pdf":
+                return b.length > 4 && b[0] == '%' && b[1] == 'P' && b[2] == 'D' && b[3] == 'F';
+            default:
+                return true;
+        }
+    }
+
     @PostMapping
     public ResponseEntity<ApiResponse<Map<String, String>>> upload(
             @RequestParam("file") MultipartFile file,
@@ -153,14 +173,38 @@ public class FileUploadController {
                 ? originalName.substring(originalName.lastIndexOf('.') + 1).toLowerCase()
                 : "";
         String contentType = file.getContentType();
-        boolean allowed = (contentType != null && (ALLOWED_PREFIXES.stream().anyMatch(contentType::startsWith)
-                || ALLOWED_DOC_TYPES.contains(contentType)))
-                || ALLOWED_EXTENSIONS.contains(extension);
-        if (!allowed) {
-            return ResponseEntity.badRequest().body(ApiResponse.error("Unsupported file type: " + contentType));
+        // Browser blobs can arrive without an extension; derive one from the declared image type.
+        if (extension.isEmpty() && contentType != null) {
+            String derived = switch (contentType.toLowerCase()) {
+                case "image/jpeg" -> "jpg";
+                case "image/png" -> "png";
+                case "image/webp" -> "webp";
+                case "image/gif" -> "gif";
+                case "audio/webm", "video/webm" -> "webm";
+                case "audio/mpeg" -> "mp3";
+                case "audio/mp4" -> "m4a";
+                case "application/pdf" -> "pdf";
+                default -> "";
+            };
+            if (!derived.isEmpty()) {
+                extension = derived;
+                originalName = originalName + "." + derived;
+            }
+        }
+        // The EXTENSION decides what is stored (it also decides how /uploads serves it), so it must be on
+        // the allow-list. Script-capable types (html, svg, xml, js) are never accepted, whatever the
+        // client claims the content type is.
+        String declared = contentType == null ? "" : contentType.toLowerCase();
+        if (!ALLOWED_EXTENSIONS.contains(extension)
+                || declared.contains("svg") || declared.contains("html") || declared.contains("xml")
+                || declared.contains("javascript")) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("Unsupported file type: " + extension));
         }
 
         byte[] bytes = file.getBytes();
+        if (!magicMatchesExtension(bytes, extension)) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("File content does not match its type"));
+        }
         String storedType = contentType;
         String storedName = originalName;
         // Phone call recordings (.amr/.3gp…) and browser webm clips don't play (or show no length) in

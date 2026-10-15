@@ -13,5 +13,15 @@ www.jbdecorcdm.com {
 
 jbdecorcdm.com {
     encode zstd gzip
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Permissions-Policy "geolocation=(self), camera=(self), microphone=(self)"
+        # Conservative CSP: blocks plugin content and base-tag hijack and clickjacking by other sites,
+        # without restricting scripts/images (full script-src CSP needs a staged report-only rollout).
+        Content-Security-Policy "frame-ancestors 'self'; object-src 'none'; base-uri 'self'"
+        -Server
+    }
     reverse_proxy web:80
 }

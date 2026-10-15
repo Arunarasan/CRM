@@ -23,6 +23,10 @@ public class VerificationTokenService {
 
     private static final SecureRandom RANDOM = new SecureRandom();
 
+    private static final int MAX_OTP_FAILURES = 5;
+    /** Wrong reset-code guesses per user id since the last code was issued (single-instance, in memory). */
+    private final java.util.concurrent.ConcurrentHashMap<Long, Integer> otpFailures = new java.util.concurrent.ConcurrentHashMap<>();
+
     @Autowired
     private VerificationTokenRepository verificationTokenRepository;
 
@@ -46,6 +50,7 @@ public class VerificationTokenService {
     public VerificationToken createPasswordResetOtp(User user, int length, int expiryMinutes) {
         // Only one live reset code per user.
         verificationTokenRepository.deleteByUserAndPurpose(user, PURPOSE_PASSWORD_RESET_OTP);
+        otpFailures.remove(user.getId());
 
         String code = generateNumericCode(length);
         // Guard the global-unique token column against the rare clash with another user's live code.
@@ -66,9 +71,26 @@ public class VerificationTokenService {
      * wrong/expired. Does not consume it — the caller deletes it after a successful reset.
      */
     public Optional<VerificationToken> verifyPasswordResetOtp(User user, String otp) {
-        return verificationTokenRepository.findByUserAndPurpose(user, PURPOSE_PASSWORD_RESET_OTP)
-                .filter(t -> t.getToken().equals(otp))
-                .filter(t -> !isExpired(t));
+        // A 6-digit code is brute-forceable, so cap wrong guesses: after MAX_OTP_FAILURES the live
+        // code is destroyed and the user must request a new one.
+        Optional<VerificationToken> live = verificationTokenRepository.findByUserAndPurpose(user, PURPOSE_PASSWORD_RESET_OTP);
+        if (live.isEmpty()) return Optional.empty();
+        if (otpFailures.getOrDefault(user.getId(), 0) >= MAX_OTP_FAILURES) {
+            verificationTokenRepository.deleteByUserAndPurpose(user, PURPOSE_PASSWORD_RESET_OTP);
+            otpFailures.remove(user.getId());
+            return Optional.empty();
+        }
+        boolean ok = otp != null
+                && java.security.MessageDigest.isEqual(live.get().getToken().getBytes(), otp.getBytes())
+                && !isExpired(live.get());
+        if (!ok) {
+            if (otpFailures.merge(user.getId(), 1, Integer::sum) >= MAX_OTP_FAILURES) {
+                verificationTokenRepository.deleteByUserAndPurpose(user, PURPOSE_PASSWORD_RESET_OTP);
+                otpFailures.remove(user.getId());
+            }
+            return Optional.empty();
+        }
+        return live;
     }
 
     /** Issues a fresh numeric email-verification OTP, invalidating any previous one for the user. */

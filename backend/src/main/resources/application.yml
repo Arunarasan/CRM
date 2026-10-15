@@ -50,7 +50,7 @@ management:
         include: "health,info"
   endpoint:
     health:
-      show-details: always
+      show-details: never
   health:
     # The mail indicator opens an SMTP connection on every /actuator/health poll. Without SMTP
     # credentials (or during a transient mail outage) it reports DOWN, which flips the whole

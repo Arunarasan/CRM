@@ -64,11 +64,14 @@ services:
       R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-${CLOUDFLARE_R2_ACCESS_KEY:-}}
       R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-${CLOUDFLARE_R2_SECRET_KEY:-}}
       R2_PUBLIC_DOMAIN: ${R2_PUBLIC_DOMAIN:-${CLOUDFLARE_R2_PUBLIC_DOMAIN:-}}
+      # Google review count sync (Review Rewards). Empty = feature off.
+      CRM_GOOGLE_PLACES_API_KEY: ${CRM_GOOGLE_PLACES_API_KEY:-}
+      CRM_GOOGLE_PLACES_PLACE_ID: ${CRM_GOOGLE_PLACES_PLACE_ID:-}
     # Local-disk uploads (STORAGE_TYPE=local) live here; without a volume every rebuild deleted them.
     volumes:
       - uploads_data:/app/uploads
     ports:
-      - "${BACKEND_PORT:-8080}:8080"
+      - "127.0.0.1:${BACKEND_PORT:-8080}:8080"
     depends_on:
       mysql:
         condition: service_healthy

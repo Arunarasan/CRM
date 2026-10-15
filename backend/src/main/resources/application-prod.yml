@@ -1,4 +1,10 @@
+# No fallbacks in prod: the app must refuse to start rather than run with a dev default secret/password.
+jwt:
+  secret: ${JWT_SECRET}
+
 spring:
+  datasource:
+    password: ${DB_PASSWORD}
   jpa:
     hibernate:
       ddl-auto: validate
