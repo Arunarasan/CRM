@@ -2359,6 +2359,9 @@ public class EmployeeTaskService {
         String[] cat = taskCategoryFor(t);
         card.put("category", cat[0]);
         card.put("categoryLabel", cat[1]);
+        // Project lane: Execution ("in process") / Ready to Fit / Completed, same as the admin portfolio.
+        card.put("workStage", t.getProject() != null && ("PROJECT".equals(cat[0]) || "FIELD_WORK".equals(cat[0]))
+                ? projectWorkStage(t.getProject().getId()) : null);
         // Template code (TT_COLLECT_REQUIREMENT, TT_VISIT_MEASURE…) — splits lead tasks into app tabs.
         card.put("taskTypeCode", t.getTaskTemplate() != null ? t.getTaskTemplate().getCode() : null);
 
@@ -2382,6 +2385,22 @@ public class EmployeeTaskService {
                     .ifPresent(mine -> card.put("myAssignmentStatus", mine.getStatus()));
         }
         return card;
+    }
+
+    // projectId -> {expiresAtMillis, stage}; a task list shows many cards of one project, so avoid recomputing.
+    private final java.util.concurrent.ConcurrentHashMap<Long, Object[]> workStageCache = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private String projectWorkStage(Long projectId) {
+        long now = System.currentTimeMillis();
+        Object[] hit = workStageCache.get(projectId);
+        if (hit != null && (long) hit[0] > now) return (String) hit[1];
+        String stage = null;
+        try {
+            Object s = projectWorkService.portfolioSummary(projectId).get("stage");
+            stage = s != null ? s.toString() : null;
+        } catch (Exception ignored) { /* no work lines / project gone — no tag */ }
+        workStageCache.put(projectId, new Object[]{now + 20_000L, stage});
+        return stage;
     }
 
     /** Origin lane for a task, mirroring the desktop board (SmartAssignmentService.taskCategory). */

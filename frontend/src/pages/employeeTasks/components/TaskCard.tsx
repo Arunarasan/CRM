@@ -5,6 +5,7 @@ import { humanizeDue, shortDue, statusMeta } from '../taskUtils';
 import SwipeActions, { SwipeAction } from './SwipeActions';
 import HoldTimer from './HoldTimer';
 import { OrderStepBar, stepLabel, workLabel } from './OrderTaskView';
+import { useT, tNow } from '@/i18n';
 
 const inr = (n: number) => `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 const qty = (n?: number | null) => (n == null ? '' : Number(n).toLocaleString('en-IN', { maximumFractionDigits: 2 }));
@@ -14,18 +15,18 @@ function laneMeta(category?: string | null, label?: string | null): { label: str
   switch ((category ?? '').toUpperCase()) {
     case 'PROJECT':
     case 'FIELD_WORK':
-      return { label: label || 'Project', cls: 'bg-[#E6EEF8] text-[#2563A8]' };
+      return { label: label || tNow('pw.card.lane.project'), cls: 'bg-[#E6EEF8] text-[#2563A8]' };
     case 'STITCHING':
     case 'INSTALLATION':
-      return { label: label || 'Order', cls: 'bg-[#F6ECDD] text-[#9B6B32]' };
+      return { label: label || tNow('pw.card.lane.order'), cls: 'bg-[#F6ECDD] text-[#9B6B32]' };
     case 'LEAD':
     case 'ENQUIRY':
     case 'CALL':
-      return { label: label || 'Lead', cls: 'bg-[#EDE6F7] text-[#6D4AA8]' };
+      return { label: label || tNow('pw.card.lane.lead'), cls: 'bg-[#EDE6F7] text-[#6D4AA8]' };
     case '':
       return null;
     default:
-      return { label: label || 'Other', cls: 'bg-[#EEF0EE] text-[#5B625E]' };
+      return { label: label || tNow('pw.card.lane.other'), cls: 'bg-[#EEF0EE] text-[#5B625E]' };
   }
 }
 
@@ -45,6 +46,7 @@ export default function TaskCard({
   onExtend?: (id: number) => void | Promise<unknown>; // extend the data-entry hold window
 }) {
   const navigate = useNavigate();
+  const { t } = useT();
   const mine = task.myAssignmentStatus;
   const open = () => navigate(`/employee/tasks/${task.id}`);
   const status = statusMeta(task.status);
@@ -55,12 +57,12 @@ export default function TaskCard({
   // Quick swipe-left shortcuts mirror the on-card buttons (identical handlers, unchanged behaviour).
   const swipe: SwipeAction[] = [];
   if (mine === 'ASSIGNED' || mine === 'ACCEPTED') {
-    swipe.push({ label: 'Start', icon: <Play className="h-4 w-4" />, className: 'bg-[#0A573B]', onClick: () => onStart(task.id) });
+    swipe.push({ label: t('pw.card.start'), icon: <Play className="h-4 w-4" />, className: 'bg-[#0A573B]', onClick: () => onStart(task.id) });
   } else if (mine === 'IN_PROGRESS') {
-    swipe.push({ label: 'Pause', icon: <Pause className="h-4 w-4" />, className: 'bg-[#B27A12]', onClick: () => onPause(task.id) });
-    swipe.push({ label: 'Complete', icon: <CheckCircle2 className="h-4 w-4" />, className: 'bg-[#0A573B]', onClick: () => onComplete(task.id) });
+    swipe.push({ label: t('pw.card.pause'), icon: <Pause className="h-4 w-4" />, className: 'bg-[#B27A12]', onClick: () => onPause(task.id) });
+    swipe.push({ label: t('pw.card.complete'), icon: <CheckCircle2 className="h-4 w-4" />, className: 'bg-[#0A573B]', onClick: () => onComplete(task.id) });
   } else if (mine === 'PAUSED') {
-    swipe.push({ label: 'Resume', icon: <Play className="h-4 w-4" />, className: 'bg-[#0A573B]', onClick: () => onStart(task.id) });
+    swipe.push({ label: t('pw.card.resume'), icon: <Play className="h-4 w-4" />, className: 'bg-[#0A573B]', onClick: () => onStart(task.id) });
   }
 
 
@@ -93,7 +95,7 @@ export default function TaskCard({
                 <span className="font-mono">{o.code}</span>
                 {o.bundleTotal && o.bundleTotal > 1 && <span className="text-[11px] font-medium text-[#8A918C]">{o.bundleNo}/{o.bundleTotal}</span>}
               </p>
-              <p className="truncate text-[14px] text-[#2F3632]">{o.customerName || task.customer || 'Customer'}</p>
+              <p className="truncate text-[14px] text-[#2F3632]">{o.customerName || task.customer || t('pw.card.customer')}</p>
             </div>
             <span className={`flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold ${late ? 'bg-[#FDEBEA] text-[#C9302C]' : 'bg-[#F0F1EF] text-[#5B625E]'}`}>
               <CalendarDays className="h-3.5 w-3.5" /> {shortDue(task.dueDate, task.status)}
@@ -101,14 +103,14 @@ export default function TaskCard({
           </div>
           <p className="mt-1.5 flex items-center gap-1.5 text-[13px] text-[#6B726E]">
             <Scissors className="h-4 w-4 shrink-0 text-[#9B6B32]" />
-            {workLabel(o.workType)} · {o.itemCount} item{o.itemCount === 1 ? '' : 's'}
-            {o.totalQuantity ? ` · ${qty(o.totalQuantity)} qty` : ''}
+            {workLabel(o.workType)} · {t('pw.card.orderItems', { n: o.itemCount })}
+            {o.totalQuantity ? t('pw.card.qty', { q: qty(o.totalQuantity) }) : ''}
             {shared && <span className="ml-auto flex items-center gap-1 text-[11px]"><Users className="h-3.5 w-3.5" /> {task.assignedEmployees!.length}</span>}
           </p>
           <div className="mt-2.5"><OrderStepBar status={o.status} labels={false} /></div>
           <p className="mt-1.5 text-[11.5px] text-[#6B726E]">
             <span className="font-semibold text-[#1A211E]">{stepLabel(o.status)}</span>
-            {o.nextStatus && o.nextStatus !== 'DELIVERED' ? ` · next: ${stepLabel(o.nextStatus)}` : o.status === 'COMPLETED' ? ' · ready for handover' : ''}
+            {o.nextStatus && o.nextStatus !== 'DELIVERED' ? t('pw.card.next', { step: stepLabel(o.nextStatus) }) : o.status === 'COMPLETED' ? t('pw.card.readyHandover') : ''}
           </p>
           {task.holdExpiresAt && (
             <div className="mt-2"><HoldTimer expiresAt={task.holdExpiresAt} onExtend={onExtend ? () => onExtend(task.id) : undefined} /></div>
@@ -121,22 +123,22 @@ export default function TaskCard({
   if (task.installOrder) {
     const io = task.installOrder;
     const owed = Number(io.balanceDue ?? 0);
-    const tag = io.installed ? { t: 'Installed', c: 'bg-[#E6F2EC] text-[#0A573B]' }
-      : io.ready ? { t: 'Ready', c: 'bg-[#E6F2EC] text-[#0A573B]' } : { t: 'Being made', c: 'bg-[#FFF3DD] text-[#8A5A12]' };
+    const tag = io.installed ? { t: t('pw.card.installed'), c: 'bg-[#E6F2EC] text-[#0A573B]' }
+      : io.ready ? { t: t('pw.card.ready'), c: 'bg-[#E6F2EC] text-[#0A573B]' } : { t: t('pw.card.beingMade'), c: 'bg-[#FFF3DD] text-[#8A5A12]' };
     return (
       <SwipeActions actions={swipe} onTap={open}>
         <div className={`rounded-2xl border border-l-4 border-[#ECEAE5] ${io.ready && !io.installed ? 'border-l-[#0A7A4B]' : 'border-l-[#C58A1B]'} bg-white px-4 py-3.5 shadow-[0_2px_10px_rgba(0,35,22,0.05)] active:bg-[#F7F8F6]`}>
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0 flex-1">
-              <p className="truncate text-[17px] font-bold leading-snug text-[#111817]">Install{io.invoiceNumber ? ` · ${io.invoiceNumber}` : ''}</p>
-              <p className="truncate text-[14px] text-[#2F3632]">{io.customerName || task.customer || 'Customer'}</p>
+              <p className="truncate text-[17px] font-bold leading-snug text-[#111817]">{t('pw.card.install')}{io.invoiceNumber ? ` · ${io.invoiceNumber}` : ''}</p>
+              <p className="truncate text-[14px] text-[#2F3632]">{io.customerName || task.customer || t('pw.card.customer')}</p>
             </div>
             <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ${tag.c}`}>{tag.t}</span>
           </div>
           <p className="mt-1.5 flex items-center gap-1.5 text-[13px] text-[#6B726E]">
             <Wrench className="h-4 w-4 shrink-0 text-[#0A573B]" />
-            {io.orders.length} order{io.orders.length === 1 ? '' : 's'}
-            {!io.installed && <> · {owed > 0 ? <span className="font-semibold text-[#8A5A12]">{inr(owed)} to collect</span> : 'paid'}</>}
+            {t('pw.card.orders', { n: io.orders.length })}
+            {!io.installed && <> · {owed > 0 ? <span className="font-semibold text-[#8A5A12]">{t('pw.card.toCollect', { amount: inr(owed) })}</span> : t('pw.card.paid')}</>}
             <span className={`ml-auto flex shrink-0 items-center gap-1 text-[11px] font-semibold ${dueCls}`}>
               <CalendarDays className="h-3.5 w-3.5" /> {shortDue(task.dueDate, task.status)}
             </span>
@@ -158,8 +160,14 @@ export default function TaskCard({
                   {lane.label}
                 </span>
               )}
+              {task.workStage && task.workStage !== 'COMPLETED' && (
+                <span className={`shrink-0 rounded-md px-1.5 py-px text-[10px] font-bold uppercase tracking-wide ${
+                  task.workStage === 'READY_TO_FIT' ? 'bg-[#EFE9FA] text-[#6B3FB5]' : 'bg-[#FBF1DC] text-[#9B6B32]'}`}>
+                  {task.workStage === 'READY_TO_FIT' ? 'Ready to Fit' : 'In Process'}
+                </span>
+              )}
               {task.closedByOffice && (
-                <span className="shrink-0 rounded-md bg-[#EEF6F0] px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-[#0A573B]">By office</span>
+                <span className="shrink-0 rounded-md bg-[#EEF6F0] px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-[#0A573B]">{t('pw.card.byOffice')}</span>
               )}
               {task.customer && <p className="truncate text-[11px] font-medium text-[#8A918C]">{task.taskName}</p>}
             </div>
