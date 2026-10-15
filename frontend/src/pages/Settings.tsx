@@ -387,7 +387,6 @@ function fmtBytes(n: number) {
 function BackupTab() {
   const [info, setInfo] = useState<BackupInfo | null>(null);
   const [busy, setBusy] = useState<'database' | 'files' | null>(null);
-  const [bytes, setBytes] = useState(0);
 
   useEffect(() => {
     backupApi.info().then(setInfo).catch(() => toast.error('Could not load backup details'));
@@ -395,14 +394,13 @@ function BackupTab() {
 
   const run = async (kind: 'database' | 'files') => {
     setBusy(kind);
-    setBytes(0);
     try {
-      const name = await backupApi.download(kind, setBytes);
-      toast.success(`Saved ${name} to your downloads`);
+      await backupApi.startDownload(kind);
+      toast.success('Download started - check your browser downloads. Large backups take a few minutes to start.');
     } catch (e: any) {
-      toast.error(e?.response?.status === 403 ? 'Only admins can download backups' : 'Backup failed — please try again');
+      toast.error(e?.response?.status === 403 ? 'Only admins can download backups' : 'Backup failed - please try again');
     } finally {
-      setBusy(null);
+      setTimeout(() => setBusy(null), 3000);
     }
   };
 
@@ -413,7 +411,7 @@ function BackupTab() {
       className="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition active:scale-[0.99] disabled:opacity-50"
     >
       {busy === kind ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-      {busy === kind ? `Downloading… ${fmtBytes(bytes)}` : label}
+      {busy === kind ? 'Starting download...' : label}
     </button>
   );
 
@@ -421,26 +419,20 @@ function BackupTab() {
     <div className="grid gap-5">
       <Card title="Database backup" desc="A complete copy of all CRM data, saved straight to this computer. Nothing is stored on the server.">
         <p className="mb-4 text-sm text-muted-foreground">
-          {info ? `${info.tables} tables · about ${info.approxRows.toLocaleString()} records` : 'Loading…'}
+          {info ? `${info.tables} tables, about ${info.approxRows.toLocaleString()} records` : 'Loading...'}
         </p>
         <Btn kind="database" label="Download database backup (.sql.gz)" />
       </Card>
-      <Card title="Uploaded files" desc="Photos, documents, voice notes and recordings.">
-        {info && !info.filesIncluded ? (
-          <p className="text-sm text-muted-foreground">
-            Files are stored in cloud storage ({info.storageType.toUpperCase()}), which is already kept off this server. Back them up from the storage provider if needed.
-          </p>
-        ) : (
-          <>
-            <p className="mb-4 text-sm text-muted-foreground">
-              {info ? `${info.fileCount.toLocaleString()} files · ${fmtBytes(info.fileBytes)}` : 'Loading…'}
-            </p>
-            <Btn kind="files" label="Download files backup (.zip)" />
-          </>
-        )}
+      <Card title="Uploaded files" desc="Photos, documents, voice notes and recordings - from the server and from cloud storage.">
+        <p className="mb-4 text-sm text-muted-foreground">
+          {info ? `${info.fileCount.toLocaleString()} files, ${fmtBytes(info.fileBytes)}` : 'Loading...'}
+          {info?.bucketError ? ' (could not read cloud storage - the zip may be incomplete)' : ''}
+        </p>
+        <Btn kind="files" label="Download files backup (.zip)" />
+        <p className="mt-3 text-xs text-muted-foreground">This can be large and takes a while. Keep the page open until your browser shows the download.</p>
       </Card>
       <p className="text-xs text-muted-foreground">
-        Keep these files somewhere safe — they contain customer and staff data. To restore, import the .sql.gz into an empty MySQL database (gunzip, then run the SQL).
+        Keep these files somewhere safe - they contain customer and staff data. To restore, import the .sql.gz into an empty MySQL database (gunzip, then run the SQL).
       </p>
     </div>
   );

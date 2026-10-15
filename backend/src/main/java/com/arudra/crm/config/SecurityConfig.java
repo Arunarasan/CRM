@@ -44,6 +44,8 @@ public class SecurityConfig {
                         // POSTs. Everything under /api/portal/** and the rest stays authenticated.
                         .requestMatchers("/api/public/**").permitAll()
                         .requestMatchers("/uploads/**").permitAll()
+                        // Backup download link: authorised by a single-use ticket an admin requested (BackupController).
+                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/admin/backup/download/*").permitAll()
                         .requestMatchers("/health", "/api/health").permitAll()
                         .requestMatchers("/actuator/**").permitAll()
                         .anyRequest().authenticated()

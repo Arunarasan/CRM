@@ -1,6 +1,8 @@
 package com.arudra.crm.service;
 
 import lombok.extern.slf4j.Slf4j;
+import com.arudra.crm.storage.S3StorageService;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -20,7 +22,12 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Types;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.security.SecureRandom;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
@@ -42,13 +49,39 @@ public class BackupService {
     private final DataSource dataSource;
     private final String uploadDir;
     private final String storageType;
+    private final ObjectProvider<S3StorageService> bucket;
+
+    /** One-time download tickets (a plain link cannot carry the login header). ticket -> expiry + kind. */
+    private record Ticket(long expiresAtMs, String kind) { }
+    private final Map<String, Ticket> tickets = new ConcurrentHashMap<>();
+    private final SecureRandom random = new SecureRandom();
 
     public BackupService(DataSource dataSource,
                          @Value("${app.upload.dir:./uploads}") String uploadDir,
-                         @Value("${app.storage.type:local}") String storageType) {
+                         @Value("${app.storage.type:local}") String storageType,
+                         ObjectProvider<S3StorageService> bucket) {
         this.dataSource = dataSource;
         this.uploadDir = uploadDir;
         this.storageType = storageType;
+        this.bucket = bucket;
+    }
+
+    /** Issues a single-use ticket (valid 2 minutes) that lets the browser start a download by plain link. */
+    public String issueTicket(String kind) {
+        long now = System.currentTimeMillis();
+        tickets.values().removeIf(t -> t.expiresAtMs() < now);
+        byte[] b = new byte[24];
+        random.nextBytes(b);
+        String id = Base64.getUrlEncoder().withoutPadding().encodeToString(b);
+        tickets.put(id, new Ticket(now + 120_000, kind));
+        return id;
+    }
+
+    /** True once, only for an unexpired ticket of the same kind. */
+    public boolean redeemTicket(String id, String kind) {
+        if (id == null) return false;
+        Ticket t = tickets.remove(id);
+        return t != null && t.expiresAtMs() >= System.currentTimeMillis() && t.kind().equals(kind);
     }
 
     /** Table → approximate row count, plus where uploaded files live. */
@@ -61,12 +94,20 @@ public class BackupService {
                      "SELECT table_rows FROM information_schema.tables WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE'")) {
             while (rs.next()) { tables++; rows += rs.getLong(1); }
         }
-        boolean local = isLocalStorage();
         out.put("tables", tables);
         out.put("approxRows", rows);
         out.put("storageType", storageType);
-        out.put("filesIncluded", local);
-        long[] f = local ? localFileStats() : new long[]{0, 0};
+        out.put("filesIncluded", true);
+        long[] f = localFileStats();
+        S3StorageService s3 = bucket.getIfAvailable();
+        if (s3 != null) {
+            try {
+                s3.forEachObject((k, size) -> { f[0]++; f[1] += size; });
+            } catch (RuntimeException e) {
+                log.warn("Could not list the storage bucket for backup info: {}", e.getMessage());
+                out.put("bucketError", true);
+            }
+        }
         out.put("fileCount", f[0]);
         out.put("fileBytes", f[1]);
         return out;
@@ -209,18 +250,39 @@ public class BackupService {
         return sb.append('\'').toString();
     }
 
-    /** Streams a zip of every file under the local upload directory (no-op listing when storage is S3/R2). */
+    /**
+     * Streams a zip of every uploaded file: whatever is on the server disk, plus (when cloud storage is
+     * active) every object in the bucket. A file present in both places is only added once.
+     */
     public void writeFilesZip(OutputStream target) throws IOException {
         Path root = Paths.get(uploadDir).toAbsolutePath().normalize();
+        Set<String> added = new HashSet<>();
         try (ZipOutputStream zip = new ZipOutputStream(target)) {
             zip.setLevel(1); // photos/audio are already compressed
-            if (!Files.isDirectory(root)) return;
-            try (Stream<Path> walk = Files.walk(root)) {
-                for (Path p : (Iterable<Path>) walk.filter(Files::isRegularFile)::iterator) {
-                    String name = root.relativize(p).toString().replace('\\', '/');
-                    zip.putNextEntry(new ZipEntry("uploads/" + name));
-                    Files.copy(p, zip);
-                    zip.closeEntry();
+            if (Files.isDirectory(root)) {
+                try (Stream<Path> walk = Files.walk(root)) {
+                    for (Path p : (Iterable<Path>) walk.filter(Files::isRegularFile)::iterator) {
+                        String name = root.relativize(p).toString().replace(java.io.File.separatorChar, '/');
+                        if (name.startsWith(".")) continue;
+                        zip.putNextEntry(new ZipEntry("uploads/" + name));
+                        Files.copy(p, zip);
+                        zip.closeEntry();
+                        added.add(name);
+                    }
+                }
+            }
+            S3StorageService s3 = bucket.getIfAvailable();
+            if (s3 != null) {
+                List<String> keys = new ArrayList<>();
+                s3.forEachObject((k, size) -> { if (!added.contains(k)) keys.add(k); });
+                for (String key : keys) {
+                    try (java.io.InputStream in = s3.open(key, null)) {
+                        zip.putNextEntry(new ZipEntry("uploads/" + key));
+                        in.transferTo(zip);
+                        zip.closeEntry();
+                    } catch (java.nio.file.NoSuchFileException e) {
+                        log.warn("Backup skipped {} (deleted while listing)", key);
+                    }
                 }
             }
         }

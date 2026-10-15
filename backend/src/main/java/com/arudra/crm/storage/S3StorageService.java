@@ -23,6 +23,8 @@ import software.amazon.awssdk.services.s3.S3Configuration;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
+import software.amazon.awssdk.services.s3.model.S3Object;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
@@ -141,6 +143,17 @@ public class S3StorageService implements StorageService {
                     .build());
         } catch (NoSuchKeyException e) {
             throw new java.nio.file.NoSuchFileException(key);
+        }
+    }
+
+    /** Visits every object in the bucket (key + size), page by page. Used by the admin backup. */
+    public void forEachObject(java.util.function.BiConsumer<String, Long> visitor) {
+        var pages = s3.listObjectsV2Paginator(ListObjectsV2Request.builder().bucket(props.getBucket()).build());
+        for (var page : pages) {
+            for (S3Object o : page.contents()) {
+                if (o.key().endsWith("/")) continue; // folder placeholder
+                visitor.accept(o.key(), o.size() == null ? 0L : o.size());
+            }
         }
     }
 

@@ -33,27 +33,22 @@ export interface BackupInfo {
   filesIncluded: boolean;
   fileCount: number;
   fileBytes: number;
+  bucketError?: boolean;
 }
 
 // Admin backups are streamed to the browser and saved on the admin's own computer (nothing kept on the server).
+// An admin-only call returns a short-lived ticket; the browser then downloads the link natively, straight
+// to disk, so even a multi-GB files backup never has to fit in the page's memory.
 export const backupApi = {
   info: () => api.get<BackupInfo>('/admin/backup/info').then((r) => r.data),
-  download: async (kind: 'database' | 'files', onProgress?: (bytes: number) => void) => {
-    const res = await api.get<Blob>(`/admin/backup/${kind}`, {
-      responseType: 'blob',
-      timeout: 0,
-      onDownloadProgress: (e) => onProgress?.(e.loaded),
-    });
-    const cd: string = res.headers['content-disposition'] || '';
-    const name = /filename="?([^";]+)"?/.exec(cd)?.[1] || `arudra-crm-${kind}-backup`;
-    const url = URL.createObjectURL(res.data);
+  startDownload: async (kind: 'database' | 'files') => {
+    const { ticket } = await api.post<{ ticket: string }>('/admin/backup/ticket', null, { params: { kind } }).then((r) => r.data);
+    const base = String(api.defaults.baseURL || '/api').replace(/\/$/, '');
     const a = document.createElement('a');
-    a.href = url;
-    a.download = name;
+    a.href = `${base}/admin/backup/download/${kind}?ticket=${encodeURIComponent(ticket)}`;
+    a.rel = 'noopener';
     document.body.appendChild(a);
     a.click();
     a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 10_000);
-    return name;
   },
 };
