@@ -55,6 +55,7 @@ public class PayrollService {
     @Autowired private HrService hrService;
     @Autowired private org.springframework.jdbc.core.JdbcTemplate jdbc;
     @Autowired private com.arudra.crm.repository.TaskAssignmentRepository taskAssignmentRepository;
+    @Autowired private com.arudra.crm.repository.SiteVisitRepository siteVisitRepository;
     @Autowired private com.arudra.crm.repository.TaskTimeLogRepository taskTimeLogRepository;
 
     // ============================================================ advances & loans
@@ -795,13 +796,10 @@ public class PayrollService {
             Long uid = u.getId();
             org.springframework.data.jpa.domain.Specification<Lead> base = (root, q, cb) ->
                     cb.equal(root.get("leadOwner").get("id"), uid);
-            base = base.and(LeadSpecification.notDeleted())
-                    .and(org.springframework.data.jpa.domain.Specification.not(
-                            LeadSpecification.journeyStage(LeadSpecification.STAGE_REQUIREMENT)))
-                    .and(org.springframework.data.jpa.domain.Specification.not(
-                            LeadSpecification.journeyStage(LeadSpecification.STAGE_LOST)));
+            base = base.and(LeadSpecification.notDeleted());
             for (Lead l : leadRepository.findAll(base)) {
                 Long rid = l.getLeadRewardSalaryRecordId();
+                if (!leadHasSiteVisit(l, null)) continue;
                 if (rid == null) leadPending++;
                 else if (rid > 0) leadPaid++;   // 0 = legacy lead, never paid
             }
@@ -822,20 +820,24 @@ public class PayrollService {
                 "SELECT COALESCE(SUM(amount),0) FROM project_completion_incentives WHERE employee_id = ?",
                 BigDecimal.class, employee.getId());
         int projPending = 0;
+        BigDecimal projPendingAmt = BigDecimal.ZERO;
         if (u != null && projRate.signum() > 0) {
             for (Project p : projectRepository.findAll()) {
                 if (Boolean.TRUE.equals(p.getIsDeleted()) || !"COMPLETED".equalsIgnoreCase(p.getStatus())) continue;
-                boolean mine = (p.getProjectManager() != null && u.getId().equals(p.getProjectManager().getId()))
-                        || (p.getAssistantManager() != null && u.getId().equals(p.getAssistantManager().getId()));
-                if (!mine) continue;
+                Set<Long> team = projectParticipantUserIds(p.getId());
+                if (!team.contains(u.getId())) continue;
                 Integer already = jdbc.queryForObject(
                         "SELECT COUNT(*) FROM project_completion_incentives WHERE project_id = ? AND employee_id = ?",
                         Integer.class, p.getId(), employee.getId());
-                if (already == null || already == 0) projPending++;
+                if (already == null || already == 0) {
+                    projPending++;
+                    projPendingAmt = projPendingAmt.add(projectShare(projRate, team.size()));
+                }
             }
         }
         Map<String, Object> proj = rewardRow(projRate, projPaid == null ? 0 : projPaid, projPending, null, 0);
         proj.put("paidAmount", projPaidAmt == null ? BigDecimal.ZERO : projPaidAmt);
+        proj.put("pendingAmount", projPendingAmt);
         out.put("projects", proj);
 
         // Google reviews: each rewarded review raised a bonus; PAID bonus = on a payslip already
@@ -893,12 +895,11 @@ public class PayrollService {
                 cb.equal(root.get("leadOwner").get("id"), owner.getId()),
                 cb.isNull(root.get("leadRewardSalaryRecordId")),
                 cb.lessThan(root.get("createdAt"), before));
-        spec = spec.and(LeadSpecification.notDeleted())
-                .and(org.springframework.data.jpa.domain.Specification.not(
-                        LeadSpecification.journeyStage(LeadSpecification.STAGE_REQUIREMENT)))
-                .and(org.springframework.data.jpa.domain.Specification.not(
-                        LeadSpecification.journeyStage(LeadSpecification.STAGE_LOST)));
-        List<Lead> leads = leadRepository.findAll(spec);
+        spec = spec.and(LeadSpecification.notDeleted());
+        // Reward is earned once the lead gets a site visit (not on registration alone).
+        LocalDate monthEnd = ym.atEndOfMonth();
+        List<Lead> leads = leadRepository.findAll(spec).stream()
+                .filter(l -> leadHasSiteVisit(l, monthEnd)).toList();
         if (leads.isEmpty()) return BigDecimal.ZERO;
         for (Lead l : leads) l.setLeadRewardSalaryRecordId(rec.getId());
         leadRepository.saveAll(leads);
@@ -906,30 +907,63 @@ public class PayrollService {
                 Collections.nCopies(leads.size(), rate));
     }
 
+    /** A lead has earned its collector reward once it has a live (non-cancelled) site visit by {@code upTo} (null = ever). */
+    private boolean leadHasSiteVisit(Lead l, LocalDate upTo) {
+        for (SiteVisit v : siteVisitRepository.findByLeadIdAndIsDeletedFalseOrderByScheduledDateDesc(l.getId())) {
+            if ("Cancelled".equalsIgnoreCase(v.getStatus())) continue;
+            if (upTo == null || v.getScheduledDate() == null || !v.getScheduledDate().isAfter(upTo)) return true;
+        }
+        return false;
+    }
+
+    private static final Set<String> PROJECT_REWARD_TASKS = Set.of("TT_PM_EXECUTION", "TT_PM_INSTALLATION");
+
     /**
-     * Pays the configured incentive for each project completed this month where the employee was the
-     * project manager or assistant manager. Each (project, employee) is paid once, ever.
+     * Users who took part in the project's Execution or Installation task (a live assignment on either).
+     * The project reward pool is split equally across them.
+     */
+    private Set<Long> projectParticipantUserIds(Long projectId) {
+        Set<Long> ids = new LinkedHashSet<>();
+        for (TaskAssignment a : taskAssignmentRepository.findByTaskProjectId(projectId)) {
+            Task t = a.getTask();
+            if (t == null || Boolean.TRUE.equals(t.getIsDeleted()) || t.getTaskTemplate() == null
+                    || !PROJECT_REWARD_TASKS.contains(t.getTaskTemplate().getCode())) continue;
+            if ("CANCELLED".equals(a.getStatus()) || "REJECTED".equals(a.getStatus())) continue;
+            if (a.getEmployee() != null) ids.add(a.getEmployee().getId());
+        }
+        return ids;
+    }
+
+    /** One participant's equal share of the per-project reward pool. */
+    private static BigDecimal projectShare(BigDecimal pool, int participants) {
+        return participants <= 0 ? BigDecimal.ZERO : pool.divide(BigDecimal.valueOf(participants), 2, RoundingMode.HALF_UP);
+    }
+
+    /**
+     * Pays each project completed this month as a pool (the configured project incentive) split equally
+     * among the employees who took part in its Execution / Installation tasks. Each (project, employee)
+     * is paid once, ever.
      */
     private BigDecimal addProjectIncentiveLine(Employee employee, SalaryRecord rec, YearMonth ym) {
-        BigDecimal rate = settingAmount(K_PROJECT_INCENTIVE);
-        if (rate.signum() <= 0 || employee.getEmail() == null) return BigDecimal.ZERO;
+        BigDecimal pool = settingAmount(K_PROJECT_INCENTIVE);
+        if (pool.signum() <= 0 || employee.getEmail() == null) return BigDecimal.ZERO;
         User u = userRepository.findByEmail(employee.getEmail()).orElse(null);
         if (u == null) return BigDecimal.ZERO;
-        int paid = 0;
+        List<BigDecimal> shares = new ArrayList<>();
         for (Project p : projectRepository.findByActualCompletionDateBetween(ym.atDay(1), ym.atEndOfMonth())) {
             if (Boolean.TRUE.equals(p.getIsDeleted()) || !"COMPLETED".equalsIgnoreCase(p.getStatus())) continue;
-            boolean mine = (p.getProjectManager() != null && u.getId().equals(p.getProjectManager().getId()))
-                    || (p.getAssistantManager() != null && u.getId().equals(p.getAssistantManager().getId()));
-            if (!mine) continue;
+            Set<Long> team = projectParticipantUserIds(p.getId());
+            if (!team.contains(u.getId())) continue;
             Integer already = jdbc.queryForObject(
                     "SELECT COUNT(*) FROM project_completion_incentives WHERE project_id = ? AND employee_id = ?",
                     Integer.class, p.getId(), employee.getId());
             if (already != null && already > 0) continue;
+            BigDecimal share = projectShare(pool, team.size());
             jdbc.update("INSERT INTO project_completion_incentives (project_id, employee_id, salary_record_id, amount) VALUES (?,?,?,?)",
-                    p.getId(), employee.getId(), rec.getId(), rate);
-            paid++;
+                    p.getId(), employee.getId(), rec.getId(), share);
+            shares.add(share);
         }
-        return addCountedLine(rec, "Projects completed", "project", Collections.nCopies(paid, rate));
+        return addCountedLine(rec, "Projects completed", "project", shares);
     }
 
     /** Flat bonus when this month's attendance (present = 1, half day = ½, absent = 0; leave ignored) meets the minimum %. */
