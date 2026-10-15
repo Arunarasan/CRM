@@ -2359,6 +2359,8 @@ public class EmployeeTaskService {
         String[] cat = taskCategoryFor(t);
         card.put("category", cat[0]);
         card.put("categoryLabel", cat[1]);
+        // Template code (TT_COLLECT_REQUIREMENT, TT_VISIT_MEASURE…) — splits lead tasks into app tabs.
+        card.put("taskTypeCode", t.getTaskTemplate() != null ? t.getTaskTemplate().getCode() : null);
 
         List<TaskAssignment> assignments = assignmentRepository.findByTaskId(t.getId());
         card.put("assignedEmployees", assignments.stream()

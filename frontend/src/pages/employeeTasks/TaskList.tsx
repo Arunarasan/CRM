@@ -3,36 +3,44 @@ import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Search, X, Flame, CalendarDays, Clock, AlertTriangle, CheckCircle2, Hand, PartyPopper,
-  FolderKanban, ListTodo, ShoppingBag, UserRound,
+  FolderKanban, ListTodo, ShoppingBag, Ruler,
 } from 'lucide-react';
 import { employeeTaskApi } from '@/api/employeeTaskApi';
 import { TaskCard as TaskCardType, Capacity } from '@/types/employeeTask';
 import { runOrQueue } from '@/hooks/useOfflineQueue';
 import TaskCard from './components/TaskCard';
 import { daysUntil, priorityMeta } from './taskUtils';
+import { useT } from '@/i18n';
 
-// "Tasks to Do" — four type tabs (My Tasks / Projects / Orders / Leads), each with the same
+// "Tasks to Do" — four type tabs (Collect Requirement / Measured / Projects / Orders), each with the same
 // Active · Available · Done views. Active work is grouped by urgency so the most important task
 // is always first. All task logic (pick / start / pause / complete) is unchanged.
-type Tab = 'MINE' | 'PROJECTS' | 'ORDERS' | 'LEADS';
+type Tab = 'REQUIREMENT' | 'MEASURE' | 'PROJECTS' | 'ORDERS';
 type View = 'ACTIVE' | 'AVAILABLE' | 'DONE';
 
-// Which origin lanes (TaskCard.category) belong to each tab. "My Tasks" shows every lane.
-const LANES: Record<Exclude<Tab, 'MINE'>, string[]> = {
+// Project / Orders tabs are origin lanes (TaskCard.category). The two lead tabs split the lead
+// lanes by task type: Collect Requirement vs. everything after it (site visit, measure, quote).
+const LANES: Record<'PROJECTS' | 'ORDERS', string[]> = {
   PROJECTS: ['PROJECT', 'FIELD_WORK'],
   ORDERS: ['STITCHING', 'INSTALLATION'],
-  LEADS: ['LEAD', 'ENQUIRY', 'CALL'],
 };
+const LEAD_LANES = ['LEAD', 'ENQUIRY', 'CALL'];
+const REQUIREMENT_CODES = ['TT_COLLECT_REQUIREMENT', 'TT_UNDERSTAND_REQ'];
 
-const TABS: { key: Tab; label: string; icon: React.ComponentType<{ className?: string }>; empty: string }[] = [
-  { key: 'MINE', label: 'My Tasks', icon: ListTodo, empty: 'tasks' },
-  { key: 'PROJECTS', label: 'Projects', icon: FolderKanban, empty: 'project tasks' },
-  { key: 'ORDERS', label: 'Orders', icon: ShoppingBag, empty: 'order tasks' },
-  { key: 'LEADS', label: 'Leads', icon: UserRound, empty: 'lead tasks' },
+const TABS: { key: Tab; icon: React.ComponentType<{ className?: string }> }[] = [
+  { key: 'REQUIREMENT', icon: ListTodo },
+  { key: 'MEASURE', icon: Ruler },
+  { key: 'PROJECTS', icon: FolderKanban },
+  { key: 'ORDERS', icon: ShoppingBag },
 ];
 
-const inTab = (tab: Tab) => (t: TaskCardType) =>
-  tab === 'MINE' || LANES[tab].includes((t.category ?? '').toUpperCase());
+const inTab = (tab: Tab) => (t: TaskCardType) => {
+  const lane = (t.category ?? '').toUpperCase();
+  if (tab === 'PROJECTS' || tab === 'ORDERS') return LANES[tab].includes(lane);
+  if (!LEAD_LANES.includes(lane)) return false;
+  const isReq = REQUIREMENT_CODES.includes((t.taskTypeCode ?? '').toUpperCase());
+  return tab === 'REQUIREMENT' ? isReq : !isReq;
+};
 
 const isActive = (t: TaskCardType) => t.status !== 'COMPLETED' && t.status !== 'CANCELLED';
 
@@ -49,7 +57,8 @@ function bucket(t: TaskCardType): 'overdue' | 'now' | 'today' | 'upcoming' {
 function readParams(params: URLSearchParams): { tab: Tab; view: View } {
   const rawTab = (params.get('tab') || '').toUpperCase();
   const rawView = (params.get('view') || '').toUpperCase();
-  const tab: Tab = (['MINE', 'PROJECTS', 'ORDERS', 'LEADS'] as Tab[]).includes(rawTab as Tab) ? (rawTab as Tab) : 'MINE';
+  // Older ?tab=MINE|LEADS links land on the first tab.
+  const tab: Tab = (['REQUIREMENT', 'MEASURE', 'PROJECTS', 'ORDERS'] as Tab[]).includes(rawTab as Tab) ? (rawTab as Tab) : 'REQUIREMENT';
   let view: View = (['ACTIVE', 'AVAILABLE', 'DONE'] as View[]).includes(rawView as View) ? (rawView as View) : 'ACTIVE';
   if (!params.get('view')) {
     if (rawTab === 'AVAILABLE') view = 'AVAILABLE';
@@ -59,6 +68,7 @@ function readParams(params: URLSearchParams): { tab: Tab; view: View } {
 }
 
 export default function TaskList() {
+  const { t } = useT();
   const [params, setParams] = useSearchParams();
   const [pool, setPool] = useState<TaskCardType[]>([]);
   const [mine, setMine] = useState<TaskCardType[]>([]);
@@ -99,10 +109,10 @@ export default function TaskList() {
   }, [load]);
 
   const withRefresh = (fn: () => Promise<unknown>) =>
-    fn().then(() => setError('')).catch((e: any) => setError(e?.message || 'Action failed')).finally(load);
-  const onStart = (id: number) => withRefresh(() => runOrQueue({ method: 'post', url: `/employee-tasks/${id}/start`, description: 'Start task' }));
-  const onPause = (id: number) => withRefresh(() => runOrQueue({ method: 'post', url: `/employee-tasks/${id}/pause`, description: 'Pause task' }));
-  const onComplete = (id: number) => withRefresh(() => runOrQueue({ method: 'post', url: `/employee-tasks/${id}/complete`, description: 'Complete task' }));
+    fn().then(() => setError('')).catch((e: any) => setError(e?.message || t('pw.tl.actionFailed'))).finally(load);
+  const onStart = (id: number) => withRefresh(() => runOrQueue({ method: 'post', url: `/employee-tasks/${id}/start`, description: t('pw.tl.q.start') }));
+  const onPause = (id: number) => withRefresh(() => runOrQueue({ method: 'post', url: `/employee-tasks/${id}/pause`, description: t('pw.tl.q.pause') }));
+  const onComplete = (id: number) => withRefresh(() => runOrQueue({ method: 'post', url: `/employee-tasks/${id}/complete`, description: t('pw.tl.q.complete') }));
   const onExtend = (id: number) => withRefresh(() => employeeTaskApi.extendHold(id));
 
   // Search matches customer name, site location, task and project name — across my tasks and the pool.
@@ -125,11 +135,11 @@ export default function TaskList() {
   const upcoming = active.filter((t) => bucket(t) === 'upcoming');
   // The rest of the work on projects I'm on — unassigned tasks I can pick up straight from here.
   const myProjectIds = new Set(mine.map((t) => t.project?.id).filter((id): id is number => id != null));
-  const projectOpen = tab === 'MINE' || tab === 'PROJECTS'
+  const projectOpen = tab === 'PROJECTS'
     ? available.filter((t) => t.project != null && myProjectIds.has(t.project.id))
     : [];
   const inProgress = active.filter((t) => t.myAssignmentStatus === 'IN_PROGRESS').length;
-  const meta = TABS.find((t) => t.key === tab)!;
+  const what = t(`pw.tl.noun.${tab}`);
 
   const cards = (list: TaskCardType[]) => (
     <div className="flex flex-col gap-3">
@@ -159,7 +169,7 @@ export default function TaskList() {
   const empty = (msg: string, celebrate = false) => (
     <div className="flex flex-col items-center gap-2 rounded-2xl border border-[#ECEAE5] bg-white px-6 py-12 text-center shadow-sm">
       {celebrate ? <PartyPopper className="h-9 w-9 text-[#0A573B]" /> : <CheckCircle2 className="h-9 w-9 text-[#B9C0BB]" />}
-      <p className="text-[15px] font-semibold text-[#111817]">{celebrate ? "You're all caught up" : 'Nothing here'}</p>
+      <p className="text-[15px] font-semibold text-[#111817]">{celebrate ? t('pw.tl.caughtUp') : t('pw.tl.nothing')}</p>
       <p className="text-[13px] text-[#7A817C]">{msg}</p>
     </div>
   );
@@ -171,16 +181,16 @@ export default function TaskList() {
   );
 
   const views: { key: View; label: string; count: number }[] = [
-    { key: 'ACTIVE', label: 'Active', count: active.length },
-    { key: 'AVAILABLE', label: 'Available', count: available.length },
-    { key: 'DONE', label: 'Done', count: completed.length },
+    { key: 'ACTIVE', label: t('pw.tl.view.ACTIVE'), count: active.length },
+    { key: 'AVAILABLE', label: t('pw.tl.view.AVAILABLE'), count: available.length },
+    { key: 'DONE', label: t('pw.tl.view.DONE'), count: completed.length },
   ];
 
   const stats: { label: string; value: number; tone: string }[] = [
-    { label: 'Overdue', value: overdue.length, tone: overdue.length ? 'text-[#C9302C]' : 'text-[#111817]' },
-    { label: 'Today', value: today.length, tone: 'text-[#111817]' },
-    { label: 'In progress', value: inProgress, tone: 'text-[#0A573B]' },
-    { label: 'Can pick', value: available.length, tone: 'text-[#9B6B32]' },
+    { label: t('pw.tl.stat.overdue'), value: overdue.length, tone: overdue.length ? 'text-[#C9302C]' : 'text-[#111817]' },
+    { label: t('pw.tl.stat.today'), value: today.length, tone: 'text-[#111817]' },
+    { label: t('pw.tl.stat.inProgress'), value: inProgress, tone: 'text-[#0A573B]' },
+    { label: t('pw.tl.stat.canPick'), value: available.length, tone: 'text-[#9B6B32]' },
   ];
 
   return (
@@ -188,12 +198,12 @@ export default function TaskList() {
       {/* Title + capacity */}
       <div className="flex items-center justify-between px-0.5">
         <div className="min-w-0">
-          <h1 className="text-[24px] font-bold leading-tight tracking-tight text-[#111817]">Tasks to Do</h1>
+          <h1 className="text-[24px] font-bold leading-tight tracking-tight text-[#111817]">{t('pw.tl.title')}</h1>
           {capacity && (
             <p className="mt-0.5 text-[13px] text-[#7A817C]">
-              {capacity.active} active · {capacity.max - capacity.active > 0
-                ? `${capacity.max - capacity.active} more you can take`
-                : 'at capacity'}
+              {t('pw.tl.activeCap', { active: capacity.active })}{capacity.max - capacity.active > 0
+                ? t('pw.tl.moreCan', { n: capacity.max - capacity.active })
+                : t('pw.tl.atCap')}
             </p>
           )}
         </div>
@@ -204,11 +214,11 @@ export default function TaskList() {
         <BaseInput
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by customer name or location…"
+          placeholder={t('pw.tl.searchPh')}
           className="min-w-0 flex-1 bg-transparent text-sm text-[#111817] outline-none"
         />
         {search && (
-          <button onClick={() => setSearch('')} aria-label="Clear search" className="shrink-0 text-[#7A817C]">
+          <button onClick={() => setSearch('')} aria-label={t('pw.tl.clearSearch')} className="shrink-0 text-[#7A817C]">
             <X className="h-4 w-4" />
           </button>
         )}
@@ -217,7 +227,7 @@ export default function TaskList() {
       {/* Type tabs — My Tasks / Projects / Orders / Leads */}
       <div className="sticky top-0 z-10 -mx-3.5 bg-[#F7F7F5]/95 px-3.5 pb-1 pt-0.5 backdrop-blur" role="tablist">
         <div className="grid grid-cols-4 gap-1 rounded-2xl bg-white p-1 shadow-[0_2px_10px_rgba(0,35,22,0.06)]">
-          {TABS.map(({ key, label, icon: Icon }) => {
+          {TABS.map(({ key, icon: Icon }) => {
             const on = tab === key;
             const n = tabCount(key);
             return (
@@ -231,7 +241,7 @@ export default function TaskList() {
                 }`}
               >
                 <Icon className="h-[18px] w-[18px]" />
-                <span className="text-[12px] font-semibold leading-tight">{label}</span>
+                <span className="text-[12px] font-semibold leading-tight">{t(`pw.tl.tab.${key}`)}</span>
                 {n > 0 && (
                   <span className={`absolute right-1 top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[10px] font-bold ${
                     on ? 'bg-white/25 text-white' : tabOverdue(key) ? 'bg-[#D64541] text-white' : 'bg-[#EEF0EE] text-[#3F4642]'
@@ -282,27 +292,27 @@ export default function TaskList() {
           {view === 'ACTIVE' && (
             active.length === 0 && projectOpen.length === 0
               ? empty(available.length
-                  ? `No ${meta.empty} in hand — ${available.length} available to pick up.`
-                  : `No ${meta.empty} need your attention right now.`, true)
+                  ? t('pw.tl.inHand', { what, n: available.length })
+                  : t('pw.tl.noAttention', { what }), true)
               : (
                 <div className="flex flex-col gap-5">
-                  <Group icon={AlertTriangle} tone="text-[#D64541]" title="Overdue" list={overdue} />
-                  <Group icon={Flame} tone="text-[#EA6A2D]" title="Do Now" list={now} />
-                  <Group icon={CalendarDays} tone="text-[#0A573B]" title="Today" list={today} />
-                  <Group icon={Clock} tone="text-[#7A817C]" title="Upcoming" list={upcoming} />
-                  <Group icon={FolderKanban} tone="text-[#9B6B32]" title="Open in your projects — tap to take" list={projectOpen} />
+                  <Group icon={AlertTriangle} tone="text-[#D64541]" title={t('pw.tl.group.overdue')} list={overdue} />
+                  <Group icon={Flame} tone="text-[#EA6A2D]" title={t('pw.tl.group.now')} list={now} />
+                  <Group icon={CalendarDays} tone="text-[#0A573B]" title={t('pw.tl.group.today')} list={today} />
+                  <Group icon={Clock} tone="text-[#7A817C]" title={t('pw.tl.group.upcoming')} list={upcoming} />
+                  <Group icon={FolderKanban} tone="text-[#9B6B32]" title={t('pw.tl.group.projectOpen')} list={projectOpen} />
                 </div>
               )
           )}
           {view === 'AVAILABLE' && (
             <>
               <p className="flex items-center gap-1.5 px-1 text-[12px] text-[#7A817C]">
-                <Hand className="h-3.5 w-3.5" /> Unassigned work you can pick up — open a task to take it.
+                <Hand className="h-3.5 w-3.5" /> {t('pw.tl.pickNote')}
               </p>
-              {available.length ? cards(available) : empty(`No ${meta.empty} available right now.`)}
+              {available.length ? cards(available) : empty(t('pw.tl.noAvailable', { what }))}
             </>
           )}
-          {view === 'DONE' && (completed.length ? cards(completed) : empty(`No completed ${meta.empty} yet.`))}
+          {view === 'DONE' && (completed.length ? cards(completed) : empty(t('pw.tl.noDone', { what })))}
         </>
       )}
     </div>
