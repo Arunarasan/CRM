@@ -469,6 +469,8 @@ export default function TaskDetail() {
 
   const primaryAction = (() => {
     if (mine === 'ASSIGNED') return { label: t('pw.td.accept_task'), icon: ThumbsUp, action: 'accept' as const };
+    // Shared project tasks have no Start / Pause / Resume — the employee just completes the task.
+    if (task.projectExecution || task.projectInstallation) return null;
     if (mine === 'ACCEPTED') return { label: t('pw.td.start_work'), icon: Play, action: 'start' as const };
     if (mine === 'IN_PROGRESS') return { label: t('pw.td.pause'), icon: Pause, action: 'pause' as const };
     if (mine === 'PAUSED') return { label: t('pw.td.resume'), icon: Play, action: 'start' as const };
@@ -484,6 +486,9 @@ export default function TaskDetail() {
   const workTracking = isProjectTask && !!task.workTracking;
   // The task whose approval closes the project collects the customer's payment and submits for approval.
   const closing = !!task.closingTask;
+  // What the customer still owes — shown in the Complete dialog of the task that collects payment.
+  const dueRaw = task.projectInfo?.pendingToCollect ?? task.projectInfo?.balanceDue;
+  const dueToCollect = dueRaw != null && String(dueRaw).trim() !== '' ? Number(dueRaw) : null;
   const canRecordPayment = !locked && !!mine && (workTracking ? closing : isProjectExec);
   const canSubmitForm = isLeadForm && !locked
     && ['ASSIGNED', 'ACCEPTED', 'IN_PROGRESS', 'PAUSED'].includes(mine ?? '');
@@ -974,7 +979,7 @@ export default function TaskDetail() {
               <button onClick={() => navigate(task.moduleLink!)} className={`${solid} mb-2 bg-[#0A573B] text-white`}>
                 <ClipboardList className="h-4 w-4" /> {task.moduleLabel ?? t('pw.td.open_module')}
               </button>
-            ) : (!moduleDriven && mine === 'IN_PROGRESS') ? (
+            ) : (!moduleDriven && (mine === 'IN_PROGRESS' || (isProjectTask && (mine === 'ACCEPTED' || mine === 'PAUSED')))) ? (
               <button onClick={() => setSheet('complete')} disabled={busy} className={`${solid} mb-2 bg-[#0A573B] text-white`}>
                 <CheckCircle2 className="h-4 w-4" /> {t('pw.td.complete_task')}
               </button>
@@ -1017,7 +1022,8 @@ export default function TaskDetail() {
       <ProgressSheet taskId={taskId} open={sheet === 'progress'} onOpenChange={(o) => setSheet(o ? 'progress' : null)} onSaved={load} />
       <IssueReportSheet taskId={taskId} open={sheet === 'issue'} onOpenChange={(o) => setSheet(o ? 'issue' : null)} onSaved={load} />
       <MaterialUsageSheet taskId={taskId} open={sheet === 'material'} onOpenChange={(o) => setSheet(o ? 'material' : null)} onSaved={load} />
-      <CompleteSheet taskId={taskId} execution={workTracking ? closing : isProjectExec} open={sheet === 'complete'} onOpenChange={(o) => setSheet(o ? 'complete' : null)}
+      <CompleteSheet taskId={taskId} execution={workTracking ? closing : isProjectExec}
+        due={dueToCollect} open={sheet === 'complete'} onOpenChange={(o) => setSheet(o ? 'complete' : null)}
         onDone={() => { load(); navigate('/employee/tasks?view=ACTIVE'); }} />
       {task.installOrder && (
         <MarkInstalledSheet taskId={taskId} info={task.installOrder} open={sheet === 'installed'}

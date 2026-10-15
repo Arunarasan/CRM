@@ -8,7 +8,7 @@ import { employeeTaskApi } from '@/api/employeeTaskApi';
 import { ProgressMediaItem } from '@/types/employeeTask';
 import { runOrQueue } from '@/hooks/useOfflineQueue';
 import MediaCapture from './MediaCapture';
-import { useT } from '@/i18n';
+import { useT, useTr } from '@/i18n';
 
 /**
  * One-tap completion confirmation. Everything here is optional — the employee can just
@@ -18,12 +18,15 @@ import { useT } from '@/i18n';
  */
 const PAY_METHODS = ['Cash', 'UPI', 'Bank Transfer', 'Cheque', 'Card'];
 
-export default function CompleteSheet({ taskId, open, onOpenChange, onDone, execution }: {
+export default function CompleteSheet({ taskId, open, onOpenChange, onDone, execution, due }: {
   taskId: number; open: boolean; onOpenChange: (open: boolean) => void; onDone: () => void;
   /** Project execution task: ask how much the customer paid and submit for admin approval. */
   execution?: boolean;
+  /** Amount the customer still has to pay — shown above the payment box. */
+  due?: number | null;
 }) {
   const { t } = useT();
+  const tr = useTr();
   const [note, setNote] = useState('');
   const [media, setMedia] = useState<ProgressMediaItem[]>([]);
   const [amount, setAmount] = useState('');
@@ -76,6 +79,12 @@ export default function CompleteSheet({ taskId, open, onOpenChange, onDone, exec
               ? t('pw.cs.execIntro')
               : t('pw.cs.intro')}
           </p>
+          {execution && due != null && (
+            <div className="flex items-center justify-between rounded-xl border border-[#F0DDB8] bg-[#FDF6E7] px-3.5 py-3">
+              <span className="text-[13px] font-medium text-[#7A5A22]">{tr('pw.cs.dueNow', 'Customer needs to pay')}</span>
+              <span className="text-lg font-bold text-[#7A5A22]">₹{Math.max(0, due).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+            </div>
+          )}
           {execution && (
             <div className="rounded-xl border border-[#EFE9DC] bg-[#FBFAF6] p-3">
               <Label>{t('pw.cs.howMuch')}</Label>
