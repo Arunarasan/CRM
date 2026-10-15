@@ -9,7 +9,7 @@ import { employeeTaskApi } from '@/api/employeeTaskApi';
 import { TaskCard as TaskCardType, Capacity } from '@/types/employeeTask';
 import { runOrQueue } from '@/hooks/useOfflineQueue';
 import TaskCard from './components/TaskCard';
-import { daysUntil, priorityMeta } from './taskUtils';
+import { daysUntil, priorityMeta, byPlanRank } from './taskUtils';
 import { useT } from '@/i18n';
 
 // "Tasks to Do" — four type tabs (Collect Requirement / Measured / Projects / Orders), each with the same
@@ -51,26 +51,6 @@ function bucket(t: TaskCardType): 'overdue' | 'now' | 'today' | 'upcoming' {
   if (d === 0) return 'today';
   if (t.myAssignmentStatus === 'IN_PROGRESS' || priorityMeta(t.priority).urgent) return 'now';
   return 'upcoming';
-}
-
-/**
- * Plan order within a group: brand-new leads first, then projects Ready-to-Fit, then everything else
- * by progress (furthest along first). Ties break on lead star rating, then earliest due date.
- */
-const NEW_LEAD_MS = 3 * 24 * 3600 * 1000;
-function rankTier(t: TaskCardType): number {
-  const fresh = t.category === 'LEAD' && t.createdAt != null
-    && Date.now() - new Date(t.createdAt).getTime() < NEW_LEAD_MS
-    && t.myAssignmentStatus !== 'IN_PROGRESS' && !(t.progressPercent && t.progressPercent > 0);
-  if (fresh) return 0;
-  if (t.workStage === 'READY_TO_FIT') return 1;
-  return 2;
-}
-function byPlanRank(a: TaskCardType, b: TaskCardType): number {
-  return rankTier(a) - rankTier(b)
-    || (rankTier(a) === 2 ? (b.progressPercent ?? 0) - (a.progressPercent ?? 0) : 0)
-    || (b.leadRating ?? 0) - (a.leadRating ?? 0)
-    || (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999');
 }
 
 /** Read tab/view from the URL, accepting the older ?tab=PROJECTS|AVAILABLE|… and ?status=COMPLETED links. */

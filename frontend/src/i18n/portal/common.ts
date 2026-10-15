@@ -2,6 +2,15 @@ import type { Rows } from './build';
 
 // Shared chrome, navigation, notifications, requests hub, status pills.
 const rows: Rows = {
+  // Today's plan on Home
+  'portal.home.plan.title': ["Today's Plan", 'आज की योजना', 'இன்றைய திட்டம்', 'నేటి ప్రణాళిక'],
+  'portal.home.plan.summary': ['{{count}} to do · {{overdue}} overdue · {{fit}} ready to fit', '{{count}} काम · {{overdue}} विलंबित · {{fit}} फिटिंग के लिए तैयार', '{{count}} பணிகள் · {{overdue}} தாமதம் · {{fit}} பொருத்த தயார்', '{{count}} పనులు · {{overdue}} ఆలస్యం · {{fit}} ఫిట్టింగ్‌కు సిద్ధం'],
+  'portal.home.plan.startHere': ['Start here', 'यहाँ से शुरू करें', 'இங்கே தொடங்குங்கள்', 'ఇక్కడ మొదలుపెట్టండి'],
+  'portal.home.plan.empty': ['Nothing planned — pick up work from Available.', 'कोई योजना नहीं — उपलब्ध काम चुनें।', 'திட்டம் எதுவும் இல்லை — கிடைக்கும் பணியை எடுங்கள்.', 'ప్రణాళిక లేదు — అందుబాటులో ఉన్న పనిని తీసుకోండి.'],
+  'portal.home.plan.newLeads': ['New leads to pick up', 'उठाने के लिए नई लीड', 'எடுக்க வேண்டிய புதிய லீட்கள்', 'తీసుకోవాల్సిన కొత్త లీడ్‌లు'],
+  'portal.home.plan.more': ['See all {{count}} tasks', 'सभी {{count}} काम देखें', 'அனைத்து {{count}} பணிகளையும் பார்க்க', 'మొత్తం {{count}} పనులు చూడండి'],
+  'portal.home.plan.readyToFit': ['Ready to fit', 'फिटिंग के लिए तैयार', 'பொருத்த தயார்', 'ఫిట్టింగ్‌కు సిద్ధం'],
+  'portal.home.plan.newLead': ['New lead', 'नई लीड', 'புதிய லீட்', 'కొత్త లీడ్'],
   // My Rewards card on Home
   'portal.home.myRewards': ['My Rewards', 'मेरे पुरस्कार', 'என் வெகுமதிகள்', 'నా రివార్డులు'],
   'portal.home.totalEarned': ['Total earned', 'कुल कमाई', 'மொத்த வருமானம்', 'మొత్తం సంపాదన'],

@@ -1,3 +1,4 @@
+import type { TaskCard as TaskCardType } from '@/types/employeeTask';
 import { tNow, currentLang, dateLocale } from '@/i18n';
 
 /**
@@ -100,4 +101,24 @@ export function statusMeta(status: string): { label: string; cls: string } {
     default:
       return { label: (() => { const k = `pw.status.${status}`; const v = tNow(k); return v === k ? status.replace(/_/g, ' ') : v; })(), cls: 'bg-[#EEF0EE] text-[#5B625E]' };
   }
+}
+
+/**
+ * Plan order within a group: brand-new leads first, then projects Ready-to-Fit, then everything else
+ * by progress (furthest along first). Ties break on lead star rating, then earliest due date.
+ */
+const NEW_LEAD_MS = 3 * 24 * 3600 * 1000;
+export function rankTier(t: TaskCardType): number {
+  const fresh = t.category === 'LEAD' && t.createdAt != null
+    && Date.now() - new Date(t.createdAt).getTime() < NEW_LEAD_MS
+    && t.myAssignmentStatus !== 'IN_PROGRESS' && !(t.progressPercent && t.progressPercent > 0);
+  if (fresh) return 0;
+  if (t.workStage === 'READY_TO_FIT') return 1;
+  return 2;
+}
+export function byPlanRank(a: TaskCardType, b: TaskCardType): number {
+  return rankTier(a) - rankTier(b)
+    || (rankTier(a) === 2 ? (b.progressPercent ?? 0) - (a.progressPercent ?? 0) : 0)
+    || (b.leadRating ?? 0) - (a.leadRating ?? 0)
+    || (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999');
 }

@@ -11,6 +11,7 @@ import { HomeSummary } from '@/types/employeeTask';
 import { EmployeeDashboard, MyRewards } from '@/types/employeePortal';
 import { StatusPill, inr } from '../employeePortal/_shared';
 import ClockWidget from '../employeePortal/ClockWidget';
+import TodayPlan from './components/TodayPlan';
 import { useT } from '@/i18n';
 
 // Premium card surface shared across the dashboard.
@@ -123,6 +124,9 @@ export default function MobileHome() {
 
         {/* Today's earnings + live session time — the money-forward hero of the home screen */}
         <ClockWidget onChange={load} />
+
+        {/* Today's plan — my work in the order to do it, plus new leads to pick up */}
+        <TodayPlan />
 
         {/* My Rewards — what lead collection, completed projects and Google reviews have earned */}
         {rewards && (
