@@ -1,5 +1,6 @@
 import { BaseInput } from '@/components/ui/input';
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useT, dateLocale } from '@/i18n';
 import { ChevronRight, Gift, Plus, X, HandCoins, Landmark, Download } from 'lucide-react';
 import { employeePortalApi } from '@/api/employeePortalApi';
@@ -97,10 +98,10 @@ function PayslipDetail({ slip, onBack, employee }: { slip: Payslip; onBack: () =
 
 const now = new Date();
 
-function RequestSheet({ owed, onClose, onSaved }: { owed: number; onClose: () => void; onSaved: () => void }) {
+function RequestSheet({ owed, borrow, onClose, onSaved }: { owed: number; borrow?: boolean; onClose: () => void; onSaved: () => void }) {
   const { t } = useT();
   const MONTHS = useMonths();
-  const [type, setType] = useState<'ADVANCE' | 'REPAY'>(owed > 0 ? 'REPAY' : 'ADVANCE');
+  const [type, setType] = useState<'ADVANCE' | 'REPAY'>(!borrow && owed > 0 ? 'REPAY' : 'ADVANCE');
   const [amount, setAmount] = useState('');
   const [reason, setReason] = useState('');
   const [monthlyRecovery, setMonthlyRecovery] = useState('');
@@ -215,7 +216,9 @@ export default function Salary() {
   const [requests, setRequests] = useState<PayrollRequestEntry[]>([]);
   const [loans, setLoans] = useState<MyLoan[]>([]);
   const [advances, setAdvances] = useState<MyAdvance[]>([]);
-  const [sheetOpen, setSheetOpen] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [sheetOpen, setSheetOpen] = useState(searchParams.get('borrow') === '1');
+  const [borrowIntent] = useState(searchParams.get('borrow') === '1');
   const [me, setMe] = useState<PayslipEmployee | null>(null);
 
   const loadRequests = () => employeePortalApi.payrollRequests().then(setRequests).catch(() => setRequests([]));
@@ -404,8 +407,9 @@ export default function Salary() {
       {sheetOpen && (
         <RequestSheet
           owed={owed}
-          onClose={() => setSheetOpen(false)}
-          onSaved={() => { setSheetOpen(false); loadRequests(); loadOwed(); }}
+          borrow={borrowIntent}
+          onClose={() => { setSheetOpen(false); if (searchParams.has('borrow')) setSearchParams({}, { replace: true }); }}
+          onSaved={() => { setSheetOpen(false); if (searchParams.has('borrow')) setSearchParams({}, { replace: true }); loadRequests(); loadOwed(); }}
         />
       )}
     </div>

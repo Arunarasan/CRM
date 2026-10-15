@@ -55,6 +55,27 @@ public class ProfileChangeRequest extends BaseEntity {
     @Column(name = "proposed_photo_url", length = 500)
     private String proposedPhotoUrl;
 
+    @Column(name = "proposed_first_name", length = 100)
+    private String proposedFirstName;
+
+    @Column(name = "proposed_last_name", length = 100)
+    private String proposedLastName;
+
+    @Column(name = "proposed_bank_account", length = 50)
+    private String proposedBankAccount;
+
+    @Column(name = "proposed_ifsc", length = 20)
+    private String proposedIfsc;
+
+    @Column(name = "proposed_pf_number", length = 50)
+    private String proposedPfNumber;
+
+    @Column(name = "proposed_esi_number", length = 50)
+    private String proposedEsiNumber;
+
+    @Column(name = "proposed_uan", length = 50)
+    private String proposedUan;
+
     // --- DOCUMENT proposal ----------------------------------------------------
     @Column(name = "doc_name", length = 150)
     private String docName;

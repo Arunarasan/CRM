@@ -11,6 +11,13 @@ export interface AdminProfileChangeRequest {
   proposedEmergencyName: string | null;
   proposedEmergencyPhone: string | null;
   proposedPhotoUrl: string | null;
+  proposedFirstName: string | null;
+  proposedLastName: string | null;
+  proposedBankAccount: string | null;
+  proposedIfsc: string | null;
+  proposedPfNumber: string | null;
+  proposedEsiNumber: string | null;
+  proposedUan: string | null;
   docName: string | null;
   docType: string | null;
   docFileUrl: string | null;

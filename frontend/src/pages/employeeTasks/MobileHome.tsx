@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ChevronDown, CalendarDays,
-  Wallet, ChevronRight,
+  Wallet, ChevronRight, HandCoins,
   Activity,
 } from 'lucide-react';
 import { employeeTaskApi } from '@/api/employeeTaskApi';
@@ -195,6 +195,18 @@ export default function MobileHome() {
             <StatusPill status={dash?.lastSalaryStatus ?? 'NONE'} />
           </button>
         </div>
+
+        {/* Borrow money — opens the advance request form; admin approves */}
+        <button onClick={() => navigate('/employee/salary?borrow=1')} className={`${CARD} flex items-center gap-3 px-4 py-3.5 text-left active:scale-[0.99]`}>
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#06452F]">
+            <HandCoins className="h-5 w-5 text-white" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[15px] font-semibold text-[#111817]">{t('portal.home.borrowMoney')}</span>
+            <span className="block text-[12px] text-[#7A817C]">{t('portal.home.borrowMoneyHint')}</span>
+          </span>
+          <ChevronRight className="h-4 w-4 text-[#06452F]" />
+        </button>
 
         {/* Recent Activity */}
         {dash?.recentActivity && Object.values(dash.recentActivity).some(Boolean) && (

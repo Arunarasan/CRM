@@ -91,6 +91,13 @@ export default function ProfileApprovalsPanel({
             <div className="mt-3 space-y-1.5 text-sm">
               {r.changeType === "PROFILE" ? (
                 <>
+                  {r.proposedFirstName != null && <Row icon={<User className="h-3.5 w-3.5" />} label="First name" value={r.proposedFirstName} />}
+                  {r.proposedLastName != null && <Row icon={<User className="h-3.5 w-3.5" />} label="Last name" value={r.proposedLastName} />}
+                  {r.proposedBankAccount != null && <Row label="Bank account" value={r.proposedBankAccount} />}
+                  {r.proposedIfsc != null && <Row label="IFSC" value={r.proposedIfsc} />}
+                  {r.proposedPfNumber != null && <Row label="PF number" value={r.proposedPfNumber} />}
+                  {r.proposedEsiNumber != null && <Row label="ESI number" value={r.proposedEsiNumber} />}
+                  {r.proposedUan != null && <Row label="UAN" value={r.proposedUan} />}
                   {r.proposedPhone != null && <Row icon={<Phone className="h-3.5 w-3.5" />} label="Mobile" value={r.proposedPhone} />}
                   {r.proposedEmergencyName != null && <Row icon={<ShieldAlert className="h-3.5 w-3.5" />} label="Emergency contact" value={r.proposedEmergencyName} />}
                   {r.proposedEmergencyPhone != null && <Row icon={<Phone className="h-3.5 w-3.5" />} label="Emergency phone" value={r.proposedEmergencyPhone} />}

@@ -37,6 +37,20 @@ function EditRow({ label, value, onChange, placeholder, type = 'text' }: { label
   );
 }
 
+const toForm = (d: EmployeeProfile | null) => ({
+  firstName: d?.firstName ?? '',
+  lastName: d?.lastName ?? '',
+  phone: d?.phone ?? '',
+  emergencyContactName: d?.emergencyContactName ?? '',
+  emergencyContactPhone: d?.emergencyContactPhone ?? '',
+  profilePhotoUrl: d?.profilePhotoUrl ?? '',
+  bankAccount: d?.bankAccount ?? '',
+  ifsc: d?.ifsc ?? '',
+  pfNumber: d?.pfNumber ?? '',
+  esiNumber: d?.esiNumber ?? '',
+  uan: d?.uan ?? '',
+});
+
 export default function MyProfile() {
   const [p, setP] = useState<EmployeeProfile | null>(null);
   const [editing, setEditing] = useState(false);
@@ -45,19 +59,14 @@ export default function MyProfile() {
   const [msg, setMsg] = useState('');
   const [msgOk, setMsgOk] = useState(false);
   const [hasPending, setHasPending] = useState(false);
-  const [form, setForm] = useState({ phone: '', emergencyContactName: '', emergencyContactPhone: '', profilePhotoUrl: '' });
+  const [form, setForm] = useState(toForm(null));
   const photoInput = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const { t } = useT();
 
   const load = () => employeePortalApi.profile().then((d) => {
     setP(d);
-    setForm({
-      phone: d.phone ?? '',
-      emergencyContactName: d.emergencyContactName ?? '',
-      emergencyContactPhone: d.emergencyContactPhone ?? '',
-      profilePhotoUrl: d.profilePhotoUrl ?? '',
-    });
+    setForm(toForm(d));
   }).catch(() => {});
 
   const loadPending = () => employeePortalApi.profileChangeRequests()
@@ -67,7 +76,7 @@ export default function MyProfile() {
   useEffect(() => { load(); loadPending(); }, []);
 
   const startEdit = () => { setMsg(''); setEditing(true); };
-  const cancel = () => { setEditing(false); if (p) setForm({ phone: p.phone ?? '', emergencyContactName: p.emergencyContactName ?? '', emergencyContactPhone: p.emergencyContactPhone ?? '', profilePhotoUrl: p.profilePhotoUrl ?? '' }); };
+  const cancel = () => { setEditing(false); setForm(toForm(p)); };
 
   const onPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -132,7 +141,14 @@ export default function MyProfile() {
           )}
         </button>
         <BaseInput ref={photoInput} type="file" accept="image/*" capture="user" className="hidden" onChange={onPhoto} />
-        <h2 className="text-lg font-bold">{p ? `${p.firstName} ${p.lastName}` : '…'}</h2>
+        {editing ? (
+          <div className="mx-3 grid w-full max-w-sm grid-cols-2 gap-2 px-3">
+            <BaseInput value={form.firstName} onChange={(e) => setForm((f) => ({ ...f, firstName: e.target.value }))} placeholder="First name" className="rounded-lg border bg-background px-3 py-2 text-sm" />
+            <BaseInput value={form.lastName} onChange={(e) => setForm((f) => ({ ...f, lastName: e.target.value }))} placeholder="Last name" className="rounded-lg border bg-background px-3 py-2 text-sm" />
+          </div>
+        ) : (
+          <h2 className="text-lg font-bold">{p ? `${p.firstName} ${p.lastName}` : '…'}</h2>
+        )}
         <p className="text-sm text-muted-foreground">{p?.designation || t('portal.more.employee')}</p>
         <span className="rounded-full bg-primary/10 px-3 py-0.5 text-xs font-semibold text-primary">{p?.employeeCode}</span>
       </div>
@@ -185,14 +201,26 @@ export default function MyProfile() {
         </div>
       )}
 
-      {/* Payroll & bank — always read-only (HR-managed) */}
+      {/* Payroll & bank — editable, but every change waits for HR approval */}
       <h3 className="px-4 pb-1 pt-2 text-xs font-semibold uppercase text-muted-foreground">{t('portal.profile.payrollBank')}</h3>
       <div className="mx-3 mb-6 divide-y overflow-hidden rounded-xl border bg-card shadow-sm">
-        <Row icon={Landmark} label={t('portal.profile.bankAccount')} value={p?.bankAccount} locked />
-        <Row icon={Landmark} label={t('portal.profile.ifsc')} value={p?.ifsc} locked />
-        <Row icon={BadgeCheck} label={t('portal.profile.pfNumber')} value={p?.pfNumber} locked />
-        <Row icon={BadgeCheck} label={t('portal.profile.esiNumber')} value={p?.esiNumber} locked />
-        <Row icon={BadgeCheck} label={t('portal.profile.uan')} value={p?.uan} locked />
+        {editing ? (
+          <>
+            <EditRow label={t('portal.profile.bankAccount')} value={form.bankAccount} onChange={(v) => setForm((f) => ({ ...f, bankAccount: v }))} />
+            <EditRow label={t('portal.profile.ifsc')} value={form.ifsc} onChange={(v) => setForm((f) => ({ ...f, ifsc: v.toUpperCase() }))} />
+            <EditRow label={t('portal.profile.pfNumber')} value={form.pfNumber} onChange={(v) => setForm((f) => ({ ...f, pfNumber: v }))} />
+            <EditRow label={t('portal.profile.esiNumber')} value={form.esiNumber} onChange={(v) => setForm((f) => ({ ...f, esiNumber: v }))} />
+            <EditRow label={t('portal.profile.uan')} value={form.uan} onChange={(v) => setForm((f) => ({ ...f, uan: v }))} />
+          </>
+        ) : (
+          <>
+            <Row icon={Landmark} label={t('portal.profile.bankAccount')} value={p?.bankAccount} />
+            <Row icon={Landmark} label={t('portal.profile.ifsc')} value={p?.ifsc} />
+            <Row icon={BadgeCheck} label={t('portal.profile.pfNumber')} value={p?.pfNumber} />
+            <Row icon={BadgeCheck} label={t('portal.profile.esiNumber')} value={p?.esiNumber} />
+            <Row icon={BadgeCheck} label={t('portal.profile.uan')} value={p?.uan} />
+          </>
+        )}
       </div>
     </div>
   );

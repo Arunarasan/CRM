@@ -62,8 +62,19 @@ public class ProfileChangeRequestService {
         r.setProposedEmergencyName(trimToNull(body.get("emergencyContactName")));
         r.setProposedEmergencyPhone(trimToNull(body.get("emergencyContactPhone")));
         r.setProposedPhotoUrl(trimToNull(body.get("profilePhotoUrl")));
+        r.setProposedFirstName(changed(body.get("firstName"), employee.getFirstName()));
+        r.setProposedLastName(changed(body.get("lastName"), employee.getLastName()));
+        r.setProposedBankAccount(changed(body.get("bankAccount"), employee.getBankAccount()));
+        r.setProposedIfsc(changed(body.get("ifsc"), employee.getIfsc()));
+        r.setProposedPfNumber(changed(body.get("pfNumber"), employee.getPfNumber()));
+        r.setProposedEsiNumber(changed(body.get("esiNumber"), employee.getEsiNumber()));
+        r.setProposedUan(changed(body.get("uan"), employee.getUan()));
         if (r.getProposedPhone() == null && r.getProposedEmergencyName() == null
-                && r.getProposedEmergencyPhone() == null && r.getProposedPhotoUrl() == null) {
+                && r.getProposedEmergencyPhone() == null && r.getProposedPhotoUrl() == null
+                && r.getProposedFirstName() == null && r.getProposedLastName() == null
+                && r.getProposedBankAccount() == null && r.getProposedIfsc() == null
+                && r.getProposedPfNumber() == null && r.getProposedEsiNumber() == null
+                && r.getProposedUan() == null) {
             throw new IllegalArgumentException("Nothing to submit — no changes were entered.");
         }
         r.setStatus("PENDING");
@@ -139,6 +150,13 @@ public class ProfileChangeRequestService {
             if (r.getProposedEmergencyName() != null) employee.setEmergencyContactName(r.getProposedEmergencyName());
             if (r.getProposedEmergencyPhone() != null) employee.setEmergencyContactPhone(r.getProposedEmergencyPhone());
             if (r.getProposedPhotoUrl() != null) employee.setProfilePhotoUrl(r.getProposedPhotoUrl());
+            if (r.getProposedFirstName() != null) employee.setFirstName(r.getProposedFirstName());
+            if (r.getProposedLastName() != null) employee.setLastName(r.getProposedLastName());
+            if (r.getProposedBankAccount() != null) employee.setBankAccount(r.getProposedBankAccount());
+            if (r.getProposedIfsc() != null) employee.setIfsc(r.getProposedIfsc());
+            if (r.getProposedPfNumber() != null) employee.setPfNumber(r.getProposedPfNumber());
+            if (r.getProposedEsiNumber() != null) employee.setEsiNumber(r.getProposedEsiNumber());
+            if (r.getProposedUan() != null) employee.setUan(r.getProposedUan());
             employeeRepository.save(employee);
         } else if ("DOCUMENT".equals(r.getChangeType())) {
             EmployeeDocument doc = new EmployeeDocument();
@@ -208,6 +226,12 @@ public class ProfileChangeRequestService {
         String last = e.getLastName() == null ? "" : e.getLastName();
         String name = (first + " " + last).trim();
         return name.isEmpty() ? "An employee" : name;
+    }
+
+    /** The trimmed new value, or null when blank or identical to the current one (nothing to propose). */
+    private static String changed(String proposed, String current) {
+        String v = trimToNull(proposed);
+        return v == null || v.equals(current == null ? null : current.trim()) ? null : v;
     }
 
     private static String trimToNull(String s) {

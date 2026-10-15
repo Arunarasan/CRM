@@ -308,6 +308,13 @@ export interface ProfileChangeRequest {
   proposedEmergencyName: string | null;
   proposedEmergencyPhone: string | null;
   proposedPhotoUrl: string | null;
+  proposedFirstName: string | null;
+  proposedLastName: string | null;
+  proposedBankAccount: string | null;
+  proposedIfsc: string | null;
+  proposedPfNumber: string | null;
+  proposedEsiNumber: string | null;
+  proposedUan: string | null;
   docName: string | null;
   docType: string | null;
   docFileUrl: string | null;
@@ -321,6 +328,13 @@ export interface ProfileChangeBody {
   emergencyContactName?: string;
   emergencyContactPhone?: string;
   profilePhotoUrl?: string;
+  firstName?: string;
+  lastName?: string;
+  bankAccount?: string;
+  ifsc?: string;
+  pfNumber?: string;
+  esiNumber?: string;
+  uan?: string;
 }
 
 export interface DocumentSubmitBody {

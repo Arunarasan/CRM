@@ -33,6 +33,8 @@ const rows: Rows = {
   'pw.sal.bonus.INCENTIVE': ['Incentive', 'प्रोत्साहन', 'ஊக்கத்தொகை', 'ప్రోత్సాహకం'],
   'pw.sal.bonus.OTHER': ['Bonus', 'बोनस', 'போனஸ்', 'బోనస్'],
 
+  'portal.home.borrowMoney': ['Request to borrow money', 'उधार पैसे का अनुरोध', 'பணம் கடன் கோரிக்கை', 'డబ్బు అప్పు అభ్యర్థన'],
+  'portal.home.borrowMoneyHint': ['Advance against your salary — HR approves', 'वेतन के विरुद्ध अग्रिम — HR स्वीकृत करेगा', 'சம்பளத்திற்கு எதிரான முன்பணம் — HR ஒப்புதல்', 'జీతంపై అడ్వాన్స్ — HR ఆమోదిస్తుంది'],
   'pw.sal.borrowRepay': ['Borrow & repay', 'उधार और चुकौती', 'கடன் & திருப்பிச் செலுத்துதல்', 'అప్పు & తిరిగి చెల్లింపు'],
   'pw.sal.newRequest': ['New request', 'नया अनुरोध', 'புதிய கோரிக்கை', 'కొత్త అభ్యర్థన'],
   'pw.sal.noRequests': ['No requests yet. Tap New request to borrow money or repay what you owe.', 'अभी कोई अनुरोध नहीं। पैसे उधार लेने या बकाया चुकाने के लिए नया अनुरोध दबाएं।', 'இன்னும் கோரிக்கைகள் இல்லை. கடன் வாங்க அல்லது திருப்பிச் செலுத்த புதிய கோரிக்கையைத் தட்டவும்.', 'ఇంకా అభ్యర్థనలు లేవు. అప్పు తీసుకోవడానికి లేదా తిరిగి చెల్లించడానికి కొత్త అభ్యర్థనను నొక్కండి.'],
