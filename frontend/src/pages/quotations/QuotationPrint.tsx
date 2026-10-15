@@ -3,7 +3,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   CalendarDays, Check, CreditCard, Globe, Landmark, Loader2, Mail, MapPin, Package, Pencil, Percent, Phone, Plus, Printer,
-  Receipt, Tag, Truck, User, Users, X,
+  Receipt, Share2, Tag, Truck, User, Users, X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
@@ -13,7 +13,9 @@ import { NumCell } from "@/pages/leads/quote/cells";
 import {
   buildCategoryBlocks, lineDiscountAmount, lineGross, quoteCharges, type Quotation, type QuotationItem,
 } from "@/types/quotation";
-import { resolveFileUrl } from "@/lib/uploadFile";
+import { resolveFileUrl, uploadFile } from "@/lib/uploadFile";
+import { DESIGN_KEY, buildQuotationPdf, loadPdfImages } from "@/lib/quotationPdf";
+import ShareQuoteDialog, { type PreparedShare } from "@/pages/leads/quote/ShareQuoteDialog";
 import { colorsOf, useLineProducts } from "@/pages/leads/quote/productCells";
 import { fetchBankDetails, fetchCompanyProfile, type BankDetails, type CompanyProfile } from "@/lib/companyProfile";
 import { lineTotal, pricingPatch, quoteTotals, readPricing, type QuotePricing } from "./quotationPricing";
@@ -53,6 +55,8 @@ export function QuotationPrintView({ quotationId, onClose, onSaved, readOnly, em
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const [shareOpen, setShareOpen] = useState<PreparedShare | null>(null);
   const [rates, setRates] = useState<Record<number, number | null | undefined>>({});
   const [pricing, setPricing] = useState<QuotePricing>({ mode: "PERCENT", value: 0, gst: 0 });
   const [fields, setFields] = useState({ quotationDate: "", expiryDate: "", termsAndConditions: "" });
@@ -100,6 +104,23 @@ export function QuotationPrintView({ quotationId, onClose, onSaved, readOnly, em
     [quotation, items, rates, pricing],
   );
   const client = quotation?.customer?.name || quotation?.lead?.name;
+
+  /** Share to the customer: the PDF in the view currently selected + the customer link, via the Share dialog. */
+  const shareToCustomer = async () => {
+    if (!quotation) return;
+    setSharing(true);
+    try {
+      const images = await loadPdfImages(quotation).catch(() => ({} as Record<string, string>));
+      images[DESIGN_KEY] = JSON.stringify(D);
+      const blob = buildQuotationPdf(quotation, { images }).output("blob");
+      const pdf = new File([blob], `Quotation-${quotation.quotationNumber || quotation.id}.pdf`, { type: "application/pdf" });
+      const pdfUrl = await uploadFile(pdf, "QUOTATION").then((u) => u.fileUrl).catch(() => undefined);
+      const share = await quotationApi.share(quotationId, pdfUrl);
+      setShareOpen({ quotation, pdf, share, company, itemCount: items.length });
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || "Could not prepare the quotation to share.");
+    } finally { setSharing(false); }
+  };
 
   const saveEdits = async () => {
     if (!quotation) return;
@@ -216,8 +237,13 @@ export function QuotationPrintView({ quotationId, onClose, onSaved, readOnly, em
           })}
           <button type="button" onClick={() => fetchDocDesign("quotation").then(setD)}
             className="ml-auto text-xs font-medium text-slate-500 hover:text-emerald-800">Reset</button>
+          <Button size="sm" disabled={sharing} onClick={shareToCustomer} className="h-8 rounded-lg bg-emerald-800 hover:bg-emerald-900 text-white">
+            {sharing ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Share2 className="mr-1.5 h-4 w-4" />} Share to customer
+          </Button>
         </div>
       )}
+
+      {shareOpen && <ShareQuoteDialog prepared={shareOpen} onClose={() => setShareOpen(null)} />}
 
       <div className="qp-scroll">
         <div id="quotation-print" className="qp">

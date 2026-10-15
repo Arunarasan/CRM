@@ -156,7 +156,7 @@ async function loadDocAssets(imageUrls: string[], upiAmount: number, upiNote: st
 /** The letterhead banner (frontend/public/quote-header.jpg), carried in the images map under this key. */
 const HEADER_KEY = "__quote_header__";
 /** The saved document design (Website › Document Design), as JSON. */
-const DESIGN_KEY = "__design__";
+export const DESIGN_KEY = "__design__";
 const HEADER_URL = `${import.meta.env.BASE_URL}quote-header.jpg`;
 /** Banner width : height (1536 × 292). */
 const HEADER_RATIO = 292 / 1536;
