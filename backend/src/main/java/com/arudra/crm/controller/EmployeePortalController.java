@@ -39,6 +39,7 @@ public class EmployeePortalController {
             + "or hasAuthority('EMPLOYEE_PORTAL')";
 
     private final EmployeePortalService portalService;
+    private final com.arudra.crm.service.PortalSearchService searchService;
     private final EmployeeTimeService timeService;
     private final CurrentUserService currentUserService;
     private final PurchaseService purchaseService;
@@ -55,7 +56,9 @@ public class EmployeePortalController {
                                     ProfileChangeRequestService profileChangeRequestService,
                                     WebAuthnService webAuthnService, AttendanceCorrectionService correctionService,
                                     com.arudra.crm.service.EmployeeReviewService employeeReviewService,
-                                    DeviceBindingService deviceBindingService) {
+                                    DeviceBindingService deviceBindingService,
+                                    com.arudra.crm.service.PortalSearchService searchService) {
+        this.searchService = searchService;
         this.portalService = portalService;
         this.timeService = timeService;
         this.currentUserService = currentUserService;
@@ -480,6 +483,13 @@ public class EmployeePortalController {
     @PreAuthorize(PORTAL)
     public ResponseEntity<ApiResponse<Map<String, Object>>> bonuses() {
         return ResponseEntity.ok(ApiResponse.success(portalService.getMyBonuses(me())));
+    }
+
+    /** One search box: customer phone/name, lead, project, shipping ID or order code, with tasks and pending amounts. */
+    @GetMapping("/search")
+    @PreAuthorize(PORTAL)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> search(@RequestParam("q") String q) {
+        return ResponseEntity.ok(ApiResponse.success(searchService.search(q)));
     }
 
     /** Month-by-month earnings preview (amount + incentive per month), computed read-only. */

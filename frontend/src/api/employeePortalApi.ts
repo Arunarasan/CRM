@@ -6,7 +6,7 @@ import {
   TimeStatus, Timesheet, TimesheetPeriod, MaterialOption, MaterialRequestEntry, MaterialRequestCreateBody,
   LeadSummary, LeadCreateBody, ManpowerRequestEntry, ManpowerRequestCreateBody,
   DailyReportEntry, DailyReportCreateBody, PersonalReminderEntry, ReminderCreateBody,
-  MyBonuses, MyRewards, MonthlyEarning, PayrollRequestEntry, PayrollRequestCreateBody, MyLoan, MyAdvance,
+  MyBonuses, MyRewards, PortalSearchResult, MonthlyEarning, PayrollRequestEntry, PayrollRequestCreateBody, MyLoan, MyAdvance,
   IncomingReceiptPo, ReceiptWarehouse, GoodsReceiptSubmission, MyReceipt,
   ProfileChangeRequest, ProfileChangeBody, DocumentSubmitBody, AttendanceCorrection,
   DeviceBindingStatus, DeviceProof, UserDeviceInfo,
@@ -107,6 +107,7 @@ export const employeePortalApi = {
 
   salary: () => api.get<SalarySummary>(`${BASE}/salary`).then((r) => r.data),
   rewards: () => api.get<MyRewards>(`${BASE}/rewards`).then((r) => r.data),
+  search: (q: string) => api.get<PortalSearchResult>(`${BASE}/search`, { params: { q } }).then((r) => r.data),
   bonuses: () => api.get<MyBonuses>(`${BASE}/bonuses`).then((r) => r.data),
   monthlyEarnings: () => api.get<MonthlyEarning[]>(`${BASE}/monthly-earnings`).then((r) => r.data),
 

@@ -677,3 +677,32 @@ export interface MyReceipt {
   warehouse?: { name?: string } | null;
   purchaseOrder?: { id?: number; poNumber?: string } | null;
 }
+
+/** Universal portal search (GET /employee-portal/search?q=). */
+export interface PortalSearchTask {
+  id: number; taskName: string; status: string; dueDate?: string | null; progress?: number | null; projectName?: string | null;
+}
+export interface PortalSearchResult {
+  query: string;
+  customers: {
+    id: number; name: string; phone?: string | null; code?: string | null; company?: string | null; address?: string | null;
+    pendingAmount: number;
+    invoices: { id: number; number: string; status: string; dueDate?: string | null; total: number; balance: number }[];
+    projects: { id: number; code?: string | null; name: string; status?: string | null }[];
+    tasks: PortalSearchTask[];
+  }[];
+  leads: {
+    id: number; code?: string | null; name: string; phone?: string | null; status?: string | null; stage?: string | null;
+    rating?: number | null; address?: string | null; tasks: PortalSearchTask[];
+  }[];
+  projects: {
+    id: number; code?: string | null; name: string; status?: string | null; address?: string | null; dueDate?: string | null;
+    customerName?: string | null; customerPhone?: string | null; pendingAmount: number; progress: number; tasks: PortalSearchTask[];
+  }[];
+  parcels: {
+    kind: 'SHIPMENT' | 'ORDER'; id: number; code: string; status: string;
+    transporter?: string | null; place?: string | null; dispatchDate?: string | null; receivedAt?: string | null; poNumber?: string | null;
+    workType?: string | null; bundleNo?: number | null; bundleTotal?: number | null; dueDate?: string | null; deliveredAt?: string | null;
+    customerName?: string | null; customerPhone?: string | null; taskId?: number | null; balanceDue?: number | null;
+  }[];
+}

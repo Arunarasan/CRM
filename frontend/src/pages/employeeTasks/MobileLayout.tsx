@@ -39,6 +39,7 @@ export default function MobileLayout() {
   // Work-surface pages (the quote sheet) are used on tablets and laptops too: let them take the full
   // width there. Everything else stays a phone-width column.
   const wide = WIDE_ROUTES.some((r) => location.pathname.startsWith(r));
+  const onSearch = location.pathname.startsWith('/employee/search');
 
   return (
     <div className={`flex h-dvh w-full flex-col bg-[#F7F7F5] mx-auto shadow-sm ${wide ? 'max-w-md md:max-w-none' : 'max-w-md md:max-w-2xl lg:max-w-3xl'}`}>
@@ -85,8 +86,8 @@ export default function MobileLayout() {
         <Outlet />
       </main>
 
-      {!wide && <button
-        onClick={() => navigate('/employee/tasks?search=1')}
+      {!wide && !onSearch && <button
+        onClick={() => navigate('/employee/search')}
         className="fixed bottom-24 right-4 z-30 md:right-[max(1rem,calc((100vw-42rem)/2+1rem))] lg:right-[max(1rem,calc((100vw-48rem)/2+1rem))] flex h-12 w-12 items-center justify-center rounded-full bg-[#C48A16] text-white shadow-lg shadow-black/20 active:scale-95"
         aria-label={t('pw.layout.quickSearch')}
       >

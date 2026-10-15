@@ -2,6 +2,32 @@ import type { Rows } from './build';
 
 // Shared chrome, navigation, notifications, requests hub, status pills.
 const rows: Rows = {
+  // Universal portal search page
+  'portal.search.placeholder': ['Phone, name, project, parcel or order ID', 'फ़ोन, नाम, प्रोजेक्ट, पार्सल या ऑर्डर आईडी', 'தொலைபேசி, பெயர், திட்டம், பார்சல் அல்லது ஆர்டர் ஐடி', 'ఫోన్, పేరు, ప్రాజెక్ట్, పార్సెల్ లేదా ఆర్డర్ ఐడి'],
+  'portal.search.hint': ['Type at least 2 characters — a customer number, name, project, shipping ID or order code.', 'कम से कम 2 अक्षर लिखें — ग्राहक नंबर, नाम, प्रोजेक्ट, शिपिंग आईडी या ऑर्डर कोड।', 'குறைந்தது 2 எழுத்துகள் — வாடிக்கையாளர் எண், பெயர், திட்டம், ஷிப்பிங் ஐடி அல்லது ஆர்டர் குறியீடு.', 'కనీసం 2 అక్షరాలు — కస్టమర్ నంబర్, పేరు, ప్రాజెక్ట్, షిప్పింగ్ ఐడి లేదా ఆర్డర్ కోడ్.'],
+  'portal.search.searching': ['Searching…', 'खोज रहे हैं…', 'தேடுகிறது…', 'వెతుకుతోంది…'],
+  'portal.search.none': ['Nothing found.', 'कुछ नहीं मिला।', 'எதுவும் கிடைக்கவில்லை.', 'ఏమీ దొరకలేదు.'],
+  'portal.search.failed': ['Search failed. Try again.', 'खोज विफल रही। फिर कोशिश करें।', 'தேடல் தோல்வி. மீண்டும் முயற்சிக்கவும்.', 'శోధన విఫలమైంది. మళ్లీ ప్రయత్నించండి.'],
+  'portal.search.customers': ['Customers', 'ग्राहक', 'வாடிக்கையாளர்கள்', 'కస్టమర్లు'],
+  'portal.search.leads': ['Leads', 'लीड', 'லீட்கள்', 'లీడ్‌లు'],
+  'portal.search.projects': ['Projects', 'प्रोजेक्ट', 'திட்டங்கள்', 'ప్రాజెక్టులు'],
+  'portal.search.parcels': ['Parcels & orders', 'पार्सल और ऑर्डर', 'பார்சல்கள் & ஆர்டர்கள்', 'పార్సెల్స్ & ఆర్డర్లు'],
+  'portal.search.pending': ['Pending', 'बकाया', 'நிலுவை', 'బాకీ'],
+  'portal.search.noPending': ['No pending amount', 'कोई बकाया नहीं', 'நிலுவை இல்லை', 'బాకీ లేదు'],
+  'portal.search.openTasks': ['Open tasks', 'खुले काम', 'திறந்த பணிகள்', 'ఓపెన్ పనులు'],
+  'portal.search.progress': ['Progress', 'प्रगति', 'முன்னேற்றம்', 'పురోగతి'],
+  'portal.search.shipment': ['Shipment', 'शिपमेंट', 'ஏற்றுமதி', 'షిప్‌మెంట్'],
+  'portal.search.order': ['Order', 'ऑर्डर', 'ஆர்டர்', 'ఆర్డర్'],
+  'portal.search.transporter': ['Transporter', 'ट्रांसपोर्टर', 'போக்குவரத்து', 'ట్రాన్స్‌పోర్టర్'],
+  'portal.search.place': ['Deliver to', 'डिलीवरी स्थान', 'டெலிவரி இடம்', 'డెలివరీ స్థలం'],
+  'portal.search.dispatched': ['Dispatched', 'भेजा गया', 'அனுப்பியது', 'పంపినది'],
+  'portal.search.received': ['Received', 'प्राप्त', 'பெறப்பட்டது', 'అందింది'],
+  'portal.search.customer': ['Customer', 'ग्राहक', 'வாடிக்கையாளர்', 'కస్టమర్'],
+  'portal.search.work': ['Work', 'काम', 'வேலை', 'పని'],
+  'portal.search.bundle': ['Bundle', 'बंडल', 'பண்டில்', 'బండిల్'],
+  'portal.search.due': ['Due', 'देय', 'கெடு', 'గడువు'],
+  'portal.search.delivered': ['Delivered', 'डिलीवर', 'வழங்கப்பட்டது', 'డెలివరీ అయింది'],
+  'portal.search.openTask': ['Open task', 'काम खोलें', 'பணியைத் திற', 'పనిని తెరవండి'],
   // Clock card details + combined earnings card
   'pw.clock.details': ['Details', 'विवरण', 'விவரங்கள்', 'వివరాలు'],
   'portal.home.earn.title': ['Incentives earned', 'अर्जित प्रोत्साहन', 'பெற்ற ஊக்கத்தொகை', 'సంపాదించిన ప్రోత్సాహకాలు'],
