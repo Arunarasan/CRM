@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Scanners the app wakes up for. Add one line per supported brand (vendor id in decimal). -->
+<resources>
+    <!-- SecuGen: vendor 0x1162 = 4450 -->
+    <usb-device vendor-id="4450" />
+</resources>
