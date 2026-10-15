@@ -6,11 +6,13 @@ import { ProgressMediaItem } from '@/types/employeeTask';
 import ImageEditor from '@/components/ImageEditor';
 import { compressImageFile } from '@/lib/imageProcessing';
 import { useAuth } from '@/hooks/useAuth';
+import { useT } from '@/i18n';
 
 /** Photo/video capture via native file input, plus voice notes via MediaRecorder. Uploads immediately to /api/uploads.
  *  Admins get the crop/rotate editor before upload; everyone else's photos are silently compressed only. */
 export default function MediaCapture({ media, onChange }: { media: ProgressMediaItem[]; onChange: (media: ProgressMediaItem[]) => void }) {
   const { isAdmin } = useAuth();
+  const { t } = useT();
   const photoInput = useRef<HTMLInputElement>(null);
   const videoInput = useRef<HTMLInputElement>(null);
   const [recording, setRecording] = useState(false);
@@ -58,7 +60,7 @@ export default function MediaCapture({ media, onChange }: { media: ProgressMedia
       recorderRef.current = recorder;
       setRecording(true);
     } catch {
-      alert('Microphone access denied or unavailable.');
+      alert(t('pw.media.mic'));
     }
   };
 
@@ -74,15 +76,15 @@ export default function MediaCapture({ media, onChange }: { media: ProgressMedia
       <div className="flex gap-2">
         <button type="button" onClick={() => photoInput.current?.click()} disabled={uploading}
           className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-[#E4DECF] bg-white py-2.5 text-xs font-medium text-[#4B524E] active:scale-95">
-          <Camera className="h-4 w-4 text-[#0A573B]" /> Photo
+          <Camera className="h-4 w-4 text-[#0A573B]" /> {t('pw.media.photo')}
         </button>
         <button type="button" onClick={() => videoInput.current?.click()} disabled={uploading}
           className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-[#E4DECF] bg-white py-2.5 text-xs font-medium text-[#4B524E] active:scale-95">
-          <Video className="h-4 w-4 text-[#0A573B]" /> Video
+          <Video className="h-4 w-4 text-[#0A573B]" /> {t('pw.media.video')}
         </button>
         <button type="button" onClick={recording ? stopRecording : startRecording} disabled={uploading}
           className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl border py-2.5 text-xs font-medium active:scale-95 ${recording ? 'border-[#E4B4AE] bg-[#FBE9E7] text-[#B94B45]' : 'border-[#E4DECF] bg-white text-[#4B524E]'}`}>
-          {recording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4 text-[#9B6B32]" />} {recording ? 'Stop' : 'Voice'}
+          {recording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4 text-[#9B6B32]" />} {recording ? t('pw.media.stop') : t('pw.media.voice')}
         </button>
       </div>
       <BaseInput ref={photoInput} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => onFileSelected(e, 'PHOTO')} />
@@ -96,12 +98,12 @@ export default function MediaCapture({ media, onChange }: { media: ProgressMedia
           onSave={onPhotoEdited}
         />
       )}
-      {uploading && <p className="text-xs text-muted-foreground">Uploading…</p>}
+      {uploading && <p className="text-xs text-muted-foreground">{t('pw.media.uploading')}</p>}
       {media.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {media.map((m, i) => (
             <span key={i} className="flex items-center gap-1 rounded-full bg-muted px-2 py-1 text-[11px]">
-              {m.mediaType}
+              {t(`pw.media.${m.mediaType}`) === `pw.media.${m.mediaType}` ? m.mediaType : t(`pw.media.${m.mediaType}`)}
               <button type="button" onClick={() => remove(i)}><X className="h-3 w-3" /></button>
             </span>
           ))}

@@ -7,15 +7,7 @@ import FileUploadField from '@/components/FileUploadField';
 import { PortalHeader, EmptyState } from './_shared';
 import { useT } from '@/i18n';
 
-const DOC_TYPES = [
-  { value: 'AADHAAR', label: 'Aadhaar' },
-  { value: 'PAN', label: 'PAN Card' },
-  { value: 'OFFER_LETTER', label: 'Offer Letter' },
-  { value: 'EXPERIENCE_LETTER', label: 'Experience Letter' },
-  { value: 'EDUCATION', label: 'Education Certificate' },
-  { value: 'BANK', label: 'Bank Proof' },
-  { value: 'OTHER', label: 'Other' },
-];
+const DOC_TYPES = ['AADHAAR', 'PAN', 'OFFER_LETTER', 'EXPERIENCE_LETTER', 'EDUCATION', 'BANK', 'OTHER'];
 
 export default function Documents() {
   const { t } = useT();
@@ -68,7 +60,7 @@ export default function Documents() {
               <span className="text-xs font-medium text-muted-foreground">{t('portal.documents.documentType')}</span>
               <select value={form.documentType} onChange={(e) => setForm((f) => ({ ...f, documentType: e.target.value }))}
                 className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm">
-                {DOC_TYPES.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                {DOC_TYPES.map((opt) => <option key={opt} value={opt}>{t(`pw.doc.type.${opt}`)}</option>)}
               </select>
             </label>
             <FileUploadField module="EMPLOYEE_DOC" label={t('portal.documents.file')} value={form.fileUrl}
@@ -128,7 +120,7 @@ export default function Documents() {
               </div>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">{d.documentName}</p>
-                <p className="text-xs text-muted-foreground">{d.documentType.replace(/_/g, ' ')}{d.uploadedDate ? ` · ${d.uploadedDate}` : ''}</p>
+                <p className="text-xs text-muted-foreground">{t(`pw.doc.type.${d.documentType}`) === `pw.doc.type.${d.documentType}` ? d.documentType.replace(/_/g, ' ') : t(`pw.doc.type.${d.documentType}`)}{d.uploadedDate ? ` · ${d.uploadedDate}` : ''}</p>
               </div>
               <Download className="h-4 w-4 text-muted-foreground" />
             </a>

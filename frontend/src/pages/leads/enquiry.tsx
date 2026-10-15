@@ -1,5 +1,6 @@
 import { Blinds, Footprints, Grid3x3, Shapes, Sofa, Theater, type LucideIcon } from "lucide-react";
 import { ENQUIRY_TYPES, type Lead } from "./constants";
+import { useT } from "@/i18n";
 
 // Helpers for a lead's enquiry tag (Product / Service / Others) so every screen that shows
 // "what the customer asked for" reads it the same way.
@@ -27,8 +28,11 @@ const TAG_STYLES: Record<string, string> = {
 };
 
 export function EnquiryTag({ type, className = "" }: { type?: string; className?: string }) {
-  const label = enquiryLabel(type);
-  if (!label) return null;
+  const { t } = useT();
+  const base = enquiryLabel(type);
+  if (!base) return null;
+  const tr = t(`pw.enquiry.${type}`);
+  const label = tr === `pw.enquiry.${type}` ? base : tr;
   return (
     <span className={`px-2 py-0.5 text-[11px] rounded-full font-semibold uppercase tracking-wide ${TAG_STYLES[type!] || ""} ${className}`}>
       {label}

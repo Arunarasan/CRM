@@ -8,6 +8,7 @@ import { employeeTaskApi } from '@/api/employeeTaskApi';
 import { ProgressMediaItem } from '@/types/employeeTask';
 import { runOrQueue } from '@/hooks/useOfflineQueue';
 import MediaCapture from './MediaCapture';
+import { useT } from '@/i18n';
 
 /**
  * One-tap completion confirmation. Everything here is optional — the employee can just
@@ -22,6 +23,7 @@ export default function CompleteSheet({ taskId, open, onOpenChange, onDone, exec
   /** Project execution task: ask how much the customer paid and submit for admin approval. */
   execution?: boolean;
 }) {
+  const { t } = useT();
   const [note, setNote] = useState('');
   const [media, setMedia] = useState<ProgressMediaItem[]>([]);
   const [amount, setAmount] = useState('');
@@ -48,13 +50,13 @@ export default function CompleteSheet({ taskId, open, onOpenChange, onDone, exec
         method: 'post',
         url: `/employee-tasks/${taskId}/complete`,
         payload: note.trim() ? { remarks: note.trim() } : undefined,
-        description: 'Complete task',
+        description: t('pw.cs.title'),
       });
       setNote(''); setMedia([]); setAmount('');
       onOpenChange(false);
       onDone();
     } catch (e: any) {
-      setError(e?.response?.data?.message || e?.message || 'Could not complete the task.');
+      setError(e?.response?.data?.message || e?.message || t('pw.cs.failed'));
     } finally {
       setSaving(false);
     }
@@ -65,18 +67,18 @@ export default function CompleteSheet({ taskId, open, onOpenChange, onDone, exec
       <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-[#0A573B]">
-            <CheckCircle2 className="h-5 w-5" /> Complete task
+            <CheckCircle2 className="h-5 w-5" /> {t('pw.cs.title')}
           </DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-4">
           <p className="text-[13px] text-[#5E655D]">
             {execution
-              ? 'Record how much the customer paid, then submit. An admin verifies the amount and approves — the project is marked 100% complete only after approval.'
-              : 'Add a closing note or photo if useful — both are optional.'}
+              ? t('pw.cs.execIntro')
+              : t('pw.cs.intro')}
           </p>
           {execution && (
             <div className="rounded-xl border border-[#EFE9DC] bg-[#FBFAF6] p-3">
-              <Label>How much did the customer pay?</Label>
+              <Label>{t('pw.cs.howMuch')}</Label>
               <div className="mt-1.5 flex gap-2">
                 <div className="relative flex-1">
                   <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[#8A8F86]">₹</span>
@@ -85,27 +87,27 @@ export default function CompleteSheet({ taskId, open, onOpenChange, onDone, exec
                 </div>
                 <select value={method} onChange={(e) => setMethod(e.target.value)}
                   className="rounded-xl border border-[#DDE2DE] bg-white px-2 text-sm outline-none focus:border-[#0A573B]">
-                  {PAY_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
+                  {PAY_METHODS.map((m) => <option key={m} value={m}>{t(`pw.pay.${m}`)}</option>)}
                 </select>
               </div>
-              <p className="mt-1.5 text-[11.5px] text-[#8A8F86]">Leave blank if nothing was collected. It stays pending until an admin verifies it.</p>
+              <p className="mt-1.5 text-[11.5px] text-[#8A8F86]">{t('pw.cs.blankNote')}</p>
             </div>
           )}
           {error && <p className="rounded-md bg-destructive/15 p-2 text-xs text-destructive">{error}</p>}
           <div>
-            <Label>Completion note</Label>
+            <Label>{t('pw.cs.noteLabel')}</Label>
             <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3}
-              className="mt-1.5 w-full rounded-xl border border-[#DDE2DE] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#0A573B]" placeholder="What was done?" />
+              className="mt-1.5 w-full rounded-xl border border-[#DDE2DE] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#0A573B]" placeholder={t('pw.cs.notePh')} />
           </div>
           <div>
-            <Label>Photo / attachment</Label>
+            <Label>{t('pw.cs.attach')}</Label>
             <div className="mt-1.5"><MediaCapture media={media} onChange={setMedia} /></div>
           </div>
         </div>
         <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving} className="flex-1 border-[#D7DED8]">Cancel</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving} className="flex-1 border-[#D7DED8]">{t('pw.cancel')}</Button>
           <Button onClick={confirm} disabled={saving} className="flex-1 bg-[#0A573B] text-white hover:bg-[#06452F]">
-            {saving ? 'Submitting…' : execution ? 'Submit for approval' : 'Mark completed'}
+            {saving ? t('pw.cs.submitting') : execution ? t('pw.cs.submitApproval') : t('pw.cs.markCompleted')}
           </Button>
         </DialogFooter>
       </DialogContent>

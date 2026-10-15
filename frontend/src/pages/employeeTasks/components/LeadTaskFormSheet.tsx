@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { X } from 'lucide-react';
 import { employeeTaskApi } from '@/api/employeeTaskApi';
 import { LeadFormType, LeadFormMedia } from '@/types/employeeTask';
+import { useT } from '@/i18n';
 
 type FieldType = 'text' | 'textarea' | 'number' | 'date' | 'time' | 'select';
 type Scope = 'top' | 'data';
@@ -13,67 +14,61 @@ interface Field { key: string; label: string; type: FieldType; scope: Scope; opt
 
 // Per-task field schema. `top` keys map to the payload root (outcome/notes/nextFollowUpDate);
 // `data` keys map into payload.data. Kept declarative so adding a task type is one array entry.
-const SCHEMAS: Record<LeadFormType, { title: string; fields: Field[]; photos?: boolean }> = {
+const SCHEMAS: Record<LeadFormType, { fields: Field[]; photos?: boolean }> = {
   FOLLOW_UP: {
-    title: 'Log Follow-up',
     fields: [
-      { key: 'method', label: 'Contacted via', type: 'select', scope: 'data', options: ['Call', 'WhatsApp', 'Email', 'Meeting'] },
-      { key: 'outcome', label: 'Outcome', type: 'select', scope: 'top', options: ['Connected', 'No Answer', 'Callback Requested', 'Not Reachable', 'Interested', 'Not Interested'] },
-      { key: 'customerResponse', label: 'Customer response', type: 'textarea', scope: 'data', placeholder: 'What did the customer say?' },
-      { key: 'nextFollowUpDate', label: 'Next follow-up date', type: 'date', scope: 'top' },
-      { key: 'nextFollowUpTime', label: 'Next follow-up time', type: 'time', scope: 'data' },
-      { key: 'notes', label: 'Notes', type: 'textarea', scope: 'top' },
+      { key: 'method', label: 'pw.lt.f.method', type: 'select', scope: 'data', options: ['Call', 'WhatsApp', 'Email', 'Meeting'] },
+      { key: 'outcome', label: 'pw.lt.f.outcome', type: 'select', scope: 'top', options: ['Connected', 'No Answer', 'Callback Requested', 'Not Reachable', 'Interested', 'Not Interested'] },
+      { key: 'customerResponse', label: 'pw.lt.f.customerResponse', type: 'textarea', scope: 'data', placeholder: 'pw.lt.p.customerResponse' },
+      { key: 'nextFollowUpDate', label: 'pw.lt.f.nextFollowUpDate', type: 'date', scope: 'top' },
+      { key: 'nextFollowUpTime', label: 'pw.lt.f.nextFollowUpTime', type: 'time', scope: 'data' },
+      { key: 'notes', label: 'pw.lt.f.notes', type: 'textarea', scope: 'top' },
     ],
   },
   REQUIREMENT: {
-    title: 'Capture Requirement',
     fields: [
-      { key: 'customerRequirements', label: 'Requirement / scope', type: 'textarea', scope: 'data', placeholder: 'What does the customer want done?' },
-      { key: 'roomsRequired', label: 'Rooms required', type: 'text', scope: 'data', placeholder: 'e.g. Kitchen, 2 Bedrooms, Living' },
-      { key: 'requirementCategory', label: 'Category', type: 'text', scope: 'data', placeholder: 'e.g. Full Interior, Modular Kitchen' },
-      { key: 'estimatedBudget', label: 'Estimated budget (₹)', type: 'number', scope: 'data' },
-      { key: 'minimumBudget', label: 'Min budget (₹)', type: 'number', scope: 'data' },
-      { key: 'maximumBudget', label: 'Max budget (₹)', type: 'number', scope: 'data' },
-      { key: 'preferredDesignStyle', label: 'Preferred style', type: 'text', scope: 'data' },
-      { key: 'preferredMaterial', label: 'Preferred material', type: 'text', scope: 'data' },
-      { key: 'preferredCompletionDate', label: 'Target completion', type: 'date', scope: 'data' },
-      { key: 'notes', label: 'Notes', type: 'textarea', scope: 'top' },
+      { key: 'customerRequirements', label: 'pw.lt.f.customerRequirements', type: 'textarea', scope: 'data', placeholder: 'pw.lt.p.customerRequirements' },
+      { key: 'roomsRequired', label: 'pw.lt.f.roomsRequired', type: 'text', scope: 'data', placeholder: 'pw.lt.p.roomsRequired' },
+      { key: 'requirementCategory', label: 'pw.lt.f.requirementCategory', type: 'text', scope: 'data', placeholder: 'pw.lt.p.requirementCategory' },
+      { key: 'estimatedBudget', label: 'pw.lt.f.estimatedBudget', type: 'number', scope: 'data' },
+      { key: 'minimumBudget', label: 'pw.lt.f.minimumBudget', type: 'number', scope: 'data' },
+      { key: 'maximumBudget', label: 'pw.lt.f.maximumBudget', type: 'number', scope: 'data' },
+      { key: 'preferredDesignStyle', label: 'pw.lt.f.preferredDesignStyle', type: 'text', scope: 'data' },
+      { key: 'preferredMaterial', label: 'pw.lt.f.preferredMaterial', type: 'text', scope: 'data' },
+      { key: 'preferredCompletionDate', label: 'pw.lt.f.preferredCompletionDate', type: 'date', scope: 'data' },
+      { key: 'notes', label: 'pw.lt.f.notes', type: 'textarea', scope: 'top' },
     ],
   },
   QUALIFY: {
-    title: 'Qualify Lead',
     fields: [
-      { key: 'decision', label: 'Decision', type: 'select', scope: 'data', options: ['Qualified', 'Not Qualified', 'Nurture'] },
-      { key: 'temperature', label: 'Temperature', type: 'select', scope: 'data', options: ['Hot', 'Warm', 'Cold'] },
-      { key: 'reason', label: 'Reason', type: 'textarea', scope: 'data', placeholder: 'Why this decision?' },
-      { key: 'nextFollowUpDate', label: 'Next follow-up date', type: 'date', scope: 'top' },
-      { key: 'nextFollowUpTime', label: 'Next follow-up time', type: 'time', scope: 'data' },
-      { key: 'notes', label: 'Notes', type: 'textarea', scope: 'top' },
+      { key: 'decision', label: 'pw.lt.f.decision', type: 'select', scope: 'data', options: ['Qualified', 'Not Qualified', 'Nurture'] },
+      { key: 'temperature', label: 'pw.lt.f.temperature', type: 'select', scope: 'data', options: ['Hot', 'Warm', 'Cold'] },
+      { key: 'reason', label: 'pw.lt.f.reason', type: 'textarea', scope: 'data', placeholder: 'pw.lt.p.reason' },
+      { key: 'nextFollowUpDate', label: 'pw.lt.f.nextFollowUpDate', type: 'date', scope: 'top' },
+      { key: 'nextFollowUpTime', label: 'pw.lt.f.nextFollowUpTime', type: 'time', scope: 'data' },
+      { key: 'notes', label: 'pw.lt.f.notes', type: 'textarea', scope: 'top' },
     ],
   },
   SCHEDULE_VISIT: {
-    title: 'Schedule Site Visit',
     fields: [
-      { key: 'visitDate', label: 'Visit date', type: 'date', scope: 'data' },
-      { key: 'visitTime', label: 'Visit time', type: 'time', scope: 'data' },
-      { key: 'outcome', label: 'Status', type: 'select', scope: 'top', options: ['Scheduled', 'Pending Confirmation'] },
-      { key: 'notes', label: 'Notes', type: 'textarea', scope: 'top' },
+      { key: 'visitDate', label: 'pw.lt.f.visitDate', type: 'date', scope: 'data' },
+      { key: 'visitTime', label: 'pw.lt.f.visitTime', type: 'time', scope: 'data' },
+      { key: 'outcome', label: 'pw.lt.f.status', type: 'select', scope: 'top', options: ['Scheduled', 'Pending Confirmation'] },
+      { key: 'notes', label: 'pw.lt.f.notes', type: 'textarea', scope: 'top' },
     ],
   },
   SITE_VISIT: {
-    title: 'Site Visit Report',
     fields: [
-      { key: 'observations', label: 'Site observations', type: 'textarea', scope: 'data', placeholder: 'Site condition, measurements needed, access…' },
-      { key: 'outcome', label: 'Outcome', type: 'select', scope: 'top', options: ['Completed', 'Needs Revisit'] },
-      { key: 'notes', label: 'Notes', type: 'textarea', scope: 'top' },
+      { key: 'observations', label: 'pw.lt.f.observations', type: 'textarea', scope: 'data', placeholder: 'pw.lt.p.observations' },
+      { key: 'outcome', label: 'pw.lt.f.outcome', type: 'select', scope: 'top', options: ['Completed', 'Needs Revisit'] },
+      { key: 'notes', label: 'pw.lt.f.notes', type: 'textarea', scope: 'top' },
     ],
     photos: true,
   },
   REVIEW: {
-    title: 'Review Lead',
     fields: [
-      { key: 'outcome', label: 'Outcome', type: 'select', scope: 'top', options: ['Reviewed', 'Needs Info'] },
-      { key: 'notes', label: 'Notes', type: 'textarea', scope: 'top', placeholder: 'What did you review / decide?' },
+      { key: 'outcome', label: 'pw.lt.f.outcome', type: 'select', scope: 'top', options: ['Reviewed', 'Needs Info'] },
+      { key: 'notes', label: 'pw.lt.f.notes', type: 'textarea', scope: 'top', placeholder: 'pw.lt.p.review' },
     ],
   },
 };
@@ -81,6 +76,7 @@ const SCHEMAS: Record<LeadFormType, { title: string; fields: Field[]; photos?: b
 export default function LeadTaskFormSheet({ taskId, formType, open, onOpenChange, onSaved }: {
   taskId: number; formType: LeadFormType; open: boolean; onOpenChange: (open: boolean) => void; onSaved: () => void;
 }) {
+  const { t } = useT();
   const schema = SCHEMAS[formType];
   const [values, setValues] = useState<Record<string, string>>({});
   const [media, setMedia] = useState<LeadFormMedia[]>([]);
@@ -131,37 +127,37 @@ export default function LeadTaskFormSheet({ taskId, formType, open, onOpenChange
     if (f.type === 'select') {
       return (
         <select value={values[f.key] ?? ''} onChange={(e) => set(f.key, e.target.value)} className={common}>
-          <option value="">Select…</option>
-          {f.options!.map((o) => <option key={o} value={o}>{o}</option>)}
+          <option value="">{t('pw.lt.select')}</option>
+          {f.options!.map((o) => <option key={o} value={o}>{t(`pw.lt.o.${o}`)}</option>)}
         </select>
       );
     }
     if (f.type === 'textarea') {
       return <textarea value={values[f.key] ?? ''} onChange={(e) => set(f.key, e.target.value)} rows={3}
-        className={common} placeholder={f.placeholder} />;
+        className={common} placeholder={f.placeholder ? t(f.placeholder) : undefined} />;
     }
     return <BaseInput type={f.type} value={values[f.key] ?? ''} onChange={(e) => set(f.key, e.target.value)}
-      className={common} placeholder={f.placeholder} />;
+      className={common} placeholder={f.placeholder ? t(f.placeholder) : undefined} />;
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm max-h-[85vh] overflow-y-auto">
-        <DialogHeader><DialogTitle>{schema.title}</DialogTitle></DialogHeader>
+      <DialogContent className="max-w-sm max-h-[85dvh] overflow-y-auto">
+        <DialogHeader><DialogTitle>{t(`pw.lt.title.${formType}`)}</DialogTitle></DialogHeader>
         <div className="flex flex-col gap-3">
           {schema.fields.map((f) => (
             <div key={f.key}>
-              <Label>{f.label}</Label>
+              <Label>{t(f.label)}</Label>
               {renderField(f)}
             </div>
           ))}
 
           {schema.photos && (
             <div>
-              <Label>Photos</Label>
+              <Label>{t('pw.lt.photos')}</Label>
               <BaseInput type="file" accept="image/*" multiple capture="environment"
                 onChange={(e) => onFiles(e.target.files)} className="w-full text-xs" />
-              {uploading && <p className="mt-1 text-xs text-muted-foreground">Uploading…</p>}
+              {uploading && <p className="mt-1 text-xs text-muted-foreground">{t('pw.lt.uploading')}</p>}
               {media.length > 0 && (
                 <div className="mt-2 flex gap-2 overflow-x-auto">
                   {media.map((m, i) => (
@@ -180,7 +176,7 @@ export default function LeadTaskFormSheet({ taskId, formType, open, onOpenChange
         </div>
         <DialogFooter>
           <Button onClick={submit} disabled={saving || uploading} className="w-full bg-[#0A573B] text-white hover:bg-[#06452F]">
-            {saving ? 'Saving…' : 'Save & complete'}
+            {saving ? t('pw.lt.saving') : t('pw.lt.saveComplete')}
           </Button>
         </DialogFooter>
       </DialogContent>

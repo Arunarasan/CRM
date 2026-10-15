@@ -6,6 +6,7 @@ import {
 import { ProjectExecutionInfo, TaskDetail } from '@/types/employeeTask';
 import { resolveFileUrl } from '@/lib/uploadFile';
 import { dueToneClass, humanizeDue, priorityMeta } from '../taskUtils';
+import { useT, dateLocale, currentLang } from '@/i18n';
 
 /**
  * The shared project task (Execution & Installation) laid out as one calm screen: a hero with the project,
@@ -18,7 +19,7 @@ const telHref = (s: string) => 'tel:' + s.replace(/[^\d+]/g, '');
 const waHref = (s: string) => 'https://wa.me/' + s.replace(/[^\d]/g, '');
 const mapsSearch = (q: string) => 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(q);
 const fmtDate = (s?: string | null) =>
-  s ? new Date(s).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+  s ? new Date(s).toLocaleDateString(dateLocale(currentLang()), { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
 
 export const cardCls = 'overflow-hidden rounded-2xl border border-[#EDE6D8] bg-white shadow-[0_4px_16px_rgba(80,55,20,0.06)]';
 
@@ -41,9 +42,10 @@ export function SectionHead({ icon, title, tone = 'gold', right, tight = false }
 
 /** "Open ›" / "View ›" text toggle used in the card headers. */
 export function HeadLink({ label, open, onClick }: { label: string; open: boolean; onClick: () => void }) {
+  const { t } = useT();
   return (
     <button onClick={onClick} className="flex shrink-0 items-center gap-0.5 text-[12.5px] font-semibold text-[#0A573B] underline-offset-2 hover:underline">
-      {open ? 'Hide' : label}
+      {open ? t('pw.pt.hide') : label}
       <ChevronRight className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-90' : ''}`} />
     </button>
   );
@@ -65,6 +67,7 @@ function contactOf(task: TaskDetail) {
 /* ------------------------------------------------------------------ Hero */
 
 export function ProjectTaskHero({ task }: { task: TaskDetail }) {
+  const { t } = useT();
   const info = task.projectInfo;
   const prio = priorityMeta(task.priority);
   const due = humanizeDue(task.dueDate, task.status);
@@ -76,10 +79,10 @@ export function ProjectTaskHero({ task }: { task: TaskDetail }) {
 
   // Call, WhatsApp and Navigate always show — greyed out when the customer has no number / address yet.
   const actions: { label: string; icon: typeof Phone; href?: string | null; ext?: boolean }[] = [
-    { label: 'Call', icon: Phone, href: ct.phone ? telHref(ct.phone) : null },
-    { label: 'WhatsApp', icon: MessageCircle, href: ct.wa ? waHref(ct.wa) : null, ext: true },
-    ...(ct.email ? [{ label: 'Email', icon: Mail, href: 'mailto:' + ct.email }] : []),
-    { label: 'Navigate', icon: Navigation, href: ct.mapUrl, ext: true },
+    { label: t('pw.pt.call'), icon: Phone, href: ct.phone ? telHref(ct.phone) : null },
+    { label: t('pw.pt.whatsapp'), icon: MessageCircle, href: ct.wa ? waHref(ct.wa) : null, ext: true },
+    ...(ct.email ? [{ label: t('pw.pt.email'), icon: Mail, href: 'mailto:' + ct.email }] : []),
+    { label: t('pw.pt.navigate'), icon: Navigation, href: ct.mapUrl, ext: true },
   ];
 
   return (
@@ -100,7 +103,7 @@ export function ProjectTaskHero({ task }: { task: TaskDetail }) {
           <div className="flex shrink-0 flex-col items-end gap-1">
             <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11.5px] font-semibold ${
               prio.urgent ? 'bg-[#FDEDEB] text-[#B94B45]' : 'bg-[#FBF6EC] text-[#6B7169]'}`}>
-              <span className={`h-2 w-2 rounded-full ${prio.dot}`} /> {prio.label} priority
+              <span className={`h-2 w-2 rounded-full ${prio.dot}`} /> {t('pw.pt.priority', { p: prio.label })}
             </span>
             <span className={`text-[12px] font-semibold ${dueToneClass(due.tone)}`}>{due.text}</span>
           </div>
@@ -125,6 +128,7 @@ export function ProjectTaskHero({ task }: { task: TaskDetail }) {
 /* ------------------------------------------------------------------ Customer + Project cards */
 
 export function ProjectInfoCards({ task }: { task: TaskDetail }) {
+  const { t } = useT();
   const info = task.projectInfo;
   const ct = contactOf(task);
   const c = task.contact;
@@ -141,9 +145,9 @@ export function ProjectInfoCards({ task }: { task: TaskDetail }) {
   return (
     <div className="grid grid-cols-1 gap-3.5 min-[380px]:grid-cols-2">
       <div className={`${cardCls} p-3.5`}>
-        <SectionHead icon={<User className="h-4 w-4" />} title="Customer" tight
-          right={custExtra ? <HeadLink label="Open" open={custOpen} onClick={() => setCustOpen((o) => !o)} /> : undefined} />
-        <p className="truncate text-[14.5px] font-bold text-[#1A211E]">{ct.name || 'Customer'}</p>
+        <SectionHead icon={<User className="h-4 w-4" />} title={t('pw.pt.customer')} tight
+          right={custExtra ? <HeadLink label={t('pw.pt.open')} open={custOpen} onClick={() => setCustOpen((o) => !o)} /> : undefined} />
+        <p className="truncate text-[14.5px] font-bold text-[#1A211E]">{ct.name || t('pw.pt.customer')}</p>
         <ul className="mt-2 flex flex-col gap-1.5 border-l-2 border-[#EFE9DC] pl-2.5 text-[12.5px] text-[#33392F]">
           {has(ct.phone) && (
             <li><a href={telHref(ct.phone as string)} className="flex items-center gap-2"><Phone className="h-3.5 w-3.5 shrink-0 text-[#0A573B]" /><span className="truncate">{ct.phone}</span></a></li>
@@ -157,11 +161,11 @@ export function ProjectInfoCards({ task }: { task: TaskDetail }) {
         </ul>
         {custOpen && (
           <div className="mt-3 flex flex-col gap-1.5 border-t border-[#F1ECE2] pt-2.5 text-[12.5px] text-[#33392F]">
-            {has(c?.alternatePhone) && <p><span className="text-[#8A8F86]">Alt. phone: </span>{c!.alternatePhone}</p>}
-            {has(ct.address) && <p><span className="text-[#8A8F86]">Address: </span>{ct.address}</p>}
+            {has(c?.alternatePhone) && <p><span className="text-[#8A8F86]">{t('pw.pt.alt_phone')}</span>{c!.alternatePhone}</p>}
+            {has(ct.address) && <p><span className="text-[#8A8F86]">{t('pw.pt.address')}</span>{ct.address}</p>}
             {(has(c?.salesExecutiveName) || has(c?.projectManagerName)) && (
               <p className="flex items-start gap-1.5"><UserCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#9B6B32]" />
-                {[has(c?.salesExecutiveName) && `Sales: ${c!.salesExecutiveName}`, has(c?.projectManagerName) && `PM: ${c!.projectManagerName}`].filter(Boolean).join(' · ')}
+                {[has(c?.salesExecutiveName) && t('pw.pt.sales', { name: String(c!.salesExecutiveName) }), has(c?.projectManagerName) && t('pw.pt.pm', { name: String(c!.projectManagerName) })].filter(Boolean).join(' · ')}
               </p>
             )}
           </div>
@@ -169,9 +173,9 @@ export function ProjectInfoCards({ task }: { task: TaskDetail }) {
       </div>
 
       <div className={`${cardCls} p-3.5`}>
-        <SectionHead icon={<Building2 className="h-4 w-4" />} title="Project" tight
-          right={projExtra ? <HeadLink label="Open" open={projOpen} onClick={() => setProjOpen((o) => !o)} /> : undefined} />
-        <p className="truncate text-[14.5px] font-bold text-[#1A211E]">{info.projectName || 'Project'}</p>
+        <SectionHead icon={<Building2 className="h-4 w-4" />} title={t('pw.pt.project')} tight
+          right={projExtra ? <HeadLink label={t('pw.pt.open')} open={projOpen} onClick={() => setProjOpen((o) => !o)} /> : undefined} />
+        <p className="truncate text-[14.5px] font-bold text-[#1A211E]">{info.projectName || t('pw.pt.project')}</p>
         <p className="truncate text-[11.5px] uppercase tracking-wide text-[#8A8F86]">{[info.projectCode, info.status].filter(has).join(' · ')}</p>
         <div className="mt-2.5 flex items-center gap-2">
           <div className="h-2 flex-1 overflow-hidden rounded-full bg-[#EFEBE0]">
@@ -180,7 +184,7 @@ export function ProjectInfoCards({ task }: { task: TaskDetail }) {
           <span className="text-[12.5px] font-bold text-[#1A211E]">{pct}%</span>
         </div>
         <div className="mt-2.5 flex flex-col gap-1.5">
-          {[['Start', info.startDate], ['Target', info.endDate]].map(([label, d]) => (
+          {[[t('pw.pt.start'), info.startDate], [t('pw.pt.target'), info.endDate]].map(([label, d]) => (
             <div key={label} className="flex min-w-0 items-center gap-1.5 text-[12px]">
               <CalendarDays className="h-3.5 w-3.5 shrink-0 text-[#5E655D]" />
               <span className="text-[#8A8F86]">{label}</span>
@@ -192,7 +196,7 @@ export function ProjectInfoCards({ task }: { task: TaskDetail }) {
           <div className="mt-3 flex flex-col gap-3 border-t border-[#F1ECE2] pt-2.5">
             {materials.length > 0 && (
               <div>
-                <p className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#9B6B32]"><Package className="h-3.5 w-3.5" /> Materials</p>
+                <p className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#9B6B32]"><Package className="h-3.5 w-3.5" /> {t('pw.pt.materials')}</p>
                 <ul className="flex flex-col gap-1">
                   {materials.map((m, i) => (
                     <li key={i} className="flex justify-between gap-2 text-[12.5px] text-[#33392F]">
@@ -205,14 +209,14 @@ export function ProjectInfoCards({ task }: { task: TaskDetail }) {
             )}
             {measurements.length > 0 && (
               <div>
-                <p className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#9B6B32]"><Ruler className="h-3.5 w-3.5" /> Site measurements</p>
+                <p className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#9B6B32]"><Ruler className="h-3.5 w-3.5" /> {t('pw.pt.site_measurements')}</p>
                 <ul className="flex flex-col gap-1">
                   {measurements.map((m, i) => {
                     const dims = [m.length, m.width, m.height].filter((n) => n != null && n !== 0);
                     return (
                       <li key={i} className="text-[12.5px] text-[#33392F]">
-                        <span className="font-medium">{[m.floor, m.room, m.roomType].filter(has).join(' · ') || 'Room'}</span>
-                        {dims.length > 0 && <span className="text-[#5E655D]"> — {dims.join(' × ')}{m.floorArea ? ` (${m.floorArea} sq.ft)` : ''}</span>}
+                        <span className="font-medium">{[m.floor, m.room, m.roomType].filter(has).join(' · ') || t('pw.pt.room')}</span>
+                        {dims.length > 0 && <span className="text-[#5E655D]"> — {dims.join(' × ')}{m.floorArea ? ` (${t('pw.pt.sqft', { n: String(m.floorArea) })})` : ''}</span>}
                       </li>
                     );
                   })}
@@ -228,13 +232,8 @@ export function ProjectInfoCards({ task }: { task: TaskDetail }) {
 
 /* ------------------------------------------------------------------ Items to make */
 
-const STATUS_LABEL: Record<string, string> = {
-  PENDING: 'Not started', ASSIGNED: 'Assigned', MATERIAL_READY: 'Material ready', STARTED: 'Started',
-  IN_PROGRESS: 'In progress', INSPECTION: 'Inspection', COMPLETED: 'Completed', ON_HOLD: 'On hold',
-  REWORK: 'Rework', CANCELLED: 'Cancelled',
-};
-
 export function ItemsToMakeCard({ info }: { info: ProjectExecutionInfo }) {
+  const { t } = useT();
   const [openIdx, setOpenIdx] = useState<number | null>(null);
   const items = (info.rooms || []).flatMap((r) => (r.items || []).map((it) => ({
     ...it, where: [r.floor, r.room || r.roomType].filter(has).join(' · '),
@@ -243,8 +242,8 @@ export function ItemsToMakeCard({ info }: { info: ProjectExecutionInfo }) {
 
   return (
     <div className={`${cardCls} p-3.5`}>
-      <SectionHead icon={<Layers className="h-4 w-4" />} title="Items to make" tone="green"
-        right={<span className="shrink-0 text-[12px] text-[#6B7169]">Total: {items.length} item{items.length === 1 ? '' : 's'}</span>} />
+      <SectionHead icon={<Layers className="h-4 w-4" />} title={t('pw.pt.items_to_make')} tone="green"
+        right={<span className="shrink-0 text-[12px] text-[#6B7169]">{t('pw.pt.total', { n: items.length })}</span>} />
       <ul className="flex flex-col gap-2">
         {items.map((it, i) => {
           const open = openIdx === i;
@@ -261,7 +260,7 @@ export function ItemsToMakeCard({ info }: { info: ProjectExecutionInfo }) {
                   </span>
                 )}
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[13.5px] font-semibold text-[#1A211E]">{it.where || it.name || 'Item'}</span>
+                  <span className="block truncate text-[13.5px] font-semibold text-[#1A211E]">{it.where || it.name || t('pw.pt.item')}</span>
                   <span className={`text-[12.5px] leading-snug text-[#6B7169] ${open ? 'block' : 'line-clamp-2'}`}>
                     {it.where ? it.name : null}{has(it.description) ? `${it.where ? ' — ' : ''}${it.description}` : ''}
                   </span>
@@ -271,7 +270,7 @@ export function ItemsToMakeCard({ info }: { info: ProjectExecutionInfo }) {
               </button>
               {open && (
                 <div className="flex items-center gap-2 border-t border-[#F1ECE2] px-3 py-2 text-[12px] text-[#5E655D]">
-                  <span className="rounded-full bg-[#F3EEE2] px-2 py-0.5 font-medium text-[#8A6A2E]">{STATUS_LABEL[it.status || ''] || it.status || 'Not started'}</span>
+                  <span className="rounded-full bg-[#F3EEE2] px-2 py-0.5 font-medium text-[#8A6A2E]">{t(`pw.pt.st.${it.status || 'PENDING'}`) === `pw.pt.st.${it.status || 'PENDING'}` ? (it.status || t('pw.pt.st.PENDING')) : t(`pw.pt.st.${it.status || 'PENDING'}`)}</span>
                   <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[#EFEBE0]">
                     <div className="h-full rounded-full bg-[#0A573B]" style={{ width: `${Math.max(0, Math.min(100, Number(it.progress ?? 0)))}%` }} />
                   </div>

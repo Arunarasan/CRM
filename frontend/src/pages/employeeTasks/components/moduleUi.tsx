@@ -1,4 +1,5 @@
 import { ReactNode } from 'react';
+import { useT } from '@/i18n';
 
 /**
  * Shared mobile UI primitives for the in-portal module screens (Site Visit, BOQ, Quotation).
@@ -14,6 +15,7 @@ export const PRIMARY_BTN =
 
 /** Soft status chip for a BOQ / Quotation document state. */
 export function DocStatus({ status }: { status?: string }) {
+  const { t } = useT();
   if (!status) return null;
   const s = status.toUpperCase();
   const cls =
@@ -22,7 +24,7 @@ export function DocStatus({ status }: { status?: string }) {
       : s === 'REJECTED'
       ? 'bg-[#FBE2E0] text-[#B94B45]'
       : 'bg-[#FBEED0] text-[#9D6B10]';
-  return <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold ${cls}`}>{s.replace(/_/g, ' ')}</span>;
+  return <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold ${cls}`}>{t(`pw.status.${s}`) === `pw.status.${s}` ? s.replace(/_/g, ' ') : t(`pw.status.${s}`)}</span>;
 }
 
 /** Context header: who the document is for, its reference numbers, and its status. */
@@ -34,11 +36,12 @@ export function LeadContext({
   refs?: (string | null | undefined)[];
   status?: ReactNode;
 }) {
+  const { t } = useT();
   return (
     <div className={`${CARD} p-3.5`}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="truncate text-[15px] font-bold text-[#111817]">{name ?? 'Loading…'}</p>
+          <p className="truncate text-[15px] font-bold text-[#111817]">{name ?? t('pw.mod.loading')}</p>
           {sub && <p className="mt-0.5 truncate text-[12px] text-[#7A817C]">{sub}</p>}
         </div>
         {status}
@@ -55,9 +58,10 @@ export function LeadContext({
 }
 
 /** Totals block — light rows plus an emphasised grand total. */
-export function Totals({ rows, grandLabel = 'Grand Total', grand }: {
+export function Totals({ rows, grandLabel, grand }: {
   rows: { label: string; value: string }[]; grandLabel?: string; grand?: number;
 }) {
+  const { t } = useT();
   return (
     <div className={`${CARD} p-4 text-sm`}>
       {rows.map((r) => (
@@ -66,7 +70,7 @@ export function Totals({ rows, grandLabel = 'Grand Total', grand }: {
         </div>
       ))}
       <div className="mt-1.5 flex items-center justify-between border-t border-[#EDECE8] pt-2.5">
-        <span className="text-[15px] font-bold text-[#111817]">{grandLabel}</span>
+        <span className="text-[15px] font-bold text-[#111817]">{grandLabel ?? t('pw.mod.grandTotal')}</span>
         <span className="text-[18px] font-extrabold text-[#0A573B] tabular-nums">{inr(grand)}</span>
       </div>
     </div>
@@ -76,7 +80,7 @@ export function Totals({ rows, grandLabel = 'Grand Total', grand }: {
 /** Sticky bottom action bar sitting just above the portal's bottom nav. */
 export function BottomBar({ children }: { children: ReactNode }) {
   return (
-    <div className="fixed bottom-16 left-1/2 z-20 w-full max-w-md -translate-x-1/2 border-t border-[#EDEBE6] bg-white px-3 py-2.5 shadow-[0_-2px_10px_rgba(0,0,0,0.06)]">
+    <div className="fixed bottom-16 left-1/2 z-20 w-full max-w-md md:max-w-2xl lg:max-w-3xl -translate-x-1/2 border-t border-[#EDEBE6] bg-white px-3 py-2.5 shadow-[0_-2px_10px_rgba(0,0,0,0.06)]">
       {children}
     </div>
   );

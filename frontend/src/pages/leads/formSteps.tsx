@@ -1,4 +1,5 @@
 import { Check, ChevronDown } from "lucide-react";
+import { useT } from "@/i18n";
 
 // Compact step-form primitives shared by the admin "New Lead" dialog and the employee-portal
 // mobile "Add Lead" sheet, so both read as the same numbered, open/close step form.
@@ -42,6 +43,7 @@ export function Step({ n, title, hint, summary, open, onToggle, onNext, children
   n: number; title: string; hint?: string; summary?: string; open: boolean;
   onToggle: () => void; onNext?: () => void; children: React.ReactNode;
 }) {
+  const { t } = useT();
   const done = !!summary;
   return (
     <section className={`rounded-lg border transition-colors ${open ? "border-primary/40 bg-card shadow-sm" : "bg-muted/20"}`}>
@@ -65,7 +67,7 @@ export function Step({ n, title, hint, summary, open, onToggle, onNext, children
           {onNext && (
             <div className="flex justify-end">
               <button type="button" onClick={onNext} className="text-xs font-semibold text-primary hover:underline">
-                Next →
+                {t('pw.step.next')}
               </button>
             </div>
           )}

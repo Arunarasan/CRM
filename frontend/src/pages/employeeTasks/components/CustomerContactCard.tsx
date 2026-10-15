@@ -1,5 +1,6 @@
 import { MapPin, MessageCircle, Navigation, Phone, User, UserCheck } from 'lucide-react';
 import { TaskContact } from '@/types/employeeTask';
+import { useT } from '@/i18n';
 
 const has = (v: unknown) => v != null && String(v).trim() !== '';
 const telHref = (s: string) => 'tel:' + s.replace(/[^\d+]/g, '');
@@ -15,13 +16,14 @@ export default function CustomerContactCard({ contact, requirement }: {
   /** What the customer asked for, when the task carries it. */
   requirement?: string | null;
 }) {
+  const { t } = useT();
   const phone = contact.phone || contact.alternatePhone || contact.whatsappNumber;
   const wa = contact.whatsappNumber || contact.phone;
   const addr = [contact.address, contact.city && !(contact.address || '').includes(contact.city) ? contact.city : null,
     contact.pincode && !(contact.address || '').includes(contact.pincode) ? contact.pincode : null].filter(has).join(', ');
   const team = [
-    has(contact.salesExecutiveName) && `Lead / sales: ${contact.salesExecutiveName}`,
-    has(contact.projectManagerName) && `Project manager: ${contact.projectManagerName}`,
+    has(contact.salesExecutiveName) && t('pw.cc.salesLead', { name: String(contact.salesExecutiveName) }),
+    has(contact.projectManagerName) && t('pw.cc.pm', { name: String(contact.projectManagerName) }),
   ].filter(Boolean) as string[];
 
   return (
@@ -29,9 +31,9 @@ export default function CustomerContactCard({ contact, requirement }: {
       <div className="h-1 bg-gradient-to-r from-[#BC8748] via-[#BC8748] to-[#0A573B]" />
       <div className="p-4">
         <p className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-[#9B6B32]">
-          <User className="h-3.5 w-3.5" /> Customer
+          <User className="h-3.5 w-3.5" /> {t('pw.cc.customer')}
         </p>
-        <p className="text-[15px] font-bold text-[#1A211E]">{contact.name || 'Customer'}</p>
+        <p className="text-[15px] font-bold text-[#1A211E]">{contact.name || t('pw.cc.customer')}</p>
         {has(contact.city) && <p className="text-[12px] text-[#8A8F86]">{contact.city}</p>}
         {has(phone) && (
           <p className="mt-1 text-[12.5px] text-[#5E655D]">
@@ -44,12 +46,12 @@ export default function CustomerContactCard({ contact, requirement }: {
           <div className="mt-3 grid grid-cols-2 gap-2">
             {has(phone) && (
               <a href={telHref(phone as string)} className="flex items-center justify-center gap-1.5 rounded-xl border border-[#D7DED8] bg-white py-2.5 text-[13px] font-semibold text-[#0A573B] active:scale-[0.99]">
-                <Phone className="h-4 w-4" /> Call
+                <Phone className="h-4 w-4" /> {t('pw.cc.call')}
               </a>
             )}
             {has(wa) && (
               <a href={waHref(wa as string)} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-1.5 rounded-xl border border-[#D7DED8] bg-white py-2.5 text-[13px] font-semibold text-[#0A573B] active:scale-[0.99]">
-                <MessageCircle className="h-4 w-4" /> WhatsApp
+                <MessageCircle className="h-4 w-4" /> {t('pw.cc.whatsapp')}
               </a>
             )}
           </div>
@@ -58,13 +60,13 @@ export default function CustomerContactCard({ contact, requirement }: {
         {(has(addr) || has(contact.mapUrl)) && (
           <div className="mt-3 rounded-xl bg-[#F6F4EC] p-3">
             <p className="mb-0.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#A07E38]">
-              <MapPin className="h-3.5 w-3.5" /> Site address
+              <MapPin className="h-3.5 w-3.5" /> {t('pw.cc.siteAddress')}
             </p>
             {has(addr) && <p className="text-[13.5px] leading-snug text-[#33392F]">{addr}</p>}
             {has(contact.mapUrl) && (
               <a href={contact.mapUrl as string} target="_blank" rel="noopener noreferrer"
                 className="mt-2 flex items-center justify-center gap-2 rounded-xl border border-[#D7DED8] bg-white py-2 text-[13px] font-semibold text-[#0A573B] active:scale-[0.99]">
-                <Navigation className="h-4 w-4" /> Navigate to site
+                <Navigation className="h-4 w-4" /> {t('pw.cc.navigate')}
               </a>
             )}
           </div>
@@ -72,7 +74,7 @@ export default function CustomerContactCard({ contact, requirement }: {
 
         {has(requirement) && (
           <div className="mt-3">
-            <p className="text-[10.5px] font-semibold uppercase tracking-wide text-[#A6A99E]">What they asked for</p>
+            <p className="text-[10.5px] font-semibold uppercase tracking-wide text-[#A6A99E]">{t('pw.cc.asked')}</p>
             <p className="whitespace-pre-wrap text-[13.5px] leading-snug text-[#33392F]">{requirement}</p>
           </div>
         )}

@@ -1,6 +1,7 @@
 import { useRef } from 'react';
 import { Camera, ImageUp, Loader2 } from 'lucide-react';
 import { compressImageFile } from '@/lib/imageProcessing';
+import { useT } from '@/i18n';
 
 /**
  * Two clear photo buttons for field employees: "Take photo" opens the camera straight away, "Upload"
@@ -14,6 +15,7 @@ export default function PhotoPickButtons({ onPicked, busy, disabled, onBlocked }
   /** Called instead of opening the picker while the buttons are shown but not usable yet (task not taken). */
   onBlocked?: () => void;
 }) {
+  const { t } = useT();
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
 
@@ -30,11 +32,11 @@ export default function PhotoPickButtons({ onPicked, busy, disabled, onBlocked }
     <div className="flex gap-2">
       <button type="button" onClick={() => open(cameraRef)} disabled={busy || disabled}
         className={`${btn} bg-[#0A573B] text-white`}>
-        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />} Take photo
+        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />} {t('pw.photo.take')}
       </button>
       <button type="button" onClick={() => open(galleryRef)} disabled={busy || disabled}
         className={`${btn} border border-[#0A573B]/30 bg-white text-[#0A573B]`}>
-        <ImageUp className="h-4 w-4" /> Upload
+        <ImageUp className="h-4 w-4" /> {t('pw.photo.upload')}
       </button>
       <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden"
         onChange={(e) => handle(e.target.files, e.currentTarget)} />

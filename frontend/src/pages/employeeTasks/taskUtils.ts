@@ -1,3 +1,5 @@
+import { tNow, currentLang, dateLocale } from '@/i18n';
+
 /**
  * Presentation-only helpers shared across the employee task-execution screens.
  * These translate the backend's raw status/priority/due values into the plain,
@@ -19,32 +21,32 @@ export function humanizeDue(
   dueDate: string | null,
   status?: string,
 ): { text: string; tone: 'normal' | 'soon' | 'overdue' } {
-  if (!dueDate) return { text: 'No due date', tone: 'normal' };
+  if (!dueDate) return { text: tNow('pw.due.none'), tone: 'normal' };
   const d = new Date(`${dueDate}T00:00:00`);
-  const nice = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const nice = d.toLocaleDateString(dateLocale(currentLang()), { month: 'short', day: 'numeric' });
   const closed = status === 'COMPLETED' || status === 'CANCELLED';
   const diff = daysUntil(dueDate);
-  if (closed || diff == null) return { text: `Due ${nice}`, tone: 'normal' };
+  if (closed || diff == null) return { text: tNow('pw.due.on', { date: nice }), tone: 'normal' };
   if (diff < 0) {
     const n = -diff;
-    return { text: n === 1 ? '1 day overdue' : `${n} days overdue`, tone: 'overdue' };
+    return { text: n === 1 ? tNow('pw.due.overdue1') : tNow('pw.due.overdueN', { n }), tone: 'overdue' };
   }
-  if (diff === 0) return { text: 'Due today', tone: 'soon' };
-  if (diff === 1) return { text: 'Due tomorrow', tone: 'soon' };
-  if (diff <= 6) return { text: `Due in ${diff} days`, tone: 'normal' };
-  return { text: `Due ${nice}`, tone: 'normal' };
+  if (diff === 0) return { text: tNow('pw.due.today'), tone: 'soon' };
+  if (diff === 1) return { text: tNow('pw.due.tomorrow'), tone: 'soon' };
+  if (diff <= 6) return { text: tNow('pw.due.inDays', { n: diff }), tone: 'normal' };
+  return { text: tNow('pw.due.on', { date: nice }), tone: 'normal' };
 }
 
 /** Compact deadline for tight card corners: "30d late", "Today", "Tomorrow", "In 3d", "12 Oct". */
 export function shortDue(dueDate: string | null, status?: string): string {
-  if (!dueDate) return 'No date';
-  const nice = new Date(`${dueDate}T00:00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  if (!dueDate) return tNow('pw.due.short.none');
+  const nice = new Date(`${dueDate}T00:00:00`).toLocaleDateString(dateLocale(currentLang()), { day: 'numeric', month: 'short' });
   const diff = daysUntil(dueDate);
   if (status === 'COMPLETED' || status === 'CANCELLED' || diff == null) return nice;
-  if (diff < 0) return `${-diff}d late`;
-  if (diff === 0) return 'Today';
-  if (diff === 1) return 'Tomorrow';
-  if (diff <= 6) return `In ${diff}d`;
+  if (diff < 0) return tNow('pw.due.short.late', { n: -diff });
+  if (diff === 0) return tNow('pw.due.short.today');
+  if (diff === 1) return tNow('pw.due.short.tomorrow');
+  if (diff <= 6) return tNow('pw.due.short.inDays', { n: diff });
   return nice;
 }
 
@@ -60,14 +62,14 @@ export function priorityMeta(priority?: string): { label: string; dot: string; u
   switch ((priority ?? '').toUpperCase()) {
     case 'URGENT':
     case 'CRITICAL':
-      return { label: 'Urgent', dot: 'bg-[#DC2626]', urgent: true };
+      return { label: tNow('pw.prio.urgent'), dot: 'bg-[#DC2626]', urgent: true };
     case 'HIGH':
-      return { label: 'High', dot: 'bg-[#EA6A2D]', urgent: true };
+      return { label: tNow('pw.prio.high'), dot: 'bg-[#EA6A2D]', urgent: true };
     case 'LOW':
-      return { label: 'Low', dot: 'bg-[#9AA39E]', urgent: false };
+      return { label: tNow('pw.prio.low'), dot: 'bg-[#9AA39E]', urgent: false };
     case 'MEDIUM':
     default:
-      return { label: 'Medium', dot: 'bg-[#D7AA4A]', urgent: false };
+      return { label: tNow('pw.prio.medium'), dot: 'bg-[#D7AA4A]', urgent: false };
   }
 }
 
@@ -75,27 +77,27 @@ export function priorityMeta(priority?: string): { label: string; dot: string; u
 export function statusMeta(status: string): { label: string; cls: string } {
   switch (status) {
     case 'AVAILABLE': // backend-only status on pool cards
-      return { label: 'Open to pick', cls: 'bg-[#F6ECDD] text-[#9B6B32]' };
+      return { label: tNow('pw.ts2.AVAILABLE'), cls: 'bg-[#F6ECDD] text-[#9B6B32]' };
     case 'PENDING':
-      return { label: 'Not started', cls: 'bg-[#EEF0EE] text-[#5B625E]' };
+      return { label: tNow('pw.ts2.PENDING'), cls: 'bg-[#EEF0EE] text-[#5B625E]' };
     case 'ACCEPTED':
-      return { label: 'Ready to start', cls: 'bg-[#E7F2EC] text-[#28704F]' };
+      return { label: tNow('pw.ts2.ACCEPTED'), cls: 'bg-[#E7F2EC] text-[#28704F]' };
     case 'IN_PROGRESS':
-      return { label: 'In progress', cls: 'bg-[#E7F2EC] text-[#28704F]' };
+      return { label: tNow('pw.ts2.IN_PROGRESS'), cls: 'bg-[#E7F2EC] text-[#28704F]' };
     case 'PAUSED':
-      return { label: 'Paused', cls: 'bg-[#FBEED0] text-[#9D6B10]' };
+      return { label: tNow('pw.ts2.PAUSED'), cls: 'bg-[#FBEED0] text-[#9D6B10]' };
     case 'WAITING_MATERIAL':
-      return { label: 'Waiting on material', cls: 'bg-[#FDE9D6] text-[#B45A1B]' };
+      return { label: tNow('pw.ts2.WAITING_MATERIAL'), cls: 'bg-[#FDE9D6] text-[#B45A1B]' };
     case 'WAITING_APPROVAL':
-      return { label: 'Awaiting approval', cls: 'bg-[#EDE6F7] text-[#6D4AA8]' };
+      return { label: tNow('pw.ts2.WAITING_APPROVAL'), cls: 'bg-[#EDE6F7] text-[#6D4AA8]' };
     case 'COMPLETED':
-      return { label: 'Completed', cls: 'bg-[#E7F2EC] text-[#28704F]' };
+      return { label: tNow('pw.ts2.COMPLETED'), cls: 'bg-[#E7F2EC] text-[#28704F]' };
     case 'REWORK':
     case 'REJECTED':
-      return { label: 'Needs rework', cls: 'bg-[#FBE2E0] text-[#B94B45]' };
+      return { label: tNow('pw.ts2.REWORK'), cls: 'bg-[#FBE2E0] text-[#B94B45]' };
     case 'CANCELLED':
-      return { label: 'Cancelled', cls: 'bg-[#EEF0EE] text-[#8A918C]' };
+      return { label: tNow('pw.ts2.CANCELLED'), cls: 'bg-[#EEF0EE] text-[#8A918C]' };
     default:
-      return { label: status.replace(/_/g, ' '), cls: 'bg-[#EEF0EE] text-[#5B625E]' };
+      return { label: (() => { const k = `pw.status.${status}`; const v = tNow(k); return v === k ? status.replace(/_/g, ' ') : v; })(), cls: 'bg-[#EEF0EE] text-[#5B625E]' };
   }
 }

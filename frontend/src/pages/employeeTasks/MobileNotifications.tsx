@@ -2,6 +2,7 @@ import { ReactElement, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bell, CheckCircle2, Briefcase, AlertCircle, Check, Trash2, X } from 'lucide-react';
 import api from '@/lib/api';
+import { useT } from '@/i18n';
 
 interface NotificationItem {
   id: number; title: string; message: string; type: string; read: boolean; createdAt: string; actionUrl?: string;
@@ -15,6 +16,7 @@ const ICONS: Record<string, ReactElement> = {
 
 export default function MobileNotifications() {
   const [items, setItems] = useState<NotificationItem[]>([]);
+  const { t } = useT();
   const navigate = useNavigate();
 
   const load = () => api.get('/notifications?size=50').then((res) => setItems(res.data.content || []));
@@ -25,7 +27,7 @@ export default function MobileNotifications() {
   const remove = (id: number) => api.delete(`/notifications/${id}`).then(load).catch(() => {});
   const clearAll = () => {
     if (items.length === 0) return;
-    if (confirm('Clear all notifications?')) api.delete('/notifications').then(load).catch(() => {});
+    if (confirm(t('pw.notif.clearConfirm'))) api.delete('/notifications').then(load).catch(() => {});
   };
 
   // Route a notification's actionUrl to the right PORTAL screen. Backend action URLs are a mix of
@@ -52,13 +54,13 @@ export default function MobileNotifications() {
   return (
     <div className="flex flex-col gap-2 p-3">
       <div className="flex items-center justify-between px-1">
-        <h1 className="text-base font-bold">Notifications</h1>
+        <h1 className="text-base font-bold">{t('pw.notif.title')}</h1>
         <div className="flex items-center gap-3">
           <button onClick={markAllAsRead} className="flex items-center gap-1 text-xs font-medium text-primary">
-            <Check className="h-3.5 w-3.5" /> Mark all read
+            <Check className="h-3.5 w-3.5" /> {t('pw.notif.markAllRead')}
           </button>
           <button onClick={clearAll} className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
-            <Trash2 className="h-3.5 w-3.5" /> Clear all
+            <Trash2 className="h-3.5 w-3.5" /> {t('pw.notif.clearAll')}
           </button>
         </div>
       </div>
@@ -67,7 +69,7 @@ export default function MobileNotifications() {
         {items.length === 0 ? (
           <div className="flex flex-col items-center gap-2 p-10 text-center text-sm text-muted-foreground">
             <Bell className="h-8 w-8 text-slate-300" />
-            You're all caught up.
+            {t('pw.notif.caughtUp')}
           </div>
         ) : (
           items.map((n) => (
@@ -84,7 +86,7 @@ export default function MobileNotifications() {
                 </span>
                 {!n.read && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-emerald-600" />}
               </button>
-              <button onClick={() => remove(n.id)} className="flex shrink-0 items-center px-3 text-muted-foreground active:text-destructive" aria-label="Delete notification">
+              <button onClick={() => remove(n.id)} className="flex shrink-0 items-center px-3 text-muted-foreground active:text-destructive" aria-label={t('pw.notif.deleteAria')}>
                 <X className="h-4 w-4" />
               </button>
             </div>

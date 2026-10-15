@@ -7,6 +7,7 @@ import { employeeTaskApi } from '@/api/employeeTaskApi';
 import { getBestPosition, locationErrorMessage, reverseGeocode } from '@/lib/geo';
 import { LeadInfo, TaskDetail } from '@/types/employeeTask';
 import LeadDetailsCard from './LeadDetailsCard';
+import { useT, rich } from '@/i18n';
 
 /**
  * Collect Requirement task page body — one card per question the field employee has:
@@ -61,13 +62,14 @@ export default function RequirementTaskView({ task, lead, canEdit, takeFirst, on
   /** Everything else about the lead (property, source, media) — revealed by the "…" button. */
   more?: React.ReactNode;
 }) {
+  const { t } = useT();
   const [locating, setLocating] = useState(false);
   const [locErr, setLocErr] = useState('');
   const [hint, setHint] = useState('');
   const showActions = canEdit || !!takeFirst;
   // Runs the action once the task is the employee's; before that, explains what to do.
   const guard = (fn: () => void) => () => {
-    if (canEdit) { setHint(''); fn(); } else setHint('Tap “Take this task” below first, then you can edit the lead, set the location and add photos in Task notes.');
+    if (canEdit) { setHint(''); fn(); } else setHint(t('pw.rt.takeFirst'));
   };
   const edit = (section: string) => guard(() => onEdit(section));
 
@@ -94,7 +96,7 @@ export default function RequirementTaskView({ task, lead, canEdit, takeFirst, on
       await employeeTaskApi.saveSiteLocation(task.id, { latitude: fix.lat, longitude: fix.lng, ...addr });
       onReload();
     } catch (e: any) {
-      setLocErr(e?.response?.data?.message || 'Could not save the location.');
+      setLocErr(e?.response?.data?.message || t('pw.rt.saveLocFailed'));
     } finally {
       setLocating(false);
     }
@@ -117,31 +119,31 @@ export default function RequirementTaskView({ task, lead, canEdit, takeFirst, on
               </span>
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <p className="flex-1 whitespace-nowrap text-[11px] font-bold uppercase tracking-wide text-[#0A573B]">Site location</p>
+                  <p className="flex-1 whitespace-nowrap text-[11px] font-bold uppercase tracking-wide text-[#0A573B]">{t('pw.rt.siteLocation')}</p>
                   {showActions && (
-                    <button onClick={edit('address')} aria-label="Edit address"
+                    <button onClick={edit('address')} aria-label={t('pw.rt.editAddress')}
                       className="flex items-center gap-1 rounded-lg border border-[#DDE2DE] bg-white px-2 py-1 text-[11.5px] font-semibold text-[#0A573B] active:scale-95">
-                      <Pencil className="h-3 w-3" /> Edit
+                      <Pencil className="h-3 w-3" /> {t('pw.rt.edit')}
                     </button>
                   )}
                 </div>
                 {line1 && <p className="truncate text-[14px] font-semibold text-[#1A211E]">{line1}</p>}
                 {line2 && <p className="truncate text-[12.5px] text-[#5B625E]">{line2}</p>}
-                {!line1 && !line2 && <p className="text-[12.5px] text-[#7A817C]">{coords ? 'Pinned on map' : 'No address yet'}</p>}
+                {!line1 && !line2 && <p className="text-[12.5px] text-[#7A817C]">{coords ? t('pw.rt.pinned') : t('pw.rt.noAddress')}</p>}
               </div>
             </div>
             <div className="mt-2.5 flex flex-col gap-1.5">
               {navHref && (
                 <a href={navHref} target="_blank" rel="noopener noreferrer"
                   className="flex items-center justify-center gap-2 rounded-xl bg-[#0A573B] px-3 py-2.5 text-[13px] font-semibold text-white active:scale-[0.98]">
-                  <Navigation className="h-4 w-4" /> Navigate to site
+                  <Navigation className="h-4 w-4" /> {t('pw.rt.navigate')}
                 </a>
               )}
               {showActions && (
                 <button onClick={guard(useMyLocation)} disabled={locating}
                   className="flex items-center justify-center gap-2 rounded-xl border border-[#0A573B]/30 bg-white px-3 py-2 text-[12.5px] font-semibold text-[#0A573B] active:scale-[0.98] disabled:opacity-60">
                   {locating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Crosshair className="h-4 w-4" />}
-                  {locating ? 'Getting GPS location…' : coords ? 'Re-pin by GPS' : 'Set location by GPS'}
+                  {locating ? t('pw.rt.gettingGps') : coords ? t('pw.rt.rePin') : t('pw.rt.setGps')}
                 </button>
               )}
             </div>
@@ -153,7 +155,7 @@ export default function RequirementTaskView({ task, lead, canEdit, takeFirst, on
               </a>
             ) : (
               <div className="flex h-full min-h-[110px] flex-col items-center justify-center gap-1 bg-[#F4F6F3] px-2 text-center text-[10.5px] text-[#8A918C]">
-                <MapPin className="h-5 w-5 text-[#B9C0BB]" /> No map pin yet
+                <MapPin className="h-5 w-5 text-[#B9C0BB]" /> {t('pw.rt.noPin')}
               </div>
             )}
           </div>
@@ -163,7 +165,7 @@ export default function RequirementTaskView({ task, lead, canEdit, takeFirst, on
 
 
       <p className="px-1 text-[12px] leading-snug text-[#6B726E]">
-        Submit when done — the <b>Site Visit, Measure &amp; Quote</b> task opens for you and this one leaves your To-Do.
+        {rich(t('pw.rt.submitNote'))}
       </p>
     </div>
   );

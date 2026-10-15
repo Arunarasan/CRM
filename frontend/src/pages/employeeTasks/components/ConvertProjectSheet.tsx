@@ -11,6 +11,7 @@ import { toast } from '@/components/ui/toast';
 import { projectRequestApi } from '@/api/projectRequestApi';
 import { resolveFileUrl } from '@/lib/uploadFile';
 import PhotoPickButtons from './PhotoPickButtons';
+import { useT, rich } from '@/i18n';
 
 const METHODS = ['Cash', 'UPI', 'Bank Transfer', 'Cheque', 'Card'];
 
@@ -29,6 +30,7 @@ export default function ConvertProjectSheet({ leadId, leadProject, open, onOpenC
   /** A field employee's request was sent (the page stays, showing it waits for an admin). */
   onRequested?: () => void;
 }) {
+  const { t } = useT();
   const update = !!leadProject;
   const { hasAuthority, isAdmin } = useAuth();
   // Every new project from the employee portal waits for an admin to approve it.
@@ -48,7 +50,7 @@ export default function ConvertProjectSheet({ leadId, leadProject, open, onOpenC
     if (!files[0]) return;
     setUploading(true); setError('');
     try { setProofUrl((await employeeTaskApi.uploadFile(files[0], 'PAYMENT')).fileUrl); }
-    catch { setError('Photo upload failed. Try again.'); }
+    catch { setError(t('pw.cv.photoFailed')); }
     finally { setUploading(false); }
   };
 
@@ -56,7 +58,7 @@ export default function ConvertProjectSheet({ leadId, leadProject, open, onOpenC
     setSaving(true); setError('');
     try {
       if (sendForApproval) {
-        if (amount.trim() && !(Number(amount.replace(/,/g, '')) > 0)) { setError('Enter a valid advance amount, or leave it blank.'); return; }
+        if (amount.trim() && !(Number(amount.replace(/,/g, '')) > 0)) { setError(t('pw.cv.badAmount')); return; }
         await projectRequestApi.send(leadId, {
           advanceAmount: amount.trim() || undefined,
           paymentMethod: amount.trim() ? method : undefined,
@@ -65,7 +67,7 @@ export default function ConvertProjectSheet({ leadId, leadProject, open, onOpenC
           note: note.trim() || undefined,
         });
         setAmount(''); setReference(''); setProofUrl(''); setNote('');
-        toast.success('Sent to admin for approval');
+        toast.success(t('pw.cv.sentToast'));
         onOpenChange(false);
         (onRequested ?? onDone)();
         return;
@@ -75,11 +77,11 @@ export default function ConvertProjectSheet({ leadId, leadProject, open, onOpenC
         advancePaymentMethod: amount.trim() ? method : undefined,
       });
       setAmount('');
-      if (needsApproval) toast.success('Sent to admin for approval');
+      if (needsApproval) toast.success(t('pw.cv.sentToast'));
       onOpenChange(false);
       onDone();
     } catch (e: any) {
-      setError(e?.response?.data?.message || (update ? 'Could not update the project.' : 'Could not create the project.'));
+      setError(e?.response?.data?.message || (update ? t('pw.cv.updateFailed') : t('pw.cv.createFailed')));
     } finally { setSaving(false); }
   };
 
@@ -89,7 +91,7 @@ export default function ConvertProjectSheet({ leadId, leadProject, open, onOpenC
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-[#0A573B]">
             {sendForApproval ? <Send className="h-5 w-5" /> : <Rocket className="h-5 w-5" />}
-            {update ? 'Update Project' : sendForApproval ? 'Send for Approval' : 'Create Project'}
+            {update ? t('pw.cv.updateTitle') : sendForApproval ? t('pw.cv.sendTitle') : t('pw.cv.createTitle')}
           </DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-3">
@@ -97,63 +99,58 @@ export default function ConvertProjectSheet({ leadId, leadProject, open, onOpenC
             <>
               <p className="flex gap-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-sm text-amber-900">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                <span>
-                  This lead already has project <span className="font-semibold">{leadProject!.projectCode}</span>.
-                  No new project is created — this quote replaces its quotation.
-                </span>
+                <span>{rich(t('pw.cv.hasProject', { code: String(leadProject!.projectCode) }))}</span>
               </p>
               <div className="rounded-md border p-2 text-sm">
-                <div className="flex justify-between gap-2"><span className="text-[#7A817C]">Current quote</span>
+                <div className="flex justify-between gap-2"><span className="text-[#7A817C]">{t('pw.cv.currentQuote')}</span>
                   <span>{leadProject!.quotationNumber || '—'} · {inr(leadProject!.contractValue)}</span></div>
-                <div className="flex justify-between gap-2 font-semibold"><span>This quote</span>
+                <div className="flex justify-between gap-2 font-semibold"><span>{t('pw.cv.thisQuote')}</span>
                   <span>{inr(leadProject!.sheetTotal)}</span></div>
               </div>
               <p className="text-xs text-[#5B625E]">
                 {needsApproval
-                  ? 'This goes to an admin for approval. Once approved, the project\'s items, work and payment plan follow the new quote. An advance you record waits for approval on Payments.'
-                  : 'The project\'s items, work and payment plan follow the new quote. Record an advance now if the customer has paid one.'}
+                  ? t('pw.cv.needsApproval')
+                  : t('pw.cv.appliesNow')}
               </p>
             </>
           ) : sendForApproval ? (
             <p className="text-sm text-[#5B625E]">
-              The customer agreed to this quote. It goes to an admin, who creates the project after checking it.
-              If the customer paid an advance, record it here — it's added to the project's payments on approval.
+              {t('pw.cv.agreed')}
             </p>
           ) : (
             <p className="text-sm text-[#5B625E]">
-              This approves the quotation and turns it into a project. Record an advance now if the
-              customer has paid one — otherwise leave it blank to just confirm the project.
+              {t('pw.cv.approvesQuote')}
             </p>
           )}
           <div>
-            <Label>{sendForApproval ? 'Advance from customer ₹ (optional)' : 'Advance received (optional)'}</Label>
+            <Label>{sendForApproval ? t('pw.cv.advanceOpt') : t('pw.cv.advanceRecv')}</Label>
             <BaseInput inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)}
-              placeholder="₹ amount" className="mt-1 w-full rounded-md border px-3 py-2 text-sm" />
+              placeholder={t('pw.cv.amountPh')} className="mt-1 w-full rounded-md border px-3 py-2 text-sm" />
           </div>
           {amount.trim() && (
             <div>
-              <Label>Payment method</Label>
+              <Label>{t('pw.cv.method')}</Label>
               <select value={method} onChange={(e) => setMethod(e.target.value)}
                 className="mt-1 w-full rounded-md border px-3 py-2 text-sm">
-                {METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
+                {METHODS.map((m) => <option key={m} value={m}>{t(`pw.pay.${m}`)}</option>)}
               </select>
             </div>
           )}
           {sendForApproval && amount.trim() && (
             <div>
-              <Label>UPI / transaction reference (optional)</Label>
-              <BaseInput value={reference} onChange={(e) => setReference(e.target.value)} placeholder="e.g. UTR 4321…"
+              <Label>{t('pw.cv.reference')}</Label>
+              <BaseInput value={reference} onChange={(e) => setReference(e.target.value)} placeholder={t('pw.cv.referencePh')}
                 className="mt-1 w-full rounded-md border px-3 py-2 text-sm" />
             </div>
           )}
           {sendForApproval && (
             <>
               <div>
-                <Label>Receipt / payment screenshot (optional)</Label>
+                <Label>{t('pw.cv.receipt')}</Label>
                 {proofUrl ? (
                   <div className="relative mt-1 h-24 w-24">
-                    <img src={resolveFileUrl(proofUrl)} alt="Payment proof" className="h-full w-full rounded-md border object-cover" />
-                    <button type="button" onClick={() => setProofUrl('')} aria-label="Remove photo"
+                    <img src={resolveFileUrl(proofUrl)} alt={t('pw.cv.proofAlt')} className="h-full w-full rounded-md border object-cover" />
+                    <button type="button" onClick={() => setProofUrl('')} aria-label={t('pw.common.removePhoto')}
                       className="absolute -right-1.5 -top-1.5 rounded-full bg-black/70 p-1 text-white"><X className="h-3 w-3" /></button>
                   </div>
                 ) : (
@@ -161,9 +158,9 @@ export default function ConvertProjectSheet({ leadId, leadProject, open, onOpenC
                 )}
               </div>
               <div>
-                <Label>Note for the admin (optional)</Label>
+                <Label>{t('pw.cv.noteForAdmin')}</Label>
                 <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2}
-                  placeholder="e.g. Balance after installation; customer wants start next week"
+                  placeholder={t('pw.cv.notePh')}
                   className="mt-1 w-full rounded-md border px-3 py-2 text-sm" />
               </div>
             </>
@@ -171,10 +168,10 @@ export default function ConvertProjectSheet({ leadId, leadProject, open, onOpenC
           {error && <p className="rounded-md bg-[#FBE2E0] p-2 text-xs text-[#B94B45]">{error}</p>}
         </div>
         <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving} className="flex-1">Cancel</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving} className="flex-1">{t('pw.cancel')}</Button>
           <Button onClick={confirm} disabled={saving || uploading} className="flex-1 bg-[#0A573B] hover:bg-[#0A573B]/90">
-            {saving ? (update || sendForApproval ? 'Sending…' : 'Creating…')
-              : needsApproval || sendForApproval ? 'Send for Approval' : update ? 'Update Project' : 'Create Project'}
+            {saving ? (update || sendForApproval ? t('pw.cv.sending') : t('pw.cv.creating'))
+              : needsApproval || sendForApproval ? t('pw.cv.sendTitle') : update ? t('pw.cv.updateTitle') : t('pw.cv.createTitle')}
           </Button>
         </DialogFooter>
       </DialogContent>

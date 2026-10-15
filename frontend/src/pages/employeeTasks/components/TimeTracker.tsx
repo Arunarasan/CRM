@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Play, Pause, Square, Clock } from 'lucide-react';
 import { employeeTaskApi } from '@/api/employeeTaskApi';
 import { TimeLogSummary } from '@/types/employeeTask';
+import { useT } from '@/i18n';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -11,6 +12,7 @@ const today = () => new Date().toISOString().slice(0, 10);
  * later submit for payroll approval. Disabled once the task is locked or the viewer isn't a member.
  */
 export default function TimeTracker({ taskId, disabled }: { taskId: number; disabled?: boolean }) {
+  const { t } = useT();
   const [log, setLog] = useState<TimeLogSummary | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -26,13 +28,13 @@ export default function TimeTracker({ taskId, disabled }: { taskId: number; disa
 
   const run = (fn: () => Promise<TimeLogSummary>) => {
     setBusy(true); setError('');
-    fn().then(setLog).catch((e: any) => setError(e?.message || 'Timer error')).finally(() => setBusy(false));
+    fn().then(setLog).catch((e: any) => setError(e?.message || t('pw.timer.error'))).finally(() => setBusy(false));
   };
 
   const running = log && !log.completedAt && log.running;
   const paused = log && !log.completedAt && !log.running;
   const mins = log?.workingTimeMinutes ?? 0;
-  const label = `${Math.floor(mins / 60)}h ${mins % 60}m`;
+  const label = t('pw.timer.hm', { h: Math.floor(mins / 60), m: mins % 60 });
 
   if (disabled) return null;
 
@@ -40,7 +42,7 @@ export default function TimeTracker({ taskId, disabled }: { taskId: number; disa
   return (
     <div className="rounded-2xl border border-[#EDE6D8] bg-white p-4 shadow-[0_2px_10px_rgba(80,55,20,0.05)]">
       <div className="mb-2.5 flex items-center justify-between">
-        <h3 className="flex items-center gap-1.5 text-[14px] font-semibold text-[#1A211E]"><Clock className="h-4 w-4 text-[#0A573B]" /> Work timer</h3>
+        <h3 className="flex items-center gap-1.5 text-[14px] font-semibold text-[#1A211E]"><Clock className="h-4 w-4 text-[#0A573B]" /> {t('pw.timer.title')}</h3>
         <span className="text-[15px] font-bold tabular-nums text-[#0A573B]">{label}</span>
       </div>
       {error && <p className="mb-2 text-[11px] text-[#B94B45]">{error}</p>}
@@ -48,18 +50,18 @@ export default function TimeTracker({ taskId, disabled }: { taskId: number; disa
         {!running && !paused && (
           <button disabled={busy} onClick={() => run(() => employeeTaskApi.timeStart(taskId))}
             className={`${btn} bg-[#0A573B]`}>
-            <Play className="h-4 w-4" /> Start
+            <Play className="h-4 w-4" /> {t('pw.timer.start')}
           </button>
         )}
         {running && (
           <>
             <button disabled={busy} onClick={() => run(() => employeeTaskApi.timePause(taskId))}
               className={`${btn} bg-[#BC8748]`}>
-              <Pause className="h-4 w-4" /> Pause
+              <Pause className="h-4 w-4" /> {t('pw.timer.pause')}
             </button>
             <button disabled={busy} onClick={() => run(() => employeeTaskApi.timeStop(taskId))}
               className={`${btn} bg-[#4B524E]`}>
-              <Square className="h-4 w-4" /> Stop
+              <Square className="h-4 w-4" /> {t('pw.timer.stop')}
             </button>
           </>
         )}
@@ -67,16 +69,16 @@ export default function TimeTracker({ taskId, disabled }: { taskId: number; disa
           <>
             <button disabled={busy} onClick={() => run(() => employeeTaskApi.timeResume(taskId))}
               className={`${btn} bg-[#0A573B]`}>
-              <Play className="h-4 w-4" /> Resume
+              <Play className="h-4 w-4" /> {t('pw.timer.resume')}
             </button>
             <button disabled={busy} onClick={() => run(() => employeeTaskApi.timeStop(taskId))}
               className={`${btn} bg-[#4B524E]`}>
-              <Square className="h-4 w-4" /> Stop
+              <Square className="h-4 w-4" /> {t('pw.timer.stop')}
             </button>
           </>
         )}
       </div>
-      {paused && <p className="mt-2 text-[11px] font-medium text-[#9B6B32]">Paused — resume when you're back on it.</p>}
+      {paused && <p className="mt-2 text-[11px] font-medium text-[#9B6B32]">{t('pw.timer.pausedNote')}</p>}
     </div>
   );
 }

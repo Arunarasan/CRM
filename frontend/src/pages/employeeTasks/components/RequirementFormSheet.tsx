@@ -10,6 +10,7 @@ import { LeadFormMedia } from '@/types/employeeTask';
 import TaskCallRecordings from './TaskCallRecordings';
 import PhotoPickButtons from './PhotoPickButtons';
 import { getBestPosition, locationErrorMessage, reverseGeocode } from '@/lib/geo';
+import { useT, useTr } from '@/i18n';
 
 /**
  * The redesigned "Collect Requirement" form for the TT_COLLECT_REQUIREMENT task. Captures the WHOLE
@@ -31,12 +32,9 @@ const RATINGS = ['1', '2', '3', '4', '5'];
 const PRIORITIES = ['Low', 'Medium', 'High', 'Urgent'];
 const TEMPERATURES = ['Hot', 'Warm', 'Cold'];
 
-const SCOPE: { key: string; label: string }[] = [
-  { key: 'reqKitchen', label: 'Modular Kitchen' }, { key: 'reqWardrobe', label: 'Wardrobe' },
-  { key: 'reqTvUnit', label: 'TV Unit' }, { key: 'reqFalseCeiling', label: 'False Ceiling' },
-  { key: 'reqPainting', label: 'Painting' }, { key: 'reqFlooring', label: 'Flooring' },
-  { key: 'reqElectrical', label: 'Electrical' }, { key: 'reqPlumbing', label: 'Plumbing' },
-  { key: 'reqWoodFinish', label: 'Wood Finish' },
+const SCOPE: { key: string }[] = [
+  { key: 'reqKitchen' }, { key: 'reqWardrobe' }, { key: 'reqTvUnit' }, { key: 'reqFalseCeiling' }, { key: 'reqPainting' },
+  { key: 'reqFlooring' }, { key: 'reqElectrical' }, { key: 'reqPlumbing' }, { key: 'reqWoodFinish' },
 ];
 
 // Which lead fields each section owns (used for prefill + the "filled" indicator).
@@ -65,6 +63,8 @@ export default function RequirementFormSheet({ taskId, leadId, open, onOpenChang
   /** Open with only this section expanded and scrolled into view (the task page's "Edit" buttons). */
   focus?: string | null;
 }) {
+  const { t } = useT();
+  const tr = useTr();
   const [v, setV] = useState<Values>({});
   const [scope, setScope] = useState<Record<string, boolean>>({});
   const [media, setMedia] = useState<LeadFormMedia[]>([]);
@@ -148,7 +148,7 @@ export default function RequirementFormSheet({ taskId, leadId, open, onOpenChang
           setMedia((prev) => [...prev, { url: res.fileUrl, type: 'PHOTO', caption: res.fileName }]);
         }
       }
-    } catch (e: any) { setError(e?.response?.data?.message || 'Upload failed. Try again.'); } finally { setUploading(false); }
+    } catch (e: any) { setError(e?.response?.data?.message || t('pw.rf.errUpload')); } finally { setUploading(false); }
   };
 
   // GPS -> map link + the street address for that spot (only blank address fields are filled).
@@ -184,20 +184,20 @@ export default function RequirementFormSheet({ taskId, leadId, open, onOpenChang
       onOpenChange(false);
       onDetailsSaved?.();
     } catch (e: any) {
-      setError(e?.response?.data?.message || e?.message || 'Could not save the changes.');
+      setError(e?.response?.data?.message || e?.message || t('pw.rf.errSave'));
     } finally { setSaving(false); }
   };
 
   const submit = async () => {
     setError('');
-    if (fromCall && !v.name?.trim()) { setError("Enter the customer's name (Lead Summary) — it creates the lead."); return; }
+    if (fromCall && !v.name?.trim()) { setError(t('pw.rf.errName')); return; }
     // Next-step validation drives whether the workflow advances to the site visit or holds for follow-up.
     if (nextStep === 'VISIT') {
-      if (!v.siteVisitDate) { setError('Pick the agreed site-visit date.'); return; }
+      if (!v.siteVisitDate) { setError(t('pw.rf.errVisit')); return; }
       const described = v.projectDescription?.trim() || v.roomsRequired?.trim();
-      if (!described && !Object.values(scope).some(Boolean)) { setError('Capture what the customer wants (description, rooms, or scope).'); return; }
+      if (!described && !Object.values(scope).some(Boolean)) { setError(t('pw.rf.errDescribe')); return; }
     } else {
-      if (!v.followUpDate) { setError('Pick the follow-up date.'); return; }
+      if (!v.followUpDate) { setError(t('pw.rf.errFollow')); return; }
     }
     setSaving(true);
     try {
@@ -213,116 +213,116 @@ export default function RequirementFormSheet({ taskId, leadId, open, onOpenChang
       onSaved();
       onOpenChange(false);
     } catch (e: any) {
-      setError(e?.response?.data?.message || e?.message || 'Could not submit the requirement.');
+      setError(e?.response?.data?.message || e?.message || t('pw.rf.errSubmit'));
     } finally { setSaving(false); }
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
-        <DialogHeader><DialogTitle>{fromCall ? 'Collect Requirement · new lead' : 'Collect Requirement'}</DialogTitle></DialogHeader>
+      <DialogContent className="max-w-md max-h-[90dvh] overflow-y-auto">
+        <DialogHeader><DialogTitle>{fromCall ? t('pw.rf.collect_requirement_new_lead') : t('pw.rf.collect_requirement')}</DialogTitle></DialogHeader>
         {fromCall && (
           <p className="rounded-lg bg-[#EFF5F0] p-2.5 text-xs text-[#2C5C45]">
-            Submitting creates the lead and saves this call's recording on its Documents page.
+            {t('pw.rf.fromCallNote')}
           </p>
         )}
-        {loading && <p className="text-xs text-muted-foreground">Loading current details…</p>}
+        {loading && <p className="text-xs text-muted-foreground">{t('pw.rf.loading_current_details')}</p>}
         {error && <p className="rounded-md bg-destructive/15 p-2 text-xs text-destructive">{error}</p>}
 
         <div className="flex flex-col gap-2">
-          <Section id="nextstep" icon={<CalendarClock className="h-4 w-4" />} title="Next Step" count={nextStep === 'VISIT' ? (v.siteVisitDate ? 1 : 0) : (v.followUpDate ? 1 : 0)} openSecs={openSecs} toggle={toggleSec}>
+          <Section id="nextstep" icon={<CalendarClock className="h-4 w-4" />} title={t('pw.rf.next_step')} count={nextStep === 'VISIT' ? (v.siteVisitDate ? 1 : 0) : (v.followUpDate ? 1 : 0)} openSecs={openSecs} toggle={toggleSec}>
             <div className="grid grid-cols-2 gap-2">
               <button type="button" onClick={() => setNextStep('VISIT')}
                 className={`rounded-lg border px-3 py-2 text-xs font-semibold ${nextStep === 'VISIT' ? 'border-primary bg-primary text-primary-foreground' : 'bg-card text-muted-foreground'}`}>
-                Schedule site visit
+                {t('pw.rf.schedule_site_visit')}
               </button>
               <button type="button" onClick={() => setNextStep('FOLLOWUP')}
                 className={`rounded-lg border px-3 py-2 text-xs font-semibold ${nextStep === 'FOLLOWUP' ? 'border-primary bg-primary text-primary-foreground' : 'bg-card text-muted-foreground'}`}>
-                Follow up later
+                {t('pw.rf.follow_up_later')}
               </button>
             </div>
             {nextStep === 'VISIT' ? (
               <>
-                <Text label="Site visit date" type="date" value={v.siteVisitDate} onChange={(x) => set('siteVisitDate', x)} />
-                <p className="text-[11px] text-muted-foreground">The Site Visit &amp; Measurement task will be due on this date.</p>
+                <Text label={t('pw.rf.site_visit_date')} type="date" value={v.siteVisitDate} onChange={(x) => set('siteVisitDate', x)} />
+                <p className="text-[11px] text-muted-foreground">{t('pw.rf.visitDueNote')}</p>
               </>
             ) : (
               <>
                 <div className="grid grid-cols-2 gap-3">
-                  <Text label="Follow-up date" type="date" value={v.followUpDate} onChange={(x) => set('followUpDate', x)} />
-                  <Text label="Time" type="time" value={v.followUpTime} onChange={(x) => set('followUpTime', x)} />
+                  <Text label={t('pw.rf.follow_up_date')} type="date" value={v.followUpDate} onChange={(x) => set('followUpDate', x)} />
+                  <Text label={t('pw.rf.time')} type="time" value={v.followUpTime} onChange={(x) => set('followUpTime', x)} />
                 </div>
-                <Area label="What's pending / follow-up notes" value={v.followUpNotes} onChange={(x) => set('followUpNotes', x)} rows={2} placeholder="Why not ready yet, what to confirm next time…" />
-                <p className="text-[11px] text-muted-foreground">A fresh "Collect Requirement" task will be created for that date, with everything you've entered kept.</p>
+                <Area label={t('pw.rf.pendingNotes')} value={v.followUpNotes} onChange={(x) => set('followUpNotes', x)} rows={2} placeholder={t('pw.rf.pendingPh')} />
+                <p className="text-[11px] text-muted-foreground">{t('pw.rf.freshTaskNote')}</p>
               </>
             )}
           </Section>
 
-          <Section id="summary" icon={<User className="h-4 w-4" />} title="Lead Summary" count={filledCount('summary')} openSecs={openSecs} toggle={toggleSec}>
-            <Text label="Customer / lead name" value={v.name} onChange={(x) => set('name', x)} />
+          <Section id="summary" icon={<User className="h-4 w-4" />} title={t('pw.rf.lead_summary')} count={filledCount('summary')} openSecs={openSecs} toggle={toggleSec}>
+            <Text label={t('pw.rf.customer_lead_name')} value={v.name} onChange={(x) => set('name', x)} />
             <div className="grid grid-cols-2 gap-3">
-              <Text label="Company (if any)" value={v.companyName} onChange={(x) => set('companyName', x)} />
-              <Text label="Contact person" value={v.contactPerson} onChange={(x) => set('contactPerson', x)} />
-              <Text label="GST number" value={v.gstNumber} onChange={(x) => set('gstNumber', x)} />
-              <Select label="Lead type" value={v.leadType} onChange={(x) => set('leadType', x)} options={LEAD_TYPES} />
-              <Select label="Lead source" value={v.leadSource} onChange={(x) => set('leadSource', x)} options={LEAD_SOURCES} />
-              <Select label="Quality rating" value={v.rating} onChange={(x) => set('rating', x)} options={RATINGS} />
-              <Select label="Priority" value={v.priority} onChange={(x) => set('priority', x)} options={PRIORITIES} />
-              <Select label="Interest level" value={v.leadTemperature} onChange={(x) => set('leadTemperature', x)} options={TEMPERATURES} />
+              <Text label={t('pw.rf.company_if_any')} value={v.companyName} onChange={(x) => set('companyName', x)} />
+              <Text label={t('pw.rf.contact_person')} value={v.contactPerson} onChange={(x) => set('contactPerson', x)} />
+              <Text label={t('pw.rf.gst_number')} value={v.gstNumber} onChange={(x) => set('gstNumber', x)} />
+              <Select label={t('pw.rf.lead_type')} value={v.leadType} onChange={(x) => set('leadType', x)} options={LEAD_TYPES} />
+              <Select label={t('pw.rf.lead_source')} value={v.leadSource} onChange={(x) => set('leadSource', x)} options={LEAD_SOURCES} />
+              <Select label={t('pw.rf.quality_rating')} value={v.rating} onChange={(x) => set('rating', x)} options={RATINGS} />
+              <Select label={t('pw.rf.priority')} value={v.priority} onChange={(x) => set('priority', x)} options={PRIORITIES} />
+              <Select label={t('pw.rf.interest_level')} value={v.leadTemperature} onChange={(x) => set('leadTemperature', x)} options={TEMPERATURES} />
             </div>
           </Section>
 
-          <Section id="contact" icon={<Phone className="h-4 w-4" />} title="Contact Details" count={filledCount('contact')} openSecs={openSecs} toggle={toggleSec}>
+          <Section id="contact" icon={<Phone className="h-4 w-4" />} title={t('pw.rf.contact_details')} count={filledCount('contact')} openSecs={openSecs} toggle={toggleSec}>
             <div className="grid grid-cols-2 gap-3">
-              <Text label="Mobile" type="tel" value={v.mobileNumber} onChange={(x) => set('mobileNumber', x)} />
-              <Text label="Alternate mobile" type="tel" value={v.alternateMobile} onChange={(x) => set('alternateMobile', x)} />
-              <Text label="WhatsApp" type="tel" value={v.whatsappNumber} onChange={(x) => set('whatsappNumber', x)} />
-              <Text label="Email" type="email" value={v.email} onChange={(x) => set('email', x)} />
+              <Text label={t('pw.rf.mobile')} type="tel" value={v.mobileNumber} onChange={(x) => set('mobileNumber', x)} />
+              <Text label={t('pw.rf.alternate_mobile')} type="tel" value={v.alternateMobile} onChange={(x) => set('alternateMobile', x)} />
+              <Text label={t('pw.rf.whatsapp')} type="tel" value={v.whatsappNumber} onChange={(x) => set('whatsappNumber', x)} />
+              <Text label={t('pw.rf.email')} type="email" value={v.email} onChange={(x) => set('email', x)} />
             </div>
           </Section>
 
-          <Section id="address" icon={<MapPin className="h-4 w-4" />} title="Address" count={filledCount('address')} openSecs={openSecs} toggle={toggleSec}>
-            <Area label="Address" value={v.address} onChange={(x) => set('address', x)} rows={2} />
+          <Section id="address" icon={<MapPin className="h-4 w-4" />} title={t('pw.rf.address')} count={filledCount('address')} openSecs={openSecs} toggle={toggleSec}>
+            <Area label={t('pw.rf.address')} value={v.address} onChange={(x) => set('address', x)} rows={2} />
             <div className="grid grid-cols-2 gap-3">
-              <Text label="City" value={v.city} onChange={(x) => set('city', x)} />
-              <Text label="District" value={v.district} onChange={(x) => set('district', x)} />
-              <Text label="State" value={v.state} onChange={(x) => set('state', x)} />
-              <Text label="Pincode" type="tel" value={v.pincode} onChange={(x) => set('pincode', x)} />
+              <Text label={t('pw.rf.city')} value={v.city} onChange={(x) => set('city', x)} />
+              <Text label={t('pw.rf.district')} value={v.district} onChange={(x) => set('district', x)} />
+              <Text label={t('pw.rf.state')} value={v.state} onChange={(x) => set('state', x)} />
+              <Text label={t('pw.rf.pincode')} type="tel" value={v.pincode} onChange={(x) => set('pincode', x)} />
             </div>
-            <Text label="Landmark" value={v.landmark} onChange={(x) => set('landmark', x)} />
-            <Text label="Google Maps link" value={v.googleMapLocation} onChange={(x) => set('googleMapLocation', x)} />
+            <Text label={t('pw.rf.landmark')} value={v.landmark} onChange={(x) => set('landmark', x)} />
+            <Text label={t('pw.rf.google_maps_link')} value={v.googleMapLocation} onChange={(x) => set('googleMapLocation', x)} />
             <button type="button" onClick={useGps} disabled={locating}
               className="flex items-center justify-center gap-2 rounded-xl border border-[#0A573B]/30 bg-[#F3F8F5] px-3 py-2.5 text-[13px] font-semibold text-[#0A573B] active:scale-[0.98] disabled:opacity-60">
               {locating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Crosshair className="h-4 w-4" />}
-              {locating ? 'Getting GPS location…' : 'Set location by GPS'}
+              {locating ? t('pw.rf.getting_gps_location') : t('pw.rf.set_location_by_gps')}
             </button>
-            <p className="-mt-1 text-[11px] text-muted-foreground">Turn on GPS and stand at the site. Fills the map link and any empty address fields.</p>
+            <p className="-mt-1 text-[11px] text-muted-foreground">{t('pw.rf.gpsNote')}</p>
           </Section>
 
-          <Section id="property" icon={<Home className="h-4 w-4" />} title="Property Details" count={filledCount('property')} openSecs={openSecs} toggle={toggleSec}>
+          <Section id="property" icon={<Home className="h-4 w-4" />} title={t('pw.rf.property_details')} count={filledCount('property')} openSecs={openSecs} toggle={toggleSec}>
             <div className="grid grid-cols-2 gap-3">
-              <Text label="Property type" value={v.propertyType} onChange={(x) => set('propertyType', x)} placeholder="Flat, Villa…" />
-              <Text label="Property / project name" value={v.propertyName} onChange={(x) => set('propertyName', x)} />
-              <Select label="Construction stage" value={v.currentConstructionStage} onChange={(x) => set('currentConstructionStage', x)} options={CONSTRUCTION_STAGES} />
-              <Text label="No. of floors" type="number" value={v.floorCount} onChange={(x) => set('floorCount', x)} />
-              <Text label="Total area (sq.ft)" type="number" value={v.areaSqft} onChange={(x) => set('areaSqft', x)} />
-              <Text label="Work area (sq.ft)" type="number" value={v.expectedWorkArea} onChange={(x) => set('expectedWorkArea', x)} />
+              <Text label={t('pw.rf.property_type')} value={v.propertyType} onChange={(x) => set('propertyType', x)} placeholder={t('pw.rf.flat_villa')} />
+              <Text label={t('pw.rf.property_project_name')} value={v.propertyName} onChange={(x) => set('propertyName', x)} />
+              <Select label={t('pw.rf.construction_stage')} value={v.currentConstructionStage} onChange={(x) => set('currentConstructionStage', x)} options={CONSTRUCTION_STAGES} />
+              <Text label={t('pw.rf.no_of_floors')} type="number" value={v.floorCount} onChange={(x) => set('floorCount', x)} />
+              <Text label={t('pw.rf.total_area_sq_ft')} type="number" value={v.areaSqft} onChange={(x) => set('areaSqft', x)} />
+              <Text label={t('pw.rf.work_area_sq_ft')} type="number" value={v.expectedWorkArea} onChange={(x) => set('expectedWorkArea', x)} />
             </div>
-            <Area label="Site address (if different)" value={v.siteAddress} onChange={(x) => set('siteAddress', x)} rows={2} />
+            <Area label={t('pw.rf.site_address_if_different')} value={v.siteAddress} onChange={(x) => set('siteAddress', x)} rows={2} />
           </Section>
 
-          <Section id="scope" icon={<ListChecks className="h-4 w-4" />} title="Scope of Work" count={filledCount('scope')} openSecs={openSecs} toggle={toggleSec}>
+          <Section id="scope" icon={<ListChecks className="h-4 w-4" />} title={t('pw.rf.scope_of_work')} count={filledCount('scope')} openSecs={openSecs} toggle={toggleSec}>
             <div className="flex flex-wrap gap-2">
               {SCOPE.map((s) => (
                 <button key={s.key} type="button" onClick={() => toggleScope(s.key)}
                   className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${scope[s.key] ? 'border-primary bg-primary text-primary-foreground' : 'bg-card text-muted-foreground'}`}>
-                  {scope[s.key] ? '✓ ' : ''}{s.label}
+                  {scope[s.key] ? '✓ ' : ''}{t(`pw.rs.scope.${s.key}`)}
                 </button>
               ))}
             </div>
           </Section>
 
-          <Section id="requirement" icon={<FileText className="h-4 w-4" />} title="Requirement" count={filledCount('requirement')} openSecs={openSecs} toggle={toggleSec}>
+          <Section id="requirement" icon={<FileText className="h-4 w-4" />} title={t('pw.rf.requirement')} count={filledCount('requirement')} openSecs={openSecs} toggle={toggleSec}>
             <div>
               <span className="mb-1 block text-xs font-medium text-muted-foreground">Categories (pick one or more)</span>
               <div className="flex flex-wrap gap-2">
@@ -331,57 +331,57 @@ export default function RequirementFormSheet({ taskId, leadId, open, onOpenChang
                   return (
                     <button key={c} type="button" aria-pressed={on} onClick={() => toggleCategory(c)}
                       className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${on ? 'border-primary bg-primary text-primary-foreground' : 'bg-card text-muted-foreground'}`}>
-                      {on ? '✓ ' : ''}{c}
+                      {on ? '✓ ' : ''}{tr(`pw.rf.o.${c}`, c)}
                     </button>
                   );
                 })}
               </div>
             </div>
-            <Text label="Products asked" value={v.requirementProduct} onChange={(x) => set('requirementProduct', x)} placeholder="e.g. Sofa, Wardrobe, TV Unit (comma separated)" />
-            <Area label="Requirement description" value={v.projectDescription} onChange={(x) => set('projectDescription', x)} placeholder="Describe the full scope the customer wants…" />
-            <Area label="Detailed requirements / customer notes" value={v.customerRequirements} onChange={(x) => set('customerRequirements', x)} rows={2} />
-            <Area label="Rooms required" value={v.roomsRequired} onChange={(x) => set('roomsRequired', x)} placeholder="e.g. 3 Bedrooms, Living, Kitchen" rows={2} />
-            <Area label="Special requests" value={v.specialRequests} onChange={(x) => set('specialRequests', x)} rows={2} />
+            <Text label={t('pw.rf.products_asked')} value={v.requirementProduct} onChange={(x) => set('requirementProduct', x)} placeholder={t('pw.rf.e_g_sofa_wardrobe_tv_unit_comma_separated')} />
+            <Area label={t('pw.rf.requirement_description')} value={v.projectDescription} onChange={(x) => set('projectDescription', x)} placeholder={t('pw.rf.describe_the_full_scope_the_customer_wants')} />
+            <Area label={t('pw.rf.detailed_requirements_customer_notes')} value={v.customerRequirements} onChange={(x) => set('customerRequirements', x)} rows={2} />
+            <Area label={t('pw.rf.rooms_required')} value={v.roomsRequired} onChange={(x) => set('roomsRequired', x)} placeholder={t('pw.rf.e_g_3_bedrooms_living_kitchen')} rows={2} />
+            <Area label={t('pw.rf.special_requests')} value={v.specialRequests} onChange={(x) => set('specialRequests', x)} rows={2} />
             <div className="grid grid-cols-2 gap-3">
-              <Text label="Design style" value={v.preferredDesignStyle} onChange={(x) => set('preferredDesignStyle', x)} placeholder="Modern…" />
-              <Text label="Material" value={v.preferredMaterial} onChange={(x) => set('preferredMaterial', x)} />
-              <Text label="Colour theme" value={v.preferredColorTheme} onChange={(x) => set('preferredColorTheme', x)} />
+              <Text label={t('pw.rf.design_style')} value={v.preferredDesignStyle} onChange={(x) => set('preferredDesignStyle', x)} placeholder={t('pw.rf.modern')} />
+              <Text label={t('pw.rf.material')} value={v.preferredMaterial} onChange={(x) => set('preferredMaterial', x)} />
+              <Text label={t('pw.rf.colour_theme')} value={v.preferredColorTheme} onChange={(x) => set('preferredColorTheme', x)} />
             </div>
           </Section>
 
-          <Section id="budget" icon={<Wallet className="h-4 w-4" />} title="Budget & Timeline" count={filledCount('budget')} openSecs={openSecs} toggle={toggleSec}>
+          <Section id="budget" icon={<Wallet className="h-4 w-4" />} title={t('pw.rf.budget_timeline')} count={filledCount('budget')} openSecs={openSecs} toggle={toggleSec}>
             <div className="grid grid-cols-3 gap-3">
-              <Text label="Estimated ₹" type="number" value={v.estimatedBudget} onChange={(x) => set('estimatedBudget', x)} />
-              <Text label="Min ₹" type="number" value={v.minimumBudget} onChange={(x) => set('minimumBudget', x)} />
-              <Text label="Max ₹" type="number" value={v.maximumBudget} onChange={(x) => set('maximumBudget', x)} />
+              <Text label={t('pw.rf.estimated')} type="number" value={v.estimatedBudget} onChange={(x) => set('estimatedBudget', x)} />
+              <Text label={t('pw.rf.min')} type="number" value={v.minimumBudget} onChange={(x) => set('minimumBudget', x)} />
+              <Text label={t('pw.rf.max')} type="number" value={v.maximumBudget} onChange={(x) => set('maximumBudget', x)} />
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Text label="Expected project value ₹" type="number" value={v.expectedProjectValue} onChange={(x) => set('expectedProjectValue', x)} />
-              <Select label="Payment preference" value={v.paymentPreference} onChange={(x) => set('paymentPreference', x)} options={PAYMENT_PREFS} />
+              <Text label={t('pw.rf.expected_project_value')} type="number" value={v.expectedProjectValue} onChange={(x) => set('expectedProjectValue', x)} />
+              <Select label={t('pw.rf.payment_preference')} value={v.paymentPreference} onChange={(x) => set('paymentPreference', x)} options={PAYMENT_PREFS} />
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Text label="Expected start" type="date" value={v.expectedStartDate} onChange={(x) => set('expectedStartDate', x)} />
-              <Text label="Expected end" type="date" value={v.expectedEndDate} onChange={(x) => set('expectedEndDate', x)} />
-              <Text label="Target completion" type="date" value={v.preferredCompletionDate} onChange={(x) => set('preferredCompletionDate', x)} />
-              <Text label="Estimated duration" value={v.estimatedDuration} onChange={(x) => set('estimatedDuration', x)} placeholder="e.g. 2 months" />
+              <Text label={t('pw.rf.expected_start')} type="date" value={v.expectedStartDate} onChange={(x) => set('expectedStartDate', x)} />
+              <Text label={t('pw.rf.expected_end')} type="date" value={v.expectedEndDate} onChange={(x) => set('expectedEndDate', x)} />
+              <Text label={t('pw.rf.target_completion')} type="date" value={v.preferredCompletionDate} onChange={(x) => set('preferredCompletionDate', x)} />
+              <Text label={t('pw.rf.estimated_duration')} value={v.estimatedDuration} onChange={(x) => set('estimatedDuration', x)} placeholder={t('pw.rf.e_g_2_months')} />
             </div>
           </Section>
 
           {!fromCall && (
-            <Section id="calls" icon={<Mic className="h-4 w-4" />} title="Call Recordings" count={0} openSecs={openSecs} toggle={toggleSec}>
+            <Section id="calls" icon={<Mic className="h-4 w-4" />} title={t('pw.rf.call_recordings')} count={0} openSecs={openSecs} toggle={toggleSec}>
               <TaskCallRecordings taskId={taskId} />
             </Section>
           )}
 
-          <Section id="media" icon={<Camera className="h-4 w-4" />} title="Photos & Notes" count={media.length + savedPhotos.length + (v.notes?.trim() ? 1 : 0)} openSecs={openSecs} toggle={toggleSec}>
+          <Section id="media" icon={<Camera className="h-4 w-4" />} title={t('pw.rf.photos_notes')} count={media.length + savedPhotos.length + (v.notes?.trim() ? 1 : 0)} openSecs={openSecs} toggle={toggleSec}>
             <PhotoPickButtons onPicked={onFiles} busy={uploading} />
-            {uploading && <p className="mt-1 text-xs text-muted-foreground">Uploading…</p>}
+            {uploading && <p className="mt-1 text-xs text-muted-foreground">{t('pw.rf.uploading')}</p>}
             {savedPhotos.length > 0 && (
               <div className="flex gap-2 overflow-x-auto">
                 {savedPhotos.map((u) => <img key={u} src={resolveFileUrl(u)} alt="" className="h-16 w-16 shrink-0 rounded-md object-cover" />)}
               </div>
             )}
-            {photosToLead && <p className="text-[11px] text-muted-foreground">Photos are saved on the lead straight away.</p>}
+            {photosToLead && <p className="text-[11px] text-muted-foreground">{t('pw.rf.photos_are_saved_on_the_lead_straight_away')}</p>}
             {media.length > 0 && (
               <div className="mt-2 flex gap-2 overflow-x-auto">
                 {media.map((m, i) => (
@@ -393,19 +393,19 @@ export default function RequirementFormSheet({ taskId, leadId, open, onOpenChang
                 ))}
               </div>
             )}
-            <Area label="Remarks (saved on the lead)" value={v.remarks} onChange={(x) => set('remarks', x)} rows={2} placeholder="Any general remark about this lead…" />
-            <Area label="Notes" value={v.notes} onChange={(x) => set('notes', x)} rows={2} />
+            <Area label={t('pw.rf.remarks_saved_on_the_lead')} value={v.remarks} onChange={(x) => set('remarks', x)} rows={2} placeholder={t('pw.rf.any_general_remark_about_this_lead')} />
+            <Area label={t('pw.rf.notes')} value={v.notes} onChange={(x) => set('notes', x)} rows={2} />
           </Section>
         </div>
 
         <DialogFooter className="flex-col gap-2 sm:flex-col sm:space-x-0">
           {!fromCall && (
             <Button variant="outline" onClick={saveChanges} disabled={saving || uploading || loading} className="w-full">
-              {saving ? 'Saving…' : 'Save changes'}
+              {saving ? t('pw.rf.saving') : t('pw.rf.save_changes')}
             </Button>
           )}
           <Button onClick={submit} disabled={saving || uploading} className="w-full">
-            {saving ? 'Saving…' : nextStep === 'FOLLOWUP' ? 'Save & Schedule Follow-up' : 'Save & Schedule Site Visit'}
+            {saving ? t('pw.rf.saving') : nextStep === 'FOLLOWUP' ? t('pw.rf.save_schedule_follow_up') : t('pw.rf.save_schedule_site_visit')}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -454,12 +454,14 @@ function Area({ label, value, onChange, placeholder, rows = 3 }: { label: string
   );
 }
 function Select({ label, value, onChange, options }: { label: string; value?: string; onChange: (v: string) => void; options: string[] }) {
+  const { t } = useT();
+  const tr = useTr();
   return (
     <div>
       <label className="text-xs font-medium text-muted-foreground">{label}</label>
       <select value={value ?? ''} onChange={(e) => onChange(e.target.value)} className={inputCls}>
-        <option value="">Select…</option>
-        {options.map((o) => <option key={o} value={o}>{o}</option>)}
+        <option value="">{t('pw.rf.select')}</option>
+        {options.map((o) => <option key={o} value={o}>{tr(`pw.rf.o.${o}`, o)}</option>)}
       </select>
     </div>
   );

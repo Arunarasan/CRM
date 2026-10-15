@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { MessageCircle, MoreHorizontal, Navigation, Pencil, Phone } from 'lucide-react';
+import { useT, tNow, dateLocale, currentLang } from '@/i18n';
 
 const has = (v: unknown) => v != null && String(v).trim() !== '';
 const list = (v?: string | null) => (v || '').split(',').map((x) => x.trim()).filter(Boolean);
 const fmtDate = (s?: string | null) =>
-  has(s) ? new Date(s as string).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : null;
+  has(s) ? new Date(s as string).toLocaleDateString(dateLocale(currentLang()), { day: 'numeric', month: 'short', year: 'numeric' }) : null;
 const digits = (s?: string | null) => (s || '').replace(/[^\d+]/g, '');
 
 /**
@@ -15,7 +16,7 @@ function customerName(lead: any, fallback?: string | null): string {
   if (has(lead?.contactPerson)) return String(lead.contactPerson).trim();
   const name = String(lead?.name ?? '').trim();
   const bracket = name.match(/^.+\(([^()]+)\)\s*$/);
-  return (bracket ? bracket[1].trim() : name) || fallback || 'Customer';
+  return (bracket ? bracket[1].trim() : name) || fallback || tNow('pw.ld.customer');
 }
 
 /** Google Maps directions to the saved pin, else a search for the address. */
@@ -39,6 +40,7 @@ export default function LeadDetailsCard({ lead, fallbackName, onEdit, more }: {
   onEdit?: () => void;
   more?: React.ReactNode;
 }) {
+  const { t } = useT();
   const [showMore, setShowMore] = useState(false);
   const phone = lead?.mobileNumber || lead?.alternateMobile || lead?.whatsappNumber || lead?.phone;
   const wa = lead?.whatsappNumber || phone;
@@ -50,10 +52,10 @@ export default function LeadDetailsCard({ lead, fallbackName, onEdit, more }: {
   const leadDate = fmtDate(lead?.capturedAt || lead?.createdAt);
   const navHref = navigateHref(lead, place);
   const reqRows = ([
-    ['Rooms required', lead?.roomsRequired],
-    ['Requirement', lead?.projectDescription],
-    ['Customer notes', lead?.customerRequirements],
-    ['Special requests', lead?.specialRequests],
+    ['pw.ld.rooms', lead?.roomsRequired],
+    ['pw.ld.requirement', lead?.projectDescription],
+    ['pw.ld.customerNotes', lead?.customerRequirements],
+    ['pw.ld.special', lead?.specialRequests],
   ] as [string, unknown][]).filter(([, v]) => has(v)).map(([l, v]) => [l, String(v)] as [string, string]);
   const roundBtn = 'flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#E4E2DC] text-[#0A573B] active:bg-[#F1F3F1]';
 
@@ -67,25 +69,25 @@ export default function LeadDetailsCard({ lead, fallbackName, onEdit, more }: {
               <p className="mt-0.5 truncate text-[12px] text-[#7A817C]">{[place, phone].filter(Boolean).join(' · ')}</p>
             )}
           </div>
-          {phone && <a href={'tel:' + digits(phone)} className={roundBtn} aria-label={`Call ${customerName(lead, fallbackName)}`}><Phone className="h-4 w-4" /></a>}
+          {phone && <a href={'tel:' + digits(phone)} className={roundBtn} aria-label={t('pw.ld.callName', { name: customerName(lead, fallbackName) })}><Phone className="h-4 w-4" /></a>}
           {wa && (
-            <a href={'https://wa.me/' + digits(wa).replace('+', '')} target="_blank" rel="noopener noreferrer" className={roundBtn} aria-label="WhatsApp">
+            <a href={'https://wa.me/' + digits(wa).replace('+', '')} target="_blank" rel="noopener noreferrer" className={roundBtn} aria-label={t('pw.ld.whatsapp')}>
               <MessageCircle className="h-4 w-4" />
             </a>
           )}
           {navHref && (
-            <a href={navHref} target="_blank" rel="noopener noreferrer" className={roundBtn} aria-label="Navigate to site">
+            <a href={navHref} target="_blank" rel="noopener noreferrer" className={roundBtn} aria-label={t('pw.ld.navigate')}>
               <Navigation className="h-4 w-4" />
             </a>
           )}
           {more && (
-            <button onClick={() => setShowMore((s) => !s)} aria-label="More lead details"
+            <button onClick={() => setShowMore((s) => !s)} aria-label={t('pw.ld.moreAria')}
               className={`${roundBtn} ${showMore ? 'bg-[#EFF5F0]' : ''}`}><MoreHorizontal className="h-4 w-4" /></button>
           )}
         </div>
         {leadBy && (
           <p className="mt-2 text-[12px] text-[#6B726E]">
-            Lead by: <span className="font-semibold text-[#33392F]">{leadBy}</span>{leadDate ? ` · ${leadDate}` : ''}
+            {t('pw.ld.leadBy')}<span className="font-semibold text-[#33392F]">{leadBy}</span>{leadDate ? ` · ${leadDate}` : ''}
           </p>
         )}
         {(chips.length > 0 || reqRows.length > 0) && (
@@ -99,8 +101,8 @@ export default function LeadDetailsCard({ lead, fallbackName, onEdit, more }: {
             )}
             {reqRows.map(([label, v]) => (
               <div key={label} className="flex flex-col gap-0.5">
-                {label !== 'Requirement' && (
-                  <span className="text-[10.5px] font-semibold uppercase tracking-wide text-[#7A817C]">{label}</span>
+                {label !== 'pw.ld.requirement' && (
+                  <span className="text-[10.5px] font-semibold uppercase tracking-wide text-[#7A817C]">{t(label)}</span>
                 )}
                 <span className="whitespace-pre-wrap text-[13.5px] text-[#1A211E]">{v}</span>
               </div>
@@ -110,7 +112,7 @@ export default function LeadDetailsCard({ lead, fallbackName, onEdit, more }: {
         {onEdit && (
           <button onClick={onEdit}
             className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-[#0A573B]/30 bg-[#F3F8F5] px-3 py-2.5 text-[13px] font-semibold text-[#0A573B] active:scale-[0.98]">
-            <Pencil className="h-4 w-4" /> Edit lead details
+            <Pencil className="h-4 w-4" /> {t('pw.ld.editLead')}
           </button>
         )}
         {showMore && more && <div className="mt-3">{more}</div>}

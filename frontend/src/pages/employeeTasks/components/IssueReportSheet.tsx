@@ -4,19 +4,14 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { employeeTaskApi } from '@/api/employeeTaskApi';
 import { IssueType } from '@/types/employeeTask';
+import { useT } from '@/i18n';
 
-const ISSUE_TYPES: { value: IssueType; label: string }[] = [
-  { value: 'MATERIAL_SHORTAGE', label: 'Material Shortage' },
-  { value: 'CUSTOMER_CHANGE', label: 'Customer Change' },
-  { value: 'MEASUREMENT_ISSUE', label: 'Measurement Issue' },
-  { value: 'SITE_ISSUE', label: 'Site Issue' },
-  { value: 'DELAY', label: 'Delay' },
-  { value: 'SAFETY_ISSUE', label: 'Safety Issue' },
-];
+const ISSUE_TYPES: IssueType[] = ['MATERIAL_SHORTAGE', 'CUSTOMER_CHANGE', 'MEASUREMENT_ISSUE', 'SITE_ISSUE', 'DELAY', 'SAFETY_ISSUE'];
 
 export default function IssueReportSheet({ taskId, open, onOpenChange, onSaved, defaultIssueType }: {
   taskId: number; open: boolean; onOpenChange: (open: boolean) => void; onSaved: () => void; defaultIssueType?: IssueType;
 }) {
+  const { t } = useT();
   const [issueType, setIssueType] = useState<IssueType>(defaultIssueType ?? 'SITE_ISSUE');
   const [description, setDescription] = useState('');
   const [saving, setSaving] = useState(false);
@@ -37,24 +32,24 @@ export default function IssueReportSheet({ taskId, open, onOpenChange, onSaved, 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-sm">
-        <DialogHeader><DialogTitle>Report an issue</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>{t('pw.issue.title')}</DialogTitle></DialogHeader>
         <div className="flex flex-col gap-4">
           <div>
-            <Label>Issue type</Label>
+            <Label>{t('pw.issue.type')}</Label>
             <select value={issueType} onChange={(e) => setIssueType(e.target.value as IssueType)}
               className="mt-1.5 w-full rounded-xl border border-[#DDE2DE] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#0A573B]">
-              {ISSUE_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+              {ISSUE_TYPES.map((it) => <option key={it} value={it}>{t(`pw.issue.${it}`)}</option>)}
             </select>
           </div>
           <div>
-            <Label>Description</Label>
+            <Label>{t('pw.issue.description')}</Label>
             <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={4}
-              className="mt-1.5 w-full rounded-xl border border-[#DDE2DE] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#0A573B]" placeholder="Describe the issue…" />
+              className="mt-1.5 w-full rounded-xl border border-[#DDE2DE] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#0A573B]" placeholder={t('pw.issue.descPh')} />
           </div>
         </div>
         <DialogFooter>
           <Button onClick={submit} disabled={saving || !description.trim()} className="w-full bg-[#0A573B] text-white hover:bg-[#06452F]">
-            {saving ? 'Reporting…' : 'Notify manager'}
+            {saving ? t('pw.issue.reporting') : t('pw.issue.notify')}
           </Button>
         </DialogFooter>
       </DialogContent>

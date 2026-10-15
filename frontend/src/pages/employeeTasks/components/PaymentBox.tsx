@@ -3,11 +3,12 @@ import { IndianRupee, Paperclip, Plus, Wallet } from 'lucide-react';
 import { ProjectExecutionInfo } from '@/types/employeeTask';
 import { resolveFileUrl } from '@/lib/uploadFile';
 import { HeadLink, SectionHead } from './ProjectTaskLayout';
+import { useT, useTr, dateLocale, currentLang } from '@/i18n';
 
 const has = (v: unknown) => v != null && String(v).trim() !== '';
 const money = (v: unknown) => '₹' + Number(v || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 });
 const fmtDate = (s?: string | null) =>
-  has(s) ? new Date(s as string).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+  has(s) ? new Date(s as string).toLocaleDateString(dateLocale(currentLang()), { day: 'numeric', month: 'short', year: 'numeric' }) : '';
 
 const STATUS: Record<string, { label: string; cls: string }> = {
   CONFIRMED: { label: 'Verified', cls: 'bg-[#E7F2EC] text-[#2C7050]' },
@@ -28,6 +29,8 @@ export default function PaymentBox({ info, canRecord, onRecord, compact = false 
   canRecord: boolean;
   onRecord: () => void;
 }) {
+  const { t } = useT();
+  const tr = useTr();
   const [expanded, setExpanded] = useState(false);
   const full = !compact || expanded;
   const payments = (info.payments || []).filter((p) => p.amount != null);
@@ -43,19 +46,19 @@ export default function PaymentBox({ info, canRecord, onRecord, compact = false 
     <div className="overflow-hidden rounded-2xl border border-[#EDE6D8] bg-white shadow-[0_4px_16px_rgba(80,55,20,0.06)]">
       <div className={compact ? 'p-3.5' : 'p-4'}>
         {compact ? (
-          <SectionHead icon={<Wallet className="h-4 w-4" />} title="Customer payments" tight
-            right={<HeadLink label="View" open={expanded} onClick={() => setExpanded((o) => !o)} />} />
+          <SectionHead icon={<Wallet className="h-4 w-4" />} title={t('pw.pb.title')} tight
+            right={<HeadLink label={t('pw.pb.view')} open={expanded} onClick={() => setExpanded((o) => !o)} />} />
         ) : (
           <p className="mb-2.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-[#9B6B32]">
-            <Wallet className="h-3.5 w-3.5" /> Customer payments
+            <Wallet className="h-3.5 w-3.5" /> {t('pw.pb.title')}
           </p>
         )}
 
         <div className="grid grid-cols-2 gap-2">
-          <Stat label="Collected" value={money(confirmed)} tone="text-[#2C7050]" />
-          {full && value != null && <Stat label="Order value" value={money(value)} tone="text-[#1A211E]" />}
+          <Stat label={t('pw.pb.collected')} value={money(confirmed)} tone="text-[#2C7050]" />
+          {full && value != null && <Stat label={t('pw.pb.orderValue')} value={money(value)} tone="text-[#1A211E]" />}
           {toCollect != null && (
-            <Stat label="Pending to collect" value={money(toCollect)} tone={toCollect > 0 ? 'text-[#B94B45]' : 'text-[#2C7050]'} />
+            <Stat label={t('pw.pb.pendingCollect')} value={money(toCollect)} tone={toCollect > 0 ? 'text-[#B94B45]' : 'text-[#2C7050]'} />
           )}
         </div>
 
@@ -64,7 +67,7 @@ export default function PaymentBox({ info, canRecord, onRecord, compact = false 
             <div className="h-2 w-full overflow-hidden rounded-full bg-[#EFEBE0]">
               <div className="h-full rounded-full bg-gradient-to-r from-[#0A573B] to-[#0F6E56]" style={{ width: `${paidPct}%` }} />
             </div>
-            <p className="mt-1 text-[11px] text-[#8A8F86]">{paidPct}% of the order value paid</p>
+            <p className="mt-1 text-[11px] text-[#8A8F86]">{t('pw.pb.paidPct', { pct: paidPct })}</p>
           </div>
         )}
 
@@ -78,17 +81,17 @@ export default function PaymentBox({ info, canRecord, onRecord, compact = false 
                   <li key={p.id ?? i} className="py-2.5">
                     <div className="flex items-center justify-between gap-2">
                       <span className={`text-[15px] font-bold ${rejected ? 'text-[#9A9E96] line-through' : 'text-[#1A211E]'}`}>{money(p.amount)}</span>
-                      <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-medium ${st.cls}`}>{st.label}</span>
+                      <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-medium ${st.cls}`}>{tr(`pw.pb.${String(p.status).toUpperCase()}`, st.label)}</span>
                     </div>
                     <p className="mt-0.5 text-[12px] text-[#7A8078]">
-                      {[fmtDate(p.date), p.method, has(p.reference) ? `Ref ${p.reference}` : '', p.collectedBy ? `by ${p.collectedBy}` : '']
+                      {[fmtDate(p.date), p.method, has(p.reference) ? t('pw.pb.ref', { ref: String(p.reference) }) : '', p.collectedBy ? t('pw.pb.by', { name: p.collectedBy }) : '']
                         .filter(Boolean).join(' · ')}
                     </p>
                     {has(p.note) && <p className="mt-1 rounded-lg bg-[#FBFAF6] px-2.5 py-1.5 text-[12.5px] text-[#33392F] ring-1 ring-[#EFE9DC]">{p.note}</p>}
                     {has(p.receiptUrl) && (
                       <a href={resolveFileUrl(p.receiptUrl as string)} target="_blank" rel="noopener noreferrer"
                         className="mt-1 inline-flex items-center gap-1 text-[12px] font-semibold text-[#0A573B]">
-                        <Paperclip className="h-3.5 w-3.5" /> Receipt
+                        <Paperclip className="h-3.5 w-3.5" /> {t('pw.pb.receipt')}
                       </a>
                     )}
                   </li>
@@ -97,7 +100,7 @@ export default function PaymentBox({ info, canRecord, onRecord, compact = false 
             </ul>
           ) : (
             <p className="mt-3 rounded-xl bg-[#FBFAF6] px-3 py-3 text-center text-[12.5px] text-[#8A8F86] ring-1 ring-[#EFE9DC]">
-              No payments entered yet.
+              {t('pw.pb.none')}
             </p>
           )
         )}
@@ -106,9 +109,9 @@ export default function PaymentBox({ info, canRecord, onRecord, compact = false 
           <>
             <button onClick={onRecord}
               className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl bg-[#0A573B] py-2.5 text-[13px] font-semibold text-white active:scale-[0.99]">
-              <Plus className="h-4 w-4" /> Record payment
+              <Plus className="h-4 w-4" /> {t('pw.pb.recordBtn')}
             </button>
-            {full && <p className="mt-2 text-[11.5px] text-[#8A8F86]">A recorded payment stays “awaiting check” until the office verifies it.</p>}
+            {full && <p className="mt-2 text-[11.5px] text-[#8A8F86]">{t('pw.pb.recordNote')}</p>}
           </>
         )}
       </div>

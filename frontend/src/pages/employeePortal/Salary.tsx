@@ -139,7 +139,7 @@ function RequestSheet({ owed, onClose, onSaved }: { owed: number; onClose: () =>
 
   return (
     <div className="fixed inset-0 z-40 flex items-end bg-black/40" onClick={onClose}>
-      <div className="mx-auto max-h-[90vh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-card p-4 pb-6" onClick={(e) => e.stopPropagation()}>
+      <div className="mx-auto max-h-[90dvh] w-full max-w-md sm:max-w-lg overflow-y-auto rounded-t-2xl bg-card p-4 pb-6" onClick={(e) => e.stopPropagation()}>
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-base font-semibold">{t('pw.sal.moneyRequest')}</h2>
           <button onClick={onClose} aria-label={t('pw.close')} className="flex h-8 w-8 items-center justify-center rounded-full active:bg-accent"><X className="h-5 w-5" /></button>

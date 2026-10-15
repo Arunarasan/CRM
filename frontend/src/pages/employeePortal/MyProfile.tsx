@@ -154,7 +154,7 @@ export default function MyProfile() {
           <Row icon={Phone} label={t('portal.profile.mobile')} value={p?.phone} />
         )}
         <Row icon={Building2} label={t('portal.profile.department')} value={p?.department?.name} locked />
-        <Row icon={BadgeCheck} label={t('common.status')} value={p?.status} locked />
+        <Row icon={BadgeCheck} label={t('common.status')} value={p?.status ? (t(`pw.status.${p.status}`) === `pw.status.${p.status}` ? p.status : t(`pw.status.${p.status}`)) : p?.status} locked />
         <Row icon={CalendarDays} label={t('portal.profile.dateOfJoining')} value={p?.dateOfJoining} locked />
       </div>
 

@@ -142,7 +142,7 @@ export default function TaskList() {
   const what = t(`pw.tl.noun.${tab}`);
 
   const cards = (list: TaskCardType[]) => (
-    <div className="flex flex-col gap-3">
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 md:items-start [&>*]:min-w-0 md:[&>*:only-child]:col-span-2">
       {list.map((task) => (
         <TaskCard key={task.id} task={task}
           onStart={onStart} onPause={onPause} onComplete={onComplete} onExtend={onExtend} />

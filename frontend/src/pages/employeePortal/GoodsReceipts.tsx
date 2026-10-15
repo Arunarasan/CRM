@@ -5,12 +5,14 @@ import { uploadFile } from '@/lib/uploadFile';
 import { apiError } from '@/lib/apiError';
 import { toast } from '@/components/ui/toast';
 import { PortalHeader, EmptyState, StatusPill } from './_shared';
+import { useT, rich } from '@/i18n';
 import type { IncomingReceiptPo, ReceiptWarehouse, MyReceipt } from '@/types/employeePortal';
 import { PackageCheck, Truck, ImagePlus, X, Loader2, ChevronRight } from 'lucide-react';
 
 type LineDraft = { received: number; damaged: number };
 
 export default function GoodsReceipts() {
+  const { t } = useT();
   const [tab, setTab] = useState<'incoming' | 'mine'>('incoming');
   const [pos, setPos] = useState<IncomingReceiptPo[]>([]);
   const [warehouses, setWarehouses] = useState<ReceiptWarehouse[]>([]);
@@ -22,7 +24,7 @@ export default function GoodsReceipts() {
     setLoading(true);
     employeePortalApi.incomingReceipts()
       .then(setPos)
-      .catch((e) => toast.error(apiError(e, 'Could not load incoming goods.')))
+      .catch((e) => toast.error(apiError(e, t('pw.grn.loadFailed'))))
       .finally(() => setLoading(false));
   };
   const loadMine = () => {
@@ -39,29 +41,29 @@ export default function GoodsReceipts() {
 
   return (
     <div className="flex flex-col pb-6">
-      <PortalHeader title="Goods Receipt" />
+      <PortalHeader title={t('pw.grn.title')} />
 
       <div className="flex gap-1 p-2">
-        {(['incoming', 'mine'] as const).map((t) => (
+        {(['incoming', 'mine'] as const).map((tb) => (
           <button
-            key={t}
-            onClick={() => setTab(t)}
+            key={tb}
+            onClick={() => setTab(tb)}
             className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold ${
-              tab === t ? 'bg-primary text-white' : 'bg-accent/40 text-slate-600'
+              tab === tb ? 'bg-primary text-white' : 'bg-accent/40 text-slate-600'
             }`}
           >
-            {t === 'incoming' ? 'To Receive' : 'My Receipts'}
+            {tb === 'incoming' ? t('pw.grn.toReceive') : t('pw.grn.myReceipts')}
           </button>
         ))}
       </div>
 
       {loading ? (
-        <EmptyState message="Loading…" />
+        <EmptyState message={t('pw.loading')} />
       ) : tab === 'incoming' ? (
         pos.length === 0 ? (
-          <EmptyState message="No incoming goods right now. Orders awaiting delivery will appear here." />
+          <EmptyState message={t('pw.grn.noneIncoming')} />
         ) : (
-          <div className="flex flex-col gap-2 px-3">
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2 md:items-start [&>*]:min-w-0 md:[&>*:only-child]:col-span-2 px-3">
             {pos.map((po) => (
               <button
                 key={po.purchaseOrderId}
@@ -74,10 +76,10 @@ export default function GoodsReceipts() {
                 <span className="min-w-0 flex-1">
                   <span className="block text-sm font-semibold">{po.poNumber}</span>
                   <span className="block truncate text-xs text-muted-foreground">
-                    {po.supplierName ?? 'Supplier'} · {po.items.length} item{po.items.length === 1 ? '' : 's'} to receive
+                    {po.supplierName ?? t('pw.grn.supplier')} · {t('pw.grn.itemsToReceive', { n: po.items.length })}
                   </span>
                   {po.expectedDeliveryDate && (
-                    <span className="block text-[11px] text-muted-foreground">Expected {po.expectedDeliveryDate}</span>
+                    <span className="block text-[11px] text-muted-foreground">{t('pw.grn.expected', { date: po.expectedDeliveryDate })}</span>
                   )}
                 </span>
                 <ChevronRight className="h-4 w-4 text-muted-foreground" />
@@ -86,9 +88,9 @@ export default function GoodsReceipts() {
           </div>
         )
       ) : mine.length === 0 ? (
-        <EmptyState message="You haven’t recorded any goods receipts yet." />
+        <EmptyState message={t('pw.grn.noneMine')} />
       ) : (
-        <div className="flex flex-col gap-2 px-3">
+        <div className="grid grid-cols-1 gap-2 md:grid-cols-2 md:items-start [&>*]:min-w-0 md:[&>*:only-child]:col-span-2 px-3">
           {mine.map((r) => (
             <div key={r.id} className="flex items-center gap-3 rounded-xl border bg-card p-3 shadow-sm">
               <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-100 text-emerald-600">
@@ -130,6 +132,7 @@ function ReceiveSheet({
   onClose: () => void;
   onDone: () => void;
 }) {
+  const { t } = useT();
   const [drafts, setDrafts] = useState<Record<number, LineDraft>>(
     () => Object.fromEntries(po.items.map((l) => [l.productId, { received: l.outstanding, damaged: 0 }])),
   );
@@ -158,14 +161,14 @@ function ReceiveSheet({
       }
       setPhotos((p) => [...p, ...urls]);
     } catch (e) {
-      toast.error(apiError(e, 'Could not upload photo.'));
+      toast.error(apiError(e, t('pw.grn.uploadFailed')));
     } finally {
       setUploading(false);
     }
   };
 
   const submit = async () => {
-    if (needsWarehouse && !warehouseId) { toast.error('Choose a warehouse to receive into.'); return; }
+    if (needsWarehouse && !warehouseId) { toast.error(t('pw.grn.chooseWarehouse')); return; }
     const items = po.items
       .map((l) => ({
         productId: l.productId,
@@ -173,7 +176,7 @@ function ReceiveSheet({
         damagedQuantity: Number(drafts[l.productId]?.damaged) || 0,
       }))
       .filter((l) => l.receivedQuantity > 0);
-    if (items.length === 0) { toast.error('Enter a received quantity for at least one item.'); return; }
+    if (items.length === 0) { toast.error(t('pw.grn.enterQty')); return; }
     setSaving(true);
     try {
       await employeePortalApi.receiveGoods({
@@ -187,11 +190,11 @@ function ReceiveSheet({
         items,
       });
       toast.success(qcStatus === 'REJECT'
-        ? 'Recorded as rejected — an admin will action the return.'
-        : 'Goods received and approved. Stock updated.');
+        ? t('pw.grn.rejectedOk')
+        : t('pw.grn.receivedOk'));
       onDone();
     } catch (e) {
-      toast.error(apiError(e, 'Could not submit the receipt.'));
+      toast.error(apiError(e, t('pw.grn.submitFailed')));
       setSaving(false);
     }
   };
@@ -201,8 +204,8 @@ function ReceiveSheet({
       <div className="mt-auto max-h-[92vh] overflow-y-auto rounded-t-2xl bg-card" onClick={(e) => e.stopPropagation()}>
         <div className="sticky top-0 flex items-center gap-2 border-b bg-card px-3 py-3">
           <div className="min-w-0 flex-1">
-            <h2 className="truncate text-base font-semibold">Receive · {po.poNumber}</h2>
-            <p className="truncate text-xs text-muted-foreground">{po.supplierName ?? 'Supplier'}</p>
+            <h2 className="truncate text-base font-semibold">{t('pw.grn.receive', { po: po.poNumber })}</h2>
+            <p className="truncate text-xs text-muted-foreground">{po.supplierName ?? t('pw.grn.supplier')}</p>
           </div>
           <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-full active:bg-accent">
             <X className="h-5 w-5" />
@@ -217,12 +220,12 @@ function ReceiveSheet({
                 <div className="mb-2 flex items-baseline justify-between gap-2">
                   <span className="text-sm font-semibold">{l.productName}</span>
                   <span className="text-[11px] text-muted-foreground">
-                    {l.outstanding} {l.unit ?? ''} pending
+                    {t('pw.grn.pending', { n: l.outstanding, unit: l.unit ?? '' })}
                   </span>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <label className="text-xs">
-                    <span className="text-muted-foreground">Received</span>
+                    <span className="text-muted-foreground">{t('pw.grn.received')}</span>
                     <BaseInput
                       type="number" min={0} max={l.outstanding}
                       value={drafts[l.productId]?.received ?? 0}
@@ -231,7 +234,7 @@ function ReceiveSheet({
                     />
                   </label>
                   <label className="text-xs">
-                    <span className="text-muted-foreground">Damaged</span>
+                    <span className="text-muted-foreground">{t('pw.grn.damaged')}</span>
                     <BaseInput
                       type="number" min={0}
                       value={drafts[l.productId]?.damaged ?? 0}
@@ -247,56 +250,56 @@ function ReceiveSheet({
           {/* Warehouse */}
           {needsWarehouse ? (
             <label className="text-sm">
-              <span className="font-medium">Receive into warehouse</span>
+              <span className="font-medium">{t('pw.grn.intoWarehouse')}</span>
               <select
                 value={warehouseId}
                 onChange={(e) => setWarehouseId(e.target.value ? Number(e.target.value) : '')}
                 className="mt-1 h-10 w-full rounded-md border px-3 text-sm"
               >
-                <option value="">Select warehouse…</option>
+                <option value="">{t('pw.grn.selectWarehouse')}</option>
                 {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
               </select>
             </label>
           ) : (
-            <p className="text-xs text-muted-foreground">Receiving into <b>{po.warehouseName}</b></p>
+            <p className="text-xs text-muted-foreground">{rich(t('pw.grn.receivingInto', { name: po.warehouseName ?? '' }))}</p>
           )}
 
           {/* QC */}
           <label className="text-sm">
-            <span className="font-medium">Quality check</span>
+            <span className="font-medium">{t('pw.grn.qcLabel')}</span>
             <select
               value={qcStatus}
               onChange={(e) => setQcStatus(e.target.value)}
               className="mt-1 h-10 w-full rounded-md border px-3 text-sm"
             >
-              <option value="PASS">Pass — accept goods</option>
-              <option value="PARTIAL_PASS">Partial pass</option>
-              <option value="REJECT">Reject — do not accept</option>
+              <option value="PASS">{t('pw.grn.qc.PASS')}</option>
+              <option value="PARTIAL_PASS">{t('pw.grn.qc.PARTIAL_PASS')}</option>
+              <option value="REJECT">{t('pw.grn.qc.REJECT')}</option>
             </select>
           </label>
 
           <div className="grid grid-cols-2 gap-2">
             <label className="text-sm">
-              <span className="font-medium">Invoice #</span>
+              <span className="font-medium">{t('pw.grn.invoiceNo')}</span>
               <BaseInput value={supplierInvoice} onChange={(e) => setSupplierInvoice(e.target.value)}
                      className="mt-1 h-10 w-full rounded-md border px-3 text-sm" />
             </label>
             <label className="text-sm">
-              <span className="font-medium">Vehicle #</span>
+              <span className="font-medium">{t('pw.grn.vehicleNo')}</span>
               <BaseInput value={vehicle} onChange={(e) => setVehicle(e.target.value)}
                      className="mt-1 h-10 w-full rounded-md border px-3 text-sm" />
             </label>
           </div>
 
           <label className="text-sm">
-            <span className="font-medium">Notes</span>
+            <span className="font-medium">{t('pw.grn.notes')}</span>
             <BaseInput value={notes} onChange={(e) => setNotes(e.target.value)}
                    className="mt-1 h-10 w-full rounded-md border px-3 text-sm" />
           </label>
 
           {/* Photos */}
           <div>
-            <span className="text-sm font-medium">Photos</span>
+            <span className="text-sm font-medium">{t('pw.grn.photos')}</span>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               {photos.map((p) => (
                 <img key={p} src={p} alt="" className="h-16 w-16 rounded-lg border object-cover" />
@@ -317,7 +320,7 @@ function ReceiveSheet({
             className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary text-sm font-semibold text-white disabled:opacity-60"
           >
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <PackageCheck className="h-4 w-4" />}
-            {qcStatus === 'REJECT' ? 'Record Rejection' : 'Receive & Approve'}
+            {qcStatus === 'REJECT' ? t('pw.grn.recordRejection') : t('pw.grn.receiveApprove')}
           </button>
         </div>
       </div>

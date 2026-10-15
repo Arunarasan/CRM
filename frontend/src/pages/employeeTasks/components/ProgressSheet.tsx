@@ -6,10 +6,12 @@ import { Label } from '@/components/ui/label';
 import { employeeTaskApi } from '@/api/employeeTaskApi';
 import { ProgressMediaItem } from '@/types/employeeTask';
 import MediaCapture from './MediaCapture';
+import { useT } from '@/i18n';
 
 export default function ProgressSheet({ taskId, open, onOpenChange, onSaved }: {
   taskId: number; open: boolean; onOpenChange: (open: boolean) => void; onSaved: () => void;
 }) {
+  const { t } = useT();
   const [progressPercent, setProgressPercent] = useState(50);
   const [remarks, setRemarks] = useState('');
   const [timeSpentMinutes, setTimeSpentMinutes] = useState<number | ''>('');
@@ -35,34 +37,34 @@ export default function ProgressSheet({ taskId, open, onOpenChange, onSaved }: {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-sm">
-        <DialogHeader><DialogTitle>Update progress</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>{t('pw.prog.title')}</DialogTitle></DialogHeader>
         <div className="flex flex-col gap-4">
           <div>
             <div className="mb-1.5 flex items-center justify-between">
-              <Label>Progress</Label>
+              <Label>{t('pw.prog.progress')}</Label>
               <span className="text-[15px] font-bold text-[#0A573B]">{progressPercent}%</span>
             </div>
             <BaseInput type="range" min={0} max={100} step={5} value={progressPercent}
               onChange={(e) => setProgressPercent(Number(e.target.value))} className="w-full accent-[#0A573B]" />
           </div>
           <div>
-            <Label>Time spent (minutes)</Label>
+            <Label>{t('pw.prog.timeSpent')}</Label>
             <BaseInput type="number" min={0} value={timeSpentMinutes}
               onChange={(e) => setTimeSpentMinutes(e.target.value === '' ? '' : Number(e.target.value))}
               className="mt-1.5 w-full rounded-xl border border-[#DDE2DE] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#0A573B]" />
           </div>
           <div>
-            <Label>Remarks</Label>
+            <Label>{t('pw.prog.remarks')}</Label>
             <textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} rows={3}
-              className="mt-1.5 w-full rounded-xl border border-[#DDE2DE] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#0A573B]" placeholder="What did you complete?" />
+              className="mt-1.5 w-full rounded-xl border border-[#DDE2DE] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#0A573B]" placeholder={t('pw.prog.remarksPh')} />
           </div>
           <div>
-            <Label>Photos / video / voice note</Label>
+            <Label>{t('pw.prog.media')}</Label>
             <div className="mt-1.5"><MediaCapture media={media} onChange={setMedia} /></div>
           </div>
         </div>
         <DialogFooter>
-          <Button onClick={submit} disabled={saving} className="w-full bg-[#0A573B] text-white hover:bg-[#06452F]">{saving ? 'Saving…' : 'Save progress'}</Button>
+          <Button onClick={submit} disabled={saving} className="w-full bg-[#0A573B] text-white hover:bg-[#06452F]">{saving ? t('pw.prog.saving') : t('pw.prog.save')}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

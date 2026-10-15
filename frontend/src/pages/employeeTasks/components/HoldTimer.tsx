@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Timer } from 'lucide-react';
+import { useT } from '@/i18n';
 
 /**
  * Live countdown for a held data-entry task in the employee portal: ticks down to the moment it is
@@ -13,6 +14,7 @@ export default function HoldTimer({
   expiresAt: string;
   onExtend?: () => void | Promise<unknown>;
 }) {
+  const { t } = useT();
   const [now, setNow] = useState(() => Date.now());
   const [extending, setExtending] = useState(false);
   useEffect(() => {
@@ -36,7 +38,7 @@ export default function HoldTimer({
   if (!urgent) {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-[#FDF3E2] px-2 py-0.5 text-[11px] font-semibold text-[#9A6B10]">
-        <Timer className="h-3 w-3" /> {label} to start
+        <Timer className="h-3 w-3" /> {t('pw.hold.toStart', { label })}
       </span>
     );
   }
@@ -45,12 +47,12 @@ export default function HoldTimer({
     <div className="flex items-center gap-2 rounded-xl border border-[#F3C7C2] bg-[#FBE9E7] px-2.5 py-2">
       <Timer className="h-4 w-4 shrink-0 text-[#B94B45]" />
       <span className="flex-1 text-[12px] font-semibold leading-tight text-[#B94B45]">
-        {expired ? 'Releasing to the board…' : `Time almost up — ${label} left. Still working?`}
+        {expired ? t('pw.hold.releasing') : t('pw.hold.almostUp', { label })}
       </span>
       {onExtend && !expired && (
         <button onClick={extend} disabled={extending}
           className="shrink-0 rounded-lg bg-[#0A573B] px-2.5 py-1 text-[12px] font-semibold text-white active:scale-95 disabled:opacity-50">
-          {extending ? 'Extending…' : 'Extend time'}
+          {extending ? t('pw.hold.extending') : t('pw.hold.extend')}
         </button>
       )}
     </div>

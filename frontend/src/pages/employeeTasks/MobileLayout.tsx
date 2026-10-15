@@ -41,18 +41,18 @@ export default function MobileLayout() {
   const wide = WIDE_ROUTES.some((r) => location.pathname.startsWith(r));
 
   return (
-    <div className={`flex h-screen w-full flex-col bg-[#F7F7F5] mx-auto shadow-sm ${wide ? 'max-w-md md:max-w-none' : 'max-w-md'}`}>
+    <div className={`flex h-dvh w-full flex-col bg-[#F7F7F5] mx-auto shadow-sm ${wide ? 'max-w-md md:max-w-none' : 'max-w-md md:max-w-2xl lg:max-w-3xl'}`}>
       {/* Premium forest header */}
       <header className="sticky top-0 z-20 shrink-0 bg-[#012B1D] px-4 pt-3 pb-3">
         <div className="flex h-11 items-center justify-between">
-          <Link to="/employee" className="flex items-center" aria-label="JB Decor CRM home">
+          <Link to="/employee" className="flex items-center" aria-label={t('pw.layout.homeAria')}>
             <Logo size="sm" />
           </Link>
 
           <div className="flex items-center gap-2">
             {!isOnline && (
               <span className="flex items-center gap-1 rounded-full bg-[#F4E5C2] px-2 py-0.5 text-[10px] font-semibold text-[#9D6B10]">
-                <WifiOff className="h-3 w-3" /> {queueSize > 0 ? queueSize : 'Off'}
+                <WifiOff className="h-3 w-3" /> {queueSize > 0 ? queueSize : t('pw.layout.offline')}
               </span>
             )}
             <Link to="/employee/notifications" className="relative flex h-10 w-10 items-center justify-center rounded-xl text-white active:bg-white/10">
@@ -66,12 +66,12 @@ export default function MobileLayout() {
             <button
               onClick={() => navigate('/employee/profile')}
               className="relative h-9 w-9 shrink-0 overflow-hidden rounded-full ring-2 ring-white/25 active:scale-95"
-              aria-label="My profile"
+              aria-label={t('pw.layout.myProfileAria')}
             >
               {photo ? (
                 <img src={photo} alt="" className="h-full w-full object-cover" />
               ) : (
-                <span className="flex h-full w-full items-center justify-center bg-[#0A573B] text-xs font-bold text-white">Me</span>
+                <span className="flex h-full w-full items-center justify-center bg-[#0A573B] text-xs font-bold text-white">{t('pw.layout.me')}</span>
               )}
               <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-[#012B1D] bg-[#2F8F65]" />
             </button>
@@ -87,8 +87,8 @@ export default function MobileLayout() {
 
       {!wide && <button
         onClick={() => navigate('/employee/tasks?search=1')}
-        className="fixed bottom-24 right-4 z-30 flex h-12 w-12 items-center justify-center rounded-full bg-[#C48A16] text-white shadow-lg shadow-black/20 active:scale-95"
-        aria-label="Quick search"
+        className="fixed bottom-24 right-4 z-30 md:right-[max(1rem,calc((100vw-42rem)/2+1rem))] lg:right-[max(1rem,calc((100vw-48rem)/2+1rem))] flex h-12 w-12 items-center justify-center rounded-full bg-[#C48A16] text-white shadow-lg shadow-black/20 active:scale-95"
+        aria-label={t('pw.layout.quickSearch')}
       >
         <Search className="h-5 w-5" />
       </button>}
@@ -98,7 +98,7 @@ export default function MobileLayout() {
         className="sticky bottom-0 z-20 shrink-0 bg-[#002B1D] px-2 pt-2.5"
         style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 0.625rem)' }}
       >
-       <div className="mx-auto grid max-w-md grid-cols-4 gap-1">
+       <div className="mx-auto grid max-w-md grid-cols-4 gap-1 md:max-w-lg">
         {navItems.map(({ to, labelKey, icon: Icon, match }) => {
           const active = match(location.pathname);
           return (

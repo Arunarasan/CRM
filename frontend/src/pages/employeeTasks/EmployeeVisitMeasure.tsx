@@ -242,7 +242,7 @@ export default function EmployeeVisitMeasure() {
       </div>
 
       {/* Sticky submit */}
-      <div className="fixed bottom-16 left-1/2 z-20 w-full max-w-md -translate-x-1/2 border-t bg-card px-3 py-2 shadow-[0_-2px_8px_rgba(0,0,0,0.06)]">
+      <div className="fixed bottom-16 left-1/2 z-20 w-full max-w-md md:max-w-2xl lg:max-w-3xl -translate-x-1/2 border-t bg-card px-3 py-2 shadow-[0_-2px_8px_rgba(0,0,0,0.06)]">
         {revisitOpen && (
           <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5">
             <p className="mb-1.5 text-[11px] font-medium text-amber-800">Save what you measured today and come back — the BOQ stays on hold until the final visit.</p>

@@ -4,12 +4,15 @@ import { Check, ListChecks, Plus } from 'lucide-react';
 import { employeeTaskApi } from '@/api/employeeTaskApi';
 import { Checklist } from '@/types/employeeTask';
 import { SectionHead } from './ProjectTaskLayout';
+import { useT } from '@/i18n';
 
-export default function ChecklistPanel({ taskId, checklist, onChanged, locked, title = 'Checklist', compact = false }: {
+export default function ChecklistPanel({ taskId, checklist, onChanged, locked, title: titleProp, compact = false }: {
   taskId: number; checklist: Checklist[]; onChanged: () => void; locked?: boolean; title?: string;
   /** Half-width card on the project task: icon heading, round ticks, one-line items (tap to read in full). */
   compact?: boolean;
 }) {
+  const { t } = useT();
+  const title = titleProp ?? t('pw.cl.title');
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [newItem, setNewItem] = useState('');
   const [adding, setAdding] = useState(false);
@@ -41,11 +44,11 @@ export default function ChecklistPanel({ taskId, checklist, onChanged, locked, t
         <div className="mb-2.5 flex items-center justify-between">
           <h3 className="text-[14px] font-semibold text-[#1A211E]">{title}</h3>
           {allItems.length > 0 && (
-            <span className="rounded-full bg-[#F3EEE2] px-2 py-0.5 text-[11px] font-medium text-[#8A6A2E]">{doneCount}/{allItems.length} done</span>
+            <span className="rounded-full bg-[#F3EEE2] px-2 py-0.5 text-[11px] font-medium text-[#8A6A2E]">{t('pw.cl.doneOf', { done: doneCount, total: allItems.length })}</span>
           )}
         </div>
       )}
-      {allItems.length === 0 && <p className="text-[13px] text-[#9A9E96]">No checklist items yet.</p>}
+      {allItems.length === 0 && <p className="text-[13px] text-[#9A9E96]">{t('pw.cl.none')}</p>}
       <ul className={`flex flex-col ${compact ? 'gap-2' : 'gap-2.5'}`}>
         {allItems.map((item) => (
           <li key={item.id} className="flex items-center gap-2.5">
@@ -72,7 +75,7 @@ export default function ChecklistPanel({ taskId, checklist, onChanged, locked, t
           <BaseInput
             value={newItem}
             onChange={(e) => setNewItem(e.target.value)}
-            placeholder="Add a step…"
+            placeholder={t('pw.cl.addStep')}
             className="min-w-0 flex-1 rounded-xl border border-[#DDE2DE] bg-white px-3 py-2 text-[13px] outline-none focus:border-[#0A573B]"
           />
           <button onClick={addItem} disabled={adding || !newItem.trim()} className="flex items-center justify-center rounded-xl bg-[#0A573B] px-3 text-white active:scale-95 disabled:opacity-50">
