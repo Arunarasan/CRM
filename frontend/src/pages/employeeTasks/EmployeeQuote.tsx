@@ -33,7 +33,7 @@ export default function EmployeeQuote() {
   // Bumped when a site visit is saved, so its new photos show in the Site photos strip.
   const [photosKey, setPhotosKey] = useState(0);
   // Bumped after "Send for Approval" so the sheet reloads and shows it waits for an admin.
-  const [sheetKey, setSheetKey] = useState(0);
+  const [sheetKey] = useState(0);
 
   useEffect(() => {
     if (!leadId) return;
@@ -63,7 +63,7 @@ export default function EmployeeQuote() {
         </div>
       </div>
       <ConvertProjectSheet leadId={leadId} leadProject={leadProject} open={convertOpen} onOpenChange={setConvertOpen}
-        onDone={() => navigate('/employee/tasks?view=ACTIVE')} onRequested={() => setSheetKey((k) => k + 1)} />
+        onDone={() => navigate('/employee/tasks?view=ACTIVE')} />
     </div>
   );
 }
