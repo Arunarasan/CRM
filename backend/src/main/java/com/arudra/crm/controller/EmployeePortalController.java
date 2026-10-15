@@ -488,7 +488,7 @@ public class EmployeePortalController {
     /** One search box: customer phone/name, lead, project, shipping ID or order code, with tasks and pending amounts. */
     @GetMapping("/search")
     @PreAuthorize(PORTAL)
-    public ResponseEntity<ApiResponse<Map<String, Object>>> search(@RequestParam("q") String q) {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> search(@RequestParam(value = "q", defaultValue = "") String q) {
         return ResponseEntity.ok(ApiResponse.success(searchService.search(q)));
     }
 

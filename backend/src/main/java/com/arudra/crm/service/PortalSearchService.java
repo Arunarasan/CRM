@@ -1,5 +1,7 @@
 package com.arudra.crm.service;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
@@ -7,6 +9,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
 
 /**
  * One search box for the employee portal: a customer's phone / name / code, a lead, a project, or a
@@ -18,6 +21,7 @@ import java.util.Map;
 @Service
 public class PortalSearchService {
 
+    private static final Logger log = LoggerFactory.getLogger(PortalSearchService.class);
     private static final int LIMIT = 8;
     /** Invoice states that still carry money owed. */
     private static final String OWING = "('GENERATED','SENT','PARTIAL','OVERDUE')";
@@ -43,11 +47,21 @@ public class PortalSearchService {
         String digits = q.replaceAll("\\D", "");
         String digitsLike = digits.length() >= 3 ? "%" + digits + "%" : "\u0000never";
 
-        out.put("customers", customers(like, digitsLike));
-        out.put("leads", leads(like, digitsLike));
-        out.put("projects", projects(like));
-        out.put("parcels", parcels(like));
+        out.put("customers", section("customers", () -> customers(like, digitsLike)));
+        out.put("leads", section("leads", () -> leads(like, digitsLike)));
+        out.put("projects", section("projects", () -> projects(like)));
+        out.put("parcels", section("parcels", () -> parcels(like)));
         return out;
+    }
+
+    /** One broken section (bad row, schema drift) must not fail the whole search — log it and return what we have. */
+    private List<Map<String, Object>> section(String name, Supplier<List<Map<String, Object>>> load) {
+        try {
+            return load.get();
+        } catch (RuntimeException e) {
+            log.error("Portal search section '{}' failed", name, e);
+            return List.of();
+        }
     }
 
     // --- customers -----------------------------------------------------------------------
