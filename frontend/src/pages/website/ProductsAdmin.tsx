@@ -7,12 +7,12 @@ import FileUploadField from '@/components/FileUploadField';
 import { uploadFile, resolveFileUrl } from '@/lib/uploadFile';
 import { compressImageFile } from '@/lib/imageProcessing';
 import SearchableSelect from '@/components/ui/searchable-select';
-import { websiteAdminApi, Product, Category, SpecRow, ColorVariant } from '@/api/websiteAdminApi';
+import { websiteAdminApi, Product, Category, Portfolio, SpecRow, ColorVariant } from '@/api/websiteAdminApi';
 
 const EMPTY: Product = {
   name: '', slug: '', sku: '', categoryId: null, shortDescription: '', description: '', imageUrl: '',
   price: 0, discountPrice: null, stock: 0, rating: 0, reviewCount: 0, featured: false, active: true,
-  material: '', dimensions: '', gallery: [], specifications: [], colors: [], catalogueUrl: '',
+  material: '', dimensions: '', gallery: [], specifications: [], colors: [], catalogueUrl: '', portfolioSlugs: [],
 };
 
 /** Editor for colour/finish variants: swatch colour + name + optional image URL. */
@@ -92,6 +92,26 @@ function GalleryUploader({ value, onChange }: { value: string[]; onChange: (v: s
         <BaseInput type="file" accept="image/*" multiple className="hidden" disabled={busy} onChange={pick} />
       </label>
       {err && <p className="text-xs text-destructive">{err}</p>}
+    </div>
+  );
+}
+
+/** Pick which portfolio projects this product links to (shown as "Our work" on the product page). */
+function PortfolioPicker({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
+  const [items, setItems] = useState<Portfolio[]>([]);
+  useEffect(() => { websiteAdminApi.portfolio.list().then(setItems).catch(() => setItems([])); }, []);
+  const sel = value ?? [];
+  const toggle = (slug: string) => onChange(sel.includes(slug) ? sel.filter((s) => s !== slug) : [...sel, slug]);
+  if (!items.length) return <p className="text-[11px] text-muted-foreground">No portfolio projects yet — add them under Website → Portfolio.</p>;
+  return (
+    <div className="max-h-40 space-y-1 overflow-y-auto rounded-md border p-2">
+      {items.filter((p) => p.slug).map((p) => (
+        <label key={p.id} className="flex cursor-pointer items-center gap-2 text-sm">
+          <input type="checkbox" checked={sel.includes(p.slug!)} onChange={() => toggle(p.slug!)} />
+          <span className="truncate">{p.title}</span>
+          {p.location && <span className="truncate text-xs text-muted-foreground">· {p.location}</span>}
+        </label>
+      ))}
     </div>
   );
 }
@@ -211,6 +231,11 @@ export default function ProductsAdmin() {
               </div>
               <Field label="Gallery images"><GalleryUploader value={d.gallery ?? []} onChange={(v) => patch({ gallery: v })} /></Field>
               <FileUploadField module="WEBSITE" label="Product catalogue (PDF)" value={d.catalogueUrl} accept="application/pdf,.pdf,.doc,.docx" onChange={({ url }) => patch({ catalogueUrl: url })} />
+            </Group>
+
+            <Group label="Portfolio links">
+              <p className="text-[11px] text-muted-foreground">Projects shown as “Our work” on this product’s page.</p>
+              <PortfolioPicker value={d.portfolioSlugs ?? []} onChange={(v) => patch({ portfolioSlugs: v })} />
             </Group>
 
             <Group label="Specifications">

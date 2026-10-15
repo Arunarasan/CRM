@@ -21,7 +21,10 @@ public final class PublicCatalogDto {
             BigDecimal price, BigDecimal discountPrice,
             Double rating, Integer reviewCount, Boolean featured, Boolean inStock,
             String material, String dimensions,
-            List<String> gallery, Object specifications, Object colors, String catalogueUrl) {}
+            List<String> gallery, Object specifications, Object colors, String catalogueUrl,
+            List<PortfolioLink> portfolio) {}
+
+    public record PortfolioLink(String title, String slug, String coverImage, String location) {}
 
     public record ServiceView(
             Long id, String title, String slug, String shortDescription, String image, String icon,

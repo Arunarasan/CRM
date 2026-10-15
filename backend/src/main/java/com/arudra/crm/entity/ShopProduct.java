@@ -66,6 +66,10 @@ public class ShopProduct extends BaseEntity {
     @Column(name = "catalogue_url", length = 500)
     private String catalogueUrl;
 
+    /** JSON array of linked portfolio project slugs. */
+    @Column(name = "portfolio_json", columnDefinition = "TEXT")
+    private String portfolioJson;
+
     /** JSON array of extra image URLs. */
     @Column(name = "gallery_json", columnDefinition = "TEXT")
     private String galleryJson;

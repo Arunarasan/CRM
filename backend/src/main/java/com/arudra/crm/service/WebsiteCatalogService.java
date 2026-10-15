@@ -93,7 +93,15 @@ public class WebsiteCatalogService {
                 p.getStock() != null && p.getStock() > 0,
                 p.getMaterial(), p.getDimensions(),
                 parseStringList(p.getGalleryJson()), parseJson(p.getSpecificationsJson()),
-                parseJson(p.getColorsJson()), p.getCatalogueUrl());
+                parseJson(p.getColorsJson()), p.getCatalogueUrl(), portfolioLinks(p.getPortfolioJson()));
+    }
+
+    private List<PortfolioLink> portfolioLinks(String json) {
+        return parseStringList(json).stream()
+                .map(sl -> portfolioRepo.findBySlugAndIsDeletedFalse(sl).orElse(null))
+                .filter(x -> x != null && Boolean.TRUE.equals(x.getActive()))
+                .map(x -> new PortfolioLink(x.getTitle(), x.getSlug(), x.getCoverImage(), x.getLocation()))
+                .collect(Collectors.toList());
     }
 
     // ---- Services ----

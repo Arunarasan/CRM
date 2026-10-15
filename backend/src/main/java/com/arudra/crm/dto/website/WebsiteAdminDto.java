@@ -33,7 +33,7 @@ public final class WebsiteAdminDto {
             Double rating, Integer reviewCount, Boolean featured, Boolean active,
             String material, String dimensions,
             List<String> gallery, List<SpecRow> specifications, List<ColorVariant> colors,
-            String catalogueUrl) {}
+            String catalogueUrl, List<String> portfolioSlugs) {}
 
     public record ServiceDto(
             Long id, String title, String slug, String shortDescription, String imageUrl, String icon,

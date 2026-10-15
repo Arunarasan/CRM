@@ -10,6 +10,7 @@ export interface ApiProductDetail extends Product {
   specifications?: { label: string; value: string }[]
   colors?: ColorVariant[]
   catalogueUrl?: string
+  portfolio?: { title: string; slug: string; coverImage?: string; location?: string }[]
 }
 
 /**

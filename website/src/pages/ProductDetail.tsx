@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, Link } from 'react-router-dom'
 import { MessageCircle, FileText, Images, Download, ExternalLink, Truck, ShieldCheck, Ruler, Check, X, CheckCircle2 } from 'lucide-react'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { Section, SectionHeading } from '@/components/ui/Section'
@@ -31,6 +31,7 @@ interface ProductView {
   specifications: { label: string; value: string }[]
   colors: ColorVariant[]
   catalogueUrl: string
+  portfolio: NonNullable<ApiProductDetail['portfolio']>
 }
 
 const API_ORIGIN = (import.meta.env.VITE_API_URL || '').replace(/\/api\/?$/, '')
@@ -84,6 +85,7 @@ export default function ProductDetail() {
         specifications: apiProduct.specifications?.length ? apiProduct.specifications : (dt?.specifications ?? []),
         colors: apiProduct.colors?.length ? apiProduct.colors : (dt?.colors ?? []),
         catalogueUrl: fileUrl(apiProduct.catalogueUrl),
+        portfolio: apiProduct.portfolio ?? [],
       }
     }
     if (seed) {
@@ -99,6 +101,7 @@ export default function ProductDetail() {
         specifications: dt.specifications,
         colors: dt.colors,
         catalogueUrl: '',
+        portfolio: [],
       }
     }
     return null
@@ -311,6 +314,25 @@ export default function ProductDetail() {
           </div>
         </div>
       </Section>
+
+      {view.portfolio.length > 0 && (
+        <Section tone="white">
+          <SectionHeading eyebrow="Our Work" title="Projects Featuring This" align="left" />
+          <div className="grid grid-cols-2 gap-4 sm:gap-5 md:grid-cols-4">
+            {view.portfolio.map((p) => (
+              <Link key={p.slug} to={`/portfolio/${p.slug}`} className="group block overflow-hidden rounded border border-forest/10 bg-white">
+                <div className="aspect-[4/3] overflow-hidden bg-forest/5">
+                  {p.coverImage && <img src={fileUrl(p.coverImage)} alt={p.title} loading="lazy" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />}
+                </div>
+                <div className="p-3">
+                  <p className="font-serif text-sm font-semibold text-forest">{p.title}</p>
+                  {p.location && <p className="text-xs text-forest/55">{p.location}</p>}
+                </div>
+              </Link>
+            ))}
+          </div>
+        </Section>
+      )}
 
       {related.length > 0 && (
         <Section tone="white">

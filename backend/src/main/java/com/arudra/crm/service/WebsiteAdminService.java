@@ -185,6 +185,7 @@ public class WebsiteAdminService {
         if (d.featured() != null) p.setFeatured(d.featured());
         if (d.active() != null) p.setActive(d.active());
         p.setMaterial(d.material());
+        p.setPortfolioJson(writeJson(d.portfolioSlugs()));
         p.setDimensions(d.dimensions());
         p.setCatalogueUrl(d.catalogueUrl() == null || d.catalogueUrl().isBlank() ? null : d.catalogueUrl().trim());
         p.setGalleryJson(writeJson(d.gallery()));
@@ -219,7 +220,8 @@ public class WebsiteAdminService {
                 readJson(p.getGalleryJson(), new TypeReference<List<String>>() {}, List.of()),
                 readJson(p.getSpecificationsJson(), new TypeReference<List<SpecRow>>() {}, List.of()),
                 readJson(p.getColorsJson(), new TypeReference<List<ColorVariant>>() {}, List.of()),
-                p.getCatalogueUrl());
+                p.getCatalogueUrl(),
+                readJson(p.getPortfolioJson(), new TypeReference<List<String>>() {}, List.of()));
     }
 
     // =========================================================================================
