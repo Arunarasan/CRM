@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-pangea/dnd";
 import {
@@ -133,25 +133,33 @@ function LeadInfo({ l }: { l: Lead }) {
   );
 }
 
+// Filters/search/page survive opening a lead and coming back (session-scoped).
+const LEADS_VIEW_KEY = "crm.leads.view";
+function loadLeadsView(): Record<string, any> {
+  try { return JSON.parse(sessionStorage.getItem(LEADS_VIEW_KEY) || "{}") || {}; } catch { return {}; }
+}
+
 export default function Leads() {
   const navigate = useNavigate();
   const info = useHoverInfo();
-  const [viewMode, setViewMode] = useState<"kanban" | "table">("table");
+  const [saved] = useState(loadLeadsView);
+  const skipPageReset = useRef(true);
+  const [viewMode, setViewMode] = useState<"kanban" | "table">(saved.viewMode || "table");
   const [dashboard, setDashboard] = useState<DashboardMetrics | null>(null);
   const [board, setBoard] = useState<BoardColumn[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [users, setUsers] = useState<UserSummary[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [search, setSearch] = useState<string>(saved.search || "");
+  const [debouncedSearch, setDebouncedSearch] = useState<string>(saved.search || "");
+  const [page, setPage] = useState<number>(saved.page || 0);
+  const [rowsPerPage, setRowsPerPage] = useState<number>(saved.rowsPerPage || 10);
   const [totalPages, setTotalPages] = useState(1);
   const [totalElements, setTotalElements] = useState(0);
-  const [showFilters, setShowFilters] = useState(false);
-  const [filters, setFilters] = useState<LeadFilters>({ ...EMPTY_FILTERS });
+  const [showFilters, setShowFilters] = useState<boolean>(!!saved.showFilters);
+  const [filters, setFilters] = useState<LeadFilters>({ ...EMPTY_FILTERS, ...(saved.filters || {}) });
   const [isAddOpen, setIsAddOpen] = useState(false);
-  const [period, setPeriod] = useState<PeriodKey>("MONTH");
+  const [period, setPeriod] = useState<PeriodKey>(saved.period || "MONTH");
   const [periodStats, setPeriodStats] = useState<LeadPeriodStats | null>(null);
   const [categories, setCategories] = useState<CatalogCategory[]>([]);
   const [products, setProducts] = useState<CatalogProduct[]>([]);
@@ -236,7 +244,16 @@ export default function Leads() {
     else fetchList();
   }, [viewMode, fetchBoard, fetchList]);
 
-  useEffect(() => { setPage(0); }, [debouncedSearch, filters, rowsPerPage]);
+  useEffect(() => {
+    if (skipPageReset.current) { skipPageReset.current = false; return; }
+    setPage(0);
+  }, [debouncedSearch, filters, rowsPerPage]);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(LEADS_VIEW_KEY, JSON.stringify({ viewMode, search, page, rowsPerPage, showFilters, filters, period }));
+    } catch { /* storage unavailable */ }
+  }, [viewMode, search, page, rowsPerPage, showFilters, filters, period]);
 
   const refresh = () => {
     fetchDashboard();
