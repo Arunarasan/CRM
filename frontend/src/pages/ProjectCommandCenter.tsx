@@ -1150,14 +1150,6 @@ export default function ProjectCommandCenter() {
             <TabsContent value="overview" className="space-y-3 mt-0 h-full outline-none">
               {project.quotation?.id ? (
                 <>
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-sm text-slate-500">Quotation {project.quotation.quotationNumber} — the agreed scope and price for this project.</p>
-                    <div className="flex flex-wrap gap-2">
-                      <Button size="sm" variant="outline" onClick={() => setActiveTab('info')} className="h-9 rounded-xl"><ClipboardCheck className="h-4 w-4 mr-1" /> Project info</Button>
-                      {project.lead?.id && <Button size="sm" variant="outline" onClick={() => { setQuoteOpen(true); setActiveTab('quote'); }} className="h-9 rounded-xl"><Pencil className="h-4 w-4 mr-1" /> Change quote</Button>}
-                      <Button size="sm" onClick={() => window.open(`${import.meta.env.BASE_URL.replace(/\/$/, '')}/quotations/${project.quotation.id}/print`, '_blank')} className="h-9 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white"><FileBarChart className="h-4 w-4 mr-1" /> Print / PDF</Button>
-                    </div>
-                  </div>
                   <QuotationPrintView key={project.quotation.id} quotationId={project.quotation.id} embedded readOnly onClose={() => {}} />
                 </>
               ) : (
