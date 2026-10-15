@@ -84,13 +84,6 @@ public class EmployeeTaskController {
         return ResponseEntity.ok(ApiResponse.success(employeeTaskService.getAvailablePool(me())));
     }
 
-    /** The employee's active-task capacity (active / max / canPick). */
-    @GetMapping("/capacity")
-    @PreAuthorize(READ)
-    public ResponseEntity<ApiResponse<Map<String, Object>>> capacity() {
-        return ResponseEntity.ok(ApiResponse.success(employeeTaskService.getCapacity(me())));
-    }
-
     /** Pick & Start — atomically claim an unassigned, eligible task. */
     @PostMapping("/{id}/pick")
     @PreAuthorize(EXECUTE)

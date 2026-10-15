@@ -406,7 +406,7 @@ export default function TaskDetail() {
       const gone = task.myAssignmentStatus === 'CANCELLED' || task.myAssignmentStatus === 'REJECTED';
       const closed = ['WAITING_APPROVAL', 'COMPLETED', 'CANCELLED'].includes(task.status);
       if ((!task.myAssignmentStatus || gone) && !closed && (task.status as string) === 'AVAILABLE') {
-        try { await employeeTaskApi.pick(taskId); } catch { /* at capacity / taken — still open the quote */ }
+        try { await employeeTaskApi.pick(taskId); } catch { /* not clocked in / taken — still open the quote */ }
       }
       if (!cancelled) navigate(quoteLink, { replace: true });
     })();
@@ -1010,10 +1010,10 @@ export default function TaskDetail() {
       <IssueReportSheet taskId={taskId} open={sheet === 'issue'} onOpenChange={(o) => setSheet(o ? 'issue' : null)} onSaved={load} />
       <MaterialUsageSheet taskId={taskId} open={sheet === 'material'} onOpenChange={(o) => setSheet(o ? 'material' : null)} onSaved={load} />
       <CompleteSheet taskId={taskId} execution={workTracking ? closing : isProjectExec} open={sheet === 'complete'} onOpenChange={(o) => setSheet(o ? 'complete' : null)}
-        onDone={() => { load(); navigate('/employee/tasks'); }} />
+        onDone={() => { load(); navigate('/employee/tasks?view=ACTIVE'); }} />
       {task.installOrder && (
         <MarkInstalledSheet taskId={taskId} info={task.installOrder} open={sheet === 'installed'}
-          onOpenChange={(o) => setSheet(o ? 'installed' : null)} onDone={() => { load(); navigate('/employee/tasks'); }} />
+          onOpenChange={(o) => setSheet(o ? 'installed' : null)} onDone={() => { load(); navigate('/employee/tasks?view=ACTIVE'); }} />
       )}
       <CollectPaymentSheet taskId={taskId} open={sheet === 'payment'} onOpenChange={(o) => setSheet(o ? 'payment' : null)} onSaved={load} />
       {isLeadForm && task.formType === 'REQUIREMENT' ? (
@@ -1030,7 +1030,7 @@ export default function TaskDetail() {
           focus={formFocus}
           open={formOpen}
           onOpenChange={setFormOpen}
-          onSaved={() => { setFormOpen(false); load(); navigate('/employee/tasks'); }}
+          onSaved={() => { setFormOpen(false); load(); navigate('/employee/tasks?view=ACTIVE'); }}
           onDetailsSaved={() => { toast.success(t('pw.td.lead_details_saved')); load(); }}
         />
       ) : isLeadForm && task.formType && (
@@ -1039,7 +1039,7 @@ export default function TaskDetail() {
           formType={task.formType}
           open={formOpen}
           onOpenChange={setFormOpen}
-          onSaved={() => { setFormOpen(false); load(); navigate('/employee/tasks'); }}
+          onSaved={() => { setFormOpen(false); load(); navigate('/employee/tasks?view=ACTIVE'); }}
         />
       )}
     </div>

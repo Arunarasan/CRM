@@ -308,6 +308,18 @@ public class EmployeeTimeService {
 
     // --- earnings / status -------------------------------------------------
 
+    /** True while the employee has an open (clocked-in, not yet clocked-out) session. */
+    public boolean isClockedIn(User user) {
+        Employee employee;
+        try {
+            employee = requireEmployee(user);
+        } catch (IllegalStateException e) {
+            return false;
+        }
+        Attendance row = activeRow(employee.getId());
+        return row != null && openSession(row) != null;
+    }
+
     /** Live clock status + earnings snapshot for the dashboard. */
     public Map<String, Object> getStatus(User user) {
         Employee employee = requireEmployee(user);

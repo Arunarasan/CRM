@@ -164,22 +164,16 @@ export default function MobileHome() {
         {/* Today's plan — my work in the order to do it, plus new leads to pick up */}
         <TodayPlan />
 
-        {/* Task capacity + available pool shortcut */}
-        {home && home.maxActiveTasks != null && (
+        {/* Available pool shortcut */}
+        {home && (
           <button
             onClick={() => navigate('/employee/tasks?view=AVAILABLE')}
             className={`${CARD} flex items-center justify-between px-4 py-3.5 text-left active:scale-[0.99]`}
           >
-            <div>
-              <p className="text-xs text-[#858B87]">{t('portal.home.taskCapacity')}</p>
-              <p className="text-lg font-bold leading-none text-[#111817]">{home.activeTaskCount ?? 0} / {home.maxActiveTasks}</p>
-            </div>
-            <div className="text-right">
-              <p className="text-xs text-[#858B87]">{t('portal.home.availableForYou')}</p>
-              <p className="flex items-center justify-end gap-1 text-lg font-bold leading-none text-[#06452F]">
-                {home.availableCount ?? 0} <ChevronRight className="h-4 w-4" />
-              </p>
-            </div>
+            <p className="text-xs text-[#858B87]">{t('portal.home.availableForYou')}</p>
+            <p className="flex items-center justify-end gap-1 text-lg font-bold leading-none text-[#06452F]">
+              {home.availableCount ?? 0} <ChevronRight className="h-4 w-4" />
+            </p>
           </button>
         )}
 

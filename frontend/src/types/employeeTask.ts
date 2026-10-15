@@ -32,8 +32,8 @@ export interface TaskCard {
   progressPercent: number | null;
   assignedEmployees: string[];
   myAssignmentStatus?: AssignmentStatus;
-  canPick?: boolean; // set on pool cards — false when the viewer is at capacity
-  dataEntry?: boolean; // quick data-entry lead task — exempt from the capacity cap
+  canPick?: boolean; // set on pool cards — false when the viewer is not clocked in
+  dataEntry?: boolean; // quick data-entry lead task
   holdExpiresAt?: string | null; // ISO time this held data-entry task auto-releases (countdown)
   customer?: string | null; // customer/lead name behind the task
   location?: string | null; // compact site location (address/city)
@@ -95,13 +95,6 @@ export interface OrderView extends OrderCardInfo {
   }[];
   events: { id: number; fromStatus: string | null; toStatus: string | null; userName: string | null; note: string | null; photoUrl: string | null; audioUrl?: string | null; at: string }[];
   siblings?: { id: number; code: string; bundleNo: number | null; status: string }[];
-}
-
-/** Active-task capacity for the current employee. */
-export interface Capacity {
-  active: number;
-  max: number;
-  canPick: boolean;
 }
 
 export interface TimeLogSummary {
@@ -444,8 +437,6 @@ export interface HomeSummary {
   upcoming: number;
   completedToday: number;
   todaysTasks: TaskCard[];
-  activeTaskCount?: number;
-  maxActiveTasks?: number;
   availableCount?: number;
 }
 

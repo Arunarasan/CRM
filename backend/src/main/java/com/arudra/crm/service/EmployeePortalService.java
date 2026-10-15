@@ -701,12 +701,6 @@ public class EmployeePortalService {
         return employeeTaskService.getAvailablePool(currentUser);
     }
 
-    /** This employee's active-task capacity (active / max / canPick). */
-    public Map<String, Object> getTaskCapacity(User currentUser) {
-        requireEmployee(currentUser);
-        return employeeTaskService.getCapacity(currentUser);
-    }
-
     // =====================================================================
     // Material Requests (operational — reuses MaterialRequestService, self-scoped)
     // =====================================================================

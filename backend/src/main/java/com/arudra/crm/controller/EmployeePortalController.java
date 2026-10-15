@@ -633,13 +633,6 @@ public class EmployeePortalController {
         return ResponseEntity.ok(ApiResponse.success(portalService.getAvailablePool(me())));
     }
 
-    /** Active-task capacity for the current employee. */
-    @GetMapping("/tasks/capacity")
-    @PreAuthorize(PORTAL)
-    public ResponseEntity<ApiResponse<Map<String, Object>>> taskCapacity() {
-        return ResponseEntity.ok(ApiResponse.success(portalService.getTaskCapacity(me())));
-    }
-
     // --- Material Requests (own only) ---------------------------------------
 
     @GetMapping("/material-requests")

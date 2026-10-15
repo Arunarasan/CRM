@@ -75,7 +75,6 @@ public class WorkflowConsoleService {
         out.put("blocked", cards(blocked));
         out.put("overdue", cards(overdue));
         out.put("unassigned", cards(unassigned));
-        out.put("employeeCapacity", employeeCapacity(activeAssignments));
         out.put("projectsAtRisk", projectsAtRisk(tasks, overdue, today));
         out.put("pendingTimeApprovals", timeLogRepository.findByStatusOrderByIdDesc("SUBMITTED").size());
         return out;
@@ -148,32 +147,6 @@ public class WorkflowConsoleService {
         m.put("dueDate", t.getDueDate());
         m.put("assignee", t.getAssignedEmployee() != null ? t.getAssignedEmployee().getName() : null);
         return m;
-    }
-
-    private List<Map<String, Object>> employeeCapacity(List<TaskAssignment> activeAssignments) {
-        int max = employeeTaskService.maxActiveTasks();
-        // employeeId -> {name, set of distinct task ids}
-        Map<Long, String> names = new LinkedHashMap<>();
-        Map<Long, Set<Long>> taskIds = new LinkedHashMap<>();
-        for (TaskAssignment a : activeAssignments) {
-            if (a.getEmployee() == null || a.getTask() == null) continue;
-            Long eid = a.getEmployee().getId();
-            names.putIfAbsent(eid, a.getEmployee().getName());
-            taskIds.computeIfAbsent(eid, k -> new java.util.HashSet<>()).add(a.getTask().getId());
-        }
-        List<Map<String, Object>> rows = new ArrayList<>();
-        for (Long eid : names.keySet()) {
-            int active = taskIds.get(eid).size();
-            Map<String, Object> row = new LinkedHashMap<>();
-            row.put("employeeId", eid);
-            row.put("name", names.get(eid));
-            row.put("active", active);
-            row.put("max", max);
-            row.put("atCapacity", active >= max);
-            rows.add(row);
-        }
-        rows.sort(Comparator.comparing((Map<String, Object> r) -> (Integer) r.get("active")).reversed());
-        return rows;
     }
 
     private List<Map<String, Object>> projectsAtRisk(List<Task> tasks, List<Task> overdue, LocalDate today) {

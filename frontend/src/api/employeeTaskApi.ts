@@ -1,7 +1,7 @@
 import api from '../lib/api';
 import {
   TaskCard, TaskDetail, HomeSummary, ReportsSummary, ProgressMediaItem,
-  Capacity, Timesheet, TimeLogSummary, LeadFormPayload,
+  Timesheet, TimeLogSummary, LeadFormPayload,
 } from '../types/employeeTask';
 
 // Thin typed wrapper around /api/employee-tasks (mobile field-execution) endpoints,
@@ -33,7 +33,6 @@ export const employeeTaskApi = {
 
   // ---- Task Pool (Increment 2/6): capacity, self-pick, join ----
   pool: () => api.get<TaskCard[]>(`${BASE}/pool`).then((r) => r.data),
-  capacity: () => api.get<Capacity>(`${BASE}/capacity`).then((r) => r.data),
   pick: (id: number) => api.post(`${BASE}/${id}/pick`).then((r) => r.data),
   join: (id: number) => api.post(`${BASE}/${id}/join`).then((r) => r.data),
   // Extend the data-entry hold window when still working, so the task isn't auto-released.

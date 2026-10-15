@@ -1,17 +1,17 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  AlertTriangle, Clock, Ban, Inbox, ListChecks, CheckCircle2, Users, TriangleAlert,
+  AlertTriangle, Clock, Ban, Inbox, ListChecks, CheckCircle2, TriangleAlert,
   Timer, Check, X, CalendarClock, ArrowUpDown, Undo2, RefreshCw, GitBranch,
 } from 'lucide-react';
 import { workflowApi, ConsoleOverview, ConsoleTaskCard, WorkflowTemplate } from '@/api/workflowApi';
 import { employeeTaskApi } from '@/api/employeeTaskApi';
 import { TimeLogSummary } from '@/types/employeeTask';
 
-const TABS = ['OVERVIEW', 'CAPACITY', 'RISK', 'TIME', 'TEMPLATES'] as const;
+const TABS = ['OVERVIEW', 'RISK', 'TIME', 'TEMPLATES'] as const;
 type Tab = (typeof TABS)[number];
 const TAB_LABEL: Record<Tab, string> = {
-  OVERVIEW: 'Task Landscape', CAPACITY: 'Capacity', RISK: 'Projects at Risk', TIME: 'Time Approvals', TEMPLATES: 'Workflow Templates',
+  OVERVIEW: 'Task Landscape', RISK: 'Projects at Risk', TIME: 'Time Approvals', TEMPLATES: 'Workflow Templates',
 };
 
 const PRIORITIES = ['LOW', 'MEDIUM', 'HIGH'];
@@ -138,25 +138,6 @@ export default function WorkflowConsole() {
           <Section title="Unassigned" rows={ov.unassigned} />
           <Section title="In Progress" rows={ov.inProgress} />
           <Section title="Available (pool)" rows={ov.available} />
-        </div>
-      )}
-
-      {tab === 'CAPACITY' && ov && (
-        <div className="rounded-xl border bg-card p-4 shadow-sm">
-          <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold"><Users className="h-4 w-4" /> Employee Capacity</h3>
-          {ov.employeeCapacity.length === 0 ? <p className="py-6 text-center text-muted-foreground">No active workloads.</p> : (
-            <div className="flex flex-col gap-2">
-              {ov.employeeCapacity.map((c) => (
-                <div key={c.employeeId} className="flex items-center gap-3">
-                  <span className="w-40 truncate text-sm font-medium">{c.name}</span>
-                  <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-muted">
-                    <div className={`h-full rounded-full ${c.atCapacity ? 'bg-red-500' : 'bg-primary'}`} style={{ width: `${Math.min(100, (c.active / Math.max(1, c.max)) * 100)}%` }} />
-                  </div>
-                  <span className={`w-14 text-right text-sm font-bold ${c.atCapacity ? 'text-red-600' : ''}`}>{c.active}/{c.max}</span>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       )}
 

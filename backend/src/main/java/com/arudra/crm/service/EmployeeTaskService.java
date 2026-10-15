@@ -83,6 +83,8 @@ public class EmployeeTaskService {
     @Autowired
     private com.arudra.crm.repository.TaskJoinRequestRepository joinRequestRepository;
     @Autowired
+    private EmployeeTimeService employeeTimeService;
+    @Autowired
     private TaskGenerationService taskGenerationService;
     @Autowired
     private QuotationRepository quotationRepository;
@@ -123,10 +125,6 @@ public class EmployeeTaskService {
 
     private static final List<String> ACTIVE_ASSIGNMENT_STATUSES =
             List.of("ASSIGNED", "ACCEPTED", "IN_PROGRESS", "PAUSED", "WAITING_MATERIAL", "REWORK", "COMPLETED");
-
-    /** Statuses that count toward an employee's active-task capacity (excludes done/closed). */
-    private static final List<String> CAPACITY_STATUSES =
-            List.of("ASSIGNED", "ACCEPTED", "IN_PROGRESS", "PAUSED", "WAITING_MATERIAL", "REWORK");
 
     /**
      * Once work is done a task is locked from further field updates, so an employee re-opening a
@@ -169,8 +167,6 @@ public class EmployeeTaskService {
         long pending = tasks.stream().filter(t -> !"COMPLETED".equals(t.getStatus())).count();
 
         Map<String, Object> home = new HashMap<>();
-        home.put("activeTaskCount", activeTaskCount(employee.getId()));
-        home.put("maxActiveTasks", maxActiveTasks());
         home.put("availableCount", getAvailablePool(employee).size());
         home.put("dueToday", dueToday);
         home.put("overdue", overdue);
@@ -310,15 +306,12 @@ public class EmployeeTaskService {
         if ("LOCKED".equals(task.getStatus())) {
             throw new IllegalStateException("This task is locked until the work it depends on is completed.");
         }
+        requireClockedIn(employee);
         if (!canTake(employee, task)) {
             throw new IllegalStateException(taskEligibilityService.ineligibleReason(employee, task));
         }
         if (!isUnassigned(task)) {
             throw new IllegalStateException("This task was already picked by another employee.");
-        }
-        // Data-entry lead tasks are exempt from the capacity cap — only manual working tasks count.
-        if (!isDataEntryLeadTask(task)) {
-            assertHasCapacity(employee);
         }
 
         // Picking a task you were taken off earlier reuses that row instead of stacking a duplicate.
@@ -369,6 +362,7 @@ public class EmployeeTaskService {
         if (isUnassigned(task)) {
             throw new IllegalStateException("No one has started this task yet — use Pick & Start instead.");
         }
+        requireClockedIn(employee);
         if (!canTake(employee, task)) {
             throw new IllegalStateException(taskEligibilityService.ineligibleReason(employee, task));
         }
@@ -378,7 +372,6 @@ public class EmployeeTaskService {
         if (existing != null && !"CANCELLED".equals(existing.getStatus()) && !"REJECTED".equals(existing.getStatus())) {
             throw new IllegalStateException("You're already on this task.");
         }
-        assertHasCapacity(employee);
 
         TaskAssignment a = existing != null ? existing : new TaskAssignment();
         a.setTask(task);
@@ -401,6 +394,14 @@ public class EmployeeTaskService {
     }
 
     // ---------------------------------------------------------------- Helpers: join requests / add helper
+
+    /** Only an employee who is clocked in may pick up or join work (admins are exempt). */
+    private void requireClockedIn(User employee) {
+        if (isAdminUser(employee)) return;
+        if (!employeeTimeService.isClockedIn(employee)) {
+            throw new IllegalStateException("Clock in first - you can only take a task while you are clocked in.");
+        }
+    }
 
     private boolean isActiveAssignment(TaskAssignment a) {
         return !"CANCELLED".equals(a.getStatus()) && !"REJECTED".equals(a.getStatus());
@@ -470,6 +471,7 @@ public class EmployeeTaskService {
             throw new IllegalStateException("No one has taken this task yet - pick it up instead.");
         }
         if (onTask(taskId, employee.getId())) throw new IllegalStateException("You're already on this task.");
+        requireClockedIn(employee);
         if (!canTake(employee, task)) {
             throw new IllegalStateException(taskEligibilityService.ineligibleReason(employee, task));
         }
@@ -572,11 +574,6 @@ public class EmployeeTaskService {
             throw new IllegalStateException("This task is closed.");
         }
         if (onTask(task.getId(), employee.getId())) throw new IllegalStateException(employee.getName() + " is already on this task.");
-        int active = activeTaskCount(employee.getId());
-        int max = maxActiveTasks();
-        if (active >= max) {
-            throw new IllegalStateException(employee.getName() + " is at capacity (" + active + " / " + max + ").");
-        }
         TaskAssignment a = assignmentRepository.findByTaskIdAndEmployeeId(task.getId(), employee.getId()).orElseGet(TaskAssignment::new);
         a.setTask(task);
         a.setResourceType(ResourceType.EMPLOYEE);
@@ -594,50 +591,6 @@ public class EmployeeTaskService {
     }
 
     // ---------------------------------------------------------------- Capacity
-
-    /**
-     * Distinct manual working tasks the employee is actively holding (owned or participating, not yet
-     * done). Quick data-entry lead tasks are deliberately excluded — capacity governs only the
-     * hands-on field work (installation, stitching, site visit, …), so a data-entry task never eats a
-     * slot and can always be picked up.
-     */
-    public int activeTaskCount(Long employeeId) {
-        return (int) assignmentRepository.findByEmployeeId(employeeId).stream()
-                .filter(a -> CAPACITY_STATUSES.contains(a.getStatus()))
-                .filter(a -> a.getTask() != null)
-                // A task an admin closed (completed/cancelled) no longer occupies the employee's slots.
-                .filter(a -> !isClosed(a.getTask()))
-                .filter(a -> !isDataEntryLeadTask(a.getTask()))
-                .map(a -> a.getTask().getId())
-                .distinct().count();
-    }
-
-    /** Configurable capacity cap (assignment_settings singleton), default 3. */
-    public int maxActiveTasks() {
-        return assignmentSettingsRepository.findById(AssignmentSettings.SINGLETON_ID)
-                .or(() -> assignmentSettingsRepository.findAll().stream().findFirst())
-                .map(AssignmentSettings::getMaxActiveTasks)
-                .orElse(3);
-    }
-
-    public Map<String, Object> getCapacity(User employee) {
-        int active = activeTaskCount(employee.getId());
-        int max = maxActiveTasks();
-        Map<String, Object> m = new HashMap<>();
-        m.put("active", active);
-        m.put("max", max);
-        m.put("canPick", active < max);
-        return m;
-    }
-
-    private void assertHasCapacity(User employee) {
-        int active = activeTaskCount(employee.getId());
-        int max = maxActiveTasks();
-        if (active >= max) {
-            throw new IllegalStateException("You're at capacity (" + active + " / " + max
-                    + "). Complete or release a task before picking another.");
-        }
-    }
 
     // ---------------------------------------------------------------- Data-entry hold window
 
@@ -831,13 +784,13 @@ public class EmployeeTaskService {
      * card carries {@code canPick} reflecting the employee's remaining capacity.
      */
     public List<Map<String, Object>> getAvailablePool(User employee) {
-        boolean hasCapacity = activeTaskCount(employee.getId()) < maxActiveTasks();
         // Workflow tasks wait in the pool as AVAILABLE; project / order / installation work is created
         // PENDING (or follows its order to IN_PROGRESS) — offer those too while nobody holds them.
         List<Task> candidates = new ArrayList<>(taskRepository.findByStatus("AVAILABLE"));
         for (String st : List.of("PENDING", "IN_PROGRESS")) {
             taskRepository.findByStatus(st).stream().filter(this::isWorkTask).forEach(candidates::add);
         }
+        boolean clockedIn = isAdminUser(employee) || employeeTimeService.isClockedIn(employee);
         TodoFilter todo = new TodoFilter();
         Set<Long> myProjects = projectIdsOnTeam(employee);
         return candidates.stream()
@@ -849,8 +802,7 @@ public class EmployeeTaskService {
                 .sorted(Comparator.comparing(Task::getDueDate, Comparator.nullsLast(Comparator.naturalOrder())))
                 .map(t -> {
                     Map<String, Object> card = toCard(t, employee.getId());
-                    // Data-entry tasks ignore the capacity cap, so they're always pickable.
-                    card.put("canPick", hasCapacity || isDataEntryLeadTask(t));
+                    card.put("canPick", clockedIn);
                     return card;
                 })
                 .collect(Collectors.toList());

@@ -17,14 +17,6 @@ export interface ConsoleTaskCard {
   assignee: string | null;
 }
 
-export interface CapacityRow {
-  employeeId: number;
-  name: string;
-  active: number;
-  max: number;
-  atCapacity: boolean;
-}
-
 export interface RiskRow {
   projectId: number;
   projectName: string;
@@ -41,7 +33,6 @@ export interface ConsoleOverview {
   blocked: ConsoleTaskCard[];
   overdue: ConsoleTaskCard[];
   unassigned: ConsoleTaskCard[];
-  employeeCapacity: CapacityRow[];
   projectsAtRisk: RiskRow[];
   pendingTimeApprovals: number;
 }
