@@ -63,7 +63,7 @@ export default function EmployeeQuote() {
         </div>
       </div>
       <ConvertProjectSheet leadId={leadId} leadProject={leadProject} open={convertOpen} onOpenChange={setConvertOpen}
-        onDone={() => navigate('/employee/tasks')} onRequested={() => setSheetKey((k) => k + 1)} />
+        onDone={() => navigate('/employee/tasks?view=ACTIVE')} onRequested={() => setSheetKey((k) => k + 1)} />
     </div>
   );
 }

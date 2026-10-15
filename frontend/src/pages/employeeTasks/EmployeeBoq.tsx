@@ -73,7 +73,7 @@ export default function EmployeeBoq() {
         if (boq.status === 'DRAFT' || boq.status === 'REJECTED') await boqApi.submitForReview(boq.id);
         await boqApi.approve(boq.id); // → onBoqApproved advances the workflow to the Quotation task
       }
-      navigate('/employee/tasks');
+      navigate('/employee/tasks?view=ACTIVE');
     } catch (e: any) {
       setError(e?.response?.data?.message || 'Could not submit the BOQ.');
     } finally { setBusy(false); }
@@ -157,7 +157,7 @@ export default function EmployeeBoq() {
 
       <BottomBar>
         {approved ? (
-          <button onClick={() => navigate('/employee/tasks')} className={PRIMARY_BTN}>
+          <button onClick={() => navigate('/employee/tasks?view=ACTIVE')} className={PRIMARY_BTN}>
             <CheckCircle2 className="h-4 w-4" /> BOQ approved — back to tasks
           </button>
         ) : (

@@ -59,7 +59,11 @@ function readParams(params: URLSearchParams): { tab: Tab; view: View } {
   const rawView = (params.get('view') || '').toUpperCase();
   // Older ?tab=MINE|LEADS links land on the first tab.
   const tab: Tab = (['REQUIREMENT', 'MEASURE', 'PROJECTS', 'ORDERS'] as Tab[]).includes(rawTab as Tab) ? (rawTab as Tab) : 'REQUIREMENT';
-  let view: View = (['ACTIVE', 'AVAILABLE', 'DONE'] as View[]).includes(rawView as View) ? (rawView as View) : 'ACTIVE';
+  // A plain /employee/tasks opens on Available (work to pick up). Links that name a tab or a search
+  // (My Projects, a project search) are about the employee's own work, so they keep opening on Active.
+  const named = params.has('tab') || params.has('search');
+  let view: View = (['ACTIVE', 'AVAILABLE', 'DONE'] as View[]).includes(rawView as View)
+    ? (rawView as View) : named ? 'ACTIVE' : 'AVAILABLE';
   if (!params.get('view')) {
     if (rawTab === 'AVAILABLE') view = 'AVAILABLE';
     if (rawTab === 'COMPLETED' || params.get('status') === 'COMPLETED') view = 'DONE';
@@ -84,8 +88,8 @@ export default function TaskList() {
       n.delete('status');
       return n;
     }, { replace: true });
-  const setTab = (t: Tab) => update({ tab: t, view: view === 'ACTIVE' ? null : view });
-  const setView = (v: View) => update({ tab, view: v === 'ACTIVE' ? null : v });
+  const setTab = (t: Tab) => update({ tab: t, view });
+  const setView = (v: View) => update({ tab, view: v });
   const setSearch = (v: string) => update({ search: v || null });
 
   const load = useCallback(() => {
@@ -179,6 +183,7 @@ export default function TaskList() {
   );
 
   const views: { key: View; label: string; count: number }[] = [
+    { key: 'ACTIVE', label: t('pw.tl.view.ACTIVE'), count: active.length },
     { key: 'AVAILABLE', label: t('pw.tl.view.AVAILABLE'), count: available.length },
     { key: 'DONE', label: t('pw.tl.view.DONE'), count: completed.length },
   ];
@@ -255,14 +260,14 @@ export default function TaskList() {
         ))}
       </div>
 
-      {/* Available · Done — tap the selected one again to go back to the active list */}
+      {/* Active · Available · Done */}
       <div className="flex gap-2">
         {views.map((v) => {
           const on = view === v.key;
           return (
             <button
               key={v.key}
-              onClick={() => setView(on ? 'ACTIVE' : v.key)}
+              onClick={() => setView(v.key)}
               className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[13px] font-semibold transition-colors ${
                 on ? 'border-[#0A573B] bg-[#E7F2EC] text-[#0A573B]' : 'border-[#E3E5E1] bg-white text-[#5B625E]'
               }`}

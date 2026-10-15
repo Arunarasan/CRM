@@ -59,7 +59,7 @@ export default function EmployeeQuotation() {
         await quotationApi.update(quote.id, { termsAndConditions: terms });
       }
       await quotationApi.updateApprovalStatus(quote.id, 'PENDING'); // flag for the office to approve + convert
-      navigate('/employee/tasks');
+      navigate('/employee/tasks?view=ACTIVE');
     } catch (e: any) {
       setError(e?.response?.data?.message || 'Could not send the quotation.');
     } finally { setBusy(false); }
@@ -127,7 +127,7 @@ export default function EmployeeQuotation() {
 
       <BottomBar>
         {sent ? (
-          <button onClick={() => navigate('/employee/tasks')} className={PRIMARY_BTN}>
+          <button onClick={() => navigate('/employee/tasks?view=ACTIVE')} className={PRIMARY_BTN}>
             <CheckCircle2 className="h-4 w-4" /> Sent for approval — back to tasks
           </button>
         ) : (
@@ -144,7 +144,7 @@ export default function EmployeeQuotation() {
       </BottomBar>
 
       <ConvertProjectSheet leadId={leadId} open={convertOpen} onOpenChange={setConvertOpen}
-        onDone={() => navigate('/employee/tasks')} />
+        onDone={() => navigate('/employee/tasks?view=ACTIVE')} />
     </div>
   );
 }

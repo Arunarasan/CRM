@@ -138,7 +138,7 @@ export default function EmployeeVisitMeasure() {
         setStep('Scheduling next visit…');
         await employeeTaskApi.scheduleRevisit(leadId, { nextVisitDate, notes: visit.observations || undefined });
       }
-      navigate('/employee/tasks');
+      navigate('/employee/tasks?view=ACTIVE');
     } catch (e: any) {
       setError(e?.response?.data?.message || e?.message || 'Could not save. Please try again.');
     } finally { setSaving(false); setStep(''); }

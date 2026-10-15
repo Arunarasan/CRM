@@ -117,7 +117,7 @@ export default function TodayPlan({ refreshKey }: { refreshKey?: number }) {
           )}
           {plan.length > MAX_STEPS && (
             <button
-              onClick={() => navigate('/employee/tasks')}
+              onClick={() => navigate('/employee/tasks?view=ACTIVE')}
               className="flex w-full items-center justify-center gap-1 border-t border-[#ECEBE7] py-3 text-[13px] font-semibold text-[#B27A12] active:bg-[#F7F7F5]"
             >
               {t('portal.home.plan.more', { count: plan.length })} <ChevronRight className="h-4 w-4" />
