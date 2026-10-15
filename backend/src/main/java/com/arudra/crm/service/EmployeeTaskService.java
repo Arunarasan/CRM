@@ -2354,12 +2354,18 @@ public class EmployeeTaskService {
     private static final Set<String> QUOTE_STAGE_CODES = Set.of("TT_MEASURE_QUOTE", "TT_VISIT_MEASURE",
             "TT_BOQ_QUOTE", "TT_GENERATE_QUOTE", "TT_SCHEDULE_VISIT", "TT_CONDUCT_VISIT", "TT_MEASURE_SITE");
 
+    /** Auto-task templates removed from the employee tab only: BOQ & Quotation, quote send/follow-up, Installation. */
+    private static final Set<String> EMPLOYEE_HIDDEN_CODES = Set.of("TT_BOQ_QUOTE", "TT_GENERATE_QUOTE",
+            "TT_SEND_QUOTE", "TT_FOLLOWUP_QUOTE", "TT_PM_INSTALLATION");
+
     private class TodoFilter {
         private final Map<Long, com.arudra.crm.entity.Lead> leads = new HashMap<>();
         private final Map<Long, List<Task>> leadTasks = new HashMap<>();
 
         boolean shows(Task t) {
             if (isClosed(t)) return true;
+            // Retired steps never appear in the employee To-Do (the office still sees them).
+            if (t.getTaskTemplate() != null && EMPLOYEE_HIDDEN_CODES.contains(t.getTaskTemplate().getCode())) return false;
             if (t.getProject() != null) {
                 if ("SERVICE_REQUEST".equals(t.getSource())) return true;
                 String ps = t.getProject().getStatus() == null ? "" : t.getProject().getStatus().toUpperCase();
