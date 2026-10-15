@@ -1,5 +1,6 @@
 import { BaseInput } from '@/components/ui/input';
 import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { financeApi } from "@/api/financeApi";
 import type { MonthBucket } from "@/types/finance";
 import { Button } from "@/components/ui/button";
@@ -32,7 +33,10 @@ const SOURCE_LABEL: Record<string, string> = {
 };
 
 export default function FinanceReportsPage() {
-  const [report, setReport] = useState<ReportKey>("revenue");
+  const [params] = useSearchParams();
+  const wanted = params.get("r") as ReportKey | null;
+  const [report, setReport] = useState<ReportKey>(
+    REPORTS.some((r) => r.key === wanted) ? (wanted as ReportKey) : "revenue");
   const [from, setFrom] = useState(firstOfYear());
   const [to, setTo] = useState(today());
   const [data, setData] = useState<Record<string, unknown> | null>(null);

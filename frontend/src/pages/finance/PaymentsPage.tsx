@@ -11,6 +11,7 @@ import SearchableSelect from "@/components/ui/searchable-select";
 import { currency, PAYMENT_STATUS_TONE, REFUND_STATUS_TONE } from "./helpers";
 import { Plus, Search, Check, X } from "lucide-react";
 import CameraCaptureButton from "@/components/CameraCaptureButton";
+import { Stat, Segmented, Empty, Modal } from "./financeUi";
 
 type Tab = "all" | "pending" | "refunds";
 
@@ -57,6 +58,8 @@ export default function PaymentsPage() {
     try { await fn(); load(); } catch (e) { console.error(e); } finally { setBusy(false); }
   };
 
+  const openRefunds = (refunds?.content ?? []).filter((r) => r.status === "PENDING" || r.status === "APPROVED").length;
+  const pageTotal = (payments?.content ?? []).reduce((s, p) => s + (p.amount ?? 0), 0);
   const setTab = (t: Tab) => setParams(t === "all" ? {} : { tab: t });
 
   const uploadProof = async (file: File) => {
@@ -72,18 +75,24 @@ export default function PaymentsPage() {
 
   return (
     <div className="space-y-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <Stat label="Awaiting approval" accent="owed" value={pending.length}
+          sub={pending.length ? `${currency(pending.reduce((s, p) => s + (p.amount ?? 0), 0))} collected in the field` : "Nothing waiting"} />
+        <Stat label="Refunds to action" accent="out" value={openRefunds}
+          sub={openRefunds ? "Pending approval or payout" : "All refunds settled"} />
+        <Stat label="Payments on this page" accent="in" value={currency(pageTotal)}
+          sub={`${payments?.totalElements ?? 0} payments in total`} />
+      </div>
+
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex rounded-lg border bg-white p-0.5">
-          {([["all", "All Payments"], ["pending", `Pending Approval (${pending.length})`], ["refunds", "Refunds"]] as [Tab, string][]).map(([t, label]) => (
-            <button key={t} onClick={() => setTab(t)}
-                    className={`px-3 py-1.5 text-sm font-semibold rounded-md ${tab === t ? "bg-primary text-primary-foreground" : "text-slate-500 hover:text-slate-800"}`}>
-              {label}
-            </button>
-          ))}
-        </div>
+        <Segmented<Tab> label="Payment views" value={tab} onChange={setTab} options={[
+          { value: "all", label: "All payments" },
+          { value: "pending", label: "Pending approval", count: pending.length },
+          { value: "refunds", label: "Refunds", count: openRefunds },
+        ]} />
         <div className="ml-auto flex gap-2">
-          <Button variant="outline" onClick={() => setShowRefund(true)}>Request Refund</Button>
-          <Button onClick={() => setShowRecord(true)}><Plus className="w-4 h-4 mr-1" /> Record Payment</Button>
+          <Button variant="outline" onClick={() => setShowRefund(true)}>Request refund</Button>
+          <Button onClick={() => setShowRecord(true)}><Plus className="w-4 h-4 mr-1" /> Record payment</Button>
         </div>
       </div>
 
@@ -134,12 +143,16 @@ export default function PaymentsPage() {
                       {p.referenceNumber && <div className="text-xs text-muted-foreground">{p.referenceNumber}</div>}
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">{p.collectedBy?.name ?? "—"}</td>
-                    <td className="px-4 py-3 text-right font-bold text-emerald-600">{currency(p.amount)}</td>
+                    <td className="px-4 py-3 text-right font-bold text-emerald-600 tabular-nums">{currency(p.amount)}</td>
                     <td className="px-4 py-3"><Badge className={PAYMENT_STATUS_TONE[p.status]}>{p.status.replaceAll("_", " ")}</Badge></td>
                   </tr>
                 ))}
                 {payments && payments.content.length === 0 && (
-                  <tr><td colSpan={8} className="px-4 py-10 text-center text-muted-foreground">No payments found.</td></tr>
+                  <tr><td colSpan={8}>
+                    <Empty title={search || method ? "No payments match these filters" : "No payments yet"}
+                      hint={search || method ? "Try a different search or clear the method filter." : "Receipts you record will appear here."}
+                      action={search || method ? <button className="text-sm font-semibold text-primary hover:underline" onClick={() => { setSearch(""); setMethod(""); }}>Clear filters</button> : undefined} />
+                  </td></tr>
                 )}
               </tbody>
             </table>
@@ -182,7 +195,7 @@ export default function PaymentsPage() {
               </div>
             </div>
           ))}
-          {pending.length === 0 && <div className="p-8 text-center text-sm text-muted-foreground">No payments awaiting approval.</div>}
+          {pending.length === 0 && <Empty title="All caught up" hint="Payments collected by staff in the field will wait here for your approval." />}
         </div>
       )}
 
@@ -217,19 +230,15 @@ export default function PaymentsPage() {
             </div>
           ))}
           {refunds && refunds.content.length === 0 && (
-            <div className="p-8 text-center text-sm text-muted-foreground">No refunds requested.</div>
+            <Empty title="No refunds requested" hint="Use Request refund to start one. It needs approval before payout." />
           )}
         </div>
       )}
 
       {/* Record payment modal (advance / unlinked) */}
       {showRecord && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setShowRecord(false)}>
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
-            <h3 className="font-bold text-slate-900">Record Payment</h3>
-            <p className="text-xs text-muted-foreground -mt-2">
-              For invoice payments, use “Record Payment” on the invoice itself. This form records advances / on-account receipts.
-            </p>
+        <Modal title="Record Payment" onClose={() => setShowRecord(false)}
+          subtitle="For invoice payments, use “Record Payment” on the invoice itself. This form records advances / on-account receipts.">
             <label className="text-sm block">
               <span className="font-semibold text-slate-700">Customer</span>
               <div className="mt-1">
@@ -283,15 +292,12 @@ export default function PaymentsPage() {
                 Save Payment
               </Button>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {/* Request refund modal */}
       {showRefund && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setShowRefund(false)}>
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
-            <h3 className="font-bold text-slate-900">Request Refund</h3>
+        <Modal title="Request Refund" onClose={() => setShowRefund(false)}>
             <label className="text-sm block">
               <span className="font-semibold text-slate-700">Customer</span>
               <div className="mt-1">
@@ -321,8 +327,7 @@ export default function PaymentsPage() {
                 Submit Request
               </Button>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

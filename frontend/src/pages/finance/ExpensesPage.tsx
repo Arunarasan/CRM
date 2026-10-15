@@ -10,6 +10,7 @@ import FileUploadField from "@/components/FileUploadField";
 import { resolveFileUrl } from "@/lib/uploadFile";
 import { toast } from "@/components/ui/toast";
 import { currency, stageLabel } from "./helpers";
+import { Segmented, Stat, FilterBar, Empty, Modal } from "./financeUi";
 import {
   Plus, Trash2, Building2, FolderKanban, Search, Pencil, FileText, CalendarClock,
 } from "lucide-react";
@@ -20,24 +21,12 @@ export default function ExpensesPage() {
   const [scope, setScope] = useState<Scope>("project");
   return (
     <div className="space-y-4">
-      <div className="inline-flex rounded-xl border bg-white p-1 shadow-sm">
-        <Toggle active={scope === "project"} onClick={() => setScope("project")} icon={FolderKanban} label="Project Expenses" />
-        <Toggle active={scope === "company"} onClick={() => setScope("company")} icon={Building2} label="Company Expenses" />
-      </div>
+      <Segmented<Scope> label="Expense type" value={scope} onChange={setScope} options={[
+        { value: "project", label: "Project expenses", icon: FolderKanban },
+        { value: "company", label: "Company expenses", icon: Building2 },
+      ]} />
       {scope === "project" ? <ProjectExpenses /> : <CompanyExpenses />}
     </div>
-  );
-}
-
-function Toggle({ active, onClick, icon: Icon, label }: {
-  active: boolean; onClick: () => void; icon: React.ComponentType<{ className?: string }>; label: string;
-}) {
-  return (
-    <button onClick={onClick}
-      className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition-colors ${
-        active ? "bg-primary text-primary-foreground shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>
-      <Icon className="w-4 h-4" /> {label}
-    </button>
   );
 }
 
@@ -78,11 +67,14 @@ function ProjectExpenses() {
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">
-        Costs booked against a project — material, labour, contractor and the like. The big ones sync
-        automatically from purchases, inventory &amp; contractor bills, or add a project cost by hand.
-      </p>
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <Stat label="Shown on this page" accent="out" value={currency((data?.content ?? []).reduce((s, e) => s + (e.amount ?? 0), 0))}
+          sub={projectId ? "For the selected project" : "Across all projects"} />
+        <Stat label="Entries" accent="neutral" value={data?.totalElements ?? 0} sub="Matching the project filter" />
+        <Stat label="How costs arrive" accent="neutral" value="Auto + manual"
+          sub="Purchases, inventory and contractor bills sync in; add other costs by hand" />
+      </div>
+      <FilterBar>
         <div className="min-w-[240px]">
           <SearchableSelect value={projectId} onChange={(v) => { setProjectId(v); setPage(0); }}
             options={projects.map((p) => ({ value: String(p.id), label: p.projectName ?? p.name ?? `Project #${p.id}` }))}
@@ -101,7 +93,7 @@ function ProjectExpenses() {
         <Button className="ml-auto" onClick={() => { setEProject(projectId); setShowAdd(true); }}>
           <Plus className="w-4 h-4 mr-1" /> Add Project Expense
         </Button>
-      </div>
+      </FilterBar>
 
       <div className="bg-white border rounded-2xl shadow-sm overflow-x-auto">
         <table className="w-full text-sm min-w-[680px]">
@@ -130,10 +122,10 @@ function ProjectExpenses() {
                 </td>
                 <td className="px-4 py-2.5 text-muted-foreground max-w-[280px] truncate">{e.description}</td>
                 <td className="px-4 py-2.5">{e.vendor ?? "—"}</td>
-                <td className="px-4 py-2.5 text-right font-bold text-rose-600">{currency(e.amount)}</td>
+                <td className="px-4 py-2.5 text-right font-bold tabular-nums text-rose-600">{currency(e.amount)}</td>
                 <td className="px-2 py-2.5">
                   {e.source === "MANUAL" && (
-                    <button className="text-slate-300 hover:text-red-500"
+                    <button className="text-slate-300 hover:text-red-500" aria-label="Delete expense"
                       onClick={async () => {
                         if (!window.confirm("Delete this expense?")) return;
                         try { await financeApi.deleteExpense(e.id); load(); } catch (err) { console.error(err); }
@@ -145,8 +137,8 @@ function ProjectExpenses() {
               </tr>
             ))}
             {data && data.content.length === 0 && (
-              <tr><td colSpan={8} className="px-4 py-10 text-center text-muted-foreground">
-                No project expenses yet. Add one, or sync a project's purchase / inventory / contractor costs.
+              <tr><td colSpan={8}>
+                <Empty title="No project expenses yet" hint="Add a cost by hand, or pick a project and sync its purchase, inventory and contractor costs." />
               </td></tr>
             )}
           </tbody>
@@ -161,9 +153,7 @@ function ProjectExpenses() {
       )}
 
       {showAdd && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setShowAdd(false)}>
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
-            <h3 className="font-bold text-slate-900">Add Project Expense</h3>
+        <Modal title="Add Project Expense" onClose={() => setShowAdd(false)}>
             <label className="text-sm block">
               <span className="font-semibold text-slate-700">Project</span>
               <div className="mt-1">
@@ -213,8 +203,7 @@ function ProjectExpenses() {
                 Save Expense
               </Button>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );
@@ -351,11 +340,15 @@ function CompanyExpenses() {
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">
-        Day-to-day company charges that don’t belong to any project. Set up repeating overheads
-        (rent, electricity, internet…) once, then record each month’s bill by hand with the receipt attached —
-        every payment reflects in the Cash Book.
-      </p>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <Stat label="Spent in this window" accent="out" value={currency(pageTotal)}
+          sub={`${data?.totalElements ?? 0} company expenses · every one reflects in the Cash Book`} />
+        <Stat label="Bills overdue" accent="out" value={heads.filter((h) => h.active && h.dueStatus === "OVERDUE").length}
+          tone={heads.some((h) => h.active && h.dueStatus === "OVERDUE") ? "text-red-600" : "text-slate-900"}
+          sub="Recurring bills not yet recorded" />
+        <Stat label="Due within 7 days" accent="owed" value={heads.filter((h) => h.active && h.dueStatus === "DUE_SOON").length}
+          sub="Record each bill with its receipt" />
+      </div>
 
       {/* Recurring overhead heads */}
       <div className="bg-white border rounded-2xl shadow-sm p-4">
@@ -415,7 +408,7 @@ function CompanyExpenses() {
       </div>
 
       {/* Filters + ad-hoc add */}
-      <div className="flex flex-wrap items-end gap-2">
+      <FilterBar>
         <label className="text-xs font-semibold text-slate-600">
           From<BaseInput type="date" className="mt-1 block border rounded-lg px-2 py-1.5 text-sm" value={from} onChange={(e) => { setFrom(e.target.value); setPage(0); }} />
         </label>
@@ -430,7 +423,7 @@ function CompanyExpenses() {
         <Button className="ml-auto bg-rose-600 hover:bg-rose-700" onClick={openAdhoc}>
           <Plus className="w-4 h-4 mr-1" /> Add Company Expense
         </Button>
-      </div>
+      </FilterBar>
 
       {/* Recorded expenses */}
       <div className="bg-white border rounded-2xl shadow-sm overflow-x-auto">
@@ -466,9 +459,9 @@ function CompanyExpenses() {
                     </a>
                   ) : <span className="text-slate-300">—</span>}
                 </td>
-                <td className="px-4 py-2.5 text-right font-bold text-rose-600">{currency(t.amount)}</td>
+                <td className="px-4 py-2.5 text-right font-bold tabular-nums text-rose-600">{currency(t.amount)}</td>
                 <td className="px-2 py-2.5">
-                  <button className="text-slate-300 hover:text-red-500"
+                  <button className="text-slate-300 hover:text-red-500" aria-label="Delete expense"
                     onClick={async () => {
                       if (!window.confirm("Delete this expense?")) return;
                       try { await financeApi.deleteCompanyTransaction(t.id); load(); }
@@ -480,8 +473,10 @@ function CompanyExpenses() {
               </tr>
             ))}
             {data && data.content.length === 0 && (
-              <tr><td colSpan={8} className="px-4 py-10 text-center text-muted-foreground">
-                No company expenses in this window. Record refreshments, electricity, rent and other overheads here.
+              <tr><td colSpan={8}>
+                <Empty title="No company expenses in this window"
+                  hint="Record refreshments, electricity, rent and other overheads here, or widen the dates."
+                  action={<Button size="sm" onClick={openAdhoc}><Plus className="w-4 h-4 mr-1" /> Add Company Expense</Button>} />
               </td></tr>
             )}
           </tbody>
@@ -506,13 +501,9 @@ function CompanyExpenses() {
 
       {/* Expense modal (ad-hoc + recurring payment) */}
       {showExpense && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4 overflow-y-auto" onClick={() => setShowExpense(false)}>
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4 my-8" onClick={(e) => e.stopPropagation()}>
-            <h3 className="font-bold text-rose-700">{xTitle}</h3>
-            <p className="text-xs text-muted-foreground -mt-2">
-              {xRecurringId ? "Record this period's bill — attach the receipt below." :
-                "e.g. visitor refreshments / welcome serves, electricity, office supplies."}
-            </p>
+        <Modal title={xTitle} titleTone="text-rose-700" onClose={() => setShowExpense(false)}
+          subtitle={xRecurringId ? "Record this period's bill — attach the receipt below." :
+            "e.g. visitor refreshments / welcome serves, electricity, office supplies."}>
             <div className="grid grid-cols-2 gap-3">
               <label className="text-sm block col-span-2">
                 <span className="font-semibold text-slate-700">Category</span>
@@ -559,15 +550,13 @@ function CompanyExpenses() {
                 {busy ? "Saving…" : "Save Expense"}
               </Button>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {/* Manage recurring head modal */}
       {showHead && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4 overflow-y-auto" onClick={() => setShowHead(false)}>
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4 my-8" onClick={(e) => e.stopPropagation()}>
-            <h3 className="font-bold text-slate-900">{hId ? "Edit Recurring Expense" : "Add Recurring Expense"}</h3>
+        <Modal title={hId ? "Edit Recurring Expense" : "Add Recurring Expense"} onClose={() => setShowHead(false)}
+          subtitle="Set it up once. The due date and reminders follow from the day and how often it repeats.">
             <label className="text-sm block">
               <span className="font-semibold text-slate-700">Name</span>
               <BaseInput className="mt-1 w-full border rounded-lg px-3 py-2" value={hName} onChange={(e) => setHName(e.target.value)} placeholder="e.g. Office Rent, Shop Electricity" />
@@ -621,8 +610,7 @@ function CompanyExpenses() {
                 <Button disabled={busy || !hName.trim()} onClick={saveHead}>{busy ? "Saving…" : "Save"}</Button>
               </div>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

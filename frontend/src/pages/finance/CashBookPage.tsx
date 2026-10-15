@@ -8,9 +8,8 @@ import { Button } from "@/components/ui/button";
 import SearchableSelect from "@/components/ui/searchable-select";
 import { toast } from "@/components/ui/toast";
 import { currency, currencyFull, stageLabel } from "./helpers";
-import {
-  ArrowDownCircle, ArrowUpCircle, Plus, Minus, Trash2, TrendingUp, TrendingDown, Scale,
-} from "lucide-react";
+import { ArrowDownCircle, ArrowUpCircle, Plus, Minus, Trash2 } from "lucide-react";
+import { Stat, FilterBar, Empty, SkeletonRows, Modal } from "./financeUi";
 
 // Every Cash Book row's source, with a friendly label and colour.
 const SOURCE_META: Record<string, { label: string; dir: "IN" | "OUT"; tone: string }> = {
@@ -118,19 +117,21 @@ export default function CashBookPage() {
     <div className="space-y-4">
       {/* Summary cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <SummaryCard title="Money In" value={data?.totalIn} icon={TrendingUp}
-          tone="from-emerald-500 to-emerald-600" sub="Customer collections + other income" />
-        <SummaryCard title="Money Out" value={data?.totalOut} icon={TrendingDown}
-          tone="from-rose-500 to-rose-600" sub="Suppliers, contractors, payroll, overhead" />
-        <SummaryCard title="Net Cash Flow" value={data?.net} icon={Scale}
-          tone={(data?.net ?? 0) >= 0 ? "from-slate-700 to-slate-900" : "from-red-600 to-red-800"}
-          sub={`${data?.count ?? 0} transactions`} signed />
+        <Stat label="Money in" accent="in" value={currency(data?.totalIn)} sub="Customer collections + other income" />
+        <Stat label="Money out" accent="out" value={currency(data?.totalOut)} sub="Suppliers, contractors, payroll, overhead" />
+        <Stat label="Net cash flow" accent="neutral"
+          value={`${(data?.net ?? 0) >= 0 ? "+" : "−"}${currency(Math.abs(data?.net ?? 0))}`}
+          tone={(data?.net ?? 0) >= 0 ? "text-emerald-700" : "text-red-600"}
+          sub={`${data?.count ?? 0} transactions in this window`} />
       </div>
 
-      {/* Source breakdown */}
+      {/* Source breakdown: click a chip to filter the register to that source */}
       {data && Object.keys(data.bySource).length > 0 && (
         <div className="bg-white border rounded-2xl shadow-sm p-4">
-          <div className="text-xs uppercase font-bold text-slate-500 mb-3">Breakdown by source</div>
+          <div className="mb-3 flex items-center justify-between">
+            <div className="text-xs uppercase font-bold text-slate-500">Where it came from / went</div>
+            {source && <button onClick={() => setSource("")} className="text-xs font-semibold text-primary hover:underline">Clear filter</button>}
+          </div>
           <div className="flex flex-wrap gap-2">
             {Object.entries(data.bySource).map(([src, amt]) => {
               const m = SOURCE_META[src];
@@ -147,7 +148,7 @@ export default function CashBookPage() {
       )}
 
       {/* Toolbar */}
-      <div className="flex flex-wrap items-end gap-2">
+      <FilterBar>
         <label className="text-xs font-semibold text-slate-600">
           From<BaseInput type="date" className="mt-1 block border rounded-lg px-2 py-1.5 text-sm"
             value={from} onChange={(e) => setFrom(e.target.value)} />
@@ -177,12 +178,42 @@ export default function CashBookPage() {
             <Minus className="w-4 h-4 mr-1" /> Add Expense
           </Button>
         </div>
+      </FilterBar>
+
+      {/* Register — phones get a stacked list, wider screens the full table */}
+      <div className="md:hidden bg-white border rounded-2xl shadow-sm divide-y">
+        {(data?.entries ?? []).map((e) => {
+          const m = SOURCE_META[e.source];
+          const isIn = e.direction === "IN";
+          return (
+            <div key={`m-${e.source}-${e.id}`} className="flex items-start gap-3 p-4">
+              <div className="min-w-0 flex-1">
+                <div className="font-semibold text-sm text-slate-800 truncate">{e.party ?? stageLabel(e.category ?? "") }</div>
+                <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+                  <span>{e.date}</span>
+                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${m?.tone ?? "bg-slate-100"}`}>{m?.label ?? stageLabel(e.source)}</span>
+                </div>
+              </div>
+              <div className={`text-sm font-bold tabular-nums ${isIn ? "text-emerald-600" : "text-rose-600"}`}>
+                {isIn ? "+" : "−"}{currency(e.amount)}
+              </div>
+              {DELETABLE.has(e.source) && (
+                <button className="p-1 text-slate-300 hover:text-red-500" aria-label="Delete transaction" onClick={() => del(e.id, e.source)}>
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          );
+        })}
+        {loading && !data && <SkeletonRows />}
+        {data && data.entries.length === 0 && (
+          <Empty title="No cash movements here" hint="Adjust the dates or filters, or record income or an expense." />
+        )}
       </div>
 
-      {/* Register */}
-      <div className="bg-white border rounded-2xl shadow-sm overflow-x-auto">
+      <div className="hidden md:block bg-white border rounded-2xl shadow-sm overflow-x-auto">
         <table className="w-full text-sm min-w-[820px]">
-          <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
+          <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500 sticky top-0">
             <tr>
               <th className="px-4 py-3">Date</th>
               <th className="px-4 py-3">Source</th>
@@ -211,7 +242,7 @@ export default function CashBookPage() {
                   <td className="px-4 py-2.5 font-medium text-slate-800">{e.party ?? "—"}</td>
                   <td className="px-4 py-2.5 text-muted-foreground">{e.reference ?? "—"}</td>
                   <td className="px-4 py-2.5 text-muted-foreground">{e.method ? stageLabel(e.method) : "—"}</td>
-                  <td className={`px-4 py-2.5 text-right font-bold ${isIn ? "text-emerald-600" : "text-rose-600"}`}>
+                  <td className={`px-4 py-2.5 text-right font-bold tabular-nums ${isIn ? "text-emerald-600" : "text-rose-600"}`}>
                     {isIn ? "+" : "−"}{currency(e.amount)}
                   </td>
                   <td className="px-2 py-2.5">
@@ -226,8 +257,8 @@ export default function CashBookPage() {
               );
             })}
             {data && data.entries.length === 0 && (
-              <tr><td colSpan={8} className="px-4 py-12 text-center text-muted-foreground">
-                {loading ? "Loading…" : "No cash movements in this window. Adjust the dates, or record income / an expense."}
+              <tr><td colSpan={8}>
+                {loading ? <SkeletonRows rows={3} /> : <Empty title="No cash movements in this window" hint="Adjust the dates or filters, or record income or an expense." />}
               </td></tr>
             )}
           </tbody>
@@ -236,17 +267,13 @@ export default function CashBookPage() {
 
       {/* Add income / expense modal */}
       {formDir && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setFormDir(null)}>
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
-            <h3 className={`font-bold ${formDir === "INCOME" ? "text-emerald-700" : "text-rose-700"}`}>
-              {formDir === "INCOME" ? "Record Other Income" : "Record Company Expense"}
-            </h3>
-            <p className="text-xs text-muted-foreground -mt-2">
-              {formDir === "INCOME"
-                ? "Non-invoice receipts — interest, scrap or asset sale, commissions, etc."
-                : "Overhead & other charges — rent, utilities, marketing, professional fees, etc."}
-            </p>
-            <div className="grid grid-cols-2 gap-3">
+        <Modal width="max-w-lg" onClose={() => setFormDir(null)}
+          titleTone={formDir === "INCOME" ? "text-emerald-700" : "text-rose-700"}
+          title={formDir === "INCOME" ? "Record Other Income" : "Record Company Expense"}
+          subtitle={formDir === "INCOME"
+            ? "Non-invoice receipts — interest, scrap or asset sale, commissions, etc."
+            : "Overhead & other charges — rent, utilities, marketing, professional fees, etc."}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <label className="text-sm block">
                 <span className="font-semibold text-slate-700">Category</span>
                 <BaseInput list="cashbook-cats" className="mt-1 w-full border rounded-lg px-3 py-2"
@@ -308,26 +335,8 @@ export default function CashBookPage() {
                 </Button>
               </div>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
-    </div>
-  );
-}
-
-function SummaryCard({ title, value, icon: Icon, tone, sub, signed }: {
-  title: string; value?: number; icon: React.ComponentType<{ className?: string }>;
-  tone: string; sub?: string; signed?: boolean;
-}) {
-  const v = value ?? 0;
-  return (
-    <div className={`rounded-2xl p-4 text-white bg-gradient-to-br ${tone} shadow-sm`}>
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-semibold opacity-90">{title}</span>
-        <Icon className="w-5 h-5 opacity-80" />
-      </div>
-      <div className="text-2xl font-bold mt-2">{signed && v >= 0 ? "+" : ""}{currency(v)}</div>
-      {sub && <div className="text-xs opacity-80 mt-1">{sub}</div>}
     </div>
   );
 }

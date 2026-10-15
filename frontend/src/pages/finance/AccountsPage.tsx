@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import SearchableSelect from "@/components/ui/searchable-select";
 import { currency, currencyFull, stageLabel, SCHEDULE_STATUS_TONE } from "./helpers";
+import { Segmented, Empty, SkeletonRows } from "./financeUi";
 import {
   Search, Users, Building2, RefreshCw, TrendingUp, TrendingDown, Printer, ChevronLeft,
 } from "lucide-react";
@@ -41,27 +42,15 @@ export default function AccountsPage() {
   return (
     <div className="space-y-4">
       {/* Customers | Projects toggle — the one control that decides what you're looking at. */}
-      <div className="inline-flex rounded-xl border bg-white p-1 shadow-sm">
-        <ToggleBtn active={view === "customers"} onClick={() => setView("customers")} icon={Users} label="Customers" />
-        <ToggleBtn active={view === "projects"} onClick={() => setView("projects")} icon={Building2} label="Projects" />
-      </div>
+      <Segmented<View> label="Accounts view" value={view} onChange={setView} options={[
+        { value: "customers", label: "Customers — who owes us", icon: Users },
+        { value: "projects", label: "Projects — profit per job", icon: Building2 },
+      ]} />
 
       {view === "customers"
         ? <CustomersView params={params} setParams={setParams} />
         : <ProjectsView />}
     </div>
-  );
-}
-
-function ToggleBtn({ active, onClick, icon: Icon, label }: {
-  active: boolean; onClick: () => void; icon: React.ComponentType<{ className?: string }>; label: string;
-}) {
-  return (
-    <button onClick={onClick}
-      className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition-colors ${
-        active ? "bg-primary text-primary-foreground shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>
-      <Icon className="w-4 h-4" /> {label}
-    </button>
   );
 }
 
@@ -150,9 +139,13 @@ function CustomersView({ params, setParams }: {
               );
             })}
             {loaded && filtered.length === 0 && (
-              <div className="bg-white border rounded-xl p-8 text-center text-sm text-muted-foreground">
-                No outstanding balances. 🎉<br />Use “Look up any customer” to view any ledger.
+              <div className="bg-white border rounded-xl">
+                <Empty title={search ? "No customers match this search" : "No outstanding balances"}
+                  hint="Use “Look up any customer” to open any ledger." />
               </div>
+            )}
+            {!loaded && (
+              <div className="bg-white border rounded-xl"><SkeletonRows rows={4} /></div>
             )}
           </div>
         </div>
@@ -210,9 +203,9 @@ function CustomersView({ params, setParams }: {
                           <td className={`px-4 py-2.5 font-semibold ${TYPE_TONE[e.type] ?? ""}`}>{e.type.replaceAll("_", " ")}</td>
                           <td className="px-4 py-2.5">{e.referenceNumber ?? "—"}</td>
                           <td className="px-4 py-2.5 text-muted-foreground">{e.description}</td>
-                          <td className="px-4 py-2.5 text-right">{e.debit > 0 ? currencyFull(e.debit) : ""}</td>
-                          <td className="px-4 py-2.5 text-right">{e.credit > 0 ? currencyFull(e.credit) : ""}</td>
-                          <td className="px-4 py-2.5 text-right font-semibold">{currencyFull(e.balance)}</td>
+                          <td className="px-4 py-2.5 text-right tabular-nums">{e.debit > 0 ? currencyFull(e.debit) : ""}</td>
+                          <td className="px-4 py-2.5 text-right tabular-nums">{e.credit > 0 ? currencyFull(e.credit) : ""}</td>
+                          <td className="px-4 py-2.5 text-right font-semibold tabular-nums">{currencyFull(e.balance)}</td>
                         </tr>
                       ))}
                       {ledger.entries.length === 0 && (
@@ -322,7 +315,7 @@ function ProjectsView() {
               </button>
             ))}
             {loaded && filtered.length === 0 && (
-              <div className="bg-white border rounded-2xl p-10 text-center text-sm text-muted-foreground">No projects found.</div>
+              <div className="bg-white border rounded-2xl"><Empty title="No projects found" hint={search ? "Try a different search." : "Project profit appears once a project has invoices or costs."} /></div>
             )}
           </div>
         </div>
@@ -475,8 +468,8 @@ function ProjectsView() {
 function Kpi({ label, value, tone, small }: { label: string; value: string; tone: string; small?: boolean }) {
   return (
     <div className="bg-white border rounded-2xl p-4 shadow-sm">
-      <div className={`${small ? "text-base" : "text-lg"} font-black ${tone} truncate`}>{value}</div>
-      <div className="text-xs font-semibold text-slate-500 mt-0.5">{label}</div>
+      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</div>
+      <div className={`${small ? "text-base" : "text-xl"} mt-0.5 font-bold tabular-nums ${tone} truncate`}>{value}</div>
     </div>
   );
 }
