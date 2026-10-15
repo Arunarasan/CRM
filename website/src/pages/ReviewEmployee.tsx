@@ -29,7 +29,16 @@ export default function ReviewEmployee() {
 
   useEffect(() => { load() }, [load])
 
-  if (loading) {
+  // With a Google link configured, skip our page: log the scan against the employee, go straight to Google.
+  const googleUrl = info?.googleReviewUrl
+  useEffect(() => {
+    if (!googleUrl) return
+    publicApi.submitEmployeeReview(token, { scan: true })
+      .catch(() => { /* attribution is best-effort; never block the customer */ })
+      .finally(() => { window.location.replace(googleUrl) })
+  }, [googleUrl, token])
+
+  if (loading || googleUrl) {
     return (
       <Shell name={site.name}>
         <div className="flex min-h-[50vh] items-center justify-center">

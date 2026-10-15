@@ -126,6 +126,130 @@
       "env": {
         "VITE_API_URL": "http://localhost:8099/api"
       }
+    },
+    {
+      "name": "backend-leads",
+      "runtimeExecutable": "mvn",
+      "runtimeArgs": [
+        "-o",
+        "spring-boot:run",
+        "-Dspring-boot.run.arguments=--server.port=8091"
+      ],
+      "port": 8091,
+      "cwd": "backend",
+      "env": {
+        "CORS_ALLOWED_ORIGINS": "http://localhost:4196"
+      }
+    },
+    {
+      "name": "frontend-leads",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "4196",
+        "--strictPort"
+      ],
+      "port": 4196,
+      "cwd": "frontend",
+      "env": {
+        "VITE_API_URL": "http://localhost:8091/api"
+      }
+    },
+    {
+      "name": "backend-device",
+      "runtimeExecutable": "mvn",
+      "runtimeArgs": [
+        "-o",
+        "spring-boot:run",
+        "-Dspring-boot.run.arguments=--server.port=8095"
+      ],
+      "port": 8095,
+      "cwd": "backend",
+      "env": {
+        "CORS_ALLOWED_ORIGINS": "http://localhost:4195"
+      }
+    },
+    {
+      "name": "frontend-device",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "4195",
+        "--strictPort"
+      ],
+      "port": 4195,
+      "cwd": "frontend",
+      "env": {
+        "VITE_API_URL": "http://localhost:8095/api"
+      }
+    },
+    {
+      "name": "backend-req",
+      "runtimeExecutable": "mvn",
+      "runtimeArgs": [
+        "-o",
+        "spring-boot:run",
+        "-Dspring-boot.run.arguments=--server.port=8093"
+      ],
+      "port": 8093,
+      "cwd": "backend",
+      "env": {
+        "CORS_ALLOWED_ORIGINS": "http://localhost:4193"
+      }
+    },
+    {
+      "name": "frontend-req",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "4193",
+        "--strictPort"
+      ],
+      "port": 4193,
+      "cwd": "frontend",
+      "env": {
+        "VITE_API_URL": "http://localhost:8093/api"
+      }
+    },
+    {
+      "name": "backend-orders",
+      "runtimeExecutable": "mvn",
+      "runtimeArgs": [
+        "-o",
+        "spring-boot:run",
+        "-Dspring-boot.run.arguments=--server.port=8097"
+      ],
+      "port": 8097,
+      "cwd": "backend",
+      "env": {
+        "CORS_ALLOWED_ORIGINS": "http://localhost:4192"
+      }
+    },
+    {
+      "name": "frontend-orders",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "4192",
+        "--strictPort"
+      ],
+      "port": 4192,
+      "cwd": "frontend",
+      "env": {
+        "VITE_API_URL": "http://localhost:8097/api"
+      }
     }
   ]
 }

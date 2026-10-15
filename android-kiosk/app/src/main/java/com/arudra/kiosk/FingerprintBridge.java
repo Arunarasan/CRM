@@ -56,6 +56,18 @@ public class FingerprintBridge {
 
     /** Look for a supported scanner and ask for USB permission if needed. Call on start and on attach. */
     public void scan() {
+        // Diagnostic: tell the person what USB devices the phone sees (OTG check, scanner IDs).
+        StringBuilder seen = new StringBuilder();
+        for (UsbDevice d : usb.getDeviceList().values()) {
+            if (seen.length() > 0) seen.append("; ");
+            seen.append(String.format("%s vendor 0x%04X product 0x%04X%s", d.getProductName() == null ? "USB device" : d.getProductName(),
+                    d.getVendorId(), d.getProductId(), SensorRegistry.forDevice(adapters, d) == null ? " (not supported)" : " (supported)"));
+        }
+        final String msg = seen.length() == 0
+                ? "No USB device detected. Check the OTG cable/adapter and that the phone supports OTG."
+                : "USB: " + seen;
+        main.post(() -> android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show());
+
         for (UsbDevice d : usb.getDeviceList().values()) {
             if (SensorRegistry.forDevice(adapters, d) == null) continue;
             if (usb.hasPermission(d)) {

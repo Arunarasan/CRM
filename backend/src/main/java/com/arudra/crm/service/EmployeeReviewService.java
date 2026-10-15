@@ -324,7 +324,9 @@ public class EmployeeReviewService {
     public Map<String, Object> submit(String token, Map<String, Object> body) {
         Employee e = requireByToken(token);
 
-        int rating = clampRating(body.get("rating"));
+        // A bare scan (no rating form) is stored with rating 0 so the QR still gets attributed to the employee.
+        boolean scan = Boolean.TRUE.equals(body.get("scan"));
+        int rating = scan ? 0 : clampRating(body.get("rating"));
         EmployeeReview r = new EmployeeReview();
         r.setEmployee(e);
         r.setRating(rating);
@@ -364,7 +366,8 @@ public class EmployeeReviewService {
     }
 
     private Map<String, Object> summaryForList(List<EmployeeReview> reviews) {
-        List<EmployeeReview> visible = reviews.stream().filter(r -> "APPROVED".equals(r.getStatus())).toList();
+        List<EmployeeReview> visible = reviews.stream()
+                .filter(r -> "APPROVED".equals(r.getStatus()) && r.getRating() > 0).toList();
         double avg = visible.isEmpty() ? 0
                 : visible.stream().mapToInt(EmployeeReview::getRating).average().orElse(0);
         Map<String, Object> out = new LinkedHashMap<>();
