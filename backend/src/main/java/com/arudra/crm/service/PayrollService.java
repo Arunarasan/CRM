@@ -773,6 +773,8 @@ public class PayrollService {
             rec.setLineItems(lineItemRepository.findBySalaryRecordIdAndIsDeletedFalseOrderByIdAsc(rec.getId()));
             rec.setStatus("PREVIEW");
             rec.setPayslipNumber(null);
+            // The transaction is rolled back before JSON serialisation, so touch lazy links now.
+            if (rec.getEmployee() != null) org.hibernate.Hibernate.initialize(rec.getEmployee().getWorkforce());
             return rec;
         });
     }
