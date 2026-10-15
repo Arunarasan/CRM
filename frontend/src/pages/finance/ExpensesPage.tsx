@@ -11,8 +11,9 @@ import { resolveFileUrl } from "@/lib/uploadFile";
 import { toast } from "@/components/ui/toast";
 import { currency, stageLabel } from "./helpers";
 import { Segmented, Stat, FilterBar, Empty, Modal } from "./financeUi";
+import RecurringBills from "./RecurringBills";
 import {
-  Plus, Trash2, Building2, FolderKanban, Search, Pencil, FileText, CalendarClock,
+  Plus, Trash2, Building2, FolderKanban, Search, FileText,
 } from "lucide-react";
 
 type Scope = "project" | "company";
@@ -213,12 +214,11 @@ function ProjectExpenses() {
 
 const todayStr = () => new Date().toISOString().slice(0, 10);
 const monthStartStr = () => { const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10); };
-const dueLabel = (d: number) =>
-  d < 0 ? `Overdue ${-d}d` : d === 0 ? "Due today" : d === 1 ? "Due tomorrow" : `Due in ${d}d`;
 const PAY_METHODS =["CASH", "UPI", "BANK_TRANSFER", "CHEQUE", "CARD"];
 
 function CompanyExpenses() {
   const [heads, setHeads] = useState<RecurringExpense[]>([]);
+  const [headsLoaded, setHeadsLoaded] = useState(false);
   const [data, setData] = useState<PageResp<CompanyTransaction> | null>(null);
   const [page, setPage] = useState(0);
   const [from, setFrom] = useState(monthStartStr);
@@ -254,7 +254,7 @@ function CompanyExpenses() {
   const [hNotes, setHNotes] = useState("");
 
   const loadHeads = useCallback(() => {
-    financeApi.getRecurringExpenses(false).then(setHeads).catch(console.error);
+    financeApi.getRecurringExpenses(false).then((r) => { setHeads(r); setHeadsLoaded(true); }).catch(console.error);
   }, []);
 
   useEffect(() => {
@@ -298,7 +298,7 @@ function CompanyExpenses() {
         description: xDescription.trim() || null, recurringExpenseId: xRecurringId, documentUrl: xDocument || null,
       });
       toast.success("Company expense recorded.");
-      setShowExpense(false); setPage(0); load();
+      setShowExpense(false); setPage(0); load(); loadHeads();
     } catch (e) { console.error(e); toast.error("Could not save the expense."); }
     finally { setBusy(false); }
   };
@@ -350,62 +350,7 @@ function CompanyExpenses() {
           sub="Record each bill with its receipt" />
       </div>
 
-      {/* Recurring overhead heads */}
-      <div className="bg-white border rounded-2xl shadow-sm p-4">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2 text-sm font-bold text-slate-700">
-            <CalendarClock className="w-4 h-4 text-slate-400" /> Recurring Overheads
-          </div>
-          <Button size="sm" variant="outline" onClick={openNewHead}>
-            <Plus className="w-4 h-4 mr-1" /> Add Recurring
-          </Button>
-        </div>
-        {heads.length === 0 ? (
-          <div className="text-sm text-muted-foreground py-4 text-center">
-            No recurring expenses yet. Add rent, electricity, internet and other monthly bills to record them in one click.
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {heads.map((h) => (
-              <div key={h.id} className={`border rounded-xl p-3 ${h.active ? "" : "opacity-60 bg-slate-50"}`}>
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="font-bold text-slate-800 truncate">{h.name}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {stageLabel(h.category)}{h.dayOfMonth ? ` · due ~${h.dayOfMonth}${nth(h.dayOfMonth)}` : ""}
-                      {h.active ? "" : " · inactive"}
-                    </div>
-                  </div>
-                  <button className="text-slate-300 hover:text-primary" title="Edit" onClick={() => openEditHead(h)}>
-                    <Pencil className="w-4 h-4" />
-                  </button>
-                </div>
-                <div className="mt-1.5 flex items-center justify-between gap-2">
-                  <span className="font-semibold text-slate-700">
-                    {h.defaultAmount != null ? currency(h.defaultAmount) : <span className="text-slate-400">Variable</span>}
-                  </span>
-                  {h.active && h.dueStatus && h.dueStatus !== "INACTIVE" && (
-                    <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold whitespace-nowrap ${
-                      h.dueStatus === "OVERDUE" ? "bg-rose-100 text-rose-700"
-                        : h.dueStatus === "DUE_SOON" ? "bg-amber-100 text-amber-700"
-                        : "bg-slate-100 text-slate-600"}`}>
-                      {dueLabel(h.daysUntilDue ?? 0)}
-                    </span>
-                  )}
-                </div>
-                {h.active && h.nextDueDate && (
-                  <div className="text-[11px] text-muted-foreground">
-                    Next due {h.nextDueDate}{h.lastPaidDate ? ` · last paid ${h.lastPaidDate}` : " · never paid"}
-                  </div>
-                )}
-                {h.active && (
-                  <Button size="sm" className="mt-2 w-full" onClick={() => openHeadPayment(h)}>Record Payment</Button>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      <RecurringBills heads={heads} loaded={headsLoaded} onAdd={openNewHead} onEdit={openEditHead} onRecord={openHeadPayment} />
 
       {/* Filters + ad-hoc add */}
       <FilterBar>
@@ -616,4 +561,3 @@ function CompanyExpenses() {
   );
 }
 
-const nth = (d: number) => (d >= 11 && d <= 13) ? "th" : ["th", "st", "nd", "rd"][d % 10] ?? "th";
