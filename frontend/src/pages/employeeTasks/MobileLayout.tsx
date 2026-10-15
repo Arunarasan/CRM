@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { Home, ListChecks, Bell, WifiOff, Search, Inbox, LayoutGrid } from 'lucide-react';
+import { Home, ListChecks, Bell, WifiOff, Search, Inbox, LayoutGrid, CloudUpload, Loader2 } from 'lucide-react';
+import OutboxSheet from '@/components/OutboxSheet';
 import { useUnreadNotificationCount } from '@/hooks/useUnreadNotificationCount';
 import { useOfflineQueue } from '@/hooks/useOfflineQueue';
 import { employeePortalApi } from '@/api/employeePortalApi';
@@ -19,7 +20,8 @@ export default function MobileLayout() {
   const navigate = useNavigate();
   const { t } = useT();
   const unreadCount = useUnreadNotificationCount();
-  const { isOnline, queueSize } = useOfflineQueue();
+  const { isOnline, queueSize, failedCount, syncing } = useOfflineQueue();
+  const [outboxOpen, setOutboxOpen] = useState(false);
   const [photo, setPhoto] = useState<string | null>(null);
 
   useEffect(() => {
@@ -51,10 +53,15 @@ export default function MobileLayout() {
           </Link>
 
           <div className="flex items-center gap-2">
-            {!isOnline && (
-              <span className="flex items-center gap-1 rounded-full bg-[#F4E5C2] px-2 py-0.5 text-[10px] font-semibold text-[#9D6B10]">
-                <WifiOff className="h-3 w-3" /> {queueSize > 0 ? queueSize : t('pw.layout.offline')}
-              </span>
+            {(!isOnline || queueSize > 0) && (
+              <button
+                onClick={() => setOutboxOpen(true)}
+                aria-label="Offline and waiting items"
+                className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold active:scale-95 ${failedCount > 0 ? 'bg-red-100 text-red-700' : 'bg-[#F4E5C2] text-[#9D6B10]'}`}
+              >
+                {!isOnline ? <WifiOff className="h-3 w-3" /> : syncing ? <Loader2 className="h-3 w-3 animate-spin" /> : <CloudUpload className="h-3 w-3" />}
+                {queueSize > 0 ? queueSize : t('pw.layout.offline')}
+              </button>
             )}
             <Link to="/employee/notifications" className="relative flex h-10 w-10 items-center justify-center rounded-xl text-white active:bg-white/10">
               <Bell className="h-6 w-6" />
@@ -123,6 +130,7 @@ export default function MobileLayout() {
         })}
        </div>
       </nav>
+      <OutboxSheet open={outboxOpen} onClose={() => setOutboxOpen(false)} />
     </div>
   );
 }

@@ -4,8 +4,12 @@ import './index.css'
 import App from './App.tsx'
 import { initTheme } from './lib/theme'
 import { I18nProvider } from './i18n'
+import { startOutboxSync } from './offline/sync'
+import { registerServiceWorker } from './offline/registerSW'
 
 initTheme()
+startOutboxSync()
+registerServiceWorker()
 
 // App-wide: focusing a number box that holds just "0" selects it, so typing replaces the 0
 // instead of producing "05". Covers plain <input type="number"> too, not only the shared Input.

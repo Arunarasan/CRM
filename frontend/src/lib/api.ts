@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { isCacheable, storeResponse, lookupResponse, OFFLINE_CACHE_EVENT } from '@/offline/readCache';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || '/api',
@@ -41,15 +42,27 @@ api.interceptors.response.use(
     if (response.data && typeof response.data === 'object' && 'success' in response.data) {
       if (response.data.success) {
         response.data = response.data.data; 
+        if (isCacheable(response.config)) storeResponse(response.config, response.data);
         return response;
       } else {
         return Promise.reject(new Error(response.data.message || 'API Error'));
       }
     }
+    if (isCacheable(response.config)) storeResponse(response.config, response.data);
     return response;
   },
   async (error) => {
     const originalRequest = error.config;
+
+    // No connection: a read screen the portal has seen before is answered from the phone's saved copy.
+    if (!error.response && originalRequest && isCacheable(originalRequest)) {
+      const hit = await lookupResponse(originalRequest);
+      if (hit) {
+        window.dispatchEvent(new CustomEvent(OFFLINE_CACHE_EVENT, { detail: { savedAt: hit.savedAt } }));
+        return { data: hit.data, status: 200, statusText: 'OK (saved copy)', headers: {}, config: originalRequest, request: null };
+      }
+    }
+
     const isAuthEndpoint = originalRequest?.url?.includes('/auth/login') || originalRequest?.url?.includes('/auth/refresh');
 
     if (error.response && error.response.status === 401 && !originalRequest._retry && !isAuthEndpoint) {

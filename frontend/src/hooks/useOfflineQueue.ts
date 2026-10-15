@@ -1,51 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
 import api from '@/lib/api';
+import { CACHE_STORE, withStore } from '@/offline/db';
+import { addToOutbox, listOutbox, OUTBOX_EVENT, type OutboxItem } from '@/offline/outbox';
+import { newClientId } from '@/offline/owner';
+import { flushOutbox, isFlushing, isNetworkError, IDEMPOTENCY_HEADER } from '@/offline/sync';
 
-// Lightweight offline support for the mobile Employee Task module: NOT a full installable PWA
-// (no service worker / manifest / background sync — see plan's "Future improvements"). This just
-// queues mutating calls in IndexedDB when the network is unavailable and replays them once it's
-// back, plus caches GET responses so a task screen can still render read-only while offline.
+// Offline support for the employee portal. A write that cannot reach the server is saved in the
+// phone's outbox (IndexedDB) and sent automatically when the connection returns - see offline/sync.ts.
+// Every write carries an Idempotency-Key so a retry can never create the same record twice.
 
-const DB_NAME = 'employee_task_offline';
-const DB_VERSION = 1;
-const QUEUE_STORE = 'queue';
-const CACHE_STORE = 'cache';
-
-export interface QueuedAction {
-  id?: number;
-  method: 'post' | 'put' | 'delete';
-  url: string;
-  payload?: unknown;
-  description: string;
-  queuedAt: string;
-}
-
-function openDb(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
-    request.onupgradeneeded = () => {
-      const db = request.result;
-      if (!db.objectStoreNames.contains(QUEUE_STORE)) {
-        db.createObjectStore(QUEUE_STORE, { keyPath: 'id', autoIncrement: true });
-      }
-      if (!db.objectStoreNames.contains(CACHE_STORE)) {
-        db.createObjectStore(CACHE_STORE, { keyPath: 'key' });
-      }
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-}
-
-async function withStore<T>(storeName: string, mode: IDBTransactionMode, fn: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
-  const db = await openDb();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(storeName, mode);
-    const request = fn(tx.objectStore(storeName));
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-}
+export type { OutboxItem as QueuedAction };
 
 export async function cacheRead<T>(key: string): Promise<T | undefined> {
   const record = await withStore<{ key: string; value: T } | undefined>(CACHE_STORE, 'readonly', (s) => s.get(key));
@@ -56,73 +20,73 @@ export async function cacheWrite<T>(key: string, value: T): Promise<void> {
   await withStore(CACHE_STORE, 'readwrite', (s) => s.put({ key, value }));
 }
 
-export async function enqueueAction(action: Omit<QueuedAction, 'id' | 'queuedAt'>): Promise<void> {
-  await withStore(QUEUE_STORE, 'readwrite', (s) => s.add({ ...action, queuedAt: new Date().toISOString() }));
-}
-
-export async function getQueuedActions(): Promise<QueuedAction[]> {
-  return withStore<QueuedAction[]>(QUEUE_STORE, 'readonly', (s) => s.getAll());
-}
-
-async function removeQueuedAction(id: number): Promise<void> {
-  await withStore(QUEUE_STORE, 'readwrite', (s) => s.delete(id));
+export interface WriteAction {
+  method: 'post' | 'put' | 'patch' | 'delete';
+  url: string;
+  payload?: unknown;
+  description: string;
 }
 
 export async function flushQueue(): Promise<{ succeeded: number; remaining: number }> {
-  const actions = await getQueuedActions();
-  let succeeded = 0;
-  for (const action of actions) {
-    try {
-      await api.request({ method: action.method, url: action.url, data: action.payload });
-      if (action.id !== undefined) await removeQueuedAction(action.id);
-      succeeded++;
-    } catch {
-      // Stop at the first failure (likely still offline or a real error) — leave the rest queued.
-      break;
-    }
-  }
-  const remaining = (await getQueuedActions()).length;
-  return { succeeded, remaining };
+  const before = (await listOutbox()).length;
+  await flushOutbox(true);
+  const remaining = (await listOutbox()).filter((i) => i.status === 'pending').length;
+  return { succeeded: Math.max(0, before - (await listOutbox()).length), remaining };
 }
 
-/** Runs a mutation immediately; if it fails (offline or network error), queues it for later instead of throwing. */
-export async function runOrQueue(action: Omit<QueuedAction, 'id' | 'queuedAt'>): Promise<{ queued: boolean }> {
+/**
+ * Runs a write now; if there is no connection (or the server hiccups) it is queued and sent later instead.
+ * A request the server answers with a 4xx is a real error and is thrown, not queued.
+ */
+export async function runOrQueue<T = unknown>(action: WriteAction): Promise<{ queued: boolean; data?: T }> {
+  const clientId = newClientId();
   if (!navigator.onLine) {
-    await enqueueAction(action);
+    await addToOutbox(action, clientId);
     return { queued: true };
   }
   try {
-    await api.request({ method: action.method, url: action.url, data: action.payload });
-    return { queued: false };
-  } catch {
-    await enqueueAction(action);
-    return { queued: true };
+    const res = await api.request<T>({
+      method: action.method,
+      url: action.url,
+      data: action.payload,
+      headers: { [IDEMPOTENCY_HEADER]: clientId },
+    });
+    return { queued: false, data: res.data };
+  } catch (e: any) {
+    const status: number | undefined = e?.response?.status;
+    // Same clientId on purpose: if the first attempt did reach the server, the retry is recognised.
+    if (isNetworkError(e) || (status !== undefined && status >= 500)) {
+      await addToOutbox(action, clientId);
+      return { queued: true };
+    }
+    throw e;
   }
 }
 
 export function useOfflineQueue() {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const [queueSize, setQueueSize] = useState(0);
+  const [items, setItems] = useState<OutboxItem[]>([]);
+  const [syncing, setSyncing] = useState(false);
 
   const refreshQueueSize = useCallback(() => {
-    getQueuedActions().then((actions) => setQueueSize(actions.length)).catch(() => {});
+    listOutbox().then(setItems).catch(() => {});
+    setSyncing(isFlushing());
   }, []);
 
   useEffect(() => {
     refreshQueueSize();
-    const handleOnline = async () => {
-      setIsOnline(true);
-      await flushQueue();
-      refreshQueueSize();
-    };
-    const handleOffline = () => setIsOnline(false);
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
+    const up = () => { setIsOnline(true); refreshQueueSize(); };
+    const down = () => setIsOnline(false);
+    window.addEventListener('online', up);
+    window.addEventListener('offline', down);
+    window.addEventListener(OUTBOX_EVENT, refreshQueueSize);
     return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('online', up);
+      window.removeEventListener('offline', down);
+      window.removeEventListener(OUTBOX_EVENT, refreshQueueSize);
     };
   }, [refreshQueueSize]);
 
-  return { isOnline, queueSize, refreshQueueSize, runOrQueue, flushQueue };
+  const failedCount = items.filter((i) => i.status === 'failed').length;
+  return { isOnline, items, queueSize: items.length, failedCount, syncing, refreshQueueSize, runOrQueue, flushQueue };
 }
