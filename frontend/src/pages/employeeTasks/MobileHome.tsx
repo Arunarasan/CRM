@@ -1,18 +1,17 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  ChevronDown, CalendarDays, CalendarCheck, ListChecks,
-  Plane, Wallet, FolderKanban, ChevronRight,
-  UserPlus, Boxes, Users, ClipboardList, TrendingUp, Activity,
+  ChevronDown, CalendarDays,
+  Wallet, ChevronRight,
+  Activity,
 } from 'lucide-react';
 import { employeeTaskApi } from '@/api/employeeTaskApi';
 import { employeePortalApi } from '@/api/employeePortalApi';
 import { HomeSummary } from '@/types/employeeTask';
 import { EmployeeDashboard } from '@/types/employeePortal';
-import { StatusPill, inr } from '../employeePortal/_shared';
+import { StatusPill } from '../employeePortal/_shared';
 import ClockWidget from '../employeePortal/ClockWidget';
 import TodayPlan from './components/TodayPlan';
-import EarningsCard from './components/EarningsCard';
 import { resolveFileUrl } from '@/lib/uploadFile';
 import { useT } from '@/i18n';
 
@@ -25,39 +24,6 @@ function greetingKey(): string {
   if (h < 12) return 'portal.home.goodMorning';
   if (h < 17) return 'portal.home.goodAfternoon';
   return 'portal.home.goodEvening';
-}
-
-/** KPI card — square icon tile + title + big number + contextual subline. */
-function Kpi({
-  title, value, icon: Icon, tone, sub, subTone = 'muted', onClick,
-}: {
-  title: string;
-  value: React.ReactNode;
-  icon: React.ComponentType<{ className?: string }>;
-  tone: 'forest' | 'gold';
-  sub?: React.ReactNode;
-  subTone?: 'muted' | 'success' | 'danger' | 'warning';
-  onClick: () => void;
-}) {
-  const tile = tone === 'forest' ? 'bg-[#06452F]' : 'bg-[#C48A16]';
-  const subColor = {
-    muted: 'text-[#858B87]',
-    success: 'text-[#28704F]',
-    danger: 'text-[#B94B45]',
-    warning: 'text-[#B27A12]',
-  }[subTone];
-  return (
-    <button onClick={onClick} className={`${CARD} flex flex-col p-4 text-left active:scale-[0.98]`}>
-      <div className="flex items-center gap-3">
-        <span className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${tile}`}>
-          <Icon className="h-6 w-6 text-white" />
-        </span>
-        <span className="text-[13px] font-medium leading-tight text-[#4B524E]">{title}</span>
-      </div>
-      <span className="mt-3 text-[26px] font-bold leading-none text-[#111817] tabular-nums">{value}</span>
-      {sub != null && <span className={`mt-2 text-[11px] font-medium ${subColor}`}>{sub}</span>}
-    </button>
-  );
 }
 
 /** Section header — title + optional gold "View All". */
@@ -177,9 +143,6 @@ export default function MobileHome() {
     month: 'short', day: 'numeric', year: 'numeric', weekday: 'long',
   });
 
-  const overdue = home?.overdue ?? 0;
-  const doneToday = home?.completedToday ?? 0;
-  const pending = dash?.pendingLeaves ?? 0;
 
   return (
     <div className="flex flex-col">
@@ -201,39 +164,6 @@ export default function MobileHome() {
         {/* Today's plan — my work in the order to do it, plus new leads to pick up */}
         <TodayPlan />
 
-        {/* Incentives earned — leads qualified, projects completed, reviews and other bonuses in one place */}
-        <EarningsCard />
-
-        {/* KPI grid */}
-        <div className="grid grid-cols-2 gap-3.5">
-          <Kpi
-            title={t('portal.home.myTasks')} icon={ListChecks} tone="gold"
-            value={home?.activeTaskCount ?? '–'}
-            sub={overdue > 0 ? t('portal.home.overdue', { count: overdue }) : t('portal.home.doneToday', { count: doneToday })}
-            subTone={overdue > 0 ? 'danger' : 'success'}
-            onClick={() => navigate('/employee/tasks')}
-          />
-          <Kpi
-            title={t('portal.home.dueToday')} icon={CalendarCheck} tone="forest"
-            value={home?.dueToday ?? '–'}
-            sub={home ? t('portal.home.upcoming', { count: home.upcoming }) : undefined}
-            onClick={() => navigate('/employee/tasks')}
-          />
-          <Kpi
-            title={t('portal.home.myProjects')} icon={FolderKanban} tone="forest"
-            value={dash?.assignedProjects ?? '–'}
-            sub={t('portal.home.assignedToMe')}
-            onClick={() => navigate('/employee/tasks?tab=PROJECTS')}
-          />
-          <Kpi
-            title={t('portal.home.leaveBalance')} icon={Plane} tone="gold"
-            value={dash ? <>{dash.leaveBalance}<span className="ml-1 text-sm font-semibold text-[#858B87]">{t('portal.home.days')}</span></> : '–'}
-            sub={pending > 0 ? t('portal.home.pendingCount', { count: pending }) : t('portal.home.upToDate')}
-            subTone={pending > 0 ? 'warning' : 'success'}
-            onClick={() => navigate('/employee/leave')}
-          />
-        </div>
-
         {/* Task capacity + available pool shortcut */}
         {home && home.maxActiveTasks != null && (
           <button
@@ -253,26 +183,6 @@ export default function MobileHome() {
           </button>
         )}
 
-        {/* Quick actions */}
-        <div>
-          <SectionHead title={t('portal.home.quickActions')} />
-          <div className="grid grid-cols-4 gap-3">
-            {[
-              { labelKey: 'portal.home.addLead', icon: UserPlus, to: '/employee/leads' },
-              { labelKey: 'portal.home.material', icon: Boxes, to: '/employee/requests/material' },
-              { labelKey: 'portal.home.manpower', icon: Users, to: '/employee/requests/manpower' },
-              { labelKey: 'portal.home.report', icon: ClipboardList, to: '/employee/daily-reports' },
-            ].map(({ labelKey, icon: Icon, to }) => (
-              <button key={to} onClick={() => navigate(to)} className={`${CARD} flex flex-col items-center gap-2 py-3 text-center active:scale-95`}>
-                <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#E7F2EC]">
-                  <Icon className="h-5 w-5 text-[#06452F]" />
-                </span>
-                <span className="text-[10.5px] font-medium leading-tight text-[#4B524E]">{t(labelKey)}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-
         {/* Attendance + Salary quick access */}
         <div className="grid grid-cols-2 gap-3.5">
           <button onClick={() => navigate('/employee/attendance')} className={`${CARD} flex flex-col items-start gap-2 p-4 text-left active:scale-[0.98]`}>
@@ -291,52 +201,6 @@ export default function MobileHome() {
             <StatusPill status={dash?.lastSalaryStatus ?? 'NONE'} />
           </button>
         </div>
-
-        {/* My Performance */}
-        {dash?.performance && (
-          <div>
-            <SectionHead title={t('portal.home.myPerformance')} icon={TrendingUp} />
-            <div className="grid grid-cols-3 gap-3">
-              {[
-                { key: 'donePerWeek', label: t('portal.home.donePerWeek'), value: dash.performance.tasksCompletedThisWeek },
-                { key: 'pending', label: t('portal.home.pendingLabel'), value: dash.performance.tasksPending },
-                { key: 'attendance', label: t('portal.home.attendance'), value: `${dash.performance.attendancePercentage}%` },
-                { key: 'hrsToday', label: t('portal.home.hrsToday'), value: dash.performance.hoursToday ?? 0 },
-                { key: 'hrsWeek', label: t('portal.home.hrsWeek'), value: dash.performance.hoursThisWeek ?? 0 },
-                { key: 'overtime', label: t('portal.home.overtime'), value: dash.performance.overtimeHours ?? 0 },
-                { key: 'thisMonth', label: t('portal.home.thisMonth'), value: inr(dash.performance.monthEarnings) },
-                { key: 'productivity', label: t('portal.home.productivity'), value: `${dash.performance.productivityScore}%` },
-              ].map((s) => (
-                <div key={s.key} className={`${CARD} p-3`}>
-                  <p className="text-base font-bold leading-none text-[#111817]">{s.value}</p>
-                  <p className="mt-1.5 text-[10px] leading-tight text-[#858B87]">{s.label}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* My Requests */}
-        {dash?.requests && (
-          <div>
-            <SectionHead title={t('portal.home.myRequests')} icon={Boxes} />
-            <div className="grid grid-cols-3 gap-3">
-              {[
-                { label: t('portal.home.material'), value: dash.requests.materialRequests, to: '/employee/requests/material' },
-                { label: t('portal.home.manpower'), value: dash.requests.manpowerRequests, to: '/employee/requests/manpower' },
-                { label: t('portal.home.leads'), value: dash.requests.leads, to: '/employee/leads' },
-                { label: t('portal.home.reports'), value: dash.requests.dailyReports, to: '/employee/daily-reports' },
-                { label: t('portal.home.leave'), value: dash.requests.leaveRequests, to: '/employee/leave' },
-                { label: t('portal.home.toApprove'), value: dash.requests.pendingApprovals, to: '/employee/requests' },
-              ].map((s) => (
-                <button key={s.to} onClick={() => navigate(s.to)} className={`${CARD} p-3 text-left active:scale-[0.98]`}>
-                  <p className="text-base font-bold leading-none text-[#111817]">{s.value}</p>
-                  <p className="mt-1.5 text-[10px] leading-tight text-[#858B87]">{s.label}</p>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* Recent Activity */}
         {dash?.recentActivity && Object.values(dash.recentActivity).some(Boolean) && (

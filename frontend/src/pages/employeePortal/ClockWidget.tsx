@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { LogIn, LogOut, Coffee, Play, Loader2, TrendingUp, ArrowRight, MapPin, ShieldCheck, ShieldAlert, X, Clock3, ChevronDown } from 'lucide-react';
 import { employeePortalApi } from '@/api/employeePortalApi';
-import { TimeStatus } from '@/types/employeePortal';
+import { TimeStatus, MyRewards, RewardRow } from '@/types/employeePortal';
 import { assert as webauthnAssert } from '@/lib/webauthn';
 import { getBestPosition } from '@/lib/geo';
 import { inr } from './_shared';
@@ -29,6 +29,10 @@ export default function ClockWidget({ onChange }: { onChange?: () => void }) {
   const [geoAccuracy, setGeoAccuracy] = useState<number | null>(null); // live best-fix accuracy while locating
   const [, forceTick] = useState(0);
   const [showDetails, setShowDetails] = useState(false);
+  const [rewards, setRewards] = useState<MyRewards | null>(null);
+  useEffect(() => {
+    if (showDetails && !rewards) employeePortalApi.rewards().then(setRewards).catch(() => {});
+  }, [showDetails, rewards]);
   const tickRef = useRef<number | null>(null);
   // Wall-clock instant of the last server sync — the running timer/earnings project forward from here.
   const syncAtRef = useRef<number>(cached?.at ?? Date.now());
@@ -92,6 +96,11 @@ export default function ClockWidget({ onChange }: { onChange?: () => void }) {
   const clockInWithGeo = async () => {
     setGeoAccuracy(null);
     const geo = await getBestPosition({ onProgress: (f) => setGeoAccuracy(Math.round(f.accuracy)) });
+    // Location is mandatory: asking for it here triggers the browser's permission prompt. No fix, no clock-in
+    // (office-device biometric punches are the one exception — they prove presence another way).
+    if (!geo && (status?.attendanceMethod ?? 'GEO') !== 'OFFICE_DEVICE') {
+      throw new Error(t('pw.clock.locationRequired'));
+    }
     const deviceInfo = typeof navigator !== 'undefined' ? navigator.userAgent?.slice(0, 250) : undefined;
 
     const method = status?.attendanceMethod ?? 'GEO';
@@ -134,6 +143,30 @@ export default function ClockWidget({ onChange }: { onChange?: () => void }) {
   const pct = target > 0 ? Math.min(100, Math.round((liveEarnings / target) * 100)) : 0;
   const remaining = Math.max(0, target - liveEarnings);
 
+  // Stretch goals: once the standard day is done the bar restarts for the next +2 hours (paid at the overtime
+  // rate) and keeps restarting — every 2 more hours is a new level — until the daily safety cap, if any.
+  const STEP_HOURS = 2;
+  const hoursWorked = liveSeconds / 3600;
+  const stdHours = status?.standardDailyHours ?? 8;
+  const ladder = (() => {
+    if (!(target > 0) || hoursWorked < stdHours) return null;
+    const level = Math.floor((hoursWorked - stdHours) / STEP_HOURS) + 1;
+    const startHours = stdHours + (level - 1) * STEP_HOURS;
+    const cap = status?.maxDailyHours ?? null;
+    if (cap != null && startHours >= cap) return { capped: true, level, startHours, endHours: startHours, pct: 100, timeLeft: '', moneyLeft: 0 };
+    let endHours = startHours + STEP_HOURS;
+    if (cap != null && endHours > cap) endHours = cap;
+    const left = Math.max(0, endHours - hoursWorked);
+    const otRate = status?.overtimeRate ?? rate;
+    const mins = Math.ceil(left * 60);
+    const timeLeft = mins >= 60 ? `${Math.floor(mins / 60)}h ${String(mins % 60).padStart(2, '0')}m` : `${mins}m`;
+    return {
+      capped: false, level, startHours, endHours,
+      pct: Math.min(100, Math.round(((hoursWorked - startHours) / (endHours - startHours)) * 100)),
+      timeLeft, moneyLeft: left * otRate,
+    };
+  })();
+
   const statusLabel = onBreak ? t('pw.clock.onBreak') : clockedIn ? t('pw.clock.working') : sessionCount > 0 ? t('pw.clock.clockedOut') : t('pw.clock.notStarted');
   const needsAttention = lastSession?.approvalStatus === 'REJECTED' || (lastSession?.flagged && lastSession.approvalStatus !== 'APPROVED');
 
@@ -166,12 +199,20 @@ export default function ClockWidget({ onChange }: { onChange?: () => void }) {
 
         {target > 0 && (
           <div className="mt-3">
-            <div className="h-1.5 w-full overflow-hidden rounded-full bg-black/20">
-              <div className="h-full rounded-full bg-gradient-to-r from-amber-300 to-yellow-200 transition-all duration-700" style={{ width: `${pct}%` }} />
+            <div className="h-2 w-full overflow-hidden rounded-full bg-black/20">
+              <div className="h-full rounded-full bg-gradient-to-r from-amber-300 to-yellow-200 transition-all duration-700" style={{ width: `${ladder ? ladder.pct : pct}%` }} />
             </div>
             <p className="mt-1.5 flex items-center gap-1 text-[11px] text-emerald-50/90">
-              <TrendingUp className="h-3 w-3" />
-              {remaining > 0
+              <TrendingUp className="h-3 w-3 shrink-0" />
+              {ladder ? (
+                ladder.capped
+                  ? <b className="font-semibold text-white">{t('pw.clock.boostMax', { hours: ladder.startHours })}</b>
+                  : <span>
+                      <b className="font-semibold text-white">{t('pw.clock.boostLevel', { level: ladder.level, goal: ladder.endHours })}</b>
+                      {' · '}{t('pw.clock.boostMore', { time: ladder.timeLeft, amount: inr(ladder.moneyLeft) })}
+                      <span className="block text-emerald-100/90">{t(`pw.clock.boostMsg${(ladder.level - 1) % 4}`, { hours: ladder.startHours })}</span>
+                    </span>
+              ) : remaining > 0
                 ? <b className="font-semibold text-white">{t('pw.clock.earnMore', { amount: inr(remaining), target: inr(target) })}</b>
                 : <b className="font-semibold text-white">{t('pw.clock.smashed', { target: inr(target) })}</b>}
             </p>
@@ -193,7 +234,8 @@ export default function ClockWidget({ onChange }: { onChange?: () => void }) {
           </div>
         ) : null}
 
-        <PhoneStatusStrip binding={phone} />
+        {/* Registered phones (and the silent first-time registration) need no strip; show it only when action is needed */}
+        {!(phone.phoneState === 'ACTIVE' || (phone.phoneState === 'NONE' && bindingMode !== 'HARD')) && <PhoneStatusStrip binding={phone} />}
 
         {/* Actions */}
         <div className="mt-3 grid grid-cols-2 gap-2">
@@ -266,10 +308,26 @@ export default function ClockWidget({ onChange }: { onChange?: () => void }) {
                     : t('pw.clock.locationChecked')}
               </p>
             )}
-            <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-              <div><p className="text-sm font-bold tabular-nums">{inr(status?.weekEarnings)}</p><p className="text-[10px] uppercase text-muted-foreground">{t('pw.clock.thisWeek')}</p></div>
-              <div><p className="text-sm font-bold tabular-nums">{inr(status?.monthEarnings)}</p><p className="text-[10px] uppercase text-muted-foreground">{t('pw.clock.thisMonth')}</p></div>
-              <div><p className="text-sm font-bold tabular-nums">{rate ? `${inr(rate)}` : '—'}</p><p className="text-[10px] uppercase text-muted-foreground">{t('pw.clock.perHour')}</p></div>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <div className="rounded-xl bg-emerald-50 px-3 py-2.5">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700">{t('pw.clock.thisMonth')}</p>
+                <p className="text-base font-bold tabular-nums text-emerald-900">{inr(status?.monthEarnings)}</p>
+              </div>
+              {([
+                ['pw.clock.inc.leads', rewards?.leads],
+                ['pw.clock.inc.projects', rewards?.projects],
+                ['pw.clock.inc.reviews', rewards?.reviews],
+              ] as [string, RewardRow | undefined][]).map(([key, r]) => {
+                const count = (r?.paidCount ?? 0) + (r?.pendingCount ?? 0);
+                const amount = (r?.paidAmount ?? 0) + (r?.pendingAmount ?? 0);
+                return (
+                  <div key={key} className="rounded-xl bg-amber-50 px-3 py-2.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-700">{t(key)}</p>
+                    <p className="text-base font-bold tabular-nums text-amber-900">{inr(amount)}</p>
+                    {count > 0 && <p className="text-[10px] text-amber-700/80">× {count}</p>}
+                  </div>
+                );
+              })}
             </div>
             {sessions.length > 0 && (
               <div className="mt-3 border-t pt-2">

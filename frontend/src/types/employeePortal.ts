@@ -75,6 +75,8 @@ export interface TimeStatus {
   weekEarnings: number;
   monthEarnings: number;
   standardDailyHours: number;
+  overtimeRate?: number | null;
+  maxDailyHours?: number | null;
   dailyTargetEarnings: number | null;
   sessions: TimeSession[];
   attendanceMethod?: string; // GEO | OFFICE_DEVICE | ANY

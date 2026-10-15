@@ -351,6 +351,9 @@ public class EmployeeTimeService {
         // running earnings bar fills toward on the home screen.
         BigDecimal std = nz(employee.getStandardDailyHours(), new BigDecimal("8"));
         m.put("standardDailyHours", std);
+        // Stretch goals past the standard day pay at the overtime rate; the safety cap stops the ladder.
+        m.put("overtimeRate", employee.getHourlyRate() == null ? null : overtimeRate(employee).setScale(2, RoundingMode.HALF_UP));
+        m.put("maxDailyHours", employee.getMaxDailyHours());
         m.put("dailyTargetEarnings", employee.getHourlyRate() == null ? null
                 : std.multiply(regularRate(employee, false)).setScale(2, RoundingMode.HALF_UP));
 
