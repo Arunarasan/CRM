@@ -64,7 +64,7 @@ export default function RecurringBills({ heads, loaded, onAdd, onEdit, onRecord 
             { value: "attention", label: "Needs action", count: attention.length },
             { value: "inactive", label: "Paused" },
           ]} />
-          <Button size="sm" variant="outline" onClick={onAdd}><Plus className="mr-1 h-4 w-4" /> Add bill</Button>
+          <Button size="sm" variant="outline" onClick={onAdd}><Plus className="mr-1 h-4 w-4" /> Add recurring bill</Button>
         </div>
       </div>
 
@@ -72,7 +72,7 @@ export default function RecurringBills({ heads, loaded, onAdd, onEdit, onRecord 
         heads.length === 0 ? (
           <Empty title="No recurring bills yet"
             hint="Add rent, electricity, internet and other repeating bills. You'll see when each is due and get reminded."
-            action={<Button size="sm" onClick={onAdd}><Plus className="mr-1 h-4 w-4" /> Add the first bill</Button>} />
+            action={<Button size="sm" onClick={onAdd}><Plus className="mr-1 h-4 w-4" /> Add the first recurring bill</Button>} />
         ) : (
           <Empty title={filter === "attention" ? "Nothing needs action" : filter === "inactive" ? "No paused bills" : "No active bills"}
             hint={filter === "attention" ? "No bill is overdue or due within 7 days." : undefined} />

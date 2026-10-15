@@ -12,6 +12,7 @@ import { toast } from "@/components/ui/toast";
 import { currency, stageLabel } from "./helpers";
 import { Segmented, Stat, FilterBar, Empty, Modal } from "./financeUi";
 import RecurringBills from "./RecurringBills";
+import RecurringBillForm from "./RecurringBillForm";
 import {
   Plus, Trash2, Building2, FolderKanban, Search, FileText,
 } from "lucide-react";
@@ -240,18 +241,8 @@ function CompanyExpenses() {
   const [xDescription, setXDescription] = useState("");
   const [xDocument, setXDocument] = useState("");
 
-  // Manage-recurring-head modal
-  const [showHead, setShowHead] = useState(false);
-  const [hId, setHId] = useState<number | null>(null);
-  const [hName, setHName] = useState("");
-  const [hCategory, setHCategory] = useState("RENT");
-  const [hAmount, setHAmount] = useState("");
-  const [hParty, setHParty] = useState("");
-  const [hMethod, setHMethod] = useState("BANK_TRANSFER");
-  const [hDay, setHDay] = useState("");
-  const [hFreq, setHFreq] = useState("MONTHLY");
-  const [hActive, setHActive] = useState(true);
-  const [hNotes, setHNotes] = useState("");
+  // Add / edit recurring bill dialog: null = closed, {head:null} = add, {head} = edit
+  const [headForm, setHeadForm] = useState<{ head: RecurringExpense | null } | null>(null);
 
   const loadHeads = useCallback(() => {
     financeApi.getRecurringExpenses(false).then((r) => { setHeads(r); setHeadsLoaded(true); }).catch(console.error);
@@ -303,40 +294,8 @@ function CompanyExpenses() {
     finally { setBusy(false); }
   };
 
-  const openNewHead = () => {
-    setHId(null); setHName(""); setHCategory("RENT"); setHAmount(""); setHParty("");
-    setHMethod("BANK_TRANSFER"); setHDay(""); setHFreq("MONTHLY"); setHActive(true); setHNotes(""); setShowHead(true);
-  };
-  const openEditHead = (h: RecurringExpense) => {
-    setHId(h.id); setHName(h.name); setHCategory(h.category); setHAmount(h.defaultAmount != null ? String(h.defaultAmount) : "");
-    setHParty(h.partyName ?? ""); setHMethod(h.paymentMethod || "BANK_TRANSFER");
-    setHDay(h.dayOfMonth != null ? String(h.dayOfMonth) : ""); setHFreq(h.frequency || "MONTHLY"); setHActive(h.active ?? true);
-    setHNotes(h.notes ?? ""); setShowHead(true);
-  };
-  const saveHead = async () => {
-    if (!hName.trim()) { toast.error("Give this expense a name."); return; }
-    setBusy(true);
-    const body = {
-      name: hName.trim(), category: hCategory.trim() || "MISC",
-      defaultAmount: hAmount ? Number(hAmount) : null, partyName: hParty.trim() || null,
-      paymentMethod: hMethod || null, dayOfMonth: hDay ? Number(hDay) : null,
-      frequency: hFreq, active: hActive, notes: hNotes.trim() || null,
-    };
-    try {
-      if (hId) await financeApi.updateRecurringExpense(hId, body);
-      else await financeApi.saveRecurringExpense(body);
-      toast.success("Recurring expense saved.");
-      setShowHead(false); loadHeads();
-    } catch (e) { console.error(e); toast.error("Could not save."); }
-    finally { setBusy(false); }
-  };
-  const deleteHead = async () => {
-    if (!hId) return;
-    if (!window.confirm("Remove this recurring expense? Its past payments stay on record.")) return;
-    setBusy(true);
-    try { await financeApi.deleteRecurringExpense(hId); setShowHead(false); loadHeads(); }
-    catch (e) { console.error(e); toast.error("Could not remove."); } finally { setBusy(false); }
-  };
+  const openNewHead = () => setHeadForm({ head: null });
+  const openEditHead = (h: RecurringExpense) => setHeadForm({ head: h });
 
   return (
     <div className="space-y-4">
@@ -498,64 +457,9 @@ function CompanyExpenses() {
         </Modal>
       )}
 
-      {/* Manage recurring head modal */}
-      {showHead && (
-        <Modal title={hId ? "Edit Recurring Expense" : "Add Recurring Expense"} onClose={() => setShowHead(false)}
-          subtitle="Set it up once. The due date and reminders follow from the day and how often it repeats.">
-            <label className="text-sm block">
-              <span className="font-semibold text-slate-700">Name</span>
-              <BaseInput className="mt-1 w-full border rounded-lg px-3 py-2" value={hName} onChange={(e) => setHName(e.target.value)} placeholder="e.g. Office Rent, Shop Electricity" />
-            </label>
-            <div className="grid grid-cols-2 gap-3">
-              <label className="text-sm block">
-                <span className="font-semibold text-slate-700">Category</span>
-                <BaseInput list="company-exp-cats" className="mt-1 w-full border rounded-lg px-3 py-2" value={hCategory} onChange={(e) => setHCategory(e.target.value)} />
-              </label>
-              <label className="text-sm block">
-                <span className="font-semibold text-slate-700">Usual Amount <span className="font-normal text-muted-foreground">(optional)</span></span>
-                <BaseInput type="number" min={0} className="mt-1 w-full border rounded-lg px-3 py-2" value={hAmount} onChange={(e) => setHAmount(e.target.value)} placeholder="blank if variable" />
-              </label>
-              <label className="text-sm block">
-                <span className="font-semibold text-slate-700">Paid To</span>
-                <BaseInput className="mt-1 w-full border rounded-lg px-3 py-2" value={hParty} onChange={(e) => setHParty(e.target.value)} placeholder="Landlord / provider" />
-              </label>
-              <label className="text-sm block">
-                <span className="font-semibold text-slate-700">Usual Method</span>
-                <select className="mt-1 w-full border rounded-lg px-3 py-2" value={hMethod} onChange={(e) => setHMethod(e.target.value)}>
-                  {PAY_METHODS.map((m) => <option key={m} value={m}>{stageLabel(m)}</option>)}
-                </select>
-              </label>
-              <label className="text-sm block">
-                <span className="font-semibold text-slate-700">Due Day <span className="font-normal text-muted-foreground">(1–31)</span></span>
-                <BaseInput type="number" min={1} max={31} className="mt-1 w-full border rounded-lg px-3 py-2" value={hDay} onChange={(e) => setHDay(e.target.value)} placeholder="e.g. 5" />
-              </label>
-              <label className="text-sm block">
-                <span className="font-semibold text-slate-700">Repeats</span>
-                <select className="mt-1 w-full border rounded-lg px-3 py-2" value={hFreq} onChange={(e) => setHFreq(e.target.value)}>
-                  <option value="MONTHLY">Monthly</option>
-                  <option value="QUARTERLY">Quarterly</option>
-                  <option value="YEARLY">Yearly</option>
-                </select>
-              </label>
-              <label className="text-sm flex items-center gap-2 mt-6">
-                <BaseInput type="checkbox" className="w-4 h-4" checked={hActive} onChange={(e) => setHActive(e.target.checked)} />
-                <span className="font-semibold text-slate-700">Active</span>
-              </label>
-            </div>
-            <label className="text-sm block">
-              <span className="font-semibold text-slate-700">Notes</span>
-              <textarea className="mt-1 w-full border rounded-lg px-3 py-2" rows={2} value={hNotes} onChange={(e) => setHNotes(e.target.value)} />
-            </label>
-            <div className="flex gap-2 justify-between pt-1">
-              <div>
-                {hId && <Button variant="outline" className="text-red-600 border-red-200 hover:bg-red-50" disabled={busy} onClick={deleteHead}>Remove</Button>}
-              </div>
-              <div className="flex gap-2">
-                <Button variant="outline" onClick={() => setShowHead(false)}>Close</Button>
-                <Button disabled={busy || !hName.trim()} onClick={saveHead}>{busy ? "Saving…" : "Save"}</Button>
-              </div>
-            </div>
-        </Modal>
+      {headForm && (
+        <RecurringBillForm head={headForm.head} categories={cats} onClose={() => setHeadForm(null)}
+          onSaved={() => { setHeadForm(null); loadHeads(); }} />
       )}
     </div>
   );
