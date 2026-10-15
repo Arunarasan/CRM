@@ -35,6 +35,31 @@ public class TaskLifecycleService {
     @Autowired private TaskRepository taskRepository;
     @Autowired private TaskAssignmentRepository assignmentRepository;
     @Autowired private com.arudra.crm.repository.ProjectRepository projectRepository;
+    @Autowired private com.arudra.crm.repository.LeadRepository leadRepository;
+
+    /**
+     * Old lead tasks brought in line with the workflow rules (same rules the employee To-Do applies):
+     * lead converted → its open workflow tasks COMPLETED; lead Lost → CANCELLED; Collect Requirement still
+     * open after a quote-stage task exists → COMPLETED (superseded). Only template-driven lead tasks;
+     * call follow-ups and enquiry tasks have their own lifecycle. Returns true when the task changed.
+     */
+    private boolean reconcileLeadTask(Task t, java.util.Map<Long, com.arudra.crm.entity.Lead> leads,
+                                      java.util.Map<Long, java.util.List<Task>> byLead) {
+        if (t.getLeadId() == null || t.getProject() != null || t.getTaskTemplate() == null) return false;
+        if ("COMPLETED".equals(t.getStatus()) || "CANCELLED".equals(t.getStatus())) return false;
+        com.arudra.crm.entity.Lead lead = leads.computeIfAbsent(t.getLeadId(), id -> leadRepository.findById(id).orElse(null));
+        if (lead == null) return false;
+        if ("Lost".equalsIgnoreCase(lead.getStatus())) { cancel(t); return true; }
+        if (Boolean.TRUE.equals(lead.getIsConverted())) { close(t); return true; }
+        if (EmployeeTaskService.COLLECT_REQUIREMENT_CODE.equals(t.getTaskTemplate().getCode())) {
+            boolean quoteTaskExists = byLead.computeIfAbsent(t.getLeadId(), taskRepository::findByLeadId).stream()
+                    .anyMatch(o -> o.getProject() == null && o.getTaskTemplate() != null
+                            && !"CANCELLED".equals(o.getStatus())
+                            && EmployeeTaskService.QUOTE_STAGE_CODES.contains(o.getTaskTemplate().getCode()));
+            if (quoteTaskExists) { close(t); return true; }
+        }
+        return false;
+    }
 
     /**
      * Completed project rule: every open task linked to the project, and to the lead it was converted
@@ -149,10 +174,12 @@ public class TaskLifecycleService {
     @Transactional
     public int sweep() {
         int fixed = 0;
+        java.util.Map<Long, com.arudra.crm.entity.Lead> leads = new java.util.HashMap<>();
+        java.util.Map<Long, java.util.List<Task>> byLead = new java.util.HashMap<>();
         for (Task t : taskRepository.findAll()) {
             if (Boolean.TRUE.equals(t.getIsDeleted())) continue;
             try {
-                if (reconcile(t)) fixed++;
+                if (reconcile(t) | reconcileLeadTask(t, leads, byLead)) fixed++;
             } catch (Exception e) {
                 log.warn("Task lifecycle sweep skipped task {}: {}", t.getId(), e.getMessage());
             }

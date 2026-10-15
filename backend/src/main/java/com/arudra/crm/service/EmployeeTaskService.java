@@ -1492,7 +1492,7 @@ public class EmployeeTaskService {
 
     /** Comment role marking a task the office completed on the employee's behalf ("By office" badge). */
     public static final String OFFICE_CLOSE_ROLE = "OFFICE_CLOSE";
-    private static final String COLLECT_REQUIREMENT_CODE = "TT_COLLECT_REQUIREMENT";
+    public static final String COLLECT_REQUIREMENT_CODE = "TT_COLLECT_REQUIREMENT";
 
     @Autowired @org.springframework.context.annotation.Lazy
     private TaskTimeService taskTimeService;
@@ -2351,7 +2351,7 @@ public class EmployeeTaskService {
      * Closed tasks always pass (they are history). One instance per request — it caches lead lookups.
      */
     /** The Measure & Quote stage tasks — once one is open, Collect Requirement leaves the To-Do. */
-    private static final Set<String> QUOTE_STAGE_CODES = Set.of("TT_MEASURE_QUOTE", "TT_VISIT_MEASURE",
+    public static final Set<String> QUOTE_STAGE_CODES = Set.of("TT_MEASURE_QUOTE", "TT_VISIT_MEASURE",
             "TT_BOQ_QUOTE", "TT_GENERATE_QUOTE", "TT_SCHEDULE_VISIT", "TT_CONDUCT_VISIT", "TT_MEASURE_SITE");
 
     /** Auto-task templates removed from the employee tab only: BOQ & Quotation, quote send/follow-up, Installation. */
