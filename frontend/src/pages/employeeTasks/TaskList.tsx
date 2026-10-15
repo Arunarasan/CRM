@@ -53,6 +53,26 @@ function bucket(t: TaskCardType): 'overdue' | 'now' | 'today' | 'upcoming' {
   return 'upcoming';
 }
 
+/**
+ * Plan order within a group: brand-new leads first, then projects Ready-to-Fit, then everything else
+ * by progress (furthest along first). Ties break on lead star rating, then earliest due date.
+ */
+const NEW_LEAD_MS = 3 * 24 * 3600 * 1000;
+function rankTier(t: TaskCardType): number {
+  const fresh = t.category === 'LEAD' && t.createdAt != null
+    && Date.now() - new Date(t.createdAt).getTime() < NEW_LEAD_MS
+    && t.myAssignmentStatus !== 'IN_PROGRESS' && !(t.progressPercent && t.progressPercent > 0);
+  if (fresh) return 0;
+  if (t.workStage === 'READY_TO_FIT') return 1;
+  return 2;
+}
+function byPlanRank(a: TaskCardType, b: TaskCardType): number {
+  return rankTier(a) - rankTier(b)
+    || (rankTier(a) === 2 ? (b.progressPercent ?? 0) - (a.progressPercent ?? 0) : 0)
+    || (b.leadRating ?? 0) - (a.leadRating ?? 0)
+    || (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999');
+}
+
 /** Read tab/view from the URL, accepting the older ?tab=PROJECTS|AVAILABLE|… and ?status=COMPLETED links. */
 function readParams(params: URLSearchParams): { tab: Tab; view: View } {
   const rawTab = (params.get('tab') || '').toUpperCase();
@@ -127,12 +147,12 @@ export default function TaskList() {
 
   // Everything below is scoped to the selected tab.
   const active = activeMine.filter(inTab(tab));
-  const available = pool.filter(matches).filter(inTab(tab));
+  const available = pool.filter(matches).filter(inTab(tab)).sort(byPlanRank);
   const completed = mine.filter(matches).filter((t) => t.status === 'COMPLETED').filter(inTab(tab));
-  const overdue = active.filter((t) => bucket(t) === 'overdue');
-  const now = active.filter((t) => bucket(t) === 'now');
-  const today = active.filter((t) => bucket(t) === 'today');
-  const upcoming = active.filter((t) => bucket(t) === 'upcoming');
+  const overdue = active.filter((t) => bucket(t) === 'overdue').sort(byPlanRank);
+  const now = active.filter((t) => bucket(t) === 'now').sort(byPlanRank);
+  const today = active.filter((t) => bucket(t) === 'today').sort(byPlanRank);
+  const upcoming = active.filter((t) => bucket(t) === 'upcoming').sort(byPlanRank);
   // The rest of the work on projects I'm on — unassigned tasks I can pick up straight from here.
   const myProjectIds = new Set(mine.map((t) => t.project?.id).filter((id): id is number => id != null));
   const projectOpen = tab === 'PROJECTS'

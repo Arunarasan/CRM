@@ -2354,6 +2354,9 @@ public class EmployeeTaskService {
         com.arudra.crm.entity.Lead reqLead = lead != null ? lead : (t.getProject() != null ? t.getProject().getLead() : null);
         card.put("requirementCategory", reqLead != null ? reqLead.getRequirementCategory() : null);
         card.put("requirementProduct", reqLead != null ? reqLead.getRequirementProduct() : null);
+        // Ranking inputs for the employee plan: the lead's star rating and when this task was raised.
+        card.put("leadRating", reqLead != null ? reqLead.getRating() : null);
+        card.put("createdAt", t.getCreatedAt());
         // Assignment mode (SINGLE_EMPLOYEE / MULTIPLE_EMPLOYEES / TEAM) and the origin category lane.
         card.put("assignmentType", t.getAssignmentType());
         String[] cat = taskCategoryFor(t);
