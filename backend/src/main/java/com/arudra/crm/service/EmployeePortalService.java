@@ -34,6 +34,7 @@ public class EmployeePortalService {
     @Autowired private EmployeeDocumentRepository documentRepository;
     @Autowired private NotificationRepository notificationRepository;
     @Autowired private EmployeeTaskService employeeTaskService;
+    @Autowired private TaskCancelRequestService taskCancelRequestService;
     @Autowired private EmployeeTimeService employeeTimeService;
     @Autowired private UserRepository userRepository;
     @Autowired private PasswordEncoder passwordEncoder;
@@ -664,6 +665,12 @@ public class EmployeePortalService {
     public void joinTask(User currentUser, Long taskId) {
         requireEmployee(currentUser);
         employeeTaskService.joinTask(taskId, currentUser);
+    }
+
+    @Transactional
+    public Map<String, Object> requestCancel(User currentUser, Long taskId, String reasonCode, String reason) {
+        requireEmployee(currentUser);
+        return taskCancelRequestService.request(taskId, currentUser, reasonCode, reason);
     }
 
     @Transactional

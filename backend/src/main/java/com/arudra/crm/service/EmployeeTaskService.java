@@ -85,6 +85,8 @@ public class EmployeeTaskService {
     @Autowired
     private EmployeeTimeService employeeTimeService;
     @Autowired
+    private TaskCancelRequestService taskCancelRequestService;
+    @Autowired
     private TaskGenerationService taskGenerationService;
     @Autowired
     private QuotationRepository quotationRepository;
@@ -966,6 +968,7 @@ public class EmployeeTaskService {
         detail.put("completedDate", task.getCompletedDate());
 
         putJoinInfo(detail, task, employee);
+        detail.put("cancelRequest", taskCancelRequestService.pendingForTask(taskId));
         detail.put("team", assignmentRepository.findByTaskId(taskId).stream().map(this::toAssignmentSummary).collect(Collectors.toList()));
         detail.put("checklist", checklistRepository.findByTaskId(taskId).stream().map(this::toChecklistSummary).collect(Collectors.toList()));
         detail.put("comments", commentRepository.findByTaskIdOrderByCreatedAtDesc(taskId).stream()
@@ -2376,6 +2379,7 @@ public class EmployeeTaskService {
             com.arudra.crm.entity.Lead lead = leads.computeIfAbsent(t.getLeadId(),
                     id -> leadRepository.findById(id).orElse(null));
             if (lead == null) return true;
+            if ("Lost".equalsIgnoreCase(lead.getStatus())) return false; // lost lead: its to-dos leave the list
             if (Boolean.TRUE.equals(lead.getIsConverted())) return false;
             if (!COLLECT_REQUIREMENT_CODE.equals(t.getTaskTemplate().getCode())) return true;
             if (lead.getRequirementPercent() < 10) return false;

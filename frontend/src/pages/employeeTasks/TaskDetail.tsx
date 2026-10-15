@@ -9,6 +9,7 @@ import {
 import api from '@/lib/api';
 import { employeeTaskApi } from '@/api/employeeTaskApi';
 import TaskTeamPanel from './components/TaskTeamPanel';
+import CancelTaskButton from './components/CancelTaskButton';
 import { TaskDetail as TaskDetailType, LeadInfo } from '@/types/employeeTask';
 import { resolveFileUrl } from '@/lib/uploadFile';
 import AudioCaptureField, { CapturedAudio } from '@/components/AudioCaptureField';
@@ -730,6 +731,12 @@ export default function TaskDetail() {
           >
             <UserPlus className="h-4 w-4" /> {t('pw.td.join_this_task')}
           </button>
+        )}
+
+        {/* Any task: ask an admin to cancel it (customer cancelled / other issue) - lead Lost or project cancelled on approval. */}
+        {!locked && (mine || task.cancelRequest) && (
+          <CancelTaskButton taskId={taskId} canRequest={!!mine} pending={task.cancelRequest}
+            targetType={task.projectId ? 'PROJECT' : task.leadId ? 'LEAD' : 'TASK'} onChanged={load} />
         )}
 
         {/* Helpers: ask to join a task someone holds; the owner / PM approves requests or adds a colleague. */}

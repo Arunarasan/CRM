@@ -106,7 +106,7 @@ const CATEGORIES: { id: TaskCategory; label: string; hint: string; badge: string
 ];
 const CATEGORY_BADGE: Record<string, string> = Object.fromEntries(CATEGORIES.map(c => [c.id, c.badge]));
 
-type MainTab = "tasks" | "employees" | "calls" | "attendance" | "approvals" | "risk" | "templates";
+type MainTab = "tasks" | "employees" | "calls" | "attendance" | "approvals" | "cancels" | "risk" | "templates";
 
 // ============================================================ page
 
@@ -115,7 +115,15 @@ export default function Tasks() {
   const canManageCalls = hasAnyAuthority(["ROLE_MANAGER", "ROLE_PROJECT_MANAGER", "TASK_ASSIGN"]);
   const navigate = useNavigate();
 
-  const [tab, setTab] = useState<MainTab>("tasks");
+  const [tab, setTab] = useState<MainTab>(() => {
+    const q = new URLSearchParams(window.location.search).get("tab");
+    return q === "cancels" ? "cancels" : "tasks";
+  });
+  const [cancelCount, setCancelCount] = useState(0);
+  useEffect(() => {
+    if (!isAdmin) return;
+    api.get("/task-cancel-requests/pending").then(r => setCancelCount((r.data?.data ?? r.data ?? []).length)).catch(() => {});
+  }, [isAdmin, tab]);
   const [taskBucket, setTaskBucket] = useState<TaskBucket | "ALL">("ALL"); // Tasks-tab status filter, driven by the stat tiles
   const [board, setBoard] = useState<TaskBoardRow[]>([]);
   const [roster, setRoster] = useState<RosterRow[]>([]);
@@ -229,6 +237,7 @@ export default function Tasks() {
     { id: "calls", label: "Call Recordings", admin: !canManageCalls },
     { id: "attendance", label: "Attendance", admin: true },
     { id: "approvals", label: "Time Approvals", admin: true },
+    { id: "cancels", label: "Cancel Requests", admin: true, badge: cancelCount },
     { id: "risk", label: "Projects at Risk", admin: true },
     { id: "templates", label: "Workflow", admin: true },
   ];
@@ -278,6 +287,7 @@ export default function Tasks() {
           <button key={t.id} onClick={() => setTab(t.id)}
             className={`shrink-0 border-b-2 px-3 py-2 text-sm font-medium transition-colors ${tab === t.id ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-slate-700"}`}>
             {t.label}
+            {!!t.badge && <span className="ml-1.5 rounded-full bg-red-600 px-1.5 text-[10px] text-white">{t.badge}</span>}
           </button>
         ))}
       </div>
@@ -287,6 +297,7 @@ export default function Tasks() {
       {tab === "calls" && (isAdmin || canManageCalls) && <CallRecordingsTab onOpenTask={openTask} onTasksChanged={loadBoard} />}
       {tab === "attendance" && isAdmin && <AttendanceAdmin />}
       {tab === "approvals" && isAdmin && <ApprovalsTab />}
+      {tab === "cancels" && isAdmin && <CancelRequestsTab onChanged={loadBoard} />}
       {tab === "risk" && isAdmin && <RiskTab navigate={navigate} />}
       {tab === "templates" && isAdmin && <TemplatesTab />}
 
@@ -772,6 +783,59 @@ function AssignTaskToEmployeeDialog({ employee, board, onClose, onAssigned }: {
 }
 
 // ============================================================ Admin extra tabs
+
+function CancelRequestsTab({ onChanged }: { onChanged: () => void }) {
+  const [rows, setRows] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState<number | null>(null);
+  const load = useCallback(() => {
+    setLoading(true);
+    api.get("/task-cancel-requests/pending").then(r => setRows(r.data?.data ?? r.data ?? [])).catch(() => setRows([])).finally(() => setLoading(false));
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const act = (id: number, kind: "approve" | "reject") => {
+    let body: any = undefined;
+    if (kind === "reject") { const n = window.prompt("Reason for declining? (optional)"); if (n === null) return; body = { note: n }; }
+    else if (!window.confirm("Approve? This will update the lead / project / task now.")) return;
+    setBusy(id);
+    api.post(`/task-cancel-requests/${id}/${kind}`, body)
+      .then(() => { toast.success(kind === "approve" ? "Approved" : "Declined"); load(); onChanged(); })
+      .catch(e => toast.error(e?.response?.data?.message || "Action failed"))
+      .finally(() => setBusy(null));
+  };
+
+  const effect = (r: any) => r.targetType === "LEAD" ? `Lead "${r.leadName ?? "#" + r.leadId}" will be marked Lost`
+    : r.targetType === "PROJECT" ? `Project "${r.projectName ?? "#" + r.projectId}" will be cancelled`
+    : "Only this task will be cancelled";
+
+  return (
+    <div className="rounded-xl border bg-card p-4 shadow-sm">
+      <h3 className="mb-3 flex items-center gap-1.5 text-sm font-semibold"><AlertTriangle className="h-4 w-4 text-red-600" /> Cancel requests from employees</h3>
+      {loading ? <p className="py-6 text-center text-muted-foreground">Loading…</p>
+        : rows.length === 0 ? <p className="py-6 text-center text-muted-foreground">Nothing pending.</p> : (
+          <div className="flex flex-col gap-3">
+            {rows.map(r => (
+              <div key={r.id} className="rounded-lg border p-3">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-slate-800">{r.taskName}</p>
+                    <p className="text-xs text-muted-foreground">{r.requesterName} · {r.reasonCode === "CUSTOMER_CANCELLED" ? "Customer cancelled" : "Other issue"}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" disabled={busy === r.id} onClick={() => act(r.id, "approve")}>Approve</Button>
+                    <Button size="sm" variant="outline" disabled={busy === r.id} onClick={() => act(r.id, "reject")}>Decline</Button>
+                  </div>
+                </div>
+                <p className="mt-2 text-sm text-slate-700">{r.reason}</p>
+                <p className="mt-1 text-xs font-medium text-red-600">{effect(r)}</p>
+              </div>
+            ))}
+          </div>
+        )}
+    </div>
+  );
+}
 
 function ApprovalsTab() {
   const [rows, setRows] = useState<TimeLogSummary[]>([]);

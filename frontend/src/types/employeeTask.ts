@@ -387,6 +387,7 @@ export interface TaskDetail extends Omit<TaskCard, 'closedByOffice'> {
   canManageTeam?: boolean;
   canRequestJoin?: boolean;
   joinRequested?: boolean;
+  cancelRequest?: { id: number; reasonCode: string; reason: string; targetType: string; requesterName: string } | null;
   joinRequests?: { id: number; employeeId: number; employeeName: string; note?: string | null }[];
   closedByOffice?: { by: string | null; at: string | null; note: string | null } | null;
   description: string | null;

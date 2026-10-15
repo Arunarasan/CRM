@@ -582,6 +582,16 @@ public class EmployeePortalController {
         return ResponseEntity.ok(ApiResponse.success("Joined task."));
     }
 
+    /** Ask an admin to cancel the lead / project behind this task: {reasonCode, reason}. */
+    @PostMapping("/tasks/{taskId}/cancel-request")
+    @PreAuthorize(PORTAL)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> requestCancel(@PathVariable Long taskId,
+                                                                          @RequestBody Map<String, String> body) {
+        return ResponseEntity.ok(ApiResponse.success(
+                portalService.requestCancel(me(), taskId, body.get("reasonCode"), body.get("reason")),
+                "Sent to admin for approval."));
+    }
+
     /** Ask the task's holder / PM to add you as a helper. */
     @PostMapping("/tasks/{taskId}/join-request")
     @PreAuthorize(PORTAL)
