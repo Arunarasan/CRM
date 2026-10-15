@@ -19,6 +19,7 @@ import BulkWorkUpdateDialog from "@/pages/projectCommandCenter/BulkWorkUpdateDia
 import CompleteProjectDialog from "@/pages/projectCommandCenter/CompleteProjectDialog";
 import DeleteWithRemarkDialog from "@/components/DeleteWithRemarkDialog";
 import CancelProjectDialog, { CancelledBanner } from "@/pages/projectCommandCenter/CancelProjectDialog";
+import { QuotationPrintView } from "@/pages/quotations/QuotationPrint";
 import ProjectPurchaseOrdersTab from "@/pages/projectCommandCenter/tabs/ProjectPurchaseOrdersTab";
 import ProjectGoodsReceivedTab from "@/pages/projectCommandCenter/tabs/ProjectGoodsReceivedTab";
 import CameraCaptureButton from "@/components/CameraCaptureButton";
@@ -200,6 +201,7 @@ function ActivityList({ items }: { items: ActivityItem[] }) {
 // own content block untouched — this is purely how they're navigated.
 const TAB_GROUPS: { id: string; label: string; icon: React.ComponentType<{ className?: string }>; sections: [string, string][] }[] = [
   { id: "overview", label: "Overview", icon: ClipboardList, sections: [["overview", "Overview"]] },
+  { id: "info", label: "Project Info", icon: ClipboardCheck, sections: [["info", "Project Info"]] },
   { id: "execution", label: "Execution", icon: Layers, sections: [["workProgress", "Execution & Installation"]] },
   { id: "commercial", label: "Commercial", icon: Wallet, sections: [
     ["payments", "Billing & Payments"], ["received", "Payments"], ["profit", "Expenses & Profit"],
@@ -996,7 +998,7 @@ export default function ProjectCommandCenter() {
                 );
               })()}
               <div className="flex items-center gap-2 @2xl:shrink-0">
-                <Button variant="outline" title="Edit Project" className="h-11 shrink-0 rounded-xl border-slate-200 bg-white px-3.5 @lg:px-4 @2xl:px-3.5 @4xl:px-4 text-slate-700 font-semibold transition hover:-translate-y-px hover:shadow-sm" onClick={() => { setActiveTab('overview'); startEdit('overview'); }}>
+                <Button variant="outline" title="Edit Project" className="h-11 shrink-0 rounded-xl border-slate-200 bg-white px-3.5 @lg:px-4 @2xl:px-3.5 @4xl:px-4 text-slate-700 font-semibold transition hover:-translate-y-px hover:shadow-sm" onClick={() => { setActiveTab('info'); startEdit('overview'); }}>
                   <Pencil className="w-4 h-4 @lg:mr-2" /> <span className="hidden @lg:inline @2xl:hidden @4xl:inline">Edit Project</span>
                 </Button>
                 {!isClosed && (
@@ -1144,8 +1146,30 @@ export default function ProjectCommandCenter() {
 
           <div className="pb-20">
             
-            {/* OVERVIEW TAB — what needs a decision → headline numbers → details, activity, actions */}
+            {/* OVERVIEW TAB — the quotation, laid out like its print preview */}
             <TabsContent value="overview" className="space-y-3 mt-0 h-full outline-none">
+              {project.quotation?.id ? (
+                <>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm text-slate-500">Quotation {project.quotation.quotationNumber} — the agreed scope and price for this project.</p>
+                    <div className="flex flex-wrap gap-2">
+                      <Button size="sm" variant="outline" onClick={() => setActiveTab('info')} className="h-9 rounded-xl"><ClipboardCheck className="h-4 w-4 mr-1" /> Project info</Button>
+                      {project.lead?.id && <Button size="sm" variant="outline" onClick={() => { setQuoteOpen(true); setActiveTab('quote'); }} className="h-9 rounded-xl"><Pencil className="h-4 w-4 mr-1" /> Change quote</Button>}
+                      <Button size="sm" onClick={() => window.open(`${import.meta.env.BASE_URL.replace(/\/$/, '')}/quotations/${project.quotation.id}/print`, '_blank')} className="h-9 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white"><FileBarChart className="h-4 w-4 mr-1" /> Print / PDF</Button>
+                    </div>
+                  </div>
+                  <QuotationPrintView key={project.quotation.id} quotationId={project.quotation.id} embedded readOnly onClose={() => {}} />
+                </>
+              ) : (
+                <div className={CARD}>
+                  <p className="text-sm text-slate-600">This project has no quotation linked. Project details are on the Project Info tab.</p>
+                  <Button size="sm" variant="outline" onClick={() => setActiveTab('info')} className="mt-3 h-9 rounded-xl">Open Project Info</Button>
+                </div>
+              )}
+            </TabsContent>
+
+            {/* PROJECT INFO TAB — what needs a decision → headline numbers → details, activity, actions */}
+            <TabsContent value="info" className="space-y-3 mt-0 h-full outline-none">
               {(() => {
                 const done = project.status === 'COMPLETED';
                 const progress = Math.max(0, Math.min(100, project.progress || 0));

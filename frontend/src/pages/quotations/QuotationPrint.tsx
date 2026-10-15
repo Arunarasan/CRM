@@ -38,9 +38,11 @@ export default function QuotationPrint() {
 }
 
 /** The print sheet as an overlay — also opened in place from the lead's Sales Journey (no route change). */
-export function QuotationPrintView({ quotationId, onClose, onSaved, readOnly }: {
+export function QuotationPrintView({ quotationId, onClose, onSaved, readOnly, embedded }: {
   quotationId: number;
   onClose: () => void;
+  /** Render the sheet inline in a page (no full-screen overlay, no toolbar) — e.g. the project Overview. */
+  embedded?: boolean;
   /** No Edit button — used where prices are typed on the price sheet, not on the printout. */
   readOnly?: boolean;
   /** Called after an edit is saved, so the screen underneath can refresh. */
@@ -121,8 +123,9 @@ export function QuotationPrintView({ quotationId, onClose, onSaved, readOnly }: 
   };
 
 
-  if (loading) return <div className="fixed inset-0 z-50 bg-white flex items-center justify-center text-slate-500">Loading…</div>;
-  if (!quotation || !totals) return <div className="fixed inset-0 z-50 bg-white flex items-center justify-center text-red-600">Failed to load quotation.</div>;
+  const shell = embedded ? "py-10" : "fixed inset-0 z-50 bg-white";
+  if (loading) return <div className={`${shell} flex items-center justify-center text-slate-500`}>Loading…</div>;
+  if (!quotation || !totals) return <div className={`${shell} flex items-center justify-center text-red-600`}>Failed to load quotation.</div>;
 
   const charges = quoteCharges(quotation);
   const itemsTotal = liveItems.reduce((s, i) => s + Number(i.totalAmount ?? 0), 0);
@@ -162,11 +165,11 @@ export function QuotationPrintView({ quotationId, onClose, onSaved, readOnly }: 
     : null;
 
   return (
-    <div className="qp-overlay fixed inset-0 z-50 overflow-auto bg-neutral-200">
+    <div className={embedded ? "qp-overlay rounded-2xl bg-neutral-200 overflow-x-auto" : "qp-overlay fixed inset-0 z-50 overflow-auto bg-neutral-200"}>
       <style>{QP_CSS}</style>
 
       {/* Screen-only toolbar */}
-      <div className="no-print sticky top-0 z-10 flex flex-wrap items-center justify-between gap-2 bg-white border-b px-4 py-2 shadow-sm">
+      {!embedded && <div className="no-print sticky top-0 z-10 flex flex-wrap items-center justify-between gap-2 bg-white border-b px-4 py-2 shadow-sm">
         <span className="text-sm font-medium text-slate-600">
           {editing ? "Editing — prices, discount, GST, dates and terms" : `Print preview — ${quotation.quotationNumber}`}
         </span>
@@ -196,7 +199,7 @@ export function QuotationPrintView({ quotationId, onClose, onSaved, readOnly }: 
             </>
           )}
         </div>
-      </div>
+      </div>}
 
       <div className="qp-scroll">
         <div id="quotation-print" className="qp">
