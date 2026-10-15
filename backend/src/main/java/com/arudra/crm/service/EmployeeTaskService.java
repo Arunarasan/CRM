@@ -81,6 +81,8 @@ public class EmployeeTaskService {
     @Autowired
     private TaskPoolNotifier taskPoolNotifier;
     @Autowired
+    private com.arudra.crm.repository.TaskJoinRequestRepository joinRequestRepository;
+    @Autowired
     private TaskGenerationService taskGenerationService;
     @Autowired
     private QuotationRepository quotationRepository;
@@ -260,7 +262,9 @@ public class EmployeeTaskService {
             if ("COMPLETED".equals(p.getStatus()) || "CANCELLED".equals(p.getStatus())) continue;
             long open = taskRepository.findByProjectId(p.getId()).stream()
                     .filter(t -> !"COMPLETED".equals(t.getStatus()) && !"CANCELLED".equals(t.getStatus()))
+                    .filter(t -> !"LOCKED".equals(t.getStatus()))
                     .filter(this::isUnassigned)
+                    .filter(t -> canTake(employee, t))
                     .count();
             if (open == 0) continue; // nothing to pick up — don't clutter the list
             Map<String, Object> card = new HashMap<>();
@@ -394,6 +398,199 @@ public class EmployeeTaskService {
                     task.getProject() != null ? "/projects/" + task.getProject().getId() : null);
         }
         return saved;
+    }
+
+    // ---------------------------------------------------------------- Helpers: join requests / add helper
+
+    private boolean isActiveAssignment(TaskAssignment a) {
+        return !"CANCELLED".equals(a.getStatus()) && !"REJECTED".equals(a.getStatus());
+    }
+
+    private boolean isAdminUser(User u) {
+        return u != null && u.getRoles() != null && u.getRoles().stream()
+                .anyMatch(r -> "ROLE_ADMIN".equalsIgnoreCase(r.getName()));
+    }
+
+    /** May this user manage the team on the task? Its owner, the project's PM / assistant manager, or an admin. */
+    private boolean canManageTeam(Task task, User user) {
+        if (user == null) return false;
+        if (isAdminUser(user)) return true;
+        Project p = task.getProject();
+        if (p != null) {
+            if (p.getProjectManager() != null && user.getId().equals(p.getProjectManager().getId())) return true;
+            if (p.getAssistantManager() != null && user.getId().equals(p.getAssistantManager().getId())) return true;
+        }
+        return assignmentRepository.findByTaskId(task.getId()).stream()
+                .anyMatch(a -> isActiveAssignment(a) && "Owner".equals(a.getRole())
+                        && a.getEmployee() != null && user.getId().equals(a.getEmployee().getId()));
+    }
+
+    private boolean onTask(Long taskId, Long employeeId) {
+        return assignmentRepository.findByTaskId(taskId).stream()
+                .anyMatch(a -> isActiveAssignment(a) && a.getEmployee() != null && employeeId.equals(a.getEmployee().getId()));
+    }
+
+    /** Adds canManageTeam, the viewer's own pending request and (for managers) the pending requests. */
+    private void putJoinInfo(Map<String, Object> detail, Task task, User viewer) {
+        boolean manage = canManageTeam(task, viewer);
+        detail.put("canManageTeam", manage);
+        boolean held = !isUnassigned(task);
+        boolean closed = "COMPLETED".equals(task.getStatus()) || "CANCELLED".equals(task.getStatus());
+        boolean mine = viewer != null && onTask(task.getId(), viewer.getId());
+        boolean requested = viewer != null && joinRequestRepository
+                .findFirstByTaskIdAndRequesterIdAndStatus(task.getId(), viewer.getId(), "PENDING").isPresent();
+        detail.put("joinRequested", requested);
+        detail.put("canRequestJoin", viewer != null && held && !closed && !mine && !requested
+                && !"LOCKED".equals(task.getStatus()) && canTake(viewer, task));
+        List<Map<String, Object>> pending = new ArrayList<>();
+        if (manage) {
+            for (com.arudra.crm.entity.TaskJoinRequest r : joinRequestRepository.findByTaskIdAndStatus(task.getId(), "PENDING")) {
+                Map<String, Object> m = new HashMap<>();
+                m.put("id", r.getId());
+                m.put("employeeId", r.getRequester().getId());
+                m.put("employeeName", r.getRequester().getName());
+                m.put("note", r.getNote());
+                m.put("requestedAt", r.getCreatedAt());
+                pending.add(m);
+            }
+        }
+        detail.put("joinRequests", pending);
+    }
+
+    /** An employee asks the holder / PM to be added to a task someone else already holds. */
+    @Transactional
+    @LogActivity(module = "EMPLOYEE_TASK", action = "JOIN_REQUEST")
+    public void requestJoin(Long taskId, User employee, String note) {
+        Task task = taskRepository.findByIdForUpdate(taskId)
+                .orElseThrow(() -> new RuntimeException("Task not found"));
+        if ("COMPLETED".equals(task.getStatus()) || "CANCELLED".equals(task.getStatus())) {
+            throw new IllegalStateException("This task is closed.");
+        }
+        if (isUnassigned(task)) {
+            throw new IllegalStateException("No one has taken this task yet - pick it up instead.");
+        }
+        if (onTask(taskId, employee.getId())) throw new IllegalStateException("You're already on this task.");
+        if (!canTake(employee, task)) {
+            throw new IllegalStateException(taskEligibilityService.ineligibleReason(employee, task));
+        }
+        if (joinRequestRepository.findFirstByTaskIdAndRequesterIdAndStatus(taskId, employee.getId(), "PENDING").isPresent()) {
+            throw new IllegalStateException("You've already asked to join this task.");
+        }
+        com.arudra.crm.entity.TaskJoinRequest r = new com.arudra.crm.entity.TaskJoinRequest();
+        r.setTask(task);
+        r.setRequester(employee);
+        String n = note == null ? "" : note.trim();
+        r.setNote(n.isEmpty() ? null : n.substring(0, Math.min(n.length(), 500)));
+        joinRequestRepository.save(r);
+
+        String url = "/employee/tasks/" + taskId;
+        java.util.Set<Long> notify = new java.util.LinkedHashSet<>(managersForTask(task));
+        if (task.getProject() != null && task.getProject().getAssistantManager() != null) {
+            notify.add(task.getProject().getAssistantManager().getId());
+        }
+        assignmentRepository.findByTaskId(taskId).stream()
+                .filter(a -> isActiveAssignment(a) && "Owner".equals(a.getRole()) && a.getEmployee() != null)
+                .forEach(a -> notify.add(a.getEmployee().getId()));
+        notify.remove(employee.getId());
+        for (Long id : notify) {
+            notificationService.dispatch("Request to join task",
+                    employee.getName() + " asked to join \"" + task.getTaskName() + "\".", "TASK", id, url);
+        }
+    }
+
+    /** The task's owner / PM / admin decides a pending join request. Approving adds the requester as a participant. */
+    @Transactional
+    @LogActivity(module = "EMPLOYEE_TASK", action = "JOIN_DECIDE")
+    public void decideJoinRequest(Long requestId, User decider, boolean approve) {
+        com.arudra.crm.entity.TaskJoinRequest r = joinRequestRepository.findById(requestId)
+                .orElseThrow(() -> new RuntimeException("Request not found"));
+        Task task = taskRepository.findByIdForUpdate(r.getTask().getId())
+                .orElseThrow(() -> new RuntimeException("Task not found"));
+        if (!canManageTeam(task, decider)) {
+            throw new IllegalStateException("Only the task owner or project manager can decide this.");
+        }
+        if (!"PENDING".equals(r.getStatus())) throw new IllegalStateException("This request was already handled.");
+        if (approve) addParticipant(task, r.getRequester(), decider);
+        r.setStatus(approve ? "APPROVED" : "REJECTED");
+        r.setDecidedBy(decider);
+        r.setDecidedAt(LocalDateTime.now());
+        joinRequestRepository.save(r);
+        notificationService.dispatch(approve ? "Added to task" : "Join request declined",
+                approve ? "You were added to \"" + task.getTaskName() + "\"."
+                        : "Your request to join \"" + task.getTaskName() + "\" was declined.",
+                "TASK", r.getRequester().getId(), "/employee/tasks/" + task.getId());
+    }
+
+    /** The requester withdraws their own pending request. */
+    @Transactional
+    public void cancelJoinRequest(Long taskId, User employee) {
+        joinRequestRepository.findFirstByTaskIdAndRequesterIdAndStatus(taskId, employee.getId(), "PENDING")
+                .ifPresent(r -> {
+                    r.setStatus("CANCELLED");
+                    joinRequestRepository.save(r);
+                });
+    }
+
+    /** Colleagues the manager can add: portal employees not already on the task. */
+    public List<Map<String, Object>> helperCandidates(Long taskId, User manager) {
+        Task task = getTask(taskId);
+        if (!canManageTeam(task, manager)) throw new IllegalStateException("Only the task owner or project manager can add helpers.");
+        return userRepository.findByRoleNames(List.of("ROLE_EMPLOYEE")).stream()
+                .filter(u -> !onTask(taskId, u.getId()))
+                .sorted(Comparator.comparing(u -> String.valueOf(u.getName()), String.CASE_INSENSITIVE_ORDER))
+                .map(u -> {
+                    Map<String, Object> m = new HashMap<>();
+                    m.put("id", u.getId());
+                    m.put("name", u.getName());
+                    return m;
+                })
+                .collect(Collectors.toList());
+    }
+
+    /** The owner / PM adds a colleague to the task directly. */
+    @Transactional
+    @LogActivity(module = "EMPLOYEE_TASK", action = "ADD_HELPER")
+    public void addHelper(Long taskId, Long helperUserId, User manager) {
+        Task task = taskRepository.findByIdForUpdate(taskId)
+                .orElseThrow(() -> new RuntimeException("Task not found"));
+        if (!canManageTeam(task, manager)) throw new IllegalStateException("Only the task owner or project manager can add helpers.");
+        User helper = userRepository.findById(helperUserId).orElseThrow(() -> new RuntimeException("Employee not found"));
+        addParticipant(task, helper, manager);
+        joinRequestRepository.findFirstByTaskIdAndRequesterIdAndStatus(taskId, helperUserId, "PENDING").ifPresent(r -> {
+            r.setStatus("APPROVED");
+            r.setDecidedBy(manager);
+            r.setDecidedAt(LocalDateTime.now());
+            joinRequestRepository.save(r);
+        });
+        notificationService.dispatch("Added to task", "You were added to \"" + task.getTaskName() + "\".",
+                "TASK", helper.getId(), "/employee/tasks/" + taskId);
+    }
+
+    /** Shared by approve + add-helper: gives the employee a Participant row (reviving a cancelled one). */
+    private void addParticipant(Task task, User employee, User addedBy) {
+        if ("COMPLETED".equals(task.getStatus()) || "CANCELLED".equals(task.getStatus())) {
+            throw new IllegalStateException("This task is closed.");
+        }
+        if (onTask(task.getId(), employee.getId())) throw new IllegalStateException(employee.getName() + " is already on this task.");
+        int active = activeTaskCount(employee.getId());
+        int max = maxActiveTasks();
+        if (active >= max) {
+            throw new IllegalStateException(employee.getName() + " is at capacity (" + active + " / " + max + ").");
+        }
+        TaskAssignment a = assignmentRepository.findByTaskIdAndEmployeeId(task.getId(), employee.getId()).orElseGet(TaskAssignment::new);
+        a.setTask(task);
+        a.setResourceType(ResourceType.EMPLOYEE);
+        a.setResourceId(employee.getId());
+        a.setEmployee(employee);
+        a.setAssignedBy(addedBy);
+        a.setAssignedDate(LocalDateTime.now());
+        a.setStartedAt(null);
+        a.setCompletedAt(null);
+        a.setRole("Participant");
+        a.setStatus("ACCEPTED");
+        a.setAcceptedAt(LocalDateTime.now());
+        assignmentRepository.save(a);
+        recomputeAndSave(task);
     }
 
     // ---------------------------------------------------------------- Capacity
@@ -818,6 +1015,7 @@ public class EmployeeTaskService {
         detail.put("dueDate", task.getDueDate());
         detail.put("completedDate", task.getCompletedDate());
 
+        putJoinInfo(detail, task, employee);
         detail.put("team", assignmentRepository.findByTaskId(taskId).stream().map(this::toAssignmentSummary).collect(Collectors.toList()));
         detail.put("checklist", checklistRepository.findByTaskId(taskId).stream().map(this::toChecklistSummary).collect(Collectors.toList()));
         detail.put("comments", commentRepository.findByTaskIdOrderByCreatedAtDesc(taskId).stream()

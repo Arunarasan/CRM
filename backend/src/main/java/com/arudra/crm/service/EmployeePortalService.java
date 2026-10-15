@@ -666,6 +666,35 @@ public class EmployeePortalService {
         employeeTaskService.joinTask(taskId, currentUser);
     }
 
+    @Transactional
+    public void requestJoin(User currentUser, Long taskId, String note) {
+        requireEmployee(currentUser);
+        employeeTaskService.requestJoin(taskId, currentUser, note);
+    }
+
+    @Transactional
+    public void cancelJoinRequest(User currentUser, Long taskId) {
+        requireEmployee(currentUser);
+        employeeTaskService.cancelJoinRequest(taskId, currentUser);
+    }
+
+    @Transactional
+    public void decideJoinRequest(User currentUser, Long requestId, boolean approve) {
+        requireEmployee(currentUser);
+        employeeTaskService.decideJoinRequest(requestId, currentUser, approve);
+    }
+
+    public List<Map<String, Object>> helperCandidates(User currentUser, Long taskId) {
+        requireEmployee(currentUser);
+        return employeeTaskService.helperCandidates(taskId, currentUser);
+    }
+
+    @Transactional
+    public void addHelper(User currentUser, Long taskId, Long helperId) {
+        requireEmployee(currentUser);
+        employeeTaskService.addHelper(taskId, helperId, currentUser);
+    }
+
     /** The shared Task Pool: eligible AVAILABLE tasks this employee can pick up. */
     public List<Map<String, Object>> getAvailablePool(User currentUser) {
         requireEmployee(currentUser);

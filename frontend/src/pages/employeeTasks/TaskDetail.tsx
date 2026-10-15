@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import api from '@/lib/api';
 import { employeeTaskApi } from '@/api/employeeTaskApi';
+import TaskTeamPanel from './components/TaskTeamPanel';
 import { TaskDetail as TaskDetailType, LeadInfo } from '@/types/employeeTask';
 import { resolveFileUrl } from '@/lib/uploadFile';
 import AudioCaptureField, { CapturedAudio } from '@/components/AudioCaptureField';
@@ -724,6 +725,13 @@ export default function TaskDetail() {
           >
             <UserPlus className="h-4 w-4" /> {t('pw.td.join_this_task')}
           </button>
+        )}
+
+        {/* Helpers: ask to join a task someone holds; the owner / PM approves requests or adds a colleague. */}
+        {!isLeadForm && !isCallTask && !locked && (
+          <TaskTeamPanel taskId={taskId} joinRequested={!!task.joinRequested} canManage={!!task.canManageTeam}
+            canRequestJoin={!!task.canRequestJoin && !(task.assignmentType === 'MULTIPLE_EMPLOYEES' || task.assignmentType === 'TEAM')}
+            requests={task.joinRequests ?? []} onChanged={load} />
         )}
 
         {/* Field-execution tools — only for real field/site tasks, not lead "collect info" forms. */}

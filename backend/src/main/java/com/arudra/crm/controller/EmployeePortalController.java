@@ -582,6 +582,50 @@ public class EmployeePortalController {
         return ResponseEntity.ok(ApiResponse.success("Joined task."));
     }
 
+    /** Ask the task's holder / PM to add you as a helper. */
+    @PostMapping("/tasks/{taskId}/join-request")
+    @PreAuthorize(PORTAL)
+    public ResponseEntity<ApiResponse<String>> requestJoin(@PathVariable Long taskId,
+                                                           @RequestBody(required = false) Map<String, String> body) {
+        portalService.requestJoin(me(), taskId, body != null ? body.get("note") : null);
+        return ResponseEntity.ok(ApiResponse.success("Request sent."));
+    }
+
+    @DeleteMapping("/tasks/{taskId}/join-request")
+    @PreAuthorize(PORTAL)
+    public ResponseEntity<ApiResponse<String>> cancelJoinRequest(@PathVariable Long taskId) {
+        portalService.cancelJoinRequest(me(), taskId);
+        return ResponseEntity.ok(ApiResponse.success("Request cancelled."));
+    }
+
+    @PostMapping("/join-requests/{requestId}/approve")
+    @PreAuthorize(PORTAL)
+    public ResponseEntity<ApiResponse<String>> approveJoin(@PathVariable Long requestId) {
+        portalService.decideJoinRequest(me(), requestId, true);
+        return ResponseEntity.ok(ApiResponse.success("Helper added."));
+    }
+
+    @PostMapping("/join-requests/{requestId}/reject")
+    @PreAuthorize(PORTAL)
+    public ResponseEntity<ApiResponse<String>> rejectJoin(@PathVariable Long requestId) {
+        portalService.decideJoinRequest(me(), requestId, false);
+        return ResponseEntity.ok(ApiResponse.success("Request declined."));
+    }
+
+    /** Colleagues the task owner / PM can add as helpers. */
+    @GetMapping("/tasks/{taskId}/helper-candidates")
+    @PreAuthorize(PORTAL)
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> helperCandidates(@PathVariable Long taskId) {
+        return ResponseEntity.ok(ApiResponse.success(portalService.helperCandidates(me(), taskId)));
+    }
+
+    @PostMapping("/tasks/{taskId}/helpers")
+    @PreAuthorize(PORTAL)
+    public ResponseEntity<ApiResponse<String>> addHelper(@PathVariable Long taskId, @RequestBody Map<String, Object> body) {
+        portalService.addHelper(me(), taskId, Long.valueOf(String.valueOf(body.get("employeeId"))));
+        return ResponseEntity.ok(ApiResponse.success("Helper added."));
+    }
+
     /** The shared Task Pool — eligible AVAILABLE tasks this employee can pick up. */
     @GetMapping("/tasks/pool")
     @PreAuthorize(PORTAL)
