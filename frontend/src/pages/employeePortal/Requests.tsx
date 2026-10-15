@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import {
-  Boxes, Users, UserPlus, ClipboardList, Plane, ChevronRight, PackageCheck, Truck,
+  Boxes, Users, UserPlus, ClipboardList, Plane, ChevronRight, PackageCheck, Truck, PhoneCall,
 } from 'lucide-react';
 import { useT } from '@/i18n';
 
@@ -19,6 +19,7 @@ const ITEMS: {
 }[] = [
   { to: '/employee/goods-receipts', labelKey: 'pw.requests.goodsReceipt', hintKey: 'pw.requests.goodsReceiptHint', icon: PackageCheck, color: 'text-blue-600' },
   { to: '/employee/deliveries', labelKey: 'pw.requests.goodsDelivery', hintKey: 'pw.requests.goodsDeliveryHint', icon: Truck, color: 'text-rose-600' },
+  { to: '/employee/call-leads', labelKey: 'pw.requests.callLeads', hintKey: 'pw.requests.callLeadsHint', icon: PhoneCall, color: 'text-sky-600' },
   { to: '/employee/requests/material', labelKey: 'pw.requests.material', hintKey: 'pw.requests.materialHint', icon: Boxes, color: 'text-orange-600' },
   { to: '/employee/requests/manpower', labelKey: 'pw.requests.manpower', hintKey: 'pw.requests.manpowerHint', icon: Users, color: 'text-emerald-600' },
   { to: '/employee/leads', labelKey: 'pw.requests.leads', hintKey: 'pw.requests.leadsHint', icon: UserPlus, color: 'text-emerald-600' },

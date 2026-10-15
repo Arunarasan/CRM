@@ -292,6 +292,21 @@ public class CallRecordingService {
     }
 
     /**
+     * The shared pool any employee can work: calls nobody has been given a task for yet and that are
+     * still open, plus the ones I closed from it (so I can see what I did).
+     */
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> pool(User me) {
+        return repository.findByIsDeletedFalseOrderByIdDesc().stream()
+                .filter(r -> inPool(r) || (r.getTaskId() == null && r.getOutcome() != null && me.getId().equals(r.getOutcomeById())))
+                .map(this::toDto).toList();
+    }
+
+    private static boolean inPool(CallRecording r) {
+        return r.getTaskId() == null && r.getOutcome() == null && !CallRecording.DISCARDED.equals(r.getStatus());
+    }
+
+    /**
      * Recordings around a lead task: the calls already on its lead, plus open calls from the same phone
      * number that can be added to it.
      */
@@ -501,6 +516,7 @@ public class CallRecordingService {
     /** Managers / admins act on any call; anyone else only on a call whose task is assigned to them. */
     private void requireCanAct(CallRecording rec, User me) {
         if (isManager()) return;
+        if (inPool(rec) && isPortalUser()) return; // shared pool: any employee may take an unclaimed call
         boolean assigned = me != null && rec.getTaskId() != null && assignmentRepository
                 .findByTaskIdAndResourceTypeAndResourceId(rec.getTaskId(), "EMPLOYEE", me.getId())
                 .filter(a -> !"CANCELLED".equals(a.getStatus()) && !"REJECTED".equals(a.getStatus()))
@@ -522,6 +538,13 @@ public class CallRecordingService {
             throw new org.springframework.security.access.AccessDeniedException("This task isn't assigned to you.");
         }
         return task;
+    }
+
+    private static boolean isPortalUser() {
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null) return false;
+        return auth.getAuthorities().stream().map(GrantedAuthority::getAuthority).anyMatch(a ->
+                a.equals("ROLE_EMPLOYEE") || a.equals("EMPLOYEE_PORTAL"));
     }
 
     private static boolean isManager() {

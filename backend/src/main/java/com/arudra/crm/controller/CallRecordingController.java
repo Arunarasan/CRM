@@ -88,6 +88,13 @@ public class CallRecordingController {
         return ResponseEntity.ok(ApiResponse.success(service.mine(currentUserService.getCurrentUser())));
     }
 
+    /** Open calls nobody has claimed — any employee can listen and turn them into a lead. */
+    @GetMapping("/pool")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN') or hasAuthority('ROLE_EMPLOYEE') or hasAuthority('EMPLOYEE_PORTAL')")
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> pool() {
+        return ResponseEntity.ok(ApiResponse.success(service.pool(currentUserService.getCurrentUser())));
+    }
+
     /** Upload one of my calls — it becomes a Collect Requirement task assigned to me. */
     @PostMapping("/mine")
     public ResponseEntity<ApiResponse<Map<String, Object>>> uploadMine(

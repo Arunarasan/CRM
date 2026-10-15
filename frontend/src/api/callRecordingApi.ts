@@ -95,6 +95,8 @@ export const callRecordingApi = {
   // --- employee app ---
   /** Calls I uploaded or whose task is assigned to me. */
   mine: () => api.get<CallRecording[]>(`${BASE}/mine`).then((r) => r.data),
+  /** Open calls nobody has claimed — any employee can listen and make a lead. */
+  pool: () => api.get<CallRecording[]>(`${BASE}/pool`).then((r) => r.data),
   /** Upload one of my calls — becomes a Collect Requirement task assigned to me. */
   uploadMine: (file: File, extra: { note?: string }, onProgress?: (pct: number) => void) =>
     api.post<CallRecording>(`${BASE}/mine`, audioForm(file, { lastModified: file.lastModified, note: extra.note }), {

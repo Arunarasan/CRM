@@ -135,6 +135,7 @@ const EmployeeDocuments = lazy(() => import("./pages/employeePortal/Documents"))
 const EmployeeTimesheet = lazy(() => import("./pages/employeePortal/Timesheet"));
 const EmployeeSettings = lazy(() => import("./pages/employeePortal/Settings"));
 const EmployeeReviewQr = lazy(() => import("./pages/employeePortal/EmployeeReviewQr"));
+const CallLeads = lazy(() => import("./pages/employeePortal/CallLeads"));
 const MyCalls = lazy(() => import("./pages/employeePortal/MyCalls"));
 const EmployeeRequests = lazy(() => import("./pages/employeePortal/Requests"));
 const EmployeeGoodsDelivery = lazy(() => import("./pages/employeePortal/GoodsDelivery"));
@@ -358,6 +359,7 @@ function App() {
             <Route path="documents" element={<EmployeeDocuments />} />
             <Route path="review-qr" element={<EmployeeReviewQr />} />
             <Route path="calls" element={<MyCalls />} />
+            <Route path="call-leads" element={<CallLeads />} />
             <Route path="timesheet" element={<EmployeeTimesheet />} />
             <Route path="settings" element={<EmployeeSettings />} />
           </Route>
