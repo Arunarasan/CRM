@@ -729,9 +729,9 @@ export default function TaskDetail() {
 
         {/* Helpers: ask to join a task someone holds; the owner / PM approves requests or adds a colleague. */}
         {!isLeadForm && !isCallTask && !locked && (
-          <TaskTeamPanel taskId={taskId} joinRequested={!!task.joinRequested} canManage={!!task.canManageTeam}
+          <TaskTeamPanel taskId={taskId} joinRequested={!!task.joinRequested} canManage={false}
             canRequestJoin={!!task.canRequestJoin && !(task.assignmentType === 'MULTIPLE_EMPLOYEES' || task.assignmentType === 'TEAM')}
-            requests={task.joinRequests ?? []} onChanged={load} />
+            requests={[]} onChanged={load} />
         )}
 
         {/* Field-execution tools — only for real field/site tasks, not lead "collect info" forms. */}
@@ -807,7 +807,8 @@ export default function TaskDetail() {
           </Disclosure>
 
           <Disclosure title={isProjectTask ? t('pw.td.assignedTeamCaps') : t('pw.td.assigned_team')} count={task.team.length}
-            meta={isProjectTask ? t('pw.td.members', { n: task.team.length }) : undefined} icon={<Users className="h-4 w-4" />}>
+            meta={isProjectTask ? t('pw.td.members', { n: task.team.length }) : undefined} icon={<Users className="h-4 w-4" />}
+            defaultOpen={(task.joinRequests?.length ?? 0) > 0}>
             <ul className="flex flex-col gap-2">
               {task.team.map((m) => (
                 <li key={m.employeeId} className="flex items-center justify-between text-[13px] text-[#33392F]">
@@ -816,6 +817,13 @@ export default function TaskDetail() {
                 </li>
               ))}
             </ul>
+            {/* Join requests + Add helper live with the team: any member can approve a request or add a colleague. */}
+            {!locked && (
+              <div className="mt-3">
+                <TaskTeamPanel taskId={taskId} canRequestJoin={false} joinRequested={false} canManage={!!task.canManageTeam}
+                  requests={task.joinRequests ?? []} onChanged={load} />
+              </div>
+            )}
           </Disclosure>
 
           {task.issues.length > 0 && (

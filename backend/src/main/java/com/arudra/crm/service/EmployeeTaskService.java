@@ -412,17 +412,15 @@ public class EmployeeTaskService {
                 .anyMatch(r -> "ROLE_ADMIN".equalsIgnoreCase(r.getName()));
     }
 
-    /** May this user manage the team on the task? Its owner, the project's PM / assistant manager, or an admin. */
+    /**
+     * May this user add helpers / decide join requests? Admins, the first picker (Owner) and the team the
+     * admin assigned. Helpers who were added or joined later ("Participant") cannot add more people.
+     */
     private boolean canManageTeam(Task task, User user) {
         if (user == null) return false;
         if (isAdminUser(user)) return true;
-        Project p = task.getProject();
-        if (p != null) {
-            if (p.getProjectManager() != null && user.getId().equals(p.getProjectManager().getId())) return true;
-            if (p.getAssistantManager() != null && user.getId().equals(p.getAssistantManager().getId())) return true;
-        }
         return assignmentRepository.findByTaskId(task.getId()).stream()
-                .anyMatch(a -> isActiveAssignment(a) && "Owner".equals(a.getRole())
+                .anyMatch(a -> isActiveAssignment(a) && !"Participant".equals(a.getRole())
                         && a.getEmployee() != null && user.getId().equals(a.getEmployee().getId()));
     }
 
