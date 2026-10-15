@@ -57,6 +57,8 @@ public class EmployeeTaskService {
     private ProjectRepository projectRepository;
 
     @Autowired
+    private com.arudra.crm.repository.ProjectConversionRequestRepository conversionRequestRepository;
+    @Autowired
     private ProductRepository productRepository;
     @Autowired
     private UserRepository userRepository;
@@ -882,7 +884,13 @@ public class EmployeeTaskService {
                     .map(TaskAssignment::getEmployee)
                     .filter(u -> seen.add(u.getId()))
                     .forEach(team::add);
-            // The lead's sales executive — even when their lead-task row was released or reassigned.
+            // The employee who sent the customer's advance / conversion request, and the lead's sales
+            // executive — even when their lead-task row was released or reassigned along the way.
+            conversionRequestRepository.findFirstByLeadIdAndIsDeletedFalseOrderByIdDesc(project.getLead().getId())
+                    .map(com.arudra.crm.entity.ProjectConversionRequest::getRequestedById)
+                    .flatMap(userRepository::findById)
+                    .filter(u -> seen.add(u.getId()))
+                    .ifPresent(team::add);
             User sales = project.getLead().getAssignedSalesExecutive();
             if (sales != null && seen.add(sales.getId())) team.add(sales);
         }
@@ -1726,6 +1734,11 @@ public class EmployeeTaskService {
                 return List.of(project);
             }
             return List.of(requestProjectUpdate(leadId, quote, project, employee, advanceAmount, advanceMethod));
+        }
+        // A field employee's new project waits for an admin (ProjectConversionRequestService) — only
+        // admins / project managers create it straight away.
+        if (!ProjectConversionRequestService.canDecide(employee)) {
+            throw new IllegalStateException("Send it to the admin for approval — the project is created once an admin approves it.");
         }
         // Employee/admin approval: promote the header to APPROVED so conversion's guard passes
         // (convertToProject also normalizes item-level statuses).
