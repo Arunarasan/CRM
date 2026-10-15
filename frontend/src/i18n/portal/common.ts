@@ -2,6 +2,12 @@ import type { Rows } from './build';
 
 // Shared chrome, navigation, notifications, requests hub, status pills.
 const rows: Rows = {
+  // Clock card details + combined earnings card
+  'pw.clock.details': ['Details', 'विवरण', 'விவரங்கள்', 'వివరాలు'],
+  'portal.home.earn.title': ['Incentives earned', 'अर्जित प्रोत्साहन', 'பெற்ற ஊக்கத்தொகை', 'సంపాదించిన ప్రోత్సాహకాలు'],
+  'portal.home.earn.leads': ['Leads qualified', 'योग्य लीड', 'தகுதியான லீட்கள்', 'అర్హత పొందిన లీడ్‌లు'],
+  'portal.home.earn.other': ['Other incentives', 'अन्य प्रोत्साहन', 'பிற ஊக்கத்தொகைகள்', 'ఇతర ప్రోత్సాహకాలు'],
+  'portal.home.earn.empty': ['Leads, projects and reviews you earn from will show up here.', 'आपकी लीड, प्रोजेक्ट और रिव्यू से मिली कमाई यहाँ दिखेगी।', 'நீங்கள் பெறும் லீட், திட்டம், மதிப்புரை வருமானம் இங்கே தெரியும்.', 'మీరు సంపాదించే లీడ్, ప్రాజెక్ట్, రివ్యూ ఆదాయం ఇక్కడ కనిపిస్తుంది.'],
   // Home profile bar (replaces the date selector)
   'portal.home.prof.empId': ['Employee ID', 'कर्मचारी आईडी', 'ஊழியர் எண்', 'ఉద్యోగి ఐడి'],
   'portal.home.prof.department': ['Department', 'विभाग', 'துறை', 'విభాగం'],

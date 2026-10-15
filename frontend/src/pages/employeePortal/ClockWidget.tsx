@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { LogIn, LogOut, Coffee, Play, Loader2, TrendingUp, ArrowRight, MapPin, ShieldCheck, ShieldAlert, X, Clock3 } from 'lucide-react';
+import { LogIn, LogOut, Coffee, Play, Loader2, TrendingUp, ArrowRight, MapPin, ShieldCheck, ShieldAlert, X, Clock3, ChevronDown } from 'lucide-react';
 import { employeePortalApi } from '@/api/employeePortalApi';
 import { TimeStatus } from '@/types/employeePortal';
 import { assert as webauthnAssert } from '@/lib/webauthn';
@@ -28,6 +28,7 @@ export default function ClockWidget({ onChange }: { onChange?: () => void }) {
   const [error, setError] = useState('');
   const [geoAccuracy, setGeoAccuracy] = useState<number | null>(null); // live best-fix accuracy while locating
   const [, forceTick] = useState(0);
+  const [showDetails, setShowDetails] = useState(false);
   const tickRef = useRef<number | null>(null);
   // Wall-clock instant of the last server sync — the running timer/earnings project forward from here.
   const syncAtRef = useRef<number>(cached?.at ?? Date.now());
@@ -133,38 +134,39 @@ export default function ClockWidget({ onChange }: { onChange?: () => void }) {
   const pct = target > 0 ? Math.min(100, Math.round((liveEarnings / target) * 100)) : 0;
   const remaining = Math.max(0, target - liveEarnings);
 
+  const statusLabel = onBreak ? t('pw.clock.onBreak') : clockedIn ? t('pw.clock.working') : sessionCount > 0 ? t('pw.clock.clockedOut') : t('pw.clock.notStarted');
+  const needsAttention = lastSession?.approvalStatus === 'REJECTED' || (lastSession?.flagged && lastSession.approvalStatus !== 'APPROVED');
+
   return (
     <div className="overflow-hidden rounded-2xl border bg-gradient-to-br from-emerald-600 via-emerald-600 to-teal-700 text-white shadow-md">
-      {/* Money hero */}
       <div className="p-4">
-        <div className="flex items-start justify-between">
-          <div>
-            <p className="text-[11px] font-medium uppercase tracking-wide text-emerald-100/90">{t('pw.clock.earnedToday')}</p>
-            <p className="mt-0.5 text-4xl font-extrabold leading-none tabular-nums drop-shadow-sm">{inr(liveEarnings)}</p>
-          </div>
-          <span className={`mt-1 flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+        {/* Status + live timer */}
+        <div className="flex items-center justify-between gap-3">
+          <span className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
             onBreak ? 'bg-amber-400/25 text-amber-50' : clockedIn ? 'bg-white/20 text-white' : 'bg-white/15 text-emerald-50'
           }`}>
             <span className={`h-2 w-2 rounded-full ${onBreak ? 'bg-amber-300' : clockedIn ? 'animate-pulse bg-emerald-200' : 'bg-emerald-100/70'}`} />
-            {onBreak ? t('pw.clock.onBreak') : clockedIn ? t('pw.clock.working') : sessionCount > 0 ? t('pw.clock.clockedOut') : t('pw.clock.notStarted')}
+            {statusLabel}
           </span>
+          <span className="font-mono text-2xl font-bold tabular-nums tracking-tight">{fmtHMS(liveSeconds)}</span>
         </div>
 
-        {/* Big live worked-time timer */}
-        <div className="mt-3 flex items-baseline gap-2">
-          <span className="font-mono text-3xl font-bold tabular-nums tracking-tight">{fmtHMS(liveSeconds)}</span>
-          <span className="text-xs text-emerald-100/80">{t('pw.clock.worked')}{status && status.todayOvertime > 0 ? ` · ${t('pw.clock.otHours', { h: status.todayOvertime })}` : ''}</span>
+        {/* Earned today — the one number that matters */}
+        <div className="mt-3 flex items-end justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-medium uppercase tracking-wide text-emerald-100/90">{t('pw.clock.earnedToday')}</p>
+            <p className="mt-0.5 text-3xl font-extrabold leading-none tabular-nums">{inr(liveEarnings)}</p>
+          </div>
+          {status?.checkInTime && (
+            <p className="text-right text-[11px] text-emerald-100/85">
+              {t('pw.clock.logIn')}<br /><b className="text-sm tabular-nums text-white">{fmtClock(status.checkInTime)}</b>
+            </p>
+          )}
         </div>
-        {pendingHours > 0 && (
-          <p className="mt-1 flex items-center gap-1 text-[11px] text-amber-100">
-            <Clock3 className="h-3 w-3" /> {t('pw.clock.pendingApproval', { h: pendingHours })}
-          </p>
-        )}
 
-        {/* Progress toward the day's target — the motivational bar */}
         {target > 0 && (
           <div className="mt-3">
-            <div className="h-2 w-full overflow-hidden rounded-full bg-black/20">
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-black/20">
               <div className="h-full rounded-full bg-gradient-to-r from-amber-300 to-yellow-200 transition-all duration-700" style={{ width: `${pct}%` }} />
             </div>
             <p className="mt-1.5 flex items-center gap-1 text-[11px] text-emerald-50/90">
@@ -176,45 +178,19 @@ export default function ClockWidget({ onChange }: { onChange?: () => void }) {
           </div>
         )}
 
-        {/* Login / Logout times */}
-        <div className="mt-3 grid grid-cols-2 gap-2">
-          <div className="rounded-xl bg-white/10 px-3 py-2">
-            <p className="text-[10px] uppercase tracking-wide text-emerald-100/80">{t('pw.clock.logIn')}</p>
-            <p className="text-sm font-bold tabular-nums">{fmtClock(status?.checkInTime)}</p>
-          </div>
-          <div className="rounded-xl bg-white/10 px-3 py-2">
-            <p className="text-[10px] uppercase tracking-wide text-emerald-100/80">{t('pw.clock.logOut')}</p>
-            <p className="text-sm font-bold tabular-nums">{clockedIn ? '—' : fmtClock(status?.checkOutTime)}</p>
-          </div>
-        </div>
+        {error && <p className="mt-3 rounded-md bg-black/25 p-2 text-xs text-amber-100">{error}</p>}
 
-        {error && <p className="mt-2 rounded-md bg-black/25 p-2 text-xs text-amber-100">{error}</p>}
-
-        {/* Verification result of the latest session */}
+        {/* Only what needs attention stays on the card; routine verification is under Details */}
         {lastSession?.approvalStatus === 'REJECTED' ? (
           <div className="mt-3 flex items-start gap-2 rounded-xl bg-red-500/25 px-3 py-2 text-[12px] text-red-50">
             <X className="mt-0.5 h-4 w-4 shrink-0 text-red-200" />
             <span><b>{t('pw.clock.notApproved')}</b> {lastSession.approvalNote || t('pw.clock.notCounted')}</span>
           </div>
-        ) : lastSession?.approvalStatus === 'APPROVED' ? (
-          <div className="mt-3 flex items-center gap-2 rounded-xl bg-white/10 px-3 py-2 text-[12px] text-emerald-50">
-            <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-200" />
-            <span>{t('pw.clock.approvedByAdmin')}</span>
-          </div>
-        ) : lastSession?.flagged ? (
+        ) : needsAttention ? (
           <div className="mt-3 flex items-start gap-2 rounded-xl bg-amber-400/20 px-3 py-2 text-[12px] text-amber-50">
             <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-200" />
-            <span><b>{t('pw.clock.sentForApproval')}</b> {lastSession.flagReason || t('pw.clock.notAutoVerified')}</span>
+            <span><b>{t('pw.clock.sentForApproval')}</b> {lastSession?.flagReason || t('pw.clock.notAutoVerified')}</span>
           </div>
-        ) : lastSession?.verified && (lastSession.verificationMethod === 'GEO' || lastSession.verificationMethod === 'BIOMETRIC') ? (
-          <div className="mt-3 flex items-center gap-2 rounded-xl bg-white/10 px-3 py-2 text-[12px] text-emerald-50">
-            <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-200" />
-            <span>{lastSession.verificationMethod === 'BIOMETRIC' ? t('pw.clock.biometricVerified') : t('pw.clock.locationVerified')}</span>
-          </div>
-        ) : !clockedIn && sessionCount === 0 ? (
-          <p className="mt-3 flex items-center gap-1.5 text-[11px] text-emerald-100/80">
-            <MapPin className="h-3 w-3" /> {t('pw.clock.locationChecked')}
-          </p>
         ) : null}
 
         <PhoneStatusStrip binding={phone} />
@@ -250,40 +226,79 @@ export default function ClockWidget({ onChange }: { onChange?: () => void }) {
         </div>
       </div>
 
-      {/* Earnings footer + today's sessions — on a light panel for readability */}
-      <div className="rounded-t-2xl bg-card p-3 text-foreground">
-        <div className="grid grid-cols-3 gap-2 text-center">
-          <div><p className="text-sm font-bold tabular-nums">{inr(status?.weekEarnings)}</p><p className="text-[10px] uppercase text-muted-foreground">{t('pw.clock.thisWeek')}</p></div>
-          <div><p className="text-sm font-bold tabular-nums">{inr(status?.monthEarnings)}</p><p className="text-[10px] uppercase text-muted-foreground">{t('pw.clock.thisMonth')}</p></div>
-          <div><p className="text-sm font-bold tabular-nums">{rate ? `${inr(rate)}` : '—'}</p><p className="text-[10px] uppercase text-muted-foreground">{t('pw.clock.perHour')}</p></div>
-        </div>
-
-        {sessions.length > 0 && (
-          <div className="mt-3 border-t pt-2">
-            <p className="mb-1 px-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-              {t('pw.clock.todaysSessions', { count: sessionCount })}
-            </p>
-            <div className="space-y-1">
-              {sessions.map((s, i) => (
-                <div key={i} className="flex items-center justify-between rounded-lg bg-muted/50 px-2.5 py-1.5 text-xs">
-                  <span className="flex items-center gap-1.5 font-medium tabular-nums">
-                    {fmtClock(s.checkInTime)}
-                    <ArrowRight className="h-3 w-3 text-muted-foreground" />
-                    {s.running
-                      ? <span className={s.onBreak ? 'text-amber-600' : 'text-emerald-600'}>{s.onBreak ? t('pw.clock.onBreak') : t('pw.clock.now')}</span>
-                      : fmtClock(s.checkOutTime)}
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    {s.breakMinutes > 0 && <span className="text-[11px] text-muted-foreground">{t('pw.clock.breakMin', { m: s.breakMinutes })}</span>}
-                    {s.approvalStatus === 'PENDING' && <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">{t('pw.clock.waiting')}</span>}
-                    {s.approvalStatus === 'APPROVED' && <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">{t('pw.clock.approved')}</span>}
-                    {s.approvalStatus === 'REJECTED' && (
-                      <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700" title={s.approvalNote ?? undefined}>{t('pw.clock.rejected')}</span>
-                    )}
-                  </span>
-                </div>
-              ))}
+      {/* Details toggle + panel — on a light surface for readability */}
+      <div className="bg-card text-foreground">
+        <button
+          onClick={() => setShowDetails((o) => !o)}
+          aria-expanded={showDetails}
+          className="flex w-full items-center justify-between px-4 py-3 text-[13px] font-semibold text-[#4B524E] active:bg-muted/50"
+        >
+          <span className="flex items-center gap-2">
+            {t('pw.clock.details')}
+            {pendingHours > 0 && <span className="flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700"><Clock3 className="h-3 w-3" />{t('pw.clock.pendingApproval', { h: pendingHours })}</span>}
+          </span>
+          <ChevronDown className={`h-4 w-4 transition-transform ${showDetails ? 'rotate-180' : ''}`} />
+        </button>
+        {showDetails && (
+          <div className="border-t px-3 pb-3 pt-3">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-xl bg-muted/50 px-3 py-2">
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{t('pw.clock.logIn')}</p>
+                <p className="text-sm font-bold tabular-nums">{fmtClock(status?.checkInTime)}</p>
+              </div>
+              <div className="rounded-xl bg-muted/50 px-3 py-2">
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{t('pw.clock.logOut')}</p>
+                <p className="text-sm font-bold tabular-nums">{clockedIn ? '—' : fmtClock(status?.checkOutTime)}</p>
+              </div>
             </div>
+            {status && status.todayOvertime > 0 && (
+              <p className="mt-2 text-[12px] text-muted-foreground">{t('pw.clock.otHours', { h: status.todayOvertime })}</p>
+            )}
+            {!needsAttention && (
+              <p className="mt-2 flex items-center gap-1.5 text-[12px] text-muted-foreground">
+                {lastSession?.approvalStatus === 'APPROVED' || lastSession?.verified
+                  ? <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                  : <MapPin className="h-3.5 w-3.5" />}
+                {lastSession?.approvalStatus === 'APPROVED'
+                  ? t('pw.clock.approvedByAdmin')
+                  : lastSession?.verified && (lastSession.verificationMethod === 'GEO' || lastSession.verificationMethod === 'BIOMETRIC')
+                    ? (lastSession.verificationMethod === 'BIOMETRIC' ? t('pw.clock.biometricVerified') : t('pw.clock.locationVerified'))
+                    : t('pw.clock.locationChecked')}
+              </p>
+            )}
+            <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+              <div><p className="text-sm font-bold tabular-nums">{inr(status?.weekEarnings)}</p><p className="text-[10px] uppercase text-muted-foreground">{t('pw.clock.thisWeek')}</p></div>
+              <div><p className="text-sm font-bold tabular-nums">{inr(status?.monthEarnings)}</p><p className="text-[10px] uppercase text-muted-foreground">{t('pw.clock.thisMonth')}</p></div>
+              <div><p className="text-sm font-bold tabular-nums">{rate ? `${inr(rate)}` : '—'}</p><p className="text-[10px] uppercase text-muted-foreground">{t('pw.clock.perHour')}</p></div>
+            </div>
+            {sessions.length > 0 && (
+              <div className="mt-3 border-t pt-2">
+                <p className="mb-1 px-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  {t('pw.clock.todaysSessions', { count: sessionCount })}
+                </p>
+                <div className="space-y-1">
+                  {sessions.map((s, i) => (
+                    <div key={i} className="flex items-center justify-between rounded-lg bg-muted/50 px-2.5 py-1.5 text-xs">
+                      <span className="flex items-center gap-1.5 font-medium tabular-nums">
+                        {fmtClock(s.checkInTime)}
+                        <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                        {s.running
+                          ? <span className={s.onBreak ? 'text-amber-600' : 'text-emerald-600'}>{s.onBreak ? t('pw.clock.onBreak') : t('pw.clock.now')}</span>
+                          : fmtClock(s.checkOutTime)}
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        {s.breakMinutes > 0 && <span className="text-[11px] text-muted-foreground">{t('pw.clock.breakMin', { m: s.breakMinutes })}</span>}
+                        {s.approvalStatus === 'PENDING' && <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">{t('pw.clock.waiting')}</span>}
+                        {s.approvalStatus === 'APPROVED' && <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">{t('pw.clock.approved')}</span>}
+                        {s.approvalStatus === 'REJECTED' && (
+                          <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700" title={s.approvalNote ?? undefined}>{t('pw.clock.rejected')}</span>
+                        )}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
