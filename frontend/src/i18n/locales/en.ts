@@ -79,6 +79,7 @@ const en = {
       notifications: 'Notifications',
       assignment: 'Assignment',
       security: 'Security',
+      backup: 'Backup',
     },
     savedToast: 'Settings saved',
     saveFailed: 'Could not save settings',

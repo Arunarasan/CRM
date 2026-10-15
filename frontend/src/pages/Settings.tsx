@@ -2,14 +2,15 @@ import { BaseInput } from '@/components/ui/input';
 import { useEffect, useState, ReactNode } from 'react';
 import {
   Building2, SlidersHorizontal, BellRing, UsersRound, ShieldCheck,
-  Save, Loader2, KeyRound, Moon, Sun, Globe, Check,
+  Save, Loader2, KeyRound, Moon, Sun, Globe, Check, DatabaseBackup, Download,
 } from 'lucide-react';
 import { toast } from '@/components/ui/toast';
 import { useT, Lang } from '@/i18n';
+import { getAuthorities } from '@/hooks/useAuth';
 import { Theme, getTheme, setTheme } from '@/lib/theme';
 import { settingsApi as siteSettingsApi } from '@/api/websiteAdminApi';
 import { smartAssignmentApi } from '@/api/smartAssignmentApi';
-import { settingsApi } from '@/api/settingsApi';
+import { settingsApi, backupApi, type BackupInfo } from '@/api/settingsApi';
 import type { AssignmentSettings } from '@/types/assignment';
 
 /* ------------------------------- primitives ------------------------------- */
@@ -101,7 +102,7 @@ function SaveBar({ saving, onSave, disabled }: { saving: boolean; onSave: () => 
 
 /* --------------------------------- tabs ---------------------------------- */
 
-type TabKey = 'company' | 'preferences' | 'notifications' | 'assignment' | 'security';
+type TabKey = 'company' | 'preferences' | 'notifications' | 'assignment' | 'security' | 'backup';
 
 /* ------------------------------ Company tab ------------------------------ */
 // Reuses the website site_settings store (brand.* / contact.*), plus a company.gst key.
@@ -375,18 +376,89 @@ function SecurityTab() {
   );
 }
 
+/* ------------------------------- Backup tab ------------------------------ */
+function fmtBytes(n: number) {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  if (n < 1024 ** 3) return `${(n / 1024 / 1024).toFixed(1)} MB`;
+  return `${(n / 1024 ** 3).toFixed(2)} GB`;
+}
+
+function BackupTab() {
+  const [info, setInfo] = useState<BackupInfo | null>(null);
+  const [busy, setBusy] = useState<'database' | 'files' | null>(null);
+  const [bytes, setBytes] = useState(0);
+
+  useEffect(() => {
+    backupApi.info().then(setInfo).catch(() => toast.error('Could not load backup details'));
+  }, []);
+
+  const run = async (kind: 'database' | 'files') => {
+    setBusy(kind);
+    setBytes(0);
+    try {
+      const name = await backupApi.download(kind, setBytes);
+      toast.success(`Saved ${name} to your downloads`);
+    } catch (e: any) {
+      toast.error(e?.response?.status === 403 ? 'Only admins can download backups' : 'Backup failed — please try again');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const Btn = ({ kind, label }: { kind: 'database' | 'files'; label: string }) => (
+    <button
+      onClick={() => run(kind)}
+      disabled={busy !== null}
+      className="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition active:scale-[0.99] disabled:opacity-50"
+    >
+      {busy === kind ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+      {busy === kind ? `Downloading… ${fmtBytes(bytes)}` : label}
+    </button>
+  );
+
+  return (
+    <div className="grid gap-5">
+      <Card title="Database backup" desc="A complete copy of all CRM data, saved straight to this computer. Nothing is stored on the server.">
+        <p className="mb-4 text-sm text-muted-foreground">
+          {info ? `${info.tables} tables · about ${info.approxRows.toLocaleString()} records` : 'Loading…'}
+        </p>
+        <Btn kind="database" label="Download database backup (.sql.gz)" />
+      </Card>
+      <Card title="Uploaded files" desc="Photos, documents, voice notes and recordings.">
+        {info && !info.filesIncluded ? (
+          <p className="text-sm text-muted-foreground">
+            Files are stored in cloud storage ({info.storageType.toUpperCase()}), which is already kept off this server. Back them up from the storage provider if needed.
+          </p>
+        ) : (
+          <>
+            <p className="mb-4 text-sm text-muted-foreground">
+              {info ? `${info.fileCount.toLocaleString()} files · ${fmtBytes(info.fileBytes)}` : 'Loading…'}
+            </p>
+            <Btn kind="files" label="Download files backup (.zip)" />
+          </>
+        )}
+      </Card>
+      <p className="text-xs text-muted-foreground">
+        Keep these files somewhere safe — they contain customer and staff data. To restore, import the .sql.gz into an empty MySQL database (gunzip, then run the SQL).
+      </p>
+    </div>
+  );
+}
+
 /* --------------------------------- page ---------------------------------- */
 export default function Settings() {
   const { t } = useT();
   const [tab, setTab] = useState<TabKey>('company');
 
-  const TABS: { key: TabKey; labelKey: string; icon: typeof Building2 }[] = [
+  const TABS = ([
     { key: 'company', labelKey: 'settings.tabs.company', icon: Building2 },
     { key: 'preferences', labelKey: 'settings.tabs.preferences', icon: SlidersHorizontal },
     { key: 'notifications', labelKey: 'settings.tabs.notifications', icon: BellRing },
     { key: 'assignment', labelKey: 'settings.tabs.assignment', icon: UsersRound },
     { key: 'security', labelKey: 'settings.tabs.security', icon: ShieldCheck },
-  ];
+    { key: 'backup', labelKey: 'settings.tabs.backup', icon: DatabaseBackup },
+  ] as { key: TabKey; labelKey: string; icon: typeof Building2 }[]).filter((x) => x.key !== 'backup' || getAuthorities().includes('ROLE_ADMIN'));
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-6 sm:px-6">
@@ -416,6 +488,7 @@ export default function Settings() {
       {tab === 'notifications' && <NotificationsTab />}
       {tab === 'assignment' && <AssignmentTab />}
       {tab === 'security' && <SecurityTab />}
+      {tab === 'backup' && <BackupTab />}
     </div>
   );
 }

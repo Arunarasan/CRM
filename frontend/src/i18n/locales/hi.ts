@@ -77,6 +77,7 @@ const hi = {
       notifications: 'सूचनाएँ',
       assignment: 'असाइनमेंट',
       security: 'सुरक्षा',
+      backup: 'बैकअप',
     },
     savedToast: 'सेटिंग्स सहेजी गईं',
     saveFailed: 'सेटिंग्स सहेजी नहीं जा सकीं',
