@@ -6,7 +6,7 @@ import {
   FolderKanban, ListTodo, ShoppingBag, Ruler,
 } from 'lucide-react';
 import { employeeTaskApi } from '@/api/employeeTaskApi';
-import { TaskCard as TaskCardType, Capacity } from '@/types/employeeTask';
+import { TaskCard as TaskCardType } from '@/types/employeeTask';
 import { runOrQueue } from '@/hooks/useOfflineQueue';
 import TaskCard from './components/TaskCard';
 import { daysUntil, priorityMeta, byPlanRank } from './taskUtils';
@@ -72,7 +72,6 @@ export default function TaskList() {
   const [params, setParams] = useSearchParams();
   const [pool, setPool] = useState<TaskCardType[]>([]);
   const [mine, setMine] = useState<TaskCardType[]>([]);
-  const [capacity, setCapacity] = useState<Capacity | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');
   const search = params.get('search') === '1' ? '' : (params.get('search') ?? '');
@@ -90,7 +89,6 @@ export default function TaskList() {
   const setSearch = (v: string) => update({ search: v || null });
 
   const load = useCallback(() => {
-    employeeTaskApi.capacity().then(setCapacity).catch(() => {});
     Promise.allSettled([
       employeeTaskApi.pool().then(setPool),
       employeeTaskApi.myTasks().then(setMine),
@@ -181,7 +179,6 @@ export default function TaskList() {
   );
 
   const views: { key: View; label: string; count: number }[] = [
-    { key: 'ACTIVE', label: t('pw.tl.view.ACTIVE'), count: active.length },
     { key: 'AVAILABLE', label: t('pw.tl.view.AVAILABLE'), count: available.length },
     { key: 'DONE', label: t('pw.tl.view.DONE'), count: completed.length },
   ];
@@ -199,13 +196,6 @@ export default function TaskList() {
       <div className="flex items-center justify-between px-0.5">
         <div className="min-w-0">
           <h1 className="text-[24px] font-bold leading-tight tracking-tight text-[#111817]">{t('pw.tl.title')}</h1>
-          {capacity && (
-            <p className="mt-0.5 text-[13px] text-[#7A817C]">
-              {t('pw.tl.activeCap', { active: capacity.active })}{capacity.max - capacity.active > 0
-                ? t('pw.tl.moreCan', { n: capacity.max - capacity.active })
-                : t('pw.tl.atCap')}
-            </p>
-          )}
         </div>
       </div>
 
@@ -265,14 +255,14 @@ export default function TaskList() {
         ))}
       </div>
 
-      {/* Active · Available · Done */}
+      {/* Available · Done — tap the selected one again to go back to the active list */}
       <div className="flex gap-2">
         {views.map((v) => {
           const on = view === v.key;
           return (
             <button
               key={v.key}
-              onClick={() => setView(v.key)}
+              onClick={() => setView(on ? 'ACTIVE' : v.key)}
               className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[13px] font-semibold transition-colors ${
                 on ? 'border-[#0A573B] bg-[#E7F2EC] text-[#0A573B]' : 'border-[#E3E5E1] bg-white text-[#5B625E]'
               }`}
