@@ -45,6 +45,8 @@ public class ProjectServiceWarrantyService {
     private final ProjectRepository projectRepository;
     private final ServiceRequestRepository serviceRequestRepository;
     private final TaskRepository taskRepository;
+    @org.springframework.beans.factory.annotation.Autowired
+    private TaskLifecycleService taskLifecycle;
     private final SiteSettingRepository siteSettingRepository;
     private final FinanceService financeService;
     private final CustomerNotificationService customerNotificationService;
@@ -192,9 +194,8 @@ public class ProjectServiceWarrantyService {
                 // Keep the linked task in step with the work's lifecycle.
                 Task task = sr.getTask();
                 if (task != null) {
-                    if (next.equals("RESOLVED") || next.equals("CLOSED")) task.setStatus("COMPLETED");
-                    else if (next.equals("IN_PROGRESS")) task.setStatus("IN_PROGRESS");
-                    taskRepository.save(task);
+                    if (next.equals("RESOLVED") || next.equals("CLOSED")) taskLifecycle.close(task);
+                    else { if (next.equals("IN_PROGRESS")) task.setStatus("IN_PROGRESS"); taskRepository.save(task); }
                 }
             }
         }

@@ -27,6 +27,8 @@ public class ServiceRequestAdminService {
 
     private final ServiceRequestRepository requestRepository;
     private final TaskRepository taskRepository;
+    @org.springframework.beans.factory.annotation.Autowired
+    private TaskLifecycleService taskLifecycle;
     private final CustomerNotificationService customerNotificationService;
 
     public ServiceRequestAdminService(ServiceRequestRepository requestRepository, TaskRepository taskRepository,
@@ -63,9 +65,8 @@ public class ServiceRequestAdminService {
         // Keep the linked internal task in step with the request's lifecycle.
         if (r.getTask() != null) {
             Task task = r.getTask();
-            if (next.equals("RESOLVED") || next.equals("CLOSED")) task.setStatus("COMPLETED");
-            else if (next.equals("IN_PROGRESS")) task.setStatus("IN_PROGRESS");
-            taskRepository.save(task);
+            if (next.equals("RESOLVED") || next.equals("CLOSED")) taskLifecycle.close(task);
+            else { if (next.equals("IN_PROGRESS")) task.setStatus("IN_PROGRESS"); taskRepository.save(task); }
         }
 
         ServiceRequest saved = requestRepository.save(r);

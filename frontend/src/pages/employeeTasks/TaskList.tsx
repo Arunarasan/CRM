@@ -42,7 +42,11 @@ const inTab = (tab: Tab) => (t: TaskCardType) => {
   return tab === 'REQUIREMENT' ? isReq : !isReq;
 };
 
-const isActive = (t: TaskCardType) => t.status !== 'COMPLETED' && t.status !== 'CANCELLED';
+// The server decides the lifecycle; only ACTIVE work counts as open. Status is a fallback for old responses.
+const lifecycleOf = (t: TaskCardType) =>
+  t.lifecycle ?? (t.status === 'COMPLETED' ? 'DONE' : t.status === 'CANCELLED' ? 'CANCELLED' : 'ACTIVE');
+const isActive = (t: TaskCardType) => lifecycleOf(t) === 'ACTIVE';
+const isSubmitted = (t: TaskCardType) => lifecycleOf(t) === 'SUBMITTED';
 
 /** Which urgency bucket an active task falls into. */
 function bucket(t: TaskCardType): 'overdue' | 'now' | 'today' | 'upcoming' {
@@ -130,7 +134,8 @@ export default function TaskList() {
   // Everything below is scoped to the selected tab.
   const active = activeMine.filter(inTab(tab));
   const available = pool.filter(matches).filter(inTab(tab)).sort(byPlanRank);
-  const completed = mine.filter(matches).filter((t) => t.status === 'COMPLETED').filter(inTab(tab));
+  const completed = mine.filter(matches).filter((t) => lifecycleOf(t) === 'DONE').filter(inTab(tab));
+  const submitted = mine.filter(matches).filter(isSubmitted).filter(inTab(tab));
   const overdue = active.filter((t) => bucket(t) === 'overdue').sort(byPlanRank);
   const now = active.filter((t) => bucket(t) === 'now').sort(byPlanRank);
   const today = active.filter((t) => bucket(t) === 'today').sort(byPlanRank);
@@ -285,7 +290,7 @@ export default function TaskList() {
       {!loaded ? skeleton : (
         <>
           {view === 'ACTIVE' && (
-            active.length === 0 && projectOpen.length === 0
+            active.length === 0 && projectOpen.length === 0 && submitted.length === 0
               ? empty(available.length
                   ? t('pw.tl.inHand', { what, n: available.length })
                   : t('pw.tl.noAttention', { what }), true)
@@ -296,6 +301,7 @@ export default function TaskList() {
                   <Group icon={CalendarDays} tone="text-[#0A573B]" title={t('pw.tl.group.today')} list={today} />
                   <Group icon={Clock} tone="text-[#7A817C]" title={t('pw.tl.group.upcoming')} list={upcoming} />
                   <Group icon={FolderKanban} tone="text-[#9B6B32]" title={t('pw.tl.group.projectOpen')} list={projectOpen} />
+                  <Group icon={Clock} tone="text-[#7A817C]" title={t('pw.tl.group.submitted')} list={submitted} />
                 </div>
               )
           )}

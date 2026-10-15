@@ -126,8 +126,7 @@ public class TaskService {
             int p = Math.max(0, Math.min(100, progress));
             task.setProgress(p);
             if (p >= 100) {
-                task.setStatus("COMPLETED");
-                if (task.getCompletedDate() == null) task.setCompletedDate(java.time.LocalDate.now());
+                return taskLifecycle.close(task);
             } else if (p > 0) {
                 task.setStatus("IN_PROGRESS");
                 task.setCompletedDate(null);
@@ -166,6 +165,8 @@ public class TaskService {
         }
 
         Task saved = taskRepository.save(task);
+        if ("COMPLETED".equals(saved.getStatus())) saved = taskLifecycle.close(saved); // admin completes → closes for everyone
+        else if ("CANCELLED".equals(saved.getStatus())) saved = taskLifecycle.cancel(saved);
         if (!"COMPLETED".equals(previousStatus) && "COMPLETED".equals(saved.getStatus())) {
             workflowTriggerService.onTaskCompleted(saved);
         }
@@ -178,10 +179,15 @@ public class TaskService {
         task.setStatus(status);
         task.setOrderIndex(orderIndex);
         Task saved = taskRepository.save(task);
+        if ("COMPLETED".equals(status)) taskLifecycle.close(saved);
+        else if ("CANCELLED".equals(status)) taskLifecycle.cancel(saved);
         if (!"COMPLETED".equals(previousStatus) && "COMPLETED".equals(status)) {
             workflowTriggerService.onTaskCompleted(saved);
         }
     }
+
+    @Autowired
+    private TaskLifecycleService taskLifecycle;
 
     @Autowired
     private org.springframework.jdbc.core.JdbcTemplate jdbc;
@@ -277,6 +283,8 @@ public class TaskService {
         if (dueDate != null) task.setDueDate(dueDate);
         if (description != null) task.setDescription(description);
         Task saved = taskRepository.save(task);
+        if ("COMPLETED".equals(saved.getStatus())) saved = taskLifecycle.close(saved); // admin completes → closes for everyone
+        else if ("CANCELLED".equals(saved.getStatus())) saved = taskLifecycle.cancel(saved);
         if (!"COMPLETED".equals(previousStatus) && "COMPLETED".equals(saved.getStatus())) {
             workflowTriggerService.onTaskCompleted(saved);
         }

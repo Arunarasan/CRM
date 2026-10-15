@@ -104,6 +104,9 @@ public class ProjectService {
     private TaskRepository taskRepository;
 
     @Autowired
+    private TaskLifecycleService taskLifecycle;
+
+    @Autowired
     private TaskChecklistService taskChecklistService;
 
     @Autowired
@@ -1066,22 +1069,14 @@ public class ProjectService {
     }
 
     /**
-     * Project completed / handed over → every still-open task on it closes (CANCELLED, as cancellation
-     * does) so it leaves the employees' To-Do. Service & warranty requests are post-completion work and stay.
+     * Project completed / handed over → every still-open task on the project AND on the lead it came from
+     * moves to COMPLETED (rule: completed project = completed work everywhere), so it leaves the
+     * employees' To-Do. Service & warranty requests are post-completion work and stay.
      */
     private void closeOpenProjectTasks(Long projectId) {
-        for (Task t : taskRepository.findByProjectId(projectId)) {
-            String ts = t.getStatus() == null ? "" : t.getStatus().toUpperCase();
-            if (ts.equals("COMPLETED") || ts.equals("CANCELLED")) continue;
-            if ("SERVICE_REQUEST".equals(t.getSource())) continue;
-            if (t.getProgress() != null && t.getProgress() >= 100) {
-                t.setStatus("COMPLETED"); // finished handover stage work counts as done
-                if (t.getCompletedDate() == null) t.setCompletedDate(java.time.LocalDate.now());
-            } else {
-                t.setStatus("CANCELLED");
-            }
-            taskRepository.save(t);
-        }
+        Project project = projectRepository.findById(projectId).orElse(null);
+        Long leadId = project != null && project.getLead() != null ? project.getLead().getId() : null;
+        taskLifecycle.completeAllForProject(projectId, leadId);
     }
 
     /** Readiness report for the completion gate (drives the UI checklist). */
@@ -1407,6 +1402,12 @@ public class ProjectService {
                 notifyItem(saved, "Inspection Required", saved.getItemName() + " is awaiting inspection in " + roomName(saved));
             } else if ("COMPLETED".equalsIgnoreCase(newStatus)) {
                 notifyItem(saved, "Task Completed", saved.getItemName() + " completed in " + roomName(saved));
+                // Office finished the work item → its generated task closes for every assignee.
+                if (saved.getBoqItemId() != null) {
+                    taskRepository.findByGeneratedFromBoqItemId(saved.getBoqItemId())
+                            .filter(t -> !"COMPLETED".equals(t.getStatus()) && !"CANCELLED".equals(t.getStatus()))
+                            .ifPresent(taskLifecycle::close);
+                }
             }
         } else if (progressChanged) {
             notifyItem(saved, "Progress Updated", saved.getItemName() + " is now " + newProgress + "% in " + roomName(saved));

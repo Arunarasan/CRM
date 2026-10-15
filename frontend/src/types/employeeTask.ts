@@ -32,6 +32,8 @@ export interface TaskCard {
   progressPercent: number | null;
   assignedEmployees: string[];
   myAssignmentStatus?: AssignmentStatus;
+  /** Server-decided: ACTIVE | SUBMITTED (waiting for the office) | DONE | CANCELLED. */
+  lifecycle?: 'ACTIVE' | 'SUBMITTED' | 'DONE' | 'CANCELLED';
   canPick?: boolean; // set on pool cards — false when the viewer is not clocked in
   dataEntry?: boolean; // quick data-entry lead task
   holdExpiresAt?: string | null; // ISO time this held data-entry task auto-releases (countdown)

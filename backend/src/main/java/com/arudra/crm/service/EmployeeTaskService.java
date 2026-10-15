@@ -125,6 +125,9 @@ public class EmployeeTaskService {
     @org.springframework.context.annotation.Lazy
     private BundleService bundleService;
 
+    @Autowired
+    private TaskLifecycleService taskLifecycle;
+
     private static final List<String> ACTIVE_ASSIGNMENT_STATUSES =
             List.of("ASSIGNED", "ACCEPTED", "IN_PROGRESS", "PAUSED", "WAITING_MATERIAL", "REWORK", "COMPLETED");
 
@@ -158,15 +161,19 @@ public class EmployeeTaskService {
         TodoFilter todo = new TodoFilter();
         List<Task> tasks = mine.stream().map(TaskAssignment::getTask).distinct()
                 .filter(todo::shows).collect(Collectors.toList());
-        long overdue = tasks.stream().filter(t -> isOverdue(t, today)).count();
-        long dueToday = tasks.stream().filter(t -> today.equals(t.getDueDate()) && !"COMPLETED".equals(t.getStatus())).count();
-        long upcoming = tasks.stream().filter(t -> t.getDueDate() != null && t.getDueDate().isAfter(today)).count();
+        // Only ACTIVE work counts as due/overdue/upcoming/pending; submitted or closed work never does.
+        java.util.Map<Long, String> myStatus = new HashMap<>();
+        for (TaskAssignment a : mine) myStatus.putIfAbsent(a.getTask().getId(), a.getStatus());
+        java.util.function.Predicate<Task> open = t -> TaskLifecycleService.isOpenForEmployee(t, myStatus.get(t.getId()));
+        long overdue = tasks.stream().filter(open).filter(t -> isOverdue(t, today)).count();
+        long dueToday = tasks.stream().filter(open).filter(t -> today.equals(t.getDueDate())).count();
+        long upcoming = tasks.stream().filter(open).filter(t -> t.getDueDate() != null && t.getDueDate().isAfter(today)).count();
         long completedToday = tasks.stream().filter(t -> today.equals(t.getCompletedDate())).count();
         LocalDate weekStart = today.with(java.time.DayOfWeek.MONDAY);
         long completedThisWeek = tasks.stream()
                 .filter(t -> t.getCompletedDate() != null && !t.getCompletedDate().isBefore(weekStart))
                 .count();
-        long pending = tasks.stream().filter(t -> !"COMPLETED".equals(t.getStatus())).count();
+        long pending = tasks.stream().filter(open).count();
 
         Map<String, Object> home = new HashMap<>();
         home.put("availableCount", getAvailablePool(employee).size());
@@ -177,7 +184,7 @@ public class EmployeeTaskService {
         home.put("completedThisWeek", completedThisWeek);
         home.put("pending", pending);
         home.put("todaysTasks", tasks.stream()
-                .filter(t -> !isClosed(t) && (today.equals(t.getDueDate()) || isOverdue(t, today)))
+                .filter(t -> open.test(t) && (today.equals(t.getDueDate()) || isOverdue(t, today)))
                 .map(t -> toCard(t, employee.getId()))
                 .collect(Collectors.toList()));
         return home;
@@ -1477,9 +1484,7 @@ public class EmployeeTaskService {
         Task task = taskRepository.findById(taskId).orElse(null);
         if (task == null || "COMPLETED".equals(task.getStatus()) || "CANCELLED".equals(task.getStatus())) return;
         if (by == null) {
-            task.setStatus("COMPLETED");
-            task.setCompletedDate(LocalDate.now());
-            taskRepository.save(task);
+            taskLifecycle.close(task);
             return;
         }
         finalizeTaskCompletion(task, by);
@@ -1630,17 +1635,7 @@ public class EmployeeTaskService {
     }
 
     private Task finalizeTaskCompletion(Task task, User byEmployee) {
-        task.setStatus("COMPLETED");
-        task.setCompletedDate(LocalDate.now());
-        for (TaskAssignment a : assignmentRepository.findByTaskId(task.getId())) {
-            if (!"CANCELLED".equals(a.getStatus()) && !"REJECTED".equals(a.getStatus())
-                    && !"COMPLETED".equals(a.getStatus())) {
-                a.setStatus("COMPLETED");
-                if (a.getCompletedAt() == null) a.setCompletedAt(LocalDateTime.now());
-                assignmentRepository.save(a);
-            }
-        }
-        Task saved = taskRepository.save(task);
+        Task saved = taskLifecycle.close(task);
         // The one shared execution task closing → the project is 100% complete.
         completeProjectForExecutionTask(saved);
 
@@ -1815,16 +1810,11 @@ public class EmployeeTaskService {
 
     @LogActivity(module = "EMPLOYEE_TASK", action = "APPROVE")
     public Task approveCompletion(Long taskId, User manager) {
-        Task task = getTask(taskId);
-        task.setStatus("COMPLETED");
-        task.setCompletedDate(LocalDate.now());
-        taskRepository.save(task);
+        Task task = taskLifecycle.close(getTask(taskId));
         // Admin sign-off on the shared execution task marks the project 100% complete.
         completeProjectForExecutionTask(task);
         for (TaskAssignment a : assignmentRepository.findByTaskId(taskId)) {
             if (!"CANCELLED".equals(a.getStatus()) && !"REJECTED".equals(a.getStatus())) {
-                a.setStatus("COMPLETED");
-                assignmentRepository.save(a);
                 notificationService.dispatch("Task Approved", "\"" + task.getTaskName() + "\" was approved by your manager.",
                         "TASK", a.getEmployee().getId(), "/employee/tasks/" + taskId);
             }
@@ -2539,6 +2529,8 @@ public class EmployeeTaskService {
                     .min(java.util.Comparator.comparing((TaskAssignment a) -> "CANCELLED".equals(a.getStatus())))
                     .ifPresent(mine -> card.put("myAssignmentStatus", mine.getStatus()));
         }
+        // Server-decided lifecycle (ACTIVE | SUBMITTED | DONE | CANCELLED) — the app never derives it.
+        card.put("lifecycle", TaskLifecycleService.lifecycleOf(t, (String) card.get("myAssignmentStatus")));
         return card;
     }
 
