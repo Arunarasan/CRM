@@ -50,6 +50,7 @@ export const site = {
   country: import.meta.env.VITE_CONTACT_COUNTRY || 'IN',
   geoLat: import.meta.env.VITE_CONTACT_GEO_LAT || '',
   catalogPdf: '',
+  founder: { image: '/founder.jpg', name: '', title: 'Founder, JB Decor', message: 'Every home we touch carries our name, so we measure, stitch and install it with the same care we would give our own.' },
   geoLng: import.meta.env.VITE_CONTACT_GEO_LNG || '',
   crmUrl: import.meta.env.VITE_CRM_URL || '/crm',
   businessHours: 'Mon – Sat · 10:00 AM – 7:00 PM',

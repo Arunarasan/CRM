@@ -9,7 +9,7 @@ import { heroStats } from '@/data/heroSlides'
 import { testimonials, whyChooseFeatures } from '@/data/siteContent'
 import { Icon } from '@/lib/icons'
 import { useSeo } from '@/hooks/useSeo'
-import { usePageContent } from '@/hooks/useSiteSettings'
+import { usePageContent, useSite } from '@/hooks/useSiteSettings'
 
 const philosophy = [
   'Design that serves the way you actually live',
@@ -21,6 +21,7 @@ const philosophy = [
 export default function About() {
   useSeo({ title: 'About Us', description: 'For over 16 years, JB Decor has supplied and fitted curtains, blinds, mosquito nets and home décor — measured, stitched and installed by our own team.' })
   const content = usePageContent('about')
+  const site = useSite()
   return (
     <>
       <PageHeader
@@ -53,6 +54,31 @@ export default function About() {
               Today, our designers, architects, and craftspeople work as one team, taking projects from the
               first sketch to the final styled room — with the same care whether it's a single space or an
               entire home.
+            </p>
+          </div>
+        </div>
+      </Section>
+
+      {/* Founder */}
+      <Section tone="white">
+        <div className="grid items-center gap-8 sm:gap-10 md:grid-cols-[minmax(0,320px)_1fr] lg:gap-14">
+          <div className="relative mx-auto w-full max-w-[280px] md:max-w-none">
+            <div className="absolute -inset-3 border border-gold/25" aria-hidden />
+            <SmartImage
+              src={site.founder.image}
+              alt={site.founder.name ? `${site.founder.name}, ${site.founder.title}` : site.founder.title}
+              className="relative aspect-[3/4] w-full"
+              imgClassName="object-top"
+            />
+          </div>
+          <div>
+            <span className="eyebrow"><span className="rule-gold" />Meet the Founder</span>
+            <h2 className="mt-4 font-serif text-3xl font-semibold text-forest md:text-4xl">
+              {site.founder.name || 'The person behind JB Decor'}
+            </h2>
+            <p className="mt-2 text-sm font-medium uppercase tracking-wide text-gold-dark">{site.founder.title}</p>
+            <p className="mt-5 border-l-2 border-gold/50 pl-4 font-serif text-lg italic leading-relaxed text-forest/80">
+              “{site.founder.message}”
             </p>
           </div>
         </div>

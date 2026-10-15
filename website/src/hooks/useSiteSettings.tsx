@@ -27,6 +27,7 @@ export interface SiteConfig {
   crmUrl: string
   businessHours: string
   catalogPdf: string
+  founder: { image: string; name: string; title: string; message: string }
   social: { instagram: string; facebook: string; pinterest: string; linkedin: string }
 }
 
@@ -53,6 +54,12 @@ function merge(s: Record<string, string>): SiteConfig {
     geoLng: g('contact.geoLng', base.geoLng),
     businessHours: g('contact.businessHours', base.businessHours),
     catalogPdf: g('site.catalogPdf', base.catalogPdf),
+    founder: {
+      image: g('founder.image', base.founder.image),
+      name: g('founder.name', base.founder.name),
+      title: g('founder.title', base.founder.title),
+      message: g('founder.message', base.founder.message),
+    },
     social: {
       instagram: g('social.instagram', base.social.instagram),
       facebook: g('social.facebook', base.social.facebook),
