@@ -9,6 +9,7 @@ import java.util.List;
 public class CreateUserRequest {
     private String name;
     private String email;
+    private String phone;
     private String password;
     private List<String> roles;
     private Boolean emailVerified;

@@ -35,6 +35,10 @@ public class User extends BaseEntity {
     @Column(nullable = false, length = 100)
     private String name;
 
+    /** Optional; lets the account sign in with a phone number instead of the email. */
+    @Column(length = 20)
+    private String phone;
+
     @Column(name = "email_verified", nullable = false)
     private boolean emailVerified = false;
 

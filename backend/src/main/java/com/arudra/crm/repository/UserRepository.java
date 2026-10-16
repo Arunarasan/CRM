@@ -11,6 +11,8 @@ import java.util.Optional;
 public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByEmail(String email);
 
+    List<User> findByPhoneIsNotNull();
+
     @org.springframework.data.jpa.repository.Query(
             "SELECT DISTINCT u FROM User u JOIN u.roles r WHERE r.name IN :roleNames")
     List<User> findByRoleNames(@org.springframework.data.repository.query.Param("roleNames") List<String> roleNames);

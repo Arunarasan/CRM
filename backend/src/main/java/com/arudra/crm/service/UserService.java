@@ -65,9 +65,28 @@ public class UserService {
         user.setName(req.getName().trim());
         user.setEmail(email);
         user.setPassword(passwordEncoder.encode(req.getPassword()));
+        user.setPhone(checkedPhone(req.getPhone(), null));
         user.setEmailVerified(req.getEmailVerified() != null ? req.getEmailVerified() : true);
         user.setRoles(resolveRoles(req.getRoles()));
         return UserAdminDTO.from(userRepository.save(user));
+    }
+
+    /** Trims the phone, returns null when blank, and rejects bad or already-used numbers (last 10 digits). */
+    private String checkedPhone(String raw, Long selfId) {
+        if (raw == null || raw.isBlank()) return null;
+        String phone = raw.trim();
+        String digits = phone.replaceAll("\\D", "");
+        if (digits.length() < 10) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Phone number must have at least 10 digits.");
+        }
+        String tail = digits.substring(digits.length() - 10);
+        boolean taken = userRepository.findByPhoneIsNotNull().stream()
+                .filter(u -> !u.getId().equals(selfId))
+                .anyMatch(u -> u.getPhone().replaceAll("\\D", "").endsWith(tail));
+        if (taken) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "A user with that phone number already exists.");
+        }
+        return phone;
     }
 
     @Transactional
@@ -86,6 +105,9 @@ public class UserService {
                 }
             });
             user.setEmail(email);
+        }
+        if (req.getPhone() != null) {
+            user.setPhone(checkedPhone(req.getPhone(), id));
         }
         if (req.getRoles() != null) {
             // Don't let the last admin lose their admin role and lock everyone out.

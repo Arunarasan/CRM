@@ -12,6 +12,7 @@ interface AdminUser {
   id: number;
   name: string;
   email: string;
+  phone: string | null;
   emailVerified: boolean;
   locked: boolean;
   failedAttempts: number;
@@ -29,8 +30,8 @@ export default function Users() {
   // create / edit dialog
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [form, setForm] = useState<{ name: string; email: string; password: string; roles: string[] }>({
-    name: "", email: "", password: "", roles: [],
+  const [form, setForm] = useState<{ name: string; email: string; phone: string; password: string; roles: string[] }>({
+    name: "", email: "", phone: "", password: "", roles: [],
   });
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
@@ -57,14 +58,14 @@ export default function Users() {
 
   const openCreate = () => {
     setEditingId(null);
-    setForm({ name: "", email: "", password: "", roles: [] });
+    setForm({ name: "", email: "", phone: "", password: "", roles: [] });
     setFormError("");
     setDialogOpen(true);
   };
 
   const openEdit = (u: AdminUser) => {
     setEditingId(u.id);
-    setForm({ name: u.name, email: u.email, password: "", roles: [...u.roles] });
+    setForm({ name: u.name, email: u.email, phone: u.phone ?? "", password: "", roles: [...u.roles] });
     setFormError("");
     setDialogOpen(true);
   };
@@ -81,10 +82,10 @@ export default function Users() {
     setSaving(true);
     try {
       if (editingId) {
-        await api.put(`/users/${editingId}`, { name: form.name, email: form.email, roles: form.roles });
+        await api.put(`/users/${editingId}`, { name: form.name, email: form.email, phone: form.phone, roles: form.roles });
       } else {
         await api.post("/users", {
-          name: form.name, email: form.email, password: form.password, roles: form.roles,
+          name: form.name, email: form.email, phone: form.phone, password: form.password, roles: form.roles,
         });
       }
       setDialogOpen(false);
@@ -173,7 +174,10 @@ export default function Users() {
             {!loading && users.map((u) => (
               <TableRow key={u.id}>
                 <TableCell className="font-medium">{u.name}</TableCell>
-                <TableCell className="text-muted-foreground">{u.email}</TableCell>
+                <TableCell className="text-muted-foreground">
+                  {u.email}
+                  {u.phone && <div className="text-xs">{u.phone}</div>}
+                </TableCell>
                 <TableCell>
                   <div className="flex flex-wrap gap-1">
                     {u.roles.length === 0 && <span className="text-xs text-muted-foreground">—</span>}
@@ -229,6 +233,11 @@ export default function Users() {
               <Label>Email</Label>
               <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
             </div>
+            <div className="space-y-1">
+              <Label>Phone (optional, for phone sign-in)</Label>
+              <Input type="tel" value={form.phone} placeholder="10-digit mobile number"
+                onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+            </div>
             {!editingId && (
               <div className="space-y-1">
                 <Label>Temporary Password</Label>
@@ -270,7 +279,7 @@ export default function Users() {
           </DialogHeader>
           <div className="space-y-3 py-2">
             <p className="text-sm text-muted-foreground">
-              Set a new password for <span className="font-medium text-foreground">{pwUser?.name}</span>. They'll use it on their next sign-in.
+              Set a new password for<span className="font-medium text-foreground">{pwUser?.name}</span>. They'll use it on their next sign-in.
             </p>
             {pwError && <div className="bg-destructive/15 text-destructive text-sm p-2 rounded-md">{pwError}</div>}
             <div className="space-y-1">

@@ -59,7 +59,9 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody AuthRequest authRequest, HttpServletRequest request) {
         String ipAddress = request.getRemoteAddr();
-        
+        // The "email" field may carry a phone number instead; resolve it to the account's email.
+        authRequest.setEmail(resolveLoginEmail(authRequest.getEmail()));
+
         try {
             Authentication authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(authRequest.getEmail(), authRequest.getPassword())
@@ -102,6 +104,42 @@ public class AuthController {
         } catch (Exception ex) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("success", false, "message", ex.getMessage()));
         }
+    }
+
+    @Autowired
+    private com.arudra.crm.repository.EmployeeRepository employeeRepository;
+
+    /**
+     * Accepts an email as-is, or a phone number (matched on its last 10 digits against user
+     * accounts first, then active employees) and returns that account's login email. An unknown or ambiguous phone is returned
+     * unchanged so authentication fails with the same generic "Invalid email or password".
+     */
+    private String resolveLoginEmail(String identifier) {
+        if (identifier == null) return null;
+        String id = identifier.trim();
+        if (id.contains("@")) return id;
+        String digits = id.replaceAll("\\D", "");
+        if (digits.length() < 10) return id;
+        String tail = digits.substring(digits.length() - 10);
+        List<String> userEmails = userRepository.findByPhoneIsNotNull().stream()
+                .filter(u -> {
+                    String d = u.getPhone().replaceAll("\\D", "");
+                    return d.length() >= 10 && d.endsWith(tail);
+                })
+                .map(User::getEmail)
+                .distinct()
+                .collect(Collectors.toList());
+        if (userEmails.size() == 1) return userEmails.get(0);
+        if (userEmails.size() > 1) return id;
+        List<String> emails = employeeRepository.findByPhoneIsNotNullAndIsDeletedFalse().stream()
+                .filter(e -> {
+                    String d = e.getPhone().replaceAll("\\D", "");
+                    return d.length() >= 10 && d.endsWith(tail);
+                })
+                .map(com.arudra.crm.entity.Employee::getEmail)
+                .distinct()
+                .collect(Collectors.toList());
+        return emails.size() == 1 ? emails.get(0) : id;
     }
 
     private void handleFailedAttempt(String email, String ipAddress) {

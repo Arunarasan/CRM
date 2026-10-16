@@ -60,7 +60,7 @@ export default function Login() {
         <CardHeader className="space-y-2 text-center items-center">
           <Logo size="lg" />
           <CardDescription>
-            Enter your credentials to access your account
+            Sign in with your email or phone number
           </CardDescription>
         </CardHeader>
         <form onSubmit={handleLogin}>
@@ -73,12 +73,13 @@ export default function Login() {
             )}
             <div className="space-y-2">
               <label className="text-sm font-medium leading-none" htmlFor="email">
-                Email
+                Email or phone number
               </label>
-              <Input 
-                id="email" 
-                type="email" 
-                placeholder="admin@arudra.com" 
+              <Input
+                id="email"
+                type="text"
+                autoComplete="username"
+                placeholder="admin@arudra.com or 98765 43210"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -97,7 +98,8 @@ export default function Login() {
               </div>
               <Input 
                 id="password" 
-                type="password" 
+                type="password"
+                autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required

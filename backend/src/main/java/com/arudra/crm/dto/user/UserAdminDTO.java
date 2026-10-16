@@ -14,6 +14,7 @@ public class UserAdminDTO {
     private Long id;
     private String name;
     private String email;
+    private String phone;
     private boolean emailVerified;
     private boolean locked;
     private int failedAttempts;
@@ -25,6 +26,7 @@ public class UserAdminDTO {
         dto.setId(user.getId());
         dto.setName(user.getName());
         dto.setEmail(user.getEmail());
+        dto.setPhone(user.getPhone());
         dto.setEmailVerified(user.isEmailVerified());
         dto.setLocked(!user.isAccountNonLocked());
         dto.setFailedAttempts(user.getFailedAttempts());

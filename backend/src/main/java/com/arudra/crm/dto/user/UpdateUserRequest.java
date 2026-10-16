@@ -9,5 +9,7 @@ import java.util.List;
 public class UpdateUserRequest {
     private String name;
     private String email;
+    /** null = unchanged; blank = clear. */
+    private String phone;
     private List<String> roles;
 }
