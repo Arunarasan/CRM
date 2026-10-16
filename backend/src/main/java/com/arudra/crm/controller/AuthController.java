@@ -106,7 +106,19 @@ public class AuthController {
             handleFailedAttempt(authRequest.getEmail(), ipAddress);
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("success", false, "message", "Invalid email or password"));
         } catch (LockedException ex) {
-            return ResponseEntity.status(HttpStatus.LOCKED).body(Map.of("success", false, "message", "Too many failed attempts. Please wait a few minutes and try again, or reset your password."));
+            // Tell the sign-in screen how long is left so it can show a countdown.
+            long retryAfter = userRepository.findByEmail(authRequest.getEmail())
+                    .filter(u -> u.getLockTime() != null)
+                    .map(u -> java.time.Duration.between(java.time.LocalDateTime.now(),
+                            u.getLockTime().plus(com.arudra.crm.security.CustomUserDetailsService
+                                    .lockDuration(u.getFailedAttempts()))).getSeconds())
+                    .orElse(900L);
+            retryAfter = Math.max(retryAfter, 1L);
+            return ResponseEntity.status(HttpStatus.LOCKED)
+                    .header("Retry-After", String.valueOf(retryAfter))
+                    .body(Map.of("success", false,
+                            "message", "Too many failed attempts. Please wait and try again, or reset your password.",
+                            "retryAfterSeconds", retryAfter));
         } catch (Exception ex) {
             // Details go to the log only; the client gets a generic message.
             log.error("Login failed unexpectedly for {}", authRequest.getEmail(), ex);

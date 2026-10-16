@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { Mail, Lock, Eye, EyeOff, ArrowRight, AlertCircle } from 'lucide-react'
 import { Logo } from '@/components/layout/Logo'
@@ -16,9 +16,24 @@ export default function Login() {
   const [showPw, setShowPw] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  // Seconds left on an account lockout; the form stays disabled until it reaches 0.
+  const [lockLeft, setLockLeft] = useState(0)
+
+  useEffect(() => {
+    if (lockLeft <= 0) return
+    const t = setTimeout(() => setLockLeft((s) => s - 1), 1000)
+    return () => clearTimeout(t)
+  }, [lockLeft])
+
+  const fmt = (s: number) => {
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60
+    const mm = String(m).padStart(2, '0'), ss = String(sec).padStart(2, '0')
+    return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`
+  }
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
+    if (lockLeft > 0) return
     setError(null)
     setLoading(true)
     try {
@@ -34,7 +49,9 @@ export default function Login() {
       if (data?.requiresVerification) {
         setError('This account is not activated yet. Please contact an administrator.')
       } else if (err?.response?.status === 423) {
-        setError('Too many failed attempts. Please wait a few minutes and try again, or reset your password.')
+        const secs = Number(data?.retryAfterSeconds ?? err?.response?.headers?.['retry-after'])
+        setLockLeft(Number.isFinite(secs) && secs > 0 ? Math.ceil(secs) : 900)
+        setError(null)
       } else {
         setError('Invalid email or password. Please try again.')
       }
@@ -62,6 +79,16 @@ export default function Login() {
           <Logo />
           <h1 className="mt-10 font-serif text-3xl font-semibold text-ivory">Team Sign in</h1>
           <p className="mt-2 text-sm text-ivory/60">Sign in to the {site.name} CRM.</p>
+
+          {lockLeft > 0 && (
+            <div role="alert" className="mt-6 border border-red-400/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+              <div className="flex items-center gap-2"><AlertCircle className="h-4 w-4 shrink-0" /> Too many failed attempts.</div>
+              <div className="mt-2 text-ivory/80">
+                Try again in <span className="font-mono text-base font-semibold tabular-nums text-gold">{fmt(lockLeft)}</span>,
+                or <Link to="/forgot-password" className="text-gold underline">reset your password</Link>.
+              </div>
+            </div>
+          )}
 
           {error && (
             <div className="mt-6 flex items-center gap-2 border border-red-400/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
@@ -107,10 +134,10 @@ export default function Login() {
             </div>
 
             <button
-              type="submit" disabled={loading}
+              type="submit" disabled={loading || lockLeft > 0}
               className="flex w-full items-center justify-center gap-2 bg-gold py-3.5 text-sm font-semibold uppercase tracking-wide text-forest transition-colors hover:bg-gold-dark disabled:opacity-60"
             >
-              {loading ? 'Signing in…' : <>Sign In <ArrowRight className="h-4 w-4" /></>}
+              {lockLeft > 0 ? `Locked · ${fmt(lockLeft)}` : loading ? 'Signing in…' : <>Sign In <ArrowRight className="h-4 w-4" /></>}
             </button>
           </form>
 
