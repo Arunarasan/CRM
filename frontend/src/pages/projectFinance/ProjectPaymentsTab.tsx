@@ -21,6 +21,9 @@ import { openInvoicePdf } from "./printInvoice";
 import { MoneySection } from "./MoneySection";
 import { Skeleton } from "@/components/ui/skeleton";
 import ProjectProfitPanel from "./ProjectProfitPanel";
+import { quotationApi } from "@/api/quotationApi";
+import { quoteCharges } from "@/types/quotation";
+import { readPricing } from "@/pages/quotations/quotationPricing";
 
 const inr = (n?: number | null) =>
   "₹" + Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
@@ -115,6 +118,7 @@ export default function ProjectPaymentsTab({ project, onChanged, mode = "billing
 
   const [makerOpen, setMakerOpen] = useState(false);
   const [payFor, setPayFor] = useState<Invoice | null>(null);
+  const [editInv, setEditInv] = useState<Invoice | null>(null);
 
   if (!canRead) {
     return (
@@ -236,6 +240,7 @@ export default function ProjectPaymentsTab({ project, onChanged, mode = "billing
 
                     <div className="col-span-2 flex items-center justify-end gap-1 @xl:col-span-1">
                       {busy && <Loader2 className="h-4 w-4 animate-spin text-slate-400" />}
+                      {canWrite && i.status === "DRAFT" && !busy && <ActionBtn onClick={() => setEditInv(i)} title="Edit this draft invoice"><Pencil className="h-3.5 w-3.5" /> Edit</ActionBtn>}
                       {canWrite && i.status === "DRAFT" && !busy && <ActionBtn onClick={() => issue(i.id)} title="Issue this invoice">Issue</ActionBtn>}
                       {canCollect && live && i.status !== "PAID" && !busy && (
                         <ActionBtn onClick={() => setPayFor(i)} tone="green" title="Record payment against this invoice"><CheckCircle2 className="h-3.5 w-3.5" /> Mark paid</ActionBtn>
@@ -274,11 +279,13 @@ export default function ProjectPaymentsTab({ project, onChanged, mode = "billing
         </div>
       )}
 
-      {makerOpen && customerId && (
+      {(makerOpen || editInv) && customerId && (
         <InvoiceMaker
+          key={editInv?.id ?? "new"}
           project={project}
-          onClose={() => setMakerOpen(false)}
-          onSaved={() => { setMakerOpen(false); reloadAll(); onChanged?.(); }}
+          invoice={editInv}
+          onClose={() => { setMakerOpen(false); setEditInv(null); }}
+          onSaved={() => { setMakerOpen(false); setEditInv(null); reloadAll(); onChanged?.(); }}
         />
       )}
       {payFor && (
@@ -725,7 +732,7 @@ const DEFAULT_DESC: Record<InvoiceType, string> = {
  * Invoice maker. Simple by default: pick a type, enter one amount, done — GST/totals auto. An
  * "Itemize" toggle reveals the multi-line editor when a detailed breakdown is needed.
  */
-function InvoiceMaker({ project, onClose, onSaved }: { project: any; onClose: () => void; onSaved: () => void }) {
+function InvoiceMaker({ project, invoice: editing, onClose, onSaved }: { project: any; invoice?: Invoice | null; onClose: () => void; onSaved: () => void }) {
   const [invoiceType, setInvoiceType] = useState<InvoiceType>("ADVANCE");
   const [date, setDate] = useState(today());
   const [dueDate, setDueDate] = useState("");
@@ -747,6 +754,81 @@ function InvoiceMaker({ project, onClose, onSaved }: { project: any; onClose: ()
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Editing a draft: load its saved lines into the itemized editor.
+  const [quoteId, setQuoteId] = useState<number | null>(editing?.quotation?.id ?? null);
+  useEffect(() => {
+    if (!editing) return;
+    setInvoiceType(editing.invoiceType);
+    setDate(editing.date || today());
+    setDueDate(editing.dueDate || "");
+    setTaxInclusive(!!editing.taxInclusive);
+    setNotes(editing.notes || "");
+    financeApi.getInvoiceItems(editing.id).then((its) => {
+      if (its.length) {
+        setGstRate(Number(its[0].gstRate ?? 0));
+        setItemized(true);
+        setLines(its.map((i) => ({
+          description: i.description || "",
+          quantity: Number(i.quantity) || 1,
+          unitPrice: Number(editing.taxInclusive ? (i.unitPriceIncl ?? i.unitPrice) : i.unitPrice) || 0,
+        })));
+      }
+    }).catch(() => setError("Could not load the invoice lines."));
+  }, [editing]);
+
+  // Fill the lines from the project's quotation: products, labour/shipping charges, the customer discount
+  // spread over the products, billed at the chosen % (e.g. 30% for an advance).
+  const quotation = project.quotation;
+  const [billPct, setBillPct] = useState(100);
+  const [filling, setFilling] = useState(false);
+  const fillFromQuote = async () => {
+    if (!quotation?.id) return;
+    setFilling(true);
+    setError(null);
+    try {
+      const q = await quotationApi.get(quotation.id);
+      const n = (v: unknown) => Number(v ?? 0) || 0;
+      const items = (q.items || []).filter((i) => i.status !== "REJECTED");
+      const pricing = readPricing(q);
+      const base = items.map((i) => {
+        let t = n(i.rate) * n(i.quantity);
+        if (n(i.discountPercentage) > 0) t -= t * n(i.discountPercentage) / 100;
+        else if (n(i.discountAmount) > 0) t -= Math.min(n(i.discountAmount), t);
+        return t + n(i.additionalCharges);
+      });
+      const charges = quoteCharges(q);
+      const itemsSum = base.reduce((a, b) => a + b, 0);
+      const chargesSum = charges.reduce((a, c) => a + c.amount, 0);
+      const discBase = pricing.itemsOnly === false ? itemsSum + chargesSum : itemsSum;
+      const discount = pricing.mode === "PERCENT" ? discBase * pricing.value / 100 : pricing.value;
+      const f = discBase > 0 ? 1 - discount / discBase : 1;
+      const k = (Number(billPct) || 100) / 100;
+      const r2 = (v: number) => Math.round(v * 100) / 100;
+      const built: LineItem[] = [
+        ...items.map((i, idx) => ({
+          description: [i.itemName, i.color].filter(Boolean).join(" — "),
+          quantity: 1,
+          unitPrice: r2(base[idx] * f * k),
+        })),
+        ...charges.map((c) => ({
+          description: c.note ? `${c.label} — ${c.note}` : c.label,
+          quantity: 1,
+          unitPrice: r2(c.amount * (pricing.itemsOnly === false ? f : 1) * k),
+        })),
+      ].filter((l) => l.unitPrice > 0);
+      if (!built.length) { setError("The quotation has no priced items to bill."); return; }
+      setLines(built);
+      setItemized(true);
+      setGstRate(pricing.gst);
+      setTaxInclusive(!!pricing.inclusive);
+      setQuoteId(q.id as number);
+      if (k < 1) setInvoiceType("ADVANCE");
+      toast.success(`Filled from ${q.quotationNumber}${k < 1 ? ` (${billPct}%)` : ""} — edit anything before saving`);
+    } catch (e: any) {
+      setError(e?.response?.data?.message || "Could not read the quotation.");
+    } finally { setFilling(false); }
+  };
 
   const entered = itemized
     ? lines.reduce((s, l) => s + (Number(l.quantity) || 0) * (Number(l.unitPrice) || 0), 0)
@@ -793,10 +875,13 @@ function InvoiceMaker({ project, onClose, onSaved }: { project: any; onClose: ()
         taxInclusive,
         status: "DRAFT",
         notes: notes || undefined,
+        ...(quoteId ? { quotation: { id: quoteId } } : {}),
       };
-      const saved = await financeApi.createInvoice(invoice, items);
+      const saved = editing
+        ? await financeApi.updateDraftInvoice(editing.id, invoice, items)
+        : await financeApi.createInvoice(invoice, items);
       if (issue && saved?.id) await financeApi.issueInvoice(saved.id);
-      toast.success(issue ? "Invoice created & issued" : "Draft invoice saved");
+      toast.success(issue ? (editing ? "Invoice updated & issued" : "Invoice created & issued") : (editing ? "Draft updated" : "Draft invoice saved"));
       onSaved();
     } catch (e: any) {
       setError(e?.response?.data?.message || "Failed to create invoice.");
@@ -809,11 +894,26 @@ function InvoiceMaker({ project, onClose, onSaved }: { project: any; onClose: ()
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2"><FileText className="h-5 w-5" /> New Invoice</DialogTitle>
-          <DialogDescription>Enter the amount — GST and totals are calculated automatically.</DialogDescription>
+          <DialogTitle className="flex items-center gap-2"><FileText className="h-5 w-5" /> {editing ? `Edit ${editing.invoiceNumber}` : "New Invoice"}</DialogTitle>
+          <DialogDescription>{editing ? "Draft invoices can be edited until they are issued." : "Enter the amount — GST and totals are calculated automatically."}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
+          {quotation?.id && (
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50/60 px-3 py-2 text-sm">
+              <FileText className="h-4 w-4 text-emerald-700" />
+              <span className="font-medium text-emerald-900">From quotation {quotation.quotationNumber}</span>
+              <span className="ml-auto flex items-center gap-1.5">
+                <span className="text-xs text-slate-500">Bill</span>
+                <Input type="number" min={1} max={100} value={billPct} onChange={(e) => setBillPct(Number(e.target.value))} className="h-8 w-16 text-right" />
+                <span className="text-xs text-slate-500">%</span>
+                <Button type="button" size="sm" variant="outline" disabled={filling} onClick={fillFromQuote} className="h-8">
+                  {filling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null} Fill lines
+                </Button>
+              </span>
+            </div>
+          )}
+
           {/* Type as segmented buttons */}
           <div className="space-y-1.5">
             <span className="text-sm font-medium">Type</span>
