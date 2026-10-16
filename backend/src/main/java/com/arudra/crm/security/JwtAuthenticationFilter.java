@@ -32,6 +32,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String token = null;
         String username = null;
 
+        if ((authHeader == null || !authHeader.startsWith("Bearer ")) && request.getRequestURI().contains("/api/files/")) {
+            // <img>/<audio>/download links can't send a header: private files accept the HttpOnly
+            // access-token cookie that is scoped to /api/files (AuthCookies.FILES).
+            String cookieToken = AuthCookies.read(request, AuthCookies.FILES);
+            if (cookieToken != null) authHeader = "Bearer " + cookieToken;
+        }
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             token = authHeader.substring(7);
             if (token != null && !token.equals("null") && !token.trim().isEmpty()) {

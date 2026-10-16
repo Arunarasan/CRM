@@ -51,6 +51,7 @@ import java.util.stream.Stream;
  */
 @Slf4j
 @Service
+@org.springframework.beans.factory.annotation.Qualifier("backendStorage")
 @ConditionalOnExpression("'${app.storage.type:local}'.equalsIgnoreCase('s3') || '${app.storage.type:local}'.equalsIgnoreCase('r2')")
 @EnableConfigurationProperties(S3StorageProperties.class)
 public class S3StorageService implements StorageService {
@@ -210,6 +211,14 @@ public class S3StorageService implements StorageService {
             }
         }
         if (copied > 0) log.info("Copied {} disk upload(s) to the storage bucket", copied);
+    }
+
+    @Override
+    public void delete(String key) throws IOException {
+        Path local = diskCopy(key);
+        if (local != null) Files.deleteIfExists(local);
+        s3.deleteObject(software.amazon.awssdk.services.s3.model.DeleteObjectRequest.builder()
+                .bucket(props.getBucket()).key(key).build());
     }
 
     private void put(String key, byte[] bytes, String contentType) {

@@ -61,10 +61,16 @@ public class ProfileChangeRequest extends BaseEntity {
     @Column(name = "proposed_last_name", length = 100)
     private String proposedLastName;
 
-    @Column(name = "proposed_bank_account", length = 50)
+    // Encrypted at rest; masked in API responses (security.Pii).
+    @Convert(converter = com.arudra.crm.security.PiiCryptoConverter.class)
+    @com.fasterxml.jackson.databind.annotation.JsonSerialize(using = com.arudra.crm.security.PiiMaskSerializer.class)
+    @Column(name = "proposed_bank_account", length = 512)
     private String proposedBankAccount;
 
-    @Column(name = "proposed_ifsc", length = 20)
+    // Encrypted at rest; masked in API responses (security.Pii).
+    @Convert(converter = com.arudra.crm.security.PiiCryptoConverter.class)
+    @com.fasterxml.jackson.databind.annotation.JsonSerialize(using = com.arudra.crm.security.PiiMaskSerializer.class)
+    @Column(name = "proposed_ifsc", length = 512)
     private String proposedIfsc;
 
     @Column(name = "proposed_pf_number", length = 50)
@@ -100,4 +106,14 @@ public class ProfileChangeRequest extends BaseEntity {
 
     @Column(name = "reviewed_at")
     private LocalDateTime reviewedAt;
+
+    /** A masked value ("••••1234") sent back by a form keeps the stored number. */
+    public void setProposedBankAccount(String proposedBankAccount) {
+        this.proposedBankAccount = com.arudra.crm.security.Pii.keep(proposedBankAccount, this.proposedBankAccount);
+    }
+
+    /** A masked value ("••••1234") sent back by a form keeps the stored number. */
+    public void setProposedIfsc(String proposedIfsc) {
+        this.proposedIfsc = com.arudra.crm.security.Pii.keep(proposedIfsc, this.proposedIfsc);
+    }
 }

@@ -22,9 +22,7 @@ export default function Login() {
       
       if (response.data && response.data.token) {
         localStorage.setItem("token", response.data.token);
-        if (response.data.refreshToken) {
-            localStorage.setItem("refreshToken", response.data.refreshToken);
-        }
+        localStorage.removeItem("refreshToken"); // now an HttpOnly cookie, never stored by the page
         
         // Setup user details if available
         const roles: string[] = Array.isArray(response.data.roles)

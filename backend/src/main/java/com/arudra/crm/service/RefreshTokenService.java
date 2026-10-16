@@ -27,7 +27,10 @@ import java.util.Optional;
 public class RefreshTokenService {
 
     /** A refreshed session: the account plus the new raw refresh token for the client. */
-    public record Rotation(User user, String refreshToken) {}
+    public record Rotation(User user, String refreshToken, Instant expiry) {}
+
+    /** A newly issued refresh token: the raw value for the client and when it expires. */
+    public record Issued(String refreshToken, Instant expiry) {}
 
     private static final SecureRandom RANDOM = new SecureRandom();
 
@@ -38,7 +41,7 @@ public class RefreshTokenService {
     private UserRepository userRepository;
 
     /** Issues a new refresh token and returns the raw value (the only time it exists in clear). */
-    public String createRefreshToken(Long userId, boolean rememberMe) {
+    public Issued createRefreshToken(Long userId, boolean rememberMe) {
         User user = userRepository.findById(userId).orElseThrow();
 
         // Delete existing refresh token for this user (only 1 active device allowed in this simple model)
@@ -53,7 +56,7 @@ public class RefreshTokenService {
         refreshToken.setExpiryDate(Instant.now().plusMillis(expiryMillis));
         refreshToken.setToken(hash(raw));
         refreshTokenRepository.save(refreshToken);
-        return raw;
+        return new Issued(raw, refreshToken.getExpiryDate());
     }
 
     /** Swaps a valid, unexpired refresh token for a new one; empty when it is unknown or expired. */
@@ -69,7 +72,7 @@ public class RefreshTokenService {
         String raw = newRawToken();
         token.setToken(hash(raw));
         refreshTokenRepository.save(token);
-        return Optional.of(new Rotation(token.getUser(), raw));
+        return Optional.of(new Rotation(token.getUser(), raw, token.getExpiryDate()));
     }
 
     /** Revokes one refresh token (logout from this device). */

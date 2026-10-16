@@ -28,6 +28,7 @@ public class CustomerProfileDTO {
     private String alternatePhone;
     private String whatsappNumber;
     private String website;
+    @com.fasterxml.jackson.databind.annotation.JsonSerialize(using = com.arudra.crm.security.PiiMaskSerializer.class)
     private String panNumber;
     private java.time.LocalDate customerSince;
     private String status;

@@ -20,6 +20,7 @@
 .env.test.local
 .env.production.local
 uploads/
+private-uploads/
 **/uploads/
 
 # IDEs & OS

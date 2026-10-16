@@ -6,6 +6,8 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  // The refresh token lives in an HttpOnly cookie scoped to /api/auth; send cookies to the API.
+  withCredentials: true,
 });
 
 /** Set at sign-in (or by a PASSWORD_CHANGE_REQUIRED response) until the user picks their own password. */
@@ -13,9 +15,8 @@ export const MUST_CHANGE_PASSWORD_KEY = 'mustChangePassword';
 
 /** Ends the session server-side (revokes the refresh token), clears it locally, and goes to sign-in. */
 export async function signOut(): Promise<void> {
-  const refreshToken = localStorage.getItem('refreshToken');
   try {
-    await api.post('/auth/logout', { refreshToken });
+    await api.post('/auth/logout', {});
   } catch {
     // Offline or already expired — the local session is cleared regardless.
   }
@@ -108,24 +109,16 @@ api.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        const refreshToken = localStorage.getItem('refreshToken');
-        if (!refreshToken) {
-          throw new Error('No refresh token');
-        }
+        // The HttpOnly refresh cookie goes along automatically; scripts never see it.
+        const { data } = await axios.post(`${api.defaults.baseURL}/auth/refresh`, {}, { withCredentials: true });
 
-        const { data } = await axios.post(`${api.defaults.baseURL}/auth/refresh`, {
-          refreshToken,
-        });
-
-        // /auth/refresh answers { accessToken, refreshToken } (not the { success, data } envelope).
-        // The refresh token rotates on every call, so the new one must replace the old.
+        // /auth/refresh answers { accessToken } (not the { success, data } envelope) and rotates the
+        // refresh cookie itself.
         const body = data?.data ?? data;
         const newAccessToken = body.accessToken || body.token;
-        const newRefreshToken = body.refreshToken;
         if (!newAccessToken) throw new Error('Refresh failed');
 
         localStorage.setItem('token', newAccessToken);
-        if (newRefreshToken) localStorage.setItem('refreshToken', newRefreshToken);
 
         api.defaults.headers.common['Authorization'] = 'Bearer ' + newAccessToken;
         processQueue(null, newAccessToken);

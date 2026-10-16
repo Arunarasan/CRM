@@ -2,7 +2,7 @@ import api from '@/lib/api'
 
 export interface LoginResponse {
   token: string
-  refreshToken: string
+  refreshToken: string | null
   email: string
   name: string
   roles: string[]

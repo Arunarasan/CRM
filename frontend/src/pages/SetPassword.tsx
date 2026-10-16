@@ -36,7 +36,6 @@ export default function SetPassword() {
       const res = await api.post("/auth/change-password", { currentPassword, newPassword });
       // Changing the password signs out every other device and returns a fresh session for this one.
       if (res.data?.token) localStorage.setItem("token", res.data.token);
-      if (res.data?.refreshToken) localStorage.setItem("refreshToken", res.data.refreshToken);
       localStorage.removeItem(MUST_CHANGE_PASSWORD_KEY);
       const home = isFieldEmployeeOnly(getAuthorities()) ? "employee" : "dashboard";
       window.location.href = import.meta.env.BASE_URL + home;

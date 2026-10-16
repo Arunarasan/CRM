@@ -13,10 +13,13 @@ import api from "./api";
 // the backend root at /uploads/**, so strip the trailing /api to build links.
 export const API_ORIGIN = (api.defaults.baseURL || "").replace(/\/api\/?$/, "");
 
-/** Turn a stored relative "/uploads/..." path into an absolute, openable URL. */
+/**
+ * Turn a stored relative "/uploads/..." or "/api/files/private/..." path into an absolute, openable
+ * URL. Private files are authorised by an HttpOnly cookie, so plain <img>/<audio>/links just work.
+ */
 export function resolveFileUrl(url?: string | null): string {
   if (!url) return "";
-  if (url.startsWith("/uploads/")) return API_ORIGIN + url;
+  if (url.startsWith("/uploads/") || url.startsWith("/api/files/")) return API_ORIGIN + url;
   return url; // already absolute, external link, or data: URL
 }
 

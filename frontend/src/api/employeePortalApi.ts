@@ -52,7 +52,11 @@ export const employeePortalApi = {
   submitDocument: (body: DocumentSubmitBody) =>
     api.post<ProfileChangeRequest>(`${BASE}/documents`, body).then((r) => r.data),
   changePassword: (currentPassword: string, newPassword: string) =>
-    api.post(`${BASE}/change-password`, { currentPassword, newPassword }).then((r) => r.data),
+    // The shared auth endpoint keeps this device signed in (new session cookie) and signs out the rest.
+    api.post('/auth/change-password', { currentPassword, newPassword }).then((r) => {
+      if (r.data?.token) localStorage.setItem('token', r.data.token);
+      return r.data;
+    }),
 
   attendance: (params?: { from?: string; to?: string }) => {
     const q = new URLSearchParams();
