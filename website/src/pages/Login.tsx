@@ -37,7 +37,7 @@ export default function Login() {
     setError(null)
     setLoading(true)
     try {
-      const res = await authApi.login(email, password, remember)
+      const res = await authApi.login(email.trim(), password, remember)
       // The customer portal is retired — this sign-in is the staff door to the CRM. The CRM lives at
       // the same origin ("/crm") and reads the same localStorage session, so persisting it here logs
       // the user straight into the CRM with no second sign-in. Role checks are enforced by the CRM.
@@ -52,8 +52,18 @@ export default function Login() {
         const secs = Number(data?.retryAfterSeconds ?? err?.response?.headers?.['retry-after'])
         setLockLeft(Number.isFinite(secs) && secs > 0 ? Math.ceil(secs) : 900)
         setError(null)
-      } else {
+      } else if (err?.response?.status === 401) {
         setError('Invalid email or password. Please try again.')
+      } else if (err?.response?.status === 403) {
+        setError(data?.message || 'This account is not active. Please contact an administrator.')
+      } else if (err?.response) {
+        // The server answered but not with a sign-in verdict (e.g. 429 rate limit, 5xx).
+        setError(data?.message || `Sign-in failed (server error ${err.response.status}). Please try again.`)
+      } else if (err?.request) {
+        setError('Cannot reach the server. Check your connection and try again.')
+      } else {
+        // The login itself worked but the page failed to start the session (e.g. storage blocked).
+        setError(`Signed in, but the session could not be started: ${err?.message || 'unknown error'}`)
       }
       setLoading(false)
     }
