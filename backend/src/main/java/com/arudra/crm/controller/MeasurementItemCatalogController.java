@@ -14,7 +14,6 @@ import java.util.List;
  */
 @RestController
 @RequestMapping("/api/measurement-item-catalog")
-@CrossOrigin(origins = "*")
 public class MeasurementItemCatalogController {
 
     private static final String READ = "hasAuthority('ROLE_ADMIN') or hasAuthority('MEASUREMENT_READ')";

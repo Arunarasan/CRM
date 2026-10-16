@@ -3,7 +3,6 @@ package com.arudra.crm.controller;
 import com.arudra.crm.dto.AuthRequest;
 import com.arudra.crm.dto.AuthResponse;
 import com.arudra.crm.entity.LoginHistory;
-import com.arudra.crm.entity.RefreshToken;
 import com.arudra.crm.entity.User;
 import com.arudra.crm.repository.LoginHistoryRepository;
 import com.arudra.crm.repository.UserRepository;
@@ -32,8 +31,9 @@ import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/auth")
-@CrossOrigin(origins = "*")
 public class AuthController {
+
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(AuthController.class);
 
     @Autowired
     private AuthenticationManager authenticationManager;
@@ -51,13 +51,17 @@ public class AuthController {
     private RefreshTokenService refreshTokenService;
 
     @Autowired
+    private com.arudra.crm.security.AuthCookies authCookies;
+
+    @Autowired
     private LoginHistoryRepository loginHistoryRepository;
 
     @Autowired
     private com.arudra.crm.security.CurrentUserService currentUserService;
 
     @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody AuthRequest authRequest, HttpServletRequest request) {
+    public ResponseEntity<?> login(@RequestBody AuthRequest authRequest, HttpServletRequest request,
+                                   jakarta.servlet.http.HttpServletResponse response) {
         String ipAddress = request.getRemoteAddr();
         // The "email" field may carry a phone number instead; resolve it to the account's email.
         authRequest.setEmail(resolveLoginEmail(authRequest.getEmail()));
@@ -80,7 +84,9 @@ public class AuthController {
             }
 
             // Generate Refresh Token
-            RefreshToken refreshToken = refreshTokenService.createRefreshToken(user.getId(), authRequest.isRememberMe());
+            // The refresh token travels only in an HttpOnly cookie — never in the body or localStorage.
+            var refresh = refreshTokenService.createRefreshToken(user.getId(), authRequest.isRememberMe());
+            authCookies.setSession(response, refresh.refreshToken(), refresh.expiry(), token);
 
             // Log history
             logHistory(user, authRequest.getEmail(), ipAddress, "SUCCESS");
@@ -89,7 +95,7 @@ public class AuthController {
                     .map(GrantedAuthority::getAuthority)
                     .collect(Collectors.toList());
 
-            return ResponseEntity.ok(new AuthResponse(token, refreshToken.getToken(), user.getEmail(), user.getName(), roles, user.isMustChangePassword()));
+            return ResponseEntity.ok(new AuthResponse(token, null, user.getEmail(), user.getName(), roles, user.isMustChangePassword()));
 
         } catch (DisabledException ex) {
             // enabled == emailVerified (CustomUserDetailsService): the account isn't active.
@@ -100,9 +106,12 @@ public class AuthController {
             handleFailedAttempt(authRequest.getEmail(), ipAddress);
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("success", false, "message", "Invalid email or password"));
         } catch (LockedException ex) {
-            return ResponseEntity.status(HttpStatus.LOCKED).body(Map.of("success", false, "message", "Account is locked due to too many failed attempts. Please try again later."));
+            return ResponseEntity.status(HttpStatus.LOCKED).body(Map.of("success", false, "message", "Too many failed attempts. Please wait a few minutes and try again, or reset your password."));
         } catch (Exception ex) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("success", false, "message", ex.getMessage()));
+            // Details go to the log only; the client gets a generic message.
+            log.error("Login failed unexpectedly for {}", authRequest.getEmail(), ex);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("success", false,
+                    "message", "Sign-in failed. Please try again."));
         }
     }
 
@@ -146,7 +155,7 @@ public class AuthController {
         userRepository.findByEmail(email).ifPresent(user -> {
             int newAttempts = user.getFailedAttempts() + 1;
             user.setFailedAttempts(newAttempts);
-            if (newAttempts >= 5) {
+            if (newAttempts % com.arudra.crm.security.CustomUserDetailsService.MAX_FAILED_ATTEMPTS == 0) {
                 user.setAccountNonLocked(false);
                 user.setLockTime(LocalDateTime.now());
             }
@@ -180,19 +189,55 @@ public class AuthController {
     @org.springframework.beans.factory.annotation.Value("${app.otp.expiry-minutes:10}")
     private int otpExpiryMinutes;
 
+    /**
+     * Swaps a refresh token for a new access token AND a new refresh token (the old one stops
+     * working). A disabled, locked or deleted account gets 401 and loses its tokens.
+     */
     @PostMapping("/refresh")
-    public ResponseEntity<?> refreshToken(@RequestBody com.arudra.crm.dto.TokenRefreshRequest request) {
-        String requestRefreshToken = request.getRefreshToken();
+    public ResponseEntity<?> refreshToken(@RequestBody(required = false) com.arudra.crm.dto.TokenRefreshRequest request,
+                                          HttpServletRequest httpRequest,
+                                          jakarta.servlet.http.HttpServletResponse response) {
+        ResponseEntity<Object> invalid = ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(Map.of("success", false, "message", "Refresh token is invalid or expired!"));
+        // Cookie first; a body token is still accepted from sessions started before the cookie switch.
+        String presented = com.arudra.crm.security.AuthCookies.read(httpRequest, com.arudra.crm.security.AuthCookies.REFRESH);
+        if (presented == null && request != null) presented = request.getRefreshToken();
+        var rotation = refreshTokenService.rotate(presented).orElse(null);
+        if (rotation == null) {
+            authCookies.clear(response);
+            return invalid;
+        }
+        UserDetails userDetails;
+        try {
+            userDetails = customUserDetailsService.loadUserByUsername(rotation.user().getEmail());
+        } catch (org.springframework.security.core.userdetails.UsernameNotFoundException e) {
+            return invalid;
+        }
+        if (!userDetails.isEnabled() || !userDetails.isAccountNonLocked()) {
+            refreshTokenService.revokeAll(rotation.user());
+            authCookies.clear(response);
+            return invalid;
+        }
+        String token = jwtUtil.generateToken(userDetails);
+        authCookies.setSession(response, rotation.refreshToken(), rotation.expiry(), token);
+        return ResponseEntity.ok(new com.arudra.crm.dto.TokenRefreshResponse(token, null));
+    }
 
-        return refreshTokenService.findByToken(requestRefreshToken)
-                .map(refreshTokenService::verifyExpiration)
-                .map(RefreshToken::getUser)
-                .map(user -> {
-                    UserDetails userDetails = customUserDetailsService.loadUserByUsername(user.getEmail());
-                    String token = jwtUtil.generateToken(userDetails);
-                    return (ResponseEntity<Object>) ResponseEntity.ok((Object) new com.arudra.crm.dto.TokenRefreshResponse(token, requestRefreshToken));
-                })
-                .orElse((ResponseEntity<Object>) ResponseEntity.status(HttpStatus.UNAUTHORIZED).body((Object) Map.of("success", false, "message", "Refresh token is invalid or expired!")));
+    /**
+     * Ends the session: revokes the presented refresh token, and every refresh token of the
+     * signed-in user when called with a valid access token. Always succeeds.
+     */
+    @PostMapping("/logout")
+    public ResponseEntity<?> logout(@RequestBody(required = false) Map<String, String> body,
+                                    HttpServletRequest httpRequest,
+                                    jakarta.servlet.http.HttpServletResponse response) {
+        refreshTokenService.revoke(com.arudra.crm.security.AuthCookies.read(httpRequest, com.arudra.crm.security.AuthCookies.REFRESH));
+        if (body != null) refreshTokenService.revoke(body.get("refreshToken"));
+        authCookies.clear(response);
+        User user = currentUserService.getCurrentUser();
+        if (user != null) refreshTokenService.revokeAll(user);
+        SecurityContextHolder.clearContext();
+        return ResponseEntity.ok(Map.of("success", true, "message", "Signed out."));
     }
 
     /**
@@ -227,9 +272,9 @@ public class AuthController {
     @PostMapping("/reset-password")
     public ResponseEntity<?> resetPassword(@RequestBody com.arudra.crm.dto.PasswordResetRequest request) {
         String newPassword = request.getNewPassword();
-        if (newPassword == null || newPassword.length() < 6) {
-            return ResponseEntity.badRequest().body(Map.of("success", false,
-                    "message", "Password must be at least 6 characters."));
+        String problem = com.arudra.crm.security.PasswordPolicy.validate(newPassword, request.getEmail());
+        if (problem != null) {
+            return ResponseEntity.badRequest().body(Map.of("success", false, "message", problem));
         }
         return userRepository.findByEmail(request.getEmail() == null ? "" : request.getEmail().trim())
                 .flatMap(user -> verificationTokenService.verifyPasswordResetOtp(user, request.getOtp())
@@ -246,6 +291,7 @@ public class AuthController {
                             user.setMustChangePassword(false);
                             user.setEmailVerified(true);
                             userRepository.save(user);
+                            refreshTokenService.revokeAll(user); // sign out every device
                             verificationTokenService.deleteToken(token);
                             return ResponseEntity.ok(Map.of("success", true,
                                     "message", "Password reset successfully. You can now sign in."));
@@ -260,7 +306,8 @@ public class AuthController {
      * mobile portal has its own equivalent under /api/employee-portal/change-password.
      */
     @PostMapping("/change-password")
-    public ResponseEntity<?> changeOwnPassword(@RequestBody Map<String, String> body) {
+    public ResponseEntity<?> changeOwnPassword(@RequestBody Map<String, String> body,
+                                               jakarta.servlet.http.HttpServletResponse response) {
         User user = currentUserService.getCurrentUser();
         if (user == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
@@ -268,9 +315,13 @@ public class AuthController {
         }
         String current = body.getOrDefault("currentPassword", "");
         String next = body.getOrDefault("newPassword", "");
-        if (next.length() < 6) {
+        String problem = com.arudra.crm.security.PasswordPolicy.validate(next, user.getEmail());
+        if (problem != null) {
+            return ResponseEntity.badRequest().body(Map.of("success", false, "message", problem));
+        }
+        if (passwordEncoder.matches(next, user.getPassword())) {
             return ResponseEntity.badRequest().body(Map.of("success", false,
-                    "message", "New password must be at least 6 characters."));
+                    "message", "New password must be different from the current one."));
         }
         if (!passwordEncoder.matches(current, user.getPassword())) {
             return ResponseEntity.badRequest().body(Map.of("success", false,
@@ -279,6 +330,12 @@ public class AuthController {
         user.setPassword(passwordEncoder.encode(next));
         user.setMustChangePassword(false);
         userRepository.save(user);
-        return ResponseEntity.ok(Map.of("success", true, "message", "Password updated."));
+        // Sign out every other device, then hand this one a fresh session so it stays signed in.
+        refreshTokenService.revokeAll(user);
+        var refresh = refreshTokenService.createRefreshToken(user.getId(), false);
+        String token = jwtUtil.generateToken(customUserDetailsService.loadUserByUsername(user.getEmail()));
+        authCookies.setSession(response, refresh.refreshToken(), refresh.expiry(), token);
+        return ResponseEntity.ok(Map.of("success", true, "message", "Password updated.",
+                "data", Map.of("token", token)));
     }
 }

@@ -25,7 +25,7 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends curl ffmpeg && \
     rm -rf /var/lib/apt/lists/* && \
     groupadd -r spring && useradd -r -g spring spring && \
-    mkdir -p /app/uploads && chown spring:spring /app/uploads
+    mkdir -p /app/uploads /app/private-uploads && chown spring:spring /app/uploads /app/private-uploads
 
 USER spring:spring
 

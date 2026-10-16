@@ -5,6 +5,7 @@ import {
   Clock, Settings as SettingsIcon, ListTodo, QrCode, PhoneCall,
 } from 'lucide-react';
 import { employeePortalApi } from '@/api/employeePortalApi';
+import { signOut } from '@/lib/api';
 import { EmployeeProfile } from '@/types/employeePortal';
 import { useT } from '@/i18n';
 
@@ -30,12 +31,7 @@ export default function EmployeeMore() {
 
   useEffect(() => { employeePortalApi.me().then(setP).catch(() => {}); }, []);
 
-  const logout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('refreshToken');
-    localStorage.removeItem('userRoles');
-    window.location.href = import.meta.env.BASE_URL + 'login';
-  };
+  const logout = () => { void signOut(); };
 
   return (
     <div className="flex flex-col">

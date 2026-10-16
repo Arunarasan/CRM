@@ -97,7 +97,7 @@ public interface LeadRepository extends JpaRepository<Lead, Long>, JpaSpecificat
            "GROUP BY COALESCE(l.lostReason, 'Unspecified') ORDER BY COUNT(l) DESC")
     java.util.List<Object[]> aggregateLostReasons();
 
-    @Query("SELECT AVG(FUNCTION('DATEDIFF', l.convertedDate, l.createdAt)) " +
+    @Query("SELECT AVG(CAST(FUNCTION('DATEDIFF', l.convertedDate, l.createdAt) AS Integer)) " +
            "FROM Lead l WHERE l.isDeleted = false AND l.isConverted = true AND l.convertedDate IS NOT NULL")
     Double averageSalesCycleDays();
 

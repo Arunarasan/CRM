@@ -19,7 +19,6 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/quotations")
-@CrossOrigin(origins = "*")
 public class QuotationController {
 
     private static final String READ = "hasAuthority('ROLE_ADMIN') or hasAuthority('QUOTATION_READ')";

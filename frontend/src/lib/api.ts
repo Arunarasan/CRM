@@ -6,7 +6,26 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  // The refresh token lives in an HttpOnly cookie scoped to /api/auth; send cookies to the API.
+  withCredentials: true,
 });
+
+/** Set at sign-in (or by a PASSWORD_CHANGE_REQUIRED response) until the user picks their own password. */
+export const MUST_CHANGE_PASSWORD_KEY = 'mustChangePassword';
+
+/** Ends the session server-side (revokes the refresh token), clears it locally, and goes to sign-in. */
+export async function signOut(): Promise<void> {
+  try {
+    await api.post('/auth/logout', {});
+  } catch {
+    // Offline or already expired — the local session is cleared regardless.
+  }
+  localStorage.removeItem('token');
+  localStorage.removeItem('refreshToken');
+  localStorage.removeItem('userRoles');
+  localStorage.removeItem(MUST_CHANGE_PASSWORD_KEY);
+  window.location.href = import.meta.env.BASE_URL + 'login';
+}
 
 let isRefreshing = false;
 let failedQueue: Array<{
@@ -65,6 +84,15 @@ api.interceptors.response.use(
 
     const isAuthEndpoint = originalRequest?.url?.includes('/auth/login') || originalRequest?.url?.includes('/auth/refresh');
 
+    // Temporary password still in use: the backend allows nothing but the change-password call.
+    if (error.response?.status === 403 && error.response?.data?.code === 'PASSWORD_CHANGE_REQUIRED') {
+      localStorage.setItem(MUST_CHANGE_PASSWORD_KEY, '1');
+      if (!window.location.pathname.endsWith('/set-password')) {
+        window.location.href = import.meta.env.BASE_URL + 'set-password';
+      }
+      return Promise.reject(error);
+    }
+
     if (error.response && error.response.status === 401 && !originalRequest._retry && !isAuthEndpoint) {
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
@@ -81,20 +109,16 @@ api.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        const refreshToken = localStorage.getItem('refreshToken');
-        if (!refreshToken) {
-          throw new Error('No refresh token');
-        }
+        // The HttpOnly refresh cookie goes along automatically; scripts never see it.
+        const { data } = await axios.post(`${api.defaults.baseURL}/auth/refresh`, {}, { withCredentials: true });
 
-        const { data } = await axios.post(`${api.defaults.baseURL}/auth/refresh`, {
-          refreshToken,
-        });
+        // /auth/refresh answers { accessToken } (not the { success, data } envelope) and rotates the
+        // refresh cookie itself.
+        const body = data?.data ?? data;
+        const newAccessToken = body.accessToken || body.token;
+        if (!newAccessToken) throw new Error('Refresh failed');
 
-        const newAccessToken = data.data.token || data.accessToken;
-        const newRefreshToken = data.data.refreshToken || data.refreshToken;
-        
         localStorage.setItem('token', newAccessToken);
-        if (newRefreshToken) localStorage.setItem('refreshToken', newRefreshToken);
 
         api.defaults.headers.common['Authorization'] = 'Bearer ' + newAccessToken;
         processQueue(null, newAccessToken);

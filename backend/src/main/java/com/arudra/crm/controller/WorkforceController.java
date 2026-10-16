@@ -26,7 +26,6 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/api/workforce")
-@CrossOrigin(origins = "*")
 public class WorkforceController {
 
     private static final String READ =

@@ -27,11 +27,20 @@ export default function Login() {
       // the same origin ("/crm") and reads the same localStorage session, so persisting it here logs
       // the user straight into the CRM with no second sign-in. Role checks are enforced by the CRM.
       setSession(res.token, res.refreshToken, { name: res.name, email: res.email, roles: res.roles })
+      // A temporary password (new employee, admin-set or reset) must be replaced before anything else.
+      if (res.mustChangePassword) {
+        localStorage.setItem('mustChangePassword', '1')
+        window.location.assign(site.crmUrl.replace(/\/$/, '') + '/set-password')
+        return
+      }
+      localStorage.removeItem('mustChangePassword')
       window.location.assign(site.crmUrl)
     } catch (err: any) {
       const data = err?.response?.data
       if (data?.requiresVerification) {
         setError('This account is not activated yet. Please contact an administrator.')
+      } else if (err?.response?.status === 423) {
+        setError('Too many failed attempts. Please wait a few minutes and try again, or reset your password.')
       } else {
         setError('Invalid email or password. Please try again.')
       }

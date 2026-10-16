@@ -13,7 +13,6 @@ import java.util.Map;
 /** HR enrolment of employee faces for the office kiosk (capture happens in the browser). */
 @RestController
 @RequestMapping("/api/hr/attendance/faces")
-@CrossOrigin(origins = "*")
 public class FaceAdminController {
 
     private static final String HR_READ = "hasAuthority('ROLE_ADMIN') or hasAuthority('WORKFORCE_READ')";

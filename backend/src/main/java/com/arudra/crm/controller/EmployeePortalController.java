@@ -32,7 +32,6 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/api/employee-portal")
-@CrossOrigin(origins = "*")
 public class EmployeePortalController {
 
     private static final String PORTAL = "hasAuthority('ROLE_ADMIN') or hasAuthority('ROLE_EMPLOYEE') "

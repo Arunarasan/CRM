@@ -17,7 +17,6 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/leads")
-@CrossOrigin(origins = "*")
 public class LeadController {
 
     private static final String READ = "hasAuthority('ROLE_ADMIN') or hasAuthority('LEAD_READ')";

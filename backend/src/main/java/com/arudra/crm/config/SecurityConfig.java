@@ -32,6 +32,9 @@ public class SecurityConfig {
     @org.springframework.beans.factory.annotation.Value("${app.cors.allowed-origins:http://localhost:5173}")
     private java.util.List<String> allowedOrigins;
 
+    @Autowired
+    private org.springframework.core.env.Environment environment;
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         return http.csrf(csrf -> csrf.disable())
@@ -88,8 +91,12 @@ public class SecurityConfig {
                 }
             }
         }
-        origins.add("http://localhost:*");
-        origins.add("http://127.0.0.1:*");
+        // Local dev servers only outside prod — a credentialed wildcard localhost origin in
+        // production lets any page served from the visitor's own machine call the API.
+        if (!environment.acceptsProfiles(org.springframework.core.env.Profiles.of("prod"))) {
+            origins.add("http://localhost:*");
+            origins.add("http://127.0.0.1:*");
+        }
 
         configuration.setAllowedOriginPatterns(origins);
         configuration.setAllowedMethods(java.util.Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));

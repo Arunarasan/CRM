@@ -23,6 +23,21 @@ public class JwtUtil {
     @Value("${jwt.expiration}")
     private long jwtExpiration;
 
+    /** Refuse to start with a missing, short, or publicly known signing key. */
+    @jakarta.annotation.PostConstruct
+    void validateSecret() {
+        if (secret == null || secret.isBlank()) {
+            throw new IllegalStateException("JWT_SECRET is not set. Generate one with: openssl rand -base64 48");
+        }
+        if (secret.toUpperCase().startsWith("404E635266556A586E32")) {
+            throw new IllegalStateException("JWT_SECRET is the well-known public example key. "
+                    + "Generate a new one with: openssl rand -base64 48");
+        }
+        if (secret.getBytes().length < 32) {
+            throw new IllegalStateException("JWT_SECRET must be at least 32 bytes.");
+        }
+    }
+
     private Key getSigningKey() {
         return Keys.hmacShaKeyFor(secret.getBytes());
     }

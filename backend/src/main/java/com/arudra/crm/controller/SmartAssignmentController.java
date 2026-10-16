@@ -19,7 +19,6 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/api/assignments")
-@CrossOrigin(origins = "*")
 public class SmartAssignmentController {
 
     private static final String READ = "hasAuthority('ROLE_ADMIN') or hasAuthority('ASSIGNMENT_READ') or hasAuthority('TASK_ASSIGN')";

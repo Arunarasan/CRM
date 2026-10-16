@@ -138,7 +138,7 @@ const hi = {
       updatePassword: 'पासवर्ड अपडेट करें',
       passwordUpdated: 'पासवर्ड अपडेट हो गया',
       passwordMismatch: 'नए पासवर्ड मेल नहीं खाते।',
-      passwordTooShort: 'नया पासवर्ड कम से कम 6 अक्षरों का होना चाहिए।',
+      passwordTooShort: 'नया पासवर्ड कम से कम 10 अक्षरों का होना चाहिए।',
       passwordFailed: 'पासवर्ड नहीं बदला जा सका।',
     },
   },
@@ -175,7 +175,7 @@ const hi = {
     updatePassword: 'पासवर्ड अपडेट करें',
     passwordUpdated: 'पासवर्ड अपडेट हो गया।',
     passwordMismatch: 'नए पासवर्ड मेल नहीं खाते।',
-    passwordTooShort: 'नया पासवर्ड कम से कम 6 अक्षरों का होना चाहिए।',
+    passwordTooShort: 'नया पासवर्ड कम से कम 10 अक्षरों का होना चाहिए।',
     passwordFailed: 'पासवर्ड नहीं बदला जा सका।',
     nav: {
       home: 'होम',

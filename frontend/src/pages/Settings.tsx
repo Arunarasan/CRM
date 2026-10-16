@@ -342,7 +342,7 @@ function SecurityTab() {
 
   const save = async () => {
     if (pw.newPassword !== pw.confirm) { toast.error(t('settings.security.passwordMismatch')); return; }
-    if (pw.newPassword.length < 6) { toast.error(t('settings.security.passwordTooShort')); return; }
+    if (pw.newPassword.length < 10) { toast.error(t('settings.security.passwordTooShort')); return; }
     setSaving(true);
     try {
       await settingsApi.changeOwnPassword(pw.currentPassword, pw.newPassword);

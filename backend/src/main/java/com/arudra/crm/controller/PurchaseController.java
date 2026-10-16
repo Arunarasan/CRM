@@ -14,7 +14,6 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/purchases")
-@CrossOrigin(origins = "*")
 public class PurchaseController {
 
     private static final String READ = "hasAuthority('ROLE_ADMIN') or hasAuthority('PURCHASE_READ')";

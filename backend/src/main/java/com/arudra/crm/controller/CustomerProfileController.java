@@ -20,7 +20,6 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/api/customers/{id}")
-@CrossOrigin(origins = "*")
 @RequiredArgsConstructor
 public class CustomerProfileController {
 

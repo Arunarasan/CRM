@@ -11,7 +11,6 @@ import java.util.List;
 /** Supplies the role list that the admin Users screen uses to populate its role picker. */
 @RestController
 @RequestMapping("/api/roles")
-@CrossOrigin(origins = "*")
 @PreAuthorize("hasAuthority('ROLE_ADMIN')")
 public class RoleController {
 

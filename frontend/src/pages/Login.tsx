@@ -22,9 +22,7 @@ export default function Login() {
       
       if (response.data && response.data.token) {
         localStorage.setItem("token", response.data.token);
-        if (response.data.refreshToken) {
-            localStorage.setItem("refreshToken", response.data.refreshToken);
-        }
+        localStorage.removeItem("refreshToken"); // now an HttpOnly cookie, never stored by the page
         
         // Setup user details if available
         const roles: string[] = Array.isArray(response.data.roles)
@@ -32,6 +30,11 @@ export default function Login() {
           : [];
         if (response.data.roles) {
             localStorage.setItem("userRoles", JSON.stringify(response.data.roles));
+        }
+        if (response.data.mustChangePassword) {
+          localStorage.setItem("mustChangePassword", "1");
+          window.location.href = import.meta.env.BASE_URL + "set-password";
+          return;
         }
 
         // Field employees (any ROLE_EMPLOYEE who is not an admin) land on the mobile self-service

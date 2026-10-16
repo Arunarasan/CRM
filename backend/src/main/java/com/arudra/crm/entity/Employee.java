@@ -101,10 +101,16 @@ public class Employee extends BaseEntity {
     @Column(name = "esi_number", length = 50)
     private String esiNumber;
 
-    @Column(name = "bank_account", length = 50)
+    // Encrypted at rest; masked in API responses (security.Pii).
+    @Convert(converter = com.arudra.crm.security.PiiCryptoConverter.class)
+    @com.fasterxml.jackson.databind.annotation.JsonSerialize(using = com.arudra.crm.security.PiiMaskSerializer.class)
+    @Column(name = "bank_account", length = 512)
     private String bankAccount;
 
-    @Column(length = 20)
+    // Encrypted at rest; masked in API responses (security.Pii).
+    @Convert(converter = com.arudra.crm.security.PiiCryptoConverter.class)
+    @com.fasterxml.jackson.databind.annotation.JsonSerialize(using = com.arudra.crm.security.PiiMaskSerializer.class)
+    @Column(length = 512)
     private String ifsc;
 
     @Column(length = 50)
@@ -173,4 +179,14 @@ public class Employee extends BaseEntity {
     @JoinColumn(name = "workforce_id")
     @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
     private Workforce workforce;
+
+    /** A masked value ("••••1234") sent back by a form keeps the stored number. */
+    public void setBankAccount(String bankAccount) {
+        this.bankAccount = com.arudra.crm.security.Pii.keep(bankAccount, this.bankAccount);
+    }
+
+    /** A masked value ("••••1234") sent back by a form keeps the stored number. */
+    public void setIfsc(String ifsc) {
+        this.ifsc = com.arudra.crm.security.Pii.keep(ifsc, this.ifsc);
+    }
 }

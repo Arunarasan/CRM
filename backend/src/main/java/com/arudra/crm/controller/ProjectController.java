@@ -17,7 +17,6 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/projects")
-@CrossOrigin(origins = "*")
 public class ProjectController {
 
     // Every mutating/reading endpoint carries method security. Authorities map to roles in DataSeeder.

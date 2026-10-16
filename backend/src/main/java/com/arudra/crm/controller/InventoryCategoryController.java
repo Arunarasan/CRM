@@ -10,7 +10,6 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/inventory/categories")
-@CrossOrigin(origins = "*")
 public class InventoryCategoryController {
 
     private static final String READ = "hasAuthority('ROLE_ADMIN') or hasAuthority('INVENTORY_READ')";

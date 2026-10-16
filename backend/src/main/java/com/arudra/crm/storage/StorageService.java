@@ -24,4 +24,7 @@ public interface StorageService {
      * "/uploads/"). Throws {@link java.nio.file.NoSuchFileException} when there is no such file.
      */
     byte[] read(String key) throws IOException;
+
+    /** Removes a stored file by its object key (no-op when it doesn't exist). */
+    void delete(String key) throws IOException;
 }

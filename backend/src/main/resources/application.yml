@@ -61,11 +61,26 @@ management:
 
 
 jwt:
-  secret: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
+  # No fallback: a missing JWT_SECRET must stop startup, never silently use a known key.
+  secret: ${JWT_SECRET}
   expiration: ${JWT_EXPIRATION:900000}
 
 app:
   name: ${APP_NAME:Arudra CRM}
+  # AES-256-GCM key for Aadhaar/PAN/bank columns (PiiCryptoConverter). Required in prod.
+  pii:
+    encryption-key: ${PII_ENCRYPTION_KEY:}
+  backup:
+    offsite:
+      enabled: ${BACKUP_ENABLED:false}
+      encryption-key: ${BACKUP_ENCRYPTION_KEY:}
+      bucket: ${BACKUP_BUCKET:}
+      endpoint: ${BACKUP_ENDPOINT:}
+      region: ${BACKUP_REGION:auto}
+      access-key: ${BACKUP_ACCESS_KEY:}
+      secret-key: ${BACKUP_SECRET_KEY:}
+      local-dir: ${BACKUP_LOCAL_DIR:}
+      retention-days: ${BACKUP_RETENTION_DAYS:30}
   # Canonical public website origin (no trailing slash). Used to build absolute URLs in the
   # dynamically generated sitemap so Google sees one consistent host.
   public-site-url: ${PUBLIC_SITE_URL:https://jbdecorcdm.com}
@@ -96,6 +111,12 @@ app:
   upload:
     dir: ${UPLOAD_DIR:./uploads}
   storage:
+    # Sensitive uploads (call recordings, kiosk selfies, employee/HR docs, payment proofs, expense bills,
+    # customer docs): a PRIVATE bucket (same S3/R2 credentials) when set, else this server directory —
+    # never the public bucket or /uploads. Served only via the authenticated /api/files/private/**.
+    private:
+      bucket: ${PRIVATE_STORAGE_BUCKET:}
+      dir: ${PRIVATE_UPLOAD_DIR:./private-uploads}
     # "local" = write to app.upload.dir (dev default). "s3" or "r2" = AWS S3 or Cloudflare R2.
     type: ${STORAGE_TYPE:${STORAGE_PROVIDER:local}}
     s3:

@@ -23,7 +23,6 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/api/finance")
-@CrossOrigin(origins = "*")
 public class FinanceController {
 
     private static final String READ = "hasAuthority('ROLE_ADMIN') or hasAuthority('FINANCE_READ')";

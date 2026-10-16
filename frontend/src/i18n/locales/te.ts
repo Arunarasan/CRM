@@ -137,7 +137,7 @@ const te = {
       updatePassword: 'పాస్‌వర్డ్ నవీకరించు',
       passwordUpdated: 'పాస్‌వర్డ్ నవీకరించబడింది',
       passwordMismatch: 'కొత్త పాస్‌వర్డ్‌లు సరిపోలడం లేదు.',
-      passwordTooShort: 'కొత్త పాస్‌వర్డ్ కనీసం 6 అక్షరాలు ఉండాలి.',
+      passwordTooShort: 'కొత్త పాస్‌వర్డ్ కనీసం 10 అక్షరాలు ఉండాలి.',
       passwordFailed: 'పాస్‌వర్డ్ మార్చలేకపోయాము.',
     },
   },
@@ -174,7 +174,7 @@ const te = {
     updatePassword: 'పాస్‌వర్డ్ నవీకరించు',
     passwordUpdated: 'పాస్‌వర్డ్ నవీకరించబడింది.',
     passwordMismatch: 'కొత్త పాస్‌వర్డ్‌లు సరిపోలడం లేదు.',
-    passwordTooShort: 'కొత్త పాస్‌వర్డ్ కనీసం 6 అక్షరాలు ఉండాలి.',
+    passwordTooShort: 'కొత్త పాస్‌వర్డ్ కనీసం 10 అక్షరాలు ఉండాలి.',
     passwordFailed: 'పాస్‌వర్డ్ మార్చలేకపోయాము.',
     nav: {
       home: 'హోమ్',

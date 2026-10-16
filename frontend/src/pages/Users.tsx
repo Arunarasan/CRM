@@ -105,7 +105,7 @@ export default function Users() {
   };
 
   const submitReset = async () => {
-    if (pwValue.length < 6) { setPwError("Password must be at least 6 characters."); return; }
+    if (pwValue.length < 10) { setPwError("Password must be at least 10 characters."); return; }
     setPwError("");
     setPwSaving(true);
     try {
@@ -241,7 +241,7 @@ export default function Users() {
             {!editingId && (
               <div className="space-y-1">
                 <Label>Temporary Password</Label>
-                <Input type="text" value={form.password} placeholder="At least 6 characters"
+                <Input type="text" value={form.password} placeholder="At least 10 characters"
                   onChange={(e) => setForm({ ...form, password: e.target.value })} />
               </div>
             )}
@@ -263,7 +263,7 @@ export default function Users() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-            <Button onClick={save} disabled={saving || !form.name || !form.email || (!editingId && form.password.length < 6)}>
+            <Button onClick={save} disabled={saving || !form.name || !form.email || (!editingId && form.password.length < 10)}>
               {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
               Save
             </Button>
@@ -284,13 +284,13 @@ export default function Users() {
             {pwError && <div className="bg-destructive/15 text-destructive text-sm p-2 rounded-md">{pwError}</div>}
             <div className="space-y-1">
               <Label>New Password</Label>
-              <Input type="text" value={pwValue} placeholder="At least 6 characters"
+              <Input type="text" value={pwValue} placeholder="At least 10 characters"
                 onChange={(e) => setPwValue(e.target.value)} />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setPwDialogOpen(false)}>Cancel</Button>
-            <Button onClick={submitReset} disabled={pwSaving || pwValue.length < 6}>
+            <Button onClick={submitReset} disabled={pwSaving || pwValue.length < 10}>
               {pwSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
               Update Password
             </Button>

@@ -19,7 +19,6 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/api/hr")
-@CrossOrigin(origins = "*")
 public class DailyReportController {
 
     private static final String HR_READ =

@@ -231,6 +231,8 @@ public class ProfileChangeRequestService {
     /** The trimmed new value, or null when blank or identical to the current one (nothing to propose). */
     private static String changed(String proposed, String current) {
         String v = trimToNull(proposed);
+        // A masked number ("••••1234") echoed back by the form is not a change.
+        if (com.arudra.crm.security.Pii.isMasked(v)) return null;
         return v == null || v.equals(current == null ? null : current.trim()) ? null : v;
     }
 

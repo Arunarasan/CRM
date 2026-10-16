@@ -82,7 +82,10 @@ public class Customer extends BaseEntity {
     @Column(length = 200)
     private String website;
 
-    @Column(name = "pan_number", length = 50)
+    // Encrypted at rest; masked in API responses (security.Pii).
+    @Convert(converter = com.arudra.crm.security.PiiCryptoConverter.class)
+    @com.fasterxml.jackson.databind.annotation.JsonSerialize(using = com.arudra.crm.security.PiiMaskSerializer.class)
+    @Column(name = "pan_number", length = 512)
     private String panNumber;
 
     @Column(name = "customer_since")
@@ -124,4 +127,9 @@ public class Customer extends BaseEntity {
             inverseJoinColumns = @JoinColumn(name = "tag_id")
     )
     private java.util.Set<Tag> tags = new java.util.HashSet<>();
+
+    /** A masked value ("••••1234") sent back by a form keeps the stored number. */
+    public void setPanNumber(String panNumber) {
+        this.panNumber = com.arudra.crm.security.Pii.keep(panNumber, this.panNumber);
+    }
 }

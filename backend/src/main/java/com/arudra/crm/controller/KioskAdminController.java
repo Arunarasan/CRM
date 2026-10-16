@@ -11,7 +11,6 @@ import java.util.Map;
 /** HR management of office kiosks (register, rename, switch off, re-pair, remove). */
 @RestController
 @RequestMapping("/api/hr/attendance/kiosks")
-@CrossOrigin(origins = "*")
 public class KioskAdminController {
 
     private static final String HR_READ = "hasAuthority('ROLE_ADMIN') or hasAuthority('WORKFORCE_READ')";

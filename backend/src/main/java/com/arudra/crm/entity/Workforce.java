@@ -67,10 +67,16 @@ public class Workforce extends BaseEntity {
     private String pincode;
 
     // --- Identity -------------------------------------------------------------
-    @Column(name = "aadhaar_number", length = 20)
+    // Encrypted at rest; masked in API responses (security.Pii).
+    @Convert(converter = com.arudra.crm.security.PiiCryptoConverter.class)
+    @com.fasterxml.jackson.databind.annotation.JsonSerialize(using = com.arudra.crm.security.PiiMaskSerializer.class)
+    @Column(name = "aadhaar_number", length = 512)
     private String aadhaarNumber;
 
-    @Column(name = "pan_number", length = 20)
+    // Encrypted at rest; masked in API responses (security.Pii).
+    @Convert(converter = com.arudra.crm.security.PiiCryptoConverter.class)
+    @com.fasterxml.jackson.databind.annotation.JsonSerialize(using = com.arudra.crm.security.PiiMaskSerializer.class)
+    @Column(name = "pan_number", length = 512)
     private String panNumber;
 
     @Column(name = "driving_license", length = 50)
@@ -113,4 +119,14 @@ public class Workforce extends BaseEntity {
 
     @Column(columnDefinition = "TEXT")
     private String notes;
+
+    /** A masked value ("••••1234") sent back by a form keeps the stored number. */
+    public void setAadhaarNumber(String aadhaarNumber) {
+        this.aadhaarNumber = com.arudra.crm.security.Pii.keep(aadhaarNumber, this.aadhaarNumber);
+    }
+
+    /** A masked value ("••••1234") sent back by a form keeps the stored number. */
+    public void setPanNumber(String panNumber) {
+        this.panNumber = com.arudra.crm.security.Pii.keep(panNumber, this.panNumber);
+    }
 }

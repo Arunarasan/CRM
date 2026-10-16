@@ -35,7 +35,9 @@ export const useAuth = create<AuthState>((set) => ({
   user: readUser(),
   setSession: (token, refreshToken, user) => {
     localStorage.setItem('token', token)
-    if (refreshToken) localStorage.setItem('refreshToken', refreshToken)
+    // The refresh token is an HttpOnly cookie set by the server; drop any legacy stored copy.
+    void refreshToken
+    localStorage.removeItem('refreshToken')
     localStorage.setItem('userRoles', JSON.stringify(user.roles))
     localStorage.setItem('userName', user.name)
     localStorage.setItem('userEmail', user.email)

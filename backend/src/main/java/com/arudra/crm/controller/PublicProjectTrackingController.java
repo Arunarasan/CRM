@@ -15,7 +15,6 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/api/public/track")
-@CrossOrigin(origins = "*")
 public class PublicProjectTrackingController {
 
     private final PublicProjectTrackingService tracking;

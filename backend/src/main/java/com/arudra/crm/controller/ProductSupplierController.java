@@ -10,7 +10,6 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/inventory/products/{productId}/suppliers")
-@CrossOrigin(origins = "*")
 public class ProductSupplierController {
 
     private static final String READ = "hasAuthority('ROLE_ADMIN') or hasAuthority('INVENTORY_READ')";

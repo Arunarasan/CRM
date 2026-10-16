@@ -31,8 +31,12 @@ public class BackupController {
     private static final DateTimeFormatter STAMP = DateTimeFormatter.ofPattern("yyyyMMdd-HHmm");
 
     private final BackupService backups;
+    private final com.arudra.crm.service.OffsiteBackupService offsite;
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.arudra.crm.service.PrivateFileMigrationService privateFileMigration;
 
-    public BackupController(BackupService backups) {
+    public BackupController(BackupService backups, com.arudra.crm.service.OffsiteBackupService offsite) {
+        this.offsite = offsite;
         this.backups = backups;
     }
 
@@ -40,6 +44,34 @@ public class BackupController {
     @PreAuthorize("hasAuthority('ROLE_ADMIN')")
     public Map<String, Object> info() throws SQLException {
         return backups.info();
+    }
+
+    /** Last nightly encrypted off-site backup (status, file names, sizes). */
+    @GetMapping("/offsite")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<?> offsiteStatus() {
+        return ResponseEntity.ok(offsite.status());
+    }
+
+    /** Runs the encrypted off-site backup now (also how to test the setup). */
+    @PostMapping("/offsite/run")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<?> offsiteRunNow() {
+        if (!Boolean.TRUE.equals(offsite.status().get("enabled"))) {
+            return ResponseEntity.badRequest().body(java.util.Map.of("success", false,
+                    "message", "Off-site backup is not configured (BACKUP_ENABLED)."));
+        }
+        return ResponseEntity.ok(offsite.runNow());
+    }
+
+    /**
+     * One-time move of sensitive files uploaded before private storage existed (call recordings,
+     * kiosk selfies, employee/HR documents, payment proofs…) off the public bucket. Safe to re-run.
+     */
+    @PostMapping("/make-files-private")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<?> makeFilesPrivate() {
+        return ResponseEntity.ok(privateFileMigration.run());
     }
 
     @PostMapping("/ticket")

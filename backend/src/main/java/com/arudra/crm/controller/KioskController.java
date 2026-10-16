@@ -18,7 +18,6 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/api/public/kiosk")
-@CrossOrigin(origins = "*")
 public class KioskController {
 
     static final String TOKEN_HEADER = "X-Kiosk-Token";

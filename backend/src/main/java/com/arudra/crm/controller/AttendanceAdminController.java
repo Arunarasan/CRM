@@ -18,7 +18,6 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/api/hr/attendance")
-@CrossOrigin(origins = "*")
 public class AttendanceAdminController {
 
     private static final String HR_READ =

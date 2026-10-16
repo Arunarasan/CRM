@@ -215,7 +215,7 @@ export default function Settings() {
   const savePw = async () => {
     setPwMsg(''); setPwErr('');
     if (pw.newPassword !== pw.confirm) { setPwErr(t('portal.passwordMismatch')); return; }
-    if (pw.newPassword.length < 6) { setPwErr(t('portal.passwordTooShort')); return; }
+    if (pw.newPassword.length < 10) { setPwErr(t('portal.passwordTooShort')); return; }
     setSavingPw(true);
     try {
       await employeePortalApi.changePassword(pw.currentPassword, pw.newPassword);

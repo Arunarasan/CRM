@@ -15,7 +15,6 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/api/public/quote")
-@CrossOrigin(origins = "*")
 public class PublicQuotationController {
 
     private final QuotationShareService shareService;

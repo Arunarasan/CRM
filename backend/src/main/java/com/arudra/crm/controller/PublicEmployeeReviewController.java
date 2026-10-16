@@ -16,7 +16,6 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/api/public/employee-review")
-@CrossOrigin(origins = "*")
 public class PublicEmployeeReviewController {
 
     private final EmployeeReviewService reviews;

@@ -133,6 +133,18 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiError> handleBadRequest(
             RuntimeException ex, HttpServletRequest request) {
 
+        if (isFromPersistenceLayer(ex)) {
+            // Hibernate/JPA wrap query and mapping failures in IllegalArgument/IllegalState — their
+            // messages carry HQL, table and column names. Log them; never send them to the client.
+            log.error("Persistence error on {}", request.getRequestURI(), ex);
+            ApiError apiError = new ApiError(
+                    HttpStatus.INTERNAL_SERVER_ERROR.value(),
+                    HttpStatus.INTERNAL_SERVER_ERROR.getReasonPhrase(),
+                    "An unexpected error occurred",
+                    request.getRequestURI()
+            );
+            return new ResponseEntity<>(apiError, HttpStatus.INTERNAL_SERVER_ERROR);
+        }
         log.warn("Bad request: {}", ex.getMessage());
         ApiError apiError = new ApiError(
                 HttpStatus.BAD_REQUEST.value(),
@@ -141,6 +153,18 @@ public class GlobalExceptionHandler {
                 request.getRequestURI()
         );
         return new ResponseEntity<>(apiError, HttpStatus.BAD_REQUEST);
+    }
+
+    private static boolean isFromPersistenceLayer(Throwable ex) {
+        for (Throwable t = ex; t != null; t = t.getCause()) {
+            String name = t.getClass().getName();
+            if (name.startsWith("org.hibernate.") || name.startsWith("jakarta.persistence.")
+                    || name.startsWith("java.sql.") || name.startsWith("org.springframework.dao.")) {
+                return true;
+            }
+            if (t.getCause() == t) break;
+        }
+        return false;
     }
 
     /**
@@ -156,8 +180,8 @@ public class GlobalExceptionHandler {
         ApiError apiError = new ApiError(
                 HttpStatus.CONFLICT.value(),
                 HttpStatus.CONFLICT.getReasonPhrase(),
-                "This record could not be saved because a required link or unique value is missing: "
-                        + ex.getMostSpecificCause().getMessage(),
+                // Table/column/constraint names stay in the log, not the response.
+                "This record could not be saved because a required link or unique value is missing or already in use.",
                 request.getRequestURI()
         );
         return new ResponseEntity<>(apiError, HttpStatus.CONFLICT);

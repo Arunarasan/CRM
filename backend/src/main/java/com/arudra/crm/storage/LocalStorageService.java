@@ -14,6 +14,7 @@ import java.nio.file.Path;
  * ephemeral hosts (e.g. Render) this disk is wiped on redeploy — use the S3/R2 backend there.
  */
 @Service
+@org.springframework.beans.factory.annotation.Qualifier("backendStorage")
 @ConditionalOnExpression("!'${app.storage.type:local}'.equalsIgnoreCase('s3') && !'${app.storage.type:local}'.equalsIgnoreCase('r2')")
 public class LocalStorageService implements StorageService {
 
@@ -35,5 +36,12 @@ public class LocalStorageService implements StorageService {
         Path file = root.resolve(key).normalize();
         if (!file.startsWith(root)) throw new java.nio.file.NoSuchFileException(key);
         return Files.readAllBytes(file);
+    }
+
+    @Override
+    public void delete(String key) throws IOException {
+        Path root = Path.of(uploadDir).toAbsolutePath().normalize();
+        Path file = root.resolve(key).normalize();
+        if (file.startsWith(root)) Files.deleteIfExists(file);
     }
 }

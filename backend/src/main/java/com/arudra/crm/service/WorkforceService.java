@@ -74,7 +74,7 @@ public class WorkforceService {
                 contract.put("contractEndDate", c.getAgreementEndDate());
                 contract.put("paymentTerms", c.getPaymentTerms());
                 contract.put("gstNumber", c.getGstin());
-                contract.put("panNumber", c.getPan());
+                contract.put("panNumber", com.arudra.crm.security.Pii.callerMayReveal() ? c.getPan() : com.arudra.crm.security.Pii.mask(c.getPan()));
                 out.put("contractDetails", contract);
                 out.put("summary", contractorBillingService.getOutstanding(c.getId()));
                 out.put("paymentRequests", contractorBillingService.getBillsForContractor(c.getId()));

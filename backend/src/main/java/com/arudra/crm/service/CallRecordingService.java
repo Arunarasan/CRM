@@ -145,6 +145,14 @@ public class CallRecordingService {
 
     /** Bytes of a file this app stored: a public storage URL, or a local "/uploads/..." path. */
     private byte[] readStored(String url) throws IOException {
+        if (com.arudra.crm.storage.PrivateFileStore.isPrivateUrl(url)
+                && storageService instanceof com.arudra.crm.storage.PrivacyAwareStorageService privacyAware) {
+            try {
+                return privacyAware.readUrl(url);
+            } catch (java.nio.file.NoSuchFileException e) {
+                throw new IllegalStateException("This recording's file is missing from storage — upload it again.");
+            }
+        }
         if (url.startsWith("/uploads/")) { // local disk, or S3/R2 with no public bucket URL
             try {
                 return storageService.read(url.substring("/uploads/".length()).split("[?#]")[0]);
