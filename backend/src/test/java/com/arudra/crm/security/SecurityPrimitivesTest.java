@@ -50,8 +50,12 @@ class SecurityPrimitivesTest {
 
     @Test
     void lockoutGrowsAndCaps() {
-        assertEquals(15, CustomUserDetailsService.lockDuration(5).toMinutes());
-        assertEquals(30, CustomUserDetailsService.lockDuration(10).toMinutes());
-        assertEquals(24 * 60, CustomUserDetailsService.lockDuration(500).toMinutes());
+        assertEquals(30, CustomUserDetailsService.lockDuration(5).toSeconds());
+        assertEquals(30, CustomUserDetailsService.lockDuration(500).toSeconds());
+        assertFalse(CustomUserDetailsService.shouldLock(4));
+        assertTrue(CustomUserDetailsService.shouldLock(5));
+        assertFalse(CustomUserDetailsService.shouldLock(7));
+        assertTrue(CustomUserDetailsService.shouldLock(8));
+        assertTrue(CustomUserDetailsService.shouldLock(11));
     }
 }

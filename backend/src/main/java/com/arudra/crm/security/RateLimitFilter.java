@@ -29,7 +29,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         int count;
     }
 
-    private static final Rule LOGIN = new Rule("login", 10, 60_000);
+    private static final Rule LOGIN = new Rule("login", 10, 30_000);
     private static final Rule REFRESH = new Rule("refresh", 30, 60_000);
     private static final Rule FORGOT = new Rule("forgot", 5, 15 * 60_000);
     private static final Rule OTP = new Rule("otp", 10, 15 * 60_000);

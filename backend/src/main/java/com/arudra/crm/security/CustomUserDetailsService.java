@@ -58,13 +58,17 @@ public class CustomUserDetailsService implements UserDetailsService {
     /** Failed sign-ins before a lock, and how long each lock lasts. */
     public static final int MAX_FAILED_ATTEMPTS = 5;
 
-    /**
-     * Progressive lockout: 15 minutes for the first 5 failures, doubling for each further batch of
-     * 5, capped at 24 hours. Short enough that a stranger can't keep a staff member locked out.
-     */
+    /** After the first lock, each further batch of this many failures locks again. */
+    public static final int REPEAT_FAILED_ATTEMPTS = 3;
+
+    /** Every lock lasts the same short time. */
     public static java.time.Duration lockDuration(int failedAttempts) {
-        int batches = Math.max(1, failedAttempts / MAX_FAILED_ATTEMPTS);
-        long minutes = 15L << Math.min(batches - 1, 7);
-        return java.time.Duration.ofMinutes(Math.min(minutes, 24 * 60));
+        return java.time.Duration.ofSeconds(30);
+    }
+
+    /** True when this failure count should lock: the 5th failure, then every 3rd after it. */
+    public static boolean shouldLock(int failedAttempts) {
+        return failedAttempts >= MAX_FAILED_ATTEMPTS
+                && (failedAttempts - MAX_FAILED_ATTEMPTS) % REPEAT_FAILED_ATTEMPTS == 0;
     }
 }

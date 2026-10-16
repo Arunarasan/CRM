@@ -112,7 +112,7 @@ public class AuthController {
                     .map(u -> java.time.Duration.between(java.time.LocalDateTime.now(),
                             u.getLockTime().plus(com.arudra.crm.security.CustomUserDetailsService
                                     .lockDuration(u.getFailedAttempts()))).getSeconds())
-                    .orElse(900L);
+                    .orElse(30L);
             retryAfter = Math.max(retryAfter, 1L);
             return ResponseEntity.status(HttpStatus.LOCKED)
                     .header("Retry-After", String.valueOf(retryAfter))
@@ -167,7 +167,7 @@ public class AuthController {
         userRepository.findByEmail(email).ifPresent(user -> {
             int newAttempts = user.getFailedAttempts() + 1;
             user.setFailedAttempts(newAttempts);
-            if (newAttempts % com.arudra.crm.security.CustomUserDetailsService.MAX_FAILED_ATTEMPTS == 0) {
+            if (com.arudra.crm.security.CustomUserDetailsService.shouldLock(newAttempts)) {
                 user.setAccountNonLocked(false);
                 user.setLockTime(LocalDateTime.now());
             }

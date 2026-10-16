@@ -50,7 +50,7 @@ export default function Login() {
         setError('This account is not activated yet. Please contact an administrator.')
       } else if (err?.response?.status === 423) {
         const secs = Number(data?.retryAfterSeconds ?? err?.response?.headers?.['retry-after'])
-        setLockLeft(Number.isFinite(secs) && secs > 0 ? Math.ceil(secs) : 900)
+        setLockLeft(Number.isFinite(secs) && secs > 0 ? Math.ceil(secs) : 30)
         setError(null)
       } else if (err?.response?.status === 401) {
         setError('Invalid email or password. Please try again.')
