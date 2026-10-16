@@ -150,7 +150,6 @@ const EmployeeGoodsReceipts = lazy(() => import("./pages/employeePortal/GoodsRec
 // the CRM's /login and /forgot-password routes redirect there via RedirectToSignIn.
 const Users = lazy(() => import("./pages/Users"));
 // Forced first-sign-in password change for accounts on a temporary password.
-const SetPassword = lazy(() => import("./pages/SetPassword"));
 
 // Admin settings — company profile, preferences, notifications, assignment rules, security.
 const Settings = lazy(() => import("./pages/Settings"));
@@ -178,7 +177,6 @@ function App() {
           <Route path="/login" element={<RedirectToSignIn />} />
           <Route path="/forgot-password" element={<RedirectToSignIn />} />
           <Route path="/kiosk" element={<KioskPage />} />
-          <Route path="/set-password" element={<SetPassword />} />
           
           {/* Protected Routes Wrapper — desktop ERP, blocked for portal-only field employees */}
           <Route path="/" element={<DesktopGuard><DashboardLayout /></DesktopGuard>}>

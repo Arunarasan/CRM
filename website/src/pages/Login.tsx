@@ -27,12 +27,6 @@ export default function Login() {
       // the same origin ("/crm") and reads the same localStorage session, so persisting it here logs
       // the user straight into the CRM with no second sign-in. Role checks are enforced by the CRM.
       setSession(res.token, res.refreshToken, { name: res.name, email: res.email, roles: res.roles })
-      // A temporary password (new employee, admin-set or reset) must be replaced before anything else.
-      if (res.mustChangePassword) {
-        localStorage.setItem('mustChangePassword', '1')
-        window.location.assign(site.crmUrl.replace(/\/$/, '') + '/set-password')
-        return
-      }
       localStorage.removeItem('mustChangePassword')
       window.location.assign(site.crmUrl)
     } catch (err: any) {

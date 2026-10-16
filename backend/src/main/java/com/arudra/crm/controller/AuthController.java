@@ -95,7 +95,7 @@ public class AuthController {
                     .map(GrantedAuthority::getAuthority)
                     .collect(Collectors.toList());
 
-            return ResponseEntity.ok(new AuthResponse(token, null, user.getEmail(), user.getName(), roles, user.isMustChangePassword()));
+            return ResponseEntity.ok(new AuthResponse(token, null, user.getEmail(), user.getName(), roles, false));
 
         } catch (DisabledException ex) {
             // enabled == emailVerified (CustomUserDetailsService): the account isn't active.

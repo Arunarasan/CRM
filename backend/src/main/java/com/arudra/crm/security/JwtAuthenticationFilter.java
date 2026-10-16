@@ -86,6 +86,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
      * until they set their own. Website customers are exempt: the public site has no change screen.
      */
     private boolean mustChangePasswordFirst(UserDetails userDetails, HttpServletRequest request) {
+        // Forced password change is switched off: normal sign-in is enough. Flip this to re-enable.
+        final boolean enforce = false;
+        if (!enforce) return false;
         if (!(userDetails instanceof AppUserDetails app) || !app.isMustChangePassword()) return false;
         boolean customer = userDetails.getAuthorities().stream()
                 .anyMatch(a -> "ROLE_CUSTOMER".equals(a.getAuthority()));

@@ -460,7 +460,6 @@ public class DataSeeder {
                         admin.setEmail(bootstrapEmail);
                         admin.setPassword(passwordEncoder.encode(bootstrapPassword));
                         admin.setEmailVerified(true);
-                        admin.setMustChangePassword(true);
                         Set<Role> roles = new HashSet<>();
                         roles.add(adminRole);
                         admin.setRoles(roles);

@@ -31,11 +31,6 @@ export default function Login() {
         if (response.data.roles) {
             localStorage.setItem("userRoles", JSON.stringify(response.data.roles));
         }
-        if (response.data.mustChangePassword) {
-          localStorage.setItem("mustChangePassword", "1");
-          window.location.href = import.meta.env.BASE_URL + "set-password";
-          return;
-        }
 
         // Field employees (any ROLE_EMPLOYEE who is not an admin) land on the mobile self-service
         // portal and never touch the desktop ERP. Everyone else goes to the desktop dashboard.

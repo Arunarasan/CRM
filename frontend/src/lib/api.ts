@@ -10,9 +10,6 @@ const api = axios.create({
   withCredentials: true,
 });
 
-/** Set at sign-in (or by a PASSWORD_CHANGE_REQUIRED response) until the user picks their own password. */
-export const MUST_CHANGE_PASSWORD_KEY = 'mustChangePassword';
-
 /** Ends the session server-side (revokes the refresh token), clears it locally, and goes to sign-in. */
 export async function signOut(): Promise<void> {
   try {
@@ -23,7 +20,7 @@ export async function signOut(): Promise<void> {
   localStorage.removeItem('token');
   localStorage.removeItem('refreshToken');
   localStorage.removeItem('userRoles');
-  localStorage.removeItem(MUST_CHANGE_PASSWORD_KEY);
+  localStorage.removeItem('mustChangePassword');
   window.location.href = import.meta.env.BASE_URL + 'login';
 }
 
@@ -83,15 +80,6 @@ api.interceptors.response.use(
     }
 
     const isAuthEndpoint = originalRequest?.url?.includes('/auth/login') || originalRequest?.url?.includes('/auth/refresh');
-
-    // Temporary password still in use: the backend allows nothing but the change-password call.
-    if (error.response?.status === 403 && error.response?.data?.code === 'PASSWORD_CHANGE_REQUIRED') {
-      localStorage.setItem(MUST_CHANGE_PASSWORD_KEY, '1');
-      if (!window.location.pathname.endsWith('/set-password')) {
-        window.location.href = import.meta.env.BASE_URL + 'set-password';
-      }
-      return Promise.reject(error);
-    }
 
     if (error.response && error.response.status === 401 && !originalRequest._retry && !isAuthEndpoint) {
       if (isRefreshing) {
