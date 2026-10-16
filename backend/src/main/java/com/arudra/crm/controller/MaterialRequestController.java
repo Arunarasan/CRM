@@ -12,7 +12,6 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/inventory/material-requests")
-@CrossOrigin(origins = "*")
 public class MaterialRequestController {
 
     private static final String READ = "hasAuthority('ROLE_ADMIN') or hasAuthority('MATERIAL_REQUEST_READ')";

@@ -18,7 +18,6 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/site-visits")
-@CrossOrigin(origins = "*")
 public class SiteVisitController {
 
     private static final String READ = "hasAuthority('ROLE_ADMIN') or hasAuthority('SITE_VISIT_READ')";

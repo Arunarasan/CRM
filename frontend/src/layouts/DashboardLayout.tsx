@@ -10,7 +10,7 @@ import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuLabel, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import api from "@/lib/api";
+import api, { signOut } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import Logo from "@/components/brand/Logo";
 import { getCurrentUser } from "@/lib/currentUser";
@@ -49,12 +49,8 @@ const BOTTOM_NAV: { to: string; labelKey: string; authority: string | null; icon
   { to: "/projects", labelKey: "nav.projects", authority: "PROJECT_READ", icon: FolderKanban },
 ];
 
-function logout() {
-  localStorage.removeItem("token");
-  localStorage.removeItem("refreshToken");
-  // BASE_URL keeps the redirect inside the CRM (/crm/ in production) instead of the public site.
-  window.location.href = import.meta.env.BASE_URL + "login";
-}
+// Revokes the session server-side; BASE_URL keeps the redirect inside the CRM (/crm/ in production).
+const logout = () => { void signOut(); };
 
 export default function DashboardLayout() {
   const [unreadCount, setUnreadCount] = useState(0);

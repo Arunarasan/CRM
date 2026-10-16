@@ -16,7 +16,6 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/hr")
-@CrossOrigin(origins = "*")
 public class HrController {
 
     // Payroll processing is HR/Finance/Admin; reads are broader (PM can view).

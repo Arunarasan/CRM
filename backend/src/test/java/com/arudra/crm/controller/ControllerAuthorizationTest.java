@@ -40,7 +40,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * authority. Runs as a web-layer slice (no database) with method security enabled.
  */
 @WebMvcTest(controllers = {ExpenseController.class, DashboardController.class,
-        HrController.class, TaskController.class})
+        HrController.class, TaskController.class, ReportController.class})
 @Import(ControllerAuthorizationTest.MethodSecurityTestConfig.class)
 class ControllerAuthorizationTest {
 
@@ -70,15 +70,27 @@ class ControllerAuthorizationTest {
     @MockBean private HrService hrService;
     @MockBean private PayrollService payrollService;
     @MockBean private WorkforceAlertService workforceAlertService;
+    @MockBean private com.arudra.crm.service.HrOverviewService hrOverviewService;
+    @MockBean private com.arudra.crm.service.PayslipEditService payslipEditService;
+    @MockBean private com.arudra.crm.service.ProfileChangeRequestService profileChangeRequestService;
+    @MockBean private com.arudra.crm.service.EmployeeReviewService employeeReviewService;
+    @MockBean private com.arudra.crm.service.GoogleBusinessReviewService googleBusinessReviewService;
+    @MockBean private com.arudra.crm.service.GoogleReviewCountService googleReviewCountService;
     @MockBean private CurrentUserService currentUserService;
     // Task
     @MockBean private TaskService taskService;
     @MockBean private TaskChecklistService taskChecklistService;
+    @MockBean(name = "taskAccess") private com.arudra.crm.security.TaskAccessGuard taskAccess;
+    // Reports
+    @MockBean private com.arudra.crm.service.ReportService reportService;
+    @MockBean private com.arudra.crm.service.InventoryReportService inventoryReportService;
+    @MockBean private com.arudra.crm.service.PurchaseReportService purchaseReportService;
     // The JWT auth filter is a Filter bean pulled into the slice; satisfy its collaborators so
     // the context loads. With no token on the request it simply passes through, and @WithMockUser
     // supplies the authentication that method security evaluates.
     @MockBean private com.arudra.crm.security.JwtUtil jwtUtil;
     @MockBean private com.arudra.crm.security.CustomUserDetailsService customUserDetailsService;
+    @MockBean private com.arudra.crm.idempotency.IdempotencyStore idempotencyStore;
 
     // ---- Expenses (financial data → FINANCE_READ / FINANCE_WRITE) ----
 
@@ -185,5 +197,61 @@ class ControllerAuthorizationTest {
     @WithMockUser(authorities = "ROLE_PROJECT_MANAGER")
     void deleteTask_allowedForProjectManager() throws Exception {
         mvc.perform(delete("/api/tasks/1").with(csrf())).andExpect(status().isOk());
+    }
+
+    // ---- Task CRUD (staff roles; employees only on tasks assigned to them) ----
+
+    @Test
+    @WithMockUser(authorities = "ROLE_CUSTOMER")
+    void allTasks_forbiddenForCustomer() throws Exception {
+        mvc.perform(get("/api/tasks/all")).andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(authorities = "ROLE_CUSTOMER")
+    void taskStatus_forbiddenForCustomer() throws Exception {
+        mvc.perform(put("/api/tasks/1/status").with(csrf())
+                        .contentType("application/json").content("{\"status\":\"DONE\"}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(authorities = "TASK_READ")
+    void allTasks_allowedForTaskReader() throws Exception {
+        when(taskService.getAllTasks()).thenReturn(Collections.emptyList());
+        mvc.perform(get("/api/tasks/all")).andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser(authorities = {"ROLE_EMPLOYEE", "EMPLOYEE_TASK_EXECUTE"})
+    void comment_forbiddenForUnassignedEmployee() throws Exception {
+        when(taskAccess.canAct(1L)).thenReturn(false);
+        mvc.perform(post("/api/tasks/1/comments").with(csrf())
+                        .contentType("application/json").content("{}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(authorities = {"ROLE_EMPLOYEE", "EMPLOYEE_TASK_EXECUTE"})
+    void comment_allowedForAssignedEmployee() throws Exception {
+        when(taskAccess.canAct(1L)).thenReturn(true);
+        mvc.perform(post("/api/tasks/1/comments").with(csrf())
+                        .contentType("application/json").content("{}"))
+                .andExpect(status().isOk());
+    }
+
+    // ---- Financial reports (revenue / payroll / profit → admin or FINANCE_READ) ----
+
+    @Test
+    @WithMockUser(authorities = "ROLE_CUSTOMER")
+    void reportDashboard_forbiddenForCustomer() throws Exception {
+        mvc.perform(get("/api/reports/dashboard")).andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(authorities = "FINANCE_READ")
+    void reportDashboard_allowedForFinanceReader() throws Exception {
+        when(reportService.getDashboardMetrics(any(), any())).thenReturn(Collections.emptyMap());
+        mvc.perform(get("/api/reports/dashboard")).andExpect(status().isOk());
     }
 }

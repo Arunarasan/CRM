@@ -16,7 +16,6 @@ import java.util.Map;
 /** The lead's combined Measurement & Quotation workspace — see {@link QuoteWorkspaceService}. */
 @RestController
 @RequestMapping("/api/quote-workspace")
-@CrossOrigin(origins = "*")
 public class QuoteWorkspaceController {
 
     // Pricing access is what the workspace is about; skipping the in-between approvals is deliberate.

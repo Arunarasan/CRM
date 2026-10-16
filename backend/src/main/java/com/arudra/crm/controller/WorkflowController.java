@@ -22,7 +22,6 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/api/workflow")
-@CrossOrigin(origins = "*")
 public class WorkflowController {
 
     private static final String READ = "hasAuthority('ROLE_ADMIN') or hasAuthority('TASK_READ') or hasAuthority('LEAD_READ')";

@@ -153,6 +153,12 @@ jobs:
               exit 1
             fi
             echo "Required variables present."
+            # The old fallback key (404E6352...) is a public tutorial key: anyone can forge tokens with it.
+            if grep -Eq "^[[:space:]]*JWT_SECRET=[[:space:]]*404E6352" .env; then
+              echo "ERROR: JWT_SECRET in $APP_DIR/.env is the well-known public example key."
+              echo "Generate a new one with: openssl rand -base64 48   — then re-run the deploy."
+              exit 1
+            fi
 
             # 5. Validate Docker Compose Configuration
             echo "--> Validating Docker Compose Configuration..."

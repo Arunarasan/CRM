@@ -34,6 +34,8 @@ public class HrService {
     @Autowired private NotificationService notificationService;
     @Autowired private TaskAssignmentRepository taskAssignmentRepository;
     @Autowired private WorkforceRepository workforceRepository;
+    @Autowired private RefreshTokenService refreshTokenService;
+    @Autowired private EmailService emailService;
 
     /** Notifies an employee via their own login account (resolved by shared email), if one exists. */
     private void notifyEmployee(Employee employee, String title, String message, String type, String url) {
@@ -74,12 +76,16 @@ public class HrService {
             return;
         }
         User user = userRepository.findByEmail(employee.getEmail()).orElse(null);
+        String tempPassword = null;
         if (user == null) {
+            // Random one-time password, e-mailed to the employee, who must replace it on first sign-in.
+            tempPassword = com.arudra.crm.security.PasswordPolicy.generateTemporary();
             user = new User();
             user.setName(employee.getFirstName() + " " + employee.getLastName());
             user.setEmail(employee.getEmail());
-            user.setPassword(passwordEncoder.encode("password123")); // Default password
+            user.setPassword(passwordEncoder.encode(tempPassword));
             user.setEmailVerified(true);
+            user.setMustChangePassword(true);
             user.setRoles(new java.util.HashSet<>());
         }
         java.util.Set<Role> roles = user.getRoles() != null ? user.getRoles() : new java.util.HashSet<>();
@@ -89,6 +95,14 @@ public class HrService {
         }
         user.setRoles(roles);
         userRepository.save(user);
+        if (tempPassword != null) {
+            emailService.send(user.getEmail(), "Your sign-in details",
+                    "Hi " + user.getName() + ",\n\n"
+                    + "An account has been created for you. Sign in with this e-mail address and the "
+                    + "temporary password below. You will be asked to choose your own password straight away.\n\n"
+                    + "Temporary password: " + tempPassword + "\n\n"
+                    + "If you can't sign in, use \"Forgot password\" on the sign-in page or ask your administrator.");
+        }
     }
 
     public Page<Employee> getEmployees(int page, int size) {
@@ -174,6 +188,7 @@ public class HrService {
             userRepository.findByEmail(saved.getEmail()).ifPresent(u -> {
                 u.setEmailVerified(active);
                 userRepository.save(u);
+                if (!active) refreshTokenService.revokeAll(u); // sign out every device now
             });
         }
         return saved;
@@ -200,6 +215,7 @@ public class HrService {
             userRepository.findByEmail(email).ifPresent(u -> {
                 u.setEmailVerified(false);
                 userRepository.save(u);
+                refreshTokenService.revokeAll(u);
             });
         }
     }

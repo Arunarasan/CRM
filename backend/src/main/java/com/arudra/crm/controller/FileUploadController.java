@@ -20,7 +20,6 @@ import java.util.Set;
 @lombok.extern.slf4j.Slf4j
 @RestController
 @RequestMapping("/api/uploads")
-@CrossOrigin(origins = "*")
 public class FileUploadController {
 
     private static final Set<String> ALLOWED_PREFIXES = Set.of("image/", "video/", "audio/");

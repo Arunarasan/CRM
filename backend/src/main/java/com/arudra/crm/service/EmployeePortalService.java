@@ -27,6 +27,7 @@ import java.util.Map;
 public class EmployeePortalService {
 
     @Autowired private EmployeeRepository employeeRepository;
+    @Autowired private RefreshTokenService refreshTokenService;
     @Autowired private AttendanceRepository attendanceRepository;
     @Autowired private LeaveRequestRepository leaveRequestRepository;
     @Autowired private SalaryRecordRepository salaryRecordRepository;
@@ -224,11 +225,14 @@ public class EmployeePortalService {
         if (currentPassword == null || !passwordEncoder.matches(currentPassword, user.getPassword())) {
             throw new IllegalArgumentException("Current password is incorrect.");
         }
-        if (newPassword == null || newPassword.length() < 6) {
-            throw new IllegalArgumentException("New password must be at least 6 characters.");
+        String problem = com.arudra.crm.security.PasswordPolicy.validate(newPassword, user.getEmail());
+        if (problem != null) {
+            throw new IllegalArgumentException(problem);
         }
         user.setPassword(passwordEncoder.encode(newPassword));
+        user.setMustChangePassword(false);
         userRepository.save(user);
+        refreshTokenService.revokeAll(user); // sign out other devices
     }
 
     private static String trimToNull(String s) {

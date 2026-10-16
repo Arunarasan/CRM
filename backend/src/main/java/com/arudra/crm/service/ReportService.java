@@ -26,7 +26,7 @@ public class ReportService {
         metrics.put("totalRevenue", revenue);
 
         // 2. Cost of Goods (Sum of PurchaseBills in range)
-        BigDecimal cogs = getSum("PurchaseBill", "billDate", startDate, endDate);
+        BigDecimal cogs = getSum("PurchaseBill", "date", startDate, endDate);
         
         // 3. Payroll Expenses (Sum of SalaryRecords in range)
         BigDecimal payroll = getSum("SalaryRecord", "paymentDate", startDate, endDate);

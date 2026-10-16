@@ -49,7 +49,7 @@ services:
       DB_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:-${DB_PASSWORD:-${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}}}
       # Security & JWT
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
-      JWT_EXPIRATION: ${JWT_EXPIRATION:-86400000}
+      JWT_EXPIRATION: ${JWT_EXPIRATION:-900000}
       # Bootstrap admin (prod only): when both are set and the email does not yet exist,
       # DataSeeder provisions a verified admin flagged must_change_password. Unset = no admin
       # is auto-created (provision one out-of-band). Empty defaults keep compose valid when absent.

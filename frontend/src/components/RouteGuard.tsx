@@ -7,6 +7,11 @@ function isAuthenticated(): boolean {
   return !!localStorage.getItem("token");
 }
 
+/** Signed in with a temporary password that hasn't been replaced yet (see pages/SetPassword). */
+function mustChangePassword(): boolean {
+  return localStorage.getItem("mustChangePassword") === "1";
+}
+
 /**
  * The single sign-in for the whole platform lives on the public website (there is no separate CRM
  * login page). VITE_SITE_URL points at that website (already set for local dev); in the Option-A
@@ -58,6 +63,9 @@ export function DesktopGuard({ children }: { children: React.ReactNode }) {
   if (!isAuthenticated()) {
     return <RedirectToSignIn />;
   }
+  if (mustChangePassword()) {
+    return <Navigate to="/set-password" replace />;
+  }
   if (isFieldEmployeeOnly(getAuthorities())) {
     const path = location.pathname;
     const allowed = FIELD_EMPLOYEE_DESKTOP_ALLOW.some(
@@ -77,6 +85,9 @@ export function DesktopGuard({ children }: { children: React.ReactNode }) {
 export function EmployeeGuard({ children }: { children: React.ReactNode }) {
   if (!isAuthenticated()) {
     return <RedirectToSignIn />;
+  }
+  if (mustChangePassword()) {
+    return <Navigate to="/set-password" replace />;
   }
   return <>{children}</>;
 }

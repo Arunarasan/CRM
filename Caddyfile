@@ -18,9 +18,10 @@ jbdecorcdm.com {
         X-Content-Type-Options "nosniff"
         Referrer-Policy "strict-origin-when-cross-origin"
         Permissions-Policy "geolocation=(self), camera=(self), microphone=(self)"
-        # Conservative CSP: blocks plugin content and base-tag hijack and clickjacking by other sites,
-        # without restricting scripts/images (full script-src CSP needs a staged report-only rollout).
-        Content-Security-Policy "frame-ancestors 'self'; object-src 'none'; base-uri 'self'"
+        # Scripts only from this origin (both SPAs ship no inline scripts; JSON-LD blocks aren't executed,
+        # face-api models are self-hosted), plus no plugins, no base-tag hijack, no framing by other sites.
+        # "?" = default only: responses that set their own CSP (the sandbox on /uploads) keep it.
+        ?Content-Security-Policy "script-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'self'"
         -Server
     }
     reverse_proxy web:80

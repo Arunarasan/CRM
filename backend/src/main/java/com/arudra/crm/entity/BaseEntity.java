@@ -15,7 +15,7 @@ import java.time.LocalDateTime;
 @Setter
 @MappedSuperclass
 @EntityListeners(AuditingEntityListener.class)
-public abstract class BaseEntity {
+public abstract class BaseEntity implements org.springframework.data.domain.Persistable<Long> {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -55,4 +55,16 @@ public abstract class BaseEntity {
 
     @Column(name = "is_deleted", nullable = false)
     private Boolean isDeleted = false;
+
+    /**
+     * New ⇔ no id yet. Without this, Spring Data decides by @Version, and because version starts at 0
+     * every new entity looked "existing": save() merged a copy and left the caller's instance without
+     * an id (Hibernate 6.6 then rejects references to it as transient).
+     */
+    @Override
+    @Transient
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    public boolean isNew() {
+        return id == null;
+    }
 }

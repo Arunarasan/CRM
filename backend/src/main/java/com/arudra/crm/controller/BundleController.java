@@ -23,7 +23,6 @@ import java.util.Set;
  */
 @RestController
 @RequestMapping("/api/bundles")
-@CrossOrigin(origins = "*")
 public class BundleController {
 
     private static final String READ = "hasAuthority('ROLE_ADMIN') or hasAuthority('BUNDLE_READ')";

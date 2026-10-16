@@ -140,7 +140,7 @@ const en = {
       updatePassword: 'Update Password',
       passwordUpdated: 'Password updated',
       passwordMismatch: 'New passwords do not match.',
-      passwordTooShort: 'New password must be at least 6 characters.',
+      passwordTooShort: 'New password must be at least 10 characters.',
       passwordFailed: 'Could not change password.',
     },
   },
@@ -177,7 +177,7 @@ const en = {
     updatePassword: 'Update Password',
     passwordUpdated: 'Password updated.',
     passwordMismatch: 'New passwords do not match.',
-    passwordTooShort: 'New password must be at least 6 characters.',
+    passwordTooShort: 'New password must be at least 10 characters.',
     passwordFailed: 'Could not change password.',
     // Bottom navigation
     nav: {

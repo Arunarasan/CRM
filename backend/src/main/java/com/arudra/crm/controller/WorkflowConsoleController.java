@@ -17,7 +17,6 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/api/workflow/console")
-@CrossOrigin(origins = "*")
 public class WorkflowConsoleController {
 
     private static final String ADMIN = "hasAuthority('ROLE_ADMIN') or hasAuthority('TASK_APPROVE')";

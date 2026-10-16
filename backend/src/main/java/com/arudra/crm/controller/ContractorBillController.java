@@ -25,7 +25,6 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/api/contractor-bills")
-@CrossOrigin(origins = "*")
 public class ContractorBillController {
 
     private static final String READ = "hasAuthority('ROLE_ADMIN') or hasAuthority('CONTRACTOR_BILL_READ')";

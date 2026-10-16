@@ -15,7 +15,6 @@ import java.util.List;
  */
 @RestController
 @RequestMapping("/api/expenses")
-@CrossOrigin(origins = "*")
 public class ExpenseController {
 
     private static final String READ = "hasAuthority('ROLE_ADMIN') or hasAuthority('FINANCE_READ')";

@@ -32,13 +32,16 @@ public class UserService {
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
     private final CurrentUserService currentUserService;
+    private final RefreshTokenService refreshTokenService;
 
     public UserService(UserRepository userRepository, RoleRepository roleRepository,
-                       PasswordEncoder passwordEncoder, CurrentUserService currentUserService) {
+                       PasswordEncoder passwordEncoder, CurrentUserService currentUserService,
+                       RefreshTokenService refreshTokenService) {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
         this.passwordEncoder = passwordEncoder;
         this.currentUserService = currentUserService;
+        this.refreshTokenService = refreshTokenService;
     }
 
     public List<UserAdminDTO> listUsers() {
@@ -54,8 +57,9 @@ public class UserService {
         if (email.isEmpty() || req.getName() == null || req.getName().isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Name and email are required.");
         }
-        if (req.getPassword() == null || req.getPassword().length() < 6) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Password must be at least 6 characters.");
+        String problem = com.arudra.crm.security.PasswordPolicy.validate(req.getPassword(), email);
+        if (problem != null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, problem);
         }
         if (userRepository.findByEmail(email).isPresent()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "A user with that email already exists.");
@@ -67,6 +71,7 @@ public class UserService {
         user.setPassword(passwordEncoder.encode(req.getPassword()));
         user.setPhone(checkedPhone(req.getPhone(), null));
         user.setEmailVerified(req.getEmailVerified() != null ? req.getEmailVerified() : true);
+        user.setMustChangePassword(true); // admin-chosen password → user picks their own on first sign-in
         user.setRoles(resolveRoles(req.getRoles()));
         return UserAdminDTO.from(userRepository.save(user));
     }
@@ -122,17 +127,20 @@ public class UserService {
 
     @Transactional
     public void adminResetPassword(Long id, String newPassword) {
-        if (newPassword == null || newPassword.length() < 6) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Password must be at least 6 characters.");
-        }
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found."));
+        String problem = com.arudra.crm.security.PasswordPolicy.validate(newPassword, user.getEmail());
+        if (problem != null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, problem);
+        }
         user.setPassword(passwordEncoder.encode(newPassword));
+        user.setMustChangePassword(true); // admin knows this password — the user must replace it
         // Clear any lockout so the user can log straight in with the new password.
         user.setFailedAttempts(0);
         user.setAccountNonLocked(true);
         user.setLockTime(null);
         userRepository.save(user);
+        refreshTokenService.revokeAll(user); // old sessions end with the old password
     }
 
     @Transactional
@@ -156,6 +164,7 @@ public class UserService {
         if (hasRole(user, "ROLE_ADMIN") && countAdmins() <= 1) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot delete the last remaining administrator.");
         }
+        refreshTokenService.revokeAll(user);
         userRepository.delete(user);
     }
 

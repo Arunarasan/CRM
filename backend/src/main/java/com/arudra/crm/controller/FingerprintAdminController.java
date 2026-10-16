@@ -19,7 +19,6 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/api/hr/attendance/fingerprints")
-@CrossOrigin(origins = "*")
 public class FingerprintAdminController {
 
     private static final String HR_READ = "hasAuthority('ROLE_ADMIN') or hasAuthority('WORKFORCE_READ')";

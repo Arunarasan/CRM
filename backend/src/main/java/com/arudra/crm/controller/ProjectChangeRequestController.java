@@ -15,7 +15,6 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/change-requests")
-@CrossOrigin(origins = "*")
 public class ProjectChangeRequestController {
 
     private static final String READ = "hasAuthority('ROLE_ADMIN') or hasAuthority('CHANGE_REQUEST_READ')";

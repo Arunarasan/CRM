@@ -12,7 +12,6 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/inventory/transfers")
-@CrossOrigin(origins = "*")
 public class StockTransferController {
 
     private static final String READ = "hasAuthority('ROLE_ADMIN') or hasAuthority('STOCK_TRANSFER_READ')";

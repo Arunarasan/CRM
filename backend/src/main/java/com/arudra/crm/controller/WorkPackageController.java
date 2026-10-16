@@ -24,7 +24,6 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/api/work-packages")
-@CrossOrigin(origins = "*")
 public class WorkPackageController {
 
     private static final String READ = "hasAuthority('ROLE_ADMIN') or hasAuthority('WORK_PACKAGE_READ')";

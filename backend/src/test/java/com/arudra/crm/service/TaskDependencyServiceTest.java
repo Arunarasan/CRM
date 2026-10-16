@@ -69,6 +69,7 @@ class TaskDependencyServiceTest {
     void unlockDependents_promotesOnlyThoseWhoseDepsAreAllComplete() {
         TaskRepository repo = Mockito.mock(TaskRepository.class);
         ReflectionTestUtils.setField(svc, "taskRepository", repo);
+        ReflectionTestUtils.setField(svc, "taskPoolNotifier", Mockito.mock(TaskPoolNotifier.class));
 
         WorkflowInstance instance = new WorkflowInstance();
         instance.setId(1L);

@@ -16,11 +16,12 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/reports")
-@CrossOrigin(origins = "*")
 public class ReportController {
 
     private static final String INVENTORY_READ = "hasAuthority('ROLE_ADMIN') or hasAuthority('INVENTORY_READ')";
     private static final String PURCHASE_READ = "hasAuthority('ROLE_ADMIN') or hasAuthority('PURCHASE_READ')";
+    // Revenue, payroll cost and profit — admin / finance only.
+    private static final String FINANCE_READ = "hasAuthority('ROLE_ADMIN') or hasAuthority('FINANCE_READ')";
 
     @Autowired
     private ReportService reportService;
@@ -32,6 +33,7 @@ public class ReportController {
     private PurchaseReportService purchaseReportService;
 
     @GetMapping("/dashboard")
+    @PreAuthorize(FINANCE_READ)
     public ResponseEntity<Map<String, Object>> getDashboardMetrics(
             @RequestParam(required = false) String startDate,
             @RequestParam(required = false) String endDate) {
@@ -43,6 +45,7 @@ public class ReportController {
     }
 
     @GetMapping("/sales-chart")
+    @PreAuthorize(FINANCE_READ)
     public ResponseEntity<List<Map<String, Object>>> getSalesChartData(
             @RequestParam(required = false) Integer year) {
         int targetYear = year != null ? year : LocalDate.now().getYear();
@@ -50,6 +53,7 @@ public class ReportController {
     }
 
     @GetMapping("/lead-conversion")
+    @PreAuthorize(FINANCE_READ)
     public ResponseEntity<Map<String, Long>> getLeadConversionStats() {
         return ResponseEntity.ok(reportService.getLeadConversionStats());
     }

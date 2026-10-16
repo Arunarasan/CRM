@@ -16,7 +16,6 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/api")
-@CrossOrigin(origins = "*")
 public class ServiceWarrantyController {
 
     private static final String READ = "hasAuthority('ROLE_ADMIN') or hasAuthority('PROJECT_READ')";

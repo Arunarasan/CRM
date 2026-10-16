@@ -47,7 +47,7 @@ public interface SiteVisitRepository extends JpaRepository<SiteVisit, Long>, Jpa
 
     long countByIsDeletedFalseAndScheduledDateBetween(LocalDate start, LocalDate end);
 
-    @Query("SELECT AVG(FUNCTION('TIMESTAMPDIFF', MINUTE, v.actualStartTime, v.actualEndTime)) " +
+    @Query("SELECT AVG(CAST(FUNCTION('TIMESTAMPDIFF', MINUTE, v.actualStartTime, v.actualEndTime) AS Long)) " +
            "FROM SiteVisit v WHERE v.isDeleted = false AND v.actualStartTime IS NOT NULL AND v.actualEndTime IS NOT NULL")
     Double averageVisitDurationMinutes();
 

@@ -18,7 +18,6 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/measurements")
-@CrossOrigin(origins = "*")
 public class MeasurementController {
 
     private static final String READ = "hasAuthority('ROLE_ADMIN') or hasAuthority('MEASUREMENT_READ')";

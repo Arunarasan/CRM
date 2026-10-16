@@ -20,7 +20,6 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/api/employee-tasks")
-@CrossOrigin(origins = "*")
 public class EmployeeTaskController {
 
     private static final String READ = "hasAuthority('ROLE_ADMIN') or hasAuthority('EMPLOYEE_TASK_READ')";
