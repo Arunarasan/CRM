@@ -2,7 +2,7 @@ import { useState } from "react";
 import { contractorApi } from "@/api/contractorApi";
 import { toast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
-import { BaseInput } from "@/components/ui/input";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
@@ -88,11 +88,11 @@ export default function ContractorMoneyDialog({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label>Amount (₹)</Label>
-              <BaseInput type="number" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus />
+              <Input type="number" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus />
             </div>
             <div>
               <Label>Date</Label>
-              <BaseInput type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -104,12 +104,12 @@ export default function ContractorMoneyDialog({
             </div>
             <div>
               <Label>Reference</Label>
-              <BaseInput value={reference} onChange={(e) => setReference(e.target.value)} placeholder="UTR / cheque no." />
+              <Input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="UTR / cheque no." />
             </div>
           </div>
           <div>
             <Label>Remarks</Label>
-            <BaseInput value={remarks} onChange={(e) => setRemarks(e.target.value)} />
+            <Input value={remarks} onChange={(e) => setRemarks(e.target.value)} />
           </div>
           <div className="flex justify-end gap-2 pt-1">
             <Button variant="outline" onClick={onClose} disabled={busy}>Cancel</Button>
