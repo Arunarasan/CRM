@@ -74,7 +74,7 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
     @Query("SELECT p FROM Project p LEFT JOIN p.customer c LEFT JOIN p.quotation q WHERE (EXISTS (" +
            "SELECT 1 FROM Invoice i WHERE i.project = p AND UPPER(i.status) NOT IN ('PAID','CANCELLED','DRAFT') " +
            "AND COALESCE(i.balanceDue, i.totalAmount - i.amountPaid) > 0) OR (UPPER(COALESCE(p.status, '')) <> 'CANCELLED' " +
-           "AND COALESCE(NULLIF(q.grandTotal, 0), p.budget, 0) > (SELECT COALESCE(SUM(cp.amount), 0) FROM CustomerPayment cp " +
+           "AND COALESCE(NULLIF(q.grandTotal, 0), p.budget, 0) - p.agreedReduction > (SELECT COALESCE(SUM(cp.amount), 0) FROM CustomerPayment cp " +
            "WHERE cp.project = p AND cp.status = 'CONFIRMED' AND cp.isDeleted = false))) AND " +
            "(:search = '' OR LOWER(p.projectName) LIKE LOWER(CONCAT('%', :search, '%')) " +
            "OR LOWER(c.name) LIKE LOWER(CONCAT('%', :search, '%')))")
@@ -83,7 +83,7 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
     @Query("SELECT COUNT(p) FROM Project p LEFT JOIN p.quotation q WHERE EXISTS (" +
            "SELECT 1 FROM Invoice i WHERE i.project = p AND UPPER(i.status) NOT IN ('PAID','CANCELLED','DRAFT') " +
            "AND COALESCE(i.balanceDue, i.totalAmount - i.amountPaid) > 0) OR (UPPER(COALESCE(p.status, '')) <> 'CANCELLED' " +
-           "AND COALESCE(NULLIF(q.grandTotal, 0), p.budget, 0) > (SELECT COALESCE(SUM(cp.amount), 0) FROM CustomerPayment cp " +
+           "AND COALESCE(NULLIF(q.grandTotal, 0), p.budget, 0) - p.agreedReduction > (SELECT COALESCE(SUM(cp.amount), 0) FROM CustomerPayment cp " +
            "WHERE cp.project = p AND cp.status = 'CONFIRMED' AND cp.isDeleted = false))")
     long countWithOutstanding();
 

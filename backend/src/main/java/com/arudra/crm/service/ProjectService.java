@@ -275,7 +275,8 @@ public class ProjectService {
                 && p.getQuotation().getGrandTotal().signum() > 0 ? p.getQuotation().getGrandTotal() : p.getBudget();
         if (value == null) return BigDecimal.ZERO;
         BigDecimal paid = customerPaymentRepository.sumConfirmedForProject(p.getId());
-        return value.subtract(paid != null ? paid : BigDecimal.ZERO).max(BigDecimal.ZERO);
+        BigDecimal cut = p.getAgreedReduction() != null ? p.getAgreedReduction() : BigDecimal.ZERO;
+        return value.subtract(cut).subtract(paid != null ? paid : BigDecimal.ZERO).max(BigDecimal.ZERO);
     }
 
     /**
@@ -292,6 +293,11 @@ public class ProjectService {
         List<Long> ids = projectRepository.findAll().stream()
                 .filter(p -> !"CANCELLED".equalsIgnoreCase(p.getStatus())).map(Project::getId).toList();
         return pendingFor(ids);
+    }
+
+    /** What the customer still owes on one project (0 when settled). */
+    public BigDecimal pendingOf(Long projectId) {
+        return pendingFor(List.of(projectId)).getOrDefault(projectId, BigDecimal.ZERO);
     }
 
     private Map<Long, BigDecimal> pendingFor(List<Long> ids) {

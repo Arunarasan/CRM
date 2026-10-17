@@ -17,6 +17,7 @@ import ProjectPaymentsTab from "@/pages/projectFinance/ProjectPaymentsTab";
 import CommercialSummary from "@/pages/projectFinance/CommercialSummary";
 import BulkWorkUpdateDialog from "@/pages/projectCommandCenter/BulkWorkUpdateDialog";
 import CompleteProjectDialog from "@/pages/projectCommandCenter/CompleteProjectDialog";
+import SettleProjectDialog, { canSettleProjects } from "@/pages/projectCommandCenter/SettleProjectDialog";
 import DeleteWithRemarkDialog from "@/components/DeleteWithRemarkDialog";
 import CancelProjectDialog, { CancelledBanner } from "@/pages/projectCommandCenter/CancelProjectDialog";
 import { QuotationPrintView } from "@/pages/quotations/QuotationPrint";
@@ -34,7 +35,7 @@ import {
   Pencil, Check, Trash2, Undo2,
   Calendar, Clock, Flag, Building2, FileText, IndianRupee,
   FileBarChart, Home, Settings, ClipboardList,
-  ArrowRight, Zap, Navigation, Ban,
+  ArrowRight, Zap, Navigation, Ban, HandCoins,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
@@ -754,6 +755,8 @@ export default function ProjectCommandCenter() {
   // Mark Completed opens the handover dialog (photos + client approval + delivery confirmation).
   const [completeOpen, setCompleteOpen] = useState(false);
   const handleCompleteProject = () => setCompleteOpen(true);
+  // Settle & complete: record an agreed price reduction (customer bargaining etc.), optionally completing.
+  const [settleOpen, setSettleOpen] = useState(false);
   // Cancel (any stage before completion, optional partial advance refund) / refund more once cancelled.
   const [cancelMode, setCancelMode] = useState<null | 'cancel' | 'refund'>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -948,6 +951,9 @@ export default function ProjectCommandCenter() {
                       )}
                       {!isClosed && (
                         <DropdownMenuItem onSelect={handleCompleteProject}><CheckCircle2 className="w-4 h-4 mr-2"/> Mark Completed</DropdownMenuItem>
+                      )}
+                      {project.status !== 'CANCELLED' && canSettleProjects() && (
+                        <DropdownMenuItem onSelect={() => setSettleOpen(true)}><HandCoins className="w-4 h-4 mr-2"/> Settle &amp; complete</DropdownMenuItem>
                       )}
                       {!isClosed && (
                         <DropdownMenuItem onSelect={() => setCancelMode('cancel')} className="text-rose-600 focus:text-rose-700"><Ban className="w-4 h-4 mr-2"/> Cancel Project</DropdownMenuItem>
@@ -2213,6 +2219,9 @@ export default function ProjectCommandCenter() {
             <TabsContent value="goodsReceived" className="mt-0 h-full outline-none">
               <ProjectGoodsReceivedTab projectId={projectId} />
             </TabsContent>
+
+            <SettleProjectDialog projectId={projectId} open={settleOpen} onClose={() => setSettleOpen(false)}
+              onDone={async () => { await fetchProjectData(); fetchCore(); }} />
 
             <CompleteProjectDialog projectId={projectId} open={completeOpen} onClose={() => setCompleteOpen(false)}
               onCompleted={async () => { await fetchProjectData(); fetchCore(); }} />

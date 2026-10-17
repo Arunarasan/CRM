@@ -232,6 +232,35 @@ public class ProjectController {
                 req.notes, req.photoUrls, req.force, currentUserService.getCurrentUser()));
     }
 
+    private static final String SETTLE = "hasAuthority('ROLE_ADMIN') or hasAuthority('ROLE_MANAGER') "
+            + "or hasAuthority('ROLE_ACCOUNTS') or hasAuthority('ROLE_FINANCE_MANAGER')";
+
+    @Autowired
+    private com.arudra.crm.service.ProjectSettlementService projectSettlementService;
+
+    public static class SettleRequest {
+        public java.math.BigDecimal amount;
+        public String reasonCode;
+        public String reason;
+        public boolean markCompleted;
+        public boolean force;
+    }
+
+    /** Money position for the Settle dialog: value, agreed reductions, paid, pending, history. */
+    @GetMapping("/{id}/settlement")
+    @PreAuthorize(SETTLE)
+    public ResponseEntity<Map<String, Object>> settlementPreview(@PathVariable Long id) {
+        return ResponseEntity.ok(projectSettlementService.preview(id));
+    }
+
+    /** Record an agreed price reduction (customer bargaining etc.) and optionally complete the project. */
+    @PostMapping("/{id}/settle")
+    @PreAuthorize(SETTLE)
+    public ResponseEntity<Map<String, Object>> settle(@PathVariable Long id, @RequestBody SettleRequest req) {
+        return ResponseEntity.ok(projectSettlementService.settle(id, req.amount, req.reasonCode, req.reason,
+                req.markCompleted, req.force, currentUserService.getCurrentUser()));
+    }
+
     /** Money position for cancelling: paid, refunds already raised, still refundable, refund history. */
     @GetMapping("/{id}/cancellation")
     @PreAuthorize(READ)

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import api from "@/lib/api";
 import { projectApi } from "@/api/projectApi";
 import { ProjectModuleDashboard } from "@/types/project";
@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import ResponsiveList, { type Column } from "@/components/ui/responsive-list";
 import FilterSheet from "@/components/ui/filter-sheet";
+import SettleProjectDialog, { canSettleProjects } from "@/pages/projectCommandCenter/SettleProjectDialog";
 import { useHoverInfo, InfoRow } from "@/components/ui/hover-info";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
@@ -162,37 +163,58 @@ function FilterSelect({
   );
 }
 
+// Filters/search/page survive opening a project and coming back (session-scoped).
+const PROJECTS_VIEW_KEY = "crm.projects.view";
+function loadProjectsView(): Record<string, any> {
+  try { return JSON.parse(sessionStorage.getItem(PROJECTS_VIEW_KEY) || "{}") || {}; } catch { return {}; }
+}
+
 export default function Projects() {
   const navigate = useNavigate();
   const info = useHoverInfo();
+  const [saved] = useState(loadProjectsView);
+  const lastQuery = useRef<string | null>(null);
   const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [page, setPage] = useState(0);
-  const [size, setSize] = useState(10);
+  const [search, setSearch] = useState<string>(saved.search || "");
+  const [debouncedSearch, setDebouncedSearch] = useState<string>(saved.search || "");
+  const [page, setPage] = useState<number>(saved.page || 0);
+  const [size, setSize] = useState<number>(saved.size || 10);
   const [totalPages, setTotalPages] = useState(1);
   const [totalElements, setTotalElements] = useState(0);
   const [dashboard, setDashboard] = useState<ProjectModuleDashboard | null>(null);
-  const [viewMode, setViewMode] = useState<"list" | "board">("list");
+  const [viewMode, setViewMode] = useState<"list" | "board">(saved.viewMode === "board" ? "board" : "list");
   const [searchParams] = useSearchParams();
   const [segment, setSegment] = useState<SegmentKey>(() => {
     const s = searchParams.get("segment") as SegmentKey | null;
-    return s && s in SEGMENT_CATEGORY ? s : "all";
+    if (s && s in SEGMENT_CATEGORY) return s;
+    return saved.segment && saved.segment in SEGMENT_CATEGORY ? saved.segment : "all";
   });
   const [counts, setCounts] = useState<SegmentCounts | null>(null);
-  const [showFilters, setShowFilters] = useState(false);
+  const [showFilters, setShowFilters] = useState<boolean>(!!saved.showFilters);
+  const [settleId, setSettleId] = useState<number | null>(null);
 
   // Client-side refinements over the current page.
-  const [customerFilter, setCustomerFilter] = useState("");
-  const [ownerFilter, setOwnerFilter] = useState("");
+  const [customerFilter, setCustomerFilter] = useState<string>(saved.customerFilter || "");
+  const [ownerFilter, setOwnerFilter] = useState<string>(saved.ownerFilter || "");
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 350);
     return () => clearTimeout(t);
   }, [search]);
 
-  useEffect(() => { setPage(0); }, [debouncedSearch, segment, size]);
+  useEffect(() => {
+    const key = `${debouncedSearch}|${segment}|${size}`;
+    const prev = lastQuery.current;
+    lastQuery.current = key;
+    if (prev !== null && prev !== key) setPage(0); // only a real filter change resets the page, not a restore
+  }, [debouncedSearch, segment, size]);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(PROJECTS_VIEW_KEY, JSON.stringify({ viewMode, search, page, size, segment, showFilters, customerFilter, ownerFilter }));
+    } catch { /* storage unavailable */ }
+  }, [viewMode, search, page, size, segment, showFilters, customerFilter, ownerFilter]);
 
   useEffect(() => {
     fetchProjects();
@@ -299,6 +321,9 @@ export default function Projects() {
           <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
             <DropdownMenuItem onSelect={() => navigate(`/projects/${p.id}`)}>Open project</DropdownMenuItem>
             <DropdownMenuItem onSelect={() => navigate(`/tasks?projectId=${p.id}`)}>View tasks</DropdownMenuItem>
+            {canSettleProjects() && String(p.status).toUpperCase() !== "CANCELLED" && (
+              <DropdownMenuItem onSelect={() => setSettleId(p.id)}>Settle &amp; complete</DropdownMenuItem>
+            )}
             {p.customer?.id && (
               <>
                 <DropdownMenuSeparator />
@@ -541,6 +566,12 @@ export default function Projects() {
         </div>
         <p className="text-xs text-muted-foreground">Customer & owner filters apply to the projects on this page.</p>
       </FilterSheet>
+      <SettleProjectDialog projectId={settleId} open={settleId !== null} onClose={() => setSettleId(null)}
+        onDone={() => {
+          fetchProjects();
+          projectApi.dashboard().then(setDashboard).catch(() => {});
+          api.get(`/projects/segment-counts`).then((res) => setCounts(res.data)).catch(() => {});
+        }} />
       {info.portal}
     </div>
   );

@@ -245,6 +245,10 @@ public class Project extends BaseEntity {
     @Transient
     private java.math.BigDecimal outstandingAmount;
 
+    /** Running total of agreed price reductions (customer bargaining etc.); lowers what the customer owes. */
+    @Column(name = "agreed_reduction", nullable = false, precision = 15, scale = 2)
+    private java.math.BigDecimal agreedReduction = java.math.BigDecimal.ZERO;
+
     /** Portfolio list: contract value — the quotation's grand total, else the budget. */
     @Transient
     private java.math.BigDecimal projectValue;
