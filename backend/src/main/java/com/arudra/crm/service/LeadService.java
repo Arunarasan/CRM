@@ -500,6 +500,10 @@ public class LeadService {
         notifyLeadTeam(updatedLead, user, "Lead status updated",
                 updatedLead.getLeadNumber() + " (" + updatedLead.getName() + ") moved from "
                         + oldStatus + " to " + newStatus);
+        // Moved past the requirement stage → Collect Requirement closes, the visit/quote task starts.
+        if (PAST_REQUIREMENT_STATUSES.contains(newStatus)) {
+            publishRequirementCollected(updatedLead.getId(), user, "lead moved to " + newStatus);
+        }
         return updatedLead;
     }
 
@@ -510,7 +514,24 @@ public class LeadService {
         lead.setStage(stage);
         Lead saved = leadRepository.save(lead);
         logActivity(saved, "STAGE_CHANGED", "Stage changed from " + oldStage + " to " + stage, user);
+        if (PAST_REQUIREMENT_STAGES.contains(stage)) {
+            publishRequirementCollected(saved.getId(), user, "lead moved to " + stage);
+        }
         return saved;
+    }
+
+    /** Statuses / stages that mean the requirement stage is over (visit, measurement, quote or later). */
+    private static final Set<String> PAST_REQUIREMENT_STATUSES = Set.of(
+            "Site Visit Scheduled", "Site Visit Completed", "Measurement Scheduled", "Measurement Completed",
+            "Quotation Preparing", "Quotation Sent", "Quotation Revised", "Quotation Rejected",
+            "Quotation Approved", "Negotiation", "Project Confirmed", "Project Started");
+    private static final Set<String> PAST_REQUIREMENT_STAGES = Set.of(
+            "Site Visit", "Measurement", "Quotation", "Negotiation", "Approval", "Project");
+
+    /** Closes the lead's open Collect Requirement task(s) once the transaction commits (no-op if none). */
+    private void publishRequirementCollected(Long leadId, User by, String reason) {
+        eventPublisher.publishEvent(new com.arudra.crm.event.LeadRequirementCollectedEvent(
+                leadId, by != null ? by.getId() : null, reason));
     }
 
     @Transactional
@@ -721,6 +742,8 @@ public class LeadService {
                 "Document uploaded: " + document.getFileName()
                         + (document.getCategory() != null ? " (" + document.getCategory() + ")" : ""),
                 currentUser);
+        // A document on the lead counts as requirement info captured ("Requirement Collected").
+        publishRequirementCollected(lead.getId(), currentUser, "a document was added to the lead");
         return saved;
     }
 

@@ -2262,7 +2262,28 @@ public class EmployeeTaskService {
         d.setDocumentType("Image");
         d.setCategory("Property Images");
         d.setUploadedBy(employee);
-        return photoRow(leadDocumentRepository.save(d), employee);
+        Map<String, Object> row = photoRow(leadDocumentRepository.save(d), employee);
+        autoCompleteRequirement(taskId, lead, employee);
+        return row;
+    }
+
+    /**
+     * Collect Requirement with a photo AND a site address on the lead is done — close it so the workflow
+     * opens Site Visit & Quote. Never lets the photo upload itself fail.
+     */
+    private void autoCompleteRequirement(Long taskId, com.arudra.crm.entity.Lead lead, User employee) {
+        try {
+            Task task = getTask(taskId);
+            if (task.getTaskTemplate() == null || !COLLECT_REQUIREMENT_CODE.equals(task.getTaskTemplate().getCode())
+                    || isClosed(task)) return;
+            boolean hasAddress = (lead.getSiteAddress() != null && !lead.getSiteAddress().isBlank())
+                    || (lead.getAddress() != null && !lead.getAddress().isBlank());
+            if (!hasAddress) return;
+            complete(taskId, employee, "Photo and site address added");
+        } catch (Exception e) {
+            org.slf4j.LoggerFactory.getLogger(EmployeeTaskService.class)
+                    .warn("Collect Requirement not auto-completed for task {}: {}", taskId, e.getMessage());
+        }
     }
 
     /** Removes a photo the employee added themselves (others' photos are managed from the office). */
