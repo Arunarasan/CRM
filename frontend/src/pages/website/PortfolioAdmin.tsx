@@ -1,4 +1,7 @@
-import { ArrowUpRight, Image as ImageIcon } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { ArrowUpRight, Image as ImageIcon, Loader2, Upload, X } from 'lucide-react';
+import { uploadFile, resolveFileUrl } from '@/lib/uploadFile';
+import { compressImageFile } from '@/lib/imageProcessing';
 import ResourceManager from './ResourceManager';
 import { Field, TextInput, TextArea, StringListEditor, Group } from './ui';
 import FileUploadField from '@/components/FileUploadField';
@@ -28,6 +31,66 @@ function PortfolioPreview({ d }: { d: Portfolio }) {
         </div>
         <span className="flex h-10 w-10 shrink-0 items-center justify-center border border-[#c9a24b]/60 text-[#c9a24b]"><ArrowUpRight className="h-5 w-5" /></span>
       </div>
+    </div>
+  );
+}
+
+/** Gallery: upload several photos from the device (or camera) and remove individual ones. */
+function GalleryUploader({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const pick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []).filter((f) => f.type.startsWith('image/'));
+    e.target.value = '';
+    if (!files.length) return;
+    setBusy(true);
+    setError(null);
+    const urls: string[] = [];
+    try {
+      for (const f of files) {
+        const res = await uploadFile(await compressImageFile(f), 'WEBSITE');
+        urls.push(res.fileUrl);
+      }
+    } catch (err: any) {
+      setError(err?.message || 'Upload failed. Please try again.');
+    } finally {
+      if (urls.length) onChange([...value, ...urls]);
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      {value.length > 0 && (
+        <div className="grid grid-cols-4 gap-2">
+          {value.map((u, i) => (
+            <div key={u + i} className="group relative aspect-square overflow-hidden rounded-md border bg-slate-100">
+              <img src={resolveFileUrl(u)} alt="" className="h-full w-full object-cover" />
+              <button
+                type="button"
+                onClick={() => onChange(value.filter((_, j) => j !== i))}
+                className="absolute right-1 top-1 rounded-full bg-black/60 p-0.5 text-white hover:bg-red-600"
+                aria-label="Remove image"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => inputRef.current?.click()}
+        className="flex w-full items-center justify-center gap-2 rounded-md border border-dashed border-input bg-background px-3 py-3 text-sm font-medium text-muted-foreground hover:border-primary hover:text-primary disabled:opacity-60"
+      >
+        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+        {busy ? 'Uploading…' : 'Upload images'}
+      </button>
+      {error && <p className="text-xs text-destructive">{error}</p>}
+      <input ref={inputRef} type="file" accept="image/*" multiple className="hidden" onChange={pick} />
     </div>
   );
 }
@@ -77,7 +140,7 @@ export default function PortfolioAdmin() {
             <div className="space-y-4">
               <Group label="Story">
                 <Field label="Concept"><TextArea value={d.concept} placeholder="The vision, challenge and approach behind this project." onChange={(e) => patch({ concept: e.target.value })} className="min-h-[56px]" /></Field>
-                <Field label="Gallery images"><StringListEditor value={d.gallery ?? []} onChange={(v) => patch({ gallery: v })} placeholder="https://…" /></Field>
+                <Field label="Gallery images"><GalleryUploader value={d.gallery ?? []} onChange={(v) => patch({ gallery: v })} /></Field>
               </Group>
 
               <Group label="Details">
