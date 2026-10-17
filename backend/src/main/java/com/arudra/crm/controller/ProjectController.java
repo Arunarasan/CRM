@@ -48,9 +48,17 @@ public class ProjectController {
     public ResponseEntity<Page<Project>> getAllProjects(
             @RequestParam(required = false) String search,
             @RequestParam(required = false) String category,
+            @RequestParam(defaultValue = "false") boolean pendingOnly,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
-        return ResponseEntity.ok(projectService.getProjects(search, category, page, size));
+        return ResponseEntity.ok(projectService.getProjects(search, category, pendingOnly, page, size));
+    }
+
+    /** Per status tab: projects still owing money (count + amount). */
+    @GetMapping("/pending-summary")
+    @PreAuthorize(READ)
+    public ResponseEntity<Map<String, Map<String, Object>>> getPendingSummary() {
+        return ResponseEntity.ok(projectService.pendingSummary());
     }
 
     /** Tab badge counts for the Projects portfolio: all / new / inProgress / completed / unassigned. */

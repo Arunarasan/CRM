@@ -31,6 +31,8 @@ interface SegmentCounts {
   delayed: number;
 }
 
+type PendingSummary = Record<string, { count: number; amount: number }>;
+
 interface ProjectRow {
   id: number;
   projectCode?: string;
@@ -187,10 +189,16 @@ export default function Projects() {
   const [searchParams] = useSearchParams();
   const [segment, setSegment] = useState<SegmentKey>(() => {
     const s = searchParams.get("segment") as SegmentKey | null;
-    if (s && s in SEGMENT_CATEGORY) return s;
-    return saved.segment && saved.segment in SEGMENT_CATEGORY ? saved.segment : "all";
+    if (s && s !== "pendingCollection" && s in SEGMENT_CATEGORY) return s;
+    return saved.segment && saved.segment !== "pendingCollection" && saved.segment in SEGMENT_CATEGORY ? saved.segment : "all";
   });
   const [counts, setCounts] = useState<SegmentCounts | null>(null);
+  // "Pending to Collect" is a filter that combines with the status tabs (e.g. Completed + pending).
+  const [pendingOnly, setPendingOnly] = useState<boolean>(() => !!saved.pendingOnly || searchParams.get("segment") === "pendingCollection");
+  const [pendingSummary, setPendingSummary] = useState<PendingSummary | null>(null);
+  const loadPendingSummary = () => {
+    api.get(`/projects/pending-summary`).then((res) => setPendingSummary(res.data)).catch(() => {});
+  };
   const [showFilters, setShowFilters] = useState<boolean>(!!saved.showFilters);
   const [settleId, setSettleId] = useState<number | null>(null);
 
@@ -204,26 +212,28 @@ export default function Projects() {
   }, [search]);
 
   useEffect(() => {
-    const key = `${debouncedSearch}|${segment}|${size}`;
+    const key = `${debouncedSearch}|${segment}|${size}|${pendingOnly}`;
     const prev = lastQuery.current;
     lastQuery.current = key;
     if (prev !== null && prev !== key) setPage(0); // only a real filter change resets the page, not a restore
-  }, [debouncedSearch, segment, size]);
+  }, [debouncedSearch, segment, size, pendingOnly]);
 
   useEffect(() => {
     try {
-      sessionStorage.setItem(PROJECTS_VIEW_KEY, JSON.stringify({ viewMode, search, page, size, segment, showFilters, customerFilter, ownerFilter }));
+      sessionStorage.setItem(PROJECTS_VIEW_KEY, JSON.stringify({ viewMode, search, page, size, segment, pendingOnly, showFilters, customerFilter, ownerFilter }));
     } catch { /* storage unavailable */ }
-  }, [viewMode, search, page, size, segment, showFilters, customerFilter, ownerFilter]);
+  }, [viewMode, search, page, size, segment, pendingOnly, showFilters, customerFilter, ownerFilter]);
 
   useEffect(() => {
     fetchProjects();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch, page, size, segment]);
+  }, [debouncedSearch, page, size, segment, pendingOnly]);
 
   useEffect(() => {
     projectApi.dashboard().then(setDashboard).catch((err) => console.error("Failed to fetch project dashboard", err));
     api.get(`/projects/segment-counts`).then((res) => setCounts(res.data)).catch((err) => console.error("Failed to fetch segment counts", err));
+    loadPendingSummary();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchProjects = () => {
@@ -231,6 +241,7 @@ export default function Projects() {
     const category = SEGMENT_CATEGORY[segment];
     const params = new URLSearchParams({ search: debouncedSearch, page: String(page), size: String(size) });
     if (category) params.set("category", category);
+    if (pendingOnly) params.set("pendingOnly", "true");
     api.get(`/projects?${params.toString()}`)
       .then((res) => {
         setProjects(res.data.content);
@@ -272,15 +283,16 @@ export default function Projects() {
   // KPI tiles double as quick filters — clicking one drives the list segment (or navigates).
   const kpis: {
     label: string; value: number; money?: boolean; icon: typeof Activity; tint: string; ring: string;
-    segment?: SegmentKey; onClick?: () => void;
+    segment?: SegmentKey; pending?: boolean; onClick?: () => void;
   }[] = [
     { label: "Active Projects", value: dashboard?.activeProjects ?? 0, icon: Activity, tint: "bg-emerald-500/10 text-emerald-500", ring: "ring-emerald-500", segment: "all" },
     { label: "Delayed", value: dashboard?.delayedProjects ?? 0, icon: AlertTriangle, tint: "bg-rose-500/10 text-rose-500", ring: "ring-rose-500", segment: "delayed" },
-    { label: "Pending to Collect", value: dashboard?.pendingToCollect ?? 0, money: true, icon: IndianRupee, tint: "bg-amber-500/10 text-amber-500", ring: "ring-amber-500", segment: "pendingCollection" },
+    { label: "Pending to Collect", value: pendingSummary?.[segment]?.amount ?? dashboard?.pendingToCollect ?? 0, money: true, icon: IndianRupee, tint: "bg-amber-500/10 text-amber-500", ring: "ring-amber-500", pending: true },
   ];
 
   const onKpiClick = (kpi: (typeof kpis)[number]) => {
     if (kpi.onClick) { kpi.onClick(); return; }
+    if (kpi.pending) { setPendingOnly((v) => !v); setViewMode("list"); return; }
     if (!kpi.segment) return;
     selectSegment(segment === kpi.segment ? "all" : kpi.segment);
     setViewMode("list");
@@ -387,14 +399,14 @@ export default function Projects() {
       {/* KPI row — tiles double as quick filters */}
       <div className="grid grid-cols-3 gap-3 sm:gap-4">
         {kpis.map((kpi) => {
-          const { label, value, money, icon: Icon, tint, ring, segment: seg } = kpi;
-          const active = seg ? segment === seg : false;
+          const { label, value, money, icon: Icon, tint, ring, segment: seg, pending: isPending } = kpi;
+          const active = isPending ? pendingOnly : seg ? segment === seg : false;
           return (
             <button
               key={label}
               type="button"
               onClick={() => onKpiClick(kpi)}
-              title={seg ? `Show ${label} projects` : `Go to ${label}`}
+              title={isPending ? (pendingOnly ? "Show all projects" : "Show only projects with pending payment") : seg ? `Show ${label} projects` : `Go to ${label}`}
               aria-pressed={active}
               className={`bg-card p-4 sm:p-5 rounded-xl border flex items-center gap-3 sm:gap-4 text-left transition-all hover:border-foreground/20 hover:shadow-sm ${active ? `ring-2 ${ring}` : ""}`}
             >
@@ -402,7 +414,7 @@ export default function Projects() {
               <div>
                 <div className="text-xl sm:text-2xl font-bold">{money ? `₹${Math.round(value).toLocaleString("en-IN")}` : value}</div>
                 <div className="text-xs font-medium text-muted-foreground">
-                  {label}{seg === "pendingCollection" && counts?.pendingCollection != null ? ` · ${counts.pendingCollection} projects` : ""}
+                  {label}{isPending && pendingSummary?.[segment] ? ` · ${pendingSummary[segment].count} project${pendingSummary[segment].count === 1 ? "" : "s"}` : ""}
                 </div>
               </div>
             </button>
@@ -439,7 +451,7 @@ export default function Projects() {
       <div className="flex items-center gap-2 overflow-x-auto pb-1 -mx-1 px-1">
         {SEGMENTS.map(({ key, label }) => {
           const active = segment === key;
-          const count = counts ? counts[key] : undefined;
+          const count = pendingOnly ? pendingSummary?.[key]?.count : counts ? counts[key] : undefined;
           return (
             <button
               key={key}
@@ -571,6 +583,7 @@ export default function Projects() {
           fetchProjects();
           projectApi.dashboard().then(setDashboard).catch(() => {});
           api.get(`/projects/segment-counts`).then((res) => setCounts(res.data)).catch(() => {});
+          loadPendingSummary();
         }} />
       {info.portal}
     </div>

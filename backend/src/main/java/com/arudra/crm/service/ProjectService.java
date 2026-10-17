@@ -207,15 +207,8 @@ public class ProjectService {
     private static final java.util.List<String> STATUS_ON_HOLD = java.util.List.of("PAUSED", "ON_HOLD");
     private static final java.util.List<String> STATUS_COMPLETED = java.util.List.of("COMPLETED", "CLOSED");
 
-    /**
-     * Portfolio listing with optional segmentation. {@code category} is one of NEW, IN_PROGRESS,
-     * COMPLETED, UNASSIGNED (team not assigned); anything else (or null) lists all projects.
-     */
-    public Page<Project> getProjects(String search, String category, int page, int size) {
-        PageRequest pageRequest = PageRequest.of(page, size, Sort.by("id").descending());
-        String s = search == null ? "" : search.trim();
-        String cat = category == null ? "" : category.trim().toUpperCase();
-
+    /** One status segment's projects (cat "" = all), matching the Projects page tabs. */
+    private Page<Project> queryCategory(String cat, String s, PageRequest pageRequest) {
         Page<Project> result;
         switch (cat) {
             case "NEW":
@@ -236,13 +229,66 @@ public class ProjectService {
             case "DELAYED":
                 result = projectRepository.findDelayed(java.time.LocalDate.now(), s, pageRequest);
                 break;
-            case "PENDING_COLLECTION":
-                result = projectRepository.findWithOutstanding(s, pageRequest);
-                break;
             default:
                 result = s.isEmpty()
                         ? projectRepository.findAll(pageRequest)
                         : projectRepository.searchProjects(s, pageRequest);
+        }
+        return result;
+    }
+
+    /** Per tab: how many projects still have money to collect, and how much — drives the Pending card and badges. */
+    public Map<String, Map<String, Object>> pendingSummary() {
+        Map<Long, BigDecimal> owing = allPending();
+        PageRequest everything = PageRequest.of(0, Integer.MAX_VALUE, Sort.by("id").descending());
+        Map<String, String> tabs = new java.util.LinkedHashMap<>();
+        tabs.put("all", ""); tabs.put("new", "NEW"); tabs.put("inProgress", "IN_PROGRESS"); tabs.put("completed", "COMPLETED");
+        tabs.put("onHold", "ON_HOLD"); tabs.put("unassigned", "UNASSIGNED"); tabs.put("delayed", "DELAYED");
+        Map<String, Map<String, Object>> out = new java.util.LinkedHashMap<>();
+        for (Map.Entry<String, String> e : tabs.entrySet()) {
+            long count = 0;
+            BigDecimal amount = BigDecimal.ZERO;
+            for (Project p : queryCategory(e.getValue(), "", everything).getContent()) {
+                BigDecimal owed = owing.get(p.getId());
+                if (owed != null) { count++; amount = amount.add(owed); }
+            }
+            Map<String, Object> m = new java.util.LinkedHashMap<>();
+            m.put("count", count);
+            m.put("amount", amount);
+            out.put(e.getKey(), m);
+        }
+        return out;
+    }
+
+    /**
+     * Portfolio listing with optional segmentation. {@code category} is one of NEW, IN_PROGRESS,
+     * COMPLETED, UNASSIGNED (team not assigned); anything else (or null) lists all projects.
+     */
+    public Page<Project> getProjects(String search, String category, int page, int size) {
+        return getProjects(search, category, false, page, size);
+    }
+
+    /**
+     * Same listing, optionally narrowed to projects that still have money to collect — so the Pending filter
+     * combines with any status tab (e.g. Completed + pending).
+     */
+    public Page<Project> getProjects(String search, String category, boolean pendingOnly, int page, int size) {
+        Sort sort = Sort.by("id").descending();
+        String s = search == null ? "" : search.trim();
+        String cat = category == null ? "" : category.trim().toUpperCase();
+        if ("PENDING_COLLECTION".equals(cat)) { cat = ""; pendingOnly = true; }
+
+        Page<Project> result;
+        if (pendingOnly) {
+            java.util.Set<Long> owing = allPending().keySet();
+            List<Project> matching = queryCategory(cat, s, PageRequest.of(0, Integer.MAX_VALUE, sort)).getContent().stream()
+                    .filter(p -> owing.contains(p.getId())).toList();
+            int from = Math.min(page * size, matching.size());
+            int to = Math.min(from + size, matching.size());
+            result = new org.springframework.data.domain.PageImpl<>(matching.subList(from, to),
+                    PageRequest.of(page, size, sort), matching.size());
+        } else {
+            result = queryCategory(cat, s, PageRequest.of(page, size, sort));
         }
         attachTaskTallies(result.getContent());
         attachOutstanding(result.getContent());
