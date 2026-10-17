@@ -782,52 +782,94 @@ function InvoiceMaker({ project, invoice: editing, onClose, onSaved }: { project
   const quotation = project.quotation;
   const [billPct, setBillPct] = useState(100);
   const [filling, setFilling] = useState(false);
+  // Quotation lines priced as they would be billed (customer discount spread over the products, at billPct).
+  const buildQuoteLines = (q: any) => {
+    const n = (v: unknown) => Number(v ?? 0) || 0;
+    const items = (q.items || []).filter((i: any) => i.status !== "REJECTED");
+    const pricing = readPricing(q);
+    const base = items.map((i: any) => {
+      let t = n(i.rate) * n(i.quantity);
+      if (n(i.discountPercentage) > 0) t -= t * n(i.discountPercentage) / 100;
+      else if (n(i.discountAmount) > 0) t -= Math.min(n(i.discountAmount), t);
+      return t + n(i.additionalCharges);
+    });
+    const charges = quoteCharges(q);
+    const itemsSum = base.reduce((x: number, y: number) => x + y, 0);
+    const chargesSum = charges.reduce((x, c) => x + c.amount, 0);
+    const discBase = pricing.itemsOnly === false ? itemsSum + chargesSum : itemsSum;
+    const discount = pricing.mode === "PERCENT" ? discBase * pricing.value / 100 : pricing.value;
+    const f = discBase > 0 ? 1 - discount / discBase : 1;
+    const k = (Number(billPct) || 100) / 100;
+    const r2 = (v: number) => Math.round(v * 100) / 100;
+    const built: LineItem[] = [
+      ...items.map((i: any, idx: number) => ({
+        description: [i.itemName, i.color].filter(Boolean).join(" — "),
+        quantity: 1,
+        unitPrice: r2(base[idx] * f * k),
+      })),
+      ...charges.map((c) => ({
+        description: c.note ? `${c.label} — ${c.note}` : c.label,
+        quantity: 1,
+        unitPrice: r2(c.amount * (pricing.itemsOnly === false ? f : 1) * k),
+      })),
+    ].filter((l) => l.unitPrice > 0);
+    return { built, pricing, k };
+  };
+
+  const applyQuoteSettings = (q: any, pricing: ReturnType<typeof readPricing>, k: number) => {
+    setItemized(true);
+    setGstRate(pricing.gst);
+    setTaxInclusive(!!pricing.inclusive);
+    setQuoteId(q.id as number);
+    if (k < 1) setInvoiceType("ADVANCE");
+  };
+
   const fillFromQuote = async () => {
     if (!quotation?.id) return;
     setFilling(true);
     setError(null);
     try {
       const q = await quotationApi.get(quotation.id);
-      const n = (v: unknown) => Number(v ?? 0) || 0;
-      const items = (q.items || []).filter((i) => i.status !== "REJECTED");
-      const pricing = readPricing(q);
-      const base = items.map((i) => {
-        let t = n(i.rate) * n(i.quantity);
-        if (n(i.discountPercentage) > 0) t -= t * n(i.discountPercentage) / 100;
-        else if (n(i.discountAmount) > 0) t -= Math.min(n(i.discountAmount), t);
-        return t + n(i.additionalCharges);
-      });
-      const charges = quoteCharges(q);
-      const itemsSum = base.reduce((a, b) => a + b, 0);
-      const chargesSum = charges.reduce((a, c) => a + c.amount, 0);
-      const discBase = pricing.itemsOnly === false ? itemsSum + chargesSum : itemsSum;
-      const discount = pricing.mode === "PERCENT" ? discBase * pricing.value / 100 : pricing.value;
-      const f = discBase > 0 ? 1 - discount / discBase : 1;
-      const k = (Number(billPct) || 100) / 100;
-      const r2 = (v: number) => Math.round(v * 100) / 100;
-      const built: LineItem[] = [
-        ...items.map((i, idx) => ({
-          description: [i.itemName, i.color].filter(Boolean).join(" — "),
-          quantity: 1,
-          unitPrice: r2(base[idx] * f * k),
-        })),
-        ...charges.map((c) => ({
-          description: c.note ? `${c.label} — ${c.note}` : c.label,
-          quantity: 1,
-          unitPrice: r2(c.amount * (pricing.itemsOnly === false ? f : 1) * k),
-        })),
-      ].filter((l) => l.unitPrice > 0);
+      const { built, pricing, k } = buildQuoteLines(q);
       if (!built.length) { setError("The quotation has no priced items to bill."); return; }
       setLines(built);
-      setItemized(true);
-      setGstRate(pricing.gst);
-      setTaxInclusive(!!pricing.inclusive);
-      setQuoteId(q.id as number);
-      if (k < 1) setInvoiceType("ADVANCE");
+      applyQuoteSettings(q, pricing, k);
+      setPickList(null);
       toast.success(`Filled from ${q.quotationNumber}${k < 1 ? ` (${billPct}%)` : ""} — edit anything before saving`);
     } catch (e: any) {
       setError(e?.response?.data?.message || "Could not read the quotation.");
     } finally { setFilling(false); }
+  };
+
+  // Item-wise billing: list the quotation's lines so only the ticked ones go on this invoice.
+  const [pickList, setPickList] = useState<{ q: any; lines: LineItem[]; picked: Set<number> } | null>(null);
+  const openPicker = async () => {
+    if (!quotation?.id) return;
+    setFilling(true);
+    setError(null);
+    try {
+      const q = await quotationApi.get(quotation.id);
+      const { built } = buildQuoteLines(q);
+      if (!built.length) { setError("The quotation has no priced items to bill."); return; }
+      setPickList({ q, lines: built, picked: new Set() });
+    } catch (e: any) {
+      setError(e?.response?.data?.message || "Could not read the quotation.");
+    } finally { setFilling(false); }
+  };
+  const togglePick = (idx: number) => setPickList((pl) => {
+    if (!pl) return pl;
+    const picked = new Set(pl.picked);
+    if (picked.has(idx)) picked.delete(idx); else picked.add(idx);
+    return { ...pl, picked };
+  });
+  const addPicked = () => {
+    if (!pickList || pickList.picked.size === 0) return;
+    const chosen = pickList.lines.filter((_, i) => pickList.picked.has(i));
+    const { pricing, k } = buildQuoteLines(pickList.q);
+    const blank = lines.length === 1 && !lines[0].description.trim() && !Number(lines[0].unitPrice);
+    setLines(blank || !itemized ? chosen : [...lines, ...chosen]);
+    applyQuoteSettings(pickList.q, pricing, k);
+    setPickList(null);
   };
 
   const entered = itemized
@@ -908,9 +950,35 @@ function InvoiceMaker({ project, invoice: editing, onClose, onSaved }: { project
                 <Input type="number" min={1} max={100} value={billPct} onChange={(e) => setBillPct(Number(e.target.value))} className="h-8 w-16 text-right" />
                 <span className="text-xs text-slate-500">%</span>
                 <Button type="button" size="sm" variant="outline" disabled={filling} onClick={fillFromQuote} className="h-8">
-                  {filling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null} Fill lines
+                  {filling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null} Fill all
                 </Button>
+                <Button type="button" size="sm" variant="outline" disabled={filling} onClick={openPicker} className="h-8">Pick items</Button>
               </span>
+            </div>
+          )}
+
+          {pickList && (
+            <div className="rounded-lg border border-slate-200">
+              <div className="flex items-center justify-between border-b border-slate-200 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                <span>Select items to bill</span>
+                <button type="button" className="font-medium normal-case text-emerald-600 hover:underline"
+                  onClick={() => setPickList((pl) => pl && ({ ...pl, picked: pl.picked.size === pl.lines.length ? new Set() : new Set(pl.lines.map((_, i) => i)) }))}>
+                  {pickList.picked.size === pickList.lines.length ? "Clear" : "Select all"}
+                </button>
+              </div>
+              <div className="max-h-52 divide-y divide-slate-100 overflow-y-auto">
+                {pickList.lines.map((l, i) => (
+                  <label key={i} className="flex cursor-pointer items-center gap-2.5 px-3 py-2 text-sm hover:bg-slate-50">
+                    <input type="checkbox" checked={pickList.picked.has(i)} onChange={() => togglePick(i)} className="h-4 w-4 accent-emerald-600" />
+                    <span className="min-w-0 flex-1 truncate">{l.description}</span>
+                    <span className="shrink-0 tabular-nums font-medium text-slate-700">{inr(l.unitPrice)}</span>
+                  </label>
+                ))}
+              </div>
+              <div className="flex justify-end gap-2 border-t border-slate-200 px-3 py-2">
+                <Button type="button" size="sm" variant="ghost" onClick={() => setPickList(null)}>Cancel</Button>
+                <Button type="button" size="sm" disabled={pickList.picked.size === 0} onClick={addPicked}>Add {pickList.picked.size || ""} selected</Button>
+              </div>
             </div>
           )}
 

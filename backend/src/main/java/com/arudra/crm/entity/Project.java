@@ -245,6 +245,10 @@ public class Project extends BaseEntity {
     @Transient
     private java.math.BigDecimal outstandingAmount;
 
+    /** Portfolio list: contract value — the quotation's grand total, else the budget. */
+    @Transient
+    private java.math.BigDecimal projectValue;
+
     /** Portfolio list only: distinct categories / product names of the project's work lines. */
     @Transient
     private java.util.List<String> workCategories;

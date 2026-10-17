@@ -275,13 +275,18 @@ public class ProjectService {
         Map<Long, BigDecimal> owed = new java.util.HashMap<>();
         for (Project p : projects) owed.put(p.getId(), BigDecimal.ZERO);
         for (var inv : invoiceRepository.findByProjectIdIn(owed.keySet())) {
-            if ("PAID".equalsIgnoreCase(inv.getStatus()) || "CANCELLED".equalsIgnoreCase(inv.getStatus())) continue;
+            if ("PAID".equalsIgnoreCase(inv.getStatus()) || "CANCELLED".equalsIgnoreCase(inv.getStatus())
+                    || "DRAFT".equalsIgnoreCase(inv.getStatus())) continue;
             BigDecimal bal = inv.getBalanceDue() != null ? inv.getBalanceDue()
                     : (inv.getTotalAmount() != null ? inv.getTotalAmount() : BigDecimal.ZERO)
                         .subtract(inv.getAmountPaid() != null ? inv.getAmountPaid() : BigDecimal.ZERO);
             if (bal.signum() > 0) owed.merge(inv.getProject().getId(), bal, BigDecimal::add);
         }
         for (Project p : projects) p.setOutstandingAmount(owed.get(p.getId()));
+        for (Project p : projects) {
+            p.setProjectValue(p.getQuotation() != null && p.getQuotation().getGrandTotal() != null
+                    ? p.getQuotation().getGrandTotal() : p.getBudget());
+        }
     }
 
     /** Fills taskTotal/taskDone on each project in one grouped query, so the portfolio Tasks column has real numbers. */
@@ -2061,7 +2066,8 @@ public class ProjectService {
         // Money still to collect on project invoices (outstanding balance, so part-payments count).
         BigDecimal pendingToCollect = invoiceRepository.findAll().stream()
                 .filter(inv -> inv.getProject() != null
-                        && !"PAID".equalsIgnoreCase(inv.getStatus()) && !"CANCELLED".equalsIgnoreCase(inv.getStatus()))
+                        && !"PAID".equalsIgnoreCase(inv.getStatus()) && !"CANCELLED".equalsIgnoreCase(inv.getStatus())
+                        && !"DRAFT".equalsIgnoreCase(inv.getStatus()))
                 .map(inv -> {
                     BigDecimal bal = inv.getBalanceDue() != null ? inv.getBalanceDue()
                             : (inv.getTotalAmount() != null ? inv.getTotalAmount() : BigDecimal.ZERO)

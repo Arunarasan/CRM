@@ -69,14 +69,14 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
 
     /** Projects that still owe us money: at least one live invoice with an outstanding balance (any project status). */
     @Query("SELECT p FROM Project p LEFT JOIN p.customer c WHERE EXISTS (" +
-           "SELECT 1 FROM Invoice i WHERE i.project = p AND UPPER(i.status) NOT IN ('PAID','CANCELLED') " +
+           "SELECT 1 FROM Invoice i WHERE i.project = p AND UPPER(i.status) NOT IN ('PAID','CANCELLED','DRAFT') " +
            "AND COALESCE(i.balanceDue, i.totalAmount - i.amountPaid) > 0) AND " +
            "(:search = '' OR LOWER(p.projectName) LIKE LOWER(CONCAT('%', :search, '%')) " +
            "OR LOWER(c.name) LIKE LOWER(CONCAT('%', :search, '%')))")
     Page<Project> findWithOutstanding(@Param("search") String search, Pageable pageable);
 
     @Query("SELECT COUNT(p) FROM Project p WHERE EXISTS (" +
-           "SELECT 1 FROM Invoice i WHERE i.project = p AND UPPER(i.status) NOT IN ('PAID','CANCELLED') " +
+           "SELECT 1 FROM Invoice i WHERE i.project = p AND UPPER(i.status) NOT IN ('PAID','CANCELLED','DRAFT') " +
            "AND COALESCE(i.balanceDue, i.totalAmount - i.amountPaid) > 0)")
     long countWithOutstanding();
 

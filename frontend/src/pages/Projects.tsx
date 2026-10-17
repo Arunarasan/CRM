@@ -47,6 +47,7 @@ interface ProjectRow {
   taskTotal?: number;
   taskDone?: number;
   outstandingAmount?: number;
+  projectValue?: number;
 }
 
 // Tab key -> backend `category` param (empty for "all").
@@ -269,14 +270,25 @@ export default function Projects() {
     { key: "category", header: "Category", cell: (p) => <NameList items={p.workCategories} /> },
     { key: "product", header: "Product", cell: (p) => <NameList items={p.workProducts} /> },
     { key: "stage", header: "Stage", cell: (p) => <StageBadge stage={p.workStage} /> },
-    ...(segment === "pendingCollection" ? [{
-      key: "outstanding", header: "Outstanding", cellClassName: "whitespace-nowrap",
+    {
+      key: "value", header: "Project Value", headClassName: "text-right", cellClassName: "whitespace-nowrap text-right",
       cell: (p: ProjectRow) => (
-        <span className="text-sm font-semibold tabular-nums text-amber-600">
-          ₹{Math.round(p.outstandingAmount ?? 0).toLocaleString("en-IN")}
+        <span className="text-sm font-semibold tabular-nums">
+          {p.projectValue != null ? `₹${Math.round(p.projectValue).toLocaleString("en-IN")}` : "—"}
         </span>
       ),
-    }] : []),
+    },
+    {
+      key: "outstanding", header: "Pending", headClassName: "text-right", cellClassName: "whitespace-nowrap text-right",
+      cell: (p: ProjectRow) => {
+        const owed = Math.round(p.outstandingAmount ?? 0);
+        return (
+          <span className={`text-sm font-semibold tabular-nums ${owed > 0 ? "text-amber-600" : "text-muted-foreground"}`}>
+            ₹{owed.toLocaleString("en-IN")}
+          </span>
+        );
+      },
+    },
     {
       key: "actions", header: "", headClassName: "text-right", cellClassName: "text-right",
       cell: (p) => (
