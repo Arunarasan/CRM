@@ -75,6 +75,8 @@ function readParams(params: URLSearchParams): { tab: Tab; view: View } {
   return { tab, view };
 }
 
+const PAGE = 20;
+
 export default function TaskList() {
   const { t } = useT();
   const [params, setParams] = useSearchParams();
@@ -82,6 +84,7 @@ export default function TaskList() {
   const [mine, setMine] = useState<TaskCardType[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');
+  const [limits, setLimits] = useState<Record<string, number>>({});
   const search = params.get('search') === '1' ? '' : (params.get('search') ?? '');
   const { tab, view } = readParams(params);
 
@@ -104,6 +107,7 @@ export default function TaskList() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { setLimits({}); }, [tab, view, search]);
 
   // Keep the list honest when the office acts on a task (an admin completes or reassigns it):
   // refresh when the employee comes back to the app, and quietly every 30s while it's open.
@@ -148,14 +152,26 @@ export default function TaskList() {
   const inProgress = active.filter((t) => t.myAssignmentStatus === 'IN_PROGRESS').length;
   const what = t(`pw.tl.noun.${tab}`);
 
-  const cards = (list: TaskCardType[]) => (
-    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 md:items-start [&>*]:min-w-0 md:[&>*:only-child]:col-span-2">
-      {list.map((task) => (
-        <TaskCard key={task.id} task={task}
-          onStart={onStart} onPause={onPause} onComplete={onComplete} onExtend={onExtend} />
-      ))}
-    </div>
-  );
+  // Long lists render a page at a time; "Show more" reveals the next page of that list only.
+  const cards = (list: TaskCardType[], key: string) => {
+    const shown = limits[key] ?? PAGE;
+    return (
+      <>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 md:items-start [&>*]:min-w-0 md:[&>*:only-child]:col-span-2">
+          {list.slice(0, shown).map((task) => (
+            <TaskCard key={task.id} task={task}
+              onStart={onStart} onPause={onPause} onComplete={onComplete} onExtend={onExtend} />
+          ))}
+        </div>
+        {list.length > shown && (
+          <button onClick={() => setLimits((l) => ({ ...l, [key]: shown + PAGE }))}
+            className="mt-3 w-full rounded-xl border border-[#DDE2DE] bg-white py-2.5 text-[13px] font-semibold text-[#0A573B] active:bg-[#F7F7F5]">
+            {t('pw.tl.showMore', { n: list.length - shown })}
+          </button>
+        )}
+      </>
+    );
+  };
 
   const Group = ({ icon: Icon, tone, title, list }: {
     icon: React.ComponentType<{ className?: string }>; tone: string; title: string; list: TaskCardType[];
@@ -168,7 +184,7 @@ export default function TaskList() {
           <h2 className="text-[15px] font-bold text-[#111817]">{title}</h2>
           <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[#EEF0EE] px-1.5 text-[11px] font-semibold text-[#5B625E]">{list.length}</span>
         </div>
-        {cards(list)}
+        {cards(list, title)}
       </section>
     );
   };
@@ -310,10 +326,10 @@ export default function TaskList() {
               <p className="flex items-center gap-1.5 px-1 text-[12px] text-[#7A817C]">
                 <Hand className="h-3.5 w-3.5" /> {t('pw.tl.pickNote')}
               </p>
-              {available.length ? cards(available) : empty(t('pw.tl.noAvailable', { what }))}
+              {available.length ? cards(available, 'available') : empty(t('pw.tl.noAvailable', { what }))}
             </>
           )}
-          {view === 'DONE' && (completed.length ? cards(completed) : empty(t('pw.tl.noDone', { what })))}
+          {view === 'DONE' && (completed.length ? cards(completed, 'done') : empty(t('pw.tl.noDone', { what })))}
         </>
       )}
     </div>

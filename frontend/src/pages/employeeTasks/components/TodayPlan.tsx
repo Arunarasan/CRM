@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronRight, Flame, Star, Sparkles, Wrench } from 'lucide-react';
+import { ChevronRight, Flame, PhoneCall, Star, Sparkles, Wrench } from 'lucide-react';
 import { employeeTaskApi } from '@/api/employeeTaskApi';
+import { callRecordingApi, fmtCallTime, fmtDuration, type CallRecording } from '@/api/callRecordingApi';
+import { displayPhone } from '@/components/callRecordings/CallLeadPanel';
 import { TaskCard } from '@/types/employeeTask';
 import { byPlanRank, daysUntil, rankTier, shortDue } from '../taskUtils';
 import { useT } from '@/i18n';
@@ -71,12 +73,14 @@ export default function TodayPlan({ refreshKey }: { refreshKey?: number }) {
   const navigate = useNavigate();
   const [mine, setMine] = useState<TaskCard[]>([]);
   const [pool, setPool] = useState<TaskCard[]>([]);
+  const [calls, setCalls] = useState<CallRecording[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   const load = useCallback(() => {
     Promise.allSettled([
       employeeTaskApi.myTasks().then(setMine),
       employeeTaskApi.pool().then(setPool),
+      callRecordingApi.pool().then(setCalls),
     ]).finally(() => setLoaded(true));
   }, []);
   useEffect(() => { load(); }, [load, refreshKey]);
@@ -92,9 +96,10 @@ export default function TodayPlan({ refreshKey }: { refreshKey?: number }) {
 
   const plan = useMemo(() => mine.filter(isActive).sort(planOrder), [mine]);
   const newLeads = useMemo(
-    () => pool.filter((p) => rankTier(p) === 0 && p.canPick !== false).sort(byPlanRank).slice(0, MAX_NEW_LEADS),
+    () => pool.filter((p) => rankTier(p) === 0 && p.canPick !== false && !p.pickedBy?.length).sort(byPlanRank).slice(0, MAX_NEW_LEADS),
     [pool],
   );
+  const newCalls = useMemo(() => calls.filter((c) => !c.outcome && !c.taskId).slice(0, MAX_NEW_LEADS), [calls]);
   const overdue = plan.filter((p) => p.dueState === 'OVERDUE').length;
   const fit = plan.filter((p) => p.workStage === 'READY_TO_FIT').length;
   const open = (id: number) => navigate(`/employee/tasks/${id}`);
@@ -134,6 +139,34 @@ export default function TodayPlan({ refreshKey }: { refreshKey?: number }) {
           )}
         </div>
       </div>
+
+      {newCalls.length > 0 && (
+        <div>
+          <div className="mb-2 flex items-center justify-between px-0.5">
+            <h3 className="flex items-center gap-1.5 text-[15px] font-semibold text-[#111817]">
+              <PhoneCall className="h-4 w-4 text-[#C48A16]" />{t('portal.home.plan.newCalls')}
+            </h3>
+            <button onClick={() => navigate('/employee/call-leads')} className="text-[13px] font-semibold text-[#B27A12]">
+              {t('portal.home.viewAll')}
+            </button>
+          </div>
+          <div className={`${CARD} divide-y divide-[#ECEBE7] overflow-hidden`}>
+            {newCalls.map((c) => (
+              <button key={c.id} onClick={() => navigate('/employee/call-leads')}
+                className="flex w-full items-center gap-3 px-3.5 py-3 text-left active:bg-[#F7F7F5]">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#FBF1DA] text-[#9D6B10]"><PhoneCall className="h-3.5 w-3.5" /></span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[14px] font-semibold text-[#111817]">{c.contactName || displayPhone(c.phoneNumber) || c.fileName}</span>
+                  <span className="block truncate text-[12px] text-[#7A817C]">
+                    {[c.calledAt && fmtCallTime(c.calledAt), fmtDuration(c.durationSec)].filter((x) => x && x !== '—').join(' · ')}
+                  </span>
+                </span>
+                <ChevronRight className="h-4 w-4 shrink-0 text-[#B9C0BB]" />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {newLeads.length > 0 && (
         <div>

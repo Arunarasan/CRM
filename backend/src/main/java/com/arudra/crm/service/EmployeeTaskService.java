@@ -176,7 +176,7 @@ public class EmployeeTaskService {
         long pending = tasks.stream().filter(open).count();
 
         Map<String, Object> home = new HashMap<>();
-        home.put("availableCount", getAvailablePool(employee).size());
+        home.put("availableCount", getAvailablePool(employee).stream().filter(c -> c.get("pickedBy") == null).count());
         home.put("dueToday", dueToday);
         home.put("overdue", overdue);
         home.put("upcoming", upcoming);
@@ -800,19 +800,41 @@ public class EmployeeTaskService {
         boolean clockedIn = isAdminUser(employee) || employeeTimeService.isClockedIn(employee);
         TodoFilter todo = new TodoFilter();
         Set<Long> myProjects = projectIdsOnTeam(employee);
+        // Tasks someone has already picked stay on the board so everyone sees the whole picture; their card
+        // names who took them. Shared (multi-person / team) tasks can still be joined; single-person ones
+        // are shown for information only (canPick = false).
+        Set<Long> seen = candidates.stream().map(Task::getId).collect(Collectors.toCollection(HashSet::new));
+        for (String st : List.of("ACCEPTED", "IN_PROGRESS", "PENDING")) {
+            for (Task t : taskRepository.findByStatus(st)) {
+                if (seen.add(t.getId())) candidates.add(t);
+            }
+        }
         return candidates.stream()
                 .filter(t -> !Boolean.TRUE.equals(t.getIsDeleted()))
                 .filter(todo::shows)
-                .filter(this::isUnassigned)
+                .filter(t -> isUnassigned(t) || !isOnTask(t, employee))
                 .filter(t -> taskEligibilityService.isEligible(employee, t)
                         || (t.getProject() != null && myProjects.contains(t.getProject().getId())))
                 .sorted(Comparator.comparing(Task::getDueDate, Comparator.nullsLast(Comparator.naturalOrder())))
                 .map(t -> {
                     Map<String, Object> card = toCard(t, employee.getId());
-                    card.put("canPick", clockedIn);
+                    boolean held = !isUnassigned(t);
+                    card.put("canPick", clockedIn && (!held || isCollaborative(t)));
+                    if (held) card.put("pickedBy", card.get("assignedEmployees"));
                     return card;
                 })
                 .collect(Collectors.toList());
+    }
+
+    private static boolean isCollaborative(Task t) {
+        return "MULTIPLE_EMPLOYEES".equals(t.getAssignmentType()) || "TEAM".equals(t.getAssignmentType());
+    }
+
+    /** Does this employee already hold a live (not cancelled / rejected) assignment on the task? */
+    private boolean isOnTask(Task t, User employee) {
+        return assignmentRepository.findByTaskId(t.getId()).stream()
+                .anyMatch(a -> a.getEmployee() != null && employee.getId().equals(a.getEmployee().getId())
+                        && !"CANCELLED".equals(a.getStatus()) && !"REJECTED".equals(a.getStatus()));
     }
 
     /**

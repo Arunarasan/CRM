@@ -199,6 +199,13 @@ export default function TaskCard({
           </div>
         )}
 
+        {task.pickedBy && task.pickedBy.length > 0 && (
+          <p className="mt-2 flex items-center gap-1.5 truncate rounded-lg bg-[#FBF1DC] px-2 py-1 text-[11.5px] font-semibold text-[#9B6B32]">
+            <Users className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">{t('pw.card.pickedBy', { names: task.pickedBy.filter(Boolean).join(', ') })}</span>
+          </p>
+        )}
+
         <div className="mt-2 flex items-center gap-2">
           {shared && (
             <span className="flex items-center gap-1 text-[11px] text-[#7A817C]">

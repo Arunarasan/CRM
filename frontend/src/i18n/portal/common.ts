@@ -71,7 +71,8 @@ const rows: Rows = {
   'portal.home.plan.newLeads': ['New leads to pick up', 'उठाने के लिए नई लीड', 'எடுக்க வேண்டிய புதிய லீட்கள்', 'తీసుకోవాల్సిన కొత్త లీడ్‌లు'],
   'portal.home.plan.more': ['See all {{count}} tasks', 'सभी {{count}} काम देखें', 'அனைத்து {{count}} பணிகளையும் பார்க்க', 'మొత్తం {{count}} పనులు చూడండి'],
   'portal.home.plan.readyToFit': ['Ready to fit', 'फिटिंग के लिए तैयार', 'பொருத்த தயார்', 'ఫిట్టింగ్‌కు సిద్ధం'],
-  'portal.home.plan.newLead': ['New lead', 'नई लीड', 'புதிய லீட்', 'కొత్త లీడ్'],
+  'portal.home.plan.newCalls': ['New call recordings', 'नई कॉल रिकॉर्डिंग', 'புதிய அழைப்பு பதிவுகள்', 'కొత్త కాల్ రికార్డింగ్‌లు'],
+  'portal.home.plan.newLead':['New lead', 'नई लीड', 'புதிய லீட்', 'కొత్త లీడ్'],
   // My Rewards card on Home
   'portal.home.myRewards': ['My Rewards', 'मेरे पुरस्कार', 'என் வெகுமதிகள்', 'నా రివార్డులు'],
   'portal.home.totalEarned': ['Total earned', 'कुल कमाई', 'மொத்த வருமானம்', 'మొత్తం సంపాదన'],
