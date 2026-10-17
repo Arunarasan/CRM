@@ -197,11 +197,18 @@ public class EmployeeTaskService {
                 .filter(a -> !"CANCELLED".equals(a.getStatus()) && !"REJECTED".equals(a.getStatus()))
                 .map(a -> a.getTask().getId())
                 .collect(Collectors.toSet());
+        // Tasks the office assigned to this employee by hand: they skip the "requirement < 10%" hold-back.
+        java.util.Set<Long> byOffice = mine.stream()
+                .filter(a -> !"CANCELLED".equals(a.getStatus()) && !"REJECTED".equals(a.getStatus()))
+                .filter(a -> a.getAssignedBy() != null && !employee.getId().equals(a.getAssignedBy().getId()))
+                .map(a -> a.getTask().getId())
+                .collect(Collectors.toSet());
+        TodoFilter todo = new TodoFilter();
         return mine.stream()
                 .map(TaskAssignment::getTask)
                 .distinct()
                 .filter(t -> stillMine.contains(t.getId()))
-                .filter(new TodoFilter()::shows)
+                .filter(t -> todo.shows(t, byOffice.contains(t.getId())))
                 .filter(t -> status == null || status.isBlank() || status.equalsIgnoreCase(t.getStatus()))
                 .filter(t -> search == null || search.isBlank()
                         || t.getTaskName().toLowerCase().contains(search.toLowerCase())
@@ -2405,7 +2412,10 @@ public class EmployeeTaskService {
         private final Map<Long, com.arudra.crm.entity.Lead> leads = new HashMap<>();
         private final Map<Long, List<Task>> leadTasks = new HashMap<>();
 
-        boolean shows(Task t) {
+        boolean shows(Task t) { return shows(t, false); }
+
+        /** {@code assignedByOffice}: an admin put this task on the employee, so the 10% requirement hold-back doesn't apply. */
+        boolean shows(Task t, boolean assignedByOffice) {
             if (isClosed(t)) return true;
             // Retired steps never appear in the employee To-Do (the office still sees them).
             if (t.getTaskTemplate() != null && EMPLOYEE_HIDDEN_CODES.contains(t.getTaskTemplate().getCode())) return false;
@@ -2424,7 +2434,7 @@ public class EmployeeTaskService {
             if ("Lost".equalsIgnoreCase(lead.getStatus())) return false; // lost lead: its to-dos leave the list
             if (Boolean.TRUE.equals(lead.getIsConverted())) return false;
             if (!COLLECT_REQUIREMENT_CODE.equals(t.getTaskTemplate().getCode())) return true;
-            if (lead.getRequirementPercent() < 10) return false;
+            if (!assignedByOffice && lead.getRequirementPercent() < 10) return false;
             boolean quoteTaskOpen = leadTasks.computeIfAbsent(t.getLeadId(), taskRepository::findByLeadId).stream()
                     .anyMatch(o -> !Boolean.TRUE.equals(o.getIsDeleted()) && !isClosed(o)
                             && o.getProject() == null && o.getTaskTemplate() != null
