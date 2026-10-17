@@ -269,6 +269,51 @@ public class ProjectService {
         }
     }
 
+    /** Contract value (quotation grand total, else budget) minus verified customer payments, never below zero. */
+    private BigDecimal unpaidShortfall(Project p) {
+        BigDecimal value = p.getQuotation() != null && p.getQuotation().getGrandTotal() != null
+                && p.getQuotation().getGrandTotal().signum() > 0 ? p.getQuotation().getGrandTotal() : p.getBudget();
+        if (value == null) return BigDecimal.ZERO;
+        BigDecimal paid = customerPaymentRepository.sumConfirmedForProject(p.getId());
+        return value.subtract(paid != null ? paid : BigDecimal.ZERO).max(BigDecimal.ZERO);
+    }
+
+    /**
+     * Completed/closed projects that haven't been fully paid: project id → amount still to collect (the larger of
+     * the issued-invoice balances and value minus verified payments, so marking a project complete without
+     * collecting — or without invoicing — still surfaces it).
+     */
+    public Map<Long, BigDecimal> completedPending() {
+        return pendingFor(projectRepository.findFinishedIds());
+    }
+
+    /** Every non-cancelled project that still has money to collect (quote value minus payments, or open invoices). */
+    public Map<Long, BigDecimal> allPending() {
+        List<Long> ids = projectRepository.findAll().stream()
+                .filter(p -> !"CANCELLED".equalsIgnoreCase(p.getStatus())).map(Project::getId).toList();
+        return pendingFor(ids);
+    }
+
+    private Map<Long, BigDecimal> pendingFor(List<Long> ids) {
+        Map<Long, BigDecimal> out = new java.util.LinkedHashMap<>();
+        if (ids.isEmpty()) return out;
+        Map<Long, BigDecimal> owed = new java.util.HashMap<>();
+        for (var inv : invoiceRepository.findByProjectIdIn(ids)) {
+            if (Boolean.TRUE.equals(inv.getIsDeleted()) || inv.getProject() == null) continue;
+            String st = String.valueOf(inv.getStatus()).toUpperCase();
+            if (st.equals("PAID") || st.equals("CANCELLED") || st.equals("DRAFT")) continue;
+            BigDecimal bal = inv.getBalanceDue() != null ? inv.getBalanceDue()
+                    : (inv.getTotalAmount() != null ? inv.getTotalAmount() : BigDecimal.ZERO)
+                        .subtract(inv.getAmountPaid() != null ? inv.getAmountPaid() : BigDecimal.ZERO);
+            if (bal.signum() > 0) owed.merge(inv.getProject().getId(), bal, BigDecimal::add);
+        }
+        for (Project p : projectRepository.findAllById(ids)) {
+            BigDecimal pending = owed.getOrDefault(p.getId(), BigDecimal.ZERO).max(unpaidShortfall(p));
+            if (pending.signum() > 0) out.put(p.getId(), pending);
+        }
+        return out;
+    }
+
     /** Fills outstandingAmount on each listed project from its live invoices (one query for the page). */
     private void attachOutstanding(List<Project> projects) {
         if (projects.isEmpty()) return;
@@ -282,7 +327,11 @@ public class ProjectService {
                         .subtract(inv.getAmountPaid() != null ? inv.getAmountPaid() : BigDecimal.ZERO);
             if (bal.signum() > 0) owed.merge(inv.getProject().getId(), bal, BigDecimal::add);
         }
-        for (Project p : projects) p.setOutstandingAmount(owed.get(p.getId()));
+        for (Project p : projects) {
+            BigDecimal pending = owed.get(p.getId());
+            if (!"CANCELLED".equalsIgnoreCase(p.getStatus())) pending = pending.max(unpaidShortfall(p));
+            p.setOutstandingAmount(pending);
+        }
         for (Project p : projects) {
             p.setProjectValue(p.getQuotation() != null && p.getQuotation().getGrandTotal() != null
                     ? p.getQuotation().getGrandTotal() : p.getBudget());
@@ -2063,18 +2112,8 @@ public class ProjectService {
                 .map(inv -> inv.getTotalAmount() != null ? inv.getTotalAmount() : BigDecimal.ZERO)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        // Money still to collect on project invoices (outstanding balance, so part-payments count).
-        BigDecimal pendingToCollect = invoiceRepository.findAll().stream()
-                .filter(inv -> inv.getProject() != null
-                        && !"PAID".equalsIgnoreCase(inv.getStatus()) && !"CANCELLED".equalsIgnoreCase(inv.getStatus())
-                        && !"DRAFT".equalsIgnoreCase(inv.getStatus()))
-                .map(inv -> {
-                    BigDecimal bal = inv.getBalanceDue() != null ? inv.getBalanceDue()
-                            : (inv.getTotalAmount() != null ? inv.getTotalAmount() : BigDecimal.ZERO)
-                                .subtract(inv.getAmountPaid() != null ? inv.getAmountPaid() : BigDecimal.ZERO);
-                    return bal.signum() > 0 ? bal : BigDecimal.ZERO;
-                })
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        // Money still to collect: per project the larger of open invoice balances and quote value minus payments.
+        BigDecimal pendingToCollect = allPending().values().stream().reduce(BigDecimal.ZERO, BigDecimal::add);
 
         Map<String, Object> dashboard = new java.util.LinkedHashMap<>();
         dashboard.put("pendingToCollect", pendingToCollect);

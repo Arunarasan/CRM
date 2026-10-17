@@ -67,17 +67,24 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
     @Query("SELECT COUNT(p) FROM Project p WHERE p.endDate < :today AND UPPER(p.status) NOT IN ('COMPLETED','CANCELLED')")
     long countDelayed(@Param("today") java.time.LocalDate today);
 
-    /** Projects that still owe us money: at least one live invoice with an outstanding balance (any project status). */
-    @Query("SELECT p FROM Project p LEFT JOIN p.customer c WHERE EXISTS (" +
+    /**
+     * Projects that still owe us money: a live (issued, unpaid) invoice with a balance — or any non-cancelled
+     * project whose quote value (else budget) exceeds the verified payments received, invoiced or not.
+     */
+    @Query("SELECT p FROM Project p LEFT JOIN p.customer c LEFT JOIN p.quotation q WHERE (EXISTS (" +
            "SELECT 1 FROM Invoice i WHERE i.project = p AND UPPER(i.status) NOT IN ('PAID','CANCELLED','DRAFT') " +
-           "AND COALESCE(i.balanceDue, i.totalAmount - i.amountPaid) > 0) AND " +
+           "AND COALESCE(i.balanceDue, i.totalAmount - i.amountPaid) > 0) OR (UPPER(COALESCE(p.status, '')) <> 'CANCELLED' " +
+           "AND COALESCE(NULLIF(q.grandTotal, 0), p.budget, 0) > (SELECT COALESCE(SUM(cp.amount), 0) FROM CustomerPayment cp " +
+           "WHERE cp.project = p AND cp.status = 'CONFIRMED' AND cp.isDeleted = false))) AND " +
            "(:search = '' OR LOWER(p.projectName) LIKE LOWER(CONCAT('%', :search, '%')) " +
            "OR LOWER(c.name) LIKE LOWER(CONCAT('%', :search, '%')))")
     Page<Project> findWithOutstanding(@Param("search") String search, Pageable pageable);
 
-    @Query("SELECT COUNT(p) FROM Project p WHERE EXISTS (" +
+    @Query("SELECT COUNT(p) FROM Project p LEFT JOIN p.quotation q WHERE EXISTS (" +
            "SELECT 1 FROM Invoice i WHERE i.project = p AND UPPER(i.status) NOT IN ('PAID','CANCELLED','DRAFT') " +
-           "AND COALESCE(i.balanceDue, i.totalAmount - i.amountPaid) > 0)")
+           "AND COALESCE(i.balanceDue, i.totalAmount - i.amountPaid) > 0) OR (UPPER(COALESCE(p.status, '')) <> 'CANCELLED' " +
+           "AND COALESCE(NULLIF(q.grandTotal, 0), p.budget, 0) > (SELECT COALESCE(SUM(cp.amount), 0) FROM CustomerPayment cp " +
+           "WHERE cp.project = p AND cp.status = 'CONFIRMED' AND cp.isDeleted = false))")
     long countWithOutstanding();
 
     java.util.List<Project> findByStatus(String status);
