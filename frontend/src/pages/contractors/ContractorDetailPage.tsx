@@ -8,8 +8,10 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Star, Phone, Mail, Building2, MapPin } from "lucide-react";
+import { ArrowLeft, Star, Phone, Mail, Building2, MapPin, ArrowUpRight, ArrowDownLeft } from "lucide-react";
 import { useGoBack } from "@/hooks/useGoBack";
+import { useAuth } from "@/hooks/useAuth";
+import ContractorMoneyDialog from "./ContractorMoneyDialog";
 
 const currency = (n?: number) => `₹${(n ?? 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 
@@ -17,10 +19,12 @@ export default function ContractorDetailPage() {
   const { id } = useParams();
   const goBack = useGoBack("/contractors/directory");
   const [data, setData] = useState<ContractorDetail | null>(null);
+  const [money, setMoney] = useState<"IN" | "OUT" | null>(null);
+  const { hasAnyAuthority } = useAuth();
+  const canPay = hasAnyAuthority(["CONTRACTOR_PAYMENT", "ROLE_ADMIN"]);
 
-  useEffect(() => {
-    if (id) contractorApi.get(Number(id)).then(setData).catch(console.error);
-  }, [id]);
+  const load = () => { if (id) contractorApi.get(Number(id)).then(setData).catch(console.error); };
+  useEffect(load, [id]);
 
   if (!data) return <div className="p-8 text-sm text-muted-foreground">Loading contractor…</div>;
 
@@ -49,11 +53,19 @@ export default function ContractorDetailPage() {
               {c.city && <span className="inline-flex items-center gap-1"><MapPin className="w-3.5 h-3.5" />{c.city}{c.state ? `, ${c.state}` : ""}</span>}
             </div>
           </div>
+          <div className="flex flex-col gap-3 items-start md:items-end">
+          {canPay && (
+            <div className="flex gap-2">
+              <Button onClick={() => setMoney("OUT")}><ArrowUpRight className="w-4 h-4 mr-1" />Pay contractor</Button>
+              <Button variant="outline" onClick={() => setMoney("IN")}><ArrowDownLeft className="w-4 h-4 mr-1" />Contractor paid us</Button>
+            </div>
+          )}
           <div className="flex gap-3">
             <Stat label="Overall" value={c.overallRating} star />
             <Stat label="Quality" value={c.ratingQuality} star />
             <Stat label="Timeliness" value={c.ratingTimeliness} star />
             <Stat label="Safety" value={c.ratingSafety} star />
+          </div>
           </div>
         </div>
 
@@ -63,7 +75,9 @@ export default function ContractorDetailPage() {
           <Metric label="Total billed" value={currency(p.totalBilled)} />
           <Metric label="Total paid" value={currency(data.outstanding.totalPaid)} hint={`incl. advances ${currency(data.outstanding.advancesPaid)}`} />
           <Metric label="Outstanding" value={currency(data.outstanding.billedOutstanding)} hint={`retention ${currency(data.outstanding.retentionHeld)}`} />
-          <Metric label="Dues (payable)" value={currency(data.outstanding.ledgerBalance)} hint="net ledger balance" />
+          <Metric
+            label={data.outstanding.ledgerBalance < 0 ? "They owe us" : "We owe them"}
+            value={currency(Math.abs(data.outstanding.ledgerBalance))} hint="net ledger balance" />
         </div>
       </div>
 
@@ -112,17 +126,23 @@ export default function ContractorDetailPage() {
         </TabsContent>
 
         <TabsContent value="payments">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-4">
             <SummaryTile label="Total paid" value={currency(data.outstanding.totalPaid)} />
             <SummaryTile label="Advances paid" value={currency(data.outstanding.advancesPaid)} />
             <SummaryTile label="Bills outstanding" value={currency(data.outstanding.billedOutstanding)} tone="amber" />
-            <SummaryTile label="Dues (net payable)" value={currency(data.outstanding.ledgerBalance)} tone="amber" />
+            <SummaryTile label="Received from contractor" value={currency(data.outstanding.receivedFromContractor)} />
+            <SummaryTile label={data.outstanding.ledgerBalance < 0 ? "They owe us" : "We owe them"}
+              value={currency(Math.abs(data.outstanding.ledgerBalance))} tone="amber" />
           </div>
           <Card>
             <SimpleTable
-              head={["Date", "Type", "Amount", "Mode", "Reference", "Bill"]}
+              head={["Date", "Direction", "Type", "Amount", "Mode", "Reference", "Bill"]}
               rows={data.payments.map((pm) => [
-                pm.paymentDate ?? "—", pm.paymentType.replace(/_/g, " "), currency(pm.amount),
+                pm.paymentDate ?? "—",
+                pm.direction === "IN"
+                  ? <Badge className="bg-emerald-100 text-emerald-700">Received</Badge>
+                  : <Badge className="bg-rose-100 text-rose-700">Paid</Badge>,
+                pm.paymentType.replace(/_/g, " "), currency(pm.amount),
                 pm.paymentMode ?? "—", pm.referenceNumber ?? "—", pm.bill?.billNumber ?? "—",
               ])}
               empty="No payments recorded yet."
@@ -206,6 +226,10 @@ export default function ContractorDetailPage() {
           </Card>
         </TabsContent>
       </Tabs>
+      {money && (
+        <ContractorMoneyDialog open onClose={() => setMoney(null)} direction={money}
+          contractorId={c.id} contractorName={c.name} onDone={load} />
+      )}
     </div>
   );
 }

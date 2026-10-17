@@ -56,6 +56,10 @@ public class ContractorPayment extends BaseEntity {
     @Column(name = "payment_type", nullable = false, length = 30)
     private String paymentType = "RUNNING_BILL"; // ADVANCE, RUNNING_BILL, FINAL_BILL, RETENTION_RELEASE
 
+    /** OUT = we paid the contractor; IN = the contractor paid us (refund, recovery, settlement). */
+    @Column(nullable = false, length = 10)
+    private String direction = "OUT";
+
     @Column(name = "payment_mode", length = 30)
     private String paymentMode; // CASH, BANK_TRANSFER, CHEQUE, UPI, NEFT, RTGS
 

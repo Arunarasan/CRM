@@ -380,7 +380,9 @@ export interface ContractorPayment {
   amount: number;
   paymentDate?: string;
   status: "PENDING" | "PAID" | "OVERDUE";
-  paymentType: "ADVANCE" | "RUNNING_BILL" | "FINAL_BILL" | "RETENTION_RELEASE";
+  paymentType: "ADVANCE" | "RUNNING_BILL" | "FINAL_BILL" | "RETENTION_RELEASE" | "REFUND" | "RECOVERY" | "SETTLEMENT_RECEIVED";
+  /** OUT = we paid the contractor, IN = the contractor paid us. */
+  direction?: "IN" | "OUT";
   paymentMode?: string;
   referenceNumber?: string;
   transactionReference?: string;
@@ -467,6 +469,7 @@ export interface ContractorOutstanding {
   retentionHeld: number;
   totalPaid: number;
   advancesPaid?: number;
+  receivedFromContractor?: number;
   ledgerBalance: number;
 }
 

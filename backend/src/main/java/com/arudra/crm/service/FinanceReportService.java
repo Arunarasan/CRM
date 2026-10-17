@@ -232,6 +232,9 @@ public class FinanceReportService {
         for (CustomerPayment p : paymentRepository.findByStatusAndPaymentDateBetweenAndIsDeletedFalse("CONFIRMED", from, to)) {
             addToBucket(months, p.getPaymentDate(), "moneyIn", p.getAmount());
         }
+        for (ContractorPayment p : contractorPaymentRepository.findReceivedBetween(from, to)) {
+            addToBucket(months, p.getPaymentDate(), "moneyIn", p.getAmount());
+        }
         for (PurchasePayment p : purchasePaymentRepository.findByPaymentDateBetween(from, to)) {
             if (Boolean.TRUE.equals(p.getIsDeleted())) continue;
             addToBucket(months, p.getPaymentDate(), "moneyOut", p.getAmount());
@@ -290,6 +293,12 @@ public class FinanceReportService {
             all.add(row(t.getId(), t.getTxnDate(), "IN", "COMPANY_INCOME", t.getCategory(),
                     t.getPartyName(), t.getReferenceNumber() != null ? t.getReferenceNumber() : t.getTxnNumber(),
                     t.getPaymentMethod(), t.getDescription(), t.getAmount()));
+        }
+
+        for (ContractorPayment p : contractorPaymentRepository.findReceivedBetween(from, to)) {
+            all.add(row(p.getId(), p.getPaymentDate(), "IN", "CONTRACTOR_RECEIPT", p.getPaymentType(),
+                    p.getContractor() != null ? p.getContractor().getName() : null,
+                    p.getReferenceNumber(), p.getPaymentMode(), p.getRemarks(), p.getAmount()));
         }
 
         // ---- Money OUT ----

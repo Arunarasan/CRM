@@ -15,6 +15,7 @@ import { Stat, FilterBar, Empty, SkeletonRows, Modal } from "./financeUi";
 const SOURCE_META: Record<string, { label: string; dir: "IN" | "OUT"; tone: string }> = {
   CUSTOMER_PAYMENT:   { label: "Customer Payment", dir: "IN",  tone: "bg-emerald-100 text-emerald-700" },
   COMPANY_INCOME:     { label: "Other Income",     dir: "IN",  tone: "bg-teal-100 text-teal-700" },
+  CONTRACTOR_RECEIPT: { label: "Contractor Refund", dir: "IN",  tone: "bg-lime-100 text-lime-700" },
   SUPPLIER_PAYMENT:   { label: "Supplier / Goods", dir: "OUT", tone: "bg-orange-100 text-orange-700" },
   CONTRACTOR_PAYMENT: { label: "Contractor",       dir: "OUT", tone: "bg-amber-100 text-amber-700" },
   PAYROLL:            { label: "Payroll / Salary", dir: "OUT", tone: "bg-purple-100 text-purple-700" },

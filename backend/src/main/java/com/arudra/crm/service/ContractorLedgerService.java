@@ -109,6 +109,15 @@ public class ContractorLedgerService {
 
     @Transactional
     public void postPayment(ContractorPayment payment) {
+        // Money the contractor paid us: the payable rises (or their debt to us shrinks), so CREDIT.
+        if ("IN".equals(payment.getDirection())) {
+            post(payment.getContractor(), payment.getProject(), payment.getWorkPackage(),
+                    payment.getPaymentDate(), "RECEIPT", "CONTRACTOR_PAYMENT", payment.getId(),
+                    payment.getReferenceNumber(),
+                    "Received from contractor (" + payment.getPaymentType().replace('_', ' ').toLowerCase() + ")",
+                    BigDecimal.ZERO, nz(payment.getAmount()));
+            return;
+        }
         String entryType = "ADVANCE".equals(payment.getPaymentType()) ? "ADVANCE"
                 : "RETENTION_RELEASE".equals(payment.getPaymentType()) ? "RETENTION_RELEASED" : "PAYMENT";
         String description = "RETENTION_RELEASE".equals(payment.getPaymentType())

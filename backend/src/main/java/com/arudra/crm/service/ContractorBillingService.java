@@ -51,6 +51,7 @@ public class ContractorBillingService {
     @Autowired private WorkPackageItemRepository workPackageItemRepository;
     @Autowired private ContractorMaterialIssueRepository materialIssueRepository;
     @Autowired private UserRepository userRepository;
+    @Autowired private ProjectRepository projectRepository;
     @Autowired private NotificationService notificationService;
     @Autowired private ContractorLedgerService ledgerService;
     @Autowired private WorkPackageService workPackageService;
@@ -534,6 +535,53 @@ public class ContractorBillingService {
         return payment;
     }
 
+    /**
+     * Profile-level two-way payment — no bill or approval ladder.
+     * OUT pays the contractor (an ADVANCE, so it stays off project cost and is set off against later bills);
+     * IN records money the contractor paid us (refund / recovery / settlement).
+     */
+    @Transactional
+    public ContractorPayment recordQuickPayment(Long contractorId, String direction, ContractorPayment payload,
+                                                User currentUser) {
+        boolean incoming = "IN".equalsIgnoreCase(direction);
+        if (!incoming && !"OUT".equalsIgnoreCase(direction)) {
+            throw new IllegalArgumentException("Direction must be IN or OUT.");
+        }
+        if (!incoming) {
+            payload.setPaymentType("ADVANCE");
+            return recordPayment(contractorId, null, payload, currentUser);
+        }
+
+        Contractor contractor = contractorRepository.findById(contractorId)
+                .orElseThrow(() -> new IllegalArgumentException("Contractor not found: " + contractorId));
+        BigDecimal amount = nz(payload.getAmount());
+        if (amount.signum() <= 0) {
+            throw new IllegalArgumentException("Amount must be greater than zero.");
+        }
+        String type = List.of("REFUND", "RECOVERY", "SETTLEMENT_RECEIVED").contains(payload.getPaymentType())
+                ? payload.getPaymentType() : "SETTLEMENT_RECEIVED";
+
+        ContractorPayment payment = new ContractorPayment();
+        payment.setContractor(contractor);
+        payment.setDirection("IN");
+        payment.setPaymentType(type);
+        payment.setAmount(amount);
+        payment.setProject(payload.getProject() != null && payload.getProject().getId() != null
+                ? projectRepository.findById(payload.getProject().getId()).orElse(null) : null);
+        payment.setPaymentDate(payload.getPaymentDate() != null ? payload.getPaymentDate() : LocalDate.now());
+        payment.setPaymentMode(payload.getPaymentMode());
+        payment.setReferenceNumber(payload.getReferenceNumber());
+        payment.setRemarks(payload.getRemarks());
+        payment.setStatus("PAID");
+        payment.setApprovedBy(currentUser);
+        payment.setApprovedAt(LocalDateTime.now());
+        payment.setPaidBy(currentUser);
+        payment = paymentRepository.save(payment);
+
+        ledgerService.postPayment(payment);
+        return payment;
+    }
+
     /** Releases retention held on a package's bills once the defect liability period is over. */
     @Transactional
     public ContractorPayment releaseRetention(Long contractorId, Long workPackageId, BigDecimal amount,
@@ -577,6 +625,7 @@ public class ContractorBillingService {
         summary.put("billedOutstanding", nz(billRepository.sumOutstandingByContractor(contractorId)));
         summary.put("retentionHeld", nz(billRepository.sumRetentionByContractor(contractorId)));
         summary.put("totalPaid", nz(paymentRepository.sumPaidByContractor(contractorId)));
+        summary.put("receivedFromContractor", nz(paymentRepository.sumReceivedFromContractor(contractorId)));
         summary.put("advancesPaid", nz(paymentRepository.sumAdvancesByContractor(contractorId)));
         summary.put("ledgerBalance", ledgerService.getBalance(contractorId));
         return summary;

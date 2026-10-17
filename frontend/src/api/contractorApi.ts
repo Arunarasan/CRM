@@ -235,6 +235,8 @@ export const contractorApi = {
     api.get<ContractorPayment[]>(`${CB}/payments${qs({ status })}`).then((r) => r.data),
   recordPayment: (payload: { contractorId: number; billId?: number; payment: Partial<ContractorPayment> }) =>
     api.post<ContractorPayment>(`${CB}/payments`, payload).then((r) => r.data),
+  quickPayment: (payload: { contractorId: number; direction: "IN" | "OUT"; payment: Partial<ContractorPayment> }) =>
+    api.post<ContractorPayment>(`${CB}/payments/quick`, payload).then((r) => r.data),
   releaseRetention: (contractorId: number, workPackageId: number, amount?: number, remarks?: string) =>
     api.post<ContractorPayment>(`${CB}/payments/release-retention${qs({ contractorId, workPackageId, amount, remarks })}`)
       .then((r) => r.data),

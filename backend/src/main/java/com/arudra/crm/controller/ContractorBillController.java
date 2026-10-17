@@ -164,6 +164,20 @@ public class ContractorBillController {
                 request.payment, currentUserService.getCurrentUser()));
     }
 
+    public static class QuickPaymentRequest {
+        public Long contractorId;
+        public String direction; // OUT = pay contractor, IN = contractor paid us
+        public ContractorPayment payment;
+    }
+
+    /** Profile-level pay / receive — no bill or approval ladder. */
+    @PostMapping("/payments/quick")
+    @PreAuthorize(PAY)
+    public ResponseEntity<ContractorPayment> quickPayment(@RequestBody QuickPaymentRequest request) {
+        return ResponseEntity.ok(billingService.recordQuickPayment(request.contractorId, request.direction,
+                request.payment, currentUserService.getCurrentUser()));
+    }
+
     @PostMapping("/payments/release-retention")
     @PreAuthorize(PAY)
     public ResponseEntity<ContractorPayment> releaseRetention(@RequestParam Long contractorId,

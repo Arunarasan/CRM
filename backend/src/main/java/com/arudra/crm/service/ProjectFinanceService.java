@@ -233,7 +233,9 @@ public class ProjectFinanceService {
         // Revenue = what the customer has really paid us (less advance refunded); costs = what we have really paid out.
         BigDecimal refunded = nz(refundRepository.sumForProject(projectId, List.of("PAID")));
         BigDecimal customerPaid = collected.subtract(refunded);
-        BigDecimal contractorPaid = nz(contractorPaymentRepository.sumPaidForProject(projectId));
+        // Net of anything the contractor paid back to us (refund / recovery).
+        BigDecimal contractorPaid = nz(contractorPaymentRepository.sumPaidForProject(projectId))
+                .subtract(nz(contractorPaymentRepository.sumReceivedForProject(projectId)));
         BigDecimal purchasePaid = nz(purchasePaymentRepository.sumForProject(projectId));
         BigDecimal otherExpensesPaid = nz(expenseRepository.totalForProjectBySource(projectId, "MANUAL"));
         BigDecimal cashOut = contractorPaid.add(purchasePaid).add(otherExpensesPaid);
