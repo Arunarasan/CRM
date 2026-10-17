@@ -2,17 +2,14 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "@/lib/api";
 import { DashboardSummary } from "@/types/dashboard";
-import { leadApi } from "./leads/leadApi";
-import type { BoardColumn } from "./leads/constants";
-import { formatINR } from "./leads/constants";
 import { getCurrentUser } from "@/lib/currentUser";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Plus, Users, Target, IndianRupee, FolderKanban, TrendingUp, TrendingDown,
-  ArrowRight, UserPlus, FileText, FolderPlus, Wallet, Sparkles,
-  Calendar as CalendarIcon, CheckCircle2, Activity, ChevronLeft, ChevronRight,
-  MapPin, ReceiptText,
+  UserPlus, FolderPlus, Wallet, Sparkles,
+  Calendar as CalendarIcon, CheckCircle2, ChevronLeft, ChevronRight,
+  ReceiptText, UserCheck,
 } from "lucide-react";
 
 /* Compact INR for tight KPI tiles: ₹42.76 L / ₹1.20 Cr */
@@ -45,21 +42,12 @@ function Sparkline({ data, color = "#0A573B" }: { data: number[]; color?: string
   );
 }
 
-function MiniBars({ data, color = "#D9B06B" }: { data: number[]; color?: string }) {
-  const bars = data.length ? data : [3, 5, 4, 6, 5, 7, 6, 8];
-  const max = Math.max(...bars, 1);
-  return (
-    <div className="flex items-end gap-1 h-10">
-      {bars.map((v, i) => (
-        <div key={i} className="flex-1 rounded-sm" style={{ height: `${Math.max((v / max) * 100, 8)}%`, backgroundColor: color, opacity: 0.55 + (i / bars.length) * 0.45 }} />
-      ))}
-    </div>
-  );
-}
-
 /* ── Fallback data (used only if the API is unreachable) ─────────────────── */
 const FALLBACK_SUMMARY: DashboardSummary = {
   totalCustomers: 512, totalLeads: 248, activeProjects: 36, pendingTasks: 24, totalRevenue: 4275800,
+  newLeadsToday: 3, leadsInProgress: 120, projectsReadyToFit: 4, projectsInProgress: 32,
+  completedPaymentPendingCount: 5, completedPaymentPendingAmount: 640000,
+  totalEmployees: 40, presentToday: 34, onLeaveToday: 2, absentToday: 4,
   revenueData: [
     { month: "Mar", revenue: 2800000 }, { month: "Apr", revenue: 3100000 }, { month: "May", revenue: 2950000 },
     { month: "Jun", revenue: 3600000 }, { month: "Jul", revenue: 3900000 }, { month: "Aug", revenue: 4275800 },
@@ -88,25 +76,6 @@ const FALLBACK_SUMMARY: DashboardSummary = {
   ],
 };
 
-const FALLBACK_BOARD: BoardColumn[] = [
-  { key: "New", count: 48, totalValue: 0, leads: [
-    { id: 1, leadNumber: "L-1041", name: "Vignesh Kumar", city: "Chennai", leadType: "Modular Kitchen", status: "New", estimatedBudget: 650000 },
-    { id: 2, leadNumber: "L-1042", name: "Priya & Aravind", city: "OMR", leadType: "Full Home Interior", status: "New", estimatedBudget: 1800000 },
-  ] },
-  { key: "Requirement Collected", count: 36, totalValue: 0, leads: [
-    { id: 3, leadNumber: "L-1030", name: "Sreeja Narayanan", city: "ECR", leadType: "Interior + Home Theatre", status: "Site Visit Scheduled", estimatedBudget: 4200000 },
-    { id: 4, leadNumber: "L-1031", name: "Rahul TechSol", city: "T. Nagar", leadType: "Office Interiors", status: "Site Visit Scheduled", estimatedBudget: 2800000 },
-  ] },
-  { key: "Quote Building", count: 28, totalValue: 0, leads: [
-    { id: 5, leadNumber: "L-1012", name: "Lakshmi Builders", city: "GST Road", leadType: "Office Interior", status: "Quotation Sent", estimatedBudget: 12000000 },
-    { id: 6, leadNumber: "L-1013", name: "SPV Developers", city: "Adyar", leadType: "Model Flat", status: "Quotation Sent", estimatedBudget: 8500000 },
-  ] },
-  { key: "Active Projects", count: 16, totalValue: 0, leads: [
-    { id: 7, leadNumber: "L-0990", name: "Ananya Residence", city: "Anna Nagar", leadType: "Full Interior", status: "Project Confirmed", estimatedBudget: 3600000 },
-    { id: 8, leadNumber: "L-0991", name: "GreenField Infra", city: "Chennai", leadType: "Workstations", status: "Project Confirmed", estimatedBudget: 7200000 },
-  ] },
-];
-
 const QUOTES = [
   "Small improvements today, bigger spaces tomorrow.",
   "Design is not just what it looks like, it's how it works.",
@@ -134,17 +103,13 @@ const TASK_STATUS_LABEL: Record<string, string> = {
 
 export default function Dashboard() {
   const [data, setData] = useState<DashboardSummary>(FALLBACK_SUMMARY);
-  const [board, setBoard] = useState<BoardColumn[]>(FALLBACK_BOARD);
   const [isLoading, setIsLoading] = useState(true);
   const { name } = getCurrentUser();
 
   useEffect(() => {
     api.get("/dashboard/summary")
       .then((res) => { if (res.data) setData(res.data); })
-      .catch((err) => console.error("Failed to fetch dashboard summary", err));
-    leadApi.board()
-      .then((res) => { if (Array.isArray(res.data) && res.data.length) setBoard(res.data); })
-      .catch(() => {})
+      .catch((err) => console.error("Failed to fetch dashboard summary", err))
       .finally(() => setTimeout(() => setIsLoading(false), 300));
   }, []);
 
@@ -156,14 +121,6 @@ export default function Dashboard() {
   const momPct = rd.length >= 2 && rd[rd.length - 2].revenue > 0
     ? Math.round(((rd[rd.length - 1].revenue - rd[rd.length - 2].revenue) / rd[rd.length - 2].revenue) * 100)
     : null;
-
-  const col = (k: string) => board.find((c) => c.key === k) || { key: k, count: 0, totalValue: 0, leads: [] };
-  const pipeline = [
-    { label: "New Leads", data: col("New"), won: false },
-    { label: "Requirement Collected", data: col("Requirement Collected"), won: false },
-    { label: "Quote Building", data: col("Quote Building"), won: false },
-    { label: "Active Projects", data: col("Active Projects"), won: true },
-  ];
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-[1600px] mx-auto">
@@ -182,7 +139,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_340px] gap-6 items-start">
         <div className="space-y-6 min-w-0">
           {/* KPI cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {/* Featured — Total Leads */}
             <Link to="/leads" className="rounded-[14px] p-5 text-white shadow-md relative overflow-hidden block transition-shadow hover:shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-gold" style={{ background: "linear-gradient(155deg, #06452F 0%, #003522 60%, #012316 100%)" }}>
               <div className="flex items-start justify-between">
@@ -190,11 +147,21 @@ export default function Dashboard() {
               </div>
               <p className="text-sm text-[#B8CEC3] mt-4">Total Leads</p>
               <p className="text-3xl font-bold tabular-nums mt-1">{data.totalLeads.toLocaleString("en-IN")}</p>
-              <div className="mt-3"><MiniBars data={(data.leadPipeline || []).map((p) => p.value)} /></div>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <div className="rounded-lg bg-white/10 px-3 py-2"><p className="text-lg font-bold tabular-nums">{data.newLeadsToday}</p><p className="text-[11px] text-[#B8CEC3]">New today</p></div>
+                <div className="rounded-lg bg-white/10 px-3 py-2"><p className="text-lg font-bold tabular-nums">{data.leadsInProgress}</p><p className="text-[11px] text-[#B8CEC3]">Need follow-up</p></div>
+              </div>
             </Link>
 
-            <KpiCard to="/projects" title="Active Projects" value={data.activeProjects.toLocaleString("en-IN")} icon={FolderKanban} subtitle="In progress"
-              chart={<Sparkline data={(data.activeProjectProgress || []).map((p) => p.progress)} color="#2F8F65" />} />
+            <KpiCard to="/projects" title="Active Projects" value={data.activeProjects.toLocaleString("en-IN")} icon={FolderKanban}
+              extra={<SplitStats a={{ value: data.projectsReadyToFit, label: "Ready to fit" }} b={{ value: data.projectsInProgress, label: "In progress" }} />} />
+
+            <KpiCard to="/projects" title="Completed · Payment Pending" value={data.completedPaymentPendingCount.toLocaleString("en-IN")} icon={ReceiptText}
+              subtitle={`${compactINR(data.completedPaymentPendingAmount || 0)} to collect`} />
+
+            <KpiCard to="/hr/attendance" title="Attendance Today" value={`${data.presentToday} / ${data.totalEmployees}`} icon={UserCheck}
+              extra={<SplitStats a={{ value: data.presentToday, label: "Present" }} b={{ value: data.absentToday, label: "Absent" }} />}
+              subtitle={data.onLeaveToday ? `${data.onLeaveToday} on leave` : undefined} />
 
             <KpiCard to="/finance" title="Monthly Revenue" value={compactINR(data.totalRevenue)} icon={IndianRupee}
               subtitle={momPct !== null ? "vs last month" : "This month"} trend={momPct}
@@ -204,38 +171,6 @@ export default function Dashboard() {
               chart={<Sparkline data={(data.leadPipeline || []).map((p) => p.value)} color="#4779A8" />} />
           </div>
 
-          {/* Lead Pipeline */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-4">
-              <CardTitle className="text-lg">Lead Pipeline</CardTitle>
-              <Link to="/leads" className="text-sm font-medium text-primary hover:text-gold inline-flex items-center gap-1">View All <ArrowRight className="w-4 h-4" /></Link>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-                {pipeline.map((c) => (
-                  <div key={c.label} className={`rounded-xl p-3 ${c.won ? "bg-secondary" : "bg-muted/60"}`}>
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="text-sm font-semibold text-foreground">{c.label}</span>
-                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${c.won ? "bg-success/15 text-success" : "bg-gold/20 text-gold-dark"}`} style={c.won ? {} : { color: "#6D512A" }}>{c.data.count}</span>
-                    </div>
-                    <div className="space-y-2">
-                      {c.data.leads.slice(0, 2).map((l) => (
-                        <Link key={l.id} to={`/leads/${l.id}`} className="block bg-card rounded-lg border border-border p-3 hover:shadow-sm hover:border-gold/40 transition-all">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="font-semibold text-sm text-foreground truncate">{l.name}</span>
-                            {c.won && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-success/15 text-success shrink-0">Won</span>}
-                          </div>
-                          <p className="text-xs text-muted-foreground truncate mt-0.5">{[l.leadType, l.city].filter(Boolean).join(" · ")}</p>
-                          <p className="text-sm font-bold text-primary mt-1.5">{formatINR(l.estimatedBudget)}</p>
-                        </Link>
-                      ))}
-                      {c.data.leads.length === 0 && <p className="text-xs text-muted-foreground text-center py-4">No leads</p>}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
         </div>
 
         {/* Right rail */}
@@ -259,24 +194,6 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Recent Activity */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-3">
-              <CardTitle className="text-base flex items-center gap-2"><Activity className="w-4 h-4 text-gold" /> Recent Activity</CardTitle>
-              <Link to="/notifications" className="text-xs font-medium text-primary hover:text-gold">View All</Link>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {buildActivity(data).map((a, i) => (
-                <div key={i} className="flex items-start gap-3">
-                  <span className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${a.tint}`}><a.icon className="w-4 h-4" /></span>
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-foreground leading-tight">{a.title}</p>
-                    <p className="text-xs text-muted-foreground truncate">{a.subtitle}</p>
-                  </div>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
         </div>
       </div>
 
@@ -358,8 +275,18 @@ export default function Dashboard() {
 }
 
 /* ── Sub-components ──────────────────────────────────────────────────────── */
-function KpiCard({ title, value, icon: Icon, subtitle, trend, chart, to }: {
-  title: string; value: string; icon: typeof Users; subtitle?: string; trend?: number | null; chart?: React.ReactNode; to?: string;
+function SplitStats({ a, b }: { a: { value: number; label: string }; b: { value: number; label: string } }) {
+  return (
+    <div className="mt-3 grid grid-cols-2 gap-2">
+      {[a, b].map((x) => (
+        <div key={x.label} className="rounded-lg bg-muted/60 px-3 py-2"><p className="text-lg font-bold tabular-nums text-foreground">{x.value}</p><p className="text-[11px] text-muted-foreground">{x.label}</p></div>
+      ))}
+    </div>
+  );
+}
+
+function KpiCard({ title, value, icon: Icon, subtitle, trend, chart, extra, to }: {
+  title: string; value: string; icon: typeof Users; subtitle?: string; trend?: number | null; chart?: React.ReactNode; extra?: React.ReactNode; to?: string;
 }) {
   const body = (
     <>
@@ -370,7 +297,8 @@ function KpiCard({ title, value, icon: Icon, subtitle, trend, chart, to }: {
         </div>
         <span className="w-11 h-11 rounded-xl bg-gold/12 flex items-center justify-center shrink-0"><Icon className="w-5 h-5 text-gold" /></span>
       </div>
-      <div className="mt-3 flex items-end justify-between gap-2">
+      {extra}
+      {(subtitle || chart || (trend !== undefined && trend !== null)) && <div className="mt-3 flex items-end justify-between gap-2">
         <p className="text-xs text-muted-foreground flex items-center gap-1">
           {trend !== undefined && trend !== null && (
             <span className={`inline-flex items-center gap-0.5 font-semibold ${trend >= 0 ? "text-success" : "text-destructive"}`}>
@@ -380,7 +308,7 @@ function KpiCard({ title, value, icon: Icon, subtitle, trend, chart, to }: {
           {subtitle}
         </p>
         {chart && <div className="w-24 shrink-0">{chart}</div>}
-      </div>
+      </div>}
     </>
   );
   if (to) {
@@ -449,16 +377,4 @@ function MiniCalendar({ tasks }: { tasks: DashboardSummary["todaysTasks"] }) {
       </CardContent>
     </Card>
   );
-}
-
-/* Build a real activity feed from whatever the summary provides. */
-function buildActivity(data: DashboardSummary) {
-  const items: { icon: typeof Users; tint: string; title: string; subtitle: string }[] = [];
-  (data.recentCustomers || []).slice(0, 2).forEach((c) =>
-    items.push({ icon: UserPlus, tint: "bg-success/12 text-success", title: "New customer added", subtitle: `${c.name}${c.company ? " · " + c.company : ""}` }));
-  (data.todaysFollowUps || []).slice(0, 1).forEach((f) =>
-    items.push({ icon: FileText, tint: "bg-gold/15 text-gold-dark", title: "Follow-up due", subtitle: `${f.customerName} · ${f.status}` }));
-  (data.todaysTasks || []).slice(0, 2).forEach((t) =>
-    items.push({ icon: MapPin, tint: "bg-info/12 text-info", title: t.title, subtitle: t.priority || t.status }));
-  return items.slice(0, 5);
 }

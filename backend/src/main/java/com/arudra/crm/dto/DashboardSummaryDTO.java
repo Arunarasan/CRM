@@ -17,6 +17,22 @@ public class DashboardSummaryDTO {
     private long pendingTasks;
     private BigDecimal totalRevenue; // Sum of all APPROVED quotations
 
+    // Card breakdowns
+    private long newLeadsToday;
+    private long leadsInProgress;
+    private long projectsReadyToFit;
+    private long projectsInProgress;
+
+    // Completed projects that still have money owed
+    private long completedPaymentPendingCount;
+    private BigDecimal completedPaymentPendingAmount;
+
+    // Employee attendance today
+    private long totalEmployees;
+    private long presentToday;
+    private long onLeaveToday;
+    private long absentToday;
+
     // Charts data
     private List<RevenueData> revenueData; // Monthly revenue
     private List<LeadStatusData> leadPipeline; // Leads grouped by status

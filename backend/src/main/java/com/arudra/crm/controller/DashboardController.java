@@ -42,6 +42,19 @@ public class DashboardController {
     @Autowired
     private QuotationRepository quotationRepository;
 
+    @Autowired
+    private InvoiceRepository invoiceRepository;
+
+    @Autowired
+    private EmployeeRepository employeeRepository;
+
+    @Autowired
+    private AttendanceRepository attendanceRepository;
+
+    @Autowired
+    private com.arudra.crm.service.SupplyInstallService supplyInstallService;
+
+
     @GetMapping("/summary")
     @PreAuthorize(OFFICE)
     public ResponseEntity<ApiResponse<DashboardSummaryDTO>> getDashboardSummary() {
@@ -68,6 +81,53 @@ public class DashboardController {
                 .map(obj -> new DashboardSummaryDTO.LeadStatusData((String) obj[0], ((Number) obj[1]).longValue()))
                 .collect(Collectors.toList());
         summary.setLeadPipeline(leadData);
+
+        // 2b. Card breakdowns
+        summary.setNewLeadsToday(leadRepository.countCreatedSince(LocalDate.now().atStartOfDay()));
+        long leadsInProgress = leadRepository.countNeedingFollowUp(LocalDate.now());
+        summary.setLeadsInProgress(leadsInProgress);
+
+        long readyToFit = 0;
+        for (Project p : projectRepository.findActive()) {
+            try {
+                Object sm = supplyInstallService.getBoard(p.getId()).get("summary");
+                if (sm instanceof java.util.Map<?, ?> m && Boolean.TRUE.equals(m.get("readyToInstall"))) readyToFit++;
+            } catch (RuntimeException ignored) {
+                // one bad project must not break the dashboard
+            }
+        }
+        summary.setProjectsReadyToFit(readyToFit);
+        summary.setProjectsInProgress(Math.max(0, summary.getActiveProjects() - readyToFit));
+
+        // Completed projects with unpaid invoices
+        List<Long> finishedIds = projectRepository.findFinishedIds();
+        java.util.Map<Long, BigDecimal> owed = new java.util.HashMap<>();
+        if (!finishedIds.isEmpty()) {
+            for (Invoice inv : invoiceRepository.findByProjectIdIn(finishedIds)) {
+                if (Boolean.TRUE.equals(inv.getIsDeleted()) || inv.getProject() == null) continue;
+                if ("PAID".equalsIgnoreCase(inv.getStatus()) || "CANCELLED".equalsIgnoreCase(inv.getStatus())) continue;
+                BigDecimal bal = inv.getBalanceDue() != null ? inv.getBalanceDue()
+                        : (inv.getTotalAmount() != null ? inv.getTotalAmount() : BigDecimal.ZERO)
+                            .subtract(inv.getAmountPaid() != null ? inv.getAmountPaid() : BigDecimal.ZERO);
+                if (bal.signum() > 0) owed.merge(inv.getProject().getId(), bal, BigDecimal::add);
+            }
+        }
+        summary.setCompletedPaymentPendingCount(owed.size());
+        summary.setCompletedPaymentPendingAmount(owed.values().stream().reduce(BigDecimal.ZERO, BigDecimal::add));
+
+        // Attendance today (active employees only)
+        long totalEmp = employeeRepository.countByStatusAndIsDeletedFalse("ACTIVE");
+        long present = 0, leave = 0;
+        for (Object[] row : attendanceRepository.countByStatusForDate(LocalDate.now())) {
+            String st = String.valueOf(row[0]).toUpperCase();
+            long n = ((Number) row[1]).longValue();
+            if ("PRESENT".equals(st) || "HALF_DAY".equals(st)) present += n;
+            else if ("LEAVE".equals(st)) leave += n;
+        }
+        summary.setTotalEmployees(totalEmp);
+        summary.setPresentToday(present);
+        summary.setOnLeaveToday(leave);
+        summary.setAbsentToday(Math.max(0, totalEmp - present - leave));
 
         // 3. Lists
         LocalDate today = LocalDate.now();

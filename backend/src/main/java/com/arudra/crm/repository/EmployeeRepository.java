@@ -10,6 +10,7 @@ import java.util.List;
 
 @Repository
 public interface EmployeeRepository extends JpaRepository<Employee, Long> {
+    long countByStatusAndIsDeletedFalse(String status);
     Page<Employee> findAllByOrderByFirstNameAsc(Pageable pageable);
     List<Employee> findByDepartmentId(Long departmentId);
     List<Employee> findByPhoneIsNotNullAndIsDeletedFalse();

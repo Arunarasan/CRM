@@ -19,6 +19,13 @@ public interface LeadRepository extends JpaRepository<Lead, Long>, JpaSpecificat
            "LOWER(l.status) LIKE LOWER(CONCAT('%', :search, '%'))")
     Page<Lead> searchLeads(@Param("search") String search, Pageable pageable);
 
+    @Query("SELECT COUNT(l) FROM Lead l WHERE l.createdAt >= :from")
+    long countCreatedSince(@Param("from") java.time.LocalDateTime from);
+
+    @Query("SELECT COUNT(l) FROM Lead l WHERE l.nextFollowUpDate IS NOT NULL AND l.nextFollowUpDate <= :today "
+            + "AND l.status NOT IN ('Lost', 'Cancelled', 'Completed', 'On Hold', 'Project Confirmed', 'Project Started')")
+    long countNeedingFollowUp(@Param("today") java.time.LocalDate today);
+
     @Query("SELECT l.status, COUNT(l) FROM Lead l GROUP BY l.status")
     java.util.List<Object[]> countLeadsByStatus();
 

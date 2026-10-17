@@ -41,6 +41,16 @@ export interface DashboardSummary {
   activeProjects: number;
   pendingTasks: number;
   totalRevenue: number;
+  newLeadsToday: number;
+  leadsInProgress: number;
+  projectsReadyToFit: number;
+  projectsInProgress: number;
+  completedPaymentPendingCount: number;
+  completedPaymentPendingAmount: number;
+  totalEmployees: number;
+  presentToday: number;
+  onLeaveToday: number;
+  absentToday: number;
   revenueData: RevenueData[];
   leadPipeline: LeadStatusData[];
   todaysTasks: TaskSummary[];

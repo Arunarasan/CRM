@@ -37,6 +37,9 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
     @Query("SELECT p FROM Project p WHERE p.status IS NULL OR UPPER(p.status) NOT IN ('COMPLETED', 'CLOSED', 'CANCELLED')")
     java.util.List<Project> findActive();
 
+    @Query("SELECT p.id FROM Project p WHERE UPPER(p.status) IN ('COMPLETED', 'CLOSED')")
+    java.util.List<Long> findFinishedIds();
+
     /**
      * "Team not assigned": an active project (not completed/closed/cancelled) with nobody on the
      * delivery team — no project manager, site engineer, supervisor and no assigned employees.
