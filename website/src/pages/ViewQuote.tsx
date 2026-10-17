@@ -86,14 +86,41 @@ const date = (d?: string | null) =>
 
 type Site = ReturnType<typeof useSite>
 
+/** Live address + phone numbers typed on the letterhead art (same boxes as frontend/src/lib/letterhead.ts). */
+const LH_W = 2000
+const LH = { address: { x: 1122, y: 148, w: 640, h: 120, font: 31 }, phones: { x: 1112, y: 298, w: 660, h: 64, font: 30 }, gap: 40, labelGap: 12 }
+function LetterheadText({ site }: { site: Site }) {
+  const cq = (px: number) => `${(px / LH_W) * 100}cqw`
+  const box = (b: { x: number; y: number; w: number; h: number; font: number }): React.CSSProperties => ({
+    position: 'absolute', display: 'flex', left: cq(b.x), top: cq(b.y), width: cq(b.w), height: cq(b.h), fontSize: cq(b.font),
+    lineHeight: 1.3, color: '#1d2a2c',
+  })
+  const phones = [site.phone, site.phone2].map((p) => (p || '').trim()).filter(Boolean)
+  return (
+    <>
+      <div style={{ ...box(LH.address), flexDirection: 'column', justifyContent: 'center', fontWeight: 500 }}>
+        {(site.address || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean).join(' ')}
+      </div>
+      {phones.length > 0 && (
+        <div style={{ ...box(LH.phones), alignItems: 'center', gap: cq(LH.gap), fontWeight: 600, whiteSpace: 'nowrap' }}>
+          <span style={{ marginRight: cq(LH.labelGap - LH.gap) }}>Ph:</span>
+          {phones.map((p) => <span key={p}>{p}</span>)}
+        </div>
+      )}
+    </>
+  )
+}
+
 /* ---------- Layout shell: brand only, no site navigation ---------- */
 function Shell({ site, children }: { site: Site; children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-ivory print:bg-white">
       {/* Letterhead banner — the same one at the top of the printed quotation and the PDF */}
       <header className="mx-auto max-w-4xl px-4 pt-4 print:px-0 print:pt-0">
-        <img src="/quote-header.jpg" alt={`${site.name} — Interior & Decor Solutions`}
-          className="block h-auto w-full rounded-xl shadow-sm print:rounded-none print:shadow-none" />
+        <div className="relative overflow-hidden rounded-xl shadow-sm print:rounded-none print:shadow-none" style={{ containerType: 'inline-size' }}>
+          <img src="/quote-header.jpg" alt={`${site.name} — Interior & Decor Solutions`} className="block h-auto w-full" />
+          <LetterheadText site={site} />
+        </div>
       </header>
       <main className="px-4 pt-4 print:px-0 print:pt-3">{children}</main>
     </div>

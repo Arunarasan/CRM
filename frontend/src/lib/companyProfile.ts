@@ -7,6 +7,8 @@ export interface CompanyProfile {
   address?: string;
   gstin?: string;
   phone?: string;
+  /** Second contact number, shown beside the first on the letterhead. */
+  phone2?: string;
   email?: string;
 }
 
@@ -14,7 +16,7 @@ export interface CompanyProfile {
 export const COMPANY_FALLBACK: CompanyProfile = {
   name: "JB Decor",
   tagline: "Crafted for Quality. Styled for You.",
-  address: "JB Decor, 64/82, North Car Street, Chidambaram, Cuddalore - 608 001",
+  address: "JB Decor, 64/82, North Car Street, Chidambaram, Cuddalore - 608 001, Tamil Nadu, India",
   phone: "+91 95248 66006",
   email: "jbdecorcdm@gmail.com",
 };
@@ -38,6 +40,7 @@ export function fetchCompanyProfile(): Promise<CompanyProfile> {
         address: m["contact.address"]?.trim() || COMPANY_FALLBACK.address,
         gstin: m["company.gst"]?.trim() || "",
         phone: m["contact.phone"]?.trim() || COMPANY_FALLBACK.phone,
+        phone2: m["contact.phone2"]?.trim() || "",
         email: m["contact.email"]?.trim() || COMPANY_FALLBACK.email,
       };
       return cache;

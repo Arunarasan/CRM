@@ -6,7 +6,8 @@ import {
 } from "@/types/quotation";
 import api from "@/lib/api";
 import { resolveFileUrl } from "@/lib/uploadFile";
-import { fetchBankDetails, fetchCompanyProfile, type BankDetails } from "@/lib/companyProfile";
+import { fetchBankDetails, fetchCompanyProfile, type BankDetails, type CompanyProfile } from "@/lib/companyProfile";
+import { LH, LH_H, LH_W, addressText, phoneNumbers } from "@/lib/letterhead";
 import type { Invoice, InvoiceItem } from "@/types/finance";
 import { fetchDocDesign, parseDesign, type DocKind } from "@/lib/docDesign";
 
@@ -120,7 +121,8 @@ async function loadDocAssets(imageUrls: string[], upiAmount: number, upiNote: st
   }));
   const bank = loadBank(upiAmount, upiNote).then((b) => Object.assign(out, b));
   const design = fetchDocDesign(kind).then((d) => { out[DESIGN_KEY] = JSON.stringify(d); });
-  await Promise.all([header, fonts, bank, design, ...urls.map(async (url) => {
+  const company = fetchCompanyProfile().then((c) => { out[COMPANY_KEY] = JSON.stringify(c); });
+  await Promise.all([header, fonts, bank, design, company, ...urls.map(async (url) => {
     try {
       // Our own stored photos come through the API (the storage bucket sends no CORS headers, so
       // a canvas can't read them directly); other links are tried as-is.
@@ -157,9 +159,11 @@ async function loadDocAssets(imageUrls: string[], upiAmount: number, upiNote: st
 const HEADER_KEY = "__quote_header__";
 /** The saved document design (Website › Document Design), as JSON. */
 export const DESIGN_KEY = "__design__";
+/** The company profile (address, phones) typed onto the letterhead, as JSON. */
+const COMPANY_KEY = "__company__";
 const HEADER_URL = `${import.meta.env.BASE_URL}quote-header.jpg`;
-/** Banner width : height (1536 × 292). */
-const HEADER_RATIO = 292 / 1536;
+/** Banner height : width. */
+const HEADER_RATIO = LH_H / LH_W;
 
 async function loadHeader(): Promise<string | null> {
   try {
@@ -491,6 +495,32 @@ function renderDocPdf(spec: DocSpec, assets: Record<string, string>): jsPDF {
   if (header) {
     const h = pageW * HEADER_RATIO;
     try { doc.addImage(header, "JPEG", 0, 0, pageW, h); y = h + 5; } catch { /* plain header */ }
+    // Live address + phone numbers on the artwork (same boxes as the print preview).
+    let co: CompanyProfile | undefined;
+    try { co = assets[COMPANY_KEY] ? JSON.parse(assets[COMPANY_KEY]) : undefined; } catch { /* no text */ }
+    if (co) {
+      const mm = pageW / LH_W;                 // artwork px → mm
+      const pt = (px: number) => px * mm * 2.8346; // px → pt
+      color([29, 42, 44]);
+      const a = LH.address;
+      font("semi", pt(a.font));
+      const lines = (doc.splitTextToSize(addressText(co), a.w * mm) as string[]).slice(0, 3);
+      const lh = a.font * a.line * mm;
+      const top = (a.y + a.h / 2) * mm - (lines.length * lh) / 2 + lh * 0.72;
+      lines.forEach((l, i) => doc.text(l, a.x * mm, top + i * lh));
+      const phones = phoneNumbers(co);
+      if (phones.length) {
+        const p = LH.phones;
+        let size = pt(p.font);
+        font("bold", size);
+        const items = ["Ph:", ...phones];
+        const gapAfter = (i: number) => (i === 0 ? LH.labelGap : LH.gap) * mm;
+        const widthOf = () => items.reduce((t, n, i) => t + doc.getTextWidth(n) + (i < items.length - 1 ? gapAfter(i) : 0), 0);
+        while (widthOf() > p.w * mm && size > 8) { size -= 0.5; font("bold", size); }
+        let x = p.x * mm;
+        items.forEach((n, i) => { doc.text(n, x, (p.y + p.h / 2) * mm + size * 0.352 * 0.36); x += doc.getTextWidth(n) + gapAfter(i); });
+      }
+    }
   }
 
   // ---- Title + number · info cards ----

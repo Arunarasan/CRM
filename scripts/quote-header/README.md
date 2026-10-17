@@ -1,12 +1,9 @@
-# Quotation letterhead
+# Quotation / invoice letterhead
 
-`quote-header.jpg` (top of the printed quotation, the PDF and the customer's quote link) is made here:
+`banner-art.png` is the artwork (logo, curtains, pin icon, gold rule) with **no address or phone text**;
+`frontend/public/quote-header.jpg` and `website/public/quote-header.jpg` are its JPEG copies (2000 × 382).
+The address and phone numbers are typed on top by the app from Settings → Company
+(`contact.address`, `contact.phone`, `contact.phone2`). Where they sit: `frontend/src/lib/letterhead.ts`
+(the website copy is in `website/src/pages/ViewQuote.tsx`).
 
-- `base.jpg` — the banner artwork (background, gold curve, services strip)
-- `logo.png` — the company logo (same as `website/public/jb-decor-logo.png`)
-- `details.json` — address, phone, email, website typed onto the banner
-
-To change any of them, edit the file and run (needs Node + Playwright with Chromium):
-
-    cd scripts/quote-header && node render.cjs && convert out.png -quality 90 ../../frontend/public/quote-header.jpg \
-      && cp ../../frontend/public/quote-header.jpg ../../website/public/quote-header.jpg && rm out.png
+To change the artwork, replace the three files with a new image of the same size (leave the text areas blank).

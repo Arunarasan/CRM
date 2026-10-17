@@ -18,6 +18,7 @@ import { DESIGN_KEY, buildQuotationPdf, loadPdfImages } from "@/lib/quotationPdf
 import ShareQuoteDialog, { type PreparedShare } from "@/pages/leads/quote/ShareQuoteDialog";
 import { colorsOf, useLineProducts } from "@/pages/leads/quote/productCells";
 import { fetchBankDetails, fetchCompanyProfile, type BankDetails, type CompanyProfile } from "@/lib/companyProfile";
+import { LH, LH_W, addressText, phoneNumbers } from "@/lib/letterhead";
 import { lineTotal, pricingPatch, quoteTotals, readPricing, type QuotePricing } from "./quotationPricing";
 import { unitDef } from "@/lib/units";
 import { DEFAULT_DESIGN, fetchDocDesign, type DocDesign } from "@/lib/docDesign";
@@ -251,6 +252,7 @@ export function QuotationPrintView({ quotationId, onClose, onSaved, readOnly, em
           {D.letterhead && (
             <header className="qp-banner">
               <img src={QUOTE_HEADER} alt={`${company.name} — Interior & Decor Solutions`} />
+              <LetterheadText company={company} />
             </header>
           )}
 
@@ -529,6 +531,26 @@ const VIEW_OPTIONS: [(keyof DocDesign)[], string][] = [
 ];
 
 const WEBSITE = "https://jbdecorcdm.com";
+
+/** The live address and phone numbers typed onto the letterhead artwork (positions: lib/letterhead.ts). */
+function LetterheadText({ company }: { company: CompanyProfile }) {
+  const cq = (px: number) => `${(px / LH_W) * 100}cqw`;
+  const box = (b: { x: number; y: number; w: number; h: number; font: number }) => ({
+    left: cq(b.x), top: cq(b.y), width: cq(b.w), height: cq(b.h), fontSize: cq(b.font),
+  });
+  const phones = phoneNumbers(company);
+  return (
+    <>
+      <div className="qp-lh" style={{ ...box(LH.address), fontWeight: 500 }}>{addressText(company)}</div>
+      {phones.length > 0 && (
+        <div className="qp-lh" style={{ ...box(LH.phones), fontWeight: 600, flexDirection: "row", alignItems: "center", gap: cq(LH.gap), whiteSpace: "nowrap" }}>
+          <span style={{ marginRight: cq(LH.labelGap - LH.gap) }}>Ph:</span>
+          {phones.map((p) => <span key={p}>{p}</span>)}
+        </div>
+      )}
+    </>
+  );
+}
 /** The letterhead banner at the top of the quotation (also used by the PDF and the customer link page). */
 const QUOTE_HEADER = `${import.meta.env.BASE_URL}quote-header.jpg`;
 /** Category header tints, cycled. */
@@ -585,7 +607,8 @@ const QP_CSS = `
   box-shadow: 0 10px 40px rgba(15,42,51,.15); border-radius: 4px; overflow: hidden;
   -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 .qp * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-.qp-banner { display:block; line-height:0; background:#fff; }
+.qp-banner { display:block; line-height:0; background:#fff; position:relative; container-type:inline-size; }
+.qp-lh { position:absolute; display:flex; flex-direction:column; justify-content:center; line-height:1.3; color:#1d2a2c; font-family:Poppins,Inter,system-ui,sans-serif; }
 .qp-banner img { display:block; width:100%; height:auto; }
 .qp-body { padding: 26px 30px 26px; flex:1; display:flex; flex-direction:column; }
 .qp-head { display:flex; gap:10px; align-items:stretch; margin-bottom: 16px; }

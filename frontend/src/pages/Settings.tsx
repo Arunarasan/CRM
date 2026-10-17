@@ -110,6 +110,7 @@ const COMPANY_KEYS = {
   businessName: 'brand.name',
   tagline: 'brand.tagline',
   contactPhone: 'contact.phone',
+  contactPhone2: 'contact.phone2',
   contactEmail: 'contact.email',
   address: 'contact.address',
   gst: 'company.gst',
@@ -163,6 +164,7 @@ function CompanyTab() {
         <TextField label={t('settings.company.businessName')} value={values[COMPANY_KEYS.businessName] ?? ''} onChange={(v) => set(COMPANY_KEYS.businessName, v)} />
         <TextField label={t('settings.company.tagline')} value={values[COMPANY_KEYS.tagline] ?? ''} onChange={(v) => set(COMPANY_KEYS.tagline, v)} />
         <TextField label={t('settings.company.contactPhone')} type="tel" value={values[COMPANY_KEYS.contactPhone] ?? ''} onChange={(v) => set(COMPANY_KEYS.contactPhone, v)} />
+        <TextField label="Second phone (letterhead)" type="tel" value={values[COMPANY_KEYS.contactPhone2] ?? ''} onChange={(v) => set(COMPANY_KEYS.contactPhone2, v)} />
         <TextField label={t('settings.company.contactEmail')} type="email" value={values[COMPANY_KEYS.contactEmail] ?? ''} onChange={(v) => set(COMPANY_KEYS.contactEmail, v)} />
         <TextField label={t('settings.company.gst')} value={values[COMPANY_KEYS.gst] ?? ''} onChange={(v) => set(COMPANY_KEYS.gst, v)} />
         <TextField label="Default service warranty (months)" type="number" value={values[COMPANY_KEYS.serviceWarrantyMonths] ?? ''} onChange={(v) => set(COMPANY_KEYS.serviceWarrantyMonths, v)} />

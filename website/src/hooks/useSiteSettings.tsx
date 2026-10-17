@@ -16,6 +16,8 @@ export interface SiteConfig {
   positioning: string
   whatsappNumber: string
   phone: string
+  /** Second number shown on the quotation letterhead (blank = none). */
+  phone2: string
   email: string
   address: string
   city: string
@@ -43,6 +45,7 @@ function merge(s: Record<string, string>): SiteConfig {
     tagline: g('brand.tagline', base.tagline),
     positioning: g('brand.positioning', base.positioning),
     phone: g('contact.phone', base.phone),
+    phone2: s['contact.phone2']?.trim() || '',
     email: g('contact.email', base.email),
     whatsappNumber: g('contact.whatsapp', base.whatsappNumber),
     address: g('contact.address', base.address),

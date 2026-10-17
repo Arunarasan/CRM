@@ -40,6 +40,7 @@ export const site = {
   positioning: 'Crafting Spaces. Defining Luxury.',
   whatsappNumber: import.meta.env.VITE_WHATSAPP_NUMBER || '919524866006',
   phone: import.meta.env.VITE_CONTACT_PHONE || '+91 95248 66006',
+  phone2: '',
   email: import.meta.env.VITE_CONTACT_EMAIL || 'jbdecorcdm@gmail.com',
   address: import.meta.env.VITE_CONTACT_ADDRESS || 'JB Decor, 64/82, North Car Street, Chidambaram, Cuddalore - 608 001',
   // Structured address parts power LocalBusiness geo/local-pack signals. Blank by default —
