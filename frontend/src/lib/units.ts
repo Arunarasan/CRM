@@ -19,41 +19,41 @@ export const UNIT_DEFS: UnitDef[] = [
   { code: "Cm", label: "Centimetre (cm)", kind: "length", size: "cm" },
   { code: "Inch", label: "Inch (in)", kind: "length", size: "in" },
   { code: "Ft", label: "Feet (ft)", kind: "length", size: "ft" },
-  { code: "Rft", label: "Running feet (rft)", kind: "length", size: "ft" },
   { code: "Mtr", label: "Metre (m)", kind: "length", size: "m" },
+  // Area (2D)
+  { code: "Sqft", label: "Square feet (sqft)", kind: "area", size: "ft" },
+  { code: "Sqm", label: "Square metre (sqm)", kind: "area", size: "m" },
+  // Count
+  { code: "Roll", label: "Roll", kind: "count" },
+  { code: "Nos", label: "Numbers (nos)", kind: "count" },
+  { code: "Set", label: "Set", kind: "count" },
+  { code: "Pcs", label: "Pieces (pcs)", kind: "count" },
+  { code: "Box", label: "Box", kind: "count" },
+];
+
+/** Units no longer offered in dropdowns but still understood, so older saved quotes/BOQs keep calculating. */
+const LEGACY_DEFS: UnitDef[] = [
+  { code: "Rft", label: "Running feet (rft)", kind: "length", size: "ft" },
   { code: "Rmt", label: "Running metre (rmt)", kind: "length", size: "m" },
   { code: "Yard", label: "Yard (yd)", kind: "length", size: "yd" },
-  // Area (2D)
   { code: "Sq Mm", label: "Square mm", kind: "area", size: "mm" },
   { code: "Sq Cm", label: "Square cm", kind: "area", size: "cm" },
   { code: "Sq Inch", label: "Square inch", kind: "area", size: "in" },
-  { code: "Sqft", label: "Square feet (sqft)", kind: "area", size: "ft" },
-  { code: "Sqm", label: "Square metre (sqm)", kind: "area", size: "m" },
   { code: "Sq Yard", label: "Square yard", kind: "area", size: "yd" },
-  // Volume (3D)
   { code: "Cu Cm", label: "Cubic cm", kind: "volume", size: "cm" },
   { code: "Cft", label: "Cubic feet (cft)", kind: "volume", size: "ft" },
   { code: "Cum", label: "Cubic metre (cum)", kind: "volume", size: "m" },
-  // Count
-  { code: "Nos", label: "Numbers (nos)", kind: "count" },
-  { code: "Pcs", label: "Pieces (pcs)", kind: "count" },
-  { code: "Set", label: "Set", kind: "count" },
   { code: "Pair", label: "Pair", kind: "count" },
   { code: "Panel", label: "Panel", kind: "count" },
-  { code: "Box", label: "Box", kind: "count" },
   { code: "Pack", label: "Pack", kind: "count" },
   { code: "Bag", label: "Bag", kind: "count" },
-  { code: "Roll", label: "Roll", kind: "count" },
   { code: "Sheet", label: "Sheet", kind: "count" },
   { code: "Bundle", label: "Bundle", kind: "count" },
-  // Weight
   { code: "Gram", label: "Gram (g)", kind: "weight" },
   { code: "Kg", label: "Kilogram (kg)", kind: "weight" },
   { code: "Ton", label: "Tonne", kind: "weight" },
-  // Liquid
   { code: "Ml", label: "Millilitre (ml)", kind: "liquid" },
   { code: "Ltr", label: "Litre (ltr)", kind: "liquid" },
-  // Labour / other
   { code: "Hour", label: "Hour", kind: "other" },
   { code: "Day", label: "Day", kind: "other" },
   { code: "Visit", label: "Visit", kind: "other" },
@@ -62,13 +62,9 @@ export const UNIT_DEFS: UnitDef[] = [
 ];
 
 export const UNIT_GROUPS: { kind: UnitKind; label: string }[] = [
-  { kind: "length", label: "Length (1D)" },
-  { kind: "area", label: "Area (2D)" },
-  { kind: "volume", label: "Volume (3D)" },
+  { kind: "length", label: "Length" },
+  { kind: "area", label: "Area" },
   { kind: "count", label: "Count" },
-  { kind: "weight", label: "Weight" },
-  { kind: "liquid", label: "Liquid" },
-  { kind: "other", label: "Labour / other" },
 ];
 
 /** Every unit code, in display order. */
@@ -108,7 +104,7 @@ const ALIASES: Record<string, string> = {
   lot: "Lot", lumpsum: "Lump Sum", ls: "Lump Sum",
 };
 
-const BY_CODE = new Map(UNIT_DEFS.map((u) => [key(u.code), u]));
+const BY_CODE = new Map([...UNIT_DEFS, ...LEGACY_DEFS].map((u) => [key(u.code), u]));
 
 /** The catalogue entry for any spelling of a unit, or undefined for a custom unit. */
 export function unitDef(unit?: string | null): UnitDef | undefined {
