@@ -52,7 +52,7 @@ public class DashboardController {
     private AttendanceRepository attendanceRepository;
 
     @Autowired
-    private com.arudra.crm.service.SupplyInstallService supplyInstallService;
+    private com.arudra.crm.service.ProjectWorkService projectWorkService;
 
 
     @GetMapping("/summary")
@@ -90,8 +90,8 @@ public class DashboardController {
         long readyToFit = 0;
         for (Project p : projectRepository.findActive()) {
             try {
-                Object sm = supplyInstallService.getBoard(p.getId()).get("summary");
-                if (sm instanceof java.util.Map<?, ?> m && Boolean.TRUE.equals(m.get("readyToInstall"))) readyToFit++;
+                // Same rule as the Projects page's Stage column: execution done, installation still open.
+                if ("READY_TO_FIT".equals(projectWorkService.portfolioSummary(p.getId()).get("stage"))) readyToFit++;
             } catch (RuntimeException ignored) {
                 // one bad project must not break the dashboard
             }
