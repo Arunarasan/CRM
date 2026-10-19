@@ -137,6 +137,25 @@ public class ContractorLedgerService {
                 description, nz(payment.getAmount()), BigDecimal.ZERO);
     }
 
+    /** An order given to the contractor: we now owe the agreed amount (CREDIT). */
+    @Transactional
+    public void postOrder(ContractorOrder order) {
+        post(order.getContractor(), order.getProject(), null, order.getOrderDate(),
+                "ORDER", "CONTRACTOR_ORDER", order.getId(), null,
+                "Order: " + order.getTitle(), BigDecimal.ZERO, nz(order.getAmount()));
+    }
+
+    /** Amount edited (+) or order cancelled (−): post only the difference, never edit history. */
+    @Transactional
+    public void postOrderAdjustment(ContractorOrder order, BigDecimal diff) {
+        if (diff.signum() == 0) return;
+        String why = "CANCELLED".equals(order.getStatus()) ? "Order cancelled: " : "Order amount changed: ";
+        ContractorLedgerEntry e = postReversal(order.getContractor(), "CONTRACTOR_ORDER", order.getId(),
+                diff.signum() < 0 ? diff.abs() : BigDecimal.ZERO,
+                diff.signum() > 0 ? diff : BigDecimal.ZERO, why + order.getTitle());
+        e.setProject(order.getProject());
+    }
+
     @Transactional
     public void postPenalty(ContractorSafetyRecord record) {
         post(record.getContractor(), record.getProject(), record.getWorkPackage(), record.getRecordDate(),

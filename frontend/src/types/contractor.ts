@@ -380,7 +380,8 @@ export interface ContractorPayment {
   amount: number;
   paymentDate?: string;
   status: "PENDING" | "PAID" | "OVERDUE";
-  paymentType: "ADVANCE" | "RUNNING_BILL" | "FINAL_BILL" | "RETENTION_RELEASE" | "REFUND" | "RECOVERY" | "SETTLEMENT_RECEIVED";
+  paymentType: "ADVANCE" | "RUNNING_BILL" | "FINAL_BILL" | "RETENTION_RELEASE" | "REFUND" | "RECOVERY" | "SETTLEMENT_RECEIVED" | "ORDER_PAYMENT";
+  order?: { id: number; title?: string } | null;
   /** OUT = we paid the contractor, IN = the contractor paid us. */
   direction?: "IN" | "OUT";
   paymentMode?: string;
@@ -593,3 +594,30 @@ export const QC_RESULT_TONE: Record<string, string> = {
   FAIL: "bg-rose-100 text-rose-700",
   REWORK: "bg-orange-100 text-orange-700",
 };
+
+/** One order given to a contractor: a job on a project with an agreed amount. */
+export type OrderStatus = "UNPAID" | "PARTLY_PAID" | "PAID" | "OVERPAID" | "CANCELLED";
+export interface ContractorOrderRow {
+  id: number;
+  title: string;
+  orderDate?: string;
+  notes?: string;
+  projectId: number;
+  projectName: string;
+  amount: number;
+  paid: number;
+  received: number;
+  balance: number;
+  status: OrderStatus;
+}
+export interface ContractorOrders {
+  orders: ContractorOrderRow[];
+  totalOrdered: number;
+  totalPaid: number;
+  totalReceived: number;
+  totalBalance: number;
+  /** Net of everything in the ledger: + we pay him, − he pays us. */
+  finalBalance: number;
+  finalDirection: "WE_PAY" | "HE_PAYS" | "SETTLED";
+  finalAmount: number;
+}

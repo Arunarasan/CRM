@@ -12,6 +12,7 @@ import { ArrowLeft, Star, Phone, Mail, Building2, MapPin, ArrowUpRight, ArrowDow
 import { useGoBack } from "@/hooks/useGoBack";
 import { useAuth } from "@/hooks/useAuth";
 import ContractorMoneyDialog from "./ContractorMoneyDialog";
+import ContractorOrdersPanel from "./ContractorOrdersPanel";
 
 const currency = (n?: number) => `₹${(n ?? 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 
@@ -126,28 +127,10 @@ export default function ContractorDetailPage() {
         </TabsContent>
 
         <TabsContent value="payments">
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-4">
-            <SummaryTile label="Total paid" value={currency(data.outstanding.totalPaid)} />
-            <SummaryTile label="Advances paid" value={currency(data.outstanding.advancesPaid)} />
-            <SummaryTile label="Bills outstanding" value={currency(data.outstanding.billedOutstanding)} tone="amber" />
-            <SummaryTile label="Received from contractor" value={currency(data.outstanding.receivedFromContractor)} />
-            <SummaryTile label={data.outstanding.ledgerBalance < 0 ? "They owe us" : "We owe them"}
-              value={currency(Math.abs(data.outstanding.ledgerBalance))} tone="amber" />
+          <div className="mt-4">
+            <ContractorOrdersPanel payments={data.payments} contractorId={c.id} contractorName={c.name}
+              canPay={canPay} onChanged={load} />
           </div>
-          <Card>
-            <SimpleTable
-              head={["Date", "Direction", "Type", "Amount", "Mode", "Reference", "Bill"]}
-              rows={data.payments.map((pm) => [
-                pm.paymentDate ?? "—",
-                pm.direction === "IN"
-                  ? <Badge className="bg-emerald-100 text-emerald-700">Received</Badge>
-                  : <Badge className="bg-rose-100 text-rose-700">Paid</Badge>,
-                pm.paymentType.replace(/_/g, " "), currency(pm.amount),
-                pm.paymentMode ?? "—", pm.referenceNumber ?? "—", pm.bill?.billNumber ?? "—",
-              ])}
-              empty="No payments recorded yet."
-            />
-          </Card>
         </TabsContent>
 
         <TabsContent value="attendance">
@@ -268,15 +251,6 @@ function Stat({ label, value, star }: { label: string; value?: number; star?: bo
         {value != null ? Number(value).toFixed(1) : "—"}
       </div>
       <div className="text-[10px] font-semibold uppercase text-slate-400">{label}</div>
-    </div>
-  );
-}
-
-function SummaryTile({ label, value, tone }: { label: string; value: string; tone?: "amber" }) {
-  return (
-    <div className={`rounded-xl border p-4 ${tone === "amber" ? "bg-amber-50 border-amber-200" : "bg-white"}`}>
-      <div className="text-xs font-semibold uppercase text-slate-400">{label}</div>
-      <div className="text-lg font-black text-slate-900 mt-1">{value}</div>
     </div>
   );
 }

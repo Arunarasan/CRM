@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { workforceApi } from "@/api/workforceApi";
 import { payrollApi } from "@/api/payrollApi";
-import { contractorApi } from "@/api/contractorApi";
 import type { WorkforceFinance, PayrollRequest } from "@/types/payroll";
 import { toast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
@@ -12,13 +11,14 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ExternalLink, FileText, Pencil, Plus, Printer } from "lucide-react";
 import PayslipEditor from "@/pages/hr/PayslipEditor";
+import { useAuth } from "@/hooks/useAuth";
+import ContractorOrdersPanel from "@/pages/contractors/ContractorOrdersPanel";
 
 export const inr = (v: number | undefined | null) =>
   v == null ? "₹0" : "₹" + Number(v).toLocaleString("en-IN", { maximumFractionDigits: 2 });
 
 export default function WorkforceFinanceTab({ workforceId }: { workforceId: number }) {
   const [fin, setFin] = useState<WorkforceFinance | null>(null);
-  const [projectWise, setProjectWise] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(() => {
@@ -26,7 +26,6 @@ export default function WorkforceFinanceTab({ workforceId }: { workforceId: numb
     workforceApi.finance(workforceId)
       .then((f: any) => {
         setFin(f);
-        if (f?.contractorId) contractorApi.getProjectPayments(f.contractorId).then(setProjectWise).catch(() => {});
       })
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -39,7 +38,7 @@ export default function WorkforceFinanceTab({ workforceId }: { workforceId: numb
 
   return fin.workforceType === "EMPLOYEE"
     ? <EmployeeFinance fin={fin} reload={load} />
-    : <ContractorFinance fin={fin} projectWise={projectWise} />;
+    : <ContractorFinance fin={fin} reload={load} />;
 }
 
 /* ----------------------------------------------------------------- Employee */
@@ -198,12 +197,11 @@ function SummaryTile({ label, value, hint, tone = "text-slate-900" }: { label: s
 }
 
 /* --------------------------------------------------------------- Contractor */
-function ContractorFinance({ fin, projectWise }: { fin: WorkforceFinance; projectWise: any[] }) {
+function ContractorFinance({ fin, reload }: { fin: WorkforceFinance; reload: () => void }) {
+  const { hasAnyAuthority } = useAuth();
+  const canPay = hasAnyAuthority(["CONTRACTOR_PAYMENT", "ROLE_ADMIN"]);
   const cid = fin.contractorId!;
-  const sum = fin.summary || {};
   const cd = fin.contractDetails || {};
-  const contractValue = projectWise.reduce((a, p) => a + (p.contractValue || 0), 0);
-  const pending = (sum.billedOutstanding || 0);
 
   return (
     <div className="space-y-5">
@@ -218,78 +216,8 @@ function ContractorFinance({ fin, projectWise }: { fin: WorkforceFinance; projec
         </div>
       </Card>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Tile label="Contract value" value={inr(contractValue)} />
-        <Tile label="Total paid" value={inr(sum.totalPaid)} />
-        <Tile label="Pending" value={inr(pending)} tone="amber" />
-        <Tile label="Retention held" value={inr(sum.retentionHeld)} />
-        <Tile label="Advance paid" value={inr(sum.advancesPaid)} />
-        <Tile label="Ledger balance" value={inr(sum.ledgerBalance)} />
-      </div>
-
-      <Card title="Payment requests (bills)" action={<Link to="/contractors/bills/new" className="text-sm text-primary flex items-center gap-1">New <Plus className="w-3.5 h-3.5" /></Link>}>
-        <table className="w-full text-sm">
-          <thead className="text-slate-500 text-left"><tr>
-            <th className="p-2">Bill #</th><th className="p-2">Type</th><th className="p-2 text-right">Net</th>
-            <th className="p-2 text-right">Balance</th><th className="p-2">Status</th><th className="p-2" />
-          </tr></thead>
-          <tbody className="divide-y">
-            {(fin.paymentRequests ?? []).map((b: any) => (
-              <tr key={b.id}>
-                <td className="p-2 font-mono text-xs">{b.billNumber}</td>
-                <td className="p-2">{b.billType}</td>
-                <td className="p-2 text-right">{inr(b.netAmount)}</td>
-                <td className="p-2 text-right">{inr(b.balanceAmount)}</td>
-                <td className="p-2"><Badge className="bg-slate-100 text-slate-700">{String(b.status).replace(/_/g, " ")}</Badge></td>
-                <td className="p-2 text-right"><Link to={`/contractors/bills/${b.id}`} className="text-primary text-xs">Open</Link></td>
-              </tr>
-            ))}
-            {(fin.paymentRequests ?? []).length === 0 && <tr><td colSpan={6} className="p-4 text-center text-muted-foreground">No payment requests.</td></tr>}
-          </tbody>
-        </table>
-      </Card>
-
-      <Card title="Project-wise payments">
-        <table className="w-full text-sm">
-          <thead className="text-slate-500 text-left"><tr>
-            <th className="p-2">Project</th><th className="p-2 text-right">Contract</th><th className="p-2 text-right">Paid</th>
-            <th className="p-2 text-right">Pending</th><th className="p-2">Status</th>
-          </tr></thead>
-          <tbody className="divide-y">
-            {projectWise.map((p) => (
-              <tr key={p.projectId}>
-                <td className="p-2 font-medium">{p.projectName}</td>
-                <td className="p-2 text-right">{inr(p.contractValue)}</td>
-                <td className="p-2 text-right">{inr(p.paid)}</td>
-                <td className="p-2 text-right">{inr(p.pending)}</td>
-                <td className="p-2"><Badge className="bg-slate-100 text-slate-700">{p.status}</Badge></td>
-              </tr>
-            ))}
-            {projectWise.length === 0 && <tr><td colSpan={5} className="p-4 text-center text-muted-foreground">No project work packages.</td></tr>}
-          </tbody>
-        </table>
-      </Card>
-
-      <Card title="Payment history" action={<Link to={`/contractors/ledger`} className="text-sm text-primary flex items-center gap-1">Ledger <ExternalLink className="w-3.5 h-3.5" /></Link>}>
-        <table className="w-full text-sm">
-          <thead className="text-slate-500 text-left"><tr>
-            <th className="p-2">Date</th><th className="p-2">Reference</th><th className="p-2">Method</th>
-            <th className="p-2 text-right">Amount</th><th className="p-2">Status</th>
-          </tr></thead>
-          <tbody className="divide-y">
-            {(fin.paymentHistory ?? []).map((p: any) => (
-              <tr key={p.id}>
-                <td className="p-2">{p.paymentDate || "—"}</td>
-                <td className="p-2 font-mono text-xs">{p.referenceNumber || p.transactionReference || "—"}</td>
-                <td className="p-2">{p.paymentMode || "—"}</td>
-                <td className="p-2 text-right font-semibold">{inr(p.amount)}</td>
-                <td className="p-2"><Badge className="bg-slate-100 text-slate-700">{p.status}</Badge></td>
-              </tr>
-            ))}
-            {(fin.paymentHistory ?? []).length === 0 && <tr><td colSpan={5} className="p-4 text-center text-muted-foreground">No payments recorded.</td></tr>}
-          </tbody>
-        </table>
-      </Card>
+      <ContractorOrdersPanel payments={fin.paymentHistory ?? []} contractorId={cid}
+        contractorName={fin.fullName ?? "Contractor"} canPay={canPay} onChanged={reload} />
     </div>
   );
 }
@@ -341,14 +269,6 @@ function Card({ title, action, children }: { title: string; action?: React.React
     <div className="bg-white border rounded-2xl shadow-sm p-5">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold text-slate-900">{title}</h3>{action}</div>
       <div className="overflow-x-auto">{children}</div>
-    </div>
-  );
-}
-function Tile({ label, value, tone }: { label: string; value: string; tone?: "amber" }) {
-  return (
-    <div className={`rounded-xl border p-4 ${tone === "amber" ? "bg-amber-50 border-amber-200" : ""}`}>
-      <div className="text-xs text-slate-500">{label}</div>
-      <div className="text-lg font-bold text-slate-900 mt-1">{value}</div>
     </div>
   );
 }

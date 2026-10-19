@@ -39,6 +39,12 @@ public class ContractorPayment extends BaseEntity {
     @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "project", "workPackage", "contractor"})
     private ContractorBill bill;
 
+    /** The order this payment belongs to; null for a general advance. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "order_id")
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "contractor", "project", "notes"})
+    private ContractorOrder order;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "work_package_id")
     @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "project", "phase", "room", "boq"})

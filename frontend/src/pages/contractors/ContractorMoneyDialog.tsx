@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { contractorApi } from "@/api/contractorApi";
+import type { ContractorOrderRow } from "@/types/contractor";
 import { toast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,7 +22,7 @@ const inputCls = "w-full h-10 rounded-md border border-input bg-white px-3 text-
  * No bill or approval ladder; the backend writes the ledger + Cash Book entry.
  */
 export default function ContractorMoneyDialog({
-  open, onClose, direction, contractorId, contractorName, onDone,
+  open, onClose, direction, contractorId, contractorName, onDone, orderId,
 }: {
   open: boolean;
   onClose: () => void;
@@ -29,6 +30,8 @@ export default function ContractorMoneyDialog({
   contractorId: number;
   contractorName: string;
   onDone: () => void;
+  /** Pre-select this order (e.g. when opened from an order row). */
+  orderId?: number;
 }) {
   const incoming = direction === "IN";
   const [amount, setAmount] = useState("");
@@ -38,6 +41,28 @@ export default function ContractorMoneyDialog({
   const [reference, setReference] = useState("");
   const [remarks, setRemarks] = useState("");
   const [busy, setBusy] = useState(false);
+  const [orders, setOrders] = useState<ContractorOrderRow[]>([]);
+  const [order, setOrder] = useState<string>(orderId ? String(orderId) : "");
+
+  // Offer this contractor's live orders; paying out only lists orders that still have a balance.
+  useEffect(() => {
+    contractorApi.getOrders(contractorId).then((d) => {
+      const live = d.orders.filter((o) => o.status !== "CANCELLED");
+      const list = incoming ? live : live.filter((o) => o.balance > 0);
+      setOrders(list);
+      const pick = orderId ? list.find((o) => o.id === orderId) : (!incoming ? list[0] : undefined);
+      if (pick) {
+        setOrder(String(pick.id));
+        if (!incoming) setAmount(String(pick.balance));
+      }
+    }).catch(() => {});
+  }, [contractorId, incoming, orderId]);
+
+  const onPickOrder = (v: string) => {
+    setOrder(v);
+    const o = orders.find((x) => String(x.id) === v);
+    if (o && !incoming) setAmount(String(o.balance));
+  };
 
   const submit = async () => {
     const amt = Number(amount);
@@ -50,6 +75,7 @@ export default function ContractorMoneyDialog({
         payment: {
           amount: amt, paymentDate: date, paymentMode: mode,
           paymentType: incoming ? (type as never) : "ADVANCE",
+          order: order ? ({ id: Number(order) } as never) : undefined,
           referenceNumber: reference || undefined, remarks: remarks || undefined,
         },
       });
@@ -75,8 +101,19 @@ export default function ContractorMoneyDialog({
           <p className="text-xs text-slate-500">
             {incoming
               ? "Money the contractor returned to us. It lowers what we owe them and shows as income in the Cash Book."
-              : "Money we pay the contractor now. It is booked as an advance and set off against their later bills."}
+              : "Money we pay the contractor now. Pick the order it is for — its balance updates straight away."}
           </p>
+          <div>
+            <Label>For order</Label>
+            <select className={inputCls} value={order} onChange={(e) => onPickOrder(e.target.value)}>
+              <option value="">{incoming ? "General (no order)" : "General advance (no order)"}</option>
+              {orders.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.projectName} — {o.title} · balance ₹{o.balance.toLocaleString("en-IN")}
+                </option>
+              ))}
+            </select>
+          </div>
           {incoming && (
             <div>
               <Label>What is it for</Label>

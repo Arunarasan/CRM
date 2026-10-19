@@ -52,6 +52,7 @@ public class ContractorBillingService {
     @Autowired private ContractorMaterialIssueRepository materialIssueRepository;
     @Autowired private UserRepository userRepository;
     @Autowired private ProjectRepository projectRepository;
+    @Autowired private ContractorOrderService orderService;
     @Autowired private NotificationService notificationService;
     @Autowired private ContractorLedgerService ledgerService;
     @Autowired private WorkPackageService workPackageService;
@@ -547,7 +548,18 @@ public class ContractorBillingService {
         if (!incoming && !"OUT".equalsIgnoreCase(direction)) {
             throw new IllegalArgumentException("Direction must be IN or OUT.");
         }
-        if (!incoming) {
+        ContractorOrder order = null;
+        if (payload.getOrder() != null && payload.getOrder().getId() != null) {
+            order = orderService.get(payload.getOrder().getId());
+            if (!order.getContractor().getId().equals(contractorId)) {
+                throw new IllegalArgumentException("That order belongs to a different contractor.");
+            }
+            if ("CANCELLED".equals(order.getStatus())) {
+                throw new IllegalStateException("That order is cancelled.");
+            }
+        }
+        // A general advance (no order) keeps the original advance path.
+        if (!incoming && order == null) {
             payload.setPaymentType("ADVANCE");
             return recordPayment(contractorId, null, payload, currentUser);
         }
@@ -558,16 +570,24 @@ public class ContractorBillingService {
         if (amount.signum() <= 0) {
             throw new IllegalArgumentException("Amount must be greater than zero.");
         }
-        String type = List.of("REFUND", "RECOVERY", "SETTLEMENT_RECEIVED").contains(payload.getPaymentType())
-                ? payload.getPaymentType() : "SETTLEMENT_RECEIVED";
+        if (!incoming && amount.compareTo(orderService.remainingToPay(order)) > 0) {
+            throw new IllegalArgumentException("Payment of " + amount + " is more than the " + orderService.remainingToPay(order)
+                    + " still to pay on this order.");
+        }
+        String type = incoming
+                ? (List.of("REFUND", "RECOVERY", "SETTLEMENT_RECEIVED").contains(payload.getPaymentType())
+                        ? payload.getPaymentType() : "SETTLEMENT_RECEIVED")
+                : "ORDER_PAYMENT";
 
         ContractorPayment payment = new ContractorPayment();
         payment.setContractor(contractor);
-        payment.setDirection("IN");
+        payment.setDirection(incoming ? "IN" : "OUT");
         payment.setPaymentType(type);
         payment.setAmount(amount);
-        payment.setProject(payload.getProject() != null && payload.getProject().getId() != null
-                ? projectRepository.findById(payload.getProject().getId()).orElse(null) : null);
+        payment.setOrder(order);
+        payment.setProject(order != null ? order.getProject()
+                : (payload.getProject() != null && payload.getProject().getId() != null
+                        ? projectRepository.findById(payload.getProject().getId()).orElse(null) : null));
         payment.setPaymentDate(payload.getPaymentDate() != null ? payload.getPaymentDate() : LocalDate.now());
         payment.setPaymentMode(payload.getPaymentMode());
         payment.setReferenceNumber(payload.getReferenceNumber());
@@ -579,6 +599,12 @@ public class ContractorBillingService {
         payment = paymentRepository.save(payment);
 
         ledgerService.postPayment(payment);
+        if (!incoming) {
+            syncProjectExpenses(payment.getProject()); // an order payment is real project labour cost
+            workPackageService.notifyContractor(contractor, "Payment released",
+                    "Payment of " + amount + " has been released to you for " + order.getTitle() + ".",
+                    "/contractor-portal/payments");
+        }
         return payment;
     }
 

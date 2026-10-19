@@ -5,7 +5,7 @@ import type {
   ContractorMaterialIssue, ContractorMaterialIssueItem, ContractorDailyProgress, ContractorProgressMedia,
   ContractorQualityInspection, ContractorAttendance, ContractorSafetyRecord, ContractorDocument,
   ContractorBill, ContractorBillItem, BillDetail, PreparedBill, ContractorPayment,
-  ContractorOutstanding, GenerateFromBoqResult,
+  ContractorOutstanding, GenerateFromBoqResult, ContractorOrders,
 } from '../types/contractor';
 
 // Thin typed wrapper around /api/contractors, /api/work-packages and /api/contractor-bills —
@@ -235,6 +235,14 @@ export const contractorApi = {
     api.get<ContractorPayment[]>(`${CB}/payments${qs({ status })}`).then((r) => r.data),
   recordPayment: (payload: { contractorId: number; billId?: number; payment: Partial<ContractorPayment> }) =>
     api.post<ContractorPayment>(`${CB}/payments`, payload).then((r) => r.data),
+  // orders given to a contractor
+  getOrders: (contractorId: number) =>
+    api.get<ContractorOrders>(`/contractor-orders/by-contractor/${contractorId}`).then((r) => r.data),
+  createOrder: (contractorId: number, o: { projectId: number; title: string; amount: number; orderDate?: string; notes?: string }) =>
+    api.post(`/contractor-orders/by-contractor/${contractorId}`, o).then((r) => r.data),
+  updateOrder: (id: number, o: { projectId: number; title: string; amount: number; orderDate?: string; notes?: string }) =>
+    api.put(`/contractor-orders/${id}`, o).then((r) => r.data),
+  cancelOrder: (id: number) => api.post(`/contractor-orders/${id}/cancel`).then((r) => r.data),
   quickPayment: (payload: { contractorId: number; direction: "IN" | "OUT"; payment: Partial<ContractorPayment> }) =>
     api.post<ContractorPayment>(`${CB}/payments/quick`, payload).then((r) => r.data),
   releaseRetention: (contractorId: number, workPackageId: number, amount?: number, remarks?: string) =>

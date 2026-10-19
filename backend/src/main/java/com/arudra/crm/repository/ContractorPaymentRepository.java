@@ -64,4 +64,14 @@ public interface ContractorPaymentRepository extends JpaRepository<ContractorPay
     @Query("SELECT COALESCE(SUM(p.amount), 0) FROM ContractorPayment p " +
            "WHERE p.project.id = :projectId AND p.status = 'PAID' AND p.direction = 'IN' AND p.isDeleted = false")
     BigDecimal sumReceivedForProject(@Param("projectId") Long projectId);
+
+    /** What we have paid out against one order. */
+    @Query("SELECT COALESCE(SUM(p.amount), 0) FROM ContractorPayment p " +
+           "WHERE p.order.id = :orderId AND p.status = 'PAID' AND p.direction = 'OUT' AND p.isDeleted = false")
+    BigDecimal sumPaidByOrder(@Param("orderId") Long orderId);
+
+    /** What the contractor paid back to us against one order. */
+    @Query("SELECT COALESCE(SUM(p.amount), 0) FROM ContractorPayment p " +
+           "WHERE p.order.id = :orderId AND p.status = 'PAID' AND p.direction = 'IN' AND p.isDeleted = false")
+    BigDecimal sumReceivedByOrder(@Param("orderId") Long orderId);
 }
