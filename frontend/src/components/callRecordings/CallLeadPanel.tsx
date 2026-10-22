@@ -4,7 +4,7 @@ import {
   Phone, MessageCircle, UserPlus, Link2, Ban, CheckCircle2, AlertTriangle, Clock, CalendarClock, Loader2,
 } from "lucide-react";
 import AudioPlayer from "@/components/AudioPlayer";
-import QuickLeadSheet from "@/components/leads/QuickLeadSheet";
+import LeadFormDialog from "@/pages/leads/LeadFormDialog";
 import { resolveFileUrl } from "@/lib/uploadFile";
 import { toast } from "@/components/ui/toast";
 import { callRecordingApi, errMsg, fmtCallTime, fmtDuration, type CallRecording } from "@/api/callRecordingApi";
@@ -171,13 +171,12 @@ export default function CallLeadPanel({
         </div>
       )}
 
-      <QuickLeadSheet
+      <LeadFormDialog
         open={sheetOpen}
-        onClose={() => setSheetOpen(false)}
+        onOpenChange={setSheetOpen}
         onSubmit={createLead}
-        initial={{ name: call.contactName || "", mobileNumber: phone, notes: call.note || "" }}
+        initial={{ name: call.contactName || "", mobileNumber: phone, projectDescription: call.note || "" }}
         title="Create lead from call"
-        subtitle="The call recording is attached to the lead automatically."
         submitLabel="Create Lead"
         footerNote={call.taskId ? "Creating the lead also completes this call task." : ""}
       />

@@ -828,8 +828,47 @@ public class EmployeePortalService {
             lead.setSiteVisitDate(visit);
             lead.setSiteVisitRequired(true);
         }
+        // The full admin "New Lead" form is used here too — every field it can send, except the team
+        // assignment, status and conversion, which stay with the office.
+        if (lead.getCustomerRequirements() == null) lead.setCustomerRequirements(trimToNull((String) body.get("projectDescription")));
+        lead.setProjectDescription(trimToNull((String) body.get("projectDescription")));
+        lead.setLandmark(trimToNull((String) body.get("landmark")));
+        lead.setPincode(trimToNull((String) body.get("pincode")));
+        lead.setDistrict(trimToNull((String) body.get("district")));
+        lead.setState(trimToNull((String) body.get("state")));
+        lead.setWhatsappNumber(trimToNull((String) body.get("whatsappNumber")));
+        lead.setAlternateMobile(trimToNull((String) body.get("alternateMobile")));
+        lead.setCompanyName(trimToNull((String) body.get("companyName")));
+        lead.setContactPerson(trimToNull((String) body.get("contactPerson")));
+        lead.setGstNumber(trimToNull((String) body.get("gstNumber")));
+        lead.setSiteAddress(trimToNull((String) body.get("siteAddress")));
+        lead.setPropertyType(trimToNull((String) body.get("propertyType")));
+        lead.setCurrentConstructionStage(trimToNull((String) body.get("currentConstructionStage")));
+        lead.setFloorCount(asInteger(body.get("floorCount")));
+        lead.setAreaSqft(asDecimal(body.get("areaSqft")));
+        lead.setPreferredMaterial(trimToNull((String) body.get("preferredMaterial")));
+        lead.setPreferredDesignStyle(trimToNull((String) body.get("preferredDesignStyle")));
+        lead.setRoomsRequired(trimToNull((String) body.get("roomsRequired")));
+        lead.setSpecialRequests(trimToNull((String) body.get("specialRequests")));
+        String priority = trimToNull((String) body.get("priority"));
+        if (priority != null) lead.setPriority(priority);
+        String temperature = trimToNull((String) body.get("leadTemperature"));
+        if (temperature != null) lead.setLeadTemperature(temperature);
+        lead.setLeadType(trimToNull((String) body.get("leadType")));
+        lead.setExpectedProjectValue(asDecimal(body.get("expectedProjectValue")));
+        lead.setExpectedStartDate(asDate(body.get("expectedStartDate")));
+        lead.setExpectedEndDate(asDate(body.get("expectedEndDate")));
+        lead.setNextFollowUpDate(asDate(body.get("nextFollowUpDate")));
+        String followUpTime = trimToNull((String) body.get("nextFollowUpTime"));
+        if (lead.getNextFollowUpDate() != null && followUpTime != null) {
+            lead.setNextFollowUpTime(java.time.LocalTime.parse(followUpTime.length() == 5 ? followUpTime + ":00" : followUpTime));
+        }
+        lead.setReferralType(trimToNull((String) body.get("referralType")));
+        lead.setReferrerName(trimToNull((String) body.get("referrerName")));
+        lead.setReferrerContact(trimToNull((String) body.get("referrerContact")));
+        lead.setReferralNotes(trimToNull((String) body.get("referralNotes")));
         lead.setStatus("New");
-        lead.setLeadSource(leadSource);
+        lead.setLeadSource(trimToNull((String) body.get("leadSource")) != null ? trimToNull((String) body.get("leadSource")) : leadSource);
         lead.setLeadOwner(currentUser);
         Lead saved = leadService.createLead(lead, currentUser);
         // Attach any photos / voice notes captured on the form as LeadDocuments, so they travel

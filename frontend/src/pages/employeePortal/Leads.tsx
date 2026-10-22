@@ -7,9 +7,9 @@ import {
 import api from '@/lib/api';
 import { useT, dateLocale } from '@/i18n';
 import { employeePortalApi } from '@/api/employeePortalApi';
-import { LeadSummary, LeadCreateBody } from '@/types/employeePortal';
+import { LeadSummary } from '@/types/employeePortal';
 import { PortalHeader, StatusPill, EmptyState, inr } from './_shared';
-import QuickLeadSheet from '@/components/leads/QuickLeadSheet';
+import LeadFormDialog from '@/pages/leads/LeadFormDialog';
 import { ENQUIRY_TYPES, formatTime } from '@/pages/leads/constants';
 import { CATEGORY_GROUPS, EnquiryTag, categoryGroupOf, enquiryDetails, enquiryLabel, enquiryTypeOf, splitList } from '@/pages/leads/enquiry';
 
@@ -134,7 +134,7 @@ export default function Leads() {
     return { ...f, category: value, product: keep ? f.product : '' };
   });
 
-  const createLead = async (body: LeadCreateBody) => {
+  const createLead = async (body: any) => {
     await employeePortalApi.createLead(body);
     setOpen(false);
     load();
@@ -357,7 +357,7 @@ export default function Leads() {
         </div>
       )}
 
-      <QuickLeadSheet open={open} onClose={() => setOpen(false)} onSubmit={createLead} />
+      <LeadFormDialog open={open} onOpenChange={setOpen} onSubmit={createLead} submitLabel="Create Lead" />
     </div>
   );
 }

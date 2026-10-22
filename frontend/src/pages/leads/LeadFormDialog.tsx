@@ -43,14 +43,26 @@ const selectCls = "w-full h-9 rounded-md border border-input bg-card px-2.5 text
 // ---------------------------------------------------------------------------
 
 export default function LeadFormDialog({
-  open, onOpenChange, lead, users, onSaved,
+  open, onOpenChange, lead, users = [], onSaved, onSubmit, initial, initialAudio, title, submitLabel, footerNote,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   lead?: Lead | null; // when set → edit mode
-  users: UserSummary[];
-  onSaved: (saved: Lead) => void;
+  users?: UserSummary[];
+  onSaved?: (saved: Lead) => void;
+  /**
+   * Employee-portal / call-recording mode: the same form, but the caller sends the request (to its own
+   * endpoint) instead of the admin leads API. Team assignment and the admin-only referral pickers are
+   * left out; photos and voice notes travel in `payload.documents`. Throw to show an error.
+   */
+  onSubmit?: (payload: any) => Promise<void>;
+  initial?: Partial<Lead>;
+  initialAudio?: CapturedAudio[];
+  title?: string;
+  submitLabel?: string;
+  footerNote?: string;
 }) {
+  const portal = !!onSubmit;
   const [form, setForm] = useState<Partial<Lead>>(EMPTY_FORM);
   const [images, setImages] = useState<CapturedImage[]>([]);
   const [audioClips, setAudioClips] = useState<CapturedAudio[]>([]);
@@ -66,9 +78,9 @@ export default function LeadFormDialog({
   useEffect(() => {
     if (open) {
       // Legacy leads have no enquiry tag yet — infer it so the right picker shows when editing.
-      setForm(lead ? { ...lead, enquiryType: enquiryTypeOf(lead), nextFollowUpTime: lead.nextFollowUpTime?.slice(0, 5) } : { ...EMPTY_FORM });
+      setForm(lead ? { ...lead, enquiryType: enquiryTypeOf(lead), nextFollowUpTime: lead.nextFollowUpTime?.slice(0, 5) } : { ...EMPTY_FORM, ...(initial || {}) });
       setImages([]);
-      setAudioClips([]);
+      setAudioClips(initialAudio || []);
       setError("");
       setDupLeads([]);
       setCustomDate(false);
@@ -139,7 +151,7 @@ export default function LeadFormDialog({
   // Live duplicate guard: as a new lead's phone number is entered, look for existing leads on
   // the same number so the user can open that lead instead of creating a duplicate. Never blocks.
   useEffect(() => {
-    if (lead) { setDupLeads([]); return; } // only while creating
+    if (lead || portal) { setDupLeads([]); return; } // only while creating, and only where the viewer can search leads
     const digits = (form.mobileNumber || "").replace(/\D/g, "");
     if (digits.length < 7) { setDupLeads([]); return; }
     const t = setTimeout(() => {
@@ -155,7 +167,7 @@ export default function LeadFormDialog({
         .catch(() => setDupLeads([]));
     }, 400);
     return () => clearTimeout(t);
-  }, [form.mobileNumber, lead]);
+  }, [form.mobileNumber, lead, portal]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -216,6 +228,18 @@ export default function LeadFormDialog({
       delete payload.referredByEmployee;
     }
 
+    if (onSubmit) {
+      payload.documents = [
+        ...images.map((img) => ({ fileName: img.fileName, fileUrl: img.url, documentType: "Image", category: "Site Photos" })),
+        ...audioClips.map((clip) => ({ fileName: clip.fileName, fileUrl: clip.url, documentType: "Audio", category: "Voice Notes" })),
+      ];
+      if (!payload.documents.length) delete payload.documents;
+      onSubmit(payload)
+        .then(() => onOpenChange(false))
+        .catch((err) => setError(err?.response?.data?.message || err?.message || "Failed to save lead."))
+        .finally(() => setSaving(false));
+      return;
+    }
     const request = lead ? leadApi.update(lead.id, payload) : leadApi.create(payload);
     request
       .then(async (res) => {
@@ -244,7 +268,7 @@ export default function LeadFormDialog({
         }
         toast.success(lead ? "Lead updated" : `Lead ${savedLead?.leadNumber || ""} created`.trim());
         onOpenChange(false);
-        onSaved(savedLead);
+        onSaved?.(savedLead);
       })
       .catch((err) => {
         console.error("Failed to save lead", err);
@@ -314,7 +338,7 @@ export default function LeadFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[92vh] max-w-xl flex-col gap-0 p-0">
         <DialogHeader className="border-b px-5 py-3.5 text-left">
-          <DialogTitle className="text-base">{lead ? `Edit Lead ${lead.leadNumber}` : "New Lead"}</DialogTitle>
+          <DialogTitle className="text-base">{title ?? (lead ? `Edit Lead ${lead.leadNumber}` : "New Lead")}</DialogTitle>
           <p className="text-xs text-muted-foreground">
             Only name and phone are required — open any step to add more.
           </p>
@@ -463,7 +487,7 @@ export default function LeadFormDialog({
                 <div className="space-y-3 rounded-md bg-muted/30 p-3">
                   <F label="Referred by">
                     <div className="flex flex-wrap gap-1.5">
-                      {REFERRAL_TYPES.map((r) => (
+                      {REFERRAL_TYPES.filter((r) => !portal || r === "Other").map((r) => (
                         <Chip key={r} active={form.referralType === r}
                           onClick={() => setForm((f) => ({
                             ...f, referralType: r,
@@ -666,9 +690,9 @@ export default function LeadFormDialog({
                 </F>
                 <F label="Expected start"><Input type="date" value={form.expectedStartDate ?? ""} onChange={text("expectedStartDate")} /></F>
                 <F label="Expected completion"><Input type="date" value={form.expectedEndDate ?? ""} onChange={text("expectedEndDate")} /></F>
-                {userPicker("Sales executive", "assignedSalesExecutive")}
-                {userPicker("Designer", "assignedDesigner")}
-                {userPicker("Engineer", "assignedEngineer")}
+                {!portal && userPicker("Sales executive", "assignedSalesExecutive")}
+                {!portal && userPicker("Designer", "assignedDesigner")}
+                {!portal && userPicker("Engineer", "assignedEngineer")}
               </div>
             </Step>
           </div>
@@ -679,12 +703,12 @@ export default function LeadFormDialog({
               <p className="flex-1 text-xs text-destructive">{error}</p>
             ) : (
               <p className="flex-1 truncate text-xs text-muted-foreground">
-                {summaries.customer || "Fill in the customer to continue"}
+                {footerNote || summaries.customer || "Fill in the customer to continue"}
               </p>
             )}
             <Button type="button" variant="outline" size="sm" onClick={() => onOpenChange(false)}>Cancel</Button>
             <Button type="submit" size="sm" disabled={saving}>
-              {saving ? "Saving..." : lead ? "Save Changes" : "Create Lead"}
+              {saving ? "Saving..." : submitLabel ?? (lead ? "Save Changes" : "Create Lead")}
             </Button>
           </div>
         </form>
