@@ -740,6 +740,9 @@ function InvoiceMaker({ project, invoice: editing, onClose, onSaved }: { project
   const [taxInclusive, setTaxInclusive] = useState(false);
   const [notes, setNotes] = useState("");
   const [itemized, setItemized] = useState(false);
+  // Discount on the invoice: % or ₹ amount. Editing the final total back-solves a flat discount.
+  const [discType, setDiscType] = useState<"PERCENTAGE" | "FLAT">("FLAT");
+  const [discValue, setDiscValue] = useState<number | "">("");
 
   // Simple mode (default)
   const [amount, setAmount] = useState<number>(0);
@@ -780,6 +783,10 @@ function InvoiceMaker({ project, invoice: editing, onClose, onSaved }: { project
     setDueDate(editing.dueDate || "");
     setTaxInclusive(!!editing.taxInclusive);
     setNotes(editing.notes || "");
+    if (Number((editing as any).discountValue) > 0) {
+      setDiscType((editing as any).discountType === "PERCENTAGE" ? "PERCENTAGE" : "FLAT");
+      setDiscValue(Number((editing as any).discountValue));
+    }
     financeApi.getInvoiceItems(editing.id).then((its) => {
       if (its.length) {
         setGstRate(Number(its[0].gstRate ?? 0));
@@ -893,9 +900,22 @@ function InvoiceMaker({ project, invoice: editing, onClose, onSaved }: { project
     : (Number(amount) || 0);
   // With GST-inclusive amounts the GST is worked out of them; otherwise it's added on top.
   const rate = Number(gstRate) || 0;
-  const subTotal = taxInclusive ? entered / (1 + rate / 100) : entered;
-  const gstAmount = taxInclusive ? entered - subTotal : subTotal * rate / 100;
+  const grossSub = taxInclusive ? entered / (1 + rate / 100) : entered;
+  const dv = Number(discValue) || 0;
+  const discount = dv <= 0 ? 0
+    : discType === "PERCENTAGE" ? grossSub * Math.min(dv, 100) / 100
+    : Math.min(taxInclusive && entered > 0 ? dv * grossSub / entered : dv, grossSub);
+  const subTotal = grossSub - discount;
+  const gstAmount = subTotal * rate / 100;
   const total = subTotal + gstAmount;
+  const preDiscountTotal = grossSub * (1 + rate / 100);
+  // Type the final total you want: the difference becomes a flat discount.
+  const setFinalTotal = (v: number | "") => {
+    if (v === "" || !(Number(v) >= 0)) { setDiscValue(""); return; }
+    const off = Math.max(0, preDiscountTotal - Number(v));
+    setDiscType("FLAT");
+    setDiscValue(off <= 0 ? "" : Math.round((taxInclusive ? off : off / (1 + rate / 100)) * 100) / 100);
+  };
 
   const save = async (issue: boolean) => {
     const items = itemized
@@ -934,6 +954,7 @@ function InvoiceMaker({ project, invoice: editing, onClose, onSaved }: { project
         dueDate: dueDate || undefined,
         gstType: "CGST_SGST",
         taxInclusive,
+        ...(dv > 0 ? { discountType: discType, discountValue: dv } : { discountType: null, discountValue: null }),
         status: "DRAFT",
         notes: notes || undefined,
         ...(quoteId ? { quotation: { id: quoteId } } : {}),
@@ -962,7 +983,7 @@ function InvoiceMaker({ project, invoice: editing, onClose, onSaved }: { project
 
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-h-[92vh] max-w-2xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2"><FileText className="h-5 w-5" /> {editing ? `Edit ${editing.invoiceNumber}` : "New Invoice"}</DialogTitle>
           <DialogDescription>{editing ? "Draft invoices can be edited until they are issued." : "Enter the amount — GST and totals are calculated automatically."}</DialogDescription>
@@ -1130,10 +1151,29 @@ function InvoiceMaker({ project, invoice: editing, onClose, onSaved }: { project
 
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Optional note shown on the invoice" />
 
-          <div className="flex justify-end gap-6 rounded-md bg-slate-50 px-4 py-3 text-sm">
-            <span className="text-slate-500">{taxInclusive ? "Taxable" : "Sub-total"} <strong className="ml-1 text-slate-700">{inr(subTotal)}</strong></span>
-            <span className="text-slate-500">GST{taxInclusive ? " (incl.)" : ""} <strong className="ml-1 text-slate-700">{inr(gstAmount)}</strong></span>
-            <span className="text-slate-500">Total <strong className="ml-1 text-slate-900">{inr(total)}</strong></span>
+          <div className="space-y-2 rounded-md bg-slate-50 px-4 py-3 text-sm">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-medium">Discount</span>
+              <div className="flex rounded-md border border-slate-200 bg-white p-0.5">
+                {([["FLAT", "₹"], ["PERCENTAGE", "%"]] as const).map(([k, l]) => (
+                  <button key={k} type="button" onClick={() => setDiscType(k)}
+                    className={`rounded px-2.5 py-0.5 text-xs font-semibold ${discType === k ? "bg-emerald-600 text-white" : "text-slate-500"}`}>{l}</button>
+                ))}
+              </div>
+              <Input type="number" min={0} className="h-8 w-28 text-right" value={discValue === "" ? "" : discValue} placeholder="0"
+                onChange={(e) => setDiscValue(e.target.value === "" ? "" : Number(e.target.value))} />
+              <span className="ml-auto flex items-center gap-1.5">
+                <span className="text-slate-500">Final total ₹</span>
+                <Input type="number" min={0} className="h-8 w-28 text-right font-semibold" value={Math.round(total * 100) / 100 || ""}
+                  onChange={(e) => setFinalTotal(e.target.value === "" ? "" : Number(e.target.value))} />
+              </span>
+            </div>
+            <div className="flex justify-end gap-6">
+              {discount > 0 && <span className="text-slate-500">Discount <strong className="ml-1 text-red-600">−{inr(discount)}</strong></span>}
+              <span className="text-slate-500">Taxable <strong className="ml-1 text-slate-700">{inr(subTotal)}</strong></span>
+              <span className="text-slate-500">GST <strong className="ml-1 text-slate-700">{inr(gstAmount)}</strong></span>
+              <span className="text-slate-500">Total <strong className="ml-1 text-slate-900">{inr(total)}</strong></span>
+            </div>
           </div>
 
           {error && <p className="text-sm text-destructive">{error}</p>}
