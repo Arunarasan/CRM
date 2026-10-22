@@ -3,33 +3,31 @@ import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Search, X, Flame, CalendarDays, Clock, AlertTriangle, CheckCircle2, Hand, PartyPopper,
-  FolderKanban, ListTodo, ShoppingBag, Ruler,
+  FolderKanban, Users, ShoppingBag,
 } from 'lucide-react';
 import { employeeTaskApi } from '@/api/employeeTaskApi';
 import { TaskCard as TaskCardType } from '@/types/employeeTask';
 import { runOrQueue } from '@/hooks/useOfflineQueue';
 import TaskCard from './components/TaskCard';
-import { daysUntil, priorityMeta, byPlanRank } from './taskUtils';
+import { daysUntil, priorityMeta, byPlanRank, REQUIREMENT_CODES, inLeadWorkspace } from './taskUtils';
 import { useT } from '@/i18n';
 
-// "Tasks to Do" — four type tabs (Collect Requirement / Measured / Projects / Orders), each with the same
+// "Tasks to Do" — three type tabs (Leads / Projects / Orders), each with the same
 // Active · Available · Done views. Active work is grouped by urgency so the most important task
 // is always first. All task logic (pick / start / pause / complete) is unchanged.
-type Tab = 'REQUIREMENT' | 'MEASURE' | 'PROJECTS' | 'ORDERS';
+type Tab = 'LEADS' | 'PROJECTS' | 'ORDERS';
 type View = 'ACTIVE' | 'AVAILABLE' | 'DONE';
 
-// Project / Orders tabs are origin lanes (TaskCard.category). The two lead tabs split the lead
-// lanes by task type: Collect Requirement vs. everything after it (site visit, measure, quote).
+// Project / Orders tabs are origin lanes (TaskCard.category). The Leads tab shows ONE card per lead
+// (its Requirement and Measure & Quote tasks fold together) and opens the lead workspace.
 const LANES: Record<'PROJECTS' | 'ORDERS', string[]> = {
   PROJECTS: ['PROJECT', 'FIELD_WORK'],
   ORDERS: ['STITCHING', 'INSTALLATION'],
 };
 const LEAD_LANES = ['LEAD', 'ENQUIRY', 'CALL'];
-const REQUIREMENT_CODES = ['TT_COLLECT_REQUIREMENT', 'TT_UNDERSTAND_REQ'];
 
 const TABS: { key: Tab; icon: React.ComponentType<{ className?: string }> }[] = [
-  { key: 'REQUIREMENT', icon: ListTodo },
-  { key: 'MEASURE', icon: Ruler },
+  { key: 'LEADS', icon: Users },
   { key: 'PROJECTS', icon: FolderKanban },
   { key: 'ORDERS', icon: ShoppingBag },
 ];
@@ -37,9 +35,22 @@ const TABS: { key: Tab; icon: React.ComponentType<{ className?: string }> }[] = 
 const inTab = (tab: Tab) => (t: TaskCardType) => {
   const lane = (t.category ?? '').toUpperCase();
   if (tab === 'PROJECTS' || tab === 'ORDERS') return LANES[tab].includes(lane);
-  if (!LEAD_LANES.includes(lane)) return false;
-  const isReq = REQUIREMENT_CODES.includes((t.taskTypeCode ?? '').toUpperCase());
-  return tab === 'REQUIREMENT' ? isReq : !isReq;
+  return LEAD_LANES.includes(lane);
+};
+
+/** Leads tab: one card per lead — the later stage (Measure & Quote) wins over Requirement. */
+const foldLeads = (list: TaskCardType[]): TaskCardType[] => {
+  const byLead = new Map<number, TaskCardType>();
+  const out: TaskCardType[] = [];
+  for (const t of list) {
+    if (!inLeadWorkspace(t)) { out.push(t); continue; }
+    const cur = byLead.get(t.leadId!);
+    const isReq = REQUIREMENT_CODES.includes((t.taskTypeCode ?? '').toUpperCase());
+    const curReq = cur ? REQUIREMENT_CODES.includes((cur.taskTypeCode ?? '').toUpperCase()) : true;
+    if (!cur) { byLead.set(t.leadId!, t); out.push(t); }
+    else if (curReq && !isReq) { out[out.indexOf(cur)] = t; byLead.set(t.leadId!, t); }
+  }
+  return out;
 };
 
 // The server decides the lifecycle; only ACTIVE work counts as open. Status is a fallback for old responses.
@@ -62,7 +73,7 @@ function readParams(params: URLSearchParams): { tab: Tab; view: View } {
   const rawTab = (params.get('tab') || '').toUpperCase();
   const rawView = (params.get('view') || '').toUpperCase();
   // Older ?tab=MINE|LEADS links land on the first tab.
-  const tab: Tab = (['REQUIREMENT', 'MEASURE', 'PROJECTS', 'ORDERS'] as Tab[]).includes(rawTab as Tab) ? (rawTab as Tab) : 'REQUIREMENT';
+  const tab: Tab = (['LEADS', 'PROJECTS', 'ORDERS'] as Tab[]).includes(rawTab as Tab) ? (rawTab as Tab) : 'LEADS';
   // A plain /employee/tasks opens on Available (work to pick up). Links that name a tab or a search
   // (My Projects, a project search) are about the employee's own work, so they keep opening on Active.
   const named = params.has('tab') || params.has('search');
@@ -136,10 +147,11 @@ export default function TaskList() {
   const tabOverdue = (t: Tab) => activeMine.filter(inTab(t)).some((x) => bucket(x) === 'overdue');
 
   // Everything below is scoped to the selected tab.
-  const active = activeMine.filter(inTab(tab));
-  const available = pool.filter(matches).filter(inTab(tab)).sort(byPlanRank);
-  const completed = mine.filter(matches).filter((t) => lifecycleOf(t) === 'DONE').filter(inTab(tab));
-  const submitted = mine.filter(matches).filter(isSubmitted).filter(inTab(tab));
+  const fold = (l: TaskCardType[]) => (tab === 'LEADS' ? foldLeads(l) : l);
+  const active = fold(activeMine.filter(inTab(tab)));
+  const available = fold(pool.filter(matches).filter(inTab(tab)).sort(byPlanRank));
+  const completed = fold(mine.filter(matches).filter((t) => lifecycleOf(t) === 'DONE').filter(inTab(tab)));
+  const submitted = fold(mine.filter(matches).filter(isSubmitted).filter(inTab(tab)));
   const overdue = active.filter((t) => bucket(t) === 'overdue').sort(byPlanRank);
   const now = active.filter((t) => bucket(t) === 'now').sort(byPlanRank);
   const today = active.filter((t) => bucket(t) === 'today').sort(byPlanRank);
@@ -242,7 +254,7 @@ export default function TaskList() {
 
       {/* Type tabs — My Tasks / Projects / Orders / Leads */}
       <div className="sticky top-0 z-10 -mx-3.5 bg-[#F7F7F5]/95 px-3.5 pb-1 pt-0.5 backdrop-blur" role="tablist">
-        <div className="grid grid-cols-4 gap-1 rounded-2xl bg-white p-1 shadow-[0_2px_10px_rgba(0,35,22,0.06)]">
+        <div className="grid grid-cols-3 gap-1 rounded-2xl bg-white p-1 shadow-[0_2px_10px_rgba(0,35,22,0.06)]">
           {TABS.map(({ key, icon: Icon }) => {
             const on = tab === key;
             const n = tabCount(key);

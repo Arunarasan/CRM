@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { Play, Pause, CheckCircle2, MapPin, Users, Package, Tag, CalendarDays, Scissors, Wrench } from 'lucide-react';
 import { TaskCard as TaskCardType } from '@/types/employeeTask';
-import { humanizeDue, shortDue, statusMeta } from '../taskUtils';
+import { humanizeDue, inLeadWorkspace, shortDue, statusMeta } from '../taskUtils';
 import SwipeActions, { SwipeAction } from './SwipeActions';
 import HoldTimer from './HoldTimer';
 import { OrderStepBar, stepLabel, workLabel } from './OrderTaskView';
@@ -48,7 +48,9 @@ export default function TaskCard({
   const navigate = useNavigate();
   const { t } = useT();
   const mine = task.myAssignmentStatus;
-  const open = () => navigate(`/employee/tasks/${task.id}`);
+  // A lead's tasks (Requirement, Measure & Quote) are all worked in its one workspace.
+  const inLead = inLeadWorkspace(task);
+  const open = () => navigate(inLead ? `/employee/lead/${task.leadId}?task=${task.id}` : `/employee/tasks/${task.id}`);
   const status = statusMeta(task.status);
   const due = humanizeDue(task.dueDate, task.status);
   const shared = (task.assignedEmployees?.length ?? 0) > 1;

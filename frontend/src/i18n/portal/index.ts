@@ -15,6 +15,7 @@ import taskOrder from './taskOrder';
 import taskProject from './taskProject';
 import taskForm from './taskForm';
 import taskDetail from './taskDetail';
+import leadWorkspace from './leadWorkspace';
 // Each screen group contributes a rows table; add new groups here.
-const ALL: Rows = { ...taskDetail, ...taskForm, ...taskProject, ...common, ...timeAttendance, ...salary, ...profileDocs, ...leads, ...requests, ...goods, ...tasksCore, ...taskParts, ...taskLead, ...taskReq, ...taskOrder };
+const ALL: Rows = { ...leadWorkspace, ...taskDetail, ...taskForm, ...taskProject, ...common, ...timeAttendance, ...salary, ...profileDocs, ...leads, ...requests, ...goods, ...tasksCore, ...taskParts, ...taskLead, ...taskReq, ...taskOrder };
 export default buildDicts(ALL);

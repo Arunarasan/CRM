@@ -45,6 +45,7 @@ export interface TaskCard {
   categoryLabel?: string | null; // human label for the lane
   workStage?: 'EXECUTION' | 'READY_TO_FIT' | 'COMPLETED' | null; // project lane: stage of the whole project
   taskTypeCode?: string | null; // template code, e.g. TT_COLLECT_REQUIREMENT / TT_VISIT_MEASURE
+  leadId?: number | null; // lead behind a lead task — the Leads tab folds a lead's tasks into one card
   requirementCategory?: string | null; // lead tasks: comma-separated catalog categories ("Mosquito Net")
   requirementProduct?: string | null; // lead tasks: comma-separated catalog products ("Door Type")
   leadRating?: number | null; // lead's 1-5 star quality rating (ranking input)

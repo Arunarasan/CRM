@@ -2571,6 +2571,8 @@ public class EmployeeTaskService {
                 ? projectWorkStage(t.getProject().getId()) : null);
         // Template code (TT_COLLECT_REQUIREMENT, TT_VISIT_MEASURE…) — splits lead tasks into app tabs.
         card.put("taskTypeCode", t.getTaskTemplate() != null ? t.getTaskTemplate().getCode() : null);
+        // The Leads tab folds a lead's tasks into one card that opens the lead workspace.
+        card.put("leadId", t.getLeadId());
 
         List<TaskAssignment> assignments = assignmentRepository.findByTaskId(t.getId());
         card.put("assignedEmployees", assignments.stream()

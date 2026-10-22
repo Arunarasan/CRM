@@ -1,0 +1,31 @@
+import type { Rows } from './build';
+
+// Lead workspace — one screen per lead with Overview / Requirement / Measure & Quote / Documents / Activity tabs.
+const rows: Rows = {
+  'pw.lw.tab.overview': ['Overview', 'सारांश', 'கண்ணோட்டம்', 'అవలోకనం'],
+  'pw.lw.tab.requirement': ['Requirement', 'आवश्यकता', 'தேவை', 'అవసరం'],
+  'pw.lw.tab.quote': ['Measure & Quote', 'माप और कोटेशन', 'அளவீடு & மதிப்பீடு', 'కొలత & కొటేషన్'],
+  'pw.lw.tab.documents': ['Documents', 'दस्तावेज़', 'ஆவணங்கள்', 'పత్రాలు'],
+  'pw.lw.tab.activity': ['Activity', 'गतिविधि', 'செயல்பாடு', 'కార్యకలాపం'],
+  'pw.lw.step.project': ['Project', 'प्रोजेक्ट', 'திட்டம்', 'ప్రాజెక్ట్'],
+  'pw.lw.sectionsAria': ['Lead sections', 'लीड के भाग', 'லீட் பிரிவுகள்', 'లీడ్ విభాగాలు'],
+  'pw.lw.loading': ['Opening the lead…', 'लीड खुल रही है…', 'லீட் திறக்கிறது…', 'లీడ్ తెరుస్తోంది…'],
+  'pw.lw.notFound': ['This lead could not be opened.', 'यह लीड नहीं खुल सकी।', 'இந்த லீடைத் திறக்க முடியவில்லை.', 'ఈ లీడ్ తెరవలేకపోయాము.'],
+  'pw.lw.reqNone': ['There is no requirement task for you on this lead. What the customer asked for is on Overview.', 'इस लीड पर आपके लिए कोई आवश्यकता कार्य नहीं है। ग्राहक ने क्या माँगा, वह सारांश में है।', 'இந்த லீடில் உங்களுக்கு தேவை பணி இல்லை. வாடிக்கையாளர் கேட்டது கண்ணோட்டத்தில் உள்ளது.', 'ఈ లీడ్‌పై మీకు అవసరం పని లేదు. కస్టమర్ అడిగింది అవలోకనంలో ఉంది.'],
+  'pw.lw.quoteLocked': ['Measure & Quote opens once the requirement is collected.', 'आवश्यकता जमा होने के बाद माप और कोटेशन खुलेगा।', 'தேவை சேகரித்த பிறகு அளவீடு & மதிப்பீடு திறக்கும்.', 'అవసరం సేకరించిన తర్వాత కొలత & కొటేషన్ తెరుచుకుంటుంది.'],
+  'pw.lw.taking': ['Taking the task…', 'कार्य लिया जा रहा है…', 'பணியை எடுக்கிறது…', 'పని తీసుకుంటోంది…'],
+  'pw.lw.addPhotos': ['Add photos', 'फ़ोटो जोड़ें', 'புகைப்படங்களைச் சேர்', 'ఫోటోలు జోడించండి'],
+  'pw.lw.capturedMedia': ['Captured with the lead', 'लीड के साथ लिया गया', 'லீடுடன் பதிவானவை', 'లీడ్‌తో తీసినవి'],
+  'pw.lw.noActivity': ['Nothing has happened on this lead yet.', 'इस लीड पर अभी कुछ नहीं हुआ।', 'இந்த லீடில் இன்னும் எதுவும் நடக்கவில்லை.', 'ఈ లీడ్‌పై ఇంకా ఏమీ జరగలేదు.'],
+  'pw.lw.ev.assigned': ['{{name}} got the task', '{{name}} को कार्य मिला', '{{name}} பணியைப் பெற்றார்', '{{name}} కు పని వచ్చింది'],
+  'pw.lw.ev.started': ['{{name}} started', '{{name}} ने शुरू किया', '{{name}} தொடங்கினார்', '{{name}} ప్రారంభించారు'],
+  'pw.lw.ev.completed': ['{{name}} finished', '{{name}} ने पूरा किया', '{{name}} முடித்தார்', '{{name}} పూర్తి చేశారు'],
+  'pw.lw.ev.progress': ['{{name}} · {{p}}% done', '{{name}} · {{p}}% पूरा', '{{name}} · {{p}}% முடிந்தது', '{{name}} · {{p}}% పూర్తి'],
+  'pw.lw.ev.visit': ['Site visit', 'साइट विज़िट', 'தள வருகை', 'సైట్ సందర్శన'],
+  'pw.lw.ev.visitDone': ['Site visit recorded', 'साइट विज़िट दर्ज', 'தள வருகை பதிவானது', 'సైట్ సందర్శన నమోదైంది'],
+  'pw.lw.converted': ['Project created', 'प्रोजेक्ट बना', 'திட்டம் உருவானது', 'ప్రాజెక్ట్ సృష్టించబడింది'],
+  'pw.tl.tab.LEADS': ['Leads', 'लीड', 'லீட்கள்', 'లీడ్‌లు'],
+  'pw.tl.noun.LEADS': ['lead tasks', 'लीड कार्य', 'லீட் பணிகள்', 'లీడ్ పనులు'],
+  'pw.card.leadTasks': ['{{n}} tasks on this lead', 'इस लीड पर {{n}} कार्य', 'இந்த லீடில் {{n}} பணிகள்', 'ఈ లీడ్‌పై {{n}} పనులు'],
+};
+export default rows;

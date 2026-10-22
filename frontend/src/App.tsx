@@ -123,6 +123,7 @@ const EmployeeVisitMeasure = lazy(() => import("./pages/employeeTasks/EmployeeVi
 const EmployeeBoq = lazy(() => import("./pages/employeeTasks/EmployeeBoq"));
 const EmployeeQuotation = lazy(() => import("./pages/employeeTasks/EmployeeQuotation"));
 const EmployeeQuote = lazy(() => import("./pages/employeeTasks/EmployeeQuote"));
+const EmployeeLeadWorkspace = lazy(() => import("./pages/employeeTasks/EmployeeLeadWorkspace"));
 const MobileNotifications = lazy(() => import("./pages/employeeTasks/MobileNotifications"));
 
 // Employee Self-Service Portal — HR screens inside the same mobile shell.
@@ -338,6 +339,8 @@ function App() {
             <Route path="boq/new" element={<EmployeeBoq />} />
             <Route path="quotation/new" element={<EmployeeQuotation />} />
             {/* One combined quote page for the merged task; the older BOQ & Quotation task opens it too. */}
+            {/* One workspace per lead (tabs); the old quote links redirect into it. */}
+            <Route path="lead/:leadId" element={<EmployeeLeadWorkspace />} />
             <Route path="quote/new" element={<EmployeeQuote />} />
             <Route path="boq-quote/new" element={<EmployeeQuote />} />
             <Route path="notifications" element={<MobileNotifications />} />

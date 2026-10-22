@@ -96,7 +96,7 @@ function LField({ label, value }: { label: string; value?: React.ReactNode }) {
  * customer is and what they asked for before collecting/confirming the requirement. Read-only; the
  * "what they want" block is open by default, the rest tucked into quiet disclosures.
  */
-function LeadDetailsCard({ lead, extrasOnly = false }: { lead: LeadInfo; extrasOnly?: boolean }) {
+export function LeadDetailsCard({ lead, extrasOnly = false }: { lead: LeadInfo; extrasOnly?: boolean }) {
   const { t } = useT();
   const phone = lead.mobileNumber || lead.alternateMobile || lead.whatsappNumber;
   const wa = lead.whatsappNumber || lead.mobileNumber;
@@ -367,12 +367,14 @@ function Pill({ children, tone }: { children: React.ReactNode; tone?: 'warm' }) 
   );
 }
 
-export default function TaskDetail() {
+/** `embeddedTaskId`: rendered inside the lead workspace's Requirement tab — no page header of its own. */
+export default function TaskDetail({ embeddedTaskId, onChanged }: { embeddedTaskId?: number; onChanged?: () => void } = {}) {
   const { t } = useT();
   const tr = useTr();
   const loc = dateLocale(currentLang());
   const { id } = useParams<{ id: string }>();
-  const taskId = Number(id);
+  const embedded = embeddedTaskId != null;
+  const taskId = embeddedTaskId ?? Number(id);
   const navigate = useNavigate();
   const [task, setTask] = useState<TaskDetailType | null>(null);
   const [note, setNote] = useState('');
@@ -387,7 +389,8 @@ export default function TaskDetail() {
 
   const load = useCallback(() => {
     employeeTaskApi.detail(taskId).then(setTask).catch(() => {});
-  }, [taskId]);
+    onChanged?.();
+  }, [taskId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { load(); }, [load]);
 
@@ -397,25 +400,20 @@ export default function TaskDetail() {
     if (isCallTask) callRecordingApi.forTask(taskId).then(setCall).catch(() => {});
   }, [isCallTask, taskId]);
 
-  // Site Visit, Measure & Quote: the quote page IS the task — skip this page, take the task if it is still
-  // open to pick, and go straight there. Back from the quote page returns to the task list.
-  const quoteLink = task?.moduleLink && task.moduleLink.startsWith('/employee/quote/new') ? task.moduleLink : null;
+  // Lead tasks (Collect Requirement, Site Visit, Measure & Quote) are worked in the one lead workspace —
+  // its Requirement or Quote tab. The workspace takes a still-open quote task when the Quote tab opens.
+  const quoteLink = !!task?.moduleLink
+    && (task.moduleLink.startsWith('/employee/quote/new') || task.moduleLink.startsWith('/employee/boq-quote/new'));
+  const workspaceTab = !task?.leadId || isCallTask ? null
+    : quoteLink ? 'quote' : task.formType === 'REQUIREMENT' ? 'requirement' : null;
   useEffect(() => {
-    if (!task || !quoteLink) return;
-    let cancelled = false;
-    (async () => {
-      const gone = task.myAssignmentStatus === 'CANCELLED' || task.myAssignmentStatus === 'REJECTED';
-      const closed = ['WAITING_APPROVAL', 'COMPLETED', 'CANCELLED'].includes(task.status);
-      if ((!task.myAssignmentStatus || gone) && !closed && (task.status as string) === 'AVAILABLE') {
-        try { await employeeTaskApi.pick(taskId); } catch { /* not clocked in / taken — still open the quote */ }
-      }
-      if (!cancelled) navigate(quoteLink, { replace: true });
-    })();
-    return () => { cancelled = true; };
-  }, [task?.id, quoteLink]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!embedded && task && workspaceTab) {
+      navigate(`/employee/lead/${task.leadId}?tab=${workspaceTab}&task=${task.id}`, { replace: true });
+    }
+  }, [task?.id, workspaceTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!task) return <div className="p-6 text-center text-sm text-muted-foreground">{t('pw.td.loading')}</div>;
-  if (quoteLink) return <div className="p-6 text-center text-sm text-muted-foreground">{t('pw.td.opening_the_quote')}</div>;
+  if (!embedded && workspaceTab) return <div className="p-6 text-center text-sm text-muted-foreground">{t('pw.td.loading')}</div>;
 
   // A released/declined assignment (e.g. the data-entry hold ran out) no longer makes the task "mine" —
   // the employee can pick it up again.
@@ -538,17 +536,17 @@ export default function TaskDetail() {
   const solid = 'flex w-full items-center justify-center gap-2 rounded-xl py-3 text-[15px] font-semibold transition active:scale-[0.99] disabled:opacity-50';
 
   return (
-    <div className="flex flex-col bg-[#FAF8F3] pb-36">
-      {/* Sticky focused header */}
-      <div className="sticky top-0 z-10 flex items-center gap-1.5 border-b border-[#EEE7DA] bg-[#FAF8F3]/90 px-2 py-2.5 backdrop-blur">
+    <div className={`flex flex-col pb-36 ${embedded ? '' : 'bg-[#FAF8F3]'}`}>
+      {/* Sticky focused header — the lead workspace has its own. */}
+      {!embedded && <div className="sticky top-0 z-10 flex items-center gap-1.5 border-b border-[#EEE7DA] bg-[#FAF8F3]/90 px-2 py-2.5 backdrop-blur">
         <button onClick={() => navigate(-1)} className="flex h-9 w-9 items-center justify-center rounded-full active:bg-black/5" aria-label={t('pw.td.back')}>
           <ArrowLeft className="h-5 w-5 text-[#22271F]" />
         </button>
         <h1 className={`min-w-0 flex-1 truncate text-[#22271F] ${reqView ? 'text-[18px] font-bold' : 'text-[15px] font-semibold'}`}>{task.taskName}</h1>
         <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] ${reqView ? 'font-bold uppercase tracking-wide' : 'font-medium'} ${status.cls}`}>{status.label}</span>
-      </div>
+      </div>}
 
-      <div className="flex flex-col gap-3.5 p-4">
+      <div className={`flex flex-col gap-3.5 ${embedded ? 'py-1' : 'p-4'}`}>
         {task.closedByOffice && (
           <div className="flex items-start gap-2.5 rounded-2xl border border-[#D9E7DD] bg-[#EEF6F0] px-3.5 py-3">
             <Building2 className="mt-0.5 h-5 w-5 shrink-0 text-[#0A573B]" />

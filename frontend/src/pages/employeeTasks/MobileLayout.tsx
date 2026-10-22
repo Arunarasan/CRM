@@ -13,7 +13,7 @@ import { useT } from '@/i18n';
  * gold-accented bottom nav, safe-area aware.
  * Deliberately NOT DashboardLayout: field employees never see the desktop sidebar/table UI.
  */
-const WIDE_ROUTES = ['/employee/quote/new', '/employee/boq-quote/new'];
+const WIDE_ROUTES = ['/employee/quote/new', '/employee/boq-quote/new', '/employee/lead/'];
 
 export default function MobileLayout() {
   const location = useLocation();

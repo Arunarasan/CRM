@@ -1,11 +1,10 @@
 import { BaseInput } from '@/components/ui/input';
 import { useCallback, useEffect, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { CheckCircle2, ChevronDown, ChevronRight, Image as ImageIcon, Loader2, MapPin, X } from 'lucide-react';
 import api from '@/lib/api';
 import { resolveFileUrl, uploadFile } from '@/lib/uploadFile';
 import { leadApi } from '../leads/leadApi';
-import { PortalHeader } from '../employeePortal/_shared';
 import QuoteWorkspace from '../leads/quote/QuoteWorkspace';
 import type { LeadProjectStatus } from '@/api/boqApi';
 import ConvertProjectSheet from './components/ConvertProjectSheet';
@@ -22,8 +21,15 @@ import type { ProjectFile } from '../projectCommandCenter/documents/fileTypes';
  * twice — the sheet IS the measurement and the quotation.
  */
 export default function EmployeeQuote() {
+  // The quote now lives in the lead workspace's Quote tab; old task / notification links land there.
   const [params] = useSearchParams();
   const leadId = Number(params.get('leadId'));
+  if (!leadId) return <p className="p-4 text-sm text-muted-foreground">No lead selected.</p>;
+  return <Navigate to={`/employee/lead/${leadId}?tab=quote`} replace />;
+}
+
+/** The quote page's body — site visit, photos and the quote sheet — shown in the lead workspace's Quote tab. */
+export function EmployeeQuoteBody({ leadId, onPhotosChanged }: { leadId: number; onPhotosChanged?: () => void }) {
   const navigate = useNavigate();
   const [lead, setLead] = useState<any>(null);
   const [creatorName, setCreatorName] = useState<string | null>(null);
@@ -42,11 +48,8 @@ export default function EmployeeQuote() {
     leadApi.createdBy(leadId).then((r) => setCreatorName(r.data?.name || null)).catch(() => {});
   }, [leadId]);
 
-  if (!leadId) return <p className="p-4 text-sm text-muted-foreground">No lead selected.</p>;
-
   return (
     <div className="flex flex-col pb-6">
-      <PortalHeader title="Visit, Measure & Quote" />
       {/* Phone: one column — who, photos, visit, then the sheet.
           Tablet (md): who + visit | photos side by side above a full-width sheet.
           Wide (xl): that context becomes a sticky left rail beside the sheet, which then has room for its table view. */}
@@ -56,7 +59,7 @@ export default function EmployeeQuote() {
           <div className="md:col-start-2 md:row-span-2 md:row-start-1 xl:contents">
             <SitePhotosCard leadId={leadId} refreshKey={photosKey} />
           </div>
-          <SiteVisitCard leadId={leadId} agreedDate={lead?.siteVisitDate} onSaved={() => setPhotosKey((k) => k + 1)} />
+          <SiteVisitCard leadId={leadId} agreedDate={lead?.siteVisitDate} onSaved={() => { setPhotosKey((k) => k + 1); onPhotosChanged?.(); }} />
         </aside>
         <div className="mt-3 min-w-0 xl:mt-0">
           <QuoteWorkspace key={sheetKey} leadId={String(leadId)} fieldMode onChanged={() => {}} onCreateProject={(lp) => { setLeadProject(lp); setConvertOpen(true); }} />
@@ -83,7 +86,7 @@ const isImage = (type: string | undefined, url: string | undefined) => {
  * ones from site visits — so the person preparing the BOQ / quote can see the site without leaving the page.
  * Tap a thumbnail for the full-screen viewer.
  */
-function SitePhotosCard({ leadId, refreshKey }: { leadId: number; refreshKey: number }) {
+export function SitePhotosCard({ leadId, refreshKey }: { leadId: number; refreshKey: number }) {
   const [files, setFiles] = useState<ProjectFile[] | null>(null);
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
 

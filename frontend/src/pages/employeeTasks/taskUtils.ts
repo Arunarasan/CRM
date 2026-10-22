@@ -122,3 +122,12 @@ export function byPlanRank(a: TaskCardType, b: TaskCardType): number {
     || (b.leadRating ?? 0) - (a.leadRating ?? 0)
     || (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999');
 }
+
+/** Lead tasks worked in the lead workspace: Collect Requirement, and the site visit / measure / quote stage. */
+export const REQUIREMENT_CODES = ['TT_COLLECT_REQUIREMENT', 'TT_UNDERSTAND_REQ'];
+export const QUOTE_CODES = ['TT_MEASURE_QUOTE', 'TT_VISIT_MEASURE', 'TT_BOQ_QUOTE'];
+export const inLeadWorkspace = (t: { leadId?: number | null; category?: string | null; taskTypeCode?: string | null }) => {
+  const code = (t.taskTypeCode ?? '').toUpperCase();
+  return t.leadId != null && ['LEAD', 'ENQUIRY'].includes((t.category ?? '').toUpperCase())
+    && (REQUIREMENT_CODES.includes(code) || QUOTE_CODES.includes(code));
+};
