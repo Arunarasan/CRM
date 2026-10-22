@@ -25,7 +25,7 @@ Plug the scanner in with a USB-OTG cable and allow USB access when Android asks.
 
 | Brand | Adapter | State |
 |---|---|---|
-| SecuGen Hamster Pro 20 / IV | `SecuGenAdapter` | **Needs the vendor SDK** (see below) |
+| SecuGen Hamster Pro 20 / IV | `SecuGenAdapter` | Uses the vendor SDK (see below); needs a real-phone test |
 
 Add a brand: write `XxxAdapter implements SensorAdapter`, list it in `SensorRegistry.create()`, and add
 its USB vendor id to `res/xml/usb_device_filter.xml`.
@@ -34,11 +34,16 @@ Use ONE scanner model per site: fingerprints captured on different brands match 
 RD-Service-only (L1, Aadhaar) scanners such as Mantra MFS110 L1 cannot be used: they return only
 encrypted data.
 
-## Finishing the SecuGen adapter
+## SecuGen SDK (already wired in)
 
-1. Request the free "FDx SDK Pro for Android" from SecuGen; ask whether it returns the raw image or only a template.
-2. Put its `.jar` in `app/libs/` and its `.so` folders in `app/src/main/jniLibs/`.
-3. Fill in `open / capture / close` in `SecuGenAdapter` (steps are in its header comment).
-4. Enrol 3-4 staff, then tune the thresholds in `FingerprintPolicy` from real scores.
+`SecuGenAdapter` uses SecuGen's "FDx SDK Pro for Android" (v4.22), following its demo app. The vendor
+files are licensed, so they are NOT in git (see `.gitignore`); copy them in before building on a new machine:
+
+1. `FDxSDKProFDAndroid.jar` and `AlCamera.jar` -> `app/libs/`
+2. the `arm64-v8a` and `armeabi-v7a` folders of `.so` files -> `app/src/main/jniLibs/`
+
+Both come from the zip SecuGen emails you (`FDx_SDK_Pro_FD_Android_Studio_v4.22.zip`).
+The adapter returns the raw 8-bit image; the server makes the template. After first use on real
+scans, check/tune the thresholds in `FingerprintPolicy`.
 
 Fingerprint data is never stored on the phone; it goes straight to the page.

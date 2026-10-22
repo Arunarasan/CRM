@@ -29,7 +29,8 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 public class FingerprintBridge {
     private static final String ACTION_USB_PERMISSION = "com.arudra.kiosk.USB_PERMISSION";
-    private static final int CAPTURE_TIMEOUT_MS = 20000;
+    // Shorter than the page's own 20 s wait, so the scanner's real message reaches the page first.
+    private static final int CAPTURE_TIMEOUT_MS = 15000;
 
     private final Context context;
     private final WebView webView;
@@ -40,6 +41,7 @@ public class FingerprintBridge {
     private final AtomicReference<String> activeRequest = new AtomicReference<>();
 
     private volatile SensorAdapter ready;   // adapter opened and ready to capture
+    private volatile int readyDeviceId = -1;
     private volatile String lastError = "";
 
     public FingerprintBridge(Context context, WebView webView) {
@@ -49,28 +51,37 @@ public class FingerprintBridge {
         IntentFilter f = new IntentFilter(ACTION_USB_PERMISSION);
         if (Build.VERSION.SDK_INT >= 33) {
             context.registerReceiver(permissionReceiver, f, Context.RECEIVER_NOT_EXPORTED);
+            context.registerReceiver(detachReceiver, new IntentFilter(UsbManager.ACTION_USB_DEVICE_DETACHED), Context.RECEIVER_NOT_EXPORTED);
         } else {
             context.registerReceiver(permissionReceiver, f);
+            context.registerReceiver(detachReceiver, new IntentFilter(UsbManager.ACTION_USB_DEVICE_DETACHED));
         }
     }
 
     /** Look for a supported scanner and ask for USB permission if needed. Call on start and on attach. */
     public void scan() {
-        // Diagnostic: tell the person what USB devices the phone sees (OTG check, scanner IDs).
+        // Diagnostic, only when there is something to fix: no USB device at all (OTG cable/adapter or a
+        // phone without OTG) or only devices this app cannot drive. Shows vendor/product ids to help.
         StringBuilder seen = new StringBuilder();
+        boolean supported = false;
         for (UsbDevice d : usb.getDeviceList().values()) {
+            boolean ok = SensorRegistry.forDevice(adapters, d) != null;
+            supported |= ok;
             if (seen.length() > 0) seen.append("; ");
             seen.append(String.format("%s vendor 0x%04X product 0x%04X%s", d.getProductName() == null ? "USB device" : d.getProductName(),
-                    d.getVendorId(), d.getProductId(), SensorRegistry.forDevice(adapters, d) == null ? " (not supported)" : " (supported)"));
+                    d.getVendorId(), d.getProductId(), ok ? " (supported)" : " (not supported)"));
         }
-        final String msg = seen.length() == 0
-                ? "No USB device detected. Check the OTG cable/adapter and that the phone supports OTG."
-                : "USB: " + seen;
-        main.post(() -> android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show());
+        if (!supported) {
+            final String msg = seen.length() == 0
+                    ? "No USB device detected. Check the OTG cable/adapter and that the phone supports OTG."
+                    : "No supported fingerprint scanner. USB: " + seen;
+            main.post(() -> android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show());
+        }
 
         for (UsbDevice d : usb.getDeviceList().values()) {
             if (SensorRegistry.forDevice(adapters, d) == null) continue;
             if (usb.hasPermission(d)) {
+                if (ready != null && readyDeviceId == d.getDeviceId()) return;   // already open
                 openDevice(d);
             } else {
                 int flags = PendingIntent.FLAG_UPDATE_CURRENT
@@ -90,6 +101,16 @@ public class FingerprintBridge {
         }
     };
 
+    /** Scanner unplugged: stop reporting it as ready so the page shows "plug in the scanner". */
+    private final BroadcastReceiver detachReceiver = new BroadcastReceiver() {
+        @Override public void onReceive(Context c, Intent intent) {
+            UsbDevice d = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
+            if (d != null && d.getDeviceId() == readyDeviceId) {
+                worker.execute(() -> { closeReady(); lastError = ""; });
+            }
+        }
+    };
+
     private void openDevice(UsbDevice d) {
         SensorAdapter a = SensorRegistry.forDevice(adapters, d);
         if (a == null) return;
@@ -98,6 +119,7 @@ public class FingerprintBridge {
                 closeReady();
                 a.open(context, d);
                 ready = a;
+                readyDeviceId = d.getDeviceId();
                 lastError = "";
             } catch (SensorAdapter.SensorException e) {
                 lastError = e.getMessage();
@@ -108,6 +130,7 @@ public class FingerprintBridge {
     private void closeReady() {
         SensorAdapter a = ready;
         ready = null;
+        readyDeviceId = -1;
         if (a != null) a.close();
     }
 
@@ -163,6 +186,7 @@ public class FingerprintBridge {
 
     public void destroy() {
         try { context.unregisterReceiver(permissionReceiver); } catch (Exception ignored) { }
+        try { context.unregisterReceiver(detachReceiver); } catch (Exception ignored) { }
         closeReady();
         worker.shutdownNow();
     }

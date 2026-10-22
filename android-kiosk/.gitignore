@@ -2,3 +2,7 @@
 build/
 local.properties
 *.apk
+
+# SecuGen's vendor SDK is licensed software: keep it out of the repo (see README)
+app/libs/*.jar
+app/src/main/jniLibs/

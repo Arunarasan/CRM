@@ -1,4 +1,5 @@
 import type { FingerCapture } from '@/api/attendanceApi';
+import { captureSecugen, cancelSecugen } from '@/lib/secugenWebApi';
 
 /**
  * The link between the CRM web page and the fingerprint sensor.
@@ -65,11 +66,13 @@ function install() {
   };
 }
 
-/** Waits for one finger on the sensor. Rejects with a readable message on timeout, error or no sensor. */
+/**
+ * Waits for one finger on the sensor. Rejects with a readable message on timeout, error or no sensor.
+ * Inside the kiosk app that is the phone's USB sensor; in a normal browser (a kiosk on a Windows PC)
+ * it is the SecuGen scanner on that PC, through SecuGen WebAPI.
+ */
 export function captureFingerprint(timeoutMs = 20000): Promise<FingerCapture> {
-  if (!window.AndroidFingerprint) {
-    return Promise.reject(new Error('No fingerprint sensor here. Use the kiosk app with the sensor connected.'));
-  }
+  if (!window.AndroidFingerprint) return captureSecugen();
   if (!fingerprintSensorAvailable()) {
     return Promise.reject(new Error('The fingerprint sensor is not connected. Plug it in and allow access.'));
   }
@@ -88,6 +91,7 @@ export function captureFingerprint(timeoutMs = 20000): Promise<FingerCapture> {
 }
 
 export function cancelFingerprint() {
+  cancelSecugen();
   try { window.AndroidFingerprint?.cancel(); } catch { /* ignore */ }
 }
 

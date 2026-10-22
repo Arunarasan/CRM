@@ -10,9 +10,13 @@ android {
         versionCode 1
         versionName '1.0'
         // Page the kiosk phone opens. Override: gradlew assembleDebug -PkioskUrl=https://...
+        // Scanner libraries exist for these CPUs (the vendor ships more; phones are ARM).
+        ndk { abiFilters 'arm64-v8a', 'armeabi-v7a' }
         buildConfigField 'String', 'KIOSK_URL', "\"${project.findProperty('kioskUrl') ?: 'https://jbdecorcdm.com/crm/kiosk'}\""
     }
     buildFeatures { buildConfig true }
+    // SecuGen's native libraries must be unpacked on install, as in the vendor's own demo app.
+    packagingOptions { jniLibs { useLegacyPackaging true } }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
