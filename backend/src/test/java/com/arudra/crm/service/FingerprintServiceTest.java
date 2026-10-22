@@ -57,6 +57,16 @@ class FingerprintServiceTest {
         return new Capture("RAW", SyntheticFingerprint.W, SyntheticFingerprint.H, 500.0, Base64.getEncoder().encodeToString(px));
     }
 
+    /** The same synthetic touch as an 8-bit grayscale BMP, the way SecuGen WebAPI returns a scan. */
+    private static Capture bmpScan(long finger, long touch) throws java.io.IOException {
+        byte[] px = SyntheticFingerprint.render(finger, touch);
+        var img = new java.awt.image.BufferedImage(SyntheticFingerprint.W, SyntheticFingerprint.H, java.awt.image.BufferedImage.TYPE_BYTE_GRAY);
+        img.getRaster().setDataElements(0, 0, SyntheticFingerprint.W, SyntheticFingerprint.H, px);
+        var out = new java.io.ByteArrayOutputStream();
+        assertTrue(javax.imageio.ImageIO.write(img, "bmp", out));
+        return new Capture("BMP", SyntheticFingerprint.W, SyntheticFingerprint.H, 500.0, Base64.getEncoder().encodeToString(out.toByteArray()));
+    }
+
     private static Capture blank() {
         byte[] px = new byte[SyntheticFingerprint.W * SyntheticFingerprint.H];
         java.util.Arrays.fill(px, (byte) 255);
@@ -71,6 +81,16 @@ class FingerprintServiceTest {
         f.setTemplate(service.toTemplate(c).toByteArray());
         f.setEngineVersion("test");
         return f;
+    }
+
+    @Test
+    void secugenBmpScanMatchesTheSameFingerAsRaw() throws Exception {
+        var fromBmp = service.toTemplate(bmpScan(1, 100));
+        var fromRaw = service.toTemplate(scan(1, 200));
+        double same = new com.machinezoo.sourceafis.FingerprintMatcher(fromBmp).match(fromRaw);
+        double other = new com.machinezoo.sourceafis.FingerprintMatcher(fromBmp).match(service.toTemplate(scan(2, 200)));
+        assertTrue(same >= 40, "same finger score " + same);
+        assertTrue(other < 40, "other finger score " + other);
     }
 
     @Test

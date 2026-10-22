@@ -94,7 +94,7 @@ export interface FingerprintStatus {
 
 /** One sensor capture as the kiosk app returns it: an image (PNG/JPEG/RAW grayscale) or an ISO template, base64. */
 export interface FingerCapture {
-  format: 'PNG' | 'JPEG' | 'RAW' | 'ISO';
+  format: 'PNG' | 'JPEG' | 'BMP' | 'RAW' | 'ISO';
   width?: number;
   height?: number;
   dpi?: number;

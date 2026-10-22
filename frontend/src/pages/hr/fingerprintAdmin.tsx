@@ -1,7 +1,7 @@
 /**
- * HR → employee profile: enrol fingerprints for the office kiosk. The scans come from the sensor on
- * the kiosk phone, so the Enrol button works inside the kiosk app (see lib/fingerprintBridge.ts).
- * Elsewhere HR can still try it with fingerprint image files (for testing a sensor's demo output).
+ * HR → employee profile: enrol fingerprints for the office kiosk. Inside the kiosk app the scans come
+ * from the phone's sensor (lib/fingerprintBridge.ts); on a computer they come from a SecuGen scanner
+ * plugged into it, through SecuGen WebAPI (lib/secugenWebApi.ts). Image files remain as a test aid.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Fingerprint, Loader2, Trash2, CheckCircle2, Upload } from 'lucide-react';
@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/toast';
 import { captureFingerprint, cancelFingerprint, fingerprintSensorAvailable, insideKioskApp, readFingerprintFiles } from '@/lib/fingerprintBridge';
+import { captureSecugen, cancelSecugen, SECUGEN_WEBAPI_URL } from '@/lib/secugenWebApi';
 
 const errText = (e: any, fallback = 'Action failed') => e?.response?.data?.message || e?.message || fallback;
 
@@ -40,10 +41,13 @@ export function FingerprintEnrollmentCard({ employeeId, canEdit }: { employeeId:
     attendanceApi.fingerprintStatus(employeeId).then(setStatus).catch(() => setStatus(null)).finally(() => setLoading(false));
   }, [employeeId]);
   useEffect(load, [load]);
-  useEffect(() => () => { runRef.current += 1; cancelFingerprint(); }, []);
+  useEffect(() => () => { runRef.current += 1; cancelFingerprint(); cancelSecugen(); }, []);
 
   const sensor = fingerprintSensorAvailable();
   const inApp = insideKioskApp();
+  // Outside the kiosk app the scanner is the SecuGen one on this PC; its state is only known on scan.
+  const canScan = inApp ? sensor : true;
+  const scan = inApp ? captureFingerprint : captureSecugen;
 
   const save = async (captures: FingerCapture[]) => {
     await attendanceApi.enrollFingerprint(employeeId, finger, { consent, captures });
@@ -60,7 +64,7 @@ export function FingerprintEnrollmentCard({ employeeId, canEdit }: { employeeId:
       const captures: FingerCapture[] = [];
       for (let i = 0; i < SCANS; i++) {
         setScanNo(i + 1);
-        captures.push(await captureFingerprint());
+        captures.push(await scan());
         if (run !== runRef.current) return;
       }
       await save(captures);
@@ -140,7 +144,7 @@ export function FingerprintEnrollmentCard({ employeeId, canEdit }: { employeeId:
                 onChange={(e) => setFinger(Number(e.target.value))} aria-label="Finger to enrol">
                 {FINGERS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
               </select>
-              <Button size="sm" onClick={enrol} disabled={busy || !sensor}>
+              <Button size="sm" onClick={enrol} disabled={busy || !canScan}>
                 <Fingerprint className="h-4 w-4" /> {status?.fingers.some((f) => f.finger === finger) ? 'Re-enrol this finger' : 'Enrol finger'}
               </Button>
               {!inApp && (
@@ -156,10 +160,13 @@ export function FingerprintEnrollmentCard({ employeeId, canEdit }: { employeeId:
               <input type="checkbox" className="mt-0.5 h-4 w-4" checked={consent} disabled={busy} onChange={(e) => setConsent(e.target.checked)} />
               <span>The employee has agreed to give their fingerprint for attendance. Only a numeric template is stored, never the image, and it is deleted when they leave.</span>
             </label>
-            {!sensor && (
+            {inApp && !sensor && (
+              <p className="text-xs text-muted-foreground">The fingerprint sensor is not connected. Plug it into the kiosk phone and allow access.</p>
+            )}
+            {!inApp && (
               <p className="text-xs text-muted-foreground">
-                {inApp ? 'The fingerprint sensor is not connected. Plug it into the kiosk phone and allow access.'
-                  : 'Enrolling a finger needs the kiosk app on the phone with the sensor. Open the CRM there to enrol.'}
+                Scans with the SecuGen scanner plugged into this PC. Needs SecuGen WebAPI installed; the first time, open{' '}
+                <a href={SECUGEN_WEBAPI_URL} target="_blank" rel="noreferrer" className="underline">{SECUGEN_WEBAPI_URL}</a> and allow it.
               </p>
             )}
           </div>
