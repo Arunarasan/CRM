@@ -755,6 +755,22 @@ function InvoiceMaker({ project, invoice: editing, onClose, onSaved }: { project
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Has the customer already paid this? NONE = unpaid; RECORDED = money already in Payments (link it);
+  // NEW = paid but not recorded yet (record it now).
+  const [payMode, setPayMode] = useState<"NONE" | "RECORDED" | "NEW">("NONE");
+  const [unlinked, setUnlinked] = useState<CustomerPayment[] | null>(null);
+  const [linkIds, setLinkIds] = useState<Set<number>>(new Set());
+  const [newMethod, setNewMethod] = useState("UPI");
+  const [newRef, setNewRef] = useState("");
+  const [newAmount, setNewAmount] = useState<number | "">("");
+  useEffect(() => {
+    if (editing || payMode === "NONE" || unlinked) return;
+    financeApi.getPayments({ projectId: project.id, size: 100 })
+      .then((r) => setUnlinked((r.content || []).filter((p) => p.status === "CONFIRMED" && !p.invoice)))
+      .catch(() => setUnlinked([]));
+  }, [editing, payMode, unlinked, project.id]);
+  const linkedTotal = (unlinked || []).filter((p) => linkIds.has(p.id)).reduce((s, p) => s + Number(p.amount || 0), 0);
+
   // Editing a draft: load its saved lines into the itemized editor.
   const [quoteId, setQuoteId] = useState<number | null>(editing?.quotation?.id ?? null);
   useEffect(() => {
@@ -904,6 +920,9 @@ function InvoiceMaker({ project, invoice: editing, onClose, onSaved }: { project
             }]
           : []);
     if (items.length === 0) { setError(itemized ? "Add at least one line item with an amount." : "Enter an amount."); return; }
+    const settling = !editing && payMode !== "NONE";
+    if (payMode === "RECORDED" && !editing && linkIds.size === 0) { setError("Tick the recorded payment(s) this invoice was paid with, or choose another option."); return; }
+    if (payMode === "NEW" && !editing && !(Number(newAmount || total) > 0)) { setError("Enter the amount that was paid."); return; }
     setSaving(true);
     setError(null);
     try {
@@ -922,8 +941,17 @@ function InvoiceMaker({ project, invoice: editing, onClose, onSaved }: { project
       const saved = editing
         ? await financeApi.updateDraftInvoice(editing.id, invoice, items)
         : await financeApi.createInvoice(invoice, items);
-      if (issue && saved?.id) await financeApi.issueInvoice(saved.id);
-      toast.success(issue ? (editing ? "Invoice updated & issued" : "Invoice created & issued") : (editing ? "Draft updated" : "Draft invoice saved"));
+      if ((issue || settling) && saved?.id) await financeApi.issueInvoice(saved.id);
+      if (settling && saved?.id) {
+        if (payMode === "RECORDED") {
+          for (const p of (unlinked || []).filter((x) => linkIds.has(x.id))) {
+            await financeApi.updatePayment(p.id, { amount: p.amount, invoice: { id: saved.id } });
+          }
+        } else {
+          await financeApi.markInvoicePaid(saved.id, [{ method: newMethod, amount: Number(newAmount || total), referenceNumber: newRef || undefined }]);
+        }
+      }
+      toast.success(settling ? "Invoice issued & payment settled" : issue ? (editing ? "Invoice updated & issued" : "Invoice created & issued") : (editing ? "Draft updated" : "Draft invoice saved"));
       onSaved();
     } catch (e: any) {
       setError(e?.response?.data?.message || "Failed to create invoice.");
@@ -1053,6 +1081,52 @@ function InvoiceMaker({ project, invoice: editing, onClose, onSaved }: { project
           <button type="button" onClick={() => setItemized((v) => !v)} className="text-xs font-medium text-emerald-600 hover:underline">
             {itemized ? "← Back to simple amount" : "Itemize (multiple lines)"}
           </button>
+
+          {!editing && (
+            <div className="space-y-2 rounded-lg border border-slate-200 p-3">
+              <span className="text-sm font-medium">Has the customer paid this?</span>
+              <div className="grid grid-cols-3 gap-1.5">
+                {([["NONE", "Not paid yet"], ["RECORDED", "Paid · already recorded"], ["NEW", "Paid · not recorded"]] as const).map(([k, label]) => (
+                  <button key={k} type="button" onClick={() => setPayMode(k)}
+                    className={`rounded-lg border px-2 py-1.5 text-xs font-semibold transition-colors ${
+                      payMode === k ? "border-emerald-500 bg-emerald-50 text-emerald-700" : "border-slate-200 text-slate-500 hover:bg-slate-50"}`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {payMode === "RECORDED" && (
+                unlinked === null ? <p className="text-xs text-slate-500">Loading recorded payments…</p>
+                : unlinked.length === 0 ? (
+                  <p className="text-xs text-amber-700">No unlinked payments found on this project — choose “Paid · not recorded” to record it now.</p>
+                ) : (
+                  <div className="divide-y divide-slate-100 rounded-md border border-slate-200">
+                    {unlinked.map((p) => (
+                      <label key={p.id} className="flex cursor-pointer items-center gap-2.5 px-3 py-2 text-sm hover:bg-slate-50">
+                        <input type="checkbox" className="h-4 w-4 accent-emerald-600" checked={linkIds.has(p.id)}
+                          onChange={() => setLinkIds((s) => { const n = new Set(s); if (n.has(p.id)) n.delete(p.id); else n.add(p.id); return n; })} />
+                        <span className="min-w-0 flex-1 truncate">{p.paymentNumber} · {(p.paymentMethod || "").replace("_", " ")} · {p.paymentDate ? format(new Date(p.paymentDate), "dd MMM yyyy") : "—"}</span>
+                        <span className="shrink-0 font-medium tabular-nums">{inr(p.amount)}</span>
+                      </label>
+                    ))}
+                  </div>
+                )
+              )}
+              {payMode === "RECORDED" && linkIds.size > 0 && (
+                <p className="text-xs text-slate-500">Linked {inr(linkedTotal)} of {inr(total)} — {linkedTotal >= total - 0.01 ? "invoice will be marked paid." : "invoice will be partly paid."}</p>
+              )}
+              {payMode === "NEW" && (
+                <div className="grid grid-cols-12 items-center gap-2">
+                  <select value={newMethod} onChange={(e) => setNewMethod(e.target.value)} className="col-span-4 rounded-md border border-input bg-background px-2 py-1.5 text-sm">
+                    {METHODS.map((m) => <option key={m} value={m}>{m.replace("_", " ")}</option>)}
+                  </select>
+                  <Input className="col-span-4 text-right" type="number" min={0} value={newAmount === "" ? "" : newAmount}
+                    onChange={(e) => setNewAmount(e.target.value === "" ? "" : Number(e.target.value))} placeholder={`Paid ${Math.round(total)}`} />
+                  <Input className="col-span-4" value={newRef} onChange={(e) => setNewRef(e.target.value)} placeholder="Ref / Txn" />
+                </div>
+              )}
+              {payMode !== "NONE" && <p className="text-xs text-slate-500">The invoice is issued and the payment is settled when you save — no duplicate payment is created for recorded ones.</p>}
+            </div>
+          )}
 
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Optional note shown on the invoice" />
 

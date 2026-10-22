@@ -12,7 +12,6 @@ import { Badge } from "@/components/ui/badge";
 import ResponsiveList, { type Column } from "@/components/ui/responsive-list";
 import FilterSheet from "@/components/ui/filter-sheet";
 import SettleProjectDialog, { canSettleProjects } from "@/pages/projectCommandCenter/SettleProjectDialog";
-import { useHoverInfo, InfoRow } from "@/components/ui/hover-info";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
@@ -108,37 +107,6 @@ function Owner({ pm }: { pm?: { name?: string } }) {
   );
 }
 
-/** Rich card shown when hovering a project row. */
-function ProjectInfo({ p }: { p: ProjectRow }) {
-  return (
-    <div>
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <div className="min-w-0">
-          <div className="font-bold text-slate-800 truncate">{p.projectName}</div>
-          {p.projectCode && <div className="font-mono text-[11px] text-slate-400">{p.projectCode}</div>}
-        </div>
-        <StageBadge stage={p.workStage} />
-      </div>
-      <div className="divide-y divide-slate-100">
-        <div className="pb-1.5">
-          <InfoRow label="Customer" value={p.customer?.name} />
-          <InfoRow label="City" value={p.customer?.city} />
-          <InfoRow label="Type" value={p.projectType} />
-        </div>
-        <div className="py-1.5">
-          <InfoRow label="Manager" value={p.projectManager?.name || "Unassigned"} />
-          <InfoRow label="Start" value={p.startDate} />
-          <InfoRow label="End" value={p.endDate} />
-        </div>
-        <div className="pt-1.5">
-          <InfoRow label="Category" value={p.workCategories?.join(", ")} />
-          <InfoRow label="Product" value={p.workProducts?.join(", ")} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /** Small styled native select that matches the toolbar pill look in both themes. */
 function FilterSelect({
   value, onChange, options, placeholder,
@@ -173,7 +141,6 @@ function loadProjectsView(): Record<string, any> {
 
 export default function Projects() {
   const navigate = useNavigate();
-  const info = useHoverInfo();
   const [saved] = useState(loadProjectsView);
   const lastQuery = useRef<string | null>(null);
   const [projects, setProjects] = useState<ProjectRow[]>([]);
@@ -475,7 +442,6 @@ export default function Projects() {
           loading={loading}
           getRowKey={(p) => p.id}
           onRowClick={(p) => navigate(`/projects/${p.id}`)}
-          getRowProps={(p) => info.bind(<ProjectInfo p={p} />)}
           emptyIcon={FolderKanban}
           emptyTitle="No projects found"
           emptyDescription="No projects match your search or filters."
@@ -514,7 +480,7 @@ export default function Projects() {
                     <button
                       key={p.id}
                       onClick={() => navigate(`/projects/${p.id}`)}
-                      className="w-full text-left bg-card rounded-lg border p-3 hover:shadow-sm hover:-translate-y-0.5 transition-all"
+                      className="w-full text-left bg-card rounded-lg border p-3"
                     >
                       {p.projectCode && <div className="text-[11px] font-mono text-muted-foreground">{p.projectCode}</div>}
                       <div className="font-medium text-sm truncate">{p.projectName}</div>
@@ -585,7 +551,6 @@ export default function Projects() {
           api.get(`/projects/segment-counts`).then((res) => setCounts(res.data)).catch(() => {});
           loadPendingSummary();
         }} />
-      {info.portal}
     </div>
   );
 }

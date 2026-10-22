@@ -1046,6 +1046,16 @@ public class FinanceService {
         p.setReferenceNumber(in.getReferenceNumber() == null || in.getReferenceNumber().isBlank() ? null : in.getReferenceNumber().trim());
         p.setRemarks(in.getRemarks());
         if (in.getCollectedBy() != null && in.getCollectedBy().getId() != null) p.setCollectedBy(in.getCollectedBy());
+        // Attach an already-recorded, not-yet-invoiced payment to an invoice (no new money is created).
+        if (p.getInvoice() == null && in.getInvoice() != null && in.getInvoice().getId() != null) {
+            Invoice target = getInvoice(in.getInvoice().getId());
+            if ("CANCELLED".equals(target.getStatus())) throw new RuntimeException("Cannot link a payment to a cancelled invoice");
+            if (p.getCustomer() != null && target.getCustomer() != null
+                    && !p.getCustomer().getId().equals(target.getCustomer().getId())) {
+                throw new RuntimeException("This payment belongs to a different customer");
+            }
+            p.setInvoice(target);
+        }
         CustomerPayment saved = paymentRepository.save(p);
         if ("CONFIRMED".equals(saved.getStatus()) && delta.signum() != 0) {
             String why = "Payment " + saved.getPaymentNumber() + " edited by " + (user != null ? user.getEmail() : "system")
