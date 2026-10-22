@@ -54,7 +54,8 @@ export default function CallLeads() {
               {c.contactName || displayPhone(c.phoneNumber) || t('pw.calls.unknown')}
             </p>
             <p className="mb-2 text-[11.5px] text-[#8A8F86]">
-              {[c.calledAt && fmtCallTime(c.calledAt), fmtDuration(c.durationSec)].filter(Boolean).join(' · ')}
+              {[c.calledAt && fmtCallTime(c.calledAt), fmtDuration(c.durationSec),
+                c.uploadedBy && t('pw.tc.addedBy', { name: c.uploadedBy })].filter(Boolean).join(' · ')}
             </p>
             {/* Replace the row in place; a call someone else just closed drops out on refresh. */}
             <CallLeadPanel call={c} onChanged={(u) => setCalls((l) => (l || []).map((x) => (x.id === u.id ? u : x)))} />

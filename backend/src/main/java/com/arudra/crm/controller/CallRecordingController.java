@@ -103,7 +103,7 @@ public class CallRecordingController {
             @RequestParam(value = "durationSec", required = false) Integer durationSec,
             @RequestParam(value = "note", required = false) String note) throws IOException {
         return ResponseEntity.ok(ApiResponse.success(service.uploadMine(file, lastModified, durationSec, note,
-                currentUserService.getCurrentUser()), "Call uploaded — a Collect Requirement task was created for you."));
+                currentUserService.getCurrentUser()), "Call uploaded — it's now open to all employees in Call Leads."));
     }
 
     // --- used from the task screens (manager or the task's assignee) -------------------------

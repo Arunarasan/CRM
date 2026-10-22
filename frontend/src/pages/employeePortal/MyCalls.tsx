@@ -5,7 +5,7 @@ import AudioPlayer from '@/components/AudioPlayer';
 import { resolveFileUrl } from '@/lib/uploadFile';
 import { toast } from '@/components/ui/toast';
 import { callRecordingApi, errMsg, fmtCallTime, fmtDuration, type CallRecording } from '@/api/callRecordingApi';
-import { displayPhone } from '@/components/callRecordings/CallLeadPanel';
+import CallLeadPanel, { displayPhone } from '@/components/callRecordings/CallLeadPanel';
 import { useT } from '@/i18n';
 
 /**
@@ -27,16 +27,14 @@ export default function MyCalls() {
 
   const upload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
-    let last: CallRecording | null = null;
     try {
       for (const f of Array.from(files)) {
         setProgress(0);
-        last = await callRecordingApi.uploadMine(f, { note: note.trim() || undefined }, setProgress);
+        await callRecordingApi.uploadMine(f, { note: note.trim() || undefined }, setProgress);
       }
       setNote('');
       toast.success(files.length > 1 ? t('pw.calls.uploadedMany', { n: files.length }) : t('pw.calls.uploadedOne'));
       load();
-      if (files.length === 1 && last?.taskId) navigate(`/employee/tasks/${last.taskId}`);
     } catch (e) {
       toast.error(errMsg(e, t('pw.calls.uploadFailed')));
     } finally {
@@ -74,13 +72,17 @@ export default function MyCalls() {
           <PhoneCall className="mx-auto mb-2 h-6 w-6 text-[#B79A5C]" /> {t('pw.calls.none')}
         </div>
       ) : (
-        calls.map((c) => <CallCard key={c.id} call={c} onOpen={() => c.taskId && navigate(`/employee/tasks/${c.taskId}`)} />)
+        calls.map((c) => (
+          <CallCard key={c.id} call={c}
+            onOpen={() => c.taskId && navigate(`/employee/tasks/${c.taskId}`)}
+            onChanged={(u) => setCalls((l) => (l || []).map((x) => (x.id === u.id ? u : x)))} />
+        ))
       )}
     </div>
   );
 }
 
-function CallCard({ call, onOpen }: { call: CallRecording; onOpen: () => void }) {
+function CallCard({ call, onOpen, onChanged }: { call: CallRecording; onOpen: () => void; onChanged: (c: CallRecording) => void }) {
   const { t } = useT();
   const who = call.contactName || displayPhone(call.phoneNumber) || t('pw.calls.unknown');
   const open = !call.outcome;
@@ -90,7 +92,8 @@ function CallCard({ call, onOpen }: { call: CallRecording; onOpen: () => void })
         <div className="min-w-0">
           <p className="truncate text-[14.5px] font-semibold text-[#1A211E]">{who}</p>
           <p className="text-[11.5px] text-[#8A8F86]">
-            {[call.calledAt && fmtCallTime(call.calledAt), fmtDuration(call.durationSec), call.direction === 'IN' ? t('pw.calls.incoming') : call.direction === 'OUT' ? t('pw.calls.outgoing') : null]
+            {[call.calledAt && fmtCallTime(call.calledAt), fmtDuration(call.durationSec), call.direction === 'IN' ? t('pw.calls.incoming') : call.direction === 'OUT' ? t('pw.calls.outgoing') : null,
+              call.uploadedBy && t('pw.tc.addedBy', { name: call.uploadedBy })]
               .filter(Boolean).join(' · ')}
           </p>
         </div>
@@ -98,6 +101,7 @@ function CallCard({ call, onOpen }: { call: CallRecording; onOpen: () => void })
       </div>
       <AudioPlayer src={resolveFileUrl(call.fileUrl)} fileName={call.fileName} />
       {call.note && <p className="mt-2 rounded-lg bg-[#F6F4EC] px-2.5 py-1.5 text-[12.5px] text-[#33392F]">{call.note}</p>}
+      {!call.taskId && open && <div className="mt-2.5"><CallLeadPanel call={call} onChanged={onChanged} showPlayer={false} /></div>}
       {call.taskId && (
         <button onClick={onOpen}
           className={`mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-xl py-2.5 text-[13px] font-semibold active:scale-[0.99] ${

@@ -278,7 +278,10 @@ public class CallRecordingService {
 
     // ------------------------------------------------------------------ employee: own calls
 
-    /** An employee uploads a call from their phone — it becomes a Collect Requirement task for them. */
+    /**
+     * An employee uploads a call from their phone. It goes into the shared pool (Call Leads) so any
+     * employee can work it; the uploader's name is recorded and shown on it.
+     */
     @Transactional
     public Map<String, Object> uploadMine(MultipartFile file, Long lastModified, Integer clientDurationSec,
                                           String note, User me) throws IOException {
@@ -288,7 +291,7 @@ public class CallRecordingService {
             rec.setNote(truncate(note.trim(), 1000));
             repository.save(rec);
         }
-        return createTasks(List.of(id), "EMPLOYEE", me.getId(), LocalDate.now(), "MEDIUM", me).get(0);
+        return toDto(rec);
     }
 
     /** Calls I uploaded or whose task is assigned to me, newest first. */
