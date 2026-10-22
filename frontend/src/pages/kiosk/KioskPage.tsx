@@ -218,7 +218,7 @@ function KioskHome({ kiosk, offline, onChoose }: { kiosk: KioskInfo | null; offl
       {offline && <p className="mt-3 rounded-lg bg-amber-400/20 px-3 py-2 text-xs text-amber-100">Can’t reach the server. Retrying…</p>}
       {/* Fingerprints are enrolled on this phone's own scanner so they match what it reads at check-in. */}
       {insideKioskApp() && (
-        <a href="/crm/hr/employees" className="mt-8 inline-block text-xs text-emerald-300 underline">HR: enrol fingerprints</a>
+        <a href="/crm/workforce/people" className="mt-8 inline-block text-xs text-emerald-300 underline">HR: enrol fingerprints</a>
       )}
     </div>
   );
