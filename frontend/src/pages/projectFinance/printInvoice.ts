@@ -44,3 +44,46 @@ export async function openInvoicePdf(load: () => Promise<InvoiceDoc>): Promise<v
 export function printInvoice(invoice: Invoice, items: InvoiceItem[], project?: any, _company?: CompanyProfile) {
   return openInvoicePdf(async () => ({ invoice, items, project }));
 }
+
+/**
+ * Sends the invoice PDF together with its message over WhatsApp.
+ * - Phones/tablets that can share files: opens the share sheet with the PDF and the message, so one tap
+ *   to WhatsApp sends both.
+ * - Desktop (WhatsApp links can't carry attachments): downloads the PDF, copies the message to the
+ *   clipboard and opens the customer's chat with the message pre-filled — attach the downloaded PDF.
+ * Returns a short note describing what happened, for a toast.
+ */
+export async function shareInvoiceWhatsApp(
+  load: () => Promise<InvoiceDoc>,
+  message: string,
+  phoneDigits: string,
+): Promise<string> {
+  const { invoice, items, project } = await load();
+  const assets = await loadInvoicePdfAssets(invoice, items);
+  const doc = buildInvoicePdf(invoice, items, project, assets);
+  const name = `${invoice.invoiceNumber || "invoice"}.pdf`;
+  const blob = doc.output("blob");
+  const file = new File([blob], name, { type: "application/pdf" });
+
+  const nav: any = navigator;
+  if (nav.canShare && nav.canShare({ files: [file] })) {
+    try {
+      await nav.share({ files: [file], text: message, title: invoice.invoiceNumber });
+      return "Shared";
+    } catch (e: any) {
+      if (e?.name === "AbortError") return "Cancelled";
+      // fall through to the desktop path
+    }
+  }
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  let copied = false;
+  try { await navigator.clipboard.writeText(message); copied = true; } catch { /* clipboard blocked */ }
+  window.open(`https://wa.me/${phoneDigits}?text=${encodeURIComponent(message)}`, "_blank");
+  return `PDF downloaded${copied ? ", message copied" : ""} — attach the PDF in WhatsApp`;
+}

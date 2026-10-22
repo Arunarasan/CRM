@@ -18,7 +18,7 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/components/ui/toast";
 import DeleteWithRemarkDialog from "@/components/DeleteWithRemarkDialog";
-import { openInvoicePdf } from "./printInvoice";
+import { openInvoicePdf, shareInvoiceWhatsApp } from "./printInvoice";
 import { MoneySection } from "./MoneySection";
 import { Skeleton } from "@/components/ui/skeleton";
 import ProjectProfitPanel from "./ProjectProfitPanel";
@@ -107,7 +107,7 @@ export default function ProjectPaymentsTab({ project, onChanged, mode = "billing
 
   // WhatsApp hand-off: opens a chat with the customer and a ready-to-send invoice message.
   const customerPhone: string | undefined = project?.customer?.whatsappNumber || project?.customer?.phone;
-  const invoiceWhatsApp = (i: Invoice) => {
+  const sendWhatsApp = (i: Invoice) => {
     let d = String(customerPhone || "").replace(/\D/g, "");
     if (d.length === 10) d = `91${d}`;
     const bal = Number(i.balanceDue || 0);
@@ -115,7 +115,12 @@ export default function ProjectPaymentsTab({ project, onChanged, mode = "billing
       + (bal > 0 ? ` — balance due ${inr(bal)}` : " — fully paid")
       + (i.dueDate && bal > 0 ? ` (due ${format(new Date(i.dueDate), "dd MMM yyyy")})` : "")
       + `.\n\nThank you,\nJB Decor`;
-    return `https://wa.me/${d}?text=${encodeURIComponent(msg)}`;
+    shareInvoiceWhatsApp(async () => {
+      const [invoice, items] = await Promise.all([financeApi.getInvoice(i.id), financeApi.getInvoiceItems(i.id)]);
+      return { invoice, items, project };
+    }, msg, d)
+      .then((note) => toast.success(note))
+      .catch(() => toast.error("Could not prepare the invoice PDF."));
   };
 
   const [makerOpen, setMakerOpen] = useState(false);
@@ -251,8 +256,8 @@ export default function ProjectPaymentsTab({ project, onChanged, mode = "billing
                         <ActionBtn onClick={() => markUnpaid(i)} tone="red" title="Mark unpaid"><RotateCcw className="h-3.5 w-3.5" /></ActionBtn>
                       )}
                       {live && customerPhone && (
-                        <a href={invoiceWhatsApp(i)} target="_blank" rel="noreferrer" title="Send on WhatsApp" aria-label={`Send ${i.invoiceNumber} on WhatsApp`}
-                          className="inline-flex items-center rounded-md border border-slate-200 px-1.5 py-1 text-slate-600 hover:bg-slate-50"><MessageCircle className="h-3.5 w-3.5" /></a>
+                        <button type="button" onClick={() => sendWhatsApp(i)} title="Send PDF + message on WhatsApp" aria-label={`Send ${i.invoiceNumber} on WhatsApp`}
+                          className="inline-flex items-center rounded-md border border-slate-200 px-1.5 py-1 text-slate-600 hover:bg-slate-50"><MessageCircle className="h-3.5 w-3.5" /></button>
                       )}
                       <ActionBtn onClick={() => doPrint(i)} title={`Print ${i.invoiceNumber}`}><Printer className="h-3.5 w-3.5" /></ActionBtn>
                     </div>
