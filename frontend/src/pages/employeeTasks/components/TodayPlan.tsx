@@ -94,7 +94,13 @@ export default function TodayPlan({ refreshKey }: { refreshKey?: number }) {
     return () => { document.removeEventListener('visibilitychange', onVisible); window.clearInterval(timer); };
   }, [load]);
 
-  const plan = useMemo(() => mine.filter(isActive).sort(planOrder), [mine]);
+  // An admin-assigned task is in the plan for the day it was assigned only.
+  const plan = useMemo(() => {
+    const today = new Date().toLocaleDateString('en-CA');
+    return mine.filter(isActive)
+      .filter((x) => !x.officeAssignedOn || x.officeAssignedOn === today)
+      .sort(planOrder);
+  }, [mine]);
   const newLeads = useMemo(
     () => pool.filter((p) => rankTier(p) === 0 && p.canPick !== false && !p.pickedBy?.length).sort(byPlanRank).slice(0, MAX_NEW_LEADS),
     [pool],

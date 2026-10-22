@@ -10,7 +10,6 @@ import com.arudra.crm.service.ProfileChangeRequestService;
 import com.arudra.crm.service.PurchaseService;
 import com.arudra.crm.service.WebAuthnService;
 import com.arudra.crm.service.AttendanceCorrectionService;
-import com.arudra.crm.service.DeviceBindingService;
 import com.arudra.crm.util.RequestIp;
 import jakarta.servlet.http.HttpServletRequest;
 
@@ -47,7 +46,6 @@ public class EmployeePortalController {
     private final WebAuthnService webAuthnService;
     private final AttendanceCorrectionService correctionService;
     private final com.arudra.crm.service.EmployeeReviewService employeeReviewService;
-    private final DeviceBindingService deviceBindingService;
 
     public EmployeePortalController(EmployeePortalService portalService, EmployeeTimeService timeService,
                                     CurrentUserService currentUserService, PurchaseService purchaseService,
@@ -55,7 +53,6 @@ public class EmployeePortalController {
                                     ProfileChangeRequestService profileChangeRequestService,
                                     WebAuthnService webAuthnService, AttendanceCorrectionService correctionService,
                                     com.arudra.crm.service.EmployeeReviewService employeeReviewService,
-                                    DeviceBindingService deviceBindingService,
                                     com.arudra.crm.service.PortalSearchService searchService) {
         this.searchService = searchService;
         this.portalService = portalService;
@@ -67,7 +64,6 @@ public class EmployeePortalController {
         this.webAuthnService = webAuthnService;
         this.correctionService = correctionService;
         this.employeeReviewService = employeeReviewService;
-        this.deviceBindingService = deviceBindingService;
     }
 
     /** Lenient parse of "HH:mm" or "HH:mm:ss" clock strings; null/blank -> null. */
@@ -203,29 +199,22 @@ public class EmployeePortalController {
         public String deviceInfo;
         /** Optional WebAuthn assertion (from navigator.credentials.get) proving device biometric. */
         public AssertionBody assertion;
-        /** Phone-binding proof: the bound phone's signature over a fresh /device/challenge nonce. */
-        public DeviceProofBody device;
         /** "Where I am" note for a field punch (shown to the approver). */
         public String note;
     }
 
     public static class ClockOutBody {
-        public DeviceProofBody device;
         public BigDecimal lat;
         public BigDecimal lng;
         public Integer accuracyMeters;
         public String note;
     }
 
-    public static class DeviceProofBody {
-        public String deviceUuid;
-        public String nonce;
-        public String signature;
-    }
-
-    private DeviceBindingService.DeviceCheck deviceCheck(User u, DeviceProofBody d, HttpServletRequest request, String action) {
-        return deviceBindingService.check(u, d == null ? null : d.deviceUuid, d == null ? null : d.nonce,
-                d == null ? null : d.signature, RequestIp.of(request), action);
+    /** Location is mandatory on every clock action; it is recorded on the session as evidence. */
+    private static void requireLocation(BigDecimal lat, BigDecimal lng, String action) {
+        if (lat == null || lng == null) {
+            throw new IllegalStateException("Location is required to " + action + ". Allow location access and try again.");
+        }
     }
 
     public static class AssertionBody {
@@ -250,15 +239,15 @@ public class EmployeePortalController {
                                                                    HttpServletRequest request) {
         ClockInBody b = body == null ? new ClockInBody() : body;
         User u = me();
-        // Phone gate first: HARD mode refuses here (403) before anything is recorded.
-        DeviceBindingService.DeviceCheck device = deviceCheck(u, b.device, request, "Clock-in");
+        // Which phone is used does not matter; where the employee is does.
+        requireLocation(b.lat, b.lng, "clock in");
         boolean biometricVerified = false;
         if (b.assertion != null) {
             Employee emp = timeService.requireEmployee(u);
             biometricVerified = webAuthnService.verifyAssertion(emp, b.assertion.credentialId,
                     b.assertion.authenticatorData, b.assertion.clientDataJSON, b.assertion.signature, b.assertion.userHandle);
         }
-        timeService.clockIn(u, b.lat, b.lng, b.accuracyMeters, b.locationLabel, b.deviceInfo, biometricVerified, device, b.note);
+        timeService.clockIn(u, b.lat, b.lng, b.accuracyMeters, b.locationLabel, b.deviceInfo, biometricVerified, b.note);
         return ResponseEntity.ok(ApiResponse.success(timeService.getStatus(u)));
     }
 
@@ -268,8 +257,8 @@ public class EmployeePortalController {
                                                                     HttpServletRequest request) {
         User u = me();
         ClockOutBody b = body == null ? new ClockOutBody() : body;
-        DeviceBindingService.DeviceCheck device = deviceCheck(u, b.device, request, "Clock-out");
-        timeService.clockOut(u, device, b.lat, b.lng, b.accuracyMeters, b.note);
+        requireLocation(b.lat, b.lng, "clock out");
+        timeService.clockOut(u, b.lat, b.lng, b.accuracyMeters, b.note);
         return ResponseEntity.ok(ApiResponse.success(timeService.getStatus(u)));
     }
 
@@ -367,47 +356,6 @@ public class EmployeePortalController {
     public ResponseEntity<ApiResponse<Map<String, Object>>> webauthnDeleteCredential(@PathVariable Long id) {
         webAuthnService.deleteCredential(timeService.requireEmployee(me()), id);
         return ResponseEntity.ok(ApiResponse.success(Map.of("deleted", true)));
-    }
-
-    // --- Attendance phone binding (one approved phone per login) ---------------
-    // Bind flow: POST /device/challenge -> sign nonce with the phone's key -> POST /device/bind.
-    public static class DeviceBindBody {
-        public String deviceUuid;
-        public String publicKey;   // SPKI, base64
-        public String nonce;
-        public String signature;   // ECDSA/SHA-256 over the nonce's UTF-8 bytes (raw r||s or DER)
-        public String deviceLabel;
-        public String platform;
-        public String reason;      // new / lost / broken phone — shown to HR
-    }
-
-    @GetMapping("/device")
-    @PreAuthorize(PORTAL)
-    public ResponseEntity<ApiResponse<Map<String, Object>>> myDevices() {
-        return ResponseEntity.ok(ApiResponse.success(deviceBindingService.myStatus(me())));
-    }
-
-    @PostMapping("/device/challenge")
-    @PreAuthorize(PORTAL)
-    public ResponseEntity<ApiResponse<Map<String, Object>>> deviceChallenge() {
-        return ResponseEntity.ok(ApiResponse.success(deviceBindingService.issueChallenge(me())));
-    }
-
-    @PostMapping("/device/bind")
-    @PreAuthorize(PORTAL)
-    public ResponseEntity<ApiResponse<Map<String, Object>>> bindDevice(@RequestBody DeviceBindBody b,
-                                                                     HttpServletRequest request) {
-        DeviceBindingService.BindRequest req = new DeviceBindingService.BindRequest(b.deviceUuid, b.publicKey,
-                b.nonce, b.signature, b.deviceLabel, b.platform, request.getHeader("User-Agent"), b.reason);
-        return ResponseEntity.ok(ApiResponse.success(deviceBindingService.requestBind(me(), req, RequestIp.of(request))));
-    }
-
-    @DeleteMapping("/device/{id}")
-    @PreAuthorize(PORTAL)
-    public ResponseEntity<ApiResponse<Map<String, Object>>> withdrawDevice(@PathVariable Long id, HttpServletRequest request) {
-        User u = me();
-        deviceBindingService.withdraw(u, id, RequestIp.of(request));
-        return ResponseEntity.ok(ApiResponse.success(deviceBindingService.myStatus(u)));
     }
 
     @GetMapping("/earnings")

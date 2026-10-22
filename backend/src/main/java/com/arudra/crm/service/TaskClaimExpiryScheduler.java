@@ -33,6 +33,7 @@ public class TaskClaimExpiryScheduler {
 
     @Scheduled(fixedDelay = 60_000, initialDelay = 60_000)
     public void releaseExpiredHolds() {
+        if (true) return; // hold timer retired: held tasks never expire
         int holdMinutes = employeeTaskService.dataEntryHoldMinutes();
         if (holdMinutes <= 0) return; // feature disabled
 
@@ -50,7 +51,7 @@ public class TaskClaimExpiryScheduler {
             }
         }
         if (released > 0) {
-            log.info("Auto-released {} data-entry task(s) back to the board after {} min hold",
+            log.info("Extended {} expired data-entry hold(s) by one day (tasks are never returned) after {} min hold",
                     released, holdMinutes);
         }
     }

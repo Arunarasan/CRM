@@ -7,14 +7,13 @@ import { BaseInput } from '@/components/ui/input';
  */
 import { useEffect, useRef, useState } from 'react';
 import api from '@/lib/api';
-import { MapPin, Plus, Trash2, Crosshair, Loader2, ShieldAlert, Check, X, ExternalLink, Fingerprint, Clock3, Smartphone } from 'lucide-react';
+import { MapPin, Plus, Trash2, Crosshair, Loader2, ShieldAlert, Check, X, ExternalLink, Fingerprint, Clock3 } from 'lucide-react';
 import { attendanceApi, AttendanceLocation, PendingAttendance, MethodRequest, CorrectionRequest } from '@/api/attendanceApi';
 import { getBestPosition } from '@/lib/geo';
 import LocationMapPicker from '@/components/LocationMapPicker';
 import { toast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import SearchableSelect from '@/components/ui/searchable-select';
-import { DeviceRequests } from './deviceAdmin';
 import { KioskSetup } from './kioskAdmin';
 import { KioskLog, FaceEnrolmentOverview, SelfieThumb, FaceBadge, FingerBadge } from './kioskLog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -27,19 +26,18 @@ import AttendanceRegister, { type DaySession } from './AttendanceRegister';
  */
 export function AttendanceAdmin() {
   const [tab, setTab] = useState('register');
-  const [counts, setCounts] = useState({ punches: 0, corrections: 0, devices: 0, methods: 0 });
+  const [counts, setCounts] = useState({ punches: 0, corrections: 0, methods: 0 });
   const [prefill, setPrefill] = useState<CorrectionPrefill | null>(null);
 
   const loadCounts = () => {
     Promise.all([
       attendanceApi.pendingCount().catch(() => 0),
       attendanceApi.listCorrections().then((r) => r.length).catch(() => 0),
-      attendanceApi.listDeviceRequests().then((r) => r.length).catch(() => 0),
       attendanceApi.listMethodRequests().then((r) => r.length).catch(() => 0),
-    ]).then(([punches, corrections, devices, methods]) => setCounts({ punches, corrections, devices, methods }));
+    ]).then(([punches, corrections, methods]) => setCounts({ punches, corrections, methods }));
   };
   useEffect(loadCounts, [tab]);
-  const waiting = counts.punches + counts.corrections + counts.devices + counts.methods;
+  const waiting = counts.punches + counts.corrections + counts.methods;
 
   return (
     <Tabs value={tab} onValueChange={setTab} className="w-full">
@@ -61,11 +59,10 @@ export function AttendanceAdmin() {
 
       <TabsContent value="approve" className="mt-4 space-y-6">
         {waiting === 0 && (
-          <p className="rounded-xl border bg-card px-4 py-6 text-center text-sm text-slate-500">Nothing waiting — field punches, time corrections and phone requests are all handled.</p>
+          <p className="rounded-xl border bg-card px-4 py-6 text-center text-sm text-slate-500">Nothing waiting — field punches, time corrections and method requests are all handled.</p>
         )}
         <PendingApprovals />
         <CorrectionApprovals />
-        <DeviceRequests />
         <MethodRequests />
       </TabsContent>
 
@@ -502,12 +499,6 @@ function PendingApprovals() {
                     {(r.verificationMethod === 'FACE' || r.verificationMethod === 'FINGER') && (
                       <span className="inline-flex items-center gap-1 rounded bg-violet-100 px-1.5 py-0.5 text-[11px] font-semibold text-violet-700">
                         {r.verificationMethod === 'FINGER' ? 'Fingerprint kiosk' : 'Face kiosk'}{r.kioskName ? ` · ${r.kioskName}` : ''}
-                      </span>
-                    )}
-                    {r.deviceMismatchReason && (
-                      <span className="inline-flex items-center gap-1 rounded bg-red-100 px-1.5 py-0.5 text-[11px] font-semibold text-red-700"
-                            title={r.deviceMismatchReason}>
-                        <Smartphone className="h-3 w-3" /> Wrong phone
                       </span>
                     )}
                   </div>

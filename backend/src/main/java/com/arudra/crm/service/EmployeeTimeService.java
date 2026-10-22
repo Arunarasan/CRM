@@ -5,7 +5,6 @@ import com.arudra.crm.entity.Attendance;
 import com.arudra.crm.entity.AttendanceSession;
 import com.arudra.crm.entity.Employee;
 import com.arudra.crm.entity.User;
-import com.arudra.crm.entity.UserDevice;
 import com.arudra.crm.repository.AttendanceRepository;
 import com.arudra.crm.repository.AttendanceSessionRepository;
 import com.arudra.crm.repository.EmployeeRepository;
@@ -43,8 +42,6 @@ public class EmployeeTimeService {
     @Autowired private AttendanceRepository attendanceRepository;
     @Autowired private AttendanceSessionRepository sessionRepository;
     @Autowired private AttendanceVerificationService verificationService;
-    @Autowired private com.arudra.crm.repository.UserDeviceRepository userDeviceRepository;
-    @Autowired private com.arudra.crm.config.DeviceBindingSettings deviceBindingSettings;
     @Autowired private com.arudra.crm.repository.EmployeeWebauthnCredentialRepository webauthnCredentialRepository;
 
     // --- scoping -----------------------------------------------------------
@@ -100,16 +97,10 @@ public class EmployeeTimeService {
 
     // --- clock actions -----------------------------------------------------
 
-    public Attendance clockIn(User user, BigDecimal lat, BigDecimal lng, Integer accuracyMeters, String locationLabel,
-                              String deviceInfo, boolean biometricVerified, DeviceBindingService.DeviceCheck deviceCheck) {
-        return clockIn(user, lat, lng, accuracyMeters, locationLabel, deviceInfo, biometricVerified, deviceCheck, null);
-    }
-
     @LogActivity(module = "ATTENDANCE", action = "CLOCK_IN")
     @Transactional
     public Attendance clockIn(User user, BigDecimal lat, BigDecimal lng, Integer accuracyMeters, String locationLabel,
-                              String deviceInfo, boolean biometricVerified, DeviceBindingService.DeviceCheck deviceCheck,
-                              String fieldNote) {
+                              String deviceInfo, boolean biometricVerified, String fieldNote) {
         Employee employee = requireEmployee(user);
         Attendance live = activeRow(employee.getId());
         if (live != null && openSession(live) != null) {
@@ -139,7 +130,6 @@ public class EmployeeTimeService {
         // Verify against the employee's required method (geo-fence / biometric). Soft: never blocks,
         // flags for HR approval on failure. Stamps the result onto the session.
         verificationService.verify(s, employee, biometricVerified);
-        verificationService.applyDevice(s, employee, deviceCheck, "Clock-in");
         sessionRepository.save(s);
 
         att.setStatus("PRESENT");
@@ -147,15 +137,10 @@ public class EmployeeTimeService {
         return attendanceRepository.save(att);
     }
 
-    public Attendance clockOut(User user, DeviceBindingService.DeviceCheck deviceCheck) {
-        return clockOut(user, deviceCheck, null, null, null, null);
-    }
-
     /** Clock-out with optional location + note (recorded as evidence; required for field punches to be judged). */
     @LogActivity(module = "ATTENDANCE", action = "CLOCK_OUT")
     @Transactional
-    public Attendance clockOut(User user, DeviceBindingService.DeviceCheck deviceCheck,
-                              BigDecimal lat, BigDecimal lng, Integer accuracyMeters, String fieldNote) {
+    public Attendance clockOut(User user, BigDecimal lat, BigDecimal lng, Integer accuracyMeters, String fieldNote) {
         Employee employee = requireEmployee(user);
         Attendance att = activeRow(employee.getId());
         AttendanceSession s = att == null ? null : openSession(att);
@@ -171,7 +156,7 @@ public class EmployeeTimeService {
             String merged = s.getFieldNote() == null ? "Out: " + outNote : s.getFieldNote() + " · Out: " + outNote;
             s.setFieldNote(merged.length() > 255 ? merged.substring(0, 255) : merged);
         }
-        verificationService.applyDevice(s, employee, deviceCheck, "Clock-out");
+        verificationService.verifyCheckOut(s, employee);
         sessionRepository.save(s);
 
         syncAggregate(att, employee);
@@ -343,10 +328,6 @@ public class EmployeeTimeService {
         m.put("attendanceMethod", employee.getAttendanceMethod() == null ? "GEO" : employee.getAttendanceMethod());
         m.put("attendanceMethodRequested", employee.getAttendanceMethodRequested());
         m.put("biometricRegistered", webauthnCredentialRepository.existsByEmployeeIdAndIsDeletedFalse(employee.getId()));
-        // Phone binding hints: OFF/SOFT/HARD + whether this login has an approved / pending phone.
-        m.put("deviceBindingMode", deviceBindingSettings.effectiveMode(employee));
-        m.put("deviceRegistered", userDeviceRepository.countByUserIdAndStatusAndIsDeletedFalse(user.getId(), UserDevice.ACTIVE) > 0);
-        m.put("devicePending", userDeviceRepository.countByUserIdAndStatusAndIsDeletedFalse(user.getId(), UserDevice.PENDING) > 0);
 
         // Second-accurate so a refresh re-syncs to the same running time the screen was already showing
         // (whole-minute figures made the timer/earnings jump back by up to a minute on every reload).
@@ -388,8 +369,6 @@ public class EmployeeTimeService {
             sm.put("checkInSource", s.getCheckInSource());
             sm.put("checkOutSource", s.getCheckOutSource());
             sm.put("fieldNote", s.getFieldNote());
-            sm.put("deviceVerified", Boolean.TRUE.equals(s.getDeviceVerified()));
-            sm.put("deviceMismatchReason", s.getDeviceMismatchReason());
             sessionList.add(sm);
         }
         m.put("sessions", sessionList);

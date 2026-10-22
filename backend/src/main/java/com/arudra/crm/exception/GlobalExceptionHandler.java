@@ -94,21 +94,6 @@ public class GlobalExceptionHandler {
         return new ResponseEntity<>(apiError, HttpStatus.CONFLICT);
     }
 
-    /** HARD device binding: the punch came from an unregistered phone. Message is user-facing. */
-    @ExceptionHandler(DeviceNotAuthorizedException.class)
-    public ResponseEntity<ApiError> handleDeviceNotAuthorized(
-            DeviceNotAuthorizedException ex, HttpServletRequest request) {
-
-        log.warn("Device not authorized: {}", ex.getMessage());
-        ApiError apiError = new ApiError(
-                HttpStatus.FORBIDDEN.value(),
-                "DEVICE_NOT_AUTHORIZED",
-                ex.getMessage(),
-                request.getRequestURI()
-        );
-        return new ResponseEntity<>(apiError, HttpStatus.FORBIDDEN);
-    }
-
     /**
      * Keeps the status a service chose (401/403/404/429...) instead of letting the generic handler
      * turn it into an opaque 500. The reason is the user-facing message.

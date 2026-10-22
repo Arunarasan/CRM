@@ -137,42 +137,31 @@ public class AttendanceVerificationService {
     }
 
     /**
-     * Stamps the phone-binding result onto a session (clock-in or clock-out). A failed SOFT check
-     * flags the session for HR review on top of whatever the geo/biometric check decided; HARD
-     * failures never reach here (refused upstream). OFF leaves the session untouched.
+     * Checks the clock-out location against the office fences. Same SOFT rule as clock-in: being outside
+     * (or an untrustworthy network fix) never blocks the clock-out, it flags the session for HR approval.
+     * Biometric-only employees and setups with no fence configured have nothing to enforce.
      */
-    public void applyDevice(AttendanceSession session, Employee employee, DeviceBindingService.DeviceCheck check, String action) {
-        if (check == null || !check.enforced()) return;
-        DeviceBindingService.Verification v = check.verification();
-        if (v.verified()) {
-            session.setDevice(v.device());
-            if (session.getDeviceMismatchReason() == null) session.setDeviceVerified(true);
-            return;
-        }
-        String reason = action + ": " + phrase(v);
-        session.setDeviceVerified(false);
-        session.setDeviceMismatchReason(clip(reason, 255));
-        boolean alreadyFlagged = Boolean.TRUE.equals(session.getFlagged()) && "PENDING".equals(session.getApprovalStatus());
+    public void verifyCheckOut(AttendanceSession session, Employee employee) {
+        String method = employee.getAttendanceMethod() == null ? "GEO" : employee.getAttendanceMethod();
+        if ("OFFICE_DEVICE".equals(method)) return;
+        if (session.getCheckOutLat() == null || session.getCheckOutLng() == null) return;
+        List<AttendanceLocation> fences = locationRepository.findByActiveTrueAndIsDeletedFalse();
+        if (fences.isEmpty()) return;
+
+        Integer acc = session.getCheckOutAccuracy();
+        int margin = Math.min(maxAccuracyMargin, Math.max(0, acc == null ? 0 : acc));
+        GeoMatch geo = nearest(session.getCheckOutLat(), session.getCheckOutLng(), fences, margin + Math.max(0, geoGraceMeters));
+        boolean coarse = acc != null && acc > usableAccuracyMeters;
+        if (geo == null || (!coarse && geo.inside())) return;
+
+        String reason = "Clock-out: " + (coarse ? coarseReason(acc) : geoReason(geo, acc));
+        boolean alreadyWaiting = session.isAwaitingApproval();
         session.setVerified(false);
         session.setFlagged(true);
         session.setApprovalStatus("PENDING");
         String prior = session.getFlagReason();
         session.setFlagReason(clip(prior == null || prior.isBlank() ? reason : prior + " · " + reason, 255));
-        if (!alreadyFlagged) notifyFlagged(employee, reason);
-    }
-
-    /** Short HR-facing wording for a failed phone check. */
-    private static String phrase(DeviceBindingService.Verification v) {
-        return switch (v.outcome()) {
-            case NO_PROOF -> "no phone check sent";
-            case NOT_BOUND -> "unregistered phone";
-            case PENDING -> "phone awaiting HR approval";
-            case REVOKED -> v.device() != null && "REPLACED".equals(v.device().getStatus())
-                    ? "old (replaced) phone" : "phone registration removed";
-            case BAD_CHALLENGE -> "phone check expired or reused";
-            case BAD_SIGNATURE -> "phone signature did not match";
-            default -> "phone not verified";
-        };
+        if (!alreadyWaiting) notifyFlagged(employee, reason);
     }
 
     private static String clip(String s, int max) {

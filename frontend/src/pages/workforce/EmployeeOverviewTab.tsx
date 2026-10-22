@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
 import { workforceApi } from "@/api/workforceApi";
 import type { WorkforceDetail, WorkforceMeta, WorkforceRequest } from "@/types/workforce";
-import { AttendancePhoneCard } from "@/pages/hr/deviceAdmin";
 import { FaceEnrollmentCard } from "@/pages/hr/faceAdmin";
 import { FingerprintEnrollmentCard } from "@/pages/hr/fingerprintAdmin";
 
@@ -196,7 +195,6 @@ export default function EmployeeOverviewTab({
       <IdentityCard detail={detail} canEdit={canEdit} save={save} />
       <EmergencyCard detail={detail} canEdit={canEdit} save={save} />
       <EmploymentCard detail={detail} meta={meta} canEdit={canEdit} save={save} />
-      {detail.employee?.id != null && <AttendancePhoneCard employeeId={detail.employee.id} canEdit={canEdit} />}
       {detail.employee?.id != null && <FaceEnrollmentCard employeeId={detail.employee.id} canEdit={canEdit} />}
       {detail.employee?.id != null && <FingerprintEnrollmentCard employeeId={detail.employee.id} canEdit={canEdit} />}
       <BankCard detail={detail} canEdit={canEdit} save={save} />

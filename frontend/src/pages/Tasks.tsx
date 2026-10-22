@@ -53,7 +53,9 @@ function HoldTimer({ expiresAt, onExtend }: { expiresAt: string; onExtend?: () =
   const msLeft = new Date(expiresAt).getTime() - now;
   const expired = msLeft <= 0;
   const totalSec = Math.max(0, Math.floor(msLeft / 1000));
-  const label = `${Math.floor(totalSec / 60)}:${(totalSec % 60).toString().padStart(2, "0")}`;
+  const label = totalSec >= 3600
+    ? `${Math.floor(totalSec / 3600)}h ${Math.floor((totalSec % 3600) / 60)}m`
+    : `${Math.floor(totalSec / 60)}:${(totalSec % 60).toString().padStart(2, "0")}`;
   const urgent = expired || msLeft <= 120_000;
   const cls = urgent ? "bg-red-100 text-red-700 border-red-200" : "bg-amber-100 text-amber-700 border-amber-200";
 

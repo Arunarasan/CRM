@@ -11,7 +11,6 @@ import {
   MyBonuses, MyRewards, PortalSearchResult, MonthlyEarning, PayrollRequestEntry, PayrollRequestCreateBody, MyLoan, MyAdvance,
   IncomingReceiptPo, ReceiptWarehouse, GoodsReceiptSubmission, MyReceipt,
   ProfileChangeRequest, ProfileChangeBody, DocumentSubmitBody, AttendanceCorrection,
-  DeviceBindingStatus, DeviceProof, UserDeviceInfo,
 } from '../types/employeePortal';
 
 // Thin typed wrapper around /api/employee-portal — the employee self-service surface.
@@ -71,16 +70,8 @@ export const employeePortalApi = {
   clockIn: (payload?: {
     lat?: number; lng?: number; accuracyMeters?: number; locationLabel?: string; deviceInfo?: string;
     assertion?: { credentialId: string; authenticatorData: string; clientDataJSON: string; signature: string; userHandle: string | null };
-    device?: DeviceProof;
     note?: string; // field punch: where the employee is
   }) => api.post<TimeStatus>(`${BASE}/attendance/clock-in`, payload ?? {}).then((r) => r.data),
-
-  // Attendance phone binding (one approved phone per login)
-  myDevices: () => api.get<DeviceBindingStatus>(`${BASE}/device`).then((r) => r.data),
-  deviceChallenge: () => api.post<{ nonce: string; expiresInSeconds: number }>(`${BASE}/device/challenge`).then((r) => r.data),
-  bindDevice: (body: { deviceUuid: string; publicKey: string; nonce: string; signature: string; deviceLabel?: string; platform?: string; reason?: string }) =>
-    api.post<UserDeviceInfo>(`${BASE}/device/bind`, body).then((r) => r.data),
-  withdrawDevice: (id: number) => api.delete<DeviceBindingStatus>(`${BASE}/device/${id}`).then((r) => r.data),
 
   // Self-service switch to biometric attendance (admin-approved)
   requestBiometricAttendance: () => api.post<TimeStatus>(`${BASE}/attendance/request-biometric`).then((r) => r.data),
@@ -100,7 +91,7 @@ export const employeePortalApi = {
   webauthnCredentials: () =>
     api.get<{ id: number; deviceLabel: string; lastUsedAt: string | null; createdAt: string | null }[]>(`${BASE}/webauthn/credentials`).then((r) => r.data),
   webauthnDeleteCredential: (id: number) => api.delete(`${BASE}/webauthn/credentials/${id}`).then((r) => r.data),
-  clockOut: (payload?: { device?: DeviceProof; lat?: number; lng?: number; accuracyMeters?: number; note?: string }) =>
+  clockOut: (payload?: { lat?: number; lng?: number; accuracyMeters?: number; note?: string }) =>
     api.post<TimeStatus>(`${BASE}/attendance/clock-out`, payload ?? {}).then((r) => r.data),
   startBreak: () => api.post<TimeStatus>(`${BASE}/attendance/break/start`).then((r) => r.data),
   endBreak: () => api.post<TimeStatus>(`${BASE}/attendance/break/end`).then((r) => r.data),

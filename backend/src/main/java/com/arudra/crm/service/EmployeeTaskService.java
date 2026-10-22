@@ -697,6 +697,7 @@ public class EmployeeTaskService {
      * live countdown timer on the task card. Takes the task's assignments to avoid a re-query.
      */
     private LocalDateTime holdExpiryFor(Task task, List<TaskAssignment> assignments) {
+        if (true) return null; // hold timer retired: tasks no longer show a countdown or expire
         int holdMinutes = dataEntryHoldMinutes();
         if (holdMinutes <= 0) return null;
         List<TaskAssignment> active = assignments.stream()
@@ -740,11 +741,7 @@ public class EmployeeTaskService {
         boolean beingWorked = active.stream().anyMatch(a -> a.getStartedAt() != null
                 || !("ASSIGNED".equals(a.getStatus()) || "ACCEPTED".equals(a.getStatus())));
         if (active.isEmpty() || beingWorked) return false;
-        LocalDateTime now = LocalDateTime.now();
-        for (TaskAssignment a : active) {
-            a.setHoldExtendedAt(now);
-            assignmentRepository.save(a);
-        }
+        applyOneDayHold(active);
         return true;
     }
 
@@ -794,26 +791,18 @@ public class EmployeeTaskService {
                 .orElse(null);
         if (latestClaim == null || latestClaim.isAfter(cutoff)) return false;
 
-        Set<Long> notifyUsers = new HashSet<>();
-        for (TaskAssignment a : active) {
-            a.setStatus("CANCELLED");
-            a.setRemarks(appendRemark(a.getRemarks(),
-                    "Auto-released to the task board — not started within " + holdMinutes + " min."));
-            assignmentRepository.save(a);
-            if (a.getEmployee() != null) notifyUsers.add(a.getEmployee().getId());
-        }
-        task.setAssignedEmployee(null); // clear the mirrored display pointer
-        task.setStatus("AVAILABLE");     // back in the pool / on the task board
-        Task saved = taskRepository.save(task);
-
-        // Ping the eligible pool that it's open again, and tell the person who let it lapse.
-        taskPoolNotifier.notifyEligibleEmployees(saved);
-        for (Long uid : notifyUsers) {
-            notificationService.dispatch("Task returned to the board",
-                    "\"" + saved.getTaskName() + "\" was released because it wasn't started within "
-                            + holdMinutes + " minutes.", "TASK", uid, "/employee/tasks?tab=AVAILABLE");
-        }
+        // Policy: an expired hold never returns the task to the board — it is extended by one day.
+        applyOneDayHold(active);
         return true;
+    }
+
+    /** Re-anchors the countdown so the hold expires exactly one day from now. */
+    private void applyOneDayHold(List<TaskAssignment> active) {
+        LocalDateTime anchor = LocalDateTime.now().plusDays(1).minusMinutes(dataEntryHoldMinutes());
+        for (TaskAssignment a : active) {
+            a.setHoldExtendedAt(anchor);
+            assignmentRepository.save(a);
+        }
     }
 
     private String appendRemark(String existing, String note) {
@@ -2478,7 +2467,8 @@ public class EmployeeTaskService {
             if ("Lost".equalsIgnoreCase(lead.getStatus())) return false; // lost lead: its to-dos leave the list
             if (Boolean.TRUE.equals(lead.getIsConverted())) return false;
             if (!COLLECT_REQUIREMENT_CODE.equals(t.getTaskTemplate().getCode())) return true;
-            if (!assignedByOffice && lead.getRequirementPercent() < 10) return false;
+            if (assignedByOffice) return true; // admin put it on this person: always in their plan
+            if (lead.getRequirementPercent() < 10) return false;
             boolean quoteTaskOpen = leadTasks.computeIfAbsent(t.getLeadId(), taskRepository::findByLeadId).stream()
                     .anyMatch(o -> !Boolean.TRUE.equals(o.getIsDeleted()) && !isClosed(o)
                             && o.getProject() == null && o.getTaskTemplate() != null
@@ -2619,6 +2609,14 @@ public class EmployeeTaskService {
         card.put("leadId", t.getLeadId());
 
         List<TaskAssignment> assignments = assignmentRepository.findByTaskId(t.getId());
+        // Day the office handed this task to the viewer (null when they picked it themselves) — Today's
+        // Plan shows an admin assignment on that day only.
+        card.put("officeAssignedOn", viewerEmployeeId == null ? null : assignments.stream()
+                .filter(a -> a.getEmployee() != null && viewerEmployeeId.equals(a.getEmployee().getId()))
+                .filter(a -> !"CANCELLED".equals(a.getStatus()) && !"REJECTED".equals(a.getStatus()))
+                .filter(a -> a.getAssignedBy() != null && !viewerEmployeeId.equals(a.getAssignedBy().getId()))
+                .map(TaskAssignment::getAssignedDate).filter(java.util.Objects::nonNull)
+                .map(d -> d.toLocalDate().toString()).findFirst().orElse(null));
         card.put("assignedEmployees", assignments.stream()
                 .filter(a -> !"CANCELLED".equals(a.getStatus()))
                 .map(a -> a.getEmployee() != null ? a.getEmployee().getName() : null)

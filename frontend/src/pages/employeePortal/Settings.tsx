@@ -5,7 +5,6 @@ import { employeePortalApi } from '@/api/employeePortalApi';
 import { ProfileChangeRequest } from '@/types/employeePortal';
 import ImageCaptureField from '@/components/ImageCaptureField';
 import { PortalHeader } from './_shared';
-import { PhoneBindingSection } from './phoneBinding';
 import { register as webauthnRegister, platformAuthenticatorAvailable, webauthnSupported, secureContextOk, describeWebauthnError } from '@/lib/webauthn';
 import { Theme, getTheme, setTheme, getNotifPrefs, setNotifPrefs, NotifPrefs } from '@/lib/theme';
 import { useT, Lang } from '@/i18n';
@@ -311,9 +310,6 @@ export default function Settings() {
           </div>
         ))}
       </div>
-
-      <SectionTitle>My registered phone</SectionTitle>
-      <PhoneBindingSection />
 
       <SectionTitle>Device biometric</SectionTitle>
       <BiometricSection />
