@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, Check, ClipboardList, FileText, History, Image as ImageIcon, LayoutGrid, MessageCircle, Mic,
-  Navigation, Phone, Ruler,
+  Navigation, Pencil, Phone,
 } from 'lucide-react';
 import api from '@/lib/api';
 import { employeeTaskApi } from '@/api/employeeTaskApi';
@@ -13,22 +13,23 @@ import type { TaskCard, TaskDetail as TaskDetailType } from '@/types/employeeTas
 import TaskDetail, { LeadDetailsCard } from './TaskDetail';
 import { EmployeeQuoteBody, SitePhotosCard } from './EmployeeQuote';
 import LeadPhotosCard from './components/LeadPhotosCard';
+import RequirementFormSheet from './components/RequirementFormSheet';
+import { toast } from '@/components/ui/toast';
 import { statusMeta, REQUIREMENT_CODES, inLeadWorkspace } from './taskUtils';
 import { useT, dateLocale, currentLang } from '@/i18n';
 
 /**
  * One screen per lead for the field employee, laid out like the office's lead page: a pinned header
  * (customer, call / WhatsApp / navigate, Requirement → Measure & Quote → Project) over tabs.
- * The lead's tasks are still separate workflow tasks underneath — the Requirement tab is the Collect
- * Requirement task, the Quote tab is the Site Visit, Measure & Quote task — so every rule about when a
- * task shows, holds or closes is unchanged.
+ * The lead's tasks are still separate workflow tasks underneath — Collect Requirement, then Site Visit,
+ * Measure & Quote — so every rule about when a task shows, holds or closes is unchanged. The Work tab
+ * shows both on ONE page: the requirement (editable any time while a task is held) above the quote sheet.
  */
 
-type WsTab = 'overview' | 'requirement' | 'quote' | 'documents' | 'activity';
+type WsTab = 'overview' | 'work' | 'documents' | 'activity';
 const TABS: { key: WsTab; icon: React.ComponentType<{ className?: string }> }[] = [
   { key: 'overview', icon: LayoutGrid },
-  { key: 'requirement', icon: ClipboardList },
-  { key: 'quote', icon: Ruler },
+  { key: 'work', icon: ClipboardList },
   { key: 'documents', icon: ImageIcon },
   { key: 'activity', icon: History },
 ];
@@ -82,6 +83,7 @@ export default function EmployeeLeadWorkspace() {
   const [info, setInfo] = useState<TaskDetailType | null>(null);
   const [photosKey, setPhotosKey] = useState(0);
   const [taking, setTaking] = useState(false);
+  const [editReq, setEditReq] = useState(false);
   const tookRef = useRef<number | null>(null);
 
   const loadLead = useCallback(() => {
@@ -124,14 +126,16 @@ export default function EmployeeLeadWorkspace() {
   ];
   const current = steps.find((s) => !s.done)?.key ?? 'project';
 
-  const rawTab = params.get('tab') as WsTab | null;
+  // Older ?tab=requirement / ?tab=quote links open the combined Work tab.
+  const rawParam = params.get('tab');
+  const rawTab = (rawParam === 'requirement' || rawParam === 'quote' ? 'work' : rawParam) as WsTab | null;
   const tab: WsTab = rawTab && TABS.some((x) => x.key === rawTab) ? rawTab
-    : quoteTask && lifecycleOf(quoteTask) === 'ACTIVE' ? 'quote' : reqTask ? 'requirement' : 'overview';
+    : reqTask || quoteTask ? 'work' : 'overview';
   const setTab = (k: WsTab) => setParams((p) => { const n = new URLSearchParams(p); n.set('tab', k); return n; }, { replace: true });
 
-  // Opening the Quote tab takes a still-open quote task, as tapping the task always did.
+  // Opening the Work tab takes a still-open quote task, as tapping the task always did.
   useEffect(() => {
-    if (tab !== 'quote' || !quoteTask || tookRef.current === quoteTask.id) return;
+    if (tab !== 'work' || !quoteTask || tookRef.current === quoteTask.id) return;
     const open = (quoteTask.status as string) === 'AVAILABLE' && (!quoteTask.myAssignmentStatus || gone(quoteTask.myAssignmentStatus));
     if (!open) return;
     tookRef.current = quoteTask.id;
@@ -205,7 +209,7 @@ export default function EmployeeLeadWorkspace() {
               const now = s.key === current && !s.done;
               return (
                 <li key={s.key} className="flex min-w-0 flex-1 items-center gap-1">
-                  <button type="button" disabled={s.key === 'project'} onClick={() => s.key !== 'project' && setTab(s.key)}
+                  <button type="button" disabled={s.key === 'project'} onClick={() => s.key !== 'project' && setTab('work')}
                     className="flex min-w-0 items-center gap-1.5 text-left">
                     <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
                       s.done ? 'bg-[#0A573B] text-white' : now ? 'bg-[#BC8748] text-white' : 'bg-[#E9E6DD] text-[#8A8F86]'}`}>
@@ -241,24 +245,29 @@ export default function EmployeeLeadWorkspace() {
         </div>
       )}
 
-      {tab === 'requirement' && (
-        <div className={`${narrow} px-3 md:px-4`}>
-          {tasks === null ? (
-            <p className="p-6 text-center text-sm text-muted-foreground">{t('pw.lw.loading')}</p>
-          ) : reqTask ? (
-            <TaskDetail key={reqTask.id} embeddedTaskId={reqTask.id} onChanged={loadTasks} />
-          ) : (
-            <div className="flex flex-col gap-3 py-3 pb-24">
-              <Note>{t('pw.lw.reqNone')}</Note>
-            </div>
-          )}
-        </div>
-      )}
-
-      {tab === 'quote' && (
-        taking || tasks === null ? <p className="p-6 text-center text-sm text-muted-foreground">{taking ? t('pw.lw.taking') : t('pw.lw.loading')}</p>
-          : quoteTask || converted ? <EmployeeQuoteBody leadId={leadId} onPhotosChanged={() => setPhotosKey((k) => k + 1)} />
-          : <div className={`${narrow} p-3 md:p-4`}><Note>{t('pw.lw.quoteLocked')}</Note></div>
+      {tab === 'work' && (
+        tasks === null || taking ? (
+          <p className="p-6 text-center text-sm text-muted-foreground">{taking ? t('pw.lw.taking') : t('pw.lw.loading')}</p>
+        ) : (
+          <div className="flex flex-col">
+            {/* Requirement: the full Collect Requirement task while it is the live step; afterwards a summary
+                that can still be edited for as long as a task on the lead is held. */}
+            {reqTask && lifecycleOf(reqTask) === 'ACTIVE' && !quoteTask && !converted ? (
+              <div className={`${narrow} w-full px-3 md:px-4`}>
+                <TaskDetail key={reqTask.id} embeddedTaskId={reqTask.id} onChanged={loadTasks} />
+              </div>
+            ) : (
+              <div className={`${narrow} w-full px-3 pt-3 md:px-4`}>
+                <RequirementSummary who={who} canEdit={!!holder} onEdit={() => setEditReq(true)} />
+              </div>
+            )}
+            {quoteTask || converted ? (
+              <EmployeeQuoteBody leadId={leadId} onPhotosChanged={() => setPhotosKey((k) => k + 1)} />
+            ) : !reqTask ? (
+              <div className={`${narrow} w-full p-3 md:p-4`}><Note>{t('pw.lw.reqNone')}</Note></div>
+            ) : null}
+          </div>
+        )
       )}
 
       {tab === 'documents' && (
@@ -279,6 +288,50 @@ export default function EmployeeLeadWorkspace() {
           <ActivityList leadId={leadId} taskIds={[reqTask?.id, quoteTask?.id].filter((x): x is number => x != null)} />
         </div>
       )}
+      <RequirementFormSheet taskId={holder?.id ?? 0} leadId={leadId} detailsOnly open={editReq} onOpenChange={setEditReq}
+        onSaved={() => setEditReq(false)}
+        onDetailsSaved={() => { toast.success(t('pw.td.lead_details_saved')); loadLead(); setPhotosKey((k) => k + 1); }} />
+    </div>
+  );
+}
+
+/** What the customer asked for, in brief, with an Edit button that works while a task on the lead is held. */
+function RequirementSummary({ who, canEdit, onEdit }: { who: any; canEdit: boolean; onEdit: () => void }) {
+  const { t } = useT();
+  const list = (v?: string | null) => String(v || '').split(',').map((x) => x.trim()).filter(Boolean);
+  const cats = list(who.requirementCategory);
+  const prods = list(who.requirementProduct);
+  const budget = who.estimatedBudget ? '₹' + Number(who.estimatedBudget).toLocaleString('en-IN') : null;
+  const rows = ([
+    [t('pw.ld.rooms'), who.roomsRequired],
+    [t('pw.ld.requirement'), who.projectDescription || who.customerRequirements],
+    [t('pw.td.budget'), budget],
+  ] as [string, unknown][]).filter(([, v]) => has(v));
+  return (
+    <div className="rounded-2xl border border-[#ECEAE5] bg-white p-3.5 shadow-[0_2px_10px_rgba(0,35,22,0.04)]">
+      <div className="flex items-center gap-2">
+        <ClipboardList className="h-4 w-4 text-[#0A573B]" />
+        <p className="flex-1 text-sm font-semibold text-[#111817]">{t('pw.lw.tab.requirement')}</p>
+        {canEdit && (
+          <button type="button" onClick={onEdit}
+            className="flex items-center gap-1.5 rounded-full border border-[#0A573B]/30 bg-[#F3F8F5] px-3 py-1.5 text-[12.5px] font-semibold text-[#0A573B] active:scale-95">
+            <Pencil className="h-3.5 w-3.5" /> {t('pw.lw.editRequirement')}
+          </button>
+        )}
+      </div>
+      {(cats.length > 0 || prods.length > 0) && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {[...cats, ...prods].map((c) => (
+            <span key={c} className="rounded-full bg-[#F7F4EC] px-2.5 py-1 text-[12px] font-semibold text-[#9B6B32] ring-1 ring-[#E4D8BF]">{c}</span>
+          ))}
+        </div>
+      )}
+      {rows.map(([label, v]) => (
+        <p key={label} className="mt-2 text-[13px] text-[#33392F]">
+          <span className="mr-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-[#7A817C]">{label}</span>{String(v)}
+        </p>
+      ))}
+      {!cats.length && !prods.length && !rows.length && <p className="mt-2 text-[13px] text-[#7A817C]">{t('pw.lw.noRequirementYet')}</p>}
     </div>
   );
 }

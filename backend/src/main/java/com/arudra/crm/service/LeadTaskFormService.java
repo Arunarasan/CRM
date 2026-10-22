@@ -213,6 +213,20 @@ public class LeadTaskFormService {
         return Map.of("leadId", lead.getId());
     }
 
+    /** Edits the lead's requirement details from the lead workspace, while any task on the lead is open and held. */
+    @Transactional
+    public Map<String, Object> saveRequirementEditsForLead(Long leadId, User employee, Map<String, Object> payload) {
+        Lead lead = employeeTaskService.leadForOpenLeadWork(leadId, employee, "edit the lead");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> data = payload != null && payload.get("data") instanceof Map
+                ? new HashMap<>((Map<String, Object>) payload.get("data")) : new HashMap<>();
+        List.of("siteVisitDate", "followUpDate", "followUpTime", "followUpNotes").forEach(data::remove);
+        applyRequirementFields(lead, data);
+        leadRepository.save(lead);
+        leadService.addNote(lead.getId(), "Lead requirement updated from the lead workspace", employee);
+        return Map.of("leadId", lead.getId());
+    }
+
     /**
      * Applies a task's captured form data onto the native lead once the task is finalized/approved.
      * Fired for every task completion; a no-op for tasks that carry no pending submission.

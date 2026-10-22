@@ -405,7 +405,7 @@ export default function TaskDetail({ embeddedTaskId, onChanged }: { embeddedTask
   const quoteLink = !!task?.moduleLink
     && (task.moduleLink.startsWith('/employee/quote/new') || task.moduleLink.startsWith('/employee/boq-quote/new'));
   const workspaceTab = !task?.leadId || isCallTask ? null
-    : quoteLink ? 'quote' : task.formType === 'REQUIREMENT' ? 'requirement' : null;
+    : quoteLink || task.formType === 'REQUIREMENT' ? 'work' : null;
   useEffect(() => {
     if (!embedded && task && workspaceTab) {
       navigate(`/employee/lead/${task.leadId}?tab=${workspaceTab}&task=${task.id}`, { replace: true });

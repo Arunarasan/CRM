@@ -3,6 +3,9 @@ import type { Rows } from './build';
 // Lead workspace — one screen per lead with Overview / Requirement / Measure & Quote / Documents / Activity tabs.
 const rows: Rows = {
   'pw.lw.tab.overview': ['Overview', 'सारांश', 'கண்ணோட்டம்', 'అవలోకనం'],
+  'pw.lw.tab.work': ['Work', 'कार्य', 'பணி', 'పని'],
+  'pw.lw.editRequirement': ['Edit requirement', 'आवश्यकता बदलें', 'தேவையைத் திருத்து', 'అవసరం సవరించండి'],
+  'pw.lw.noRequirementYet': ['Nothing collected yet.', 'अभी कुछ जमा नहीं हुआ।', 'இன்னும் எதுவும் சேகரிக்கப்படவில்லை.', 'ఇంకా ఏమీ సేకరించలేదు.'],
   'pw.lw.tab.requirement': ['Requirement', 'आवश्यकता', 'தேவை', 'అవసరం'],
   'pw.lw.tab.quote': ['Measure & Quote', 'माप और कोटेशन', 'அளவீடு & மதிப்பீடு', 'కొలత & కొటేషన్'],
   'pw.lw.tab.documents': ['Documents', 'दस्तावेज़', 'ஆவணங்கள்', 'పత్రాలు'],

@@ -85,6 +85,9 @@ export const employeeTaskApi = {
   // Collect Requirement "Save changes": edit the lead's details without completing the task.
   saveLeadForm: (id: number, data: Record<string, string | boolean>) =>
     api.post(`${BASE}/${id}/lead-form/save`, { data }).then((r) => r.data),
+  // Lead workspace: edit the requirement while any task on the lead is held (works after Collect Requirement is done).
+  saveLeadDetails: (leadId: number, data: Record<string, string | boolean>) =>
+    api.post(`${BASE}/lead/${leadId}/details`, { data }).then((r) => r.data),
   // Photos on the task's lead (its Documents tab) — list, add an uploaded one, remove one you added.
   leadPhotos: (id: number) => api.get<LeadPhoto[]>(`${BASE}/${id}/lead-photos`).then((r) => r.data),
   addLeadPhoto: (id: number, payload: { fileUrl: string; fileName?: string }) =>

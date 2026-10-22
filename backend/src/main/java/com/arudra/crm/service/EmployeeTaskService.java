@@ -2195,6 +2195,22 @@ public class EmployeeTaskService {
     public com.arudra.crm.entity.Lead leadForOpenTask(Long taskId, User employee, String what) {
         Task task = getTask(taskId);
         if ("COMPLETED".equals(task.getStatus()) || "CANCELLED".equals(task.getStatus())) {
+    /**
+     * The lead an employee may edit while working ANY open task on it (Collect Requirement or Measure &
+     * Quote) — the combined lead workspace edits the requirement alongside the quote.
+     */
+    public com.arudra.crm.entity.Lead leadForOpenLeadWork(Long leadId, User employee, String what) {
+        boolean onOpenTask = taskRepository.findByLeadId(leadId).stream()
+                .filter(t -> !Boolean.TRUE.equals(t.getIsDeleted()))
+                .filter(t -> !"COMPLETED".equals(t.getStatus()) && !"CANCELLED".equals(t.getStatus()))
+                .anyMatch(t -> assignmentRepository.findByTaskId(t.getId()).stream()
+                        .anyMatch(a -> a.getEmployee() != null && a.getEmployee().getId().equals(employee.getId())
+                                && ACTIVE_ASSIGNMENT_STATUSES.contains(a.getStatus()) && !"COMPLETED".equals(a.getStatus())));
+        if (!onOpenTask) throw new IllegalStateException("Take a task on this lead first to " + what + ".");
+        return leadRepository.findById(leadId)
+                .orElseThrow(() -> new IllegalStateException("This lead no longer exists."));
+    }
+
             throw new IllegalStateException("This task is closed — you can't " + what + " from it.");
         }
         boolean onTask = assignmentRepository.findByTaskId(taskId).stream()

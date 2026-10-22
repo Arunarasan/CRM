@@ -405,6 +405,14 @@ public class EmployeeTaskController {
         return ResponseEntity.ok(ApiResponse.success(leadTaskFormService.saveRequirementEdits(id, me(), body)));
     }
 
+    /** Lead workspace "Save changes": edit the requirement while any task on the lead is open and held. */
+    @PostMapping("/lead/{leadId}/details")
+    @PreAuthorize(EXECUTE)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> saveLeadDetails(
+            @PathVariable Long leadId, @RequestBody(required = false) Map<String, Object> body) {
+        return ResponseEntity.ok(ApiResponse.success(leadTaskFormService.saveRequirementEditsForLead(leadId, me(), body)));
+    }
+
     @PostMapping("/{id}/checkout")
     @PreAuthorize(EXECUTE)
     public ResponseEntity<ApiResponse<Map<String, Object>>> checkOut(@PathVariable Long id, @RequestBody(required = false) Map<String, Object> body) {

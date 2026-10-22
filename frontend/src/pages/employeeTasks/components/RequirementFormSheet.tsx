@@ -52,7 +52,7 @@ const SECTION_FIELDS: Record<string, string[]> = {
 
 type Values = Record<string, string>;
 
-export default function RequirementFormSheet({ taskId, leadId, open, onOpenChange, onSaved, onDetailsSaved, initial, fromCall, focus }: {
+export default function RequirementFormSheet({ taskId, leadId, open, onOpenChange, onSaved, onDetailsSaved, initial, fromCall, focus, detailsOnly }: {
   taskId: number; leadId?: number | null; open: boolean; onOpenChange: (open: boolean) => void; onSaved: () => void;
   /** "Save changes" finished — lead updated, task still open. */
   onDetailsSaved?: () => void;
@@ -62,6 +62,8 @@ export default function RequirementFormSheet({ taskId, leadId, open, onOpenChang
   fromCall?: boolean;
   /** Open with only this section expanded and scrolled into view (the task page's "Edit" buttons). */
   focus?: string | null;
+  /** Lead workspace: edit the lead's details only — no next-step scheduling, no completing, saved by lead id. */
+  detailsOnly?: boolean;
 }) {
   const { t } = useT();
   const tr = useTr();
@@ -85,7 +87,7 @@ export default function RequirementFormSheet({ taskId, leadId, open, onOpenChang
     setLoading(true);
     Promise.all([
       leadId ? api.get(`/leads/${leadId}`).then((r) => r.data).catch(() => ({})) : Promise.resolve({}),
-      employeeTaskApi.leadFormDraft(taskId).catch(() => ({})),
+      detailsOnly ? Promise.resolve({}) : employeeTaskApi.leadFormDraft(taskId).catch(() => ({})),
     ]).then(([l, draft]: [any, any]) => {
       const next: Values = {};
       const put = (k: string, val: any) => { if (val != null && val !== '') next[k] = String(val); };
@@ -105,7 +107,7 @@ export default function RequirementFormSheet({ taskId, leadId, open, onOpenChang
 
   useEffect(() => {
     if (!open) return;
-    setOpenSecs(new Set(focus ? [focus] : ['requirement', 'scope', 'nextstep']));
+    setOpenSecs(new Set(focus ? [focus] : detailsOnly ? ['requirement', 'scope'] : ['requirement', 'scope', 'nextstep']));
     if (!focus) return;
     const t = setTimeout(() => document.getElementById(`req-sec-${focus}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 350);
     return () => clearTimeout(t);
@@ -180,7 +182,8 @@ export default function RequirementFormSheet({ taskId, leadId, open, onOpenChang
     setError('');
     setSaving(true);
     try {
-      await employeeTaskApi.saveLeadForm(taskId, leadData());
+      if (detailsOnly && leadId) await employeeTaskApi.saveLeadDetails(leadId, leadData());
+      else await employeeTaskApi.saveLeadForm(taskId, leadData());
       onOpenChange(false);
       onDetailsSaved?.();
     } catch (e: any) {
@@ -230,7 +233,7 @@ export default function RequirementFormSheet({ taskId, leadId, open, onOpenChang
         {error && <p className="rounded-md bg-destructive/15 p-2 text-xs text-destructive">{error}</p>}
 
         <div className="flex flex-col gap-2">
-          <Section id="nextstep" icon={<CalendarClock className="h-4 w-4" />} title={t('pw.rf.next_step')} count={nextStep === 'VISIT' ? (v.siteVisitDate ? 1 : 0) : (v.followUpDate ? 1 : 0)} openSecs={openSecs} toggle={toggleSec}>
+          {!detailsOnly && (<Section id="nextstep" icon={<CalendarClock className="h-4 w-4" />} title={t('pw.rf.next_step')} count={nextStep === 'VISIT' ? (v.siteVisitDate ? 1 : 0) : (v.followUpDate ? 1 : 0)} openSecs={openSecs} toggle={toggleSec}>
             <div className="grid grid-cols-2 gap-2">
               <button type="button" onClick={() => setNextStep('VISIT')}
                 className={`rounded-lg border px-3 py-2 text-xs font-semibold ${nextStep === 'VISIT' ? 'border-primary bg-primary text-primary-foreground' : 'bg-card text-muted-foreground'}`}>
@@ -256,7 +259,7 @@ export default function RequirementFormSheet({ taskId, leadId, open, onOpenChang
                 <p className="text-[11px] text-muted-foreground">{t('pw.rf.freshTaskNote')}</p>
               </>
             )}
-          </Section>
+          </Section>)}
 
           <Section id="summary" icon={<User className="h-4 w-4" />} title={t('pw.rf.lead_summary')} count={filledCount('summary')} openSecs={openSecs} toggle={toggleSec}>
             <Text label={t('pw.rf.customer_lead_name')} value={v.name} onChange={(x) => set('name', x)} />
@@ -367,13 +370,13 @@ export default function RequirementFormSheet({ taskId, leadId, open, onOpenChang
             </div>
           </Section>
 
-          {!fromCall && (
+          {!fromCall && !detailsOnly && (
             <Section id="calls" icon={<Mic className="h-4 w-4" />} title={t('pw.rf.call_recordings')} count={0} openSecs={openSecs} toggle={toggleSec}>
               <TaskCallRecordings taskId={taskId} />
             </Section>
           )}
 
-          <Section id="media" icon={<Camera className="h-4 w-4" />} title={t('pw.rf.photos_notes')} count={media.length + savedPhotos.length + (v.notes?.trim() ? 1 : 0)} openSecs={openSecs} toggle={toggleSec}>
+          {!detailsOnly && (<Section id="media" icon={<Camera className="h-4 w-4" />} title={t('pw.rf.photos_notes')} count={media.length + savedPhotos.length + (v.notes?.trim() ? 1 : 0)} openSecs={openSecs} toggle={toggleSec}>
             <PhotoPickButtons onPicked={onFiles} busy={uploading} />
             {uploading && <p className="mt-1 text-xs text-muted-foreground">{t('pw.rf.uploading')}</p>}
             {savedPhotos.length > 0 && (
@@ -395,7 +398,7 @@ export default function RequirementFormSheet({ taskId, leadId, open, onOpenChang
             )}
             <Area label={t('pw.rf.remarks_saved_on_the_lead')} value={v.remarks} onChange={(x) => set('remarks', x)} rows={2} placeholder={t('pw.rf.any_general_remark_about_this_lead')} />
             <Area label={t('pw.rf.notes')} value={v.notes} onChange={(x) => set('notes', x)} rows={2} />
-          </Section>
+          </Section>)}
         </div>
 
         <DialogFooter className="flex-col gap-2 sm:flex-col sm:space-x-0">
@@ -404,9 +407,9 @@ export default function RequirementFormSheet({ taskId, leadId, open, onOpenChang
               {saving ? t('pw.rf.saving') : t('pw.rf.save_changes')}
             </Button>
           )}
-          <Button onClick={submit} disabled={saving || uploading} className="w-full">
+          {!detailsOnly && <Button onClick={submit} disabled={saving || uploading} className="w-full">
             {saving ? t('pw.rf.saving') : nextStep === 'FOLLOWUP' ? t('pw.rf.save_schedule_follow_up') : t('pw.rf.save_schedule_site_visit')}
-          </Button>
+          </Button>}
         </DialogFooter>
       </DialogContent>
     </Dialog>

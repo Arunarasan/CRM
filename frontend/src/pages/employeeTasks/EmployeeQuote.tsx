@@ -25,7 +25,7 @@ export default function EmployeeQuote() {
   const [params] = useSearchParams();
   const leadId = Number(params.get('leadId'));
   if (!leadId) return <p className="p-4 text-sm text-muted-foreground">No lead selected.</p>;
-  return <Navigate to={`/employee/lead/${leadId}?tab=quote`} replace />;
+  return <Navigate to={`/employee/lead/${leadId}?tab=work`} replace />;
 }
 
 /** The quote page's body — site visit, photos and the quote sheet — shown in the lead workspace's Quote tab. */
