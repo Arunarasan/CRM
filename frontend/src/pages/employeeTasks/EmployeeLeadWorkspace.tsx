@@ -262,7 +262,7 @@ export default function EmployeeLeadWorkspace() {
               </div>
             )}
             {quoteTask || converted ? (
-              <EmployeeQuoteBody leadId={leadId} onPhotosChanged={() => setPhotosKey((k) => k + 1)} />
+              <EmployeeQuoteBody leadId={leadId} gpsTaskId={holder?.id} onPhotosChanged={() => setPhotosKey((k) => k + 1)} />
             ) : !reqTask ? (
               <div className={`${narrow} w-full p-3 md:p-4`}><Note>{t('pw.lw.reqNone')}</Note></div>
             ) : null}

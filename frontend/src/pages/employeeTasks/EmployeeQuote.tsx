@@ -10,6 +10,7 @@ import type { LeadProjectStatus } from '@/api/boqApi';
 import ConvertProjectSheet from './components/ConvertProjectSheet';
 import { CARD } from './components/moduleUi';
 import LeadDetailsCard from './components/LeadDetailsCard';
+import SiteGpsCard from './components/SiteGpsCard';
 import FileViewer from '../projectCommandCenter/documents/FileViewer';
 import type { ProjectFile } from '../projectCommandCenter/documents/fileTypes';
 
@@ -29,7 +30,7 @@ export default function EmployeeQuote() {
 }
 
 /** The quote page's body — site visit, photos and the quote sheet — shown in the lead workspace's Quote tab. */
-export function EmployeeQuoteBody({ leadId, onPhotosChanged }: { leadId: number; onPhotosChanged?: () => void }) {
+export function EmployeeQuoteBody({ leadId, gpsTaskId, onPhotosChanged }: { leadId: number; gpsTaskId?: number | null; onPhotosChanged?: () => void }) {
   const navigate = useNavigate();
   const [lead, setLead] = useState<any>(null);
   const [creatorName, setCreatorName] = useState<string | null>(null);
@@ -40,13 +41,14 @@ export function EmployeeQuoteBody({ leadId, onPhotosChanged }: { leadId: number;
   const [photosKey, setPhotosKey] = useState(0);
   // Bumped after "Send for Approval" so the sheet reloads and shows it waits for an admin.
   const [sheetKey, setSheetKey] = useState(0);
+  const [leadKey, setLeadKey] = useState(0); // bumped after the GPS pin is saved, to reload the lead
 
   useEffect(() => {
     if (!leadId) return;
     api.get(`/leads/${leadId}`).then((r) => setLead(r.data)).catch(() => {});
     // "Lead by" — the lead record only carries the creator's login, so ask for their name.
     leadApi.createdBy(leadId).then((r) => setCreatorName(r.data?.name || null)).catch(() => {});
-  }, [leadId]);
+  }, [leadId, leadKey]);
 
   return (
     <div className="flex flex-col pb-6">
@@ -56,6 +58,7 @@ export function EmployeeQuoteBody({ leadId, onPhotosChanged }: { leadId: number;
       <div className="mx-auto w-full max-w-[1600px] p-3 md:p-4 xl:grid xl:grid-cols-[300px_minmax(0,1fr)] xl:items-start xl:gap-4">
         <aside className="flex flex-col gap-3 md:grid md:grid-cols-2 md:items-start xl:sticky xl:top-[4.25rem] xl:flex xl:max-h-[calc(100vh-11rem)] xl:overflow-y-auto">
           <LeadDetailsCard lead={lead && creatorName ? { ...lead, capturedByName: creatorName } : lead} fallbackName="Loading…" />
+          <SiteGpsCard lead={lead} taskId={gpsTaskId} onSaved={() => setLeadKey((k) => k + 1)} />
           <div className="md:col-start-2 md:row-span-2 md:row-start-1 xl:contents">
             <SitePhotosCard leadId={leadId} refreshKey={photosKey} />
           </div>

@@ -19,7 +19,7 @@ import { useT, rich } from '@/i18n';
 
 const has = (v: unknown) => v != null && String(v).trim() !== '';
 /** "…?q=11.7,79.7" / "…@11.7,79.7" / "11.7, 79.7" → coordinates, when the saved pin carries them. */
-function parseCoords(s?: string | null): { lat: number; lng: number } | null {
+export function parseCoords(s?: string | null): { lat: number; lng: number } | null {
   if (!s) return null;
   const m = s.match(/(-?\d{1,2}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)/);
   if (!m) return null;
@@ -28,7 +28,7 @@ function parseCoords(s?: string | null): { lat: number; lng: number } | null {
 }
 
 /** A small street map around the pin, stitched from 3×3 OpenStreetMap tiles (no API key needed). */
-function MapThumb({ lat, lng }: { lat: number; lng: number }) {
+export function MapThumb({ lat, lng }: { lat: number; lng: number }) {
   const z = 15; const n = 2 ** z; const rad = (lat * Math.PI) / 180;
   const fx = ((lng + 180) / 360) * n;
   const fy = ((1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2) * n;
