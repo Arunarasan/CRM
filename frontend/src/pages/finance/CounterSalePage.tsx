@@ -280,9 +280,9 @@ export default function CounterSalePage() {
   ])).filter((v) => v > 0).slice(0, 4);
 
   return (
-    <div className="h-full flex flex-col lg:flex-row bg-white border rounded-xl overflow-hidden">
+    <div className="h-full flex flex-col md:flex-row bg-white border rounded-xl overflow-hidden">
         {/* LEFT — cart */}
-        <div className="flex-1 overflow-y-auto p-3 md:p-4 space-y-3">
+        <div className="flex-1 min-w-0 overflow-y-auto p-3 md:p-4 space-y-3">
           <ProductAdd onPick={addProduct} onCustom={addCustomLine} inputRef={searchRef} />
 
           {lines.length === 0 ? (
@@ -301,16 +301,16 @@ export default function CounterSalePage() {
           ) : (
             <div className="bg-white border rounded-xl overflow-hidden">
               {/* header row (desktop) */}
-              <div className="hidden md:grid grid-cols-[28px_1fr_auto_120px_70px_110px_36px] gap-3 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400 border-b bg-slate-50/60">
+              <div className="hidden xl:grid grid-cols-[28px_1fr_auto_120px_70px_110px_36px] gap-3 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400 border-b bg-slate-50/60">
                 <span>#</span><span>Item</span><span className="text-center">Quantity</span><span className="text-right">Rate ₹{taxInclusive ? " (incl.)" : ""}</span>
                 <span className="text-right">GST%</span><span className="text-right">Amount</span><span />
               </div>
               {lines.map((l, idx) => (
-                <div key={l.key} className="grid grid-cols-2 md:grid-cols-[28px_1fr_auto_120px_70px_110px_36px] gap-2 md:gap-3 items-center px-3 py-2.5 border-b last:border-0 hover:bg-slate-50/50">
-                  <span className="hidden md:block text-xs font-semibold tabular-nums text-slate-400">{idx + 1}</span>
+                <div key={l.key} className="grid grid-cols-4 xl:grid-cols-[28px_1fr_auto_120px_70px_110px_36px] gap-x-2 gap-y-2 xl:gap-3 items-center px-3 py-3 xl:py-2.5 border-b last:border-0 hover:bg-slate-50/50">
+                  <span className="hidden xl:block text-xs font-semibold tabular-nums text-slate-400">{idx + 1}</span>
                   {/* item: photo + name + description — click to edit the details */}
                   <button type="button" onClick={() => setEditing(l)} title="Edit description / photo"
-                    className="group col-span-2 md:col-span-1 min-w-0 flex items-center gap-2.5 text-left">
+                    className="group order-1 col-span-3 xl:order-none xl:col-span-1 min-w-0 flex items-center gap-2.5 text-left">
                     {l.imageUrl ? (
                       <img src={resolveFileUrl(l.imageUrl)} alt="" className="h-11 w-11 shrink-0 rounded-md border object-cover" />
                     ) : (
@@ -330,22 +330,29 @@ export default function CounterSalePage() {
                     </span>
                   </button>
                   {/* quantity — typed in */}
-                  <div className="flex items-center justify-center gap-1.5">
+                  <div className="order-2 xl:order-none flex flex-col xl:flex-row xl:items-center xl:justify-center gap-0.5 xl:gap-1.5">
+                    <span className="xl:hidden text-[11px] text-slate-400">Quantity</span>
+                    <div className="flex items-center gap-1.5">
                     <Input type="number" inputMode="numeric" min={1} step={1} aria-label="Quantity"
                       value={l.qty || ""} onFocus={(e) => e.target.select()}
                       onChange={(e) => patchLine(l.key, { qty: Math.max(0, Math.floor(Number(e.target.value) || 0)) })}
                       onBlur={() => { if (!l.qty) patchLine(l.key, { qty: 1 }); }}
-                      className="h-9 w-20 text-center text-sm font-semibold tabular-nums" />
+                      className="h-10 xl:h-9 w-full xl:w-20 text-center text-sm font-semibold tabular-nums" />
                     <span className="text-xs text-slate-400">{l.unit}</span>
+                    </div>
                   </div>
-                  <div className="md:text-right">
-                    <Input type="number" min={0} value={l.rate} onChange={(e) => patchLine(l.key, { rate: Number(e.target.value) })} className="h-9 md:text-right" />
+                  <div className="order-2 xl:order-none xl:text-right">
+                    <span className="xl:hidden block text-[11px] text-slate-400 mb-0.5">Rate ₹{taxInclusive ? " (incl.)" : ""}</span>
+                    <Input type="number" min={0} value={l.rate} onChange={(e) => patchLine(l.key, { rate: Number(e.target.value) })} className="h-10 xl:h-9 xl:text-right" />
                   </div>
-                  <div className="md:text-right">
-                    <Input type="number" min={0} value={l.gst} onChange={(e) => patchLine(l.key, { gst: Number(e.target.value) })} className="h-9 md:text-right" />
+                  <div className="order-2 xl:order-none xl:text-right">
+                    <span className="xl:hidden block text-[11px] text-slate-400 mb-0.5">GST %</span>
+                    <Input type="number" min={0} value={l.gst} onChange={(e) => patchLine(l.key, { gst: Number(e.target.value) })} className="h-10 xl:h-9 xl:text-right" />
                   </div>
-                  <div className="text-right text-sm font-semibold tabular-nums text-slate-800">{currency(l.qty * l.rate)}</div>
-                  <button aria-label="Remove item" className="text-slate-300 hover:text-red-500 justify-self-end" onClick={() => removeLine(l.key)}><Trash2 className="w-4 h-4" /></button>
+                  <div className="order-2 xl:order-none text-right text-sm font-semibold tabular-nums text-slate-800">
+                    <span className="xl:hidden block text-[11px] font-normal text-slate-400 mb-0.5">Amount</span>{currency(l.qty * l.rate)}
+                  </div>
+                  <button aria-label="Remove item" className="order-1 xl:order-none p-2 xl:p-0 text-slate-300 hover:text-red-500 justify-self-end" onClick={() => removeLine(l.key)}><Trash2 className="w-4 h-4" /></button>
                 </div>
               ))}
             </div>
@@ -360,17 +367,17 @@ export default function CounterSalePage() {
               <span className="text-xs text-slate-400">creates a task for an employee</span>
             </label>
             {installOn && (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 px-3 pb-3">
-                <label className="text-xs col-span-2 md:col-span-1"><span className="text-slate-500">Charge ₹</span>
-                  <Input type="number" min={0} value={installCharge} onChange={(e) => setInstallCharge(e.target.value)} className="h-9 mt-1" /></label>
-                <label className="text-xs col-span-2 md:col-span-1"><span className="text-slate-500">Assign to</span>
+              <div className="grid grid-cols-2 xl:grid-cols-4 gap-2 px-3 pb-3">
+                <label className="text-xs"><span className="text-slate-500">Charge ₹</span>
+                  <Input type="number" min={0} value={installCharge} onChange={(e) => setInstallCharge(e.target.value)} className="h-10 xl:h-9 mt-1" /></label>
+                <label className="text-xs"><span className="text-slate-500">Assign to</span>
                   <SearchableSelect value={installEmployeeId} onChange={setInstallEmployeeId}
                     options={employees.map((e) => ({ value: String(e.id), label: e.name }))}
                     placeholder="Anyone (pool)" clearLabel="Anyone (pool)" /></label>
                 <label className="text-xs"><span className="text-slate-500">Date</span>
-                  <Input type="date" value={installDate} onChange={(e) => setInstallDate(e.target.value)} className="h-9 mt-1" /></label>
+                  <Input type="date" value={installDate} onChange={(e) => setInstallDate(e.target.value)} className="h-10 xl:h-9 mt-1" /></label>
                 <label className="text-xs"><span className="text-slate-500">Notes</span>
-                  <Input value={installNotes} onChange={(e) => setInstallNotes(e.target.value)} className="h-9 mt-1" placeholder="Optional" /></label>
+                  <Input value={installNotes} onChange={(e) => setInstallNotes(e.target.value)} className="h-10 xl:h-9 mt-1" placeholder="Optional" /></label>
               </div>
             )}
           </div>
@@ -395,7 +402,7 @@ export default function CounterSalePage() {
         </div>
 
         {/* RIGHT — bill */}
-        <div className="lg:w-[360px] shrink-0 border-t lg:border-t-0 lg:border-l bg-slate-50/60 flex flex-col">
+        <div className="md:w-[330px] lg:w-[360px] shrink-0 md:min-h-0 border-t md:border-t-0 md:border-l bg-slate-50/60 flex flex-col">
           <div className="border-b bg-white px-4 pt-3 pb-2.5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -419,7 +426,7 @@ export default function CounterSalePage() {
                 <div role="radiogroup" aria-label="Place of supply" className="inline-flex items-center gap-0.5 rounded-lg bg-slate-100 p-0.5">
                   {([["CGST_SGST", "Same state"], ["IGST", "Other state"]] as const).map(([v, label]) => (
                     <button key={v} type="button" role="radio" aria-checked={gstType === v} onClick={() => setGstType(v)}
-                      className={`whitespace-nowrap rounded-md px-2 py-0.5 text-[11px] font-semibold transition active:scale-[0.98] ${
+                      className={`whitespace-nowrap rounded-md px-2.5 py-1 md:py-1.5 text-[11px] font-semibold transition active:scale-[0.98] ${
                         gstType === v ? "bg-white text-emerald-800 shadow-sm ring-1 ring-emerald-200" : "text-slate-500 hover:text-slate-700"}`}>
                       {label}
                     </button>
@@ -445,9 +452,9 @@ export default function CounterSalePage() {
                 </div>
               ) : (
                 <div className="space-y-1.5">
-                  <div className="grid grid-cols-2 gap-2">
-                    <Input value={custName} onChange={(e) => setCustName(e.target.value)} placeholder="Name (optional)" className="h-9" />
-                    <Input ref={phoneRef} type="tel" inputMode="tel" value={custPhone} onChange={(e) => setCustPhone(e.target.value)} placeholder="Phone (optional)" className="h-9" />
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+                    <Input value={custName} onChange={(e) => setCustName(e.target.value)} placeholder="Name (optional)" className="h-10" />
+                    <Input ref={phoneRef} type="tel" inputMode="tel" value={custPhone} onChange={(e) => setCustPhone(e.target.value)} placeholder="Phone (optional)" className="h-10" />
                   </div>
                   {phoneMatch ? (
                     <button type="button" onClick={adoptCustomer}
@@ -476,12 +483,12 @@ export default function CounterSalePage() {
                 <div className="flex items-center gap-1 text-slate-500">
                   <span>Discount</span>
                   <div className="inline-flex rounded border text-[11px] overflow-hidden">
-                    <button onClick={() => setDiscountType("FLAT")} className={`px-1.5 ${discountType === "FLAT" ? "bg-slate-700 text-white" : "text-slate-500"}`}>₹</button>
-                    <button onClick={() => setDiscountType("PERCENTAGE")} className={`px-1.5 ${discountType === "PERCENTAGE" ? "bg-slate-700 text-white" : "text-slate-500"}`}>%</button>
+                    <button onClick={() => setDiscountType("FLAT")} className={`px-2.5 py-1 ${discountType === "FLAT" ? "bg-slate-700 text-white" : "text-slate-500"}`}>₹</button>
+                    <button onClick={() => setDiscountType("PERCENTAGE")} className={`px-2.5 py-1 ${discountType === "PERCENTAGE" ? "bg-slate-700 text-white" : "text-slate-500"}`}>%</button>
                   </div>
                 </div>
                 <BaseInput type="number" min={0} value={discountValue} onChange={(e) => setDiscountValue(e.target.value)}
-                  className="w-24 h-8 rounded-md border px-2 text-right text-sm" />
+                  className="w-24 h-9 rounded-md border px-2 text-right text-sm" />
               </div>
               {totals.discount >= 0.5 && <Row label="Discount applied" value={`− ${currency(totals.discount)}`} valueClass="text-red-600" />}
               <Row label={taxInclusive ? "GST (included)" : "GST"} value={currency(totals.gst)} />
@@ -514,7 +521,7 @@ export default function CounterSalePage() {
                   <div className="inline-flex rounded-md border overflow-hidden text-xs">
                     {([["FULL", "Full"], ["ADVANCE", "Advance"]] as const).map(([v, label]) => (
                       <button key={v} onClick={() => setPayMode(v)}
-                        className={`px-3 py-1 ${payMode === v ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}>
+                        className={`px-4 py-2 ${payMode === v ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}>
                         {label}
                       </button>
                     ))}
@@ -524,7 +531,7 @@ export default function CounterSalePage() {
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-slate-500 shrink-0">Paying now ₹</span>
                         <BaseInput type="number" min={0} inputMode="decimal" value={advance} onChange={(e) => setAdvance(e.target.value)}
-                          placeholder="0" className="h-8 w-full rounded-md border px-2 text-sm" />
+                          placeholder="0" className="h-10 w-full rounded-md border px-2 text-sm" />
                       </div>
                       {advanceAmt > 0 && advanceAmt < totals.grand ? (
                         <p className="text-xs font-medium text-amber-700">Balance {currency(totals.grand - advanceAmt)} due at pickup</p>
@@ -536,10 +543,10 @@ export default function CounterSalePage() {
                 </div>
               )}
               {collectNow && (
-                <div className="grid grid-cols-5 gap-1">
+                <div className="grid grid-cols-3 lg:grid-cols-5 gap-1.5 lg:gap-1">
                   {PAYMENT_METHODS.map((m) => (
                     <button key={m.v} onClick={() => setPaymentMethod(m.v)}
-                      className={`rounded-lg border py-1.5 text-xs font-semibold transition active:scale-[0.97] ${paymentMethod === m.v ? "bg-primary text-white border-primary" : "bg-white text-slate-600 hover:bg-slate-50"}`}>
+                      className={`rounded-lg border py-2.5 text-xs font-semibold transition active:scale-[0.97] ${paymentMethod === m.v ? "bg-primary text-white border-primary" : "bg-white text-slate-600 hover:bg-slate-50"}`}>
                       {m.label}
                     </button>
                   ))}
@@ -550,12 +557,12 @@ export default function CounterSalePage() {
                   <label className="flex items-center justify-between gap-2">
                     <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600"><Banknote className="h-3.5 w-3.5 text-emerald-700" /> Cash given</span>
                     <BaseInput type="number" min={0} inputMode="decimal" value={cashGiven} onChange={(e) => setCashGiven(e.target.value)} placeholder="0"
-                      className="h-9 w-28 rounded-md border px-2 text-right text-sm font-semibold tabular-nums" />
+                      className="h-10 w-28 rounded-md border px-2 text-right text-sm font-semibold tabular-nums" />
                   </label>
                   <div className="mt-2 flex flex-wrap gap-1">
                     {quickCash.map((v) => (
                       <button key={v} type="button" onClick={() => setCashGiven(String(v))}
-                        className="rounded-md border px-2 py-0.5 text-[11px] font-semibold tabular-nums text-slate-600 hover:border-emerald-300 hover:bg-emerald-50 active:scale-95">
+                        className="rounded-md border px-2.5 py-1.5 text-xs font-semibold tabular-nums text-slate-600 hover:border-emerald-300 hover:bg-emerald-50 active:scale-95">
                         {currency(v)}
                       </button>
                     ))}
@@ -584,7 +591,7 @@ export default function CounterSalePage() {
               <div className="ml-auto inline-flex rounded-md border overflow-hidden text-[11px]">
                 {([["receipt", "Receipt"], ["invoice", "A4"], ["none", "Off"]] as const).map(([v, label]) => (
                   <button key={v} onClick={() => setPrintFormat(v)}
-                    className={`px-2.5 py-1 ${printFormat === v ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}>
+                    className={`px-3 py-1.5 ${printFormat === v ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}>
                     {label}
                   </button>
                 ))}
