@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import GstModeToggle from "@/components/ui/gst-mode-toggle";
 import { format } from "date-fns";
+import { useNavigate } from "react-router-dom";
 import {
   Plus, Trash2, Pencil, FileText, Loader2, IndianRupee, AlertCircle,
   CheckCircle2, RotateCcw, Printer, Ban, Clock, User as UserIcon, MessageCircle,
@@ -66,6 +67,7 @@ export default function ProjectPaymentsTab({ project, onChanged, mode = "billing
   const canWrite = hasAuthority("FINANCE_WRITE");
   const canCollect = hasAnyAuthority(["FINANCE_WRITE", "FINANCE_COLLECT"]);
 
+  const navigate = useNavigate();
   const projectId = project?.id;
   const customerId = project?.customer?.id;
 
@@ -188,7 +190,7 @@ export default function ProjectPaymentsTab({ project, onChanged, mode = "billing
               </div>
             )}
             {canWrite && customerId && (
-              <Button size="sm" variant="forest" onClick={() => setMakerOpen(true)} className="active:scale-[0.98]"><Plus /> New invoice</Button>
+              <Button size="sm" variant="forest" onClick={() => navigate(`/billing/invoices/new?projectId=${projectId}${customerId ? `&customerId=${customerId}` : ""}`)} className="active:scale-[0.98]"><Plus /> New invoice</Button>
             )}
           </>}
         >
