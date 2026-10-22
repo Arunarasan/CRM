@@ -6,6 +6,7 @@ import SwipeActions, { SwipeAction } from './SwipeActions';
 import HoldTimer from './HoldTimer';
 import { OrderStepBar, stepLabel, workLabel } from './OrderTaskView';
 import { useT, tNow } from '@/i18n';
+import { JOURNEY_STAGE_META } from '@/pages/leads/constants';
 
 const inr = (n: number) => `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 const qty = (n?: number | null) => (n == null ? '' : Number(n).toLocaleString('en-IN', { maximumFractionDigits: 2 }));
@@ -161,6 +162,14 @@ export default function TaskCard({
                 <span className={`shrink-0 rounded-md px-1.5 py-px text-[10px] font-bold uppercase tracking-wide ${lane.cls}`}>
                   {lane.label}
                 </span>
+              )}
+              {inLead && task.journeyStage && JOURNEY_STAGE_META[task.journeyStage] && (
+                <span className={`shrink-0 rounded-md px-1.5 py-px text-[10px] font-bold uppercase tracking-wide ${JOURNEY_STAGE_META[task.journeyStage].className}`}>
+                  {JOURNEY_STAGE_META[task.journeyStage].label}
+                </span>
+              )}
+              {inLead && (task.enquiryType ?? '').toUpperCase() === 'SERVICE' && (
+                <span className="shrink-0 rounded-md bg-green-100 px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-green-700">{t('pw.tl.chip.SERVICE')}</span>
               )}
               {task.workStage && task.workStage !== 'COMPLETED' && (
                 <span className={`shrink-0 rounded-md px-1.5 py-px text-[10px] font-bold uppercase tracking-wide ${

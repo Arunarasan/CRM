@@ -26,6 +26,9 @@ const rows: Rows = {
   'pw.lw.converted': ['Project created', 'प्रोजेक्ट बना', 'திட்டம் உருவானது', 'ప్రాజెక్ట్ సృష్టించబడింది'],
   'pw.tl.tab.LEADS': ['Leads', 'लीड', 'லீட்கள்', 'లీడ్‌లు'],
   'pw.tl.noun.LEADS': ['lead tasks', 'लीड कार्य', 'லீட் பணிகள்', 'లీడ్ పనులు'],
+  'pw.tl.chip.ALL': ['All', 'सभी', 'அனைத்தும்', 'అన్నీ'],
+  'pw.tl.chip.SERVICE': ['Service Work', 'सर्विस कार्य', 'சேவைப் பணி', 'సర్వీస్ పని'],
+  'pw.tl.stageFilter': ['Filter leads by stage', 'चरण के अनुसार लीड फ़िल्टर करें', 'நிலை வாரியாக லீட்களை வடிகட்டு', 'దశ ఆధారంగా లీడ్‌లను ఫిల్టర్ చేయండి'],
   'pw.card.leadTasks': ['{{n}} tasks on this lead', 'इस लीड पर {{n}} कार्य', 'இந்த லீடில் {{n}} பணிகள்', 'ఈ లీడ్‌పై {{n}} పనులు'],
 };
 export default rows;

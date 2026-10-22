@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Search, X, Flame, CalendarDays, Clock, AlertTriangle, CheckCircle2, Hand, PartyPopper,
-  FolderKanban, Users, ShoppingBag,
+  FolderKanban, Users, ShoppingBag, ClipboardCheck, FileText, Wrench, Sparkles,
 } from 'lucide-react';
 import { employeeTaskApi } from '@/api/employeeTaskApi';
 import { TaskCard as TaskCardType } from '@/types/employeeTask';
@@ -11,12 +11,26 @@ import { runOrQueue } from '@/hooks/useOfflineQueue';
 import TaskCard from './components/TaskCard';
 import { daysUntil, priorityMeta, byPlanRank, REQUIREMENT_CODES, inLeadWorkspace } from './taskUtils';
 import { useT } from '@/i18n';
+import { JOURNEY_STAGE_META } from '@/pages/leads/constants';
 
 // "Tasks to Do" — three type tabs (Leads / Projects / Orders), each with the same
 // Active · Available · Done views. Active work is grouped by urgency so the most important task
 // is always first. All task logic (pick / start / pause / complete) is unchanged.
 type Tab = 'LEADS' | 'PROJECTS' | 'ORDERS';
 type View = 'ACTIVE' | 'AVAILABLE' | 'DONE';
+// Leads tab filter chips, same as the office's lead cards: three stages plus Service Work (an enquiry type).
+type Chip = 'ALL' | 'REQUIREMENT' | 'COLLECTED' | 'QUOTE' | 'SERVICE';
+const CHIPS: { key: Exclude<Chip, 'ALL'>; icon: React.ComponentType<{ className?: string }>; on: string }[] = [
+  { key: 'REQUIREMENT', icon: Sparkles, on: 'border-violet-500 bg-violet-50 text-violet-700' },
+  { key: 'COLLECTED', icon: ClipboardCheck, on: 'border-blue-500 bg-blue-50 text-blue-700' },
+  { key: 'QUOTE', icon: FileText, on: 'border-amber-500 bg-amber-50 text-amber-800' },
+  { key: 'SERVICE', icon: Wrench, on: 'border-green-500 bg-green-50 text-green-700' },
+];
+const inChip = (chip: Chip) => (t: TaskCardType) => {
+  if (chip === 'ALL') return true;
+  if (chip === 'SERVICE') return (t.enquiryType ?? '').toUpperCase() === 'SERVICE';
+  return t.journeyStage === chip;
+};
 
 // Project / Orders tabs are origin lanes (TaskCard.category). The Leads tab shows ONE card per lead
 // (its Requirement and Measure & Quote tasks fold together) and opens the lead workspace.
@@ -98,6 +112,8 @@ export default function TaskList() {
   const [limits, setLimits] = useState<Record<string, number>>({});
   const search = params.get('search') === '1' ? '' : (params.get('search') ?? '');
   const { tab, view } = readParams(params);
+  const rawChip = (params.get('stage') || '').toUpperCase();
+  const chip: Chip = tab === 'LEADS' && CHIPS.some((c) => c.key === rawChip) ? (rawChip as Chip) : 'ALL';
 
   const update = (patch: Record<string, string | null>) =>
     setParams((p) => {
@@ -109,6 +125,7 @@ export default function TaskList() {
   const setTab = (t: Tab) => update({ tab: t, view });
   const setView = (v: View) => update({ tab, view: v });
   const setSearch = (v: string) => update({ search: v || null });
+  const setChip = (c: Chip) => update({ stage: c === 'ALL' ? null : c });
 
   const load = useCallback(() => {
     Promise.allSettled([
@@ -118,7 +135,7 @@ export default function TaskList() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { setLimits({}); }, [tab, view, search]);
+  useEffect(() => { setLimits({}); }, [tab, view, search, chip]);
 
   // Keep the list honest when the office acts on a task (an admin completes or reassigns it):
   // refresh when the employee comes back to the app, and quietly every 30s while it's open.
@@ -148,10 +165,19 @@ export default function TaskList() {
 
   // Everything below is scoped to the selected tab.
   const fold = (l: TaskCardType[]) => (tab === 'LEADS' ? foldLeads(l) : l);
-  const active = fold(activeMine.filter(inTab(tab)));
-  const available = fold(pool.filter(matches).filter(inTab(tab)).sort(byPlanRank));
-  const completed = fold(mine.filter(matches).filter((t) => lifecycleOf(t) === 'DONE').filter(inTab(tab)));
-  const submitted = fold(mine.filter(matches).filter(isSubmitted).filter(inTab(tab)));
+  // Stage / Service chips filter whole leads, after the one-card-per-lead fold.
+  const pick = (l: TaskCardType[]) => (tab === 'LEADS' ? l.filter(inChip(chip)) : l);
+  const baseActive = fold(activeMine.filter(inTab(tab)));
+  const baseAvailable = fold(pool.filter(matches).filter(inTab(tab)).sort(byPlanRank));
+  const baseCompleted = fold(mine.filter(matches).filter((t) => lifecycleOf(t) === 'DONE').filter(inTab(tab)));
+  const baseSubmitted = fold(mine.filter(matches).filter(isSubmitted).filter(inTab(tab)));
+  const active = pick(baseActive);
+  const available = pick(baseAvailable);
+  const completed = pick(baseCompleted);
+  const submitted = pick(baseSubmitted);
+  // Chip counts follow the selected view (Active / Available / Done), like the office cards follow their list.
+  const viewList = view === 'ACTIVE' ? baseActive : view === 'AVAILABLE' ? baseAvailable : baseCompleted;
+  const chipCount = (c: Chip) => viewList.filter(inChip(c)).length;
   const overdue = active.filter((t) => bucket(t) === 'overdue').sort(byPlanRank);
   const now = active.filter((t) => bucket(t) === 'now').sort(byPlanRank);
   const today = active.filter((t) => bucket(t) === 'today').sort(byPlanRank);
@@ -292,6 +318,24 @@ export default function TaskList() {
           </div>
         ))}
       </div>
+
+      {/* Lead stage chips — same cards as the office lead page */}
+      {tab === 'LEADS' && (
+        <div className="-mx-3.5 flex gap-2 overflow-x-auto px-3.5 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="group" aria-label={t('pw.tl.stageFilter')}>
+          {([{ key: 'ALL' as Chip, icon: Users, on: 'border-[#0A573B] bg-[#E7F2EC] text-[#0A573B]' }, ...CHIPS]).map((c) => {
+            const on = chip === c.key;
+            return (
+              <button key={c.key} onClick={() => setChip(c.key)} aria-pressed={on}
+                className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-1.5 text-[12.5px] font-semibold transition-colors ${
+                  on ? c.on : 'border-[#E3E5E1] bg-white text-[#5B625E]'}`}>
+                <c.icon className="h-3.5 w-3.5" />
+                {c.key === 'ALL' ? t('pw.tl.chip.ALL') : c.key === 'SERVICE' ? t('pw.tl.chip.SERVICE') : JOURNEY_STAGE_META[c.key].label}
+                <span className="text-[11px] opacity-70">{chipCount(c.key)}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Active · Available · Done */}
       <div className="flex gap-2">

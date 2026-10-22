@@ -215,7 +215,35 @@ public class EmployeeTaskService {
                         || (t.getProject() != null && t.getProject().getProjectName().toLowerCase().contains(search.toLowerCase())))
                 .sorted(Comparator.comparing(Task::getDueDate, Comparator.nullsLast(Comparator.naturalOrder())))
                 .map(t -> toCard(t, employee.getId()))
-                .collect(Collectors.toList());
+                .collect(Collectors.collectingAndThen(Collectors.toList(), this::attachLeadStages));
+    }
+
+    /**
+     * Tags lead-task cards with their lead's journey stage (the office's New / Requirement Collected /
+     * Quote Building rule) and enquiry type, so the Leads tab can filter like the admin lead page.
+     * One query per stage for the whole list, not per card.
+     */
+    private List<Map<String, Object>> attachLeadStages(List<Map<String, Object>> cards) {
+        java.util.Set<Long> ids = cards.stream().map(c -> c.get("leadId")).filter(java.util.Objects::nonNull)
+                .map(o -> ((Number) o).longValue()).collect(Collectors.toSet());
+        if (ids.isEmpty()) return cards;
+        Map<Long, String> stage = new HashMap<>();
+        for (String st : com.arudra.crm.repository.LeadSpecification.JOURNEY_STAGES) {
+            leadRepository.findAll(org.springframework.data.jpa.domain.Specification
+                    .where(com.arudra.crm.repository.LeadSpecification.idIn(ids))
+                    .and(com.arudra.crm.repository.LeadSpecification.journeyStage(st)))
+                    .forEach(l -> stage.put(l.getId(), st));
+        }
+        Map<Long, String> enquiry = new HashMap<>();
+        leadRepository.findAllById(ids).forEach(l -> enquiry.put(l.getId(), l.getEnquiryType()));
+        for (Map<String, Object> c : cards) {
+            Object id = c.get("leadId");
+            if (id == null) continue;
+            long key = ((Number) id).longValue();
+            c.put("journeyStage", stage.get(key));
+            c.put("enquiryType", enquiry.get(key));
+        }
+        return cards;
     }
 
     /**
@@ -830,7 +858,7 @@ public class EmployeeTaskService {
                     if (held) card.put("pickedBy", card.get("assignedEmployees"));
                     return card;
                 })
-                .collect(Collectors.toList());
+                .collect(Collectors.collectingAndThen(Collectors.toList(), this::attachLeadStages));
     }
 
     private static boolean isCollaborative(Task t) {
