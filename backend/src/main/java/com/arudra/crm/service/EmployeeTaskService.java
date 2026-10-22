@@ -2195,6 +2195,17 @@ public class EmployeeTaskService {
     public com.arudra.crm.entity.Lead leadForOpenTask(Long taskId, User employee, String what) {
         Task task = getTask(taskId);
         if ("COMPLETED".equals(task.getStatus()) || "CANCELLED".equals(task.getStatus())) {
+            throw new IllegalStateException("This task is closed — you can't " + what + " from it.");
+        }
+        boolean onTask = assignmentRepository.findByTaskId(taskId).stream()
+                .anyMatch(a -> a.getEmployee() != null && a.getEmployee().getId().equals(employee.getId())
+                        && ACTIVE_ASSIGNMENT_STATUSES.contains(a.getStatus()) && !"COMPLETED".equals(a.getStatus()));
+        if (!onTask) throw new IllegalStateException("Take this task first to " + what + ".");
+        com.arudra.crm.entity.Lead lead = leadOf(task);
+        if (lead == null) throw new IllegalStateException("This task has no lead to " + what + " on");
+        return lead;
+    }
+
     /**
      * The lead an employee may edit while working ANY open task on it (Collect Requirement or Measure &
      * Quote) — the combined lead workspace edits the requirement alongside the quote.
@@ -2209,17 +2220,6 @@ public class EmployeeTaskService {
         if (!onOpenTask) throw new IllegalStateException("Take a task on this lead first to " + what + ".");
         return leadRepository.findById(leadId)
                 .orElseThrow(() -> new IllegalStateException("This lead no longer exists."));
-    }
-
-            throw new IllegalStateException("This task is closed — you can't " + what + " from it.");
-        }
-        boolean onTask = assignmentRepository.findByTaskId(taskId).stream()
-                .anyMatch(a -> a.getEmployee() != null && a.getEmployee().getId().equals(employee.getId())
-                        && ACTIVE_ASSIGNMENT_STATUSES.contains(a.getStatus()) && !"COMPLETED".equals(a.getStatus()));
-        if (!onTask) throw new IllegalStateException("Take this task first to " + what + ".");
-        com.arudra.crm.entity.Lead lead = leadOf(task);
-        if (lead == null) throw new IllegalStateException("This task has no lead to " + what + " on");
-        return lead;
     }
 
     private com.arudra.crm.entity.Lead leadOf(Task task) {
