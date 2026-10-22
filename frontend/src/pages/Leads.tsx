@@ -297,8 +297,8 @@ export default function Leads() {
     { label: "New", value: dashboard?.journeyStages?.REQUIREMENT, icon: Users, className: "bg-violet-100 text-violet-600", ring: "ring-violet-500 border-violet-500", patch: { journeyStage: "REQUIREMENT" }, hint: "Nothing collected yet" },
     { label: "Requirement Collected", sub: "Quote pending", value: dashboard?.journeyStages?.COLLECTED, icon: ClipboardCheck, className: "bg-blue-100 text-blue-600", ring: "ring-blue-500 border-blue-500", patch: { journeyStage: "COLLECTED" }, hint: "Some requirement info captured (task done, document, photo, measurement…) — no quote yet" },
     { label: "Quote Building", value: dashboard?.journeyStages?.QUOTE, icon: FileText, className: "bg-amber-100 text-amber-700", ring: "ring-amber-500 border-amber-500", patch: { journeyStage: "QUOTE" }, hint: "Quote or BOQ started, not approved yet" },
-    { label: "Active Projects", value: dashboard?.journeyStages?.PROJECT, icon: FolderKanban, className: "bg-cyan-100 text-cyan-600", ring: "ring-cyan-500 border-cyan-500", patch: { journeyStage: "PROJECT" }, hint: "Converted to a project — work running" },
     { label: "Service Work", value: serviceCount, icon: Wrench, className: "bg-green-100 text-green-600", ring: "ring-green-500 border-green-500", patch: { enquiryType: "SERVICE" }, hint: "Leads enquiring about a service (not a product)" },
+    { label: "Active Projects", value: dashboard?.journeyStages?.PROJECT, icon: FolderKanban, className: "bg-cyan-100 text-cyan-600", ring: "ring-cyan-500 border-cyan-500", patch: { journeyStage: "PROJECT" }, hint: "Converted to a project — work running" },
     { label: "Lost", value: dashboard?.journeyStages?.LOST, icon: XCircle, className: "bg-rose-100 text-rose-600", ring: "ring-rose-500 border-rose-500", patch: { journeyStage: "LOST" }, hint: "Marked Lost, or its project was cancelled" },
   ], [dashboard]);
 
