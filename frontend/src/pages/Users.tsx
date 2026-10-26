@@ -20,11 +20,15 @@ interface AdminUser {
   createdAt: string | null;
 }
 
+const ACCOUNT_TYPES = [
+  { role: "ROLE_ADMIN", label: "Admin" },
+  { role: "ROLE_EMPLOYEE", label: "Employee" },
+];
+
 const prettyRole = (r: string) => r.replace(/^ROLE_/, "").replaceAll("_", " ");
 
 export default function Users() {
   const [users, setUsers] = useState<AdminUser[]>([]);
-  const [roles, setRoles] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
   // create / edit dialog
@@ -47,9 +51,8 @@ export default function Users() {
     setLoading(true);
     Promise.all([
       api.get("/users").then((r) => r.data as AdminUser[]),
-      api.get("/roles").then((r) => r.data as string[]),
     ])
-      .then(([u, r]) => { setUsers(u); setRoles(r); })
+      .then(([u]) => setUsers(u))
       .catch((e) => alert(e.response?.data?.message || e.message || "Failed to load users"))
       .finally(() => setLoading(false));
   };
@@ -58,24 +61,19 @@ export default function Users() {
 
   const openCreate = () => {
     setEditingId(null);
-    setForm({ name: "", email: "", phone: "", password: "", roles: [] });
+    setForm({ name: "", email: "", phone: "", password: "", roles: ["ROLE_EMPLOYEE"] });
     setFormError("");
     setDialogOpen(true);
   };
 
   const openEdit = (u: AdminUser) => {
     setEditingId(u.id);
-    setForm({ name: u.name, email: u.email, phone: u.phone ?? "", password: "", roles: [...u.roles] });
+    setForm({ name: u.name, email: u.email, phone: u.phone ?? "", password: "", roles: [u.roles.includes("ROLE_ADMIN") ? "ROLE_ADMIN" : "ROLE_EMPLOYEE"] });
     setFormError("");
     setDialogOpen(true);
   };
 
-  const toggleRole = (role: string) => {
-    setForm((f) => ({
-      ...f,
-      roles: f.roles.includes(role) ? f.roles.filter((r) => r !== role) : [...f.roles, role],
-    }));
-  };
+  const accountRole = form.roles[0];
 
   const save = async () => {
     setFormError("");
@@ -246,19 +244,19 @@ export default function Users() {
               </div>
             )}
             <div className="space-y-1">
-              <Label>Roles</Label>
-              <div className="grid grid-cols-2 gap-1.5 max-h-52 overflow-y-auto border rounded-md p-2">
-                {roles.map((r) => (
-                  <label key={r} className="flex items-center gap-2 text-sm cursor-pointer">
-                    <BaseInput
-                      type="checkbox"
-                      checked={form.roles.includes(r)}
-                      onChange={() => toggleRole(r)}
-                    />
-                    {prettyRole(r)}
+              <Label>Account type</Label>
+              <div className="grid grid-cols-2 gap-2">
+                {ACCOUNT_TYPES.map((t) => (
+                  <label key={t.role} className={`flex items-center gap-2 text-sm cursor-pointer border rounded-md p-2 ${accountRole === t.role ? "border-primary bg-primary/5" : ""}`}>
+                    <BaseInput type="radio" name="accountType" checked={accountRole === t.role}
+                      onChange={() => setForm({ ...form, roles: [t.role] })} />
+                    {t.label}
                   </label>
                 ))}
               </div>
+              <p className="text-xs text-muted-foreground">
+                Only Admin or Employee. Project manager, designer, etc. are work roles assigned on projects, not separate logins.
+              </p>
             </div>
           </div>
           <DialogFooter>

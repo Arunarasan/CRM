@@ -11,7 +11,7 @@ import AudioPlayer from '@/components/AudioPlayer';
 import type { Bundle } from '@/api/bundleApi';
 import { fetchCompanyProfile, type CompanyProfile } from '@/lib/companyProfile';
 import {
-  LABEL_SIZES, getLabelSize, printBundleStickers, printPackingStickers, setLabelSize, type LabelSize,
+  LABEL_SIZES, getLabelSize, printBundleStickers, printJobCard, printPackingStickers, setLabelSize, type LabelSize,
 } from '@/components/bundles/printStickers';
 import type { OrderStep, OrderView, TaskDetail } from '@/types/employeeTask';
 import { employeeTaskApi } from '@/api/employeeTaskApi';
@@ -93,6 +93,7 @@ function useStickerPrint(order: OrderView) {
   return {
     size, setSize: (v: LabelSize) => { setLabelSize(v); setSizeState(v); },
     printOrder: () => done(printBundleStickers([bundle], size, company)),
+    printJobCard: () => done(printJobCard(bundle, company)),
     printAllProducts: () => done(printPackingStickers(bundle, size, company)),
     printProduct: (index: number) => done(printPackingStickers(bundle, size, company, [bundle.items![index]])),
   };
@@ -277,6 +278,10 @@ export default function OrderTaskView({ task, order, canWork, onChanged, onMarkC
           <button type="button" onClick={print.printAllProducts} disabled={order.items.length === 0}
             className="flex items-center justify-center gap-1.5 rounded-xl bg-[#0A573B] py-2.5 text-[13px] font-semibold text-white active:scale-[0.98] disabled:opacity-50">
             <Printer className="h-4 w-4" /> {t('pw.ot.eachProduct', { n: order.items.length })}
+          </button>
+          <button type="button" onClick={print.printJobCard}
+            className="col-span-2 flex items-center justify-center gap-1.5 rounded-xl border border-[#0A573B] py-2.5 text-[13px] font-semibold text-[#0A573B] active:scale-[0.98]">
+            <Printer className="h-4 w-4" /> {t('pw.ot.jobCard')}
           </button>
         </div>
         <p className="mt-2 text-[11.5px] text-[#8A8F86]">{t('pw.ot.stickerNote', { n: order.items.length })}</p>

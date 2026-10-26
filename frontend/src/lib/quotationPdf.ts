@@ -270,12 +270,9 @@ export function buildQuotationPdf(quotation: Quotation, sel: PdfSelection = {}):
   const totals = selectionTotals(quotation, sel);
   const lead: any = quotation.lead || {};
   const cust: any = quotation.customer || {};
-  const meas: any = quotation.measurement || {};
   const billTo = resolveBillTo(cust, lead, (quotation as any).billTo);
   const client = billTo.name || "—";
   const area = lead.area || cust.area || lead.city || cust.city || cust.customerCode || "";
-  const site = quotation.project?.projectName || meas.siteAddress || lead.siteAddress || cust.siteAddress
-    || lead.address || cust.address || lead.city || cust.city || "—";
   const qDate = quotation.quotationDate;
   const xDate = quotation.expiryDate || addDays(qDate, 14);
   const validDays = qDate && xDate ? Math.round((new Date(xDate).getTime() - new Date(qDate).getTime()) / 86400000) : null;
@@ -326,14 +323,10 @@ export function buildQuotationPdf(quotation: Quotation, sel: PdfSelection = {}):
  * UPI box — titled TAX INVOICE, with Paid and Balance Due under the total. Invoice lines have no
  * category, so they print as one block; their GST rate takes the quotation's discount column.
  */
-export function buildInvoicePdf(invoice: Invoice, lines: InvoiceItem[], project?: any, assets: Record<string, string> = {}): jsPDF {
+export function buildInvoicePdf(invoice: Invoice, lines: InvoiceItem[], _project?: any, assets: Record<string, string> = {}): jsPDF {
   const inv: any = invoice;
   const cust: any = inv.customer || {};
-  const proj: any = project || inv.project || {};
   const billTo = resolveBillTo(cust, null, inv.billTo);
-  const site = proj.projectName
-    ? `${proj.projectName}${proj.projectCode ? ` (${proj.projectCode})` : ""}`
-    : proj.siteAddress || cust.siteAddress || cust.address || cust.city || "—";
   // "Prices include GST": lines print at the rate as typed (with GST); unitPrice is the before-GST rate.
   const incl = !!(invoice as any).taxInclusive;
   const rateOf = (l: InvoiceItem) => (incl && (l as any).unitPriceIncl != null ? n((l as any).unitPriceIncl) : n(l.unitPrice));

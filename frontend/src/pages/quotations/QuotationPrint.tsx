@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
-  CalendarDays, Check, CreditCard, Globe, Landmark, Loader2, Mail, MapPin, Package, Pencil, Percent, Phone, Plus, Printer,
+  CalendarDays, Check, CreditCard, Globe, Landmark, Loader2, Mail, Package, Pencil, Percent, Phone, Plus, Printer,
   Receipt, Share2, Tag, Truck, User, Users, X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -183,9 +183,6 @@ export function QuotationPrintView({ quotationId, onClose, onSaved, readOnly, em
   const clientCode = cust.customerCode;
   // Under the customer's name: their area / city (falls back to the customer code).
   const clientArea = [lead.area || cust.area, lead.city || cust.city].filter(Boolean)[0] as string | undefined;
-  const meas: any = quotation.measurement || {};
-  const site = quotation.project?.projectName || meas.siteAddress || lead.siteAddress || cust.siteAddress
-    || (quotation.siteVisit as any)?.locationAddress || lead.address || cust.address || lead.city || cust.city;
   const qDate = editing ? fields.quotationDate : quotation.quotationDate;
   // No validity saved yet → 14 days from the quote date (the standard terms).
   const xDate = (editing ? fields.expiryDate : quotation.expiryDate) || addDays(qDate, 14);
