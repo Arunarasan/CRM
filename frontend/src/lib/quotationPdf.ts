@@ -430,7 +430,7 @@ function renderDocPdf(spec: DocSpec, assets: Record<string, string>): jsPDF {
   const M = 10;
   const W = pageW - 2 * M;
   const rx = pageW - M;
-  const bottom = pageH - (D.footerText.trim() ? 19 : 14);
+  const bottom = pageH - (D.footerText.trim() ? 19 : 14) - (spec.title !== "QUOTATION" ? 3 : 0);
   let y = 14;
 
   // ---- Fonts: embedded (with ₹) when loaded, else Helvetica with "Rs." ----
@@ -814,6 +814,12 @@ function renderDocPdf(spec: DocSpec, assets: Record<string, string>): jsPDF {
   y = Math.max(top + sumH, ly) + 6;
 
   // ---- Footer on every page ----
+  let ourCo: CompanyProfile | undefined;
+  try { ourCo = assets[COMPANY_KEY] ? JSON.parse(assets[COMPANY_KEY]) : undefined; } catch { /* no company */ }
+  // Invoices carry our own name, GSTIN and contact in the footer.
+  const ourLine = spec.title !== "QUOTATION" && ourCo
+    ? [ourCo.name, ourCo.gstin && `GSTIN ${ourCo.gstin}`, ourCo.phone && `Ph ${ourCo.phone}`, ourCo.email].filter(Boolean).join("  ·  ")
+    : "";
   const pages = doc.getNumberOfPages();
   for (let i = 1; i <= pages; i++) {
     doc.setPage(i);
@@ -822,6 +828,7 @@ function renderDocPdf(spec: DocSpec, assets: Record<string, string>): jsPDF {
       doc.text((doc.splitTextToSize(D.footerText.trim(), W) as string[]).slice(0, 2), M, pageH - 14);
     }
     if (!D.showFooter) continue;
+    if (ourLine) { font("sans", 7); color(MUTED); doc.text(ourLine, pageW / 2, pageH - 11.5, { align: "center" }); }
     doc.setDrawColor(201, 154, 62).setLineWidth(0.3);
     doc.line(M, pageH - 9, rx, pageH - 9);
     font("sans", 7); color(MUTED);

@@ -34,6 +34,8 @@ export interface DocDesign {
   showQr: boolean;
   /** Printed under the terms / bank box and in the page footer, e.g. "Goods once sold…". */
   footerText: string;
+  /** Invoices: terms & conditions prefilled on every new invoice (one point per line). */
+  defaultTerms: string;
   showFooter: boolean;
   // Print preview only (the PDF has no signature block)
   showSignatures: boolean;
@@ -45,7 +47,7 @@ export const DEFAULT_DESIGN: DocDesign = {
   showDateCard: true, showCustomerCard: true, showCustomerDetail: true, showSiteCard: true,
   categoryHeader: true, categoryTotal: true,
   colPhoto: true, colTag: true, colDescription: true, colQty: true, colUnit: true, colRate: true, colExtra: true,
-  showTerms: true, showBank: true, showQr: true, footerText: "", showFooter: true,
+  showTerms: true, showBank: true, showQr: true, footerText: "", defaultTerms: "", showFooter: true,
   showSignatures: true, showContact: true,
 };
 

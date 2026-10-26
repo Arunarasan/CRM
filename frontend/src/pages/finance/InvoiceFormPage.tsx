@@ -16,6 +16,7 @@ import { currency } from "./helpers";
 import BillToPanel from "@/components/BillToPanel";
 import { gstinError, resolveBillTo, saveBillToToCustomer, type BillTo } from "@/lib/billTo";
 import { fetchCompanyProfile, type CompanyProfile } from "@/lib/companyProfile";
+import { fetchDocDesign } from "@/lib/docDesign";
 import { ArrowLeft, Plus, Trash2, Save } from "lucide-react";
 import { UNIT_DATALIST_ID } from "@/components/UnitOptions";
 
@@ -44,6 +45,8 @@ export default function InvoiceFormPage() {
   const [saveToCustomer, setSaveToCustomer] = useState(false);
   const [company, setCompany] = useState<CompanyProfile>({ name: "JB Decor" });
   useEffect(() => { fetchCompanyProfile().then(setCompany); }, []);
+  // New invoices start with the default terms from Website > Document Design (still editable here).
+  useEffect(() => { fetchDocDesign("invoice").then((d) => setTerms((t) => t || d.defaultTerms || "")); }, []);
   const [projectId, setProjectId] = useState(sp.get("projectId") || "");
   const [invoiceType, setInvoiceType] = useState("PROGRESS");
   const [gstType, setGstType] = useState<"CGST_SGST" | "IGST">("CGST_SGST");
@@ -372,7 +375,9 @@ export default function InvoiceFormPage() {
               <Field label="Discount value"><Input type="number" min={0} value={discountValue} onChange={(e) => setDiscountValue(e.target.value)} /></Field>
             </div>
             <Field label="Notes"><Input value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
-            <Field label="Terms"><Input value={terms} onChange={(e) => setTerms(e.target.value)} /></Field>
+            <Field label="Terms & conditions (one point per line)">
+              <textarea rows={4} value={terms} onChange={(e) => setTerms(e.target.value)} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
+            </Field>
           </div>
           <div className="bg-white border rounded-2xl shadow-sm p-5 space-y-2 text-sm">
             {taxInclusive ? (

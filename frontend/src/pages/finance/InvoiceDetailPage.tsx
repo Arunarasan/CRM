@@ -335,12 +335,7 @@ export default function InvoiceDetailPage() {
         )}
       </div>
 
-      {(inv.notes || inv.terms) && (
-        <div className="bg-white border rounded-2xl shadow-sm p-5 text-sm space-y-3">
-          {inv.notes && <div><div className="text-xs uppercase text-slate-500 mb-1">Notes</div><p className="text-slate-700">{inv.notes}</p></div>}
-          {inv.terms && <div><div className="text-xs uppercase text-slate-500 mb-1">Terms</div><p className="text-slate-700">{inv.terms}</p></div>}
-        </div>
-      )}
+      <TermsCard inv={inv} onSaved={(u) => setInv(u)} canEdit={inv.status !== "CANCELLED"} />
     </div>
   );
 }
@@ -366,4 +361,47 @@ function Meta({ label, value }: { label: string; value?: string }) {
 
 function Row({ label, value }: { label: string; value: string }) {
   return <div className="flex justify-between"><span className="text-slate-500">{label}</span><span className="font-semibold">{value}</span></div>;
+}
+
+/** Terms & notes printed on the invoice - editable in place on any non-cancelled invoice. */
+function TermsCard({ inv, onSaved, canEdit }: { inv: any; onSaved: (i: any) => void; canEdit: boolean }) {
+  const [editing, setEditing] = useState(false);
+  const [terms, setTerms] = useState(inv.terms || "");
+  const [notes, setNotes] = useState(inv.notes || "");
+  const [saving, setSaving] = useState(false);
+  const save = async () => {
+    setSaving(true);
+    try {
+      const u = await financeApi.updateInvoiceTerms(inv.id, { terms: terms || null, notes: notes || null });
+      onSaved({ ...inv, terms: u.terms, notes: u.notes });
+      setEditing(false);
+      toast.success("Terms updated");
+    } catch (e) { toast.error(apiError(e, "Could not update the terms.")); } finally { setSaving(false); }
+  };
+  const area = "w-full rounded-md border border-input bg-background px-3 py-2 text-sm";
+  return (
+    <div className="bg-white border rounded-2xl shadow-sm p-5 text-sm space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Terms &amp; notes (printed on the invoice)</div>
+        {canEdit && !editing && <button className="text-xs font-semibold text-emerald-800 hover:underline" onClick={() => { setTerms(inv.terms || ""); setNotes(inv.notes || ""); setEditing(true); }}>Edit</button>}
+      </div>
+      {editing ? (
+        <>
+          <label className="block"><span className="mb-1 block text-xs text-slate-500">Terms &amp; conditions (one point per line)</span>
+            <textarea rows={5} className={area} value={terms} onChange={(e) => setTerms(e.target.value)} /></label>
+          <label className="block"><span className="mb-1 block text-xs text-slate-500">Notes</span>
+            <textarea rows={2} className={area} value={notes} onChange={(e) => setNotes(e.target.value)} /></label>
+          <div className="flex gap-2">
+            <button disabled={saving} onClick={save} className="rounded-md bg-emerald-800 px-3 py-1.5 text-xs font-semibold text-white">{saving ? "Saving..." : "Save"}</button>
+            <button onClick={() => setEditing(false)} className="rounded-md border px-3 py-1.5 text-xs font-semibold text-slate-700">Cancel</button>
+          </div>
+        </>
+      ) : (inv.terms || inv.notes) ? (
+        <>
+          {inv.notes && <div><div className="text-xs uppercase text-slate-500 mb-1">Notes</div><p className="whitespace-pre-line text-slate-700">{inv.notes}</p></div>}
+          {inv.terms && <div><div className="text-xs uppercase text-slate-500 mb-1">Terms</div><p className="whitespace-pre-line text-slate-700">{inv.terms}</p></div>}
+        </>
+      ) : <p className="text-slate-400">No terms added.</p>}
+    </div>
+  );
 }

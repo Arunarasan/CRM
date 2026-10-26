@@ -36,6 +36,8 @@ export const financeApi = {
     api.post<Invoice>(`${BASE}/invoices`, { invoice, items }).then((r) => r.data),
   updateDraftInvoice: (id: number, invoice: Record<string, unknown>, items?: Record<string, unknown>[]) =>
     api.put<Invoice>(`${BASE}/invoices/${id}`, { invoice, items }).then((r) => r.data),
+  updateInvoiceTerms: (id: number, body: { terms: string | null; notes: string | null }) =>
+    api.put<Invoice>(`${BASE}/invoices/${id}/terms`, body).then((r) => r.data),
   issueInvoice: (id: number) => api.post<Invoice>(`${BASE}/invoices/${id}/issue`).then((r) => r.data),
   sendInvoice: (id: number) => api.post<Invoice>(`${BASE}/invoices/${id}/send`).then((r) => r.data),
   cancelInvoice: (id: number, reason?: string) =>

@@ -500,6 +500,17 @@ public class FinanceService {
         return invoiceRepository.save(invoice);
     }
 
+    @Transactional
+    public Invoice updateInvoiceTerms(Long id, String terms, String notes) {
+        Invoice invoice = getInvoice(id);
+        if ("CANCELLED".equals(invoice.getStatus())) {
+            throw new RuntimeException("A cancelled invoice can't be edited");
+        }
+        invoice.setTerms(terms == null || terms.isBlank() ? null : terms.trim());
+        invoice.setNotes(notes == null || notes.isBlank() ? null : notes.trim());
+        return invoiceRepository.save(invoice);
+    }
+
     private void computeTotals(Invoice invoice, List<InvoiceItem> items) {
         // "Prices include GST": the typed rate (kept in unitPriceIncl) contains GST, so the line's taxable
         // rate is worked out of it. unitPrice always holds the before-GST rate, so reports stay correct.

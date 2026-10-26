@@ -106,6 +106,13 @@ public class FinanceController {
         return ResponseEntity.ok(financeService.updateDraftInvoice(id, request.invoice, request.items));
     }
 
+    /** Terms & notes can be edited on any non-cancelled invoice (they don't change the amounts). */
+    @PutMapping("/invoices/{id}/terms")
+    @PreAuthorize(WRITE)
+    public ResponseEntity<Invoice> updateInvoiceTerms(@PathVariable Long id, @RequestBody java.util.Map<String, String> body) {
+        return ResponseEntity.ok(financeService.updateInvoiceTerms(id, body.get("terms"), body.get("notes")));
+    }
+
     @PostMapping("/invoices/{id}/issue")
     @PreAuthorize(WRITE)
     public ResponseEntity<Invoice> issueInvoice(@PathVariable Long id) {

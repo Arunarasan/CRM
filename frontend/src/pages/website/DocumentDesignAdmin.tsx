@@ -107,6 +107,15 @@ export default function DocumentDesignAdmin() {
                   placeholder="e.g. Goods once sold will not be taken back."
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
               </label>
+              {kind === 'invoice' && (
+                <label className="block">
+                  <span className="mb-1 block text-xs font-medium text-slate-600">Default terms &amp; conditions</span>
+                  <textarea value={design.defaultTerms} onChange={(e) => set('defaultTerms', e.target.value)} rows={5}
+                    placeholder={"One point per line, e.g.\nPayment due within 7 days.\nGoods once sold will not be taken back."}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
+                  <span className="mt-1 block text-[11px] text-muted-foreground">Prefilled on every new invoice; each invoice can still edit its own terms.</span>
+                </label>
+              )}
             </div>
           </section>
 
