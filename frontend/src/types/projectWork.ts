@@ -44,6 +44,7 @@ export interface WorkLine {
   quantity?: number | null;
   unit?: string | null;
   imageUrl?: string | null;
+  descriptions?: string[];
   percent: number;
   atSite: boolean;
   custom: boolean;

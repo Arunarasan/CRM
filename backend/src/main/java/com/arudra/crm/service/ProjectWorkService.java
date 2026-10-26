@@ -8,6 +8,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
@@ -364,6 +365,7 @@ public class ProjectWorkService {
             lm.put("quantity", l.getQuantity());
             lm.put("unit", l.getUnit());
             lm.put("imageUrl", l.getImageUrl());
+            lm.put("descriptions", descriptionsOf(l.getDescriptions()));
             lm.put("percent", calc.linePercent.getOrDefault(l.getId(), 0));
             lm.put("atSite", calc.atSite.contains(l.getId()));
             lm.put("custom", l.getQuotationItemId() == null);
@@ -816,6 +818,7 @@ public class ProjectWorkService {
         }
         line.setUnit(blankToNull(body.get("unit")));
         line.setImageUrl(blankToNull(body.get("imageUrl")));
+        line.setDescriptions(descriptionsJson(body.get("descriptions")));
         if (body.get("productId") != null) line.setProductId(Long.valueOf(String.valueOf(body.get("productId"))));
         line.setSortOrder(lineRepository.findByProjectIdAndIsDeletedFalseOrderBySortOrderAscIdAsc(projectId).size());
         line = lineRepository.save(line);
@@ -839,6 +842,7 @@ public class ProjectWorkService {
             line.setProductId(v == null || String.valueOf(v).isBlank() ? null : Long.valueOf(String.valueOf(v)));
         }
         if (body.containsKey("location")) line.setLocation(blankToNull(body.get("location")));
+        if (body.containsKey("descriptions")) line.setDescriptions(descriptionsJson(body.get("descriptions")));
         if (body.containsKey("itemName") && blankToNull(body.get("itemName")) != null) line.setItemName(blankToNull(body.get("itemName")));
         lineRepository.save(line);
         recompute(line.getProjectId());
@@ -1061,6 +1065,22 @@ public class ProjectWorkService {
     }
 
     // ------------------------------------------------------------------ helpers
+
+    private static final ObjectMapper JSON = new ObjectMapper();
+
+    /** Non-blank description boxes as JSON, or null when there are none. */
+    private static String descriptionsJson(Object raw) {
+        if (!(raw instanceof List<?> l)) return null;
+        List<String> out = l.stream().map(o -> o == null ? "" : String.valueOf(o).trim()).filter(x -> !x.isEmpty()).toList();
+        if (out.isEmpty()) return null;
+        try { return JSON.writeValueAsString(out); } catch (Exception e) { return null; }
+    }
+
+    private static List<String> descriptionsOf(String json) {
+        if (json == null || json.isBlank()) return List.of();
+        try { return JSON.readValue(json, new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {}); }
+        catch (Exception e) { return List.of(); }
+    }
 
     private static String categoryOf(String raw) {
         return raw == null || raw.isBlank() ? "Others" : raw.trim();

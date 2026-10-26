@@ -172,6 +172,7 @@ function ProductSheet({ line, board, onClose, onChange, editable, canManage, onC
                     {[line.category, line.color, line.quantity != null && `${Number(line.quantity)} ${line.unit || ''}`.trim()].filter(Boolean).join(' · ')}
                   </p>
                   {line.location && <p className="mt-0.5 flex items-center gap-1 text-[12px] text-[#8A8F86]"><MapPin className="h-3 w-3" />{line.location}</p>}
+                  {line.descriptions?.map((d, i) => <p key={i} className="mt-1 whitespace-pre-line text-[12.5px] text-[#5E655D]">{d}</p>)}
                 </div>
                 <span className={`text-[18px] font-bold ${pctTone(line.percent)}`}>{line.percent}%</span>
               </div>
@@ -335,7 +336,8 @@ function StepCard({ step, editable, run }: {
 function AddProductDialog({ open, onOpenChange, board, onChange }: {
   open: boolean; onOpenChange: (o: boolean) => void; board: WorkBoard; onChange: (b: WorkBoard) => void;
 }) {
-  const [form, setForm] = useState({ category: '', itemName: '', color: '', quantity: '', unit: '', location: '' });
+  const [form, setForm] = useState({ itemName: '', color: '', quantity: '', unit: '', location: '' });
+  const [descriptions, setDescriptions] = useState<string[]>(['']);
   const [busy, setBusy] = useState(false);
   const [imageUrl, setImageUrl] = useState('');
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -345,9 +347,11 @@ function AddProductDialog({ open, onOpenChange, board, onChange }: {
     setBusy(true);
     try {
       onChange(await projectWorkApi.addLine(board.projectId, {
-        ...form, quantity: form.quantity || undefined, category: form.category || undefined, imageUrl: imageUrl || undefined,
+        ...form, quantity: form.quantity || undefined, imageUrl: imageUrl || undefined,
+        descriptions: descriptions.map((d) => d.trim()).filter(Boolean),
       }));
-      setForm({ category: '', itemName: '', color: '', quantity: '', unit: '', location: '' });
+      setForm({ itemName: '', color: '', quantity: '', unit: '', location: '' });
+      setDescriptions(['']);
       setImageUrl('');
       onOpenChange(false);
     } catch (e) {
@@ -362,8 +366,6 @@ function AddProductDialog({ open, onOpenChange, board, onChange }: {
       <DialogContent className="sm:max-w-md">
         <DialogHeader><DialogTitle>Add a product to track</DialogTitle></DialogHeader>
         <div className="flex flex-col gap-2.5">
-          <input list="work-categories" value={form.category} onChange={set('category')} placeholder="Category (e.g. Curtains)" className={INPUT} />
-          <datalist id="work-categories">{board.categories.map((c) => <option key={c.category} value={c.category} />)}</datalist>
           <input value={form.itemName} onChange={set('itemName')} placeholder="Product name" className={INPUT} />
           <div className="grid grid-cols-3 gap-2">
             <input value={form.color} onChange={set('color')} placeholder="Colour" className={INPUT} />
@@ -371,6 +373,20 @@ function AddProductDialog({ open, onOpenChange, board, onChange }: {
             <input value={form.unit} onChange={set('unit')} placeholder="Unit" className={INPUT} />
           </div>
           <input value={form.location} onChange={set('location')} placeholder="Location / room" className={INPUT} />
+          <div className="flex flex-col gap-2">
+            {descriptions.map((d, i) => (
+              <div key={i} className="flex items-start gap-2">
+                <textarea value={d} rows={2} placeholder={`Description ${descriptions.length > 1 ? i + 1 : ''}`.trim()}
+                  onChange={(e) => setDescriptions((ds) => ds.map((x, j) => (j === i ? e.target.value : x)))}
+                  className={`${INPUT} flex-1 resize-y`} />
+                {descriptions.length > 1 && (
+                  <button type="button" aria-label="Remove description" onClick={() => setDescriptions((ds) => ds.filter((_, j) => j !== i))}
+                    className="mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[#8A8F86] hover:bg-black/5">×</button>
+                )}
+              </div>
+            ))}
+            <button type="button" onClick={() => setDescriptions((ds) => [...ds, ''])} className="self-start text-[12.5px] font-semibold text-[#0A573B]">+ Add another description</button>
+          </div>
           <div className="flex items-center gap-3">
             {imageUrl && (
               <div className="relative h-16 w-16 shrink-0">

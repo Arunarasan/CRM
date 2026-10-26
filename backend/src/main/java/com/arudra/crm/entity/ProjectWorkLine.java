@@ -46,6 +46,10 @@ public class ProjectWorkLine extends BaseEntity {
     @Column(name = "image_url", length = 500)
     private String imageUrl;
 
+    /** JSON array of free-text description notes (one box each). */
+    @Column(name = "descriptions", columnDefinition = "TEXT")
+    private String descriptions;
+
     @Column(name = "sort_order", nullable = false)
     private Integer sortOrder = 0;
 
