@@ -61,6 +61,9 @@ export const publicApi = {
   acceptQuote: (token: string, payload: { name: string; note?: string }) =>
     api.post<SharedQuote>(`/public/quote/${token}/accept`, payload).then((r) => r.data),
 
+  respondQuote: (token: string, payload: { action: 'CHANGES_REQUESTED' | 'DECLINED'; name: string; note: string }) =>
+    api.post<SharedQuote>(`/public/quote/${token}/respond`, payload).then((r) => r.data),
+
   // Public, no-login employee review (personal QR link → capture + Google redirect)
   employeeReviewInfo: (token: string) =>
     api.get<EmployeeReviewInfo>(`/public/employee-review/${token}`).then((r) => r.data),
@@ -94,8 +97,8 @@ export interface SharedQuote {
   quotationNumber: string
   quotationDate?: string | null
   expiryDate?: string | null
-  /** OPEN · ACCEPTED · APPROVED · REPLACED · CLOSED */
-  state: 'OPEN' | 'ACCEPTED' | 'APPROVED' | 'REPLACED' | 'CLOSED'
+  /** OPEN · CHANGES_REQUESTED · DECLINED (all still answerable) · ACCEPTED · APPROVED · REPLACED · CLOSED */
+  state: 'OPEN' | 'CHANGES_REQUESTED' | 'DECLINED' | 'ACCEPTED' | 'APPROVED' | 'REPLACED' | 'CLOSED'
   customerName?: string | null
   city?: string | null
   preparedBy?: string | null
@@ -112,6 +115,9 @@ export interface SharedQuote {
   pdfUrl?: string | null
   acceptedAt?: string | null
   acceptedName?: string | null
+  responseAt?: string | null
+  responseName?: string | null
+  responseNote?: string | null
 }
 
 export interface TrackingStep {

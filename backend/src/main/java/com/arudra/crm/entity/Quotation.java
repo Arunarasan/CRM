@@ -178,4 +178,17 @@ public class Quotation extends BaseEntity {
 
     @Column(name = "customer_accept_note", columnDefinition = "TEXT")
     private String customerAcceptNote;
+
+    /** CHANGES_REQUESTED or DECLINED — the customer's other choice on the link's page (cleared by Accept). */
+    @Column(name = "customer_response", length = 20)
+    private String customerResponse;
+
+    @Column(name = "customer_response_at")
+    private LocalDateTime customerResponseAt;
+
+    @Column(name = "customer_response_name", length = 150)
+    private String customerResponseName;
+
+    @Column(name = "customer_response_note", columnDefinition = "TEXT")
+    private String customerResponseNote;
 }

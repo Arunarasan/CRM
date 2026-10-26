@@ -96,6 +96,11 @@ export interface Quotation {
   customerAcceptedAt?: string | null;
   customerAcceptedName?: string | null;
   customerAcceptNote?: string | null;
+  /** CHANGES_REQUESTED | DECLINED — customer's other choice on the link, with their message. */
+  customerResponse?: string | null;
+  customerResponseAt?: string | null;
+  customerResponseName?: string | null;
+  customerResponseNote?: string | null;
   approvedBy?: EntityRef;
   approvedDate?: string;
   createdAt?: string;

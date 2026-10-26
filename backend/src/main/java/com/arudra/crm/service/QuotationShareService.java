@@ -79,7 +79,9 @@ public class QuotationShareService {
     private static Map<String, Object> linkState(Quotation q) {
         return map("shareToken", q.getShareToken(), "shareEnabled", q.isShareEnabled(),
                 "sharePdfUrl", q.getSharePdfUrl(), "sharedAt", q.getSharedAt(),
-                "customerAcceptedAt", q.getCustomerAcceptedAt(), "customerAcceptedName", q.getCustomerAcceptedName());
+                "customerAcceptedAt", q.getCustomerAcceptedAt(), "customerAcceptedName", q.getCustomerAcceptedName(),
+                "customerResponse", q.getCustomerResponse(), "customerResponseAt", q.getCustomerResponseAt(),
+                "customerResponseName", q.getCustomerResponseName(), "customerResponseNote", q.getCustomerResponseNote());
     }
 
     private static String newToken() {
@@ -183,7 +185,10 @@ public class QuotationShareService {
                 "terms", terms,
                 "pdfUrl", q.getSharePdfUrl(),
                 "acceptedAt", q.getCustomerAcceptedAt(),
-                "acceptedName", q.getCustomerAcceptedName());
+                "acceptedName", q.getCustomerAcceptedName(),
+                "responseAt", q.getCustomerResponseAt(),
+                "responseName", q.getCustomerResponseName(),
+                "responseNote", q.getCustomerResponseNote());
     }
 
     /** OPEN (can accept) · ACCEPTED (customer pressed accept) · APPROVED · REPLACED (newer quote) · CLOSED. */
@@ -192,7 +197,8 @@ public class QuotationShareService {
         if ("APPROVED".equals(s) || "CONVERTED".equals(s)) return "APPROVED";
         if ("REVISED".equals(s) || Boolean.FALSE.equals(q.getIsLatestVersion())) return "REPLACED";
         if (CLOSED.contains(s)) return "CLOSED";
-        return q.getCustomerAcceptedAt() != null ? "ACCEPTED" : "OPEN";
+        if (q.getCustomerAcceptedAt() != null) return "ACCEPTED";
+        return q.getCustomerResponse() != null ? q.getCustomerResponse() : "OPEN";
     }
 
     /** Customer pressed "Accept" — recorded once, and the team is told to confirm it. */
@@ -201,7 +207,7 @@ public class QuotationShareService {
         Quotation q = resolve(token);
         String state = publicState(q);
         if ("ACCEPTED".equals(state) || "APPROVED".equals(state)) return view(token);
-        if (!"OPEN".equals(state)) {
+        if (!isAnswerable(state)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "This quotation can no longer be accepted online — please contact us.");
         }
@@ -210,12 +216,61 @@ public class QuotationShareService {
         q.setCustomerAcceptedAt(LocalDateTime.now());
         q.setCustomerAcceptedName(name);
         q.setCustomerAcceptNote(trim(body.get("note"), 2000));
+        q.setCustomerResponse(null);
+        q.setCustomerResponseAt(null);
         quotationRepository.save(q);
 
-        String title = "Quotation " + q.getQuotationNumber() + " accepted online";
-        String msg = name + " accepted " + q.getQuotationNumber() + " (₹"
-                + nz(q.getGrandTotal()).setScale(0, RoundingMode.HALF_UP).toPlainString()
-                + ") from the shared link — confirm the customer approval in the CRM.";
+        notifyTeam(q, "Quotation " + q.getQuotationNumber() + " accepted online",
+                name + " accepted " + q.getQuotationNumber() + " (₹"
+                        + nz(q.getGrandTotal()).setScale(0, RoundingMode.HALF_UP).toPlainString()
+                        + ") from the shared link — confirm the customer approval in the CRM.");
+        return view(token);
+    }
+
+    /**
+     * Customer chose "Request changes" or "Decline" on the link. Nothing is locked or closed — the message
+     * is recorded, the sales owner and admins are alerted, and the customer can still accept later.
+     */
+    @Transactional
+    public Map<String, Object> respond(String token, Map<String, Object> body) {
+        Quotation q = resolve(token);
+        if (!isAnswerable(publicState(q))) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "This quotation can no longer be answered online — please contact us.");
+        }
+        Object a = body.get("action");
+        String action = a == null ? "" : a.toString().trim().toUpperCase(Locale.ROOT);
+        if (!"CHANGES_REQUESTED".equals(action) && !"DECLINED".equals(action)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Please choose what you would like to do.");
+        }
+        String name = trim(body.get("name"), 150);
+        String note = trim(body.get("note"), 2000);
+        if (blank(name)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Please enter your name.");
+        if (blank(note)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "CHANGES_REQUESTED".equals(action)
+                    ? "Please tell us what you would like changed." : "Please tell us why you are declining.");
+        }
+        q.setCustomerResponse(action);
+        q.setCustomerResponseAt(LocalDateTime.now());
+        q.setCustomerResponseName(name);
+        q.setCustomerResponseNote(note);
+        // A fresh answer replaces an earlier acceptance that staff have not yet confirmed.
+        q.setCustomerAcceptedAt(null);
+        q.setCustomerAcceptedName(null);
+        q.setCustomerAcceptNote(null);
+        quotationRepository.save(q);
+
+        boolean changes = "CHANGES_REQUESTED".equals(action);
+        notifyTeam(q, "Quotation " + q.getQuotationNumber() + (changes ? " — customer wants changes" : " declined online"),
+                name + (changes ? " asked for changes to " : " declined ") + q.getQuotationNumber() + ": “" + note + "”");
+        return view(token);
+    }
+
+    private static boolean isAnswerable(String state) {
+        return "OPEN".equals(state) || "CHANGES_REQUESTED".equals(state) || "DECLINED".equals(state);
+    }
+
+    private void notifyTeam(Quotation q, String title, String msg) {
         Lead lead = q.getLead();
         String url = lead != null ? "/leads/" + lead.getId() + "?tab=journey" : "/quotations";
         Long owner = lead == null ? null
@@ -223,7 +278,6 @@ public class QuotationShareService {
                 : lead.getLeadOwner() != null ? lead.getLeadOwner().getId() : null;
         notificationService.dispatchToAdmins(title, msg, "QUOTATION", url, owner);
         if (owner != null) notificationService.dispatch(title, msg, "QUOTATION", owner, url);
-        return view(token);
     }
 
     // ---------------- helpers ----------------

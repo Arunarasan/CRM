@@ -35,6 +35,13 @@ public class PublicQuotationController {
                 "Thank you — we have received your acceptance and will contact you shortly."));
     }
 
+    @PostMapping("/{token}/respond")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> respond(
+            @PathVariable String token, @RequestBody Map<String, Object> body) {
+        return ResponseEntity.ok(ApiResponse.success(shareService.respond(token, body),
+                "Thank you — we have received your message and will get back to you shortly."));
+    }
+
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<ApiResponse<Void>> handle(ResponseStatusException ex) {
         return ResponseEntity.status(ex.getStatusCode()).body(ApiResponse.error(ex.getReason()));

@@ -68,6 +68,10 @@ export interface QuoteShareState {
   sharedAt?: string | null;
   customerAcceptedAt?: string | null;
   customerAcceptedName?: string | null;
+  customerResponse?: string | null;
+  customerResponseAt?: string | null;
+  customerResponseName?: string | null;
+  customerResponseNote?: string | null;
   /** Signed-in staff member (for the message signature); only on POST /share. */
   staffName?: string | null;
 }

@@ -177,6 +177,13 @@ export default function ShareQuoteDialog({ prepared, onClose }: {
           </div>
         )}
 
+        {share.customerResponse && !share.customerAcceptedAt && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            <b>{share.customerResponseName}</b> {share.customerResponse === "DECLINED" ? "declined" : "asked for changes"} on {fmtDate(share.customerResponseAt)}
+            {share.customerResponseNote ? <> — “{share.customerResponseNote}”</> : null}
+          </div>
+        )}
+
         {/* Customer link */}
         <div className="space-y-1.5">
           <div className="flex items-center justify-between text-xs">

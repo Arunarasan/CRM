@@ -481,6 +481,17 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
         </div>
       )}
 
+      {/* Customer asked for changes / declined on the shared link — follow up (revise the sheet, then re-share). */}
+      {quote?.customerResponse && !quote.customerAcceptedAt && !approved && (
+        <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600" />
+          <span className="min-w-0 flex-1">
+            <b>{quote.customerResponseName}</b> {quote.customerResponse === "DECLINED" ? "declined" : "asked for changes to"} {quote.quotationNumber} online on {formatDate(quote.customerResponseAt)}
+            {quote.customerResponseNote ? <> — “{quote.customerResponseNote}”</> : null}.
+          </span>
+        </div>
+      )}
+
       <div className="space-y-4">
         {!boq ? (
           // ---- Nothing yet: visit/measure, then one click opens the sheet ----

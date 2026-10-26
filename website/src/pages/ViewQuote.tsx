@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import {
   AlertCircle, BadgeCheck, CalendarDays, Check, Download, FileText, ImageIcon, Loader2, MapPin,
-  MessageCircle, Phone, Printer,
+  MessageCircle, Pencil, Phone, Printer, Send, XCircle,
 } from 'lucide-react'
 import { publicApi, type SharedQuote, type SharedQuoteItem } from '@/api/publicApi'
 import { useSite } from '@/hooks/useSiteSettings'
@@ -152,6 +152,10 @@ function StateBanner({ data }: { data: SharedQuote }) {
   const banners: Record<string, { cls: string; text: string } | undefined> = {
     ACCEPTED: { cls: 'bg-emerald-50 text-emerald-800 border-emerald-200',
       text: `You accepted this quotation${data.acceptedAt ? ` on ${date(data.acceptedAt)}` : ''}. Our team will contact you shortly.` },
+    CHANGES_REQUESTED: { cls: 'bg-amber-50 text-amber-800 border-amber-200',
+      text: `You asked for changes${data.responseAt ? ` on ${date(data.responseAt)}` : ''}${data.responseNote ? ` — “${data.responseNote}”` : ''}. We will send you a revised quotation. You can still accept this one below.` },
+    DECLINED: { cls: 'bg-slate-50 text-slate-700 border-slate-200',
+      text: `You declined this quotation${data.responseAt ? ` on ${date(data.responseAt)}` : ''}. If you change your mind you can still accept it below.` },
     APPROVED: { cls: 'bg-emerald-50 text-emerald-800 border-emerald-200', text: 'This quotation is approved. Thank you for choosing us!' },
     REPLACED: { cls: 'bg-amber-50 text-amber-800 border-amber-200', text: 'This quotation has been replaced by a newer one. Please ask us for the latest link.' },
     CLOSED: { cls: 'bg-slate-50 text-slate-700 border-slate-200', text: 'This quotation is closed. Please contact us for an updated quote.' },
@@ -298,8 +302,11 @@ function Terms({ terms }: { terms: string[] }) {
   )
 }
 
-/* ---------- Accept ---------- */
+/* ---------- Respond: accept / request changes / decline ---------- */
+type Choice = 'ACCEPT' | 'CHANGES_REQUESTED' | 'DECLINED'
+
 function AcceptCard({ token, data, onChange }: { token: string; data: SharedQuote; onChange: (d: SharedQuote) => void }) {
+  const [choice, setChoice] = useState<Choice>('ACCEPT')
   const [name, setName] = useState(data.customerName || '')
   const [note, setNote] = useState('')
   const [agree, setAgree] = useState(false)
@@ -317,41 +324,76 @@ function AcceptCard({ token, data, onChange }: { token: string; data: SharedQuot
       </section>
     )
   }
-  if (data.state !== 'OPEN') return null
+  if (data.state !== 'OPEN' && data.state !== 'CHANGES_REQUESTED' && data.state !== 'DECLINED') return null
 
+  const accept = choice === 'ACCEPT'
+  const ready = !!name.trim() && !busy && (accept ? agree : !!note.trim())
   const submit = async () => {
-    if (!name.trim() || !agree || busy) return
+    if (!ready) return
     setBusy(true); setErr(null)
     try {
-      onChange(await publicApi.acceptQuote(token, { name: name.trim(), note: note.trim() || undefined }))
+      onChange(accept
+        ? await publicApi.acceptQuote(token, { name: name.trim(), note: note.trim() || undefined })
+        : await publicApi.respondQuote(token, { action: choice as 'CHANGES_REQUESTED' | 'DECLINED', name: name.trim(), note: note.trim() }))
+      setNote(''); setAgree(false); setChoice('ACCEPT')
       window.scrollTo({ top: 0, behavior: 'smooth' })
     } catch (e: any) {
-      setErr(e?.response?.data?.message || e?.message || 'Could not send your acceptance. Please try again.')
+      setErr(e?.response?.data?.message || e?.message || 'Could not send your response. Please try again.')
     } finally { setBusy(false) }
   }
   const field = 'h-11 w-full rounded-xl border border-forest/15 px-3 text-forest outline-none focus:border-gold focus:ring-2 focus:ring-gold/20'
+  const options: { id: Choice; label: string; hint: string; icon: typeof Check }[] = [
+    { id: 'ACCEPT', label: 'Accept', hint: 'Go ahead with this quotation', icon: Check },
+    { id: 'CHANGES_REQUESTED', label: 'Request changes', hint: 'Ask us to revise it', icon: Pencil },
+    { id: 'DECLINED', label: 'Decline', hint: 'Not going ahead', icon: XCircle },
+  ]
+  const cta = { ACCEPT: 'Accept quotation', CHANGES_REQUESTED: 'Send change request', DECLINED: 'Decline quotation' }[choice]
   return (
     <section id="accept" className="scroll-mt-4 rounded-2xl bg-white p-5 shadow-sm print:hidden">
-      <h2 className="font-serif text-lg font-semibold text-forest">Happy with this quotation?</h2>
-      <p className="mt-1 text-sm text-forest/60">Accept it here and our team will contact you to confirm the order and schedule the work.</p>
+      <h2 className="font-serif text-lg font-semibold text-forest">Your decision</h2>
+      <p className="mt-1 text-sm text-forest/60">Accept it, ask us to change something, or let us know you are not going ahead.</p>
+      <div role="radiogroup" aria-label="Your decision" className="mt-4 grid gap-2 sm:grid-cols-3">
+        {options.map((o) => (
+          <button key={o.id} type="button" role="radio" aria-checked={choice === o.id}
+            onClick={() => { setChoice(o.id); setErr(null) }}
+            className={`flex items-start gap-3 rounded-xl border p-3 text-left transition ${choice === o.id
+              ? 'border-forest bg-forest/[0.05] ring-2 ring-forest/15' : 'border-forest/15 hover:bg-forest/[0.03]'}`}>
+            <o.icon className="mt-0.5 h-4 w-4 shrink-0 text-forest" />
+            <span className="text-sm"><b className="block text-forest">{o.label}</b><span className="text-xs text-forest/55">{o.hint}</span></span>
+          </button>
+        ))}
+      </div>
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <label className="text-sm">
           <span className="mb-1 block text-xs font-medium text-forest/60">Your name</span>
           <input value={name} onChange={(e) => setName(e.target.value)} maxLength={150} className={field} />
         </label>
-        <label className="text-sm">
-          <span className="mb-1 block text-xs font-medium text-forest/60">Message (optional)</span>
-          <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={2000} placeholder="e.g. Please start after the 15th" className={field} />
-        </label>
+        {accept ? (
+          <label className="text-sm">
+            <span className="mb-1 block text-xs font-medium text-forest/60">Message (optional)</span>
+            <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={2000} placeholder="e.g. Please start after the 15th" className={field} />
+          </label>
+        ) : (
+          <label className="text-sm sm:col-span-2">
+            <span className="mb-1 block text-xs font-medium text-forest/60">
+              {choice === 'CHANGES_REQUESTED' ? 'What would you like changed?' : 'Reason for declining'}
+            </span>
+            <textarea value={note} onChange={(e) => setNote(e.target.value)} maxLength={2000} rows={3}
+              placeholder={choice === 'CHANGES_REQUESTED' ? 'e.g. Remove the sofa set, use a lighter curtain fabric' : 'e.g. Went with another option'}
+              className="w-full rounded-xl border border-forest/15 px-3 py-2 text-forest outline-none focus:border-gold focus:ring-2 focus:ring-gold/20" />
+          </label>
+        )}
       </div>
-      <label className="mt-3 flex items-start gap-2 text-sm text-forest/70">
-        <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} className="mt-0.5 h-4 w-4 accent-[#0B2B23]" />
-        I accept quotation {data.quotationNumber} for {money(data.grandTotal)} and its terms.
-      </label>
+      {accept && (
+        <label className="mt-3 flex items-start gap-2 text-sm text-forest/70">
+          <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} className="mt-0.5 h-4 w-4 accent-[#0B2B23]" />
+          I accept quotation {data.quotationNumber} for {money(data.grandTotal)} and its terms.
+        </label>
+      )}
       {err && <p className="mt-2 text-sm text-rose-600">{err}</p>}
-      <button type="button" onClick={submit} disabled={!name.trim() || !agree || busy}
-        className="mt-4 inline-flex h-11 items-center gap-2 rounded-full bg-forest px-6 text-sm font-semibold text-ivory disabled:opacity-40">
-        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} Accept quotation
+      <button type="button" onClick={submit} disabled={!ready}
+        className={`mt-4 inline-flex h-11 items-center gap-2 rounded-full px-6 text-sm font-semibold disabled:opacity-40 ${choice === 'DECLINED' ? 'bg-rose-700 text-white' : 'bg-forest text-ivory'}`}>
+        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} {cta}
       </button>
     </section>
   )
@@ -376,9 +418,9 @@ function ActionBar({ data }: { data: SharedQuote }) {
             <Printer className="h-4 w-4" /> Print / Save PDF
           </button>
         )}
-        {data.state === 'OPEN' && (
+        {(data.state === 'OPEN' || data.state === 'CHANGES_REQUESTED' || data.state === 'DECLINED') && (
           <a href="#accept" className={`${btn} bg-forest font-semibold text-ivory`}>
-            <Check className="h-4 w-4" /> Accept
+            <Check className="h-4 w-4" /> Respond
           </a>
         )}
       </div>
