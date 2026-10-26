@@ -297,7 +297,6 @@ export function buildQuotationPdf(quotation: Quotation, sel: PdfSelection = {}):
     cards: [
       { label: "Date", value: fmtDay(qDate), sub: validDays != null && validDays >= 0 ? `Valid for ${validDays} day${validDays === 1 ? "" : "s"}` : xDate ? `Valid till ${fmtDay(xDate)}` : undefined },
       { label: "Customer", value: client, sub: area || undefined },
-      { label: "Site / Project", value: site, wrap: true },
     ],
     billTo,
     note: totals.isPartial ? `Selected scope: ${totals.items.length} of ${scopeCount} items` : undefined,
@@ -362,7 +361,6 @@ export function buildInvoicePdf(invoice: Invoice, lines: InvoiceItem[], project?
     cards: [
       { label: "Invoice Date", value: fmtDay(invoice.date), sub: invoice.dueDate ? `Due ${fmtDay(invoice.dueDate)}` : undefined },
       { label: "Bill To", value: billTo.name || "—", sub: [cust.city, billTo.gstin ? `GSTIN ${billTo.gstin}` : ""].filter(Boolean).join(" · ") || undefined },
-      { label: "Site / Project", value: site, wrap: true },
     ],
     billTo,
     items,
@@ -539,7 +537,7 @@ function renderDocPdf(spec: DocSpec, assets: Record<string, string>): jsPDF {
   const cardX = M + 64, gap = 2.5, cardH = 17;
   // spec.cards is [date, customer, site]; the design decides which are printed.
   const cards = spec.cards
-    .filter((_, i) => [D.showDateCard, D.showCustomerCard, D.showSiteCard][i] !== false)
+    .filter((_, i) => [D.showDateCard, D.showCustomerCard][i] !== false)
     .map((c) => (c.label === "Customer" || c.label === "Bill To") && !D.showCustomerDetail ? { ...c, sub: undefined } : c);
   const cardW = cards.length ? (rx - cardX - (cards.length - 1) * gap) / cards.length : 0;
   cards.forEach((c, i) => {

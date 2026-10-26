@@ -4,6 +4,8 @@ import {
   TrendingUp, TrendingDown, RefreshCw, Loader2, Plus, Trash2, Receipt, Minus, Equal,
 } from "lucide-react";
 import { financeApi } from "@/api/financeApi";
+import { contractorApi } from "@/api/contractorApi";
+import SearchableSelect from "@/components/ui/searchable-select";
 import type { ProjectProfitability, ProjectExpense } from "@/types/finance";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -307,10 +309,21 @@ function QuickAddExpense({ projectId, onAdded, onCancel }: { projectId: number; 
   const [date, setDate] = useState(today());
   const [description, setDescription] = useState("");
   const [saving, setSaving] = useState(false);
+  // Contractor expenses say which contractor the money is for.
+  const [contractors, setContractors] = useState<{ id: number; name: string; hint?: string }[]>([]);
+  const [contractorId, setContractorId] = useState("");
+  useEffect(() => {
+    if (category !== "CONTRACTOR" || contractors.length) return;
+    contractorApi.list({ size: 200 })
+      .then((r: any) => setContractors((r.content || []).map((c: any) => ({ id: c.id, name: c.name, hint: c.trade || c.companyName }))))
+      .catch(() => toast.error("Could not load contractors"));
+  }, [category, contractors.length]);
 
   const add = async () => {
     const amt = Number(amount);
     if (!amt || amt <= 0) { toast.error("Enter an amount"); return; }
+    const contractor = category === "CONTRACTOR" ? contractors.find((c) => String(c.id) === contractorId) : undefined;
+    if (category === "CONTRACTOR" && !contractor) { toast.error("Select the contractor"); return; }
     setSaving(true);
     try {
       await financeApi.addExpense({
@@ -319,6 +332,7 @@ function QuickAddExpense({ projectId, onAdded, onCancel }: { projectId: number; 
         amount: amt,
         expenseDate: date,
         description: description.trim() || undefined,
+        ...(contractor ? { vendor: contractor.name, referenceType: "CONTRACTOR", referenceId: contractor.id } : {}),
       });
       setAmount(""); setDescription("");
       toast.success("Expense added");
@@ -342,6 +356,12 @@ function QuickAddExpense({ projectId, onAdded, onCancel }: { projectId: number; 
           <Input type="number" min={0} value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" className="pl-6 text-right rounded-xl" autoFocus />
         </div>
         <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="col-span-1 rounded-xl @2xl:col-span-3" />
+        {category === "CONTRACTOR" && (
+          <div className="col-span-2 @2xl:col-span-12">
+            <SearchableSelect value={contractorId} onChange={setContractorId} placeholder="Which contractor?"
+              options={contractors.map((c) => ({ value: String(c.id), label: c.name, hint: c.hint }))} />
+          </div>
+        )}
         <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Note (e.g. auto fare)" className="col-span-2 rounded-xl @2xl:col-span-4" />
       </div>
       <div className="mt-2 flex justify-end gap-2">

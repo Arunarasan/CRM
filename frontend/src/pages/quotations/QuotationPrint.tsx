@@ -304,13 +304,6 @@ export function QuotationPrintView({ quotationId, onClose, onSaved, readOnly, em
                   {D.showCustomerDetail && (clientArea || clientCode) && <span>{clientArea || clientCode}</span>}
                 </div>
               </div>}
-              {D.showSiteCard && <div className="qp-card qp-card-wide">
-                <MapPin className="qp-ico" />
-                <div className="min-w-0">
-                  <small>Site / Project</small>
-                  <span className="qp-site">{site || "—"}</span>
-                </div>
-              </div>}
             </div>
 
             {D.showCustomerCard && (
