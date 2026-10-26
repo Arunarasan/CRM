@@ -202,16 +202,16 @@ function ActivityList({ items }: { items: ActivityItem[] }) {
 // own content block untouched — this is purely how they're navigated.
 const TAB_GROUPS: { id: string; label: string; icon: React.ComponentType<{ className?: string }>; sections: [string, string][] }[] = [
   { id: "overview", label: "Overview", icon: ClipboardList, sections: [["overview", "Overview"]] },
-  { id: "info", label: "Project Info", icon: ClipboardCheck, sections: [["info", "Project Info"]] },
+  { id: "documents", label: "Documents", icon: FileText, sections: [["media", "Documents"]] },
   { id: "execution", label: "Execution", icon: Layers, sections: [["workProgress", "Execution & Installation"]] },
   { id: "commercial", label: "Commercial", icon: Wallet, sections: [
     ["payments", "Billing & Payments"], ["received", "Payments"], ["profit", "Expenses & Profit"],
     ["quote", "Quotation"], ["approvals", "Approvals & Changes"], ["changeRequests", "Change Requests"],
   ] },
+  { id: "info", label: "Project Info", icon: ClipboardCheck, sections: [["info", "Project Info"]] },
   { id: "resources", label: "Resources", icon: Package, sections: [
     ["purchaseOrders", "Purchase Orders"], ["goodsReceived", "Goods Received"],
   ] },
-  { id: "documents", label: "Documents", icon: FileText, sections: [["media", "Documents"]] },
   { id: "activity", label: "Activity", icon: History, sections: [["activity", "Activity"]] },
   // Shown only once the project is COMPLETED (see the tab-strip filter below).
   { id: "service", label: "Service & Warranty", icon: Settings, sections: [["serviceWarranty", "Service & Warranty"]] },
@@ -1027,6 +1027,9 @@ export default function ProjectCommandCenter() {
                     <DropdownMenuItem onSelect={() => setTrackingOpen(true)}>Customer Tracking Link</DropdownMenuItem>
                     {project.customer?.id && (
                       <DropdownMenuItem asChild><Link to={`/customers/${project.customer.id}`}>View Customer</Link></DropdownMenuItem>
+                    )}
+                    {project.status !== 'CANCELLED' && canSettleProjects() && (
+                      <DropdownMenuItem onSelect={() => setSettleOpen(true)}><HandCoins className="w-4 h-4 mr-2"/> Settle &amp; complete</DropdownMenuItem>
                     )}
                     {!isClosed && (
                       <>
