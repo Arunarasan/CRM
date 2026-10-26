@@ -6,6 +6,7 @@ import { employeeTaskApi } from '@/api/employeeTaskApi';
 import { toast } from '@/components/ui/toast';
 import { TaskDetail } from '@/types/employeeTask';
 import { WorkBoard, WorkEvent, WorkTaskInfo } from '@/types/projectWork';
+import type { JobCardInfo } from '@/components/projectWork/printJobCard';
 import ExecutionBoard from '@/components/projectWork/ExecutionBoard';
 import InstallationBoard from '@/components/projectWork/InstallationBoard';
 import DailyLogPanel from '@/components/projectWork/DailyLogPanel';
@@ -23,7 +24,7 @@ type View = 'execution' | 'installation' | 'log' | 'chat' | 'history';
  * log, the team chat and history. Older projects may still have a separate Installation task; the log and
  * chat then switch between the two.
  */
-export default function WorkProgressTab({ projectId, onChanged }: { projectId: number; onChanged?: () => void }) {
+export default function WorkProgressTab({ projectId, onChanged, jobInfo }: { projectId: number; onChanged?: () => void; jobInfo?: JobCardInfo }) {
   const navigate = useNavigate();
   const { hasAuthority } = useAuth();
   const canManage = hasAuthority('PROJECT_WRITE');
@@ -143,7 +144,7 @@ export default function WorkProgressTab({ projectId, onChanged }: { projectId: n
 
       <div className="max-w-3xl">
         {view === 'execution' && (
-          <ExecutionBoard board={board} onChange={onBoard} editable canManage={canManage}
+          <ExecutionBoard jobInfo={jobInfo} board={board} onChange={onBoard} editable canManage={canManage}
             onChat={(l) => { setChatTask('execution'); setChatTag({ workLineId: l.id, label: l.itemName }); setView('chat'); }} />
         )}
         {view === 'installation' && (

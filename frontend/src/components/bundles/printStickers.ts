@@ -185,7 +185,7 @@ export function printBundleStickers(bundles: Bundle[], size: LabelSize, company?
   return true;
 }
 
-/** A4 job card for the tailor: specs, quantities and notes — no prices. */
+/** Job card for the tailor: specs, quantities and notes — no prices. Fits A4, A5 or a 58/80 mm thermal roll. */
 export function printJobCard(b: Bundle, company?: CompanyProfile): boolean {
   const rows = (b.items ?? []).map((it, i) => {
     const spec = parseSpec(it.workSpec);
@@ -205,7 +205,7 @@ export function printJobCard(b: Bundle, company?: CompanyProfile): boolean {
 
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>Job card ${esc(b.code)}</title>
   <style>
-    @page { size: A4; margin: 12mm; }
+    @page { margin: 8mm; }
     * { box-sizing: border-box; }
     body { margin: 0; font-family: "Segoe UI", Roboto, Arial, sans-serif; color: #000; font-size: 11pt; }
     .head { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #000; padding-bottom: 4mm; }
@@ -223,6 +223,22 @@ export function printJobCard(b: Bundle, company?: CompanyProfile): boolean {
     .notes { margin-top: 5mm; border: 1px solid #000; padding: 3mm; min-height: 20mm; }
     .sign { display: flex; justify-content: space-between; margin-top: 14mm; font-size: 9pt; }
     .sign div { border-top: 1px solid #000; width: 55mm; padding-top: 1mm; text-align: center; }
+    /* A5 and narrower */
+    @media (max-width: 150mm) {
+      body { font-size: 9.5pt; } .code { font-size: 20pt; } .qr { width: 20mm; height: 20mm; }
+      .meta { grid-template-columns: repeat(2, 1fr); } .sign div { width: 40mm; }
+    }
+    /* Thermal rolls (58 / 80 mm): one column */
+    @media (max-width: 90mm) {
+      body { font-size: 9pt; } .code { font-size: 16pt; } .qr { width: 16mm; height: 16mm; }
+      .meta { grid-template-columns: 1fr; margin: 3mm 0; }
+      table, thead, tbody, tr, td { display: block; width: 100% !important; }
+      thead { display: none; }
+      td { border: 0; padding: 1mm 0; } tr { border-bottom: 1px dashed #000; padding: 2mm 0; }
+      .n { display: inline; font-weight: 700; } .n::after { content: "."; } .q { font-weight: 700; }
+      .chk { border: 0; height: 5mm; border-bottom: 1px solid #000; }
+      .sign { display: block; } .sign div { width: 100%; margin-top: 8mm; } .notes { min-height: 12mm; }
+    }
   </style></head><body>
     <div class="head">
       <div>
@@ -235,6 +251,7 @@ export function printJobCard(b: Bundle, company?: CompanyProfile): boolean {
     </div>
     <div class="meta">
       <div><span>Customer</span>${esc(b.customerName || "Walk-in")}</div>
+      ${b.customerPhone ? `<div><span>Phone</span>${esc(b.customerPhone)}</div>` : ""}
       <div><span>Bill</span>${esc(b.invoiceNumber || "—")}</div>
       <div><span>Ready by</span>${b.dueDate ? new Date(b.dueDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—"}</div>
       <div><span>Tailor</span>${esc(b.assigneeName || "—")}</div>

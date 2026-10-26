@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  ChevronDown, Package, Scissors, Hammer, Truck, CheckCircle2, MapPin, MessageSquare, Plus, Trash2, Receipt,
+  ChevronDown, Package, Scissors, Hammer, Truck, CheckCircle2, MapPin, MessageSquare, Plus, Trash2, Receipt, Printer,
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { projectWorkApi } from '@/api/projectWorkApi';
@@ -9,6 +9,7 @@ import { toast } from '@/components/ui/toast';
 import {
   DELIVERY_FLOW, DeliveryRoute, WorkBoard, WorkLine, WorkStep, WorkStepType,
 } from '@/types/projectWork';
+import { printJobCard, type JobCardInfo } from './printJobCard';
 import { Bar, CARD, GHOST, INPUT, PRIMARY, PhotoPicker, Thumbs, errMsg, fmtWhen, pctTone } from './workUi';
 
 export const STEP_ICON: Record<WorkStepType, typeof Package> = {
@@ -34,7 +35,8 @@ export function stepSummary(s: WorkStep): string {
  * Project Execution: Category → Product → steps (material, manufacture, stitching, delivery to site).
  * `editable` lets the team move steps; `canManage` also allows choosing steps and adding products.
  */
-export default function ExecutionBoard({ board, onChange, editable, canManage, onChat }: {
+export default function ExecutionBoard({ board, onChange, editable, canManage, onChat, jobInfo }: {
+  jobInfo?: JobCardInfo;
   board: WorkBoard;
   onChange: (b: WorkBoard) => void;
   editable: boolean;
@@ -52,7 +54,14 @@ export default function ExecutionBoard({ board, onChange, editable, canManage, o
       <div className={`${CARD} p-4`}>
         <div className="flex items-baseline justify-between">
           <p className="text-[12px] font-semibold uppercase tracking-wide text-[#9B6B32]">Project execution</p>
-          <span className={`text-[20px] font-bold ${pctTone(board.executionPercent)}`}>{board.executionPercent}%</span>
+          <div className="flex items-center gap-3">
+            {board.productCount > 0 && (
+              <button type="button" onClick={() => printJobCard(board, jobInfo)} className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-[#0A573B]">
+                <Printer className="h-4 w-4" /> Print job card
+              </button>
+            )}
+            <span className={`text-[20px] font-bold ${pctTone(board.executionPercent)}`}>{board.executionPercent}%</span>
+          </div>
         </div>
         <Bar value={board.executionPercent} className="mt-2 h-2.5" />
         <p className="mt-2 text-[12.5px] text-[#6B7169]">

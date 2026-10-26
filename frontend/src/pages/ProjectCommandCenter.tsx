@@ -2170,7 +2170,14 @@ export default function ProjectCommandCenter() {
 
             {/* EXECUTION & INSTALLATION — Category → Product steps, installation checklists, daily log, team chat */}
             <TabsContent value="workProgress" className="mt-0 h-full outline-none">
-              {activeTab === "workProgress" && <WorkProgressTab projectId={projectId} onChanged={fetchProjectData} />}
+              {activeTab === "workProgress" && <WorkProgressTab projectId={projectId} onChanged={fetchProjectData} jobInfo={{
+                projectCode: project.projectCode, projectName: project.projectName,
+                customerName: summary.customerName || project.customer?.name, phone: summary.phone,
+                address: [project.propertyAddress || summary.address, summary.city].filter(Boolean).join(', ') || undefined,
+                startDate: project.startDate ? String(project.startDate) : undefined,
+                endDate: project.endDate ? String(project.endDate) : undefined,
+                manager: (project.projectManager as any)?.name || summary.leadBy,
+              }} />}
             </TabsContent>
 
             <TabsContent value="workCategories" className="mt-0 h-full outline-none">
