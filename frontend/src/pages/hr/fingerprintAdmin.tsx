@@ -43,8 +43,15 @@ export function FingerprintEnrollmentCard({ employeeId, canEdit }: { employeeId:
   useEffect(load, [load]);
   useEffect(() => () => { runRef.current += 1; cancelFingerprint(); cancelSecugen(); }, []);
 
-  const sensor = fingerprintSensorAvailable();
   const inApp = insideKioskApp();
+  // The app opens the USB scanner (permission prompt, driver start) after this page has rendered, so
+  // readiness has to be re-read; a one-off check left the button disabled for good.
+  const [sensor, setSensor] = useState(fingerprintSensorAvailable);
+  useEffect(() => {
+    if (!inApp) return;
+    const t = window.setInterval(() => setSensor(fingerprintSensorAvailable()), 1000);
+    return () => window.clearInterval(t);
+  }, [inApp]);
   // Outside the kiosk app the scanner is the SecuGen one on this PC; its state is only known on scan.
   const canScan = inApp ? sensor : true;
   const scan = inApp ? captureFingerprint : captureSecugen;

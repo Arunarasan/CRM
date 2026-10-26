@@ -1,16 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronRight, Flame, PhoneCall, Star, Sparkles, Wrench } from 'lucide-react';
+import { ChevronRight, Flame, Star, Sparkles, Wrench } from 'lucide-react';
 import { employeeTaskApi } from '@/api/employeeTaskApi';
-import { callRecordingApi, fmtCallTime, fmtDuration, type CallRecording } from '@/api/callRecordingApi';
-import { displayPhone } from '@/components/callRecordings/CallLeadPanel';
 import { TaskCard } from '@/types/employeeTask';
 import { byPlanRank, daysUntil, rankTier, shortDue } from '../taskUtils';
 import { useT } from '@/i18n';
 
 const CARD = 'rounded-2xl border border-[#ECEAE5] bg-white shadow-[0_4px_14px_rgba(0,35,22,0.05)]';
 const MAX_STEPS = 6;
-const MAX_NEW_LEADS = 3;
 
 const isActive = (t: TaskCard) => t.status !== 'COMPLETED' && t.status !== 'CANCELLED';
 
@@ -67,20 +64,16 @@ function PlanRow({ task, step, first, onOpen }: { task: TaskCard; step: number; 
   );
 }
 
-/** Home's "Today's Plan": my active work in the order to do it, plus brand-new leads waiting in the pool. */
+/** Home's "Today's Plan": only the active tasks the office assigned to me today, in the order to do them. */
 export default function TodayPlan({ refreshKey }: { refreshKey?: number }) {
   const { t } = useT();
   const navigate = useNavigate();
   const [mine, setMine] = useState<TaskCard[]>([]);
-  const [pool, setPool] = useState<TaskCard[]>([]);
-  const [calls, setCalls] = useState<CallRecording[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   const load = useCallback(() => {
     Promise.allSettled([
       employeeTaskApi.myTasks().then(setMine),
-      employeeTaskApi.pool().then(setPool),
-      callRecordingApi.pool().then(setCalls),
     ]).finally(() => setLoaded(true));
   }, []);
   useEffect(() => { load(); }, [load, refreshKey]);
@@ -94,18 +87,13 @@ export default function TodayPlan({ refreshKey }: { refreshKey?: number }) {
     return () => { document.removeEventListener('visibilitychange', onVisible); window.clearInterval(timer); };
   }, [load]);
 
-  // An admin-assigned task is in the plan for the day it was assigned only.
+  // Only tasks the office assigned to me today (officeAssignedOn is null for ones I picked myself).
   const plan = useMemo(() => {
     const today = new Date().toLocaleDateString('en-CA');
     return mine.filter(isActive)
-      .filter((x) => !x.officeAssignedOn || x.officeAssignedOn === today)
+      .filter((x) => x.officeAssignedOn === today)
       .sort(planOrder);
   }, [mine]);
-  const newLeads = useMemo(
-    () => pool.filter((p) => rankTier(p) === 0 && p.canPick !== false && !p.pickedBy?.length).sort(byPlanRank).slice(0, MAX_NEW_LEADS),
-    [pool],
-  );
-  const newCalls = useMemo(() => calls.filter((c) => !c.outcome && !c.taskId).slice(0, MAX_NEW_LEADS), [calls]);
   const overdue = plan.filter((p) => p.dueState === 'OVERDUE').length;
   const fit = plan.filter((p) => p.workStage === 'READY_TO_FIT').length;
   const open = (id: number) => navigate(`/employee/tasks/${id}`);
@@ -145,52 +133,6 @@ export default function TodayPlan({ refreshKey }: { refreshKey?: number }) {
           )}
         </div>
       </div>
-
-      {newCalls.length > 0 && (
-        <div>
-          <div className="mb-2 flex items-center justify-between px-0.5">
-            <h3 className="flex items-center gap-1.5 text-[15px] font-semibold text-[#111817]">
-              <PhoneCall className="h-4 w-4 text-[#C48A16]" />{t('portal.home.plan.newCalls')}
-            </h3>
-            <button onClick={() => navigate('/employee/call-leads')} className="text-[13px] font-semibold text-[#B27A12]">
-              {t('portal.home.viewAll')}
-            </button>
-          </div>
-          <div className={`${CARD} divide-y divide-[#ECEBE7] overflow-hidden`}>
-            {newCalls.map((c) => (
-              <button key={c.id} onClick={() => navigate('/employee/call-leads')}
-                className="flex w-full items-center gap-3 px-3.5 py-3 text-left active:bg-[#F7F7F5]">
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#FBF1DA] text-[#9D6B10]"><PhoneCall className="h-3.5 w-3.5" /></span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[14px] font-semibold text-[#111817]">{c.contactName || displayPhone(c.phoneNumber) || c.fileName}</span>
-                  <span className="block truncate text-[12px] text-[#7A817C]">
-                    {[c.calledAt && fmtCallTime(c.calledAt), fmtDuration(c.durationSec)].filter((x) => x && x !== '—').join(' · ')}
-                  </span>
-                </span>
-                <ChevronRight className="h-4 w-4 shrink-0 text-[#B9C0BB]" />
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {newLeads.length > 0 && (
-        <div>
-          <div className="mb-2 flex items-center justify-between px-0.5">
-            <h3 className="flex items-center gap-1.5 text-[15px] font-semibold text-[#111817]">
-              <Sparkles className="h-4 w-4 text-[#C48A16]" />{t('portal.home.plan.newLeads')}
-            </h3>
-            <button onClick={() => navigate('/employee/tasks?view=AVAILABLE')} className="text-[13px] font-semibold text-[#B27A12]">
-              {t('portal.home.viewAll')}
-            </button>
-          </div>
-          <div className={`${CARD} divide-y divide-[#ECEBE7] overflow-hidden`}>
-            {newLeads.map((task) => (
-              <PlanRow key={task.id} task={task} step={0} first={false} onOpen={() => navigate('/employee/tasks?view=AVAILABLE')} />
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
