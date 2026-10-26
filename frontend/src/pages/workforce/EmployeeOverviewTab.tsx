@@ -1,4 +1,5 @@
 import { BaseInput } from '@/components/ui/input';
+import { DESIGNATIONS } from "@/lib/designations";
 import { useState } from "react";
 import { Pencil, Check, X } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -55,14 +56,14 @@ function Cell({
 }
 
 function TextInput({
-  value, onChange, type = "text", placeholder, inputMode,
+  value, onChange, type = "text", placeholder, inputMode, list,
 }: {
-  value: any; onChange: (v: string) => void; type?: string; placeholder?: string;
+  value: any; onChange: (v: string) => void; type?: string; placeholder?: string; list?: string;
   inputMode?: "text" | "numeric" | "decimal" | "tel" | "email";
 }) {
   return (
     <BaseInput
-      className={cellInput} type={type} placeholder={placeholder} inputMode={inputMode}
+      className={cellInput} type={type} placeholder={placeholder} inputMode={inputMode} list={list}
       value={value ?? ""} onChange={(e) => onChange(e.target.value)}
     />
   );
@@ -399,7 +400,10 @@ function EmploymentCard({ detail, meta, canEdit, save }: CardProps & { meta: Wor
           <SelectInput value={edit.draft.departmentId} onChange={edit.set("departmentId")} options={deptOptions} />
         </Cell>
         <Cell label="Designation" editing={e} view={emp.designation}>
-          <TextInput value={edit.draft.designation} onChange={edit.set("designation")} />
+          <>
+            <TextInput list="designation-options" value={edit.draft.designation} onChange={edit.set("designation")} />
+            <datalist id="designation-options">{DESIGNATIONS.map((d) => <option key={d} value={d} />)}</datalist>
+          </>
         </Cell>
         <Cell label="Date of joining" editing={e} view={fmtDate(emp.dateOfJoining)}>
           <TextInput type="date" value={edit.draft.joiningDate} onChange={edit.set("joiningDate")} />

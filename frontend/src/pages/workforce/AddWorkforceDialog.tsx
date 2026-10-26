@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { DESIGNATIONS } from "@/lib/designations";
 import { workforceApi } from "@/api/workforceApi";
 import type {
   WorkforceMeta, WorkforceRequest, WorkforceDetail, ResourceType,
@@ -269,7 +270,8 @@ export default function AddWorkforceDialog({
                       {(meta?.departments ?? []).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
                     </select>
                   </Field>
-                  <Field label="Designation"><Input value={form.employee?.designation ?? ""} onChange={(e) => setEmp("designation", e.target.value)} /></Field>
+                  <Field label="Designation"><><Input list="designation-options" value={form.employee?.designation ?? ""} onChange={(e) => setEmp("designation", e.target.value)} />
+                    <datalist id="designation-options">{DESIGNATIONS.map((d) => <option key={d} value={d} />)}</datalist></></Field>
                   <Field label="Joining date"><Input type="date" value={form.employee?.joiningDate ?? ""} onChange={(e) => setEmp("joiningDate", e.target.value)} /></Field>
                   <Field label="Salary"><Input type="number" value={form.employee?.salary ?? ""} onChange={(e) => setEmp("salary", num(e.target.value))} /></Field>
                   <Field label="Salary type">
