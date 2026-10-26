@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Input, BaseInput } from "@/components/ui/input";
 import ResourceSelect, { type ResourceSelection } from "@/components/workforce/ResourceSelect";
 import { WORK_TYPES } from "@/api/bundleApi";
-import { WorkSpecFields, formatSpec, type WorkSpec } from "./workSpec";
+import { WorkSpecFields, formatSpec, specNotes, type WorkSpec } from "./workSpec";
 import { ChevronDown, ChevronUp } from "lucide-react";
 
 export interface WorkHeader {
@@ -95,7 +95,7 @@ export default function BundleWorkEditor({
         {lines.length === 0 && <div className="px-3 py-3 text-sm text-slate-400">Add items to the bill first.</div>}
         {lines.map((l) => {
           const st = lineState[l.key] ?? { on: false, bundleNo: 1, spec: {} };
-          const summary = formatSpec(st.spec);
+          const summary = [formatSpec(st.spec), ...specNotes(st.spec)].filter(Boolean).join(" · ");
           const open = openKey === l.key && st.on;
           return (
             <div key={l.key} className="px-3 py-2">
@@ -105,7 +105,7 @@ export default function BundleWorkEditor({
                 <button type="button" className="min-w-0 flex-1 text-left" disabled={!st.on}
                   onClick={() => setOpenKey(open ? null : l.key)}>
                   <span className={`block text-sm truncate ${st.on ? "font-medium text-slate-800" : "text-slate-500"}`}>{l.label || "Unnamed item"}</span>
-                  <span className="block text-[11px] text-slate-400 truncate">{st.on ? (summary || "Tap to add size / pleat / lining") : l.sub}</span>
+                  <span className="block text-[11px] text-slate-400 truncate">{st.on ? (summary || "Tap to add work notes") : l.sub}</span>
                 </button>
                 {st.on && header.bundleCount > 1 && (
                   <select value={Math.min(st.bundleNo, header.bundleCount)} onChange={(e) => onLine(l.key, { bundleNo: Number(e.target.value) })}

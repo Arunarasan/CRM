@@ -16,7 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import ImageCaptureField from "@/components/ImageCaptureField";
 import ResourceSelect from "@/components/workforce/ResourceSelect";
 import type { ResourceType } from "@/types/workforce";
-import { WorkSpecFields, formatSpec, parseSpec, specToJson, type WorkSpec } from "@/components/bundles/workSpec";
+import { WorkSpecFields, formatSpec, parseSpec, specNotes, specToJson, type WorkSpec } from "@/components/bundles/workSpec";
 import { printBundleStickers, printJobCard, getLabelSize, setLabelSize, LABEL_SIZES, type LabelSize } from "@/components/bundles/printStickers";
 import HandoverDialog from "@/components/bundles/HandoverDialog";
 import { StatusPill } from "./BundlesPage";
@@ -241,9 +241,9 @@ export default function BundleDetailPage() {
                       {it.description} <span className="font-normal text-slate-500">× {Number(it.quantity)} {it.unit ?? ""}</span>
                     </div>
                     {summary && <div className="text-sm text-slate-700 mt-0.5">{summary}</div>}
-                    {spec.notes && <div className="text-sm text-slate-500 italic mt-0.5">{spec.notes}</div>}
+                    {specNotes(spec).map((n, i) => <div key={i} className="text-sm text-slate-500 italic mt-0.5">{n}</div>)}
                     {it.notes && <div className="text-sm text-slate-500 italic mt-0.5">{it.notes}</div>}
-                    {!summary && !spec.notes && !it.notes && <div className="text-xs text-slate-400 mt-0.5">No work details yet</div>}
+                    {!summary && specNotes(spec).length === 0 && !it.notes && <div className="text-xs text-slate-400 mt-0.5">No work details yet</div>}
                     {photos.length > 0 && (
                       <div className="flex gap-2 mt-2">
                         {photos.map((p) => <a key={p} href={resolveFileUrl(p)} target="_blank" rel="noreferrer"><img src={resolveFileUrl(p)} className="w-14 h-14 rounded object-cover border" /></a>)}

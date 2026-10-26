@@ -11,7 +11,10 @@ export interface WorkSpec {
   panels?: string;
   pleat?: string;
   lining?: string;
+  /** Old single note — read for existing orders; new ones use `notesList`. */
   notes?: string;
+  /** Work notes, one per box. */
+  notesList?: string[];
 }
 
 export const SPEC_TYPES = ["Curtain", "Roman Blind", "Blind", "Cushion Cover", "Sofa Cover", "Bedsheet", "Other"];
@@ -28,9 +31,16 @@ export function parseSpec(json?: string | null): WorkSpec {
   }
 }
 
+/** Every work note for an item (the old single note first), blanks dropped. */
+export function specNotes(spec: WorkSpec): string[] {
+  return [spec.notes, ...(spec.notesList ?? [])].map((n) => (n ?? "").trim()).filter(Boolean);
+}
+
 /** JSON for the API — null when nothing was filled in. */
 export function specToJson(spec: WorkSpec): string | null {
-  const clean = Object.fromEntries(Object.entries(spec).filter(([, v]) => v != null && String(v).trim() !== ""));
+  const notesList = (spec.notesList ?? []).map((n) => n.trim()).filter(Boolean);
+  const clean = Object.fromEntries(Object.entries({ ...spec, notesList: notesList.length ? notesList : undefined })
+    .filter(([, v]) => v != null && String(v).trim() !== ""));
   return Object.keys(clean).length ? JSON.stringify(clean) : null;
 }
 
@@ -48,47 +58,26 @@ export function formatSpec(spec: WorkSpec): string {
   return parts.join(" · ");
 }
 
-const selectCls = "h-9 w-full rounded-md border bg-white px-2 text-sm";
-
-/** Compact spec editor used on the counter sale and on the bundle page. */
+/** Work notes editor used on the counter sale and the order page: any number of notes per item. */
 export function WorkSpecFields({ value, onChange }: { value: WorkSpec; onChange: (v: WorkSpec) => void }) {
-  const set = (patch: Partial<WorkSpec>) => onChange({ ...value, ...patch });
-  const isWindow = !value.type || ["Curtain", "Roman Blind", "Blind"].includes(value.type);
+  // The old single note becomes the first box so nothing is lost when an existing order is edited.
+  const notes = [...(value.notes ? [value.notes] : []), ...(value.notesList ?? [])];
+  const boxes = notes.length ? notes : [""];
+  const write = (list: string[]) => onChange({ ...value, notes: undefined, notesList: list });
   return (
-    <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
-      <label className="text-xs col-span-2 md:col-span-1"><span className="text-slate-500">Type</span>
-        <select value={value.type ?? ""} onChange={(e) => set({ type: e.target.value || undefined })} className={`${selectCls} mt-1`}>
-          <option value="">—</option>
-          {SPEC_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-        </select>
-      </label>
-      <label className="text-xs"><span className="text-slate-500">Width (in)</span>
-        <Input inputMode="decimal" value={value.width ?? ""} onChange={(e) => set({ width: e.target.value })} className="h-9 mt-1" /></label>
-      <label className="text-xs"><span className="text-slate-500">Height (in)</span>
-        <Input inputMode="decimal" value={value.height ?? ""} onChange={(e) => set({ height: e.target.value })} className="h-9 mt-1" /></label>
-      {isWindow ? (
-        <>
-          <label className="text-xs"><span className="text-slate-500">Panels</span>
-            <Input inputMode="numeric" value={value.panels ?? ""} onChange={(e) => set({ panels: e.target.value })} className="h-9 mt-1" /></label>
-          <label className="text-xs"><span className="text-slate-500">Pleat</span>
-            <select value={value.pleat ?? ""} onChange={(e) => set({ pleat: e.target.value || undefined })} className={`${selectCls} mt-1`}>
-              <option value="">—</option>
-              {PLEATS.map((p) => <option key={p} value={p}>{p}</option>)}
-            </select>
-          </label>
-          <label className="text-xs"><span className="text-slate-500">Lining</span>
-            <select value={value.lining ?? ""} onChange={(e) => set({ lining: e.target.value || undefined })} className={`${selectCls} mt-1`}>
-              <option value="">—</option>
-              {LININGS.map((l) => <option key={l} value={l}>{l}</option>)}
-            </select>
-          </label>
-        </>
-      ) : (
-        <label className="text-xs col-span-2 md:col-span-3"><span className="text-slate-500">Pieces</span>
-          <Input inputMode="numeric" value={value.panels ?? ""} onChange={(e) => set({ panels: e.target.value })} className="h-9 mt-1" /></label>
-      )}
-      <label className="text-xs col-span-2 md:col-span-6"><span className="text-slate-500">Work notes</span>
-        <Input value={value.notes ?? ""} onChange={(e) => set({ notes: e.target.value })} placeholder="e.g. hooks every 4 in, hem 3 in" className="h-9 mt-1" /></label>
+    <div className="space-y-2">
+      {boxes.map((n, i) => (
+        <div key={i} className="flex items-start gap-2">
+          <label className="text-xs flex-1"><span className="text-slate-500">Work note{boxes.length > 1 ? ` ${i + 1}` : ""}</span>
+            <Input value={n} onChange={(e) => write(boxes.map((x, j) => (j === i ? e.target.value : x)))}
+              placeholder="e.g. hooks every 4 in, hem 3 in" className="h-9 mt-1" /></label>
+          {boxes.length > 1 && (
+            <button type="button" aria-label="Remove note" onClick={() => write(boxes.filter((_, j) => j !== i))}
+              className="mt-6 h-7 w-7 shrink-0 rounded-full text-slate-400 hover:bg-slate-100">×</button>
+          )}
+        </div>
+      ))}
+      <button type="button" onClick={() => write([...boxes, ""])} className="text-xs font-semibold text-emerald-700">+ Add another work note</button>
     </div>
   );
 }

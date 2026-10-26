@@ -4,7 +4,7 @@ import { QRCodeSVG } from "qrcode.react";
 import JsBarcode from "jsbarcode";
 import type { Bundle } from "@/api/bundleApi";
 import type { CompanyProfile } from "@/lib/companyProfile";
-import { formatSpec, parseSpec } from "./workSpec";
+import { formatSpec, parseSpec, specNotes } from "./workSpec";
 
 export type LabelSize = "50x25" | "100x150" | "a4";
 
@@ -197,7 +197,7 @@ export function printJobCard(b: Bundle, company?: CompanyProfile): boolean {
     return `<tr>
       <td class="n">${i + 1}</td>
       <td><b>${esc(it.description)}</b>${cells ? `<div class="spec">${esc(cells)}</div>` : ""}
-        ${spec.notes ? `<div class="note">${esc(spec.notes)}</div>` : ""}${it.notes ? `<div class="note">${esc(it.notes)}</div>` : ""}</td>
+        ${specNotes(spec).map((n) => `<div class="note">${esc(n)}</div>`).join("")}${it.notes ? `<div class="note">${esc(it.notes)}</div>` : ""}</td>
       <td class="q">${esc(Number(it.quantity))} ${esc(it.unit ?? "")}</td>
       <td class="chk"></td>
     </tr>`;

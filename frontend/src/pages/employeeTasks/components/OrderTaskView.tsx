@@ -15,7 +15,7 @@ import {
 } from '@/components/bundles/printStickers';
 import type { OrderStep, OrderView, TaskDetail } from '@/types/employeeTask';
 import { employeeTaskApi } from '@/api/employeeTaskApi';
-import { formatSpec, parseSpec } from '@/components/bundles/workSpec';
+import { formatSpec, parseSpec, specNotes } from '@/components/bundles/workSpec';
 import { resolveFileUrl } from '@/lib/uploadFile';
 import { humanizeDue } from '../taskUtils';
 import { useT, tNow, dateLocale, currentLang } from '@/i18n';
@@ -514,7 +514,7 @@ function ItemDetailDialog({ item, order, onClose, onPrint }: {
           <p className="mb-0.5 text-[11px] font-bold uppercase tracking-wide text-[#9B6B32]">{t('pw.ot.d.workToDo', { work: workLabel(order.workType) })}</p>
           {specRows.length > 0 ? specRows.map(([l, v]) => <Row key={l} label={l} value={v} />)
             : <p className="py-2 text-[13px] text-[#8A918C]">{t('pw.ot.d.noWork')}</p>}
-          {spec.notes && <p className="mt-1.5 rounded-lg bg-[#FDF6E7] px-3 py-2 text-[13px] text-[#7A5414]">{spec.notes}</p>}
+          {specNotes(spec).map((n, i) => <p key={i} className="mt-1.5 rounded-lg bg-[#FDF6E7] px-3 py-2 text-[13px] text-[#7A5414]">{n}</p>)}
           {item.notes && <p className="mt-1.5 rounded-lg bg-[#FDF6E7] px-3 py-2 text-[13px] italic text-[#7A5414]">{item.notes}</p>}
         </div>
 
