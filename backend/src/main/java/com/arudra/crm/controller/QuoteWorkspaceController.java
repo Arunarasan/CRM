@@ -22,7 +22,7 @@ public class QuoteWorkspaceController {
     private static final String WRITE = "hasAuthority('ROLE_ADMIN') or hasAuthority('BOQ_WRITE')";
 
     // Changing a running project's quote: admins and project managers only.
-    private static final String PROJECT_CHANGE = "hasAuthority('ROLE_ADMIN') or hasAuthority('ROLE_PROJECT_MANAGER')";
+    private static final String PROJECT_CHANGE = "hasAuthority('ROLE_ADMIN')";
 
     private final QuoteWorkspaceService service;
     private final ProjectQuoteChangeService projectChanges;

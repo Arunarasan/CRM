@@ -33,7 +33,7 @@ export default function HandoverDialog({ bundles, focusId, onClose, onDone }: {
 }) {
   const { hasAnyAuthority, roleNames } = useAuth();
   const canCollect = hasAnyAuthority(["FINANCE_WRITE", "FINANCE_COLLECT"]);
-  const canOverride = roleNames.includes("ROLE_ADMIN") || roleNames.includes("ROLE_MANAGER");
+  const canOverride = roleNames.includes("ROLE_ADMIN");
 
   const open = bundles.filter((b) => b.status !== "DELIVERED" && b.status !== "CANCELLED");
   const [picked, setPicked] = useState<Set<number>>(

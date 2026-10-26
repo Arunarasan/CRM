@@ -32,7 +32,7 @@ export default function ConvertProjectSheet({ leadId, leadProject, open, onOpenC
 }) {
   const { t } = useT();
   const update = !!leadProject;
-  const { hasAuthority, isAdmin } = useAuth();
+  const { isAdmin } = useAuth();
   // Every new project from the employee portal waits for an admin to approve it.
   const sendForApproval = !update;
   const [reference, setReference] = useState('');
@@ -40,7 +40,7 @@ export default function ConvertProjectSheet({ leadId, leadProject, open, onOpenC
   const [note, setNote] = useState('');
   const [uploading, setUploading] = useState(false);
   // Admins / project managers apply the update at once; anyone else's goes to an admin for approval.
-  const needsApproval = update && !(isAdmin || hasAuthority('ROLE_PROJECT_MANAGER'));
+  const needsApproval = update && !isAdmin;
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState('Cash');
   const [saving, setSaving] = useState(false);

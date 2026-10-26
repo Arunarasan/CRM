@@ -1798,7 +1798,7 @@ public class EmployeeTaskService {
     /** Admins and project managers may change a running project's quote (same rule as the project tab). */
     private static boolean canChangeProjectQuote(User user) {
         return user != null && user.getRoles() != null && user.getRoles().stream()
-                .anyMatch(r -> "ROLE_ADMIN".equals(r.getName()) || "ROLE_PROJECT_MANAGER".equals(r.getName()));
+                .anyMatch(r -> "ROLE_ADMIN".equals(r.getName()));
     }
 
     /**
@@ -2268,7 +2268,7 @@ public class EmployeeTaskService {
         com.arudra.crm.dto.BundleView order = bundleService.orderForTask(taskId);
         if (order == null) throw new IllegalStateException("This task has no order.");
         boolean manager = employee != null && employee.getRoles() != null && employee.getRoles().stream()
-                .anyMatch(r -> "ROLE_ADMIN".equals(r.getName()) || "ROLE_MANAGER".equals(r.getName()));
+                .anyMatch(r -> "ROLE_ADMIN".equals(r.getName()));
         boolean onTask = employee != null && assignmentRepository.findByTaskId(task.getId()).stream()
                 .anyMatch(a -> a.getEmployee() != null && a.getEmployee().getId().equals(employee.getId())
                         && ACTIVE_ASSIGNMENT_STATUSES.contains(a.getStatus()));

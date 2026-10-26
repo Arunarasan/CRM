@@ -133,8 +133,8 @@ class ControllerAuthorizationTest {
     }
 
     @Test
-    @WithMockUser(authorities = "ROLE_MANAGER")
-    void dashboardSummary_allowedForManager() throws Exception {
+    @WithMockUser(authorities = "ROLE_ADMIN")
+    void dashboardSummary_allowedForAdmin() throws Exception {
         when(quotationRepository.getMonthlyRevenue()).thenReturn(Collections.emptyList());
         when(leadRepository.countLeadsByStatus()).thenReturn(Collections.emptyList());
         when(taskRepository.findTasksDueToday(any())).thenReturn(Collections.emptyList());
@@ -194,8 +194,8 @@ class ControllerAuthorizationTest {
     }
 
     @Test
-    @WithMockUser(authorities = "ROLE_PROJECT_MANAGER")
-    void deleteTask_allowedForProjectManager() throws Exception {
+    @WithMockUser(authorities = "ROLE_ADMIN")
+    void deleteTask_allowedForAdmin() throws Exception {
         mvc.perform(delete("/api/tasks/1").with(csrf())).andExpect(status().isOk());
     }
 

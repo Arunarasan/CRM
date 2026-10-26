@@ -32,8 +32,8 @@ public class PrivateFileController {
             "KIOSK", Set.of("WORKFORCE_READ", "PAYROLL_READ"),
             "EMPLOYEE_DOC", Set.of("WORKFORCE_READ"),
             "HR_DOCUMENT", Set.of("WORKFORCE_READ"),
-            "PAYMENT", Set.of("FINANCE_READ", "PROJECT_READ", "ROLE_ACCOUNTS"),
-            "FINANCE", Set.of("FINANCE_READ", "ROLE_ACCOUNTS"),
+            "PAYMENT", Set.of("FINANCE_READ", "PROJECT_READ"),
+            "FINANCE", Set.of("FINANCE_READ"),
             "CUSTOMER", Set.of("CUSTOMER_READ"));
 
     private final PrivateFileStore store;

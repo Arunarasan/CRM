@@ -18,7 +18,7 @@ public class CustomerController {
     @Autowired
     private CustomerService customerService;
 
-    @PreAuthorize("hasAnyRole('ADMIN', 'PROJECT_MANAGER', 'SALES')")
+    @PreAuthorize("hasRole('ADMIN')")
     @GetMapping
     public ResponseEntity<ApiResponse<Page<CustomerDTO>>> getCustomers(
             @RequestParam(required = false) String search,

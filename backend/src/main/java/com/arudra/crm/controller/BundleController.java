@@ -28,7 +28,7 @@ public class BundleController {
     private static final String READ = "hasAuthority('ROLE_ADMIN') or hasAuthority('BUNDLE_READ')";
     private static final String MOVE = "hasAuthority('ROLE_ADMIN') or hasAuthority('BUNDLE_WRITE') or hasAuthority('BUNDLE_MOVE')";
     private static final String WRITE = "hasAuthority('ROLE_ADMIN') or hasAuthority('BUNDLE_WRITE')";
-    private static final Set<String> OVERRIDE_ROLES = Set.of("ROLE_ADMIN", "ROLE_MANAGER");
+    private static final Set<String> OVERRIDE_ROLES = Set.of("ROLE_ADMIN");
     private static final Set<String> COLLECT_AUTHORITIES = Set.of("ROLE_ADMIN", "FINANCE_WRITE", "FINANCE_COLLECT");
 
     @Autowired private BundleService bundleService;

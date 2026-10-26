@@ -40,7 +40,7 @@ public class ContractorBillingService {
             "FINANCE", "FINANCE_APPROVED");
 
     static final List<String> FINANCE_ALERT_ROLES =
-            List.of("ROLE_ADMIN", "ROLE_MANAGER", "ROLE_ACCOUNTS", "ROLE_FINANCE_MANAGER");
+            List.of("ROLE_ADMIN");
 
     @Autowired private ContractorBillRepository billRepository;
     @Autowired private ContractorBillItemRepository billItemRepository;

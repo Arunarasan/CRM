@@ -44,7 +44,7 @@ public class ProjectConversionRequestService {
     /** Admins and project managers decide requests (and may still create projects directly). */
     public static boolean canDecide(User user) {
         return user != null && user.getRoles() != null && user.getRoles().stream()
-                .anyMatch(r -> "ROLE_ADMIN".equals(r.getName()) || "ROLE_PROJECT_MANAGER".equals(r.getName()));
+                .anyMatch(r -> "ROLE_ADMIN".equals(r.getName()));
     }
 
     /** The employee sends the customer-agreed quote (and any advance) to an admin. */

@@ -23,7 +23,7 @@ public class PurchaseService {
 
     /** Roles that get procurement alerts (approvals required, deliveries, invoices due). */
     static final List<String> PURCHASE_ALERT_ROLES =
-            List.of("ROLE_ADMIN", "ROLE_MANAGER", "ROLE_INVENTORY_MANAGER");
+            List.of("ROLE_ADMIN");
 
     /** PO statuses that still expect a delivery. */
     static final List<String> OPEN_PO_STATUSES =

@@ -299,7 +299,7 @@ public class QuotationService {
     private boolean isManagerOrAdmin(User user) {
         if (user == null || user.getRoles() == null) return false;
         return user.getRoles().stream().map(Role::getName).anyMatch(r ->
-                "ROLE_ADMIN".equals(r) || "ROLE_MANAGER".equals(r) || "ROLE_PROJECT_MANAGER".equals(r));
+                "ROLE_ADMIN".equals(r));
     }
 
     /**

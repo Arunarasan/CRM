@@ -30,8 +30,7 @@ public class TaskController {
     private static final String ASSIGN = "hasAuthority('ROLE_ADMIN') or hasAuthority('TASK_ASSIGN')";
     // Deleting a task is destructive — restricted to approvers.
     private static final String DELETE =
-            "hasAuthority('ROLE_ADMIN') or hasAuthority('TASK_APPROVE') "
-            + "or hasAuthority('ROLE_MANAGER') or hasAuthority('ROLE_PROJECT_MANAGER')";
+            "hasAuthority('ROLE_ADMIN') or hasAuthority('TASK_APPROVE')";
 
     @Autowired
     private TaskService taskService;

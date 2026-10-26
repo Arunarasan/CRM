@@ -77,7 +77,7 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
   const canApprove = isAdmin || (canPrice && hasAuthority("QUOTATION_APPROVE"));
   const canConvert = isAdmin || hasAuthority("QUOTATION_WRITE");
   // Changing a running project's quote: admins and project managers only.
-  const canChangeProject = isAdmin || hasAuthority("ROLE_PROJECT_MANAGER");
+  const canChangeProject = isAdmin;
   const projectMode = projectId != null;
 
   const [loading, setLoading] = useState(true);

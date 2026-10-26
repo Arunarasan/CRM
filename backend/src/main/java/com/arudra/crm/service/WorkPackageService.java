@@ -32,7 +32,7 @@ public class WorkPackageService {
 
     /** Roles notified when a package is delayed or needs attention. */
     static final List<String> CONTRACTOR_ALERT_ROLES =
-            List.of("ROLE_ADMIN", "ROLE_MANAGER", "ROLE_PROJECT_MANAGER");
+            List.of("ROLE_ADMIN");
 
     /**
      * BOQ category → contractor trade. Categories come from BoqItem.category, which the BOQ

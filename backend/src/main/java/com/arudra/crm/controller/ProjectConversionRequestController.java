@@ -20,7 +20,7 @@ import java.util.Map;
 public class ProjectConversionRequestController {
 
     private static final String EXECUTE = "hasAuthority('ROLE_ADMIN') or hasAuthority('EMPLOYEE_TASK_EXECUTE')";
-    private static final String DECIDE = "hasAuthority('ROLE_ADMIN') or hasAuthority('ROLE_PROJECT_MANAGER')";
+    private static final String DECIDE = "hasAuthority('ROLE_ADMIN')";
 
     private final ProjectConversionRequestService service;
     private final CurrentUserService currentUserService;

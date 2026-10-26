@@ -23,9 +23,7 @@ public class DashboardController {
     // management overview, not something every authenticated user (e.g. field employees on the
     // mobile portal) should read.
     private static final String OFFICE =
-            "hasAuthority('ROLE_ADMIN') or hasAuthority('ROLE_MANAGER') or hasAuthority('ROLE_SALES') "
-            + "or hasAuthority('ROLE_PROJECT_MANAGER') or hasAuthority('ROLE_ACCOUNTS') "
-            + "or hasAuthority('ROLE_FINANCE_MANAGER')";
+            "hasAuthority('ROLE_ADMIN')";
 
     @Autowired
     private CustomerRepository customerRepository;

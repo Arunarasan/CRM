@@ -78,10 +78,7 @@ public class DataSeeder {
                 }
             }
             // 1. Seed Roles
-            List<String> roleNames = Arrays.asList("ROLE_ADMIN", "ROLE_SALES", "ROLE_PROJECT_MANAGER",
-                    "ROLE_EMPLOYEE", "ROLE_MANAGER", "ROLE_DESIGNER", "ROLE_ENGINEER", "ROLE_SUPERVISOR",
-                    "ROLE_ESTIMATOR", "ROLE_ACCOUNTS", "ROLE_INVENTORY_MANAGER", "ROLE_STORE_KEEPER",
-                    "ROLE_FINANCE_MANAGER", "ROLE_CONTRACTOR",
+            List<String> roleNames = Arrays.asList("ROLE_ADMIN", "ROLE_EMPLOYEE", "ROLE_CONTRACTOR",
                     // Website customer portal login role.
                     "ROLE_CUSTOMER");
             for (String roleName : roleNames) {
@@ -139,27 +136,12 @@ public class DataSeeder {
 
             assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_ADMIN",
                     "CUSTOMER_READ", "CUSTOMER_WRITE", "CUSTOMER_DELETE", "CUSTOMER_FINANCIAL_READ", "CUSTOMER_EXPORT");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_SALES",
-                    "CUSTOMER_READ", "CUSTOMER_WRITE", "CUSTOMER_FINANCIAL_READ");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_PROJECT_MANAGER",
-                    "CUSTOMER_READ", "CUSTOMER_WRITE", "CUSTOMER_FINANCIAL_READ");
             assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_EMPLOYEE",
                     "CUSTOMER_READ");
 
             // Lead Management permissions
             assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_ADMIN",
                     "LEAD_READ", "LEAD_WRITE", "LEAD_DELETE", "LEAD_ASSIGN", "LEAD_CONVERT", "LEAD_EXPORT");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_MANAGER",
-                    "CUSTOMER_READ", "CUSTOMER_WRITE", "CUSTOMER_FINANCIAL_READ",
-                    "LEAD_READ", "LEAD_WRITE", "LEAD_DELETE", "LEAD_ASSIGN", "LEAD_CONVERT", "LEAD_EXPORT");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_SALES",
-                    "LEAD_READ", "LEAD_WRITE", "LEAD_ASSIGN", "LEAD_CONVERT", "LEAD_EXPORT");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_PROJECT_MANAGER",
-                    "LEAD_READ", "LEAD_WRITE", "LEAD_ASSIGN");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_DESIGNER",
-                    "LEAD_READ", "LEAD_WRITE");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_ENGINEER",
-                    "LEAD_READ", "LEAD_WRITE");
             assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_EMPLOYEE",
                     "LEAD_READ");
 
@@ -167,108 +149,37 @@ public class DataSeeder {
             assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_ADMIN",
                     "MEASUREMENT_READ", "MEASUREMENT_WRITE", "MEASUREMENT_DELETE",
                     "MEASUREMENT_ASSIGN", "MEASUREMENT_APPROVE", "MEASUREMENT_EXPORT");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_MANAGER",
-                    "MEASUREMENT_READ", "MEASUREMENT_WRITE", "MEASUREMENT_DELETE",
-                    "MEASUREMENT_ASSIGN", "MEASUREMENT_APPROVE", "MEASUREMENT_EXPORT");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_PROJECT_MANAGER",
-                    "MEASUREMENT_READ", "MEASUREMENT_WRITE", "MEASUREMENT_ASSIGN", "MEASUREMENT_APPROVE");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_SUPERVISOR",
-                    "MEASUREMENT_READ", "MEASUREMENT_WRITE", "MEASUREMENT_ASSIGN");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_DESIGNER",
-                    "MEASUREMENT_READ", "MEASUREMENT_WRITE", "MEASUREMENT_APPROVE");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_ENGINEER",
-                    "MEASUREMENT_READ", "MEASUREMENT_WRITE");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_SALES",
-                    "MEASUREMENT_READ");
             assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_EMPLOYEE",
                     "MEASUREMENT_READ");
 
             // Site Visit Management permissions
             assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_ADMIN",
                     "SITE_VISIT_READ", "SITE_VISIT_WRITE", "SITE_VISIT_DELETE", "SITE_VISIT_ASSIGN");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_MANAGER",
-                    "SITE_VISIT_READ", "SITE_VISIT_WRITE", "SITE_VISIT_DELETE", "SITE_VISIT_ASSIGN");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_SALES",
-                    "SITE_VISIT_READ", "SITE_VISIT_WRITE", "SITE_VISIT_ASSIGN");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_PROJECT_MANAGER",
-                    "SITE_VISIT_READ", "SITE_VISIT_WRITE", "SITE_VISIT_ASSIGN");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_DESIGNER",
-                    "SITE_VISIT_READ", "SITE_VISIT_WRITE");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_ENGINEER",
-                    "SITE_VISIT_READ", "SITE_VISIT_WRITE");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_SUPERVISOR",
-                    "SITE_VISIT_READ", "SITE_VISIT_WRITE", "SITE_VISIT_ASSIGN");
             assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_EMPLOYEE",
                     "SITE_VISIT_READ");
 
             // BOQ Management permissions
             assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_ADMIN",
                     "BOQ_READ", "BOQ_WRITE", "BOQ_DELETE", "BOQ_APPROVE");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_MANAGER",
-                    "BOQ_READ", "BOQ_WRITE", "BOQ_DELETE", "BOQ_APPROVE");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_ESTIMATOR",
-                    "BOQ_READ", "BOQ_WRITE");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_ENGINEER",
-                    "BOQ_READ", "BOQ_WRITE");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_SALES",
-                    "BOQ_READ");
 
             // Quotation Management permissions
             assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_ADMIN",
                     "QUOTATION_READ", "QUOTATION_WRITE", "QUOTATION_DELETE", "QUOTATION_APPROVE");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_MANAGER",
-                    "QUOTATION_READ", "QUOTATION_WRITE", "QUOTATION_DELETE", "QUOTATION_APPROVE");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_ESTIMATOR",
-                    "QUOTATION_READ", "QUOTATION_WRITE");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_SALES",
-                    "QUOTATION_READ", "QUOTATION_WRITE", "QUOTATION_APPROVE");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_PROJECT_MANAGER",
-                    "QUOTATION_READ");
 
             // Project Management permissions
             assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_ADMIN",
                     "PROJECT_READ", "PROJECT_WRITE", "PROJECT_DELETE", "PROJECT_APPROVE",
                     "TASK_READ", "TASK_WRITE", "TASK_ASSIGN");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_MANAGER",
-                    "PROJECT_READ", "PROJECT_WRITE", "PROJECT_DELETE", "PROJECT_APPROVE",
-                    "TASK_READ", "TASK_WRITE", "TASK_ASSIGN");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_PROJECT_MANAGER",
-                    "PROJECT_READ", "PROJECT_WRITE", "PROJECT_APPROVE",
-                    "TASK_READ", "TASK_WRITE", "TASK_ASSIGN");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_ENGINEER",
-                    "PROJECT_READ", "PROJECT_WRITE", "TASK_READ", "TASK_WRITE");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_SUPERVISOR",
-                    "PROJECT_READ", "PROJECT_WRITE", "TASK_READ", "TASK_WRITE", "TASK_ASSIGN");
             // Smart Employee Auto Assignment — recommend / assign / settings / history / dashboard.
             assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_ADMIN",
                     "ASSIGNMENT_READ", "ASSIGNMENT_WRITE");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_MANAGER",
-                    "ASSIGNMENT_READ", "ASSIGNMENT_WRITE");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_PROJECT_MANAGER",
-                    "ASSIGNMENT_READ", "ASSIGNMENT_WRITE");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_SUPERVISOR",
-                    "ASSIGNMENT_READ", "ASSIGNMENT_WRITE");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_ACCOUNTS",
-                    "PROJECT_READ", "PROJECT_APPROVE");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_SALES",
-                    "PROJECT_READ", "TASK_READ");
 
             // Employee Task & Work Execution (mobile field-execution module) permissions
             assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_ADMIN",
                     "TASK_APPROVE", "EMPLOYEE_TASK_READ", "EMPLOYEE_TASK_EXECUTE", "EMPLOYEE_TASK_ISSUE", "EMPLOYEE_TASK_MATERIAL");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_MANAGER",
-                    "TASK_APPROVE");
             // Sales/Pre-sales pick the lead-workflow pool tasks (Review Lead, Contact, Quotation…),
             // so they need the field-execution module too — otherwise they're notified about a
             // pickable task but get 403 on the pool. PM likewise picks BOQ/Project-scope tasks.
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_SALES",
-                    "EMPLOYEE_TASK_READ", "EMPLOYEE_TASK_EXECUTE", "EMPLOYEE_TASK_ISSUE", "EMPLOYEE_TASK_MATERIAL");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_PROJECT_MANAGER",
-                    "TASK_APPROVE", "EMPLOYEE_TASK_READ", "EMPLOYEE_TASK_EXECUTE", "EMPLOYEE_TASK_ISSUE", "EMPLOYEE_TASK_MATERIAL");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_SUPERVISOR",
-                    "TASK_APPROVE", "EMPLOYEE_TASK_READ", "EMPLOYEE_TASK_EXECUTE", "EMPLOYEE_TASK_ISSUE", "EMPLOYEE_TASK_MATERIAL");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_ENGINEER",
-                    "EMPLOYEE_TASK_READ", "EMPLOYEE_TASK_EXECUTE", "EMPLOYEE_TASK_ISSUE", "EMPLOYEE_TASK_MATERIAL");
             assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_EMPLOYEE",
                     "EMPLOYEE_TASK_READ", "EMPLOYEE_TASK_EXECUTE", "EMPLOYEE_TASK_ISSUE", "EMPLOYEE_TASK_MATERIAL",
                     "EMPLOYEE_PORTAL");
@@ -286,25 +197,10 @@ public class DataSeeder {
             // Dynamic BOQ Management + Project Change Request permissions
             assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_ADMIN",
                     "CHANGE_REQUEST_READ", "CHANGE_REQUEST_WRITE", "CHANGE_REQUEST_APPROVE");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_MANAGER",
-                    "CHANGE_REQUEST_READ", "CHANGE_REQUEST_WRITE", "CHANGE_REQUEST_APPROVE");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_PROJECT_MANAGER",
-                    "CHANGE_REQUEST_READ", "CHANGE_REQUEST_WRITE", "CHANGE_REQUEST_APPROVE",
-                    "BOQ_READ", "BOQ_WRITE");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_ESTIMATOR",
-                    "CHANGE_REQUEST_READ", "CHANGE_REQUEST_WRITE");
 
             // Inventory Management permissions
             assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_ADMIN",
                     "INVENTORY_READ", "INVENTORY_WRITE");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_MANAGER",
-                    "INVENTORY_READ", "INVENTORY_WRITE");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_ESTIMATOR",
-                    "INVENTORY_READ", "INVENTORY_WRITE");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_PROJECT_MANAGER",
-                    "INVENTORY_READ", "INVENTORY_WRITE");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_SALES",
-                    "INVENTORY_READ");
 
             // Enterprise Inventory: warehouses, purchase requests/orders, stock transfers, material requests, damage
             assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_ADMIN",
@@ -313,50 +209,14 @@ public class DataSeeder {
                     "STOCK_TRANSFER_READ", "STOCK_TRANSFER_WRITE", "STOCK_TRANSFER_APPROVE",
                     "MATERIAL_REQUEST_READ", "MATERIAL_REQUEST_WRITE", "MATERIAL_REQUEST_APPROVE",
                     "DAMAGE_READ", "DAMAGE_WRITE");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_INVENTORY_MANAGER",
-                    "INVENTORY_READ", "INVENTORY_WRITE",
-                    "WAREHOUSE_READ", "WAREHOUSE_WRITE",
-                    "PURCHASE_READ", "PURCHASE_WRITE", "PURCHASE_APPROVE",
-                    "STOCK_TRANSFER_READ", "STOCK_TRANSFER_WRITE", "STOCK_TRANSFER_APPROVE",
-                    "MATERIAL_REQUEST_READ", "MATERIAL_REQUEST_WRITE", "MATERIAL_REQUEST_APPROVE",
-                    "DAMAGE_READ", "DAMAGE_WRITE");
             // Purchase Management: managers are the primary PR/PO approvers
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_MANAGER",
-                    "WAREHOUSE_READ",
-                    "PURCHASE_READ", "PURCHASE_WRITE", "PURCHASE_APPROVE");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_ACCOUNTS",
-                    "PURCHASE_READ");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_STORE_KEEPER",
-                    "INVENTORY_READ", "INVENTORY_WRITE",
-                    "WAREHOUSE_READ",
-                    "PURCHASE_READ", "PURCHASE_WRITE",
-                    "STOCK_TRANSFER_READ", "STOCK_TRANSFER_WRITE",
-                    "MATERIAL_REQUEST_READ", "MATERIAL_REQUEST_APPROVE",
-                    "DAMAGE_READ", "DAMAGE_WRITE");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_PROJECT_MANAGER",
-                    "WAREHOUSE_READ", "PURCHASE_READ", "PURCHASE_WRITE",
-                    "STOCK_TRANSFER_READ", "STOCK_TRANSFER_WRITE",
-                    "MATERIAL_REQUEST_READ", "MATERIAL_REQUEST_WRITE", "MATERIAL_REQUEST_APPROVE",
-                    "DAMAGE_READ");
             assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_EMPLOYEE",
                     "WAREHOUSE_READ", "MATERIAL_REQUEST_READ", "MATERIAL_REQUEST_WRITE", "DAMAGE_READ", "DAMAGE_WRITE");
 
             // Billing & Finance permissions
             assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_ADMIN",
                     "FINANCE_READ", "FINANCE_WRITE", "FINANCE_APPROVE", "FINANCE_COLLECT");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_FINANCE_MANAGER",
-                    "FINANCE_READ", "FINANCE_WRITE", "FINANCE_APPROVE", "FINANCE_COLLECT",
-                    "CUSTOMER_READ", "CUSTOMER_FINANCIAL_READ", "PROJECT_READ", "QUOTATION_READ", "PURCHASE_READ");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_ACCOUNTS",
-                    "FINANCE_READ", "FINANCE_WRITE", "FINANCE_COLLECT",
-                    "CUSTOMER_READ", "CUSTOMER_FINANCIAL_READ");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_MANAGER",
-                    "FINANCE_READ", "FINANCE_WRITE", "FINANCE_APPROVE", "FINANCE_COLLECT");
             // Project managers see project finances; sales sees invoices/outstanding for their customers
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_PROJECT_MANAGER",
-                    "FINANCE_READ");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_SALES",
-                    "FINANCE_READ", "FINANCE_COLLECT");
 
             // Contractor Management permissions. Work packages are project execution, so the
             // project-side roles (PM, site engineer, supervisor) own assignment and verification;
@@ -367,38 +227,7 @@ public class DataSeeder {
                     "WORK_PACKAGE_APPROVE", "WORK_PACKAGE_EXECUTE", "CONTRACTOR_MATERIAL_ISSUE",
                     "CONTRACTOR_BILL_READ", "CONTRACTOR_BILL_WRITE", "CONTRACTOR_BILL_APPROVE",
                     "CONTRACTOR_PAYMENT");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_MANAGER",
-                    "CONTRACTOR_READ", "CONTRACTOR_WRITE", "CONTRACTOR_DELETE",
-                    "WORK_PACKAGE_READ", "WORK_PACKAGE_WRITE", "WORK_PACKAGE_ASSIGN",
-                    "WORK_PACKAGE_APPROVE", "WORK_PACKAGE_EXECUTE", "CONTRACTOR_MATERIAL_ISSUE",
-                    "CONTRACTOR_BILL_READ", "CONTRACTOR_BILL_WRITE", "CONTRACTOR_BILL_APPROVE",
-                    "CONTRACTOR_PAYMENT");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_PROJECT_MANAGER",
-                    "CONTRACTOR_READ", "CONTRACTOR_WRITE",
-                    "WORK_PACKAGE_READ", "WORK_PACKAGE_WRITE", "WORK_PACKAGE_ASSIGN",
-                    "WORK_PACKAGE_APPROVE", "WORK_PACKAGE_EXECUTE",
-                    "CONTRACTOR_BILL_READ", "CONTRACTOR_BILL_WRITE", "CONTRACTOR_BILL_APPROVE");
             // Site engineers run execution and certify the first rung of the bill ladder.
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_ENGINEER",
-                    "CONTRACTOR_READ",
-                    "WORK_PACKAGE_READ", "WORK_PACKAGE_WRITE", "WORK_PACKAGE_EXECUTE", "WORK_PACKAGE_APPROVE",
-                    "CONTRACTOR_BILL_READ", "CONTRACTOR_BILL_WRITE", "CONTRACTOR_BILL_APPROVE");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_SUPERVISOR",
-                    "CONTRACTOR_READ",
-                    "WORK_PACKAGE_READ", "WORK_PACKAGE_WRITE", "WORK_PACKAGE_EXECUTE", "WORK_PACKAGE_APPROVE",
-                    "CONTRACTOR_BILL_READ");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_STORE_KEEPER",
-                    "CONTRACTOR_READ", "WORK_PACKAGE_READ", "CONTRACTOR_MATERIAL_ISSUE");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_INVENTORY_MANAGER",
-                    "CONTRACTOR_READ", "WORK_PACKAGE_READ", "CONTRACTOR_MATERIAL_ISSUE");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_FINANCE_MANAGER",
-                    "CONTRACTOR_READ", "WORK_PACKAGE_READ",
-                    "CONTRACTOR_BILL_READ", "CONTRACTOR_BILL_APPROVE", "CONTRACTOR_PAYMENT");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_ACCOUNTS",
-                    "CONTRACTOR_READ", "WORK_PACKAGE_READ",
-                    "CONTRACTOR_BILL_READ", "CONTRACTOR_BILL_APPROVE", "CONTRACTOR_PAYMENT");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_ESTIMATOR",
-                    "CONTRACTOR_READ", "WORK_PACKAGE_READ");
             // The portal role sees only its own records — ContractorPortalService re-derives the
             // contractor from the login, so no cross-contractor read is possible.
             assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_CONTRACTOR",
@@ -408,22 +237,10 @@ public class DataSeeder {
             // contractors. Kept alongside the module-specific permissions above.
             assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_ADMIN",
                     "WORKFORCE_READ", "WORKFORCE_WRITE");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_MANAGER",
-                    "WORKFORCE_READ", "WORKFORCE_WRITE");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_PROJECT_MANAGER",
-                    "WORKFORCE_READ");
 
             // Payroll: HR/Finance/Admin process; PM reads (view contractor payment status).
             assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_ADMIN",
                     "PAYROLL_READ", "PAYROLL_WRITE", "PAYROLL_PROCESS");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_MANAGER",
-                    "PAYROLL_READ", "PAYROLL_WRITE", "PAYROLL_PROCESS");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_FINANCE_MANAGER",
-                    "PAYROLL_READ", "PAYROLL_WRITE", "PAYROLL_PROCESS");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_ACCOUNTS",
-                    "PAYROLL_READ", "PAYROLL_WRITE", "PAYROLL_PROCESS");
-            assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_PROJECT_MANAGER",
-                    "PAYROLL_READ");
 
             // Website / CMS management — admin-only for now.
             assignPermissionsToRole(roleRepository, permissionRepository, "ROLE_ADMIN",
@@ -431,11 +248,11 @@ public class DataSeeder {
 
             // Bundle tracking (stickered stitching/making bundles): counter staff create + assign;
             // floor staff (tailors, packers) scan a bundle and step it forward.
-            for (String role : List.of("ROLE_ADMIN", "ROLE_MANAGER", "ROLE_SALES", "ROLE_ACCOUNTS", "ROLE_FINANCE_MANAGER")) {
+            for (String role : List.of("ROLE_ADMIN")) {
                 assignPermissionsToRole(roleRepository, permissionRepository, role,
                         "BUNDLE_READ", "BUNDLE_WRITE", "BUNDLE_MOVE");
             }
-            for (String role : List.of("ROLE_EMPLOYEE", "ROLE_SUPERVISOR", "ROLE_STORE_KEEPER")) {
+            for (String role : List.of("ROLE_EMPLOYEE")) {
                 assignPermissionsToRole(roleRepository, permissionRepository, role, "BUNDLE_READ", "BUNDLE_MOVE");
             }
 

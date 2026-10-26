@@ -80,7 +80,13 @@ export default function Users() {
     setSaving(true);
     try {
       if (editingId) {
-        await api.put(`/users/${editingId}`, { name: form.name, email: form.email, phone: form.phone, roles: form.roles });
+        // Only send roles when the type was changed, so legacy/customer accounts keep theirs.
+        const orig = users.find((u) => u.id === editingId);
+        const origType = orig?.roles.includes("ROLE_ADMIN") ? "ROLE_ADMIN" : "ROLE_EMPLOYEE";
+        const changed = form.roles[0] !== origType;
+        await api.put(`/users/${editingId}`, {
+          name: form.name, email: form.email, phone: form.phone, ...(changed ? { roles: form.roles } : {}),
+        });
       } else {
         await api.post("/users", {
           name: form.name, email: form.email, phone: form.phone, password: form.password, roles: form.roles,

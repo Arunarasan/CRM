@@ -35,7 +35,7 @@ export default function BundleDetailPage() {
   const { hasAuthority, roleNames } = useAuth();
   const canWrite = hasAuthority("BUNDLE_WRITE");
   const canMove = canWrite || hasAuthority("BUNDLE_MOVE");
-  const canOverride = roleNames.includes("ROLE_ADMIN") || roleNames.includes("ROLE_MANAGER");
+  const canOverride = roleNames.includes("ROLE_ADMIN");
 
   const [b, setB] = useState<Bundle | null>(null);
   const [error, setError] = useState<string | null>(null);

@@ -101,7 +101,7 @@ export function QuotationWorkbench({
 
   const canWrite = hasAuthority("QUOTATION_WRITE") || isAdmin;
   const canApprove = hasAuthority("QUOTATION_APPROVE") || isAdmin;
-  const isManager = isAdmin || hasAuthority("ROLE_MANAGER") || hasAuthority("ROLE_PROJECT_MANAGER");
+  const isManager = isAdmin;
 
   /** Pull the editable state (scope, discount, GST, terms) out of a fresh server copy. */
   const adopt = useCallback((q: Quotation) => {

@@ -67,9 +67,8 @@ public class HrService {
 
     /**
      * Creates the login account for an employee if missing, and keeps the account's roles in step
-     * with the employee's designation either way. Additive only — designation grants extra roles
-     * (e.g. "Project Manager" → ROLE_PROJECT_MANAGER, so BOQ/Quotation access works), but roles are
-     * never removed here, since an admin may have granted them independently of HR data.
+     * either way. Every employee login is just ROLE_EMPLOYEE — designations such as Project Manager
+     * are work roles, not account types. Roles are never removed here (an admin may be one).
      */
     private void syncUserForEmployee(Employee employee) {
         if (employee.getEmail() == null || employee.getEmail().trim().isEmpty()) {
@@ -90,9 +89,6 @@ public class HrService {
         }
         java.util.Set<Role> roles = user.getRoles() != null ? user.getRoles() : new java.util.HashSet<>();
         roleRepository.findByName("ROLE_EMPLOYEE").ifPresent(roles::add);
-        if (employee.getDesignation() != null && employee.getDesignation().toLowerCase().contains("manager")) {
-            roleRepository.findByName("ROLE_PROJECT_MANAGER").ifPresent(roles::add);
-        }
         user.setRoles(roles);
         userRepository.save(user);
         if (tempPassword != null) {
@@ -162,7 +158,7 @@ public class HrService {
         if (details.getDepartment() != null) employee.setDepartment(details.getDepartment());
         Employee saved = employeeRepository.save(employee);
         try {
-            syncUserForEmployee(saved); // designation change may grant e.g. ROLE_PROJECT_MANAGER
+            syncUserForEmployee(saved); 
         } catch (Exception e) {
             System.err.println("Failed to sync user roles for employee " + saved.getId() + ": " + e.getMessage());
         }

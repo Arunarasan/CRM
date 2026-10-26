@@ -86,7 +86,7 @@ export function QuotationPrintView({ quotationId, onClose, onSaved, readOnly, em
   }, [quotationId]);
 
   const status = quotation?.status || "DRAFT";
-  const isManager = isAdmin || hasAuthority("ROLE_MANAGER") || hasAuthority("ROLE_PROJECT_MANAGER");
+  const isManager = isAdmin;
   // Same rule as the server: approved quotations are repriced by managers only; converted never.
   const canEdit = !readOnly && (hasAuthority("QUOTATION_WRITE") || isAdmin) && status !== "CONVERTED"
     && (status !== "APPROVED" || isManager);

@@ -562,7 +562,7 @@ public class CallRecordingService {
         var auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null) return false;
         return auth.getAuthorities().stream().map(GrantedAuthority::getAuthority).anyMatch(a ->
-                a.equals("ROLE_ADMIN") || a.equals("ROLE_MANAGER") || a.equals("ROLE_PROJECT_MANAGER") || a.equals("TASK_ASSIGN"));
+                a.equals("ROLE_ADMIN") || a.equals("TASK_ASSIGN"));
     }
 
     private Long matchLeadId(String phone) {

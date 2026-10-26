@@ -12,7 +12,7 @@ import { apiError } from "@/lib/apiError";
 /** Who may record a price reduction — mirrors the backend's @PreAuthorize on /projects/{id}/settle. */
 export const canSettleProjects = () => {
   const a = getAuthorities();
-  return ["ROLE_ADMIN", "ROLE_MANAGER", "ROLE_ACCOUNTS", "ROLE_FINANCE_MANAGER"].some((r) => a.includes(r));
+  return ["ROLE_ADMIN"].some((r) => a.includes(r));
 };
 
 interface Preview {

@@ -240,8 +240,7 @@ public class ProjectController {
                 req.notes, req.photoUrls, req.force, currentUserService.getCurrentUser()));
     }
 
-    private static final String SETTLE = "hasAuthority('ROLE_ADMIN') or hasAuthority('ROLE_MANAGER') "
-            + "or hasAuthority('ROLE_ACCOUNTS') or hasAuthority('ROLE_FINANCE_MANAGER')";
+    private static final String SETTLE = "hasAuthority('ROLE_ADMIN')";
 
     @Autowired
     private com.arudra.crm.service.ProjectSettlementService projectSettlementService;

@@ -181,6 +181,10 @@ public class UserService {
         }
         for (String name : roleNames) {
             if (name == null || name.isBlank()) continue;
+            if (!name.trim().equals("ROLE_ADMIN") && !name.trim().equals("ROLE_EMPLOYEE")) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Accounts can only be Admin or Employee.");
+            }
             Role role = roleRepository.findByName(name.trim())
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown role: " + name));
             roles.add(role);

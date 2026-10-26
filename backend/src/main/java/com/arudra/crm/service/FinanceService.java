@@ -1535,7 +1535,7 @@ public class FinanceService {
     private void notifyFinanceUsers(String title, String message, String type, String actionUrl, boolean deduped) {
         try {
             List<User> recipients = userRepository.findByRoleNames(
-                    List.of("ROLE_ADMIN", "ROLE_MANAGER", "ROLE_ACCOUNTS", "ROLE_FINANCE_MANAGER"));
+                    List.of("ROLE_ADMIN"));
             for (User u : recipients) {
                 if (deduped) {
                     notificationService.dispatchIfAbsent(title, message, type, u.getId(), actionUrl);

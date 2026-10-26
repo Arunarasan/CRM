@@ -27,7 +27,7 @@ import java.util.Map;
 public class WorkforceAlertService {
 
     private static final List<String> FINANCE_ROLES =
-            List.of("ROLE_ADMIN", "ROLE_FINANCE_MANAGER", "ROLE_ACCOUNTS", "ROLE_MANAGER");
+            List.of("ROLE_ADMIN");
 
     @Autowired private ContractorRepository contractorRepository;
     @Autowired private ContractorBillRepository billRepository;

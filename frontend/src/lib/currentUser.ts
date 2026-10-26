@@ -37,11 +37,6 @@ function titleCase(s: string): string {
 
 const ROLE_LABELS: Record<string, string> = {
   ROLE_ADMIN: "Administrator",
-  ROLE_PROJECT_MANAGER: "Project Manager",
-  ROLE_SALES: "Sales",
-  ROLE_ACCOUNTANT: "Accounts",
-  ROLE_HR: "HR",
-  ROLE_PURCHASE: "Purchase",
   ROLE_EMPLOYEE: "Team Member",
 };
 

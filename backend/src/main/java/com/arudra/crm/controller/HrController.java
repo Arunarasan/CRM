@@ -25,7 +25,7 @@ public class HrController {
             "hasAuthority('ROLE_ADMIN') or hasAuthority('PAYROLL_PROCESS') or hasAuthority('PAYROLL_WRITE')";
     // Project Managers may recommend bonuses/OT (HR approves); processors and admins too.
     private static final String PAYROLL_RECOMMEND =
-            "hasAuthority('ROLE_ADMIN') or hasAuthority('PAYROLL_PROCESS') or hasAuthority('PAYROLL_WRITE') or hasAuthority('ROLE_PROJECT_MANAGER')";
+            "hasAuthority('ROLE_ADMIN') or hasAuthority('PAYROLL_PROCESS') or hasAuthority('PAYROLL_WRITE')";
     // Core HR data (employee PII, attendance, leave, documents, performance) is HR/management-scoped.
     private static final String HR_READ =
             "hasAuthority('ROLE_ADMIN') or hasAuthority('WORKFORCE_READ')";

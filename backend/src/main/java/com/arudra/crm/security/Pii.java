@@ -15,7 +15,7 @@ public final class Pii {
 
     private static final char BULLET = '•';
     private static final Set<String> REVEAL = Set.of(
-            "ROLE_ADMIN", "ROLE_ACCOUNTS", "ROLE_FINANCE_MANAGER",
+            "ROLE_ADMIN",
             "PAYROLL_READ", "PAYROLL_PROCESS", "FINANCE_READ", "FINANCE_WRITE");
 
     private Pii() {}

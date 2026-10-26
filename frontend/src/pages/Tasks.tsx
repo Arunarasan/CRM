@@ -114,7 +114,7 @@ type MainTab = "tasks" | "employees" | "calls" | "attendance" | "approvals" | "c
 
 export default function Tasks() {
   const { isAdmin, hasAnyAuthority } = useAuth();
-  const canManageCalls = hasAnyAuthority(["ROLE_MANAGER", "ROLE_PROJECT_MANAGER", "TASK_ASSIGN"]);
+  const canManageCalls = hasAnyAuthority(["TASK_ASSIGN"]);
   const navigate = useNavigate();
 
   const [tab, setTab] = useState<MainTab>(() => {

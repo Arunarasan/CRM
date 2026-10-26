@@ -11,7 +11,7 @@ import lombok.Setter;
 public class Role extends BaseEntity {
 
     @Column(nullable = false, unique = true, length = 50)
-    private String name; // e.g., ROLE_ADMIN, ROLE_SALES, ROLE_PROJECT_MANAGER, ROLE_EMPLOYEE
+    private String name; // e.g., ROLE_ADMIN, ROLE_EMPLOYEE, plus external ROLE_CUSTOMER / ROLE_CONTRACTOR
 
     @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(

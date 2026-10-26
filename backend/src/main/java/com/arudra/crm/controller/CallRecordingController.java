@@ -24,8 +24,7 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class CallRecordingController {
 
-    private static final String MANAGE = "hasAuthority('ROLE_ADMIN') or hasAuthority('ROLE_MANAGER') "
-            + "or hasAuthority('ROLE_PROJECT_MANAGER') or hasAuthority('TASK_ASSIGN')";
+    private static final String MANAGE = "hasAuthority('ROLE_ADMIN') or hasAuthority('TASK_ASSIGN')";
 
     private final CallRecordingService service;
     private final CurrentUserService currentUserService;

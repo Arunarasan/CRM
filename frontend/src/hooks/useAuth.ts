@@ -29,12 +29,8 @@ export function getRoleNames(authorities: string[]): string[] {
 /**
  * A "field employee" is a portal-only user: they hold ROLE_EMPLOYEE and are NOT an admin.
  * Such users are redirected to /employee and blocked from the desktop ERP entirely — matching
- * the spec (employees never see HR/finance/quotations/etc.). Note this deliberately catches
- * employees who ALSO carry an operational role like ROLE_PROJECT_MANAGER (auto-granted from a
- * "manager" designation): being an employee wins, so they still land in the portal.
- *
- * Pure managers/staff who are NOT employees (e.g. ROLE_PROJECT_MANAGER without ROLE_EMPLOYEE)
- * and admins keep full desktop access.
+ * the spec (employees never see HR/finance/quotations/etc.). Logins are only Admin or
+ * Employee, so every non-admin is a field employee; admins keep full desktop access.
  */
 export function isFieldEmployeeOnly(authorities: string[]): boolean {
   const roles = getRoleNames(authorities);

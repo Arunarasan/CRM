@@ -60,7 +60,7 @@ public class InventoryService {
 
     /** Roles that get inventory alerts (low stock, negative-stock attempts, damage). */
     static final List<String> INVENTORY_ALERT_ROLES =
-            List.of("ROLE_ADMIN", "ROLE_MANAGER", "ROLE_INVENTORY_MANAGER");
+            List.of("ROLE_ADMIN");
 
     public Page<Product> getProducts(String search, int page, int size) {
         PageRequest pageRequest = PageRequest.of(page, size, Sort.by("id").descending());

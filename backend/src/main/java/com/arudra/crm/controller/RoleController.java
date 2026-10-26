@@ -22,8 +22,10 @@ public class RoleController {
 
     @GetMapping
     public ResponseEntity<List<String>> getRoles() {
+        // Logins are only Admin or Employee; other roles are work roles, not account types.
         List<String> names = roleRepository.findAll().stream()
                 .map(Role::getName)
+                .filter(n -> n.equals("ROLE_ADMIN") || n.equals("ROLE_EMPLOYEE"))
                 .sorted()
                 .toList();
         return ResponseEntity.ok(names);
