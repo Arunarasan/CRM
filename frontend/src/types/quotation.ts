@@ -56,6 +56,8 @@ export interface QuotationItem {
 
 export interface Quotation {
   id?: number;
+  /** Customer company details printed on this quotation (editable per document). */
+  billTo?: import("@/lib/billTo").BillTo | null;
   quotationNumber?: string;
   quotationDate?: string;
   expiryDate?: string;

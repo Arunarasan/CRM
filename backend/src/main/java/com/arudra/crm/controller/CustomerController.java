@@ -69,6 +69,12 @@ public class CustomerController {
     }
 
     @PreAuthorize("hasAuthority('ROLE_ADMIN') or hasAuthority('CUSTOMER_WRITE')")
+    @PutMapping("/{id}/bill-to")
+    public ResponseEntity<ApiResponse<CustomerDTO>> saveBillTo(@PathVariable Long id, @RequestBody com.arudra.crm.entity.BillTo billTo) {
+        return ResponseEntity.ok(ApiResponse.success(CustomerMapper.toDTO(customerService.updateBillTo(id, billTo))));
+    }
+
+    @PreAuthorize("hasAuthority('ROLE_ADMIN') or hasAuthority('CUSTOMER_WRITE')")
     @PostMapping("/{id}/contacts")
     public ResponseEntity<ApiResponse<com.arudra.crm.dto.ContactPersonDTO>> addContact(@PathVariable Long id, @RequestBody com.arudra.crm.dto.ContactPersonDTO dto) {
         com.arudra.crm.entity.ContactPerson entity = new com.arudra.crm.entity.ContactPerson();

@@ -20,6 +20,7 @@ import { printReceipt } from "./printReceipt";
 import { fetchCompanyProfile, type CompanyProfile } from "@/lib/companyProfile";
 import InvoiceBundles from "@/components/bundles/InvoiceBundles";
 import { resolveFileUrl } from "@/lib/uploadFile";
+import { resolveBillTo } from "@/lib/billTo";
 import { ArrowLeft, CheckCircle2, Send, XCircle, IndianRupee, RotateCcw, Printer, ChevronDown, MoreHorizontal, MessageCircle, Phone, MapPin, User } from "lucide-react";
 
 export default function InvoiceDetailPage() {
@@ -116,6 +117,7 @@ export default function InvoiceDetailPage() {
   const due = dueInfo(inv);
   const wa = canPay ? waReminderHref(inv, company?.name || "JB Decor") : null;
   const cust: any = inv.customer || {};
+  const billTo = resolveBillTo(cust, null, inv.billTo);
   const custPhone: string | undefined = cust.phone || cust.whatsappNumber;
   const custAddress = [cust.billingAddress || cust.address || cust.siteAddress, cust.city, cust.pincode].filter(Boolean).join(", ");
   const cancel = () => {
@@ -218,10 +220,10 @@ export default function InvoiceDetailPage() {
         <div className="rounded-2xl border bg-white p-5 shadow-sm">
           <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400"><User className="h-3.5 w-3.5" /> Bill to</div>
           <div className="text-base font-bold text-slate-900">
-            {cust.id ? <Link to={`/customers/${cust.id}`} className="hover:underline">{cust.name}</Link> : cust.name}
+            {cust.id ? <Link to={`/customers/${cust.id}`} className="hover:underline">{billTo.name || cust.name}</Link> : (billTo.name || cust.name)}
           </div>
-          {cust.gstNumber && <div className="text-xs text-slate-500">GSTIN {cust.gstNumber}</div>}
-          {custAddress && <div className="mt-1.5 flex items-start gap-1.5 text-sm text-slate-600"><MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />{custAddress}</div>}
+          {billTo.gstin && <div className="text-xs text-slate-500">GSTIN {billTo.gstin}</div>}
+          {(billTo.address || custAddress) && <div className="mt-1.5 flex items-start gap-1.5 text-sm text-slate-600"><MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />{billTo.address || custAddress}</div>}
           {custPhone && (
             <div className="mt-3 flex flex-wrap gap-2">
               <a href={`tel:${String(custPhone).replace(/[^\d+]/g, "")}`} className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 active:scale-[0.98]">

@@ -219,6 +219,10 @@ public class QuotationService {
         quotation.setQuotationDate(quotationDetails.getQuotationDate());
         quotation.setExpiryDate(quotationDetails.getExpiryDate());
         quotation.setTermsAndConditions(quotationDetails.getTermsAndConditions());
+        if (quotationDetails.getBillTo() != null) {
+            quotationDetails.getBillTo().normalise();
+            quotation.setBillTo(quotationDetails.getBillTo());
+        }
 
         updateCollections(quotation, quotationDetails);
 
@@ -241,6 +245,7 @@ public class QuotationService {
         copy.setStatus("DRAFT");
         copy.setCurrency(original.getCurrency());
         copy.setTermsAndConditions(original.getTermsAndConditions());
+        if (original.getBillTo() != null) copy.setBillTo(original.getBillTo().copy());
 
         copyCollections(original, copy);
 

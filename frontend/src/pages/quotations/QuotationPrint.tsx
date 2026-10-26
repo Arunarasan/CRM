@@ -19,6 +19,8 @@ import ShareQuoteDialog, { type PreparedShare } from "@/pages/leads/quote/ShareQ
 import { colorsOf, useLineProducts } from "@/pages/leads/quote/productCells";
 import { fetchBankDetails, fetchCompanyProfile, type BankDetails, type CompanyProfile } from "@/lib/companyProfile";
 import { LH, LH_W, addressText, phoneNumbers } from "@/lib/letterhead";
+import BillToPanel from "@/components/BillToPanel";
+import { gstinError, resolveBillTo, saveBillToToCustomer, type BillTo } from "@/lib/billTo";
 import { lineTotal, pricingPatch, quoteTotals, readPricing, type QuotePricing } from "./quotationPricing";
 import { unitDef } from "@/lib/units";
 import { DEFAULT_DESIGN, fetchDocDesign, type DocDesign } from "@/lib/docDesign";
@@ -62,8 +64,13 @@ export function QuotationPrintView({ quotationId, onClose, onSaved, readOnly, em
   const [pricing, setPricing] = useState<QuotePricing>({ mode: "PERCENT", value: 0, gst: 0 });
   const [fields, setFields] = useState({ quotationDate: "", expiryDate: "", termsAndConditions: "" });
 
+  const [billTo, setBillTo] = useState<BillTo>({});
+  const [saveToCustomer, setSaveToCustomer] = useState(false);
+
   const adopt = (q: Quotation) => {
     setQuotation(q);
+    setBillTo(resolveBillTo(q.customer, q.lead, q.billTo));
+    setSaveToCustomer(false);
     setRates({});
     setPricing(readPricing(q));
     setFields({ quotationDate: q.quotationDate || "", expiryDate: q.expiryDate || "", termsAndConditions: q.termsAndConditions || "" });
@@ -125,6 +132,8 @@ export function QuotationPrintView({ quotationId, onClose, onSaved, readOnly, em
 
   const saveEdits = async () => {
     if (!quotation) return;
+    const gErr = gstinError(billTo.gstin);
+    if (gErr) { toast.error(gErr); return; }
     setSaving(true);
     try {
       const saved = await quotationApi.update(quotationId, {
@@ -134,7 +143,13 @@ export function QuotationPrintView({ quotationId, onClose, onSaved, readOnly, em
         expiryDate: fields.expiryDate || undefined,
         items: (quotation.items || []).map((i) => (i.id != null && rates[i.id] !== undefined ? { ...i, rate: rates[i.id] ?? 0 } : i)),
         ...pricingPatch(pricing),
+        billTo,
       } as Quotation);
+      const custId = (quotation.customer as any)?.id;
+      if (saveToCustomer && custId) {
+        try { await saveBillToToCustomer(custId, billTo); toast.success("Customer profile updated"); }
+        catch { toast.error("Quotation saved, but the customer profile could not be updated."); }
+      }
       adopt(saved);
       onSaved?.(saved);
       setEditing(false);
@@ -285,7 +300,7 @@ export function QuotationPrintView({ quotationId, onClose, onSaved, readOnly, em
                 <User className="qp-ico" />
                 <div className="min-w-0">
                   <small>Customer</small>
-                  <b>{client || "—"}</b>
+                  <b>{billTo.name || client || "—"}</b>
                   {D.showCustomerDetail && (clientArea || clientCode) && <span>{clientArea || clientCode}</span>}
                 </div>
               </div>}
@@ -297,6 +312,11 @@ export function QuotationPrintView({ quotationId, onClose, onSaved, readOnly, em
                 </div>
               </div>}
             </div>
+
+            {D.showCustomerCard && (
+              <BillToPanel company={company} value={billTo} onChange={setBillTo} editing={editing} label="Quotation For"
+                canSaveToCustomer={!!(quotation.customer as any)?.id} saveToCustomer={saveToCustomer} onSaveToCustomerChange={setSaveToCustomer} />
+            )}
 
             {/* Items, grouped by category: header · column titles · products · category total */}
             <table className="qp-table">

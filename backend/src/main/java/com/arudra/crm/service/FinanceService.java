@@ -104,6 +104,7 @@ public class FinanceService {
             throw new RuntimeException("Invoice needs a customer");
         }
         invoice.setId(null);
+        if (invoice.getBillTo() != null) invoice.getBillTo().normalise();
         invoice.setInvoiceNumber(nextInvoiceNumber());
         if (invoice.getDate() == null) invoice.setDate(LocalDate.now());
         if (invoice.getStatus() == null || invoice.getStatus().isBlank()) invoice.setStatus("DRAFT");
@@ -474,6 +475,10 @@ public class FinanceService {
         if (changes.getTaxInclusive() != null) invoice.setTaxInclusive(changes.getTaxInclusive());
         invoice.setRetentionPercent(changes.getRetentionPercent());
         invoice.setPlaceOfSupply(changes.getPlaceOfSupply());
+        if (changes.getBillTo() != null) {
+            changes.getBillTo().normalise();
+            invoice.setBillTo(changes.getBillTo());
+        }
         invoice.setNotes(changes.getNotes());
         invoice.setTerms(changes.getTerms());
         if (changes.getProject() != null) invoice.setProject(changes.getProject());

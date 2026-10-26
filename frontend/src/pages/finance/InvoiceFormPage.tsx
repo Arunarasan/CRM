@@ -13,10 +13,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import SearchableSelect from "@/components/ui/searchable-select";
 import { currency } from "./helpers";
+import BillToPanel from "@/components/BillToPanel";
+import { gstinError, resolveBillTo, saveBillToToCustomer, type BillTo } from "@/lib/billTo";
+import { fetchCompanyProfile, type CompanyProfile } from "@/lib/companyProfile";
 import { ArrowLeft, Plus, Trash2, Save } from "lucide-react";
 import { UNIT_DATALIST_ID } from "@/components/UnitOptions";
 
-interface CustomerLite { id: number; name: string }
+interface CustomerLite { id: number; name: string; [k: string]: any }
 interface ProjectLite { id: number; projectName?: string }
 interface Line { key: number; description: string; hsnCode: string; unit: string; quantity: number; unitPrice: number; gstRate: number }
 
@@ -35,6 +38,12 @@ export default function InvoiceFormPage() {
   const [projects, setProjects] = useState<ProjectLite[]>([]);
 
   const [customerId, setCustomerId] = useState(sp.get("customerId") || "");
+  // Customer's company details printed on the invoice — prefilled from the customer, editable here.
+  const [billTo, setBillTo] = useState<BillTo>({});
+  const [billToEdited, setBillToEdited] = useState(false);
+  const [saveToCustomer, setSaveToCustomer] = useState(false);
+  const [company, setCompany] = useState<CompanyProfile>({ name: "JB Decor" });
+  useEffect(() => { fetchCompanyProfile().then(setCompany); }, []);
   const [projectId, setProjectId] = useState(sp.get("projectId") || "");
   const [invoiceType, setInvoiceType] = useState("PROGRESS");
   const [gstType, setGstType] = useState<"CGST_SGST" | "IGST">("CGST_SGST");
@@ -162,8 +171,14 @@ export default function InvoiceFormPage() {
 
   const validItems = lines.filter((l) => l.description.trim() && l.quantity > 0);
 
+  useEffect(() => {
+    if (billToEdited) return;
+    setBillTo(resolveBillTo(customers.find((c) => String(c.id) === customerId)));
+  }, [customerId, customers, billToEdited]);
   const save = async () => {
     if (!customerId) { toast.error("Please choose a customer."); return; }
+    const gErr = gstinError(billTo.gstin);
+    if (gErr) { toast.error(gErr); return; }
     if (validItems.length === 0) { toast.error("Add at least one line item with a description and quantity."); return; }
     const settling = payMode !== "NONE";
     if (payMode === "RECORDED" && linkIds.size === 0) { toast.error("Tick the recorded payment(s) this invoice was paid with, or choose another option."); return; }
@@ -179,6 +194,7 @@ export default function InvoiceFormPage() {
         discountType, discountValue: Number(discountValue) || 0,
         retentionPercent: Number(retentionPercent) || 0,
         notes: notes || null, terms: terms || null,
+        billTo,
       };
       const items = validItems.map((l) => ({
         description: l.description, hsnCode: l.hsnCode || null, unit: l.unit || null,
@@ -186,6 +202,10 @@ export default function InvoiceFormPage() {
         unitPriceIncl: taxInclusive ? l.unitPrice : null,
       }));
       const created = await financeApi.createInvoice(invoice, items);
+      if (saveToCustomer) {
+        try { await saveBillToToCustomer(Number(customerId), billTo); }
+        catch { toast.error("Invoice created, but the customer profile could not be updated."); }
+      }
       if (settling) {
         await financeApi.issueInvoice(created.id);
         if (payMode === "RECORDED") {
@@ -248,6 +268,15 @@ export default function InvoiceFormPage() {
             <Field label="Retention %"><Input type="number" min={0} value={retentionPercent} onChange={(e) => setRetentionPercent(e.target.value)} /></Field>
           </div>
         </section>
+
+        {customerId && (
+          <section className="bg-white border rounded-2xl shadow-sm p-5 space-y-3">
+            <h2 className="text-sm font-bold uppercase tracking-wide text-slate-400">Company details on the invoice</h2>
+            <BillToPanel company={company} value={billTo} editing label="Bill To"
+              onChange={(b) => { setBillTo(b); setBillToEdited(true); }}
+              canSaveToCustomer saveToCustomer={saveToCustomer} onSaveToCustomerChange={setSaveToCustomer} />
+          </section>
+        )}
 
         {/* Bill from the project's quotation: advance % / chosen items / a plain advance amount */}
         {projectId && (

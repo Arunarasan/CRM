@@ -358,6 +358,20 @@ public class CustomerService {
         return customerRepository.save(customer);
     }
 
+    /** Copy a document's edited Bill To onto the customer profile (only the fields that were filled in). */
+    @LogActivity(module = "CUSTOMER", action = "UPDATE")
+    public Customer updateBillTo(Long id, com.arudra.crm.entity.BillTo b) {
+        Customer customer = getCustomerById(id);
+        b.normalise();
+        if (b.getName() != null) customer.setCompanyName(b.getName());
+        if (b.getGstin() != null) customer.setGstNumber(b.getGstin());
+        if (b.getAddress() != null) customer.setBillingAddress(b.getAddress());
+        if (b.getState() != null) customer.setState(b.getState());
+        if (b.getPhone() != null) customer.setPhone(b.getPhone());
+        if (b.getEmail() != null) customer.setEmail(b.getEmail());
+        return customerRepository.save(customer);
+    }
+
     public void deleteCustomer(Long id) {
         Customer customer = getCustomerById(id);
         customerRepository.delete(customer);

@@ -114,6 +114,10 @@ public class Invoice extends BaseEntity {
     @Column(name = "retention_amount", precision = 15, scale = 2, nullable = false)
     private BigDecimal retentionAmount = BigDecimal.ZERO;
 
+    /** Customer company details as printed on this document (null → falls back to the customer record). */
+    @Embedded
+    private BillTo billTo;
+
     @Column(name = "place_of_supply", length = 100)
     private String placeOfSupply;
 

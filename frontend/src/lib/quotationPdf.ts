@@ -6,6 +6,7 @@ import {
 } from "@/types/quotation";
 import api from "@/lib/api";
 import { resolveFileUrl } from "@/lib/uploadFile";
+import { billToLines, fromLines, resolveBillTo, type BillTo } from "@/lib/billTo";
 import { fetchBankDetails, fetchCompanyProfile, type BankDetails, type CompanyProfile } from "@/lib/companyProfile";
 import { LH, LH_H, LH_W, addressText, phoneNumbers } from "@/lib/letterhead";
 import type { Invoice, InvoiceItem } from "@/types/finance";
@@ -270,7 +271,8 @@ export function buildQuotationPdf(quotation: Quotation, sel: PdfSelection = {}):
   const lead: any = quotation.lead || {};
   const cust: any = quotation.customer || {};
   const meas: any = quotation.measurement || {};
-  const client = cust.name || lead.name || "—";
+  const billTo = resolveBillTo(cust, lead, (quotation as any).billTo);
+  const client = billTo.name || "—";
   const area = lead.area || cust.area || lead.city || cust.city || cust.customerCode || "";
   const site = quotation.project?.projectName || meas.siteAddress || lead.siteAddress || cust.siteAddress
     || lead.address || cust.address || lead.city || cust.city || "—";
@@ -297,6 +299,7 @@ export function buildQuotationPdf(quotation: Quotation, sel: PdfSelection = {}):
       { label: "Customer", value: client, sub: area || undefined },
       { label: "Site / Project", value: site, wrap: true },
     ],
+    billTo,
     note: totals.isPartial ? `Selected scope: ${totals.items.length} of ${scopeCount} items` : undefined,
     items: totals.items,
     tags: true,
@@ -328,6 +331,7 @@ export function buildInvoicePdf(invoice: Invoice, lines: InvoiceItem[], project?
   const inv: any = invoice;
   const cust: any = inv.customer || {};
   const proj: any = project || inv.project || {};
+  const billTo = resolveBillTo(cust, null, inv.billTo);
   const site = proj.projectName
     ? `${proj.projectName}${proj.projectCode ? ` (${proj.projectCode})` : ""}`
     : proj.siteAddress || cust.siteAddress || cust.address || cust.city || "—";
@@ -357,9 +361,10 @@ export function buildInvoicePdf(invoice: Invoice, lines: InvoiceItem[], project?
     number: `${invoice.invoiceNumber || ""} · ${status}`,
     cards: [
       { label: "Invoice Date", value: fmtDay(invoice.date), sub: invoice.dueDate ? `Due ${fmtDay(invoice.dueDate)}` : undefined },
-      { label: "Bill To", value: cust.name || "—", sub: [cust.city, cust.gstNumber ? `GSTIN ${cust.gstNumber}` : ""].filter(Boolean).join(" · ") || undefined },
+      { label: "Bill To", value: billTo.name || "—", sub: [cust.city, billTo.gstin ? `GSTIN ${billTo.gstin}` : ""].filter(Boolean).join(" · ") || undefined },
       { label: "Site / Project", value: site, wrap: true },
     ],
+    billTo,
     items,
     tags: false,
     blockTotalLabel: "Items Total",
@@ -405,6 +410,8 @@ interface DocSpec {
   /** Line under the heading (number, revision or status). */
   number: string;
   cards: DocCard[];
+  /** Bill To (customer's company details); "From" is our own company profile. */
+  billTo?: BillTo;
   /** Small line above the items (e.g. a partial selection). */
   note?: string;
   items: QuotationItem[];
@@ -551,6 +558,35 @@ function renderDocPdf(spec: DocSpec, assets: Record<string, string>): jsPDF {
     }
   });
   y += cardH + 6;
+
+  // ---- From (us) · Bill To (customer's company) ----
+  if (D.showCustomerCard !== false) {
+    let ours: CompanyProfile | undefined;
+    try { ours = assets[COMPANY_KEY] ? JSON.parse(assets[COMPANY_KEY]) : undefined; } catch { /* no company */ }
+    const parties = [
+      { label: "From", name: ours?.name || "", lines: ours ? fromLines(ours) : [] },
+      { label: spec.title === "QUOTATION" ? "Quotation For" : "Bill To", name: spec.billTo?.name || "", lines: spec.billTo ? billToLines(spec.billTo) : [] },
+    ].filter((p) => p.name || p.lines.length);
+    if (parties.length) {
+      const pw = (W - (parties.length - 1) * gap) / parties.length;
+      font("sans", 7.6);
+      const wrapped = parties.map((p) => p.lines.flatMap((l) => doc.splitTextToSize(l, pw - 8) as string[]).slice(0, 5));
+      const ph = 11 + Math.max(...wrapped.map((w) => w.length)) * 3.7 + 2;
+      ensure(ph + 4);
+      parties.forEach((p, i) => {
+        const x = M + i * (pw + gap);
+        doc.setDrawColor(...LINE).setLineWidth(0.25).setFillColor(255, 255, 255);
+        doc.roundedRect(x, y, pw, ph, 1.8, 1.8, "FD");
+        font("sans", 7.5); color(MUTED);
+        doc.text(p.label.toUpperCase(), x + 4, y + 5);
+        font("semi", 9.5); color(INK);
+        doc.text((doc.splitTextToSize(p.name, pw - 8) as string[])[0] || "", x + 4, y + 9.6);
+        font("sans", 7.6); color(MUTED);
+        wrapped[i].forEach((l, k) => doc.text(l, x + 4, y + 14 + k * 3.7));
+      });
+      y += ph + 5;
+    }
+  }
 
   if (spec.note) {
     font("sans", 8); color(MUTED);

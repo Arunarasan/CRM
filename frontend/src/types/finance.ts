@@ -48,6 +48,7 @@ export interface InvoiceItem {
 
 export interface Invoice {
   id: number;
+  billTo?: import("@/lib/billTo").BillTo | null;
   invoiceNumber: string;
   invoiceType: InvoiceType;
   customer: FinRef;

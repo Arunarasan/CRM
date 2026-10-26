@@ -17,6 +17,10 @@ import java.util.List;
 @Table(name = "quotations")
 public class Quotation extends BaseEntity {
 
+    /** Customer company details as printed on this document (null → falls back to the customer record). */
+    @Embedded
+    private BillTo billTo;
+
     @Column(name = "quotation_number", nullable = false, unique = true, length = 50)
     private String quotationNumber;
 
