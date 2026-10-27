@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  ChevronDown, CalendarDays,
+  ChevronDown, CalendarDays, Briefcase, Phone, Mail,
   Wallet, ChevronRight, HandCoins,
   Activity,
 } from 'lucide-react';
@@ -12,6 +12,8 @@ import { EmployeeDashboard } from '@/types/employeePortal';
 import { StatusPill } from '../employeePortal/_shared';
 import ClockWidget from '../employeePortal/ClockWidget';
 import TodayPlan from './components/TodayPlan';
+import { fetchCompanyProfile, COMPANY_FALLBACK, type CompanyProfile } from '@/lib/companyProfile';
+import Logo from '@/components/brand/Logo';
 import { resolveFileUrl } from '@/lib/uploadFile';
 import { useT } from '@/i18n';
 
@@ -48,7 +50,59 @@ function SectionHead({ title, icon: Icon, onViewAll }: {
   );
 }
 
-/** Floating bar that opens/closes the employee's profile summary (replaces the old date selector). */
+/** Employee ID card — forest/gold badge with photo, name, designation and key details. */
+function IdCard({ e }: { e: EmployeeDashboard['employee'] }) {
+  const { t } = useT();
+  const [company, setCompany] = useState<CompanyProfile>(COMPANY_FALLBACK);
+  useEffect(() => { fetchCompanyProfile().then(setCompany).catch(() => {}); }, []);
+  const name = `${e.firstName ?? ''} ${e.lastName ?? ''}`.trim();
+  const initials = (name || 'Me').split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase()).join('');
+  const fmt = (v: unknown) => {
+    if (!v) return '—';
+    const d = new Date(String(v));
+    return isNaN(d.getTime()) ? String(v) : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  };
+  const rows: { icon: React.ComponentType<{ className?: string }>; label: string; value: string }[] = [
+    { icon: Briefcase, label: t('portal.home.prof.designation'), value: e.designation || '—' },
+    { icon: CalendarDays, label: t('portal.home.prof.doj'), value: fmt(e.dateOfJoining) },
+    { icon: Phone, label: t('portal.home.prof.phone'), value: e.phone || '—' },
+    { icon: Mail, label: t('portal.home.prof.email'), value: e.email || '—' },
+  ];
+  return (
+    <div
+      className="relative mx-auto h-[560px] w-full max-w-[340px] overflow-hidden rounded-[22px] shadow-[0_8px_24px_rgba(0,35,22,0.22)]"
+      style={{ backgroundImage: `url(${import.meta.env.BASE_URL}id-card-bg.webp)`, backgroundSize: '109% 105%', backgroundPosition: 'center' }}
+    >
+      <div className="flex flex-col items-center px-5 pt-3">
+        <Logo size="lg" />
+        <span className="mt-4 flex h-[132px] w-[118px] items-center justify-center overflow-hidden rounded-2xl border-[3px] border-[#D9B25C] bg-[#E7F2EC] text-[32px] font-bold text-[#06452F] shadow-md">
+          {e.profilePhotoUrl ? <img src={resolveFileUrl(e.profilePhotoUrl)} alt={name} className="h-full w-full object-cover" /> : initials}
+        </span>
+        <h3 className="mt-2 text-[22px] font-extrabold uppercase leading-tight text-[#06452F]">{name || '—'}</h3>
+        {e.designation && (
+          <span className="mt-1 inline-block rounded-full bg-gradient-to-r from-[#E9C867] to-[#C99A2E] px-5 py-0.5 text-[11px] font-bold uppercase tracking-[0.25em] text-[#012B1D]">
+            {e.designation}
+          </span>
+        )}
+      </div>
+      <dl className="absolute inset-x-0 top-[312px] flex flex-col gap-2 pl-[40px] pr-[26px]">
+        {rows.map((r) => (
+          <div key={r.label} className="flex items-center gap-2.5">
+            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-[#06452F] text-[#E9C867]"><r.icon className="h-3 w-3" /></span>
+            <dt className="w-[74px] shrink-0 text-[10px] text-[#4B524E]">{r.label}</dt>
+            <dd className="min-w-0 flex-1 truncate border-l border-[#C9CCC8] pl-2 text-[11px] font-semibold text-[#111817]">{r.value}</dd>
+          </div>
+        ))}
+      </dl>
+      <div className="absolute inset-x-0 bottom-3 flex flex-col items-center gap-0.5 text-[11px] font-semibold text-[#F3DFA0]">
+        <span className="flex items-center gap-1.5"><Phone className="h-3 w-3" />{company.phone}</span>
+        <span className="flex items-center gap-1.5"><Mail className="h-3 w-3" />{company.email}</span>
+      </div>
+    </div>
+  );
+}
+
+/** Floating bar that opens/closes the employee's ID card (replaces the old date selector). */
 function ProfileBar({ dash, today }: { dash: EmployeeDashboard | null; today: string }) {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
@@ -61,17 +115,6 @@ function ProfileBar({ dash, today }: { dash: EmployeeDashboard | null; today: st
     const d = new Date(v);
     return isNaN(d.getTime()) ? v : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
-  const joined = e?.dateOfJoining ? new Date(e.dateOfJoining).toLocaleDateString(undefined, { month: 'short', year: 'numeric' }) : '—';
-  const rows: { label: string; value: React.ReactNode }[] = e ? [
-    { label: t('portal.home.prof.empId'), value: e.employeeCode || '—' },
-    { label: t('portal.home.prof.department'), value: e.department?.name || '—' },
-    { label: t('portal.home.prof.shift'), value: e.shift || '—' },
-    { label: t('portal.home.prof.joined'), value: joined },
-    { label: t('portal.home.prof.phone'), value: e.phone || '—' },
-    { label: t('portal.home.prof.email'), value: e.email || '—' },
-    { label: t('portal.home.prof.checkIn'), value: time(dash?.todayCheckIn) },
-    { label: t('portal.home.prof.checkOut'), value: time(dash?.todayCheckOut) },
-  ] : [];
   const pct = Math.max(0, Math.min(100, Math.round(dash?.profileCompletion ?? 0)));
   return (
     <div className="overflow-hidden rounded-2xl border border-[#DCDDD9] bg-white shadow-[0_4px_16px_rgba(0,35,22,0.08)]">
@@ -91,32 +134,22 @@ function ProfileBar({ dash, today }: { dash: EmployeeDashboard | null; today: st
         </span>
         <ChevronDown className={`h-5 w-5 shrink-0 text-[#06452F] transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
-      {open && (
-        <div className="border-t border-[#ECEAE5] px-4 pb-4 pt-3">
-          <div className="mb-4 flex flex-col items-center">
-            <span className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-full bg-[#06452F] text-[28px] font-bold text-white ring-4 ring-[#E7F2EC]">
-              {e?.profilePhotoUrl ? <img src={resolveFileUrl(e.profilePhotoUrl)} alt={name} className="h-full w-full object-cover" /> : initials}
-            </span>
-            {name && <span className="mt-2 text-[16px] font-semibold text-[#111817]">{name}</span>}
-            {e?.designation && <span className="text-[12px] text-[#7A817C]">{e.designation}</span>}
-          </div>
-          <div className="mb-3 flex items-center justify-between gap-3">
+      {open && e && (
+        <div className="border-t border-[#ECEAE5] bg-[#F4F3EF] px-4 pb-4 pt-4">
+          <IdCard e={e} />
+          <div className="mx-auto mt-3 flex w-full max-w-[340px] items-center justify-between gap-3">
             <span className="text-[13px] font-medium text-[#4B524E]">{t('portal.home.todaysAttendance')}</span>
             <StatusPill status={dash?.todayAttendance ?? 'NOT_MARKED'} />
           </div>
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
-            {rows.map((r) => (
-              <div key={r.label} className="min-w-0">
-                <dt className="text-[11px] text-[#858B87]">{r.label}</dt>
-                <dd className="truncate text-[13px] font-medium text-[#111817]">{r.value}</dd>
-              </div>
-            ))}
-          </dl>
-          <div className="mt-4">
+          <div className="mx-auto mt-1 flex w-full max-w-[340px] justify-between text-[12px] text-[#4B524E]">
+            <span>{t('portal.home.prof.checkIn')}: <b>{time(dash?.todayCheckIn)}</b></span>
+            <span>{t('portal.home.prof.checkOut')}: <b>{time(dash?.todayCheckOut)}</b></span>
+          </div>
+          <div className="mx-auto mt-3 w-full max-w-[340px]">
             <div className="mb-1 text-[11px] text-[#7A817C]">{t('portal.home.prof.completion', { pct })}</div>
             <div className="h-1.5 overflow-hidden rounded-full bg-[#E4E7E4]"><div className="h-full rounded-full bg-[#C48A16]" style={{ width: `${pct}%` }} /></div>
           </div>
-          <button onClick={() => navigate('/employee/profile')} className="mt-4 flex w-full items-center justify-center gap-1 rounded-xl bg-[#06452F] py-2.5 text-[13px] font-semibold text-white active:opacity-90">
+          <button onClick={() => navigate('/employee/profile')} className="mx-auto mt-4 flex w-full max-w-[340px] items-center justify-center gap-1 rounded-xl bg-[#06452F] py-2.5 text-[13px] font-semibold text-white active:opacity-90">
             {t('portal.home.prof.view')} <ChevronRight className="h-4 w-4" />
           </button>
         </div>
