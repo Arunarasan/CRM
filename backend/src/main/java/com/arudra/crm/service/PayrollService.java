@@ -55,7 +55,8 @@ public class PayrollService {
     @Autowired private HrService hrService;
     @Autowired private org.springframework.jdbc.core.JdbcTemplate jdbc;
     @Autowired private com.arudra.crm.repository.TaskAssignmentRepository taskAssignmentRepository;
-    @Autowired private com.arudra.crm.repository.SiteVisitRepository siteVisitRepository;
+    @Autowired private com.arudra.crm.repository.TaskRepository taskRepository;
+    @Autowired private com.arudra.crm.repository.LeadDocumentRepository leadDocumentRepository;
     @Autowired private com.arudra.crm.repository.TaskTimeLogRepository taskTimeLogRepository;
 
     // ============================================================ advances & loans
@@ -789,19 +790,15 @@ public class PayrollService {
         Map<String, Object> out = new LinkedHashMap<>();
         User u = employee.getEmail() == null ? null : userRepository.findByEmail(employee.getEmail()).orElse(null);
 
-        // Leads collected (qualified = past New, not Lost)
+        // Leads collected (qualified = site location + photo set)
         BigDecimal leadRate = settingAmount("lead_collected_reward_amount");
         int leadPaid = 0, leadPending = 0, leadConverted = 0;
+        BigDecimal leadPaidAmt = BigDecimal.ZERO, leadPendingAmt = BigDecimal.ZERO;
         if (u != null) {
             Long uid = u.getId();
-            org.springframework.data.jpa.domain.Specification<Lead> base = (root, q, cb) ->
-                    cb.equal(root.get("leadOwner").get("id"), uid);
-            base = base.and(LeadSpecification.notDeleted());
-            for (Lead l : leadRepository.findAll(base)) {
-                Long rid = l.getLeadRewardSalaryRecordId();
-                if (!leadHasSiteVisit(l, null)) continue;
-                if (rid == null) leadPending++;
-                else if (rid > 0) leadPaid++;   // 0 = legacy lead, never paid
+            for (LeadShare x : leadShares(u, leadRate, null)) {
+                if (x.paid()) { leadPaid++; leadPaidAmt = leadPaidAmt.add(x.amount()); }
+                else { leadPending++; leadPendingAmt = leadPendingAmt.add(x.amount()); }
             }
             org.springframework.data.jpa.domain.Specification<Lead> conv = (root, q, cb) ->
                     cb.equal(root.get("leadOwner").get("id"), uid);
@@ -810,7 +807,10 @@ public class PayrollService {
                             LeadSpecification.journeyStage(LeadSpecification.STAGE_COMPLETED)));
             leadConverted = (int) leadRepository.count(conv);
         }
-        out.put("leads", rewardRow(leadRate, leadPaid, leadPending, "convertedCount", leadConverted));
+        Map<String, Object> leadRow = rewardRow(leadRate, leadPaid, leadPending, "convertedCount", leadConverted);
+        leadRow.put("paidAmount", leadPaidAmt);       // shares can be a split of the rate
+        leadRow.put("pendingAmount", leadPendingAmt);
+        out.put("leads", leadRow);
 
         // Projects completed as PM / assistant manager
         BigDecimal projRate = settingAmount(K_PROJECT_INCENTIVE);
@@ -880,40 +880,103 @@ public class PayrollService {
         return m;
     }
 
+    /** One person's cut of a qualified lead's reward. */
+    private record LeadShare(Lead lead, BigDecimal amount, boolean paid) {}
+
     /**
-     * Pays the employee for each qualified lead they collected (own it, got past New, not Lost) up to the
-     * end of this month and not yet paid, at the configured per-lead rate. Marks each lead as paid by
-     * this payslip so it is never counted twice. Returns the amount added (0 when the rate is unset).
+     * Who is paid for a qualified lead: its owner and whoever completed its Collect Requirement task.
+     * They split the per-lead rate equally; one person in both roles (or no completer) gets it all.
+     */
+    private Set<Long> leadRewardUserIds(Lead l) {
+        Set<Long> ids = new LinkedHashSet<>();
+        if (l.getLeadOwner() != null) ids.add(l.getLeadOwner().getId());
+        for (Task t : taskRepository.findByLeadId(l.getId())) {
+            if (Boolean.TRUE.equals(t.getIsDeleted()) || t.getTaskTemplate() == null
+                    || !EmployeeTaskService.COLLECT_REQUIREMENT_CODE.equals(t.getTaskTemplate().getCode())) continue;
+            for (TaskAssignment a : taskAssignmentRepository.findByTaskId(t.getId())) {
+                if (a.getEmployee() != null && "COMPLETED".equals(a.getStatus())
+                        && !Boolean.TRUE.equals(a.getIsDeleted())) ids.add(a.getEmployee().getId());
+            }
+        }
+        return ids;
+    }
+
+    /** Every qualified lead this person earns a share of (by {@code upTo}, null = ever), paid or not. */
+    private List<LeadShare> leadShares(User user, BigDecimal rate, LocalDate upTo) {
+        Long uid = user.getId();
+        Map<Long, Lead> candidates = new LinkedHashMap<>();
+        org.springframework.data.jpa.domain.Specification<Lead> owned = (root, q, cb) ->
+                cb.equal(root.get("leadOwner").get("id"), uid);
+        for (Lead l : leadRepository.findAll(owned.and(LeadSpecification.notDeleted()))) candidates.put(l.getId(), l);
+        for (TaskAssignment a : taskAssignmentRepository.findByEmployeeId(uid)) {
+            Task t = a.getTask();
+            if (!"COMPLETED".equals(a.getStatus()) || Boolean.TRUE.equals(a.getIsDeleted()) || t == null
+                    || t.getLeadId() == null || t.getTaskTemplate() == null
+                    || !EmployeeTaskService.COLLECT_REQUIREMENT_CODE.equals(t.getTaskTemplate().getCode())
+                    || candidates.containsKey(t.getLeadId())) continue;
+            leadRepository.findById(t.getLeadId()).filter(l -> !Boolean.TRUE.equals(l.getIsDeleted()))
+                    .ifPresent(l -> candidates.put(l.getId(), l));
+        }
+        List<LeadShare> out = new ArrayList<>();
+        for (Lead l : candidates.values()) {
+            Long rid = l.getLeadRewardSalaryRecordId();
+            if (rid != null) { // settled under the old owner-only rule (0 = legacy, never paid)
+                if (rid > 0 && l.getLeadOwner() != null && uid.equals(l.getLeadOwner().getId()))
+                    out.add(new LeadShare(l, rate, true));
+                continue;
+            }
+            if (!leadIsQualified(l, upTo)) continue;
+            Set<Long> people = leadRewardUserIds(l);
+            if (!people.contains(uid)) continue;
+            BigDecimal amount = rate.divide(BigDecimal.valueOf(people.size()), 2, RoundingMode.HALF_UP);
+            Integer paid = jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM lead_reward_shares WHERE lead_id = ? AND user_id = ?", Integer.class, l.getId(), uid);
+            out.add(new LeadShare(l, amount, paid != null && paid > 0));
+        }
+        return out;
+    }
+
+    /**
+     * Pays the employee their share of each qualified lead (they own it or completed its Collect
+     * Requirement task) up to the end of this month and not yet paid. Records each share against this
+     * payslip so it is never counted twice. Returns the amount added (0 when the rate is unset).
      */
     private BigDecimal addLeadRewardLine(Employee employee, SalaryRecord rec, YearMonth ym) {
         BigDecimal rate = settingAmount("lead_collected_reward_amount");
         if (rate.signum() <= 0 || employee.getEmail() == null) return BigDecimal.ZERO;
-        User owner = userRepository.findByEmail(employee.getEmail()).orElse(null);
-        if (owner == null) return BigDecimal.ZERO;
-        LocalDateTime before = ym.plusMonths(1).atDay(1).atStartOfDay();
-        org.springframework.data.jpa.domain.Specification<Lead> spec = (root, q, cb) -> cb.and(
-                cb.equal(root.get("leadOwner").get("id"), owner.getId()),
-                cb.isNull(root.get("leadRewardSalaryRecordId")),
-                cb.lessThan(root.get("createdAt"), before));
-        spec = spec.and(LeadSpecification.notDeleted());
-        // Reward is earned once the lead gets a site visit (not on registration alone).
-        LocalDate monthEnd = ym.atEndOfMonth();
-        List<Lead> leads = leadRepository.findAll(spec).stream()
-                .filter(l -> leadHasSiteVisit(l, monthEnd)).toList();
-        if (leads.isEmpty()) return BigDecimal.ZERO;
-        for (Lead l : leads) l.setLeadRewardSalaryRecordId(rec.getId());
-        leadRepository.saveAll(leads);
-        return addCountedLine(rec, "Leads collected", "lead",
-                Collections.nCopies(leads.size(), rate));
+        User user = userRepository.findByEmail(employee.getEmail()).orElse(null);
+        if (user == null) return BigDecimal.ZERO;
+        List<LeadShare> due = leadShares(user, rate, ym.atEndOfMonth()).stream().filter(x -> !x.paid()).toList();
+        if (due.isEmpty()) return BigDecimal.ZERO;
+        for (LeadShare x : due) {
+            jdbc.update("INSERT INTO lead_reward_shares (lead_id, user_id, salary_record_id, amount) VALUES (?,?,?,?)",
+                    x.lead().getId(), user.getId(), rec.getId(), x.amount());
+        }
+        return addCountedLine(rec, "Leads collected", "lead", due.stream().map(LeadShare::amount).toList());
     }
 
-    /** A lead has earned its collector reward once it has a live (non-cancelled) site visit by {@code upTo} (null = ever). */
-    private boolean leadHasSiteVisit(Lead l, LocalDate upTo) {
-        for (SiteVisit v : siteVisitRepository.findByLeadIdAndIsDeletedFalseOrderByScheduledDateDesc(l.getId())) {
-            if ("Cancelled".equalsIgnoreCase(v.getStatus())) continue;
-            if (upTo == null || v.getScheduledDate() == null || !v.getScheduledDate().isAfter(upTo)) return true;
+    /**
+     * A lead has earned its collector reward once the employee has set the site location (GPS pin or site
+     * address) and added at least one photo to it by {@code upTo} (null = ever).
+     */
+    private boolean leadIsQualified(Lead l, LocalDate upTo) {
+        boolean hasLocation = notBlank(l.getGoogleMapLocation()) || notBlank(l.getSiteAddress());
+        if (!hasLocation) return false;
+        LocalDateTime before = upTo == null ? null : upTo.plusDays(1).atStartOfDay();
+        for (LeadDocument d : leadDocumentRepository.findByLeadId(l.getId())) {
+            if (Boolean.TRUE.equals(d.getIsDeleted()) || !isImageDoc(d)) continue;
+            if (before == null || d.getCreatedAt() == null || d.getCreatedAt().isBefore(before)) return true;
         }
         return false;
+    }
+
+    private static boolean notBlank(String s) { return s != null && !s.isBlank(); }
+
+    private static boolean isImageDoc(LeadDocument d) {
+        if (d.getFileUrl() == null) return false;
+        if ("image".equalsIgnoreCase(d.getDocumentType()) || "photo".equalsIgnoreCase(d.getDocumentType())) return true;
+        String name = (d.getFileName() != null ? d.getFileName() : d.getFileUrl()).split("\\?")[0].toLowerCase(java.util.Locale.ROOT);
+        return name.matches(".*\\.(jpe?g|png|webp|gif|heic|heif|bmp)$");
     }
 
     private static final Set<String> PROJECT_REWARD_TASKS = Set.of("TT_PM_EXECUTION", "TT_PM_INSTALLATION");
@@ -1178,6 +1241,7 @@ public class PayrollService {
             leadRepository.save(l);
         }
         jdbc.update("DELETE FROM project_completion_incentives WHERE salary_record_id = ?", id);
+        jdbc.update("DELETE FROM lead_reward_shares WHERE salary_record_id = ?", id);
         lineItemRepository.deleteAll(lineItemRepository.findBySalaryRecordId(id));
         salaryRepository.delete(rec);
         salaryRepository.flush();

@@ -91,7 +91,7 @@ export default function PayRulesTab({ canEdit }: { canEdit: boolean }) {
 
       <Section title="Work incentives" sub="Added automatically as a line on the payslip. 0 = off.">
         <Field label="Per project completed" prefix="₹" hint="Total reward per completed project, split equally among the employees who worked on its Execution and Installation tasks. Paid once." value={form.projectIncentive} onChange={set("projectIncentive")} disabled={!canEdit} />
-        <Field label="Per lead collected" prefix="₹" hint="Paid to the lead's owner (the employee who registered it, or whoever admin reassigned it to) once the lead gets a site visit. Paid once per lead." value={form.leadReward} onChange={set("leadReward")} disabled={!canEdit} />
+        <Field label="Per lead collected" prefix="₹" hint="Per qualified lead (site location + photo set in Collect Requirement). Split equally between the lead owner and the employee who completed the task; one person in both roles gets it all. Paid once per lead." value={form.leadReward} onChange={set("leadReward")} disabled={!canEdit} />
         <Field label="Per Google review" prefix="₹" hint="Reward when HR pays a verified QR review. Added to the payslip as a Google reviews line." value={form.reviewReward} onChange={set("reviewReward")} disabled={!canEdit} />
       </Section>
 
