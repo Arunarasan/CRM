@@ -178,6 +178,28 @@ public class ContractorBillController {
                 request.payment, currentUserService.getCurrentUser()));
     }
 
+    public static class PaymentEditRequest {
+        public BigDecimal amount;
+        public LocalDate paymentDate;
+        public String paymentMode;
+        public String referenceNumber;
+        public String remarks;
+    }
+
+    @PutMapping("/payments/{id}")
+    @PreAuthorize(PAY)
+    public ResponseEntity<ContractorPayment> updatePayment(@PathVariable Long id, @RequestBody PaymentEditRequest r) {
+        return ResponseEntity.ok(billingService.updatePayment(id, r.amount, r.paymentDate, r.paymentMode,
+                r.referenceNumber, r.remarks));
+    }
+
+    @DeleteMapping("/payments/{id}")
+    @PreAuthorize(PAY)
+    public ResponseEntity<Void> deletePayment(@PathVariable Long id) {
+        billingService.deletePayment(id);
+        return ResponseEntity.noContent().build();
+    }
+
     @PostMapping("/payments/release-retention")
     @PreAuthorize(PAY)
     public ResponseEntity<ContractorPayment> releaseRetention(@RequestParam Long contractorId,

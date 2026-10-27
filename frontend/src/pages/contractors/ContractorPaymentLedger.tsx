@@ -2,7 +2,12 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ArrowDownLeft, ArrowUpRight } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { toast } from "@/components/ui/toast";
+import { contractorApi } from "@/api/contractorApi";
+import { ArrowDownLeft, ArrowUpRight, Pencil, Trash2 } from "lucide-react";
 import ContractorMoneyDialog from "./ContractorMoneyDialog";
 
 const inr = (n?: number | null) => `₹${(n ?? 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
@@ -34,6 +39,13 @@ export default function ContractorPaymentLedger({
   onChanged: () => void;
 }) {
   const [money, setMoney] = useState<"IN" | "OUT" | null>(null);
+  const [editing, setEditing] = useState<Row | null>(null);
+
+  const remove = async (p: Row) => {
+    if (!window.confirm(`Delete this ${inr(p.amount)} payment? The balance will be corrected.`)) return;
+    try { await contractorApi.deletePayment(p.id); toast.success("Payment deleted"); onChanged(); }
+    catch (e: any) { toast.error(e?.response?.data?.message ?? "Could not delete the payment."); }
+  };
 
   const { rows, paid, received } = useMemo(() => {
     const live = payments.filter((p) => (p.status ?? "PAID") === "PAID");
@@ -79,6 +91,7 @@ export default function ContractorPaymentLedger({
               <th className="p-3 font-semibold text-right">We paid him</th>
               <th className="p-3 font-semibold text-right">He paid us</th>
               <th className="p-3 font-semibold text-right">Net paid so far</th>
+              {canPay && <th className="p-3" />}
             </tr>
           </thead>
           <tbody className="divide-y">
@@ -112,6 +125,20 @@ export default function ContractorPaymentLedger({
                   <td className="p-3 text-right font-semibold text-rose-700">{incoming ? "" : inr(p.amount)}</td>
                   <td className="p-3 text-right font-semibold text-emerald-700">{incoming ? inr(p.amount) : ""}</td>
                   <td className="p-3 text-right font-semibold text-slate-800">{inr(running)}</td>
+                  {canPay && (
+                    <td className="p-3 whitespace-nowrap text-right">
+                      {p.paymentType !== "RETENTION_RELEASE" && (
+                        <>
+                          <Button size="icon" variant="ghost" className="h-8 w-8" title="Edit payment" onClick={() => setEditing(p)}>
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button size="icon" variant="ghost" className="h-8 w-8 text-rose-600" title="Delete payment" onClick={() => remove(p)}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </>
+                      )}
+                    </td>
+                  )}
                 </tr>
               );
             })}
@@ -123,17 +150,81 @@ export default function ContractorPaymentLedger({
                 <td className="p-3 text-right text-rose-700">{inr(paid)}</td>
                 <td className="p-3 text-right text-emerald-700">{inr(received)}</td>
                 <td className="p-3 text-right">{inr(net)}</td>
+                {canPay && <td />}
               </tr>
             </tfoot>
           )}
         </table>
       </div>
 
+      {editing && (
+        <EditPaymentDialog payment={editing} onClose={() => setEditing(null)} onDone={onChanged} />
+      )}
       {money && (
         <ContractorMoneyDialog open onClose={() => setMoney(null)} direction={money}
           contractorId={contractorId} contractorName={contractorName} onDone={onChanged} />
       )}
     </div>
+  );
+}
+
+const MODES = ["CASH", "UPI", "BANK_TRANSFER", "NEFT", "RTGS", "CHEQUE"];
+
+/** Correct a recorded payment's amount, date, mode, reference or note. */
+function EditPaymentDialog({ payment, onClose, onDone }: { payment: Row; onClose: () => void; onDone: () => void }) {
+  const [amount, setAmount] = useState(String(payment.amount));
+  const [date, setDate] = useState(payment.paymentDate ?? new Date().toISOString().slice(0, 10));
+  const [mode, setMode] = useState(payment.paymentMode ?? "CASH");
+  const [reference, setReference] = useState(payment.referenceNumber ?? "");
+  const [remarks, setRemarks] = useState(payment.remarks ?? "");
+  const [busy, setBusy] = useState(false);
+
+  const save = async () => {
+    const amt = Number(amount);
+    if (!(amt > 0)) { toast.error("Enter an amount greater than zero."); return; }
+    setBusy(true);
+    try {
+      await contractorApi.updatePayment(payment.id, {
+        amount: amt, paymentDate: date, paymentMode: mode,
+        referenceNumber: reference || undefined, remarks: remarks || undefined,
+      });
+      toast.success("Payment updated");
+      onDone();
+      onClose();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message ?? "Could not update the payment.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader><DialogTitle>Edit payment</DialogTitle></DialogHeader>
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div><Label>Amount (₹)</Label><Input type="number" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} /></div>
+            <div><Label>Date</Label><Input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Mode</Label>
+              <select value={mode} onChange={(e) => setMode(e.target.value)}
+                className="w-full h-10 rounded-md border border-input bg-white px-3 text-sm">
+                {MODES.map((m) => <option key={m} value={m}>{label(m)}</option>)}
+              </select>
+            </div>
+            <div><Label>Reference</Label><Input value={reference} onChange={(e) => setReference(e.target.value)} /></div>
+          </div>
+          <div><Label>Note</Label><Input value={remarks} onChange={(e) => setRemarks(e.target.value)} /></div>
+          <div className="flex justify-end gap-2 pt-1">
+            <Button variant="outline" onClick={onClose} disabled={busy}>Cancel</Button>
+            <Button onClick={save} disabled={busy}>{busy ? "Saving…" : "Save changes"}</Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 

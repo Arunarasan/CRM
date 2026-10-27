@@ -162,6 +162,12 @@ public class ProjectFinanceService {
         return result;
     }
 
+    /** A deleted payment must not leave its synced cost row behind. */
+    @Transactional
+    public void dropContractorPaymentExpense(Long paymentId) {
+        dropExpense("CONTRACTOR_PAYMENT", paymentId);
+    }
+
     /** A job moved off its project: take its cost out of that project. */
     @Transactional
     public void dropContractorOrderExpense(Long orderId) {

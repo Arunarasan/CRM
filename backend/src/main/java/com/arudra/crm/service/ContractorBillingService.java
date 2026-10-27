@@ -637,6 +637,95 @@ public class ContractorBillingService {
         return order;
     }
 
+    /**
+     * Corrects a recorded payment (amount, date, mode, reference, note). The ledger is never rewritten:
+     * a change in amount posts an opposite REVERSAL row for the difference, and everything derived from
+     * the payment (bill balance, job balance, project cost) is recalculated.
+     */
+    @Transactional
+    public ContractorPayment updatePayment(Long paymentId, BigDecimal amount, LocalDate date, String mode,
+                                           String referenceNumber, String remarks) {
+        ContractorPayment p = editablePayment(paymentId);
+        BigDecimal newAmount = nz(amount);
+        if (newAmount.signum() <= 0) throw new IllegalArgumentException("Payment amount must be greater than zero.");
+        BigDecimal old = nz(p.getAmount());
+        BigDecimal diff = newAmount.subtract(old);
+        boolean incoming = "IN".equals(p.getDirection());
+
+        ContractorBill bill = p.getBill();
+        boolean billSettling = bill != null && !"ADVANCE".equals(p.getPaymentType());
+        if (diff.signum() > 0) {
+            if (billSettling && diff.compareTo(nz(bill.getBalanceAmount())) > 0) {
+                throw new IllegalArgumentException("That is more than the bill's outstanding balance of " + bill.getBalanceAmount() + ".");
+            }
+            if (!incoming && p.getOrder() != null && diff.compareTo(orderService.remainingToPay(p.getOrder())) > 0) {
+                throw new IllegalArgumentException("That is more than the " + orderService.remainingToPay(p.getOrder())
+                        + " still to pay on this job.");
+            }
+        }
+
+        if (diff.signum() != 0) {
+            // OUT was posted as a debit, IN as a credit; the correction moves the same side by the difference.
+            boolean moreDebit = incoming ? diff.signum() < 0 : diff.signum() > 0;
+            ledgerService.postReversal(p.getContractor(), "CONTRACTOR_PAYMENT", p.getId(),
+                    moreDebit ? diff.abs() : BigDecimal.ZERO, moreDebit ? BigDecimal.ZERO : diff.abs(),
+                    "Payment corrected from " + old + " to " + newAmount);
+        }
+        p.setAmount(newAmount);
+        if (date != null) p.setPaymentDate(date);
+        p.setPaymentMode(mode);
+        p.setReferenceNumber(referenceNumber);
+        p.setRemarks(remarks);
+        p = paymentRepository.save(p);
+
+        if (billSettling && diff.signum() != 0) applyToBill(bill, diff);
+        afterPaymentChange(p);
+        return p;
+    }
+
+    /** Removes a recorded payment: its ledger effect is reversed and the payment stops counting everywhere. */
+    @Transactional
+    public void deletePayment(Long paymentId) {
+        ContractorPayment p = editablePayment(paymentId);
+        BigDecimal amount = nz(p.getAmount());
+        boolean incoming = "IN".equals(p.getDirection());
+        ledgerService.postReversal(p.getContractor(), "CONTRACTOR_PAYMENT", p.getId(),
+                incoming ? amount : BigDecimal.ZERO, incoming ? BigDecimal.ZERO : amount,
+                "Payment deleted (" + amount + ")");
+        if (p.getBill() != null && !"ADVANCE".equals(p.getPaymentType())) applyToBill(p.getBill(), amount.negate());
+        p.setStatus("CANCELLED");
+        p.setIsDeleted(true);
+        p = paymentRepository.save(p);
+        projectFinanceService.dropContractorPaymentExpense(p.getId());
+        afterPaymentChange(p);
+    }
+
+    private ContractorPayment editablePayment(Long paymentId) {
+        ContractorPayment p = paymentRepository.findById(paymentId)
+                .orElseThrow(() -> new IllegalArgumentException("Payment not found: " + paymentId));
+        if (!"PAID".equals(p.getStatus()) || Boolean.TRUE.equals(p.getIsDeleted())) {
+            throw new IllegalStateException("This payment has already been removed.");
+        }
+        if ("RETENTION_RELEASE".equals(p.getPaymentType())) {
+            throw new IllegalStateException("A retention release can't be edited or deleted here.");
+        }
+        return p;
+    }
+
+    /** Moves a bill's paid amount by {@code delta} (negative = money taken back) and restates its status. */
+    private void applyToBill(ContractorBill bill, BigDecimal delta) {
+        BigDecimal paid = nz(bill.getPaidAmount()).add(delta).max(BigDecimal.ZERO);
+        bill.setPaidAmount(paid);
+        bill.setBalanceAmount(nz(bill.getNetAmount()).subtract(paid).max(BigDecimal.ZERO));
+        bill.setStatus(paid.signum() == 0 ? "FINANCE_APPROVED" : bill.getBalanceAmount().signum() == 0 ? "PAID" : "PARTIALLY_PAID");
+        billRepository.save(bill);
+    }
+
+    private void afterPaymentChange(ContractorPayment p) {
+        if (p.getWorkPackage() != null) workPackageService.recomputeFinancials(p.getWorkPackage().getId());
+        syncProjectExpenses(p.getProject());
+    }
+
     /** Releases retention held on a package's bills once the defect liability period is over. */
     @Transactional
     public ContractorPayment releaseRetention(Long contractorId, Long workPackageId, BigDecimal amount,

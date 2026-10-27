@@ -240,6 +240,9 @@ export const contractorApi = {
     api.get<ContractorOrders>(`/contractor-orders/by-contractor/${contractorId}`).then((r) => r.data),
   createOrder: (contractorId: number, o: { projectId?: number; bundleId?: number; title: string; amount: number; orderDate?: string; notes?: string }) =>
     api.post(`/contractor-orders/by-contractor/${contractorId}`, o).then((r) => r.data),
+  updatePayment: (id: number, p: { amount: number; paymentDate?: string; paymentMode?: string; referenceNumber?: string; remarks?: string }) =>
+    api.put<ContractorPayment>(`${CB}/payments/${id}`, p).then((r) => r.data),
+  deletePayment: (id: number) => api.delete(`${CB}/payments/${id}`).then((r) => r.data),
   /** Project-page entry: the job (owed + project cost) plus whatever part was paid now (0 = fully due). */
   createOrderWithPayment: (contractorId: number, o: {
     projectId: number; title: string; amount: number; orderDate?: string; notes?: string;
