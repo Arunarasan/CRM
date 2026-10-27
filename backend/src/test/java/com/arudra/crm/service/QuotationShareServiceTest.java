@@ -28,6 +28,7 @@ class QuotationShareServiceTest {
 
     @Mock private QuotationRepository quotationRepository;
     @Mock private NotificationService notificationService;
+    @Mock private com.arudra.crm.repository.InvoiceRepository invoiceRepository;
     @InjectMocks private QuotationShareService service;
 
     private Quotation quote(String status) {

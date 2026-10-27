@@ -93,6 +93,18 @@ export interface SharedQuoteItem {
   amount?: number | null
 }
 
+export interface SharedInvoice {
+  invoiceNumber: string
+  type?: string | null
+  date?: string | null
+  dueDate?: string | null
+  status: string
+  totalAmount: number
+  amountPaid: number
+  balanceDue: number
+  pdfUrl?: string | null
+}
+
 export interface SharedQuote {
   quotationNumber: string
   quotationDate?: string | null
@@ -113,6 +125,8 @@ export interface SharedQuote {
   grandTotal: number
   terms: string[]
   pdfUrl?: string | null
+  /** Invoices the team chose to show here, with what's paid and what's left. */
+  invoices?: SharedInvoice[]
   acceptedAt?: string | null
   acceptedName?: string | null
   responseAt?: string | null

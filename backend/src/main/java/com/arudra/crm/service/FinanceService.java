@@ -663,6 +663,63 @@ public class FinanceService {
     }
 
     /**
+     * Deletes an invoice from the project. A draft never reached the books, so it is simply removed.
+     * An issued/paid one is first detached from its payments (the money stays recorded in Payments,
+     * ready to link to another invoice), then cancelled with the ledger reversal, then hidden.
+     */
+    @Transactional
+    public void deleteInvoice(Long id, String remark, User user) {
+        if (remark == null || remark.isBlank()) throw new RuntimeException("A remark is required to delete an invoice");
+        Invoice invoice = getInvoice(id);
+        if (Boolean.TRUE.equals(invoice.getIsDeleted())) return;
+        boolean draft = "DRAFT".equals(invoice.getStatus());
+        if (!draft && !"CANCELLED".equals(invoice.getStatus())) {
+            for (CustomerPayment p : paymentRepository.findByInvoiceId(id)) {
+                p.setInvoice(null);
+                paymentRepository.save(p);
+            }
+            recalculateInvoice(id);
+            cancelInvoice(id, "Deleted: " + remark.trim());
+            invoice = getInvoice(id);
+        } else if (draft) {
+            for (CustomerPayment p : paymentRepository.findByInvoiceId(id)) {
+                p.setInvoice(null);
+                paymentRepository.save(p);
+            }
+        }
+        invoice.setShareOnQuote(false);
+        invoice.setIsDeleted(true);
+        invoice.setDeletedAt(LocalDateTime.now());
+        invoice.setDeletedBy(user == null ? null : user.getEmail());
+        if (draft) invoice.setCancelledReason("Deleted: " + remark.trim());
+        invoiceRepository.save(invoice);
+        if (invoice.getPaymentSchedule() != null && draft) {
+            scheduleRepository.findById(invoice.getPaymentSchedule().getId()).ifPresent(s -> {
+                s.setInvoice(null);
+                s.setStatus("PENDING");
+                scheduleRepository.save(s);
+            });
+        }
+    }
+
+    /** Show / hide an issued invoice on the customer's quotation link; keeps the PDF snapshot sent with it. */
+    @Transactional
+    public Invoice setQuoteShare(Long id, boolean enabled, String pdfUrl) {
+        Invoice invoice = getInvoice(id);
+        if (enabled) {
+            if ("DRAFT".equals(invoice.getStatus()) || "CANCELLED".equals(invoice.getStatus())) {
+                throw new RuntimeException("Issue the invoice before showing it on the quotation link");
+            }
+            if (invoice.getQuotation() == null && invoice.getProject() == null) {
+                throw new RuntimeException("This invoice has no project or quotation to show it under");
+            }
+            if (pdfUrl != null && !pdfUrl.isBlank()) invoice.setSharePdfUrl(pdfUrl.trim());
+        }
+        invoice.setShareOnQuote(enabled);
+        return invoiceRepository.save(invoice);
+    }
+
+    /**
      * Raises an advance invoice from an approved quotation (idempotent — an existing non-cancelled
      * advance invoice for the quotation is returned as-is). Only ever called on a user's request.
      */

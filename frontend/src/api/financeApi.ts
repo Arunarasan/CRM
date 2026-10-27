@@ -42,6 +42,10 @@ export const financeApi = {
   sendInvoice: (id: number) => api.post<Invoice>(`${BASE}/invoices/${id}/send`).then((r) => r.data),
   cancelInvoice: (id: number, reason?: string) =>
     api.post<Invoice>(`${BASE}/invoices/${id}/cancel${qs({ reason })}`).then((r) => r.data),
+  deleteInvoice: (id: number, remark: string) =>
+    api.delete(`${BASE}/invoices/${id}${qs({ remark })}`).then((r) => r.data),
+  setQuoteShare: (id: number, enabled: boolean, pdfUrl?: string) =>
+    api.put<Invoice>(`${BASE}/invoices/${id}/quote-share`, { enabled, pdfUrl }).then((r) => r.data),
   markInvoicePaid: (id: number, splits: { method: string; amount: number; referenceNumber?: string }[]) =>
     api.post<Invoice>(`${BASE}/invoices/${id}/mark-paid`, splits).then((r) => r.data),
   markInvoiceUnpaid: (id: number) =>

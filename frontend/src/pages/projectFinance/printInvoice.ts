@@ -45,6 +45,14 @@ export function printInvoice(invoice: Invoice, items: InvoiceItem[], project?: a
   return openInvoicePdf(async () => ({ invoice, items, project }));
 }
 
+/** The invoice PDF as a file (current paid / balance baked in) — for uploading, e.g. to the quotation link. */
+export async function buildInvoicePdfFile(load: () => Promise<InvoiceDoc>): Promise<File> {
+  const { invoice, items, project } = await load();
+  const assets = await loadInvoicePdfAssets(invoice, items);
+  const doc = buildInvoicePdf(invoice, items, project, assets);
+  return new File([doc.output("blob")], `${invoice.invoiceNumber || "invoice"}.pdf`, { type: "application/pdf" });
+}
+
 /**
  * Sends the invoice PDF together with its message over WhatsApp.
  * - Phones/tablets that can share files: opens the share sheet with the PDF and the message, so one tap

@@ -4,7 +4,7 @@ import { format } from "date-fns";
 import { useNavigate } from "react-router-dom";
 import {
   Plus, Trash2, Pencil, FileText, Loader2, IndianRupee, AlertCircle,
-  CheckCircle2, RotateCcw, Printer, Ban, Clock, User as UserIcon, MessageCircle,
+  CheckCircle2, RotateCcw, Printer, Ban, Clock, User as UserIcon, MessageCircle, Link2, RefreshCw,
 } from "lucide-react";
 import { financeApi } from "@/api/financeApi";
 import { smartAssignmentApi, type RosterRow } from "@/api/smartAssignmentApi";
@@ -18,7 +18,8 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/components/ui/toast";
 import DeleteWithRemarkDialog from "@/components/DeleteWithRemarkDialog";
-import { openInvoicePdf, shareInvoiceWhatsApp } from "./printInvoice";
+import { openInvoicePdf, shareInvoiceWhatsApp, buildInvoicePdfFile } from "./printInvoice";
+import { uploadFile } from "@/lib/uploadFile";
 import { MoneySection } from "./MoneySection";
 import { Skeleton } from "@/components/ui/skeleton";
 import ProjectProfitPanel from "./ProjectProfitPanel";
@@ -62,7 +63,7 @@ export type CommercialMode = "all" | "billing" | "payments" | "profit";
  * Reuses /api/finance.
  */
 export default function ProjectPaymentsTab({ project, onChanged, mode = "billing", focus }: { project: any; onChanged?: () => void; mode?: CommercialMode; focus?: "payments" | "expenses" }) {
-  const { hasAuthority, hasAnyAuthority } = useAuth();
+  const { hasAuthority, hasAnyAuthority, isAdmin } = useAuth();
   const canRead = hasAuthority("FINANCE_READ");
   const canWrite = hasAuthority("FINANCE_WRITE");
   const canCollect = hasAnyAuthority(["FINANCE_WRITE", "FINANCE_COLLECT"]);
@@ -126,6 +127,27 @@ export default function ProjectPaymentsTab({ project, onChanged, mode = "billing
   const [makerOpen, setMakerOpen] = useState(false);
   const [payFor, setPayFor] = useState<Invoice | null>(null);
   const [editInv, setEditInv] = useState<Invoice | null>(null);
+  const [deleteInv, setDeleteInv] = useState<Invoice | null>(null);
+
+  // Show an issued invoice on the customer's quotation link: upload a fresh PDF (current paid / balance), then switch it on.
+  const setQuoteShare = async (inv: Invoice, enabled: boolean) => {
+    setBusyId(inv.id);
+    try {
+      let pdfUrl: string | undefined;
+      if (enabled) {
+        const file = await buildInvoicePdfFile(async () => {
+          const [invoice, items] = await Promise.all([financeApi.getInvoice(inv.id), financeApi.getInvoiceItems(inv.id)]);
+          return { invoice, items, project };
+        });
+        pdfUrl = (await uploadFile(file, "INVOICE")).fileUrl;
+      }
+      await financeApi.setQuoteShare(inv.id, enabled, pdfUrl);
+      load();
+      toast.success(enabled ? "Shown on the customer's quotation link" : "Removed from the quotation link");
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || "Could not update the quotation link");
+    } finally { setBusyId(null); }
+  };
 
   if (!canRead) {
     return (
@@ -259,7 +281,21 @@ export default function ProjectPaymentsTab({ project, onChanged, mode = "billing
                         <button type="button" onClick={() => sendWhatsApp(i)} title="Send PDF + message on WhatsApp" aria-label={`Send ${i.invoiceNumber} on WhatsApp`}
                           className="inline-flex items-center rounded-md border border-slate-200 px-1.5 py-1 text-slate-600 hover:bg-slate-50"><MessageCircle className="h-3.5 w-3.5" /></button>
                       )}
+                      {canWrite && live && !busy && (
+                        <>
+                          <ActionBtn onClick={() => setQuoteShare(i, !i.shareOnQuote)} tone={i.shareOnQuote ? "green" : undefined}
+                            title={i.shareOnQuote ? "Shown on the customer's quotation link — click to hide" : "Show this invoice on the customer's quotation link"}>
+                            <Link2 className="h-3.5 w-3.5" /> {i.shareOnQuote ? "On quote link" : "Quote link"}
+                          </ActionBtn>
+                          {i.shareOnQuote && (
+                            <ActionBtn onClick={() => setQuoteShare(i, true)} title="Refresh the shared PDF (after a payment or change)"><RefreshCw className="h-3.5 w-3.5" /></ActionBtn>
+                          )}
+                        </>
+                      )}
                       <ActionBtn onClick={() => doPrint(i)} title={`Print ${i.invoiceNumber}`}><Printer className="h-3.5 w-3.5" /></ActionBtn>
+                      {isAdmin && !busy && (
+                        <ActionBtn onClick={() => setDeleteInv(i)} tone="red" title="Delete this invoice"><Trash2 className="h-3.5 w-3.5" /></ActionBtn>
+                      )}
                     </div>
                   </li>
                 );
@@ -295,6 +331,13 @@ export default function ProjectPaymentsTab({ project, onChanged, mode = "billing
           onSaved={() => { setMakerOpen(false); setEditInv(null); reloadAll(); onChanged?.(); }}
         />
       )}
+      <DeleteWithRemarkDialog open={!!deleteInv} title={`Delete ${deleteInv?.invoiceNumber ?? "invoice"}`} subject="Invoice"
+        hint={deleteInv && deleteInv.status !== "DRAFT"
+          ? "This invoice is issued: it will be cancelled and removed from the list, and any payments on it are kept in Payments, unlinked."
+          : "This draft invoice will be removed."}
+        onClose={() => setDeleteInv(null)}
+        onConfirm={(reason) => financeApi.deleteInvoice(deleteInv!.id, reason)}
+        onDone={() => { reloadAll(); onChanged?.(); }} />
       {payFor && (
         <MarkPaidDialog
           invoice={payFor}

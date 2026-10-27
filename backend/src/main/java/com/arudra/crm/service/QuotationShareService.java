@@ -1,6 +1,7 @@
 package com.arudra.crm.service;
 
 import com.arudra.crm.entity.*;
+import com.arudra.crm.repository.InvoiceRepository;
 import com.arudra.crm.repository.QuotationRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -29,10 +30,13 @@ public class QuotationShareService {
 
     private final QuotationRepository quotationRepository;
     private final NotificationService notificationService;
+    private final InvoiceRepository invoiceRepository;
 
-    public QuotationShareService(QuotationRepository quotationRepository, NotificationService notificationService) {
+    public QuotationShareService(QuotationRepository quotationRepository, NotificationService notificationService,
+                                 InvoiceRepository invoiceRepository) {
         this.quotationRepository = quotationRepository;
         this.notificationService = notificationService;
+        this.invoiceRepository = invoiceRepository;
     }
 
     // ---------------- Staff (authenticated) ----------------
@@ -184,11 +188,25 @@ public class QuotationShareService {
                 "grandTotal", nz(q.getGrandTotal()),
                 "terms", terms,
                 "pdfUrl", q.getSharePdfUrl(),
+                "invoices", sharedInvoices(q),
                 "acceptedAt", q.getCustomerAcceptedAt(),
                 "acceptedName", q.getCustomerAcceptedName(),
                 "responseAt", q.getCustomerResponseAt(),
                 "responseName", q.getCustomerResponseName(),
                 "responseNote", q.getCustomerResponseNote());
+    }
+
+    /** Invoices staff chose to show here: number, totals, paid / balance and the PDF — nothing internal. */
+    private List<Map<String, Object>> sharedInvoices(Quotation q) {
+        Long projectId = q.getProject() != null ? q.getProject().getId() : -1L;
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (Invoice i : invoiceRepository.findSharedOnQuote(q.getId(), projectId)) {
+            out.add(map("invoiceNumber", i.getInvoiceNumber(), "type", i.getInvoiceType(), "date", i.getDate(),
+                    "dueDate", i.getDueDate(), "status", i.getStatus(),
+                    "totalAmount", nz(i.getTotalAmount()), "amountPaid", nz(i.getAmountPaid()),
+                    "balanceDue", nz(i.getBalanceDue()), "pdfUrl", i.getSharePdfUrl()));
+        }
+        return out;
     }
 
     /** OPEN (can accept) · ACCEPTED (customer pressed accept) · APPROVED · REPLACED (newer quote) · CLOSED. */

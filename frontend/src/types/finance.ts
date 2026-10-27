@@ -73,6 +73,9 @@ export interface Invoice {
   roundOff: number;
   totalAmount: number;
   amountPaid: number;
+  /** Shown on the customer's quotation link with its PDF snapshot. */
+  shareOnQuote?: boolean;
+  sharePdfUrl?: string | null;
   balanceDue: number;
   retentionPercent?: number;
   retentionAmount: number;

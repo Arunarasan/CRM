@@ -76,4 +76,11 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
     BigDecimal sumInvoicedBetween(@Param("from") LocalDate from, @Param("to") LocalDate to);
 
     List<Invoice> findByDateBetweenAndStatusNotInAndIsDeletedFalse(LocalDate from, LocalDate to, List<String> excludedStatuses);
+
+    /** Invoices staff chose to show on a quotation's customer link (this quotation, or its project's). */
+    @Query("select i from Invoice i where i.isDeleted = false and i.shareOnQuote = true " +
+           "and i.status not in ('DRAFT', 'CANCELLED') " +
+           "and (i.quotation.id = :quotationId or i.project.id = :projectId) " +
+           "order by i.date asc, i.id asc")
+    List<Invoice> findSharedOnQuote(@Param("quotationId") Long quotationId, @Param("projectId") Long projectId);
 }

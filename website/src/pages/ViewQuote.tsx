@@ -60,6 +60,7 @@ export default function ViewQuote() {
         <Items items={data.items} />
         <Summary data={data} />
         {data.terms.length > 0 && <Terms terms={data.terms} />}
+        {!!data.invoices?.length && <Invoices invoices={data.invoices} />}
         <AcceptCard token={token} data={data} onChange={setData} />
         <section className="rounded-2xl bg-white p-5 shadow-sm print:hidden">
           <p className="text-sm text-forest/70">Questions or changes? We're happy to help.</p>
@@ -287,6 +288,40 @@ function Summary({ data }: { data: SharedQuote }) {
           <span className="text-xl font-bold tabular-nums">{money(data.grandTotal)}</span>
         </div>
       </div>
+    </section>
+  )
+}
+
+function Invoices({ invoices }: { invoices: NonNullable<SharedQuote['invoices']> }) {
+  return (
+    <section className="rounded-2xl bg-white p-5 shadow-sm print:hidden">
+      <h2 className="text-sm font-bold uppercase tracking-wide text-forest">Invoices</h2>
+      <ul className="mt-2 divide-y divide-forest/10">
+        {invoices.map((i) => {
+          const pdf = fileUrl(i.pdfUrl)
+          return (
+            <li key={i.invoiceNumber} className="flex flex-wrap items-center gap-x-4 gap-y-2 py-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-forest">{i.invoiceNumber}</p>
+                <p className="text-xs capitalize text-forest/60">{(i.type || '').toLowerCase()}{i.date ? ` · ${new Date(i.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}` : ''}</p>
+              </div>
+              <div className="text-right text-sm tabular-nums">
+                <p className="font-semibold text-forest">{money(i.totalAmount)}</p>
+                <p className="text-xs text-emerald-700">Paid {money(i.amountPaid)}</p>
+                <p className={`text-xs font-medium ${i.balanceDue > 0 ? 'text-rose-600' : 'text-forest/50'}`}>
+                  {i.balanceDue > 0 ? `Balance ${money(i.balanceDue)}` : 'Fully paid'}
+                </p>
+              </div>
+              {pdf && (
+                <a href={pdf} target="_blank" rel="noopener noreferrer"
+                  className="inline-flex h-9 items-center gap-1.5 rounded-full border border-forest/20 px-4 text-sm font-medium text-forest">
+                  <Download className="h-4 w-4" /> View PDF
+                </a>
+              )}
+            </li>
+          )
+        })}
+      </ul>
     </section>
   )
 }

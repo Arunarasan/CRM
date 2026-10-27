@@ -137,4 +137,12 @@ public class Invoice extends BaseEntity {
 
     @Column(columnDefinition = "TEXT")
     private String terms;
+
+    /** Shown on the customer's quotation link (/q/{token}) with its PDF, paid amount and balance. */
+    @Column(name = "share_on_quote", nullable = false)
+    private Boolean shareOnQuote = false;
+
+    /** The PDF snapshot customers open from the quotation link. */
+    @Column(name = "share_pdf_url", length = 1000)
+    private String sharePdfUrl;
 }

@@ -145,6 +145,23 @@ public class FinanceController {
         return ResponseEntity.ok(financeService.cancelInvoice(id, reason));
     }
 
+    /** Admin only; remark required. Drafts are removed, issued/paid ones are unlinked, cancelled and hidden. */
+    @DeleteMapping("/invoices/{id}")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<Void> deleteInvoice(@PathVariable Long id, @RequestParam String remark) {
+        financeService.deleteInvoice(id, remark, currentUserService.getCurrentUser());
+        return ResponseEntity.noContent().build();
+    }
+
+    /** Show / hide the invoice (with its PDF, paid amount and balance) on the customer's quotation link. */
+    @PutMapping("/invoices/{id}/quote-share")
+    @PreAuthorize(WRITE)
+    public ResponseEntity<Invoice> setQuoteShare(@PathVariable Long id, @RequestBody java.util.Map<String, Object> body) {
+        Object pdf = body.get("pdfUrl");
+        return ResponseEntity.ok(financeService.setQuoteShare(id, Boolean.TRUE.equals(body.get("enabled")),
+                pdf == null ? null : pdf.toString()));
+    }
+
     @PostMapping("/invoices/{id}/recalculate")
     @PreAuthorize(WRITE)
     public ResponseEntity<Invoice> recalculate(@PathVariable Long id) {
