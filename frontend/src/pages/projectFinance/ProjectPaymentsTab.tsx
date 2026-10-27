@@ -871,24 +871,6 @@ function InvoiceMaker({ project, invoice: editing, onClose, onSaved }: { project
     } finally { setFilling(false); }
   };
 
-  // A new invoice opens already filled from the project's quotation (still editable; "Fill all"/"Pick items" redo it).
-  useEffect(() => {
-    if (editing || !quotation?.id) return;
-    let cancelled = false;
-    setFilling(true);
-    quotationApi.get(quotation.id).then((q) => {
-      if (cancelled) return;
-      const { built, pricing } = buildQuoteLines(q);
-      if (!built.length) return;
-      setLines(built);
-      applyQuoteSettings(q, pricing, 1);
-      setInvoiceType("QUOTATION");
-    }).catch(() => { /* leave the form blank; the user can still fill manually */ })
-      .finally(() => { if (!cancelled) setFilling(false); });
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   // Item-wise billing: list the quotation's lines so only the ticked ones go on this invoice.
   const [pickList, setPickList] = useState<{ q: any; lines: LineItem[]; picked: Set<number> } | null>(null);
   const openPicker = async () => {

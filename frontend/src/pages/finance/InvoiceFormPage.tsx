@@ -75,9 +75,19 @@ export default function InvoiceFormPage() {
     if (!projectId) return;
     api.get(`/projects/${projectId}`).then((r) => {
       const pr = r.data;
-      if (pr?.quotation?.id) setQuote({ id: pr.quotation.id, number: pr.quotation.quotationNumber });
+      if (pr?.quotation?.id) {
+        setQuote({ id: pr.quotation.id, number: pr.quotation.quotationNumber });
+        // A new invoice for a project opens already filled from its quotation (every line stays editable).
+        quotationApi.get(pr.quotation.id).then((q) => {
+          const { built, pricing, k } = buildQuoteLines(q, 100);
+          if (!built.length) return;
+          applyLines(q, built, k, pricing, false);
+          setInvoiceType("QUOTATION");
+        }).catch(() => {});
+      }
       if (pr?.customer?.id) setCustomerId((c) => c || String(pr.customer.id));
     }).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
   const applyLines = (q: any, chosen: { description: string; quantity: number; unitPrice: number }[], k: number, pricing: any, append: boolean) => {
