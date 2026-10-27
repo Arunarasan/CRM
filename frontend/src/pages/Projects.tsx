@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
-type SegmentKey = "all" | "new" | "inProgress" | "completed" | "onHold" | "unassigned" | "delayed" | "pendingCollection";
+type SegmentKey = "all" | "new" | "inProgress" | "completed" | "fullyPaid" | "onHold" | "unassigned" | "delayed" | "pendingCollection";
 
 interface SegmentCounts {
   pendingCollection?: number;
@@ -25,6 +25,7 @@ interface SegmentCounts {
   new: number;
   inProgress: number;
   completed: number;
+  fullyPaid: number;
   onHold: number;
   unassigned: number;
   delayed: number;
@@ -58,6 +59,7 @@ const SEGMENT_CATEGORY: Record<SegmentKey, string> = {
   new: "NEW",
   inProgress: "IN_PROGRESS",
   completed: "COMPLETED",
+  fullyPaid: "FULLY_PAID",
   onHold: "ON_HOLD",
   unassigned: "UNASSIGNED",
   delayed: "DELAYED",
@@ -69,6 +71,7 @@ const SEGMENTS: { key: SegmentKey; label: string }[] = [
   { key: "new", label: "New" },
   { key: "inProgress", label: "In Progress" },
   { key: "completed", label: "Completed" },
+  { key: "fullyPaid", label: "Fully Paid" },
   { key: "onHold", label: "On Hold" },
   { key: "unassigned", label: "Team Not Assigned" },
 ];

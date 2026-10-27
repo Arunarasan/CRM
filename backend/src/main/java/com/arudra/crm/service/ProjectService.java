@@ -220,9 +220,18 @@ public class ProjectService {
             case "ON_HOLD":
                 result = projectRepository.findByStatusCategory(STATUS_ON_HOLD, s, pageRequest);
                 break;
-            case "COMPLETED":
-                result = projectRepository.findByStatusCategory(STATUS_COMPLETED, s, pageRequest);
+            case "COMPLETED":   // finished but still money to collect
+            case "FULLY_PAID": { // finished and nothing left to collect
+                java.util.Set<Long> owing = completedPending().keySet();
+                boolean wantOwing = "COMPLETED".equals(cat);
+                List<Project> matching = projectRepository.findByStatusCategory(STATUS_COMPLETED, s,
+                        PageRequest.of(0, Integer.MAX_VALUE, pageRequest.getSort())).getContent().stream()
+                        .filter(p -> owing.contains(p.getId()) == wantOwing).toList();
+                int from = (int) Math.min(pageRequest.getOffset(), matching.size());
+                int to = Math.min(from + pageRequest.getPageSize(), matching.size());
+                result = new org.springframework.data.domain.PageImpl<>(matching.subList(from, to), pageRequest, matching.size());
                 break;
+            }
             case "UNASSIGNED":
                 result = projectRepository.findUnassignedTeam(s, pageRequest);
                 break;
@@ -242,7 +251,7 @@ public class ProjectService {
         Map<Long, BigDecimal> owing = allPending();
         PageRequest everything = PageRequest.of(0, Integer.MAX_VALUE, Sort.by("id").descending());
         Map<String, String> tabs = new java.util.LinkedHashMap<>();
-        tabs.put("all", ""); tabs.put("new", "NEW"); tabs.put("inProgress", "IN_PROGRESS"); tabs.put("completed", "COMPLETED");
+        tabs.put("all", ""); tabs.put("new", "NEW"); tabs.put("inProgress", "IN_PROGRESS"); tabs.put("completed", "COMPLETED"); tabs.put("fullyPaid", "FULLY_PAID");
         tabs.put("onHold", "ON_HOLD"); tabs.put("unassigned", "UNASSIGNED"); tabs.put("delayed", "DELAYED");
         Map<String, Map<String, Object>> out = new java.util.LinkedHashMap<>();
         for (Map.Entry<String, String> e : tabs.entrySet()) {
@@ -415,7 +424,10 @@ public class ProjectService {
         counts.put("new", projectRepository.countByStatusCategory(STATUS_NEW));
         counts.put("inProgress", projectRepository.countByStatusCategory(STATUS_IN_PROGRESS));
         counts.put("onHold", projectRepository.countByStatusCategory(STATUS_ON_HOLD));
-        counts.put("completed", projectRepository.countByStatusCategory(STATUS_COMPLETED));
+        long finished = projectRepository.countByStatusCategory(STATUS_COMPLETED);
+        long finishedOwing = completedPending().size();
+        counts.put("completed", finishedOwing);
+        counts.put("fullyPaid", finished - finishedOwing);
         counts.put("unassigned", projectRepository.countUnassignedTeam());
         counts.put("delayed", projectRepository.countDelayed(java.time.LocalDate.now()));
         counts.put("pendingCollection", projectRepository.countWithOutstanding());
