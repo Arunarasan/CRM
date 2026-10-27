@@ -74,7 +74,7 @@ export default function InvoiceFormPage() {
     setQuote(null); setQuoteId(null); setPick(null);
     if (!projectId) return;
     api.get(`/projects/${projectId}`).then((r) => {
-      const pr = r.data;
+      const pr = r.data?.project ?? r.data; // the endpoint wraps the project: { project, stages, … }
       if (pr?.quotation?.id) {
         setQuote({ id: pr.quotation.id, number: pr.quotation.quotationNumber });
         // A new invoice for a project opens already filled from its quotation (every line stays editable).
