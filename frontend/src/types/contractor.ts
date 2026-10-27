@@ -602,8 +602,10 @@ export interface ContractorOrderRow {
   title: string;
   orderDate?: string;
   notes?: string;
-  projectId: number;
-  projectName: string;
+  projectId?: number | null;
+  projectName?: string | null;
+  bundleId?: number | null;
+  bundleCode?: string | null;
   amount: number;
   paid: number;
   received: number;

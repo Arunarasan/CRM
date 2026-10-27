@@ -124,7 +124,8 @@ export default function ContractorOrdersPanel({
                 const live = o.status !== "CANCELLED";
                 return (
                   <tr key={o.id} className={`hover:bg-slate-50 align-top ${live ? "" : "opacity-60"}`}>
-                    <td className="p-3 font-medium text-slate-800">{o.projectName}</td>
+                    <td className="p-3 font-medium text-slate-800">{o.projectName || (o.bundleCode ? null : <span className="text-slate-400">General</span>)}
+                      {o.bundleCode && <span className="block text-xs font-normal text-slate-500">Order {o.bundleCode}</span>}</td>
                     <td className="p-3">
                       <div>{o.title}</div>
                       <div className="text-xs text-slate-500">{o.orderDate ?? ""}{o.notes ? ` · ${o.notes}` : ""}</div>

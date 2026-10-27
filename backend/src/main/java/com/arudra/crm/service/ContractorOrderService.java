@@ -1,5 +1,6 @@
 package com.arudra.crm.service;
 
+import com.arudra.crm.entity.Bundle;
 import com.arudra.crm.entity.Contractor;
 import com.arudra.crm.entity.ContractorOrder;
 import com.arudra.crm.entity.Project;
@@ -33,6 +34,7 @@ public class ContractorOrderService {
     @Autowired private ProjectRepository projectRepository;
     @Autowired private ContractorLedgerService ledgerService;
     @Autowired private ProjectFinanceService projectFinanceService;
+    @Autowired private com.arudra.crm.repository.BundleRepository bundleRepository;
 
     // =====================================================================
     // Reads
@@ -79,16 +81,17 @@ public class ContractorOrderService {
     // =====================================================================
 
     @Transactional
-    public ContractorOrder create(Long contractorId, Long projectId, String title, BigDecimal amount,
+    public ContractorOrder create(Long contractorId, Long projectId, Long bundleId, String title, BigDecimal amount,
                                   LocalDate orderDate, String notes) {
         Contractor contractor = contractorRepository.findById(contractorId)
                 .orElseThrow(() -> new IllegalArgumentException("Contractor not found: " + contractorId));
-        Project project = requireProject(projectId);
+        Project project = optionalProject(projectId);
         validate(title, amount);
 
         ContractorOrder o = new ContractorOrder();
         o.setContractor(contractor);
         o.setProject(project);
+        o.setBundleId(checkedBundle(bundleId));
         o.setTitle(title.trim());
         o.setAmount(amount);
         o.setOrderDate(orderDate != null ? orderDate : LocalDate.now());
@@ -101,6 +104,7 @@ public class ContractorOrderService {
 
     /** A job's agreed amount is project cost, so every change re-syncs the project's expenses. */
     private void syncCost(ContractorOrder o) {
+        if (o.getProject() == null) return;
         try {
             projectFinanceService.syncProjectExpenses(o.getProject().getId());
         } catch (Exception ignored) {
@@ -109,7 +113,7 @@ public class ContractorOrderService {
     }
 
     @Transactional
-    public ContractorOrder update(Long orderId, Long projectId, String title, BigDecimal amount,
+    public ContractorOrder update(Long orderId, Long projectId, Long bundleId, String title, BigDecimal amount,
                                   LocalDate orderDate, String notes) {
         ContractorOrder o = get(orderId);
         if ("CANCELLED".equals(o.getStatus())) {
@@ -122,9 +126,16 @@ public class ContractorOrderService {
                     + " already paid against it.");
         }
         BigDecimal diff = amount.subtract(nz(o.getAmount()));
-        if (projectId != null && !projectId.equals(o.getProject().getId())) {
-            o.setProject(requireProject(projectId));
+        Project before = o.getProject();
+        Long beforeId = before == null ? null : before.getId();
+        if (!java.util.Objects.equals(projectId, beforeId)) {
+            if (beforeId != null) projectFinanceService.dropContractorOrderExpense(o.getId());
+            o.setProject(optionalProject(projectId));
+            if (beforeId != null) {
+                try { projectFinanceService.syncProjectExpenses(beforeId); } catch (Exception ignored) { }
+            }
         }
+        o.setBundleId(checkedBundle(bundleId));
         o.setTitle(title.trim());
         o.setAmount(amount);
         if (orderDate != null) o.setOrderDate(orderDate);
@@ -182,8 +193,11 @@ public class ContractorOrderService {
         row.put("title", o.getTitle());
         row.put("orderDate", o.getOrderDate());
         row.put("notes", o.getNotes());
-        row.put("projectId", o.getProject().getId());
-        row.put("projectName", o.getProject().getProjectName());
+        row.put("bundleId", o.getBundleId());
+        row.put("bundleCode", o.getBundleId() == null ? null
+                : bundleRepository.findById(o.getBundleId()).map(Bundle::getCode).orElse(null));
+        row.put("projectId",o.getProject() != null ? o.getProject().getId() : null);
+        row.put("projectName", o.getProject() != null ? o.getProject().getProjectName() : null);
         row.put("amount", o.getAmount());
         row.put("paid", paid);
         row.put("received", received);
@@ -192,8 +206,16 @@ public class ContractorOrderService {
         return row;
     }
 
-    private Project requireProject(Long projectId) {
-        if (projectId == null) throw new IllegalArgumentException("Choose the project this order is for.");
+    /** The customer order (bundle) is optional too; when given it must exist. */
+    private Long checkedBundle(Long bundleId) {
+        if (bundleId == null) return null;
+        if (!bundleRepository.existsById(bundleId)) throw new IllegalArgumentException("Order not found: " + bundleId);
+        return bundleId;
+    }
+
+    /** The project is optional — a job can be general work that belongs to no project. */
+    private Project optionalProject(Long projectId) {
+        if (projectId == null) return null;
         return projectRepository.findById(projectId)
                 .orElseThrow(() -> new IllegalArgumentException("Project not found: " + projectId));
     }

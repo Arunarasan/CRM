@@ -238,14 +238,14 @@ export const contractorApi = {
   // orders given to a contractor
   getOrders: (contractorId: number) =>
     api.get<ContractorOrders>(`/contractor-orders/by-contractor/${contractorId}`).then((r) => r.data),
-  createOrder: (contractorId: number, o: { projectId: number; title: string; amount: number; orderDate?: string; notes?: string }) =>
+  createOrder: (contractorId: number, o: { projectId?: number; bundleId?: number; title: string; amount: number; orderDate?: string; notes?: string }) =>
     api.post(`/contractor-orders/by-contractor/${contractorId}`, o).then((r) => r.data),
   /** Project-page entry: the job (owed + project cost) plus whatever part was paid now (0 = fully due). */
   createOrderWithPayment: (contractorId: number, o: {
     projectId: number; title: string; amount: number; orderDate?: string; notes?: string;
     paidNow?: number; paymentMode?: string; referenceNumber?: string;
   }) => api.post(`/contractor-orders/by-contractor/${contractorId}/with-payment`, o).then((r) => r.data),
-  updateOrder: (id: number, o: { projectId: number; title: string; amount: number; orderDate?: string; notes?: string }) =>
+  updateOrder: (id: number, o: { projectId?: number; bundleId?: number; title: string; amount: number; orderDate?: string; notes?: string }) =>
     api.put(`/contractor-orders/${id}`, o).then((r) => r.data),
   cancelOrder: (id: number) => api.post(`/contractor-orders/${id}/cancel`).then((r) => r.data),
   quickPayment: (payload: { contractorId: number; direction: "IN" | "OUT"; payment: Partial<ContractorPayment> }) =>

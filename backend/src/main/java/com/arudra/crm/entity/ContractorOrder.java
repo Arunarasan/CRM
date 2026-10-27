@@ -27,9 +27,13 @@ public class ContractorOrder extends BaseEntity {
     private Contractor contractor;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "project_id", nullable = false)
+    @JoinColumn(name = "project_id")
     @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "customer", "lead", "quotation", "siteVisit", "measurement", "boq", "assignedEmployees"})
     private Project project;
+
+    /** Optional customer order (bundle) this job is for — plain id, like Bundle's own links. */
+    @Column(name = "bundle_id")
+    private Long bundleId;
 
     @Column(nullable = false)
     private String title;

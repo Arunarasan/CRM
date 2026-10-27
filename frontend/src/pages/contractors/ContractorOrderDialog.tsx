@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { contractorApi } from "@/api/contractorApi";
+import { bundleApi, type Bundle } from "@/api/bundleApi";
 import { assignmentLookups, type ProjectOption } from "@/api/smartAssignmentApi";
 import type { ContractorOrderRow } from "@/types/contractor";
 import { toast } from "@/components/ui/toast";
@@ -21,7 +22,9 @@ export default function ContractorOrderDialog({
   onDone: () => void;
 }) {
   const [projects, setProjects] = useState<ProjectOption[]>([]);
-  const [project, setProject] = useState(existing ? String(existing.projectId) : "");
+  const [project, setProject] = useState(existing?.projectId != null ? String(existing.projectId) : "");
+  const [bundles, setBundles] = useState<Bundle[]>([]);
+  const [bundle, setBundle] = useState(existing?.bundleId != null ? String(existing.bundleId) : "");
   const [title, setTitle] = useState(existing?.title ?? "");
   const [amount, setAmount] = useState(existing ? String(existing.amount) : "");
   const [date, setDate] = useState(existing?.orderDate ?? new Date().toISOString().slice(0, 10));
@@ -29,15 +32,15 @@ export default function ContractorOrderDialog({
   const [busy, setBusy] = useState(false);
 
   useEffect(() => { assignmentLookups.projects().then(setProjects).catch(() => {}); }, []);
+  useEffect(() => { bundleApi.search({ size: 200 }).then((r) => setBundles(r.content ?? [])).catch(() => {}); }, []);
 
   const submit = async () => {
     const amt = Number(amount);
-    if (!project) { toast.error("Choose the project this order is for."); return; }
     if (!title.trim()) { toast.error("Describe the job."); return; }
     if (!(amt > 0)) { toast.error("Enter the amount agreed for this order."); return; }
     setBusy(true);
     try {
-      const body = { projectId: Number(project), title: title.trim(), amount: amt, orderDate: date, notes: notes || undefined };
+      const body = { projectId: project ? Number(project) : undefined, bundleId: bundle ? Number(bundle) : undefined, title: title.trim(), amount: amt, orderDate: date, notes: notes || undefined };
       if (existing) await contractorApi.updateOrder(existing.id, body);
       else await contractorApi.createOrder(contractorId, body);
       toast.success(existing ? "Order updated" : `Order given to ${contractorName}`);
@@ -58,12 +61,23 @@ export default function ContractorOrderDialog({
         </DialogHeader>
         <div className="space-y-3">
           <div>
-            <Label>Project</Label>
+            <Label>Project <span className="text-xs font-normal text-slate-400">(optional)</span></Label>
             <SearchableSelect
               value={project}
               onChange={setProject}
-              placeholder="Select project…"
-              options={projects.map((p) => ({ value: String(p.id), label: p.projectName }))}
+              placeholder="No project — general work"
+              options={[{ value: "", label: "No project — general work" },
+                ...projects.map((p) => ({ value: String(p.id), label: p.projectName }))]}
+            />
+          </div>
+          <div>
+            <Label>Order <span className="text-xs font-normal text-slate-400">(optional)</span></Label>
+            <SearchableSelect
+              value={bundle}
+              onChange={setBundle}
+              placeholder="No order"
+              options={[{ value: "", label: "No order" },
+                ...bundles.map((b) => ({ value: String(b.id), label: b.code, hint: b.customerName ?? undefined }))]}
             />
           </div>
           <div>

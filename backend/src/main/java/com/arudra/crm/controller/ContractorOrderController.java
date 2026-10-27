@@ -25,6 +25,7 @@ public class ContractorOrderController {
 
     public static class OrderRequest {
         public Long projectId;
+        public Long bundleId;
         public String title;
         public BigDecimal amount;
         public LocalDate orderDate;
@@ -40,7 +41,7 @@ public class ContractorOrderController {
     @PostMapping("/by-contractor/{contractorId}")
     @PreAuthorize(WRITE)
     public ResponseEntity<ContractorOrder> create(@PathVariable Long contractorId, @RequestBody OrderRequest r) {
-        return ResponseEntity.ok(orderService.create(contractorId, r.projectId, r.title, r.amount, r.orderDate, r.notes));
+        return ResponseEntity.ok(orderService.create(contractorId, r.projectId, r.bundleId, r.title, r.amount, r.orderDate, r.notes));
     }
 
     public static class ProjectEntryRequest extends OrderRequest {
@@ -53,14 +54,14 @@ public class ContractorOrderController {
     @PostMapping("/by-contractor/{contractorId}/with-payment")
     @PreAuthorize(WRITE)
     public ResponseEntity<ContractorOrder> createWithPayment(@PathVariable Long contractorId, @RequestBody ProjectEntryRequest r) {
-        return ResponseEntity.ok(billingService.createOrderWithPayment(contractorId, r.projectId, r.title, r.amount,
+        return ResponseEntity.ok(billingService.createOrderWithPayment(contractorId, r.projectId, r.bundleId, r.title, r.amount,
                 r.orderDate, r.notes, r.paidNow, r.paymentMode, r.referenceNumber, currentUserService.getCurrentUser()));
     }
 
     @PutMapping("/{id}")
     @PreAuthorize(WRITE)
     public ResponseEntity<ContractorOrder> update(@PathVariable Long id, @RequestBody OrderRequest r) {
-        return ResponseEntity.ok(orderService.update(id, r.projectId, r.title, r.amount, r.orderDate, r.notes));
+        return ResponseEntity.ok(orderService.update(id, r.projectId, r.bundleId, r.title, r.amount, r.orderDate, r.notes));
     }
 
     @PostMapping("/{id}/cancel")

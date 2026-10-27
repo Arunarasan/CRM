@@ -162,6 +162,12 @@ public class ProjectFinanceService {
         return result;
     }
 
+    /** A job moved off its project: take its cost out of that project. */
+    @Transactional
+    public void dropContractorOrderExpense(Long orderId) {
+        dropExpense("CONTRACTOR_ORDER", orderId);
+    }
+
     /** Removes a previously synced expense row (e.g. a payment now counted through its job). */
     private void dropExpense(String source, Long referenceId) {
         expenseRepository.findBySourceAndReferenceIdAndIsDeletedFalse(source, referenceId).ifPresent(e -> {

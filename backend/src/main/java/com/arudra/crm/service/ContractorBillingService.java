@@ -615,14 +615,14 @@ public class ContractorBillingService {
      * One transaction, so the job never exists without the payment the user said was made.
      */
     @Transactional
-    public ContractorOrder createOrderWithPayment(Long contractorId, Long projectId, String title, BigDecimal amount,
+    public ContractorOrder createOrderWithPayment(Long contractorId, Long projectId, Long bundleId, String title, BigDecimal amount,
                                                   LocalDate date, String notes, BigDecimal paidNow,
                                                   String paymentMode, String referenceNumber, User currentUser) {
         BigDecimal paid = nz(paidNow);
         if (paid.compareTo(nz(amount)) > 0) {
             throw new IllegalArgumentException("Paid now can't be more than the amount.");
         }
-        ContractorOrder order = orderService.create(contractorId, projectId, title, amount, date, notes);
+        ContractorOrder order = orderService.create(contractorId, projectId, bundleId, title, amount, date, notes);
         if (paid.signum() > 0) {
             ContractorPayment p = new ContractorPayment();
             p.setAmount(paid);
