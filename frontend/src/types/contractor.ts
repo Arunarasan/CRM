@@ -380,7 +380,7 @@ export interface ContractorPayment {
   amount: number;
   paymentDate?: string;
   status: "PENDING" | "PAID" | "OVERDUE";
-  paymentType: "ADVANCE" | "RUNNING_BILL" | "FINAL_BILL" | "RETENTION_RELEASE" | "REFUND" | "RECOVERY" | "SETTLEMENT_RECEIVED" | "ORDER_PAYMENT";
+  paymentType: "ADVANCE" | "DIRECT" |"RUNNING_BILL" | "FINAL_BILL" | "RETENTION_RELEASE" | "REFUND" | "RECOVERY" | "SETTLEMENT_RECEIVED" | "ORDER_PAYMENT";
   order?: { id: number; title?: string } | null;
   /** OUT = we paid the contractor, IN = the contractor paid us. */
   direction?: "IN" | "OUT";

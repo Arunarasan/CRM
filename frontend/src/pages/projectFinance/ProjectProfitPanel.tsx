@@ -326,14 +326,23 @@ function QuickAddExpense({ projectId, onAdded, onCancel }: { projectId: number; 
     if (category === "CONTRACTOR" && !contractor) { toast.error("Select the contractor"); return; }
     setSaving(true);
     try {
-      await financeApi.addExpense({
-        project: { id: projectId },
-        category,
-        amount: amt,
-        expenseDate: date,
-        description: description.trim() || undefined,
-        ...(contractor ? { vendor: contractor.name, referenceType: "CONTRACTOR", referenceId: contractor.id } : {}),
-      });
+      if (contractor) {
+        // Booked as a real contractor payment so it shows on the contractor's Payments page and ledger;
+        // the project cost sync turns it into this project's CONTRACTOR expense.
+        await contractorApi.quickPayment({
+          contractorId: contractor.id,
+          direction: "OUT",
+          payment: { amount: amt, paymentDate: date, paymentType: "DIRECT", remarks: description.trim() || undefined, project: { id: projectId } } as never,
+        });
+      } else {
+        await financeApi.addExpense({
+          project: { id: projectId },
+          category,
+          amount: amt,
+          expenseDate: date,
+          description: description.trim() || undefined,
+        });
+      }
       setAmount(""); setDescription("");
       toast.success("Expense added");
       onAdded();

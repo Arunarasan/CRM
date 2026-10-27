@@ -472,7 +472,7 @@ public class ContractorBillingService {
         }
 
         ContractorBill bill = null;
-        if (!"ADVANCE".equals(type) && !"RETENTION_RELEASE".equals(type)) {
+        if (!"ADVANCE".equals(type) && !"RETENTION_RELEASE".equals(type) && !"DIRECT".equals(type)) {
             if (billId == null) {
                 throw new IllegalArgumentException("A " + type + " payment must reference a contractor bill.");
             }
@@ -560,7 +560,8 @@ public class ContractorBillingService {
         }
         // A general advance (no order) keeps the original advance path.
         if (!incoming && order == null) {
-            payload.setPaymentType("ADVANCE");
+            // DIRECT = paid straight against a project (entered on the project page); it books as project cost.
+            if (!"DIRECT".equals(payload.getPaymentType())) payload.setPaymentType("ADVANCE");
             return recordPayment(contractorId, null, payload, currentUser);
         }
 
