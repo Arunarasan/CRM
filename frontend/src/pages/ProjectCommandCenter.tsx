@@ -65,6 +65,11 @@ import { ResourceType } from "@/types/workforce";
 import { useGoBack } from "@/hooks/useGoBack";
 import { toast } from "@/components/ui/toast";
 import SearchableSelect from "@/components/ui/searchable-select";
+import LeadFormDialog from "@/pages/leads/LeadFormDialog";
+import ChangeCreatorDialog from "@/pages/leads/ChangeCreatorDialog";
+import { useAuth } from "@/hooks/useAuth";
+import { leadApi } from "@/pages/leads/leadApi";
+import type { Lead, UserSummary } from "@/pages/leads/constants";
 import QuoteWorkspace from "@/pages/leads/quote/QuoteWorkspace";
 import { UNIT_DATALIST_ID } from "@/components/UnitOptions";
 
@@ -761,6 +766,26 @@ export default function ProjectCommandCenter() {
   const [cancelMode, setCancelMode] = useState<null | 'cancel' | 'refund'>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [statusOpen, setStatusOpen] = useState(false);
+  // Edit the originating lead (same form as the lead page); loaded on demand.
+  const [leadEdit, setLeadEdit] = useState<{ lead: Lead; users: UserSummary[] } | null>(null);
+  const openLeadEdit = async () => {
+    const leadId = project?.lead?.id;
+    if (!leadId) return;
+    try {
+      const [l, u] = await Promise.all([leadApi.get(leadId), leadApi.assignableUsers()]);
+      setLeadEdit({ lead: l.data, users: u.data });
+    } catch { toast.error("Couldn't load the lead."); }
+  };
+  const { isAdmin } = useAuth();
+  const [creatorEdit, setCreatorEdit] = useState<{ users: UserSummary[]; currentUserId?: number } | null>(null);
+  const openCreatorEdit = async () => {
+    const leadId = project?.lead?.id;
+    if (!leadId) return;
+    try {
+      const [c, u] = await Promise.all([leadApi.createdBy(leadId), leadApi.assignableUsers()]);
+      setCreatorEdit({ users: u.data, currentUserId: c.data?.userId });
+    } catch { toast.error("Couldn't load the lead."); }
+  };
   const [newStatus, setNewStatus] = useState("RUNNING");
   const [cancelRefresh, setCancelRefresh] = useState(0);
 
@@ -958,6 +983,9 @@ export default function ProjectCommandCenter() {
                       {!isClosed && (
                         <DropdownMenuItem onSelect={() => setCancelMode('cancel')} className="text-rose-600 focus:text-rose-700"><Ban className="w-4 h-4 mr-2"/> Cancel Project</DropdownMenuItem>
                       )}
+                      {project.lead?.id && (
+                        <DropdownMenuItem onSelect={openLeadEdit}><Pencil className="w-4 h-4 mr-2"/> Edit lead details</DropdownMenuItem>
+                      )}
                       <DropdownMenuItem onSelect={() => { setNewStatus(project.status === "RUNNING" ? "PLANNING" : "RUNNING"); setStatusOpen(true); }}><Undo2 className="w-4 h-4 mr-2"/> Change status</DropdownMenuItem>
                       <DropdownMenuItem onSelect={() => setDeleteOpen(true)} className="text-rose-600 focus:text-rose-700"><Trash2 className="w-4 h-4 mr-2"/> Delete Project</DropdownMenuItem>
                     </DropdownMenuContent>
@@ -970,7 +998,7 @@ export default function ProjectCommandCenter() {
                     </span>
                   )}
                 </div>
-                <div className="-ml-[52px] mt-3 @xl:ml-0 @xl:mt-0"><ProjectInfoRow summary={summary} /></div>
+                <div className="-ml-[52px] mt-3 @xl:ml-0 @xl:mt-0"><ProjectInfoRow summary={summary} onChangeLeadBy={isAdmin && project.lead?.id ? openCreatorEdit : undefined} /></div>
               </div>
             </div>
 
@@ -1054,6 +1082,15 @@ export default function ProjectCommandCenter() {
       </div>
       <CancelProjectDialog projectId={projectId} mode={cancelMode || 'cancel'} open={cancelMode !== null} onClose={() => setCancelMode(null)}
         onDone={async () => { setCancelRefresh((n) => n + 1); await fetchProjectData(); fetchCore(); }} />
+      {leadEdit && (
+        <LeadFormDialog open onOpenChange={(o) => { if (!o) setLeadEdit(null); }} lead={leadEdit.lead} users={leadEdit.users}
+          onSaved={() => { setLeadEdit(null); fetchProjectData(); }} />
+      )}
+      {creatorEdit && project?.lead?.id && (
+        <ChangeCreatorDialog open onOpenChange={(o) => { if (!o) setCreatorEdit(null); }} leadId={project.lead.id}
+          users={creatorEdit.users} currentUserId={creatorEdit.currentUserId}
+          onChanged={() => { setCreatorEdit(null); fetchProjectData(); }} />
+      )}
       <DeleteWithRemarkDialog open={statusOpen} title="Change project status" subject="Status" action="Change" success="Status updated."
         hint="Moving a cancelled project back does not reopen its cancelled tasks or refunds."
         onClose={() => setStatusOpen(false)} onConfirm={(remarks) => api.post(`/projects/${projectId}/status`, { status: newStatus, remarks })}

@@ -46,7 +46,7 @@ export const waLink = (n: string) => {
 const PHONE_PRODUCTS = 2;
 
 /** Customer contact / lead / location / scope rows shown under the project name. */
-export function ProjectInfoRow({ summary }: { summary: ProjectHeaderSummary }) {
+export function ProjectInfoRow({ summary, onChangeLeadBy }: { summary: ProjectHeaderSummary; onChangeLeadBy?: () => void }) {
   const chip = "inline-flex min-w-0 items-center gap-2 rounded-xl bg-white border border-slate-200 px-2.5 @lg:px-3 py-1.5 text-[13px] @lg:text-sm text-slate-700 shadow-sm whitespace-nowrap [&>svg]:shrink-0";
   const link = `${chip} hover:border-emerald-300 hover:text-emerald-800 transition-colors`;
   const products = summary.products || [];
@@ -67,10 +67,15 @@ export function ProjectInfoRow({ summary }: { summary: ProjectHeaderSummary }) {
               : <span className="font-semibold truncate">{summary.whatsapp}</span>}
           </a>
         )}
-        <span className={chip} title="Employee who got this lead">
-          <UserCheck className="h-4 w-4 text-amber-500" />
-          <span className="text-slate-400 hidden @md:inline">Lead by</span> <span className="font-semibold truncate">{summary.leadBy || "—"}</span>
-        </span>
+        {(() => {
+          const body = (<>
+            <UserCheck className="h-4 w-4 text-amber-500" />
+            <span className="text-slate-400 hidden @md:inline">Lead by</span> <span className="font-semibold truncate">{summary.leadBy || "—"}</span>
+          </>);
+          return onChangeLeadBy
+            ? <button type="button" onClick={onChangeLeadBy} className={`${chip} hover:border-slate-300`} title="Change who brought this lead in">{body}</button>
+            : <span className={chip} title="Employee who got this lead">{body}</span>;
+        })()}
         {summary.city && (
           <span className={chip}><MapPin className="h-4 w-4 text-emerald-700" /> <span className="truncate">{summary.city}</span></span>
         )}
