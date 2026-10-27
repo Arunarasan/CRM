@@ -609,6 +609,34 @@ public class ContractorBillingService {
         return payment;
     }
 
+    /**
+     * Job entered from the project page: books the agreed amount (we owe it, and it counts as project cost
+     * straight away) and, if part or all of it was paid now, the payment against that same job.
+     * One transaction, so the job never exists without the payment the user said was made.
+     */
+    @Transactional
+    public ContractorOrder createOrderWithPayment(Long contractorId, Long projectId, String title, BigDecimal amount,
+                                                  LocalDate date, String notes, BigDecimal paidNow,
+                                                  String paymentMode, String referenceNumber, User currentUser) {
+        BigDecimal paid = nz(paidNow);
+        if (paid.compareTo(nz(amount)) > 0) {
+            throw new IllegalArgumentException("Paid now can't be more than the amount.");
+        }
+        ContractorOrder order = orderService.create(contractorId, projectId, title, amount, date, notes);
+        if (paid.signum() > 0) {
+            ContractorPayment p = new ContractorPayment();
+            p.setAmount(paid);
+            p.setPaymentDate(date);
+            p.setPaymentMode(paymentMode);
+            p.setReferenceNumber(referenceNumber);
+            p.setRemarks(notes);
+            p.setOrder(order);
+            recordQuickPayment(contractorId, "OUT", p, currentUser);
+        }
+        syncProjectExpenses(order.getProject());
+        return order;
+    }
+
     /** Releases retention held on a package's bills once the defect liability period is over. */
     @Transactional
     public ContractorPayment releaseRetention(Long contractorId, Long workPackageId, BigDecimal amount,

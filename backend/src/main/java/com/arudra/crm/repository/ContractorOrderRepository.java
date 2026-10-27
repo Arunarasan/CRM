@@ -10,4 +10,6 @@ import java.util.List;
 public interface ContractorOrderRepository extends JpaRepository<ContractorOrder, Long> {
 
     List<ContractorOrder> findByContractorIdAndIsDeletedFalseOrderByOrderDateDescIdDesc(Long contractorId);
+
+    List<ContractorOrder> findByProjectIdAndIsDeletedFalse(Long projectId);
 }

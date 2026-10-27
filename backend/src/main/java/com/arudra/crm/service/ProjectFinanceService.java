@@ -28,6 +28,7 @@ public class ProjectFinanceService {
     @Autowired private InventoryTransactionRepository inventoryTransactionRepository;
     @Autowired private ContractorPaymentRepository contractorPaymentRepository;
     @Autowired private ContractorBillRepository contractorBillRepository;
+    @Autowired private ContractorOrderRepository contractorOrderRepository;
     @Autowired private InvoiceRepository invoiceRepository;
     @Autowired private CustomerPaymentRepository paymentRepository;
     @Autowired private PurchasePaymentRepository purchasePaymentRepository;
@@ -125,7 +126,25 @@ public class ProjectFinanceService {
 
         // 3b. Contractor payments with no bill behind them — legacy direct payments only.
         // Advances and retention releases are cash timing, not cost, so they never book here.
+        // 3c. Jobs given to a contractor -> CONTRACTOR cost at the agreed amount, paid or not.
+        // Payments against a job are cash movements, so they never book a second time (3b skips them).
+        for (ContractorOrder order : contractorOrderRepository.findByProjectIdAndIsDeletedFalse(projectId)) {
+            if ("CANCELLED".equals(order.getStatus())) {
+                dropExpense("CONTRACTOR_ORDER", order.getId());
+                continue;
+            }
+            upsert(project, "CONTRACTOR", "CONTRACTOR_ORDER", "CONTRACTOR_ORDER", order.getId(),
+                    order.getTitle() + (order.getContractor() != null ? " — " + order.getContractor().getName() : ""),
+                    order.getAmount(), order.getOrderDate() != null ? order.getOrderDate() : LocalDate.now(),
+                    order.getContractor() != null ? order.getContractor().getName() : null);
+            synced++;
+        }
+
         for (ContractorPayment cp : contractorPaymentRepository.findByProjectIdAndStatus(projectId, "PAID")) {
+            if (cp.getOrder() != null) {
+                dropExpense("CONTRACTOR_PAYMENT", cp.getId()); // cost already booked via its job
+                continue;
+            }
             if (cp.getBill() != null) continue;
             if ("ADVANCE".equals(cp.getPaymentType()) || "RETENTION_RELEASE".equals(cp.getPaymentType())) continue;
             upsert(project, "CONTRACTOR", "CONTRACTOR_PAYMENT", "CONTRACTOR_PAYMENT", cp.getId(),
@@ -141,6 +160,14 @@ public class ProjectFinanceService {
         result.put("documentsSynced", synced);
         result.put("totalExpenses", total);
         return result;
+    }
+
+    /** Removes a previously synced expense row (e.g. a payment now counted through its job). */
+    private void dropExpense(String source, Long referenceId) {
+        expenseRepository.findBySourceAndReferenceIdAndIsDeletedFalse(source, referenceId).ifPresent(e -> {
+            e.setIsDeleted(true);
+            expenseRepository.save(e);
+        });
     }
 
     private BigDecimal productCost(Product product) {

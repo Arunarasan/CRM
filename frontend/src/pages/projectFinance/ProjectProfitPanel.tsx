@@ -312,6 +312,9 @@ function QuickAddExpense({ projectId, onAdded, onCancel }: { projectId: number; 
   // Contractor expenses say which contractor the money is for.
   const [contractors, setContractors] = useState<{ id: number; name: string; hint?: string }[]>([]);
   const [contractorId, setContractorId] = useState("");
+  const [payStatus, setPayStatus] = useState<"DUE" | "PART" | "PAID">("DUE");
+  const [paidAmount, setPaidAmount] = useState("");
+  const [payMode, setPayMode] = useState("CASH");
   useEffect(() => {
     if (category !== "CONTRACTOR" || contractors.length) return;
     contractorApi.list({ size: 200 })
@@ -327,12 +330,16 @@ function QuickAddExpense({ projectId, onAdded, onCancel }: { projectId: number; 
     setSaving(true);
     try {
       if (contractor) {
-        // Booked as a real contractor payment so it shows on the contractor's Payments page and ledger;
-        // the project cost sync turns it into this project's CONTRACTOR expense.
-        await contractorApi.quickPayment({
-          contractorId: contractor.id,
-          direction: "OUT",
-          payment: { amount: amt, paymentDate: date, paymentType: "DIRECT", remarks: description.trim() || undefined, project: { id: projectId } } as never,
+        // A job for the contractor: counts as project cost now, shows on his Payments tab as Unpaid /
+        // Partly paid / Paid, and whatever was paid now is recorded against it.
+        const paidNow = payStatus === "PAID" ? amt : payStatus === "PART" ? Number(paidAmount) || 0 : 0;
+        if (payStatus === "PART" && !(paidNow > 0 && paidNow < amt)) {
+          toast.error("Part paid must be more than 0 and less than the amount"); setSaving(false); return;
+        }
+        await contractorApi.createOrderWithPayment(contractor.id, {
+          projectId, title: description.trim() || "Contractor work", amount: amt, orderDate: date,
+          notes: description.trim() || undefined,
+          paidNow, paymentMode: paidNow > 0 ? payMode : undefined,
         });
       } else {
         await financeApi.addExpense({
@@ -369,6 +376,22 @@ function QuickAddExpense({ projectId, onAdded, onCancel }: { projectId: number; 
           <div className="col-span-2 @2xl:col-span-12">
             <SearchableSelect value={contractorId} onChange={setContractorId} placeholder="Which contractor?"
               options={contractors.map((c) => ({ value: String(c.id), label: c.name, hint: c.hint }))} />
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              {([["DUE", "Not paid (due)"], ["PART", "Part paid"], ["PAID", "Paid in full"]] as const).map(([k, l]) => (
+                <button key={k} type="button" onClick={() => setPayStatus(k)}
+                  className={`rounded-full border px-3 py-1 text-xs font-semibold ${payStatus === k ? "border-emerald-600 bg-emerald-600 text-white" : "border-slate-200 bg-white text-slate-600"}`}>{l}</button>
+              ))}
+              {payStatus === "PART" && (
+                <Input type="number" min={0} value={paidAmount} onChange={(e) => setPaidAmount(e.target.value)}
+                  placeholder="Paid now ₹" className="h-8 w-32 rounded-xl text-right" />
+              )}
+              {payStatus !== "DUE" && (
+                <select value={payMode} onChange={(e) => setPayMode(e.target.value)}
+                  className="h-8 rounded-xl border border-slate-200 bg-white px-2 text-xs">
+                  {["CASH", "UPI", "BANK_TRANSFER", "CHEQUE"].map((m) => <option key={m} value={m}>{m.replace("_", " ")}</option>)}
+                </select>
+              )}
+            </div>
           </div>
         )}
         <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Note (e.g. auto fare)" className="col-span-2 rounded-xl @2xl:col-span-4" />

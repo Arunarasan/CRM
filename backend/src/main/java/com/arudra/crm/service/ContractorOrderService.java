@@ -32,6 +32,7 @@ public class ContractorOrderService {
     @Autowired private ContractorRepository contractorRepository;
     @Autowired private ProjectRepository projectRepository;
     @Autowired private ContractorLedgerService ledgerService;
+    @Autowired private ProjectFinanceService projectFinanceService;
 
     // =====================================================================
     // Reads
@@ -94,7 +95,17 @@ public class ContractorOrderService {
         o.setNotes(notes);
         o = orderRepository.save(o);
         ledgerService.postOrder(o);
+        syncCost(o);
         return o;
+    }
+
+    /** A job's agreed amount is project cost, so every change re-syncs the project's expenses. */
+    private void syncCost(ContractorOrder o) {
+        try {
+            projectFinanceService.syncProjectExpenses(o.getProject().getId());
+        } catch (Exception ignored) {
+            // reporting convenience; never fail the order itself
+        }
     }
 
     @Transactional
@@ -122,6 +133,7 @@ public class ContractorOrderService {
         if (diff.signum() != 0) {
             ledgerService.postOrderAdjustment(o, diff);
         }
+        syncCost(o);
         return o;
     }
 
@@ -137,6 +149,7 @@ public class ContractorOrderService {
         o.setStatus("CANCELLED");
         o = orderRepository.save(o);
         ledgerService.postOrderAdjustment(o, nz(o.getAmount()).negate());
+        syncCost(o);
         return o;
     }
 
