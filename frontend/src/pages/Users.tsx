@@ -18,6 +18,8 @@ interface AdminUser {
   failedAttempts: number;
   roles: string[];
   createdAt: string | null;
+  employeeId?: number | null;
+  employeeName?: string | null;
 }
 
 const ACCOUNT_TYPES = [
@@ -74,6 +76,7 @@ export default function Users() {
   };
 
   const accountRole = form.roles[0];
+  const linkedEmployee = !!editingId && !!users.find((u) => u.id === editingId)?.employeeId;
 
   const save = async () => {
     setFormError("");
@@ -177,7 +180,12 @@ export default function Users() {
             )}
             {!loading && users.map((u) => (
               <TableRow key={u.id}>
-                <TableCell className="font-medium">{u.name}</TableCell>
+                <TableCell className="font-medium">
+                  {u.name}
+                  {u.employeeId && (
+                    <div className="text-xs font-normal text-muted-foreground">Employee: {u.employeeName}</div>
+                  )}
+                </TableCell>
                 <TableCell className="text-muted-foreground">
                   {u.email}
                   {u.phone && <div className="text-xs">{u.phone}</div>}
@@ -235,7 +243,11 @@ export default function Users() {
             </div>
             <div className="space-y-1">
               <Label>Email</Label>
-              <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+              <Input type="email" value={form.email} disabled={linkedEmployee}
+                onChange={(e) => setForm({ ...form, email: e.target.value })} />
+              {linkedEmployee && (
+                <p className="text-xs text-muted-foreground">Linked to an employee — change the username from their HR profile.</p>
+              )}
             </div>
             <div className="space-y-1">
               <Label>Phone (optional, for phone sign-in)</Label>

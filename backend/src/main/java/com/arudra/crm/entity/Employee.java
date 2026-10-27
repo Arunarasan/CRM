@@ -26,6 +26,10 @@ public class Employee extends BaseEntity {
     @Column(nullable = false, unique = true, length = 150)
     private String email;
 
+    /** The login account (users.id) this employee signs in with; null = no login. Unique both ways. */
+    @Column(name = "user_id", unique = true)
+    private Long userId;
+
     @Column(length = 20)
     private String phone;
 

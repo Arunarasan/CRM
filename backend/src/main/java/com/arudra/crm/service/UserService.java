@@ -33,10 +33,13 @@ public class UserService {
     private final PasswordEncoder passwordEncoder;
     private final CurrentUserService currentUserService;
     private final RefreshTokenService refreshTokenService;
+    private final com.arudra.crm.repository.EmployeeRepository employeeRepository;
 
     public UserService(UserRepository userRepository, RoleRepository roleRepository,
                        PasswordEncoder passwordEncoder, CurrentUserService currentUserService,
-                       RefreshTokenService refreshTokenService) {
+                       RefreshTokenService refreshTokenService,
+                       com.arudra.crm.repository.EmployeeRepository employeeRepository) {
+        this.employeeRepository = employeeRepository;
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
         this.passwordEncoder = passwordEncoder;
@@ -45,8 +48,18 @@ public class UserService {
     }
 
     public List<UserAdminDTO> listUsers() {
+        java.util.Map<Long, com.arudra.crm.entity.Employee> byUser = new java.util.HashMap<>();
+        employeeRepository.findByUserIdIsNotNull().forEach(e -> byUser.put(e.getUserId(), e));
         return userRepository.findAll().stream()
-                .map(UserAdminDTO::from)
+                .map(u -> {
+                    UserAdminDTO dto = UserAdminDTO.from(u);
+                    com.arudra.crm.entity.Employee e = byUser.get(u.getId());
+                    if (e != null) {
+                        dto.setEmployeeId(e.getId());
+                        dto.setEmployeeName(e.getFirstName() + " " + e.getLastName());
+                    }
+                    return dto;
+                })
                 .sorted((a, b) -> a.getName() == null ? 1 : a.getName().compareToIgnoreCase(b.getName() == null ? "" : b.getName()))
                 .collect(Collectors.toList());
     }
@@ -104,6 +117,10 @@ public class UserService {
         }
         if (req.getEmail() != null && !req.getEmail().isBlank()) {
             String email = normalizeEmail(req.getEmail());
+            if (!email.equalsIgnoreCase(user.getEmail()) && employeeRepository.findByUserId(id).isPresent()) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "This login belongs to an employee — change the username from the employee's HR profile.");
+            }
             userRepository.findByEmail(email).ifPresent(existing -> {
                 if (!existing.getId().equals(id)) {
                     throw new ResponseStatusException(HttpStatus.CONFLICT, "A user with that email already exists.");

@@ -8,6 +8,8 @@ import { toast } from "@/components/ui/toast";
 import { workforceApi } from "@/api/workforceApi";
 import type { WorkforceDetail, WorkforceMeta, WorkforceRequest } from "@/types/workforce";
 import { FaceEnrollmentCard } from "@/pages/hr/faceAdmin";
+import { LoginAccountCard } from "@/pages/hr/LoginAccountCard";
+import { useAuth } from "@/hooks/useAuth";
 import { FingerprintEnrollmentCard } from "@/pages/hr/fingerprintAdmin";
 
 // The employee-profile Overview tab renders the person's master record as a set of cards, each of
@@ -176,6 +178,7 @@ export default function EmployeeOverviewTab({
   onChanged: () => void;
 }) {
   const wfId = detail.workforce.id;
+  const { isAdmin } = useAuth();
 
   // Merge one card's header + employee edits onto the full request and persist.
   const save = async (headerPatch: Partial<WorkforceRequest>, empPatch?: Record<string, unknown>) => {
@@ -196,6 +199,7 @@ export default function EmployeeOverviewTab({
       <IdentityCard detail={detail} canEdit={canEdit} save={save} />
       <EmergencyCard detail={detail} canEdit={canEdit} save={save} />
       <EmploymentCard detail={detail} meta={meta} canEdit={canEdit} save={save} />
+      {isAdmin && detail.employee?.id != null && <LoginAccountCard employeeId={detail.employee.id} onChanged={onChanged} />}
       {detail.employee?.id != null && <FaceEnrollmentCard employeeId={detail.employee.id} canEdit={canEdit} />}
       {detail.employee?.id != null && <FingerprintEnrollmentCard employeeId={detail.employee.id} canEdit={canEdit} />}
       <BankCard detail={detail} canEdit={canEdit} save={save} />

@@ -125,6 +125,46 @@ public class HrController {
         return ResponseEntity.ok(hrService.updateEmployee(id, employee));
     }
 
+    // --- Employee login account (explicit employee <-> user link; admin only) ---
+    @Autowired
+    private com.arudra.crm.service.EmployeeLoginService employeeLoginService;
+
+    @GetMapping("/employees/{id}/login")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<Map<String, Object>> employeeLogin(@PathVariable Long id) {
+        return ResponseEntity.ok(employeeLoginService.status(id));
+    }
+
+    @GetMapping("/login-candidates")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<java.util.List<Map<String, Object>>> loginCandidates() {
+        return ResponseEntity.ok(employeeLoginService.linkCandidates());
+    }
+
+    @PostMapping("/employees/{id}/login/link")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<Map<String, Object>> linkLogin(@PathVariable Long id, @RequestBody Map<String, Long> body) {
+        return ResponseEntity.ok(employeeLoginService.link(id, body.get("userId")));
+    }
+
+    @PostMapping("/employees/{id}/login/create")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<Map<String, Object>> createLogin(@PathVariable Long id) {
+        return ResponseEntity.ok(employeeLoginService.createAndLink(id));
+    }
+
+    @PutMapping("/employees/{id}/login")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<Map<String, Object>> updateLogin(@PathVariable Long id, @RequestBody Map<String, String> body) {
+        return ResponseEntity.ok(employeeLoginService.updateLogin(id, body.get("email"), body.get("password")));
+    }
+
+    @DeleteMapping("/employees/{id}/login")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<Map<String, Object>> unlinkLogin(@PathVariable Long id) {
+        return ResponseEntity.ok(employeeLoginService.unlink(id));
+    }
+
     @PutMapping("/employees/{id}/active")
     @PreAuthorize(HR_WRITE)
     public ResponseEntity<Employee> setEmployeeActive(@PathVariable Long id, @RequestParam boolean active) {

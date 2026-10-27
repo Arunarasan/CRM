@@ -36,6 +36,7 @@ public class HrService {
     @Autowired private WorkforceRepository workforceRepository;
     @Autowired private RefreshTokenService refreshTokenService;
     @Autowired private EmailService emailService;
+    @Autowired private EmployeeLoginService employeeLoginService;
 
     /** Notifies an employee via their own login account (resolved by shared email), if one exists. */
     private void notifyEmployee(Employee employee, String title, String message, String type, String url) {
@@ -74,7 +75,12 @@ public class HrService {
         if (employee.getEmail() == null || employee.getEmail().trim().isEmpty()) {
             return;
         }
-        User user = userRepository.findByEmail(employee.getEmail()).orElse(null);
+        User user = employee.getUserId() != null ? userRepository.findById(employee.getUserId()).orElse(null) : null;
+        if (user == null && employee.getUserId() == null) {
+            // Adopt an existing login with this e-mail, unless it already belongs to another employee.
+            user = userRepository.findByEmail(employee.getEmail()).orElse(null);
+            if (user != null && employeeRepository.findByUserId(user.getId()).isPresent()) return;
+        }
         String tempPassword = null;
         if (user == null) {
             // Random one-time password, e-mailed to the employee, who must replace it on first sign-in.
@@ -91,6 +97,10 @@ public class HrService {
         roleRepository.findByName("ROLE_EMPLOYEE").ifPresent(roles::add);
         user.setRoles(roles);
         userRepository.save(user);
+        if (!user.getId().equals(employee.getUserId())) {
+            employee.setUserId(user.getId());
+            employeeRepository.save(employee);
+        }
         if (tempPassword != null) {
             emailService.send(user.getEmail(), "Your sign-in details",
                     "Hi " + user.getName() + ",\n\n"
@@ -152,7 +162,11 @@ public class HrService {
                 .orElseThrow(() -> new com.arudra.crm.exception.ResourceNotFoundException("Employee not found with id: " + id));
         if (details.getFirstName() != null) employee.setFirstName(details.getFirstName());
         if (details.getLastName() != null) employee.setLastName(details.getLastName());
-        if (details.getEmail() != null) employee.setEmail(details.getEmail());
+        if (details.getEmail() != null && !details.getEmail().isBlank()
+                && !details.getEmail().trim().equalsIgnoreCase(employee.getEmail())) {
+            // A linked login's username moves with the e-mail (and duplicates are rejected).
+            employeeLoginService.onEmployeeEmailChanged(employee, details.getEmail());
+        }
         if (details.getPhone() != null) employee.setPhone(details.getPhone());
         if (details.getDesignation() != null) employee.setDesignation(details.getDesignation());
         if (details.getDepartment() != null) employee.setDepartment(details.getDepartment());
@@ -180,8 +194,8 @@ public class HrService {
             header.setStatus(active ? "AVAILABLE" : "INACTIVE");
             workforceRepository.save(header);
         }
-        if (saved.getEmail() != null && !saved.getEmail().isBlank()) {
-            userRepository.findByEmail(saved.getEmail()).ifPresent(u -> {
+        if (saved.getUserId() != null) {
+            userRepository.findById(saved.getUserId()).ifPresent(u -> {
                 u.setEmailVerified(active);
                 userRepository.save(u);
                 if (!active) refreshTokenService.revokeAll(u); // sign out every device now
@@ -200,15 +214,15 @@ public class HrService {
         Employee employee = employeeRepository.findById(id)
                 .orElseThrow(() -> new com.arudra.crm.exception.ResourceNotFoundException("Employee not found with id: " + id));
         Workforce header = employee.getWorkforce();
-        String email = employee.getEmail();
+        Long linkedUserId = employee.getUserId();
         employeeRepository.delete(employee);
         employeeRepository.flush();
         if (header != null) {
             workforceRepository.delete(header);
             workforceRepository.flush();
         }
-        if (email != null && !email.isBlank()) {
-            userRepository.findByEmail(email).ifPresent(u -> {
+        if (linkedUserId != null) {
+            userRepository.findById(linkedUserId).ifPresent(u -> {
                 u.setEmailVerified(false);
                 userRepository.save(u);
                 refreshTokenService.revokeAll(u);

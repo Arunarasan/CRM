@@ -20,6 +20,9 @@ public class UserAdminDTO {
     private int failedAttempts;
     private List<String> roles;
     private LocalDateTime createdAt;
+    /** Employee this login is linked to (null = none). */
+    private Long employeeId;
+    private String employeeName;
 
     public static UserAdminDTO from(User user) {
         UserAdminDTO dto = new UserAdminDTO();

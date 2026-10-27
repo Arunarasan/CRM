@@ -79,7 +79,7 @@ public class TaskEligibilityService {
         }
         // Bridge to the HR master record by email (same convention as SmartAssignmentService).
         if (user.getEmail() != null) {
-            employeeRepository.findByEmailIgnoreCaseAndIsDeletedFalse(user.getEmail()).ifPresent(emp -> {
+            employeeRepository.findByUserIdAndIsDeletedFalse(user.getId()).ifPresent(emp -> {
                 addToken(tokens, emp.getDesignation());
                 if (emp.getDepartment() != null) addToken(tokens, emp.getDepartment().getName());
                 Workforce wf = emp.getWorkforce();

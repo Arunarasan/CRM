@@ -48,7 +48,7 @@ public class EmployeeTimeService {
 
     public Employee requireEmployee(User currentUser) {
         if (currentUser == null) throw new IllegalStateException("Not authenticated.");
-        return employeeRepository.findByEmailIgnoreCaseAndIsDeletedFalse(currentUser.getEmail())
+        return employeeRepository.findByUserIdAndIsDeletedFalse(currentUser.getId())
                 .orElseThrow(() -> new IllegalStateException("This login is not linked to an employee record."));
     }
 

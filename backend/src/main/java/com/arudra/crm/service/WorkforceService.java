@@ -38,6 +38,7 @@ public class WorkforceService {
     @Autowired private TaskAssignmentRepository taskAssignmentRepository;
     @Autowired private UserRepository userRepository;
     @Autowired private HrService hrService;
+    @Autowired private EmployeeLoginService employeeLoginService;
     @Autowired private ContractorService contractorService;
     @Autowired private PayrollService payrollService;
     @Autowired private ContractorBillingService contractorBillingService;
@@ -350,7 +351,13 @@ public class WorkforceService {
         String[] name = splitName(h.getFullName());
         e.setFirstName(name[0]);
         e.setLastName(name[1]);
-        e.setEmail(h.getEmail());
+        if (e.getId() == null) {
+            e.setEmail(h.getEmail());
+        } else if (h.getEmail() != null && !h.getEmail().isBlank()
+                && !h.getEmail().trim().equalsIgnoreCase(e.getEmail())) {
+            // Editing the e-mail must also move a linked login's username (and reject duplicates).
+            employeeLoginService.onEmployeeEmailChanged(e, h.getEmail());
+        }
         e.setPhone(h.getMobile());
         e.setProfilePhotoUrl(h.getProfilePhotoUrl());
         e.setEmergencyContactName(h.getEmergencyContactName());

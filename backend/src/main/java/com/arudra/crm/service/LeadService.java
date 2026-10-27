@@ -1369,7 +1369,7 @@ public class LeadService {
         out.put("employeeCode", null);
         out.put("designation", null);
         if (owner != null && owner.getEmail() != null) {
-            employeeRepository.findByEmailIgnoreCaseAndIsDeletedFalse(owner.getEmail()).ifPresent(emp -> {
+            employeeRepository.findByUserIdAndIsDeletedFalse(owner.getId()).ifPresent(emp -> {
                 out.put("employeeCode", emp.getEmployeeCode());
                 out.put("designation", emp.getDesignation());
                 out.put("name", (emp.getFirstName() != null || emp.getLastName() != null)

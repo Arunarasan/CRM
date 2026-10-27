@@ -493,7 +493,7 @@ public class SmartAssignmentService {
             User u = userRepository.findById(rid).orElse(null);
             if (u != null) {
                 h.setEmployeeName(u.getName());
-                employeeRepository.findByEmailIgnoreCaseAndIsDeletedFalse(u.getEmail())
+                employeeRepository.findByUserIdAndIsDeletedFalse(u.getId())
                         .ifPresent(e -> h.setEmployeeId(e.getId()));
             }
         } else {
@@ -780,7 +780,7 @@ public class SmartAssignmentService {
         User u = a.getEmployee() != null ? a.getEmployee()
                 : (a.getResourceId() != null ? userRepository.findById(a.getResourceId()).orElse(null) : null);
         if (u == null || u.getEmail() == null) return null;
-        return employeeRepository.findByEmailIgnoreCaseAndIsDeletedFalse(u.getEmail())
+        return employeeRepository.findByUserIdAndIsDeletedFalse(u.getId())
                 .map(Employee::getEmployeeCode).orElse(null);
     }
 
