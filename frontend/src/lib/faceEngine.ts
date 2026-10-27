@@ -30,6 +30,7 @@ export function loadFaceEngine(): Promise<FaceApi> {
         faceapi.nets.faceLandmark68TinyNet.loadFromUri(MODEL_URL),
         faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
       ]);
+      await warmUp(faceapi);
       return faceapi;
     })().catch((e) => {
       enginePromise = null; // allow a retry after a network failure
@@ -37,6 +38,27 @@ export function loadFaceEngine(): Promise<FaceApi> {
     });
   }
   return enginePromise;
+}
+
+/**
+ * One dummy pass through each network so TensorFlow compiles its WebGL shaders now, while the kiosk
+ * is idle, instead of during the first person's scan. A blank frame has no face, so the landmark and
+ * recognition nets are fed directly with correctly sized canvases.
+ */
+async function warmUp(faceapi: FaceApi): Promise<void> {
+  try {
+    const blank = (size: number) => {
+      const c = document.createElement('canvas');
+      c.width = size; c.height = size;
+      const g = c.getContext('2d');
+      if (g) { g.fillStyle = '#808080'; g.fillRect(0, 0, size, size); }
+      return c;
+    };
+    await faceapi.detectAllFaces(blank(320), new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 }));
+    await faceapi.detectAllFaces(blank(224), new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 }));
+    await faceapi.nets.faceLandmark68TinyNet.detectLandmarks(blank(112));
+    await faceapi.nets.faceRecognitionNet.computeFaceDescriptor(blank(150));
+  } catch { /* warm-up is best effort */ }
 }
 
 export interface FaceBox { x: number; y: number; width: number; height: number }
@@ -153,6 +175,49 @@ export async function startFrontCamera(video: HTMLVideoElement): Promise<MediaSt
   video.playsInline = true;
   await video.play().catch(() => {});
   return stream;
+}
+
+let sharedStream: MediaStream | null = null;
+
+/**
+ * Kiosk only: opens the front camera once and keeps it running between punches, so a tap does not
+ * wait for the camera to start. Safe to call repeatedly; returns the live stream (or null if it
+ * could not be opened).
+ */
+export async function keepCameraWarm(): Promise<MediaStream | null> {
+  if (sharedStream && sharedStream.getVideoTracks().some((t) => t.readyState === 'live')) return sharedStream;
+  try {
+    sharedStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+      audio: false,
+    });
+  } catch {
+    sharedStream = null;
+  }
+  return sharedStream;
+}
+
+/** Shows the warm camera on a <video>; falls back to opening the camera if it was not kept warm. */
+export async function attachWarmCamera(video: HTMLVideoElement): Promise<MediaStream> {
+  const stream = await keepCameraWarm();
+  if (!stream) return startFrontCamera(video);
+  video.srcObject = stream;
+  video.muted = true;
+  video.playsInline = true;
+  await video.play().catch(() => {});
+  return stream;
+}
+
+/** Ends a scan: keeps the warm camera running, but really stops any camera opened just for the scan. */
+export function leaveCamera(stream: MediaStream | null | undefined, video?: HTMLVideoElement | null) {
+  if (!stream) return;
+  if (stream === sharedStream) { if (video) video.srcObject = null; return; }
+  stopCamera(stream);
+}
+
+export function releaseWarmCamera() {
+  stopCamera(sharedStream);
+  sharedStream = null;
 }
 
 export function stopCamera(stream: MediaStream | null | undefined) {

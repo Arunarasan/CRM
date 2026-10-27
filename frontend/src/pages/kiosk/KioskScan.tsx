@@ -7,7 +7,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Loader2, X } from 'lucide-react';
 import { kioskApi, KioskPunchResult } from '@/lib/kioskApi';
-import { loadFaceEngine, scanFace, scanPose, snapshot, startFrontCamera, stopCamera } from '@/lib/faceEngine';
+import { attachWarmCamera, leaveCamera, loadFaceEngine, scanFace, scanPose, snapshot } from '@/lib/faceEngine';
 import { FRONTAL_OFFSET, LIVENESS_PROMPT, LivenessChallenge, pickChallenge } from '@/lib/liveness';
 
 export type ScanAction = 'IN' | 'OUT';
@@ -56,10 +56,11 @@ export default function KioskScan({ action, onDone, onFail, onCancel, onSwitch }
 
     const run = async () => {
       try {
-        await loadFaceEngine();
+        // Camera and models are warmed while the kiosk idles; these resolve at once in that case.
         const video = videoRef.current;
-        if (!video || cancelled) return;
-        stream = await startFrontCamera(video);
+        const [, cam] = await Promise.all([loadFaceEngine(), video ? attachWarmCamera(video) : Promise.resolve(null)]);
+        if (!video || cancelled) { leaveCamera(cam, video); return; }
+        stream = cam;
         if (cancelled) return;
 
         const started = Date.now();
@@ -84,7 +85,7 @@ export default function KioskScan({ action, onDone, onFail, onCancel, onSwitch }
 
           if (stg === 'find') {
             okFrames += 1;
-            if (okFrames >= 4) {
+            if (okFrames >= 2) {
               challenge = new LivenessChallenge(pickChallenge());
               challengeStart = Date.now();
               stg = 'challenge';
@@ -101,13 +102,13 @@ export default function KioskScan({ action, onDone, onFail, onCancel, onSwitch }
           } else if (stg === 'capture') {
             const frontal = Math.abs(pose.yaw - 0.5) < FRONTAL_OFFSET;
             steady = frontal && pose.score >= 0.7 ? steady + 1 : 0;
-            if (steady < 3) continue;
+            if (steady < 2) continue;
 
             const full = await scanFace(video);
             if (cancelled) return;
             if (full.state !== 'one') { steady = 0; continue; }
             const selfie = await snapshot(video, 0.8, 480);
-            stopCamera(stream); stream = null; // done with the camera: close it right away
+            leaveCamera(stream, video); stream = null; // frame taken: stop showing it (the warm camera stays on)
             setStage('sending'); setHint('Checking…');
             try {
               const result = await kioskApi.punch(action, full.reading.descriptor, selfie, challenge?.kind ?? null);
@@ -128,7 +129,7 @@ export default function KioskScan({ action, onDone, onFail, onCancel, onSwitch }
       }
     };
     run();
-    return () => { cancelled = true; stopCamera(stream); };
+    return () => { cancelled = true; leaveCamera(stream, videoRef.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [action]);
 

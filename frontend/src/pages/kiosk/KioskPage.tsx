@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Loader2, Tablet, LogIn, LogOut, CheckCircle2, AlertTriangle, XCircle, UserRound } from 'lucide-react';
 import { kioskApi, kioskToken, KioskInfo, KioskPunchResult } from '@/lib/kioskApi';
-import { loadFaceEngine } from '@/lib/faceEngine';
+import { keepCameraWarm, loadFaceEngine, releaseWarmCamera } from '@/lib/faceEngine';
 import { fingerprintSensorAvailable, insideKioskApp } from '@/lib/fingerprintBridge';
 import KioskScan, { ScanAction, ScanDone, ScanFail } from './KioskScan';
 import KioskFingerScan from './KioskFingerScan';
@@ -63,7 +63,13 @@ export default function KioskPage() {
   }, [phase, check]);
 
   // Warm up the face models while the kiosk sits idle so the first tap is instant.
-  useEffect(() => { if (phase === 'ready') loadFaceEngine().catch(() => {}); }, [phase]);
+  // The camera is kept running too (face kiosks only), so a tap does not wait for it to start.
+  useEffect(() => {
+    if (phase !== 'ready') return;
+    loadFaceEngine().catch(() => {});
+    if (kiosk?.verifyMode !== 'FINGER') keepCameraWarm().catch(() => {});
+  }, [phase, kiosk?.verifyMode]);
+  useEffect(() => () => releaseWarmCamera(), []);
 
   // Keep the screen awake; the browser drops the lock when the tab is hidden, so ask again on return.
   useEffect(() => {

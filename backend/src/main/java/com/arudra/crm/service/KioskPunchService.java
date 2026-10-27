@@ -46,6 +46,25 @@ public class KioskPunchService {
 
     private final ObjectMapper mapper = new ObjectMapper();
     private final Map<Long, Deque<LocalDateTime>> failures = new ConcurrentHashMap<>();
+    /**
+     * Parsed descriptors by template id. A template row is never edited (re-enrolling inserts new rows),
+     * so an entry can't go stale; employee status is still read live from the database on every punch.
+     */
+    private final Map<Long, double[]> parsedCache = new ConcurrentHashMap<>();
+    private static final int MAX_CACHED_TEMPLATES = 20000;
+
+    private double[] parsedDescriptor(EmployeeFaceTemplate t) {
+        Long id = t.getId();
+        if (id == null) return parse(t.getDescriptor());
+        double[] cached = parsedCache.get(id);
+        if (cached != null) return cached;
+        double[] d = parse(t.getDescriptor());
+        if (d != null) {
+            if (parsedCache.size() >= MAX_CACHED_TEMPLATES) parsedCache.clear();
+            parsedCache.put(id, d);
+        }
+        return d;
+    }
 
     @Autowired private EmployeeFaceTemplateRepository templateRepository;
     @Autowired private EmployeeTimeService timeService;
@@ -71,7 +90,7 @@ public class KioskPunchService {
         for (EmployeeFaceTemplate t : templateRepository.findAllActive()) {
             Employee e = t.getEmployee();
             if (e == null || !"ACTIVE".equalsIgnoreCase(e.getStatus())) continue; // on leave / terminated can't punch
-            double[] d = parse(t.getDescriptor());
+            double[] d = parsedDescriptor(t);
             if (d == null) continue;
             employees.put(e.getId(), e);
             samples.add(new FaceMatcher.Sample(e.getId(), d));
