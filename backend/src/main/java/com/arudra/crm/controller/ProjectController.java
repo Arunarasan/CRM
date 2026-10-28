@@ -29,6 +29,9 @@ public class ProjectController {
     private ProjectService projectService;
 
     @Autowired
+    private com.arudra.crm.service.ProjectPeopleService projectPeopleService;
+
+    @Autowired
     private com.arudra.crm.service.QuotationService quotationService;
 
     @Autowired
@@ -106,6 +109,30 @@ public class ProjectController {
         Long pmId = body.get("projectManagerId") == null ? null : Long.valueOf(body.get("projectManagerId").toString());
         Long amId = body.get("assistantManagerId") == null ? null : Long.valueOf(body.get("assistantManagerId").toString());
         return ResponseEntity.ok(projectService.assignTeam(id, pmId, amId));
+    }
+
+    // ---- One people list: manager pair + everyone holding a task (admin edits it) ----
+
+    @GetMapping("/{id}/people")
+    @PreAuthorize(READ)
+    public ResponseEntity<java.util.List<Map<String, Object>>> people(@PathVariable Long id) {
+        return ResponseEntity.ok(projectPeopleService.people(id));
+    }
+
+    /** Add a person or change their role: body {userId, role: PROJECT_MANAGER|ASSISTANT_MANAGER|MEMBER}. */
+    @PutMapping("/{id}/people")
+    @PreAuthorize(WRITE)
+    public ResponseEntity<java.util.List<Map<String, Object>>> setPerson(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+        projectPeopleService.setRole(id, Long.valueOf(String.valueOf(body.get("userId"))),
+                body.get("role") == null ? null : String.valueOf(body.get("role")), currentUserService.getCurrentUser());
+        return ResponseEntity.ok(projectPeopleService.people(id));
+    }
+
+    @DeleteMapping("/{id}/people/{userId}")
+    @PreAuthorize(WRITE)
+    public ResponseEntity<java.util.List<Map<String, Object>>> removePerson(@PathVariable Long id, @PathVariable Long userId) {
+        projectPeopleService.remove(id, userId);
+        return ResponseEntity.ok(projectPeopleService.people(id));
     }
 
     @DeleteMapping("/{id}")

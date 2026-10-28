@@ -9,6 +9,7 @@ import { toast } from "@/components/ui/toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import ResourceSelect, { type ResourceSelection } from "@/components/workforce/ResourceSelect";
 import TaskCard from "@/components/tasks/TaskCard";
+import ProjectPeoplePanel from "./ProjectPeoplePanel";
 import TaskEditor from "@/components/tasks/TaskEditor";
 import { bucketToLane, TASK_LANES, LANE_STYLES, type TaskCardModel, type TaskFormValues } from "@/components/tasks/taskShared";
 
@@ -254,6 +255,8 @@ export default function ProjectTaskManager({ projectId, onChanged, onAddTask, fi
           )}
         </div>
       </div>
+
+      <ProjectPeoplePanel projectId={projectId} onChanged={refresh} />
 
       {loading ? (
         <div className="flex justify-center py-8 text-slate-400"><Loader2 className="h-5 w-5 animate-spin" /></div>

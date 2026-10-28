@@ -578,6 +578,21 @@ public class EmployeeTaskService {
                 });
     }
 
+    /** Puts an employee on the project's shared Execution task as a plain team member (idempotent). */
+    @Transactional
+    public void addProjectMember(Long projectId, Long userId, User by) {
+        List<Task> open = taskRepository.findByProjectId(projectId).stream()
+                .filter(t -> !Boolean.TRUE.equals(t.getIsDeleted()) && t.getTaskTemplate() != null)
+                .filter(t -> !"COMPLETED".equals(t.getStatus()) && !"CANCELLED".equals(t.getStatus()))
+                .toList();
+        Task exec = open.stream().filter(t -> "TT_PM_EXECUTION".equals(t.getTaskTemplate().getCode())).findFirst()
+                .or(() -> open.stream().filter(t -> "TT_PM_INSTALLATION".equals(t.getTaskTemplate().getCode())).findFirst())
+                .or(() -> open.stream().findFirst())
+                .orElseThrow(() -> new IllegalStateException("This project has no open task to add the person to."));
+        assignResources(exec.getId(), List.of(new com.arudra.crm.dto.workforce.AssignResourceRequest(
+                ResourceType.EMPLOYEE, userId, "Team member")), by);
+    }
+
     /** The project's customer quotation link (/q/{token}) for a team member to send; created on first use. */
     @Transactional
     public Map<String, Object> projectQuotationLink(Long taskId, User viewer) {
