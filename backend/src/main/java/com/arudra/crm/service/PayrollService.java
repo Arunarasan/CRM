@@ -1084,10 +1084,22 @@ public class PayrollService {
     }
 
     /** Flat bonus when this month's attendance (present = 1, half day = ½, absent = 0; leave ignored) meets the minimum %. */
+    /**
+     * Attendance bonus. The attendance-% test (if set) must pass. Then, if either hours test is switched on,
+     * the bonus is earned when AT LEAST ONE passes — per-day (enough days with at least N hours each) or
+     * overall average (total hours ÷ days attended ≥ N) — and withheld when none does. With both hours tests
+     * off it behaves as before. The reward is a flat amount, or "days of pay" when that rule is set.
+     */
     private BigDecimal addAttendanceBonusLine(Employee employee, SalaryRecord rec, YearMonth ym) {
-        BigDecimal amount = settingAmount(K_ATTENDANCE_BONUS);
-        if (amount.signum() <= 0) return BigDecimal.ZERO;
-        double countable = 0, credited = 0;
+        BigDecimal flat = settingAmount(K_ATTENDANCE_BONUS);
+        BigDecimal bonusDays = settingAmount(K_ATT_BONUS_DAYS);
+        if (flat.signum() <= 0 && bonusDays.signum() <= 0) return BigDecimal.ZERO;
+        double dayHours = settingAmount(K_ATT_DAY_HOURS).doubleValue();
+        int minDays = settingAmount(K_ATT_MIN_DAYS).intValue();
+        double avgNeeded = settingAmount(K_ATT_AVG_HOURS).doubleValue();
+
+        double countable = 0, credited = 0, totalHours = 0;
+        int attended = 0, qualifying = 0;
         for (Attendance a : attendanceRepository.findByEmployeeIdAndDateBetween(
                 employee.getId(), ym.atDay(1), ym.atEndOfMonth())) {
             String s = a.getStatus() == null ? "" : a.getStatus().toUpperCase();
@@ -1097,11 +1109,44 @@ public class PayrollService {
                 case "ABSENT": countable++; break;
                 default: break;
             }
+            if (s.equals("PRESENT") || s.equals("HALF_DAY")) {
+                double h = a.getWorkedHours() == null ? 0 : a.getWorkedHours().doubleValue();
+                attended++;
+                totalHours += h;
+                if (h + 0.0001 >= dayHours) qualifying++;
+            }
         }
         if (countable == 0) return BigDecimal.ZERO;
         double pct = credited / countable * 100.0;
         if (pct + 0.0001 < settingAmount(K_ATTENDANCE_MIN_PERCENT).doubleValue()) return BigDecimal.ZERO;
-        return addFlatLine(rec, "Attendance bonus — " + Math.round(pct) + "% attendance", amount);
+
+        boolean perDayOn = minDays > 0, avgOn = avgNeeded > 0;
+        double avg = attended == 0 ? 0 : totalHours / attended;
+        String why = Math.round(pct) + "% attendance";
+        if (perDayOn || avgOn) {
+            boolean perDayOk = perDayOn && qualifying >= minDays;
+            boolean avgOk = avgOn && avg + 0.0001 >= avgNeeded;
+            if (!perDayOk && !avgOk) return BigDecimal.ZERO; // neither hours test met → no bonus
+            why = perDayOk
+                    ? qualifying + " days of " + stripZeros(dayHours) + "+ hrs"
+                    : "avg " + String.format("%.1f", avg) + " hrs/day";
+        }
+
+        BigDecimal amount = flat;
+        String label = "Attendance bonus — " + why;
+        if (bonusDays.signum() > 0) {
+            BigDecimal dailyHours = employee.getStandardDailyHours() != null && employee.getStandardDailyHours().signum() > 0
+                    ? employee.getStandardDailyHours() : settingAmount(K_DAILY_HOURS);
+            if (dailyHours.signum() <= 0) dailyHours = BigDecimal.valueOf(8);
+            amount = nz(rec.getHourlyRate()).multiply(dailyHours).multiply(bonusDays).setScale(2, RoundingMode.HALF_UP);
+            label += " → " + bonusDays.stripTrailingZeros().toPlainString() + " days' pay";
+        }
+        if (amount.signum() <= 0) return BigDecimal.ZERO;
+        return addFlatLine(rec, label, amount);
+    }
+
+    private static String stripZeros(double v) {
+        return BigDecimal.valueOf(v).stripTrailingZeros().toPlainString();
     }
 
     /** Flat bonus when the auto-calculated performance score meets the minimum. */
@@ -1132,6 +1177,11 @@ public class PayrollService {
     private static final String K_PROJECT_INCENTIVE = "payroll.project_incentive_amount";
     private static final String K_ATTENDANCE_BONUS = "payroll.attendance_bonus_amount";
     private static final String K_ATTENDANCE_MIN_PERCENT = "payroll.attendance_bonus_min_percent";
+    // Attendance bonus hours tests (0 = that test is off) and the "days of pay" reward (0 = flat amount).
+    private static final String K_ATT_DAY_HOURS = "payroll.attendance_day_hours";
+    private static final String K_ATT_MIN_DAYS = "payroll.attendance_min_days";
+    private static final String K_ATT_AVG_HOURS = "payroll.attendance_avg_hours";
+    private static final String K_ATT_BONUS_DAYS = "payroll.attendance_bonus_days";
     private static final String K_PERFORMANCE_BONUS = "payroll.performance_bonus_amount";
     private static final String K_PERFORMANCE_MIN_SCORE = "payroll.performance_bonus_min_score";
     private static final String K_REVIEW_REWARD = "google_review_reward_amount";
@@ -1147,6 +1197,10 @@ public class PayrollService {
         RULE_KEYS.put("reviewReward", K_REVIEW_REWARD);
         RULE_KEYS.put("attendanceBonus", K_ATTENDANCE_BONUS);
         RULE_KEYS.put("attendanceMinPercent", K_ATTENDANCE_MIN_PERCENT);
+        RULE_KEYS.put("attendanceDayHours", K_ATT_DAY_HOURS);
+        RULE_KEYS.put("attendanceMinDays", K_ATT_MIN_DAYS);
+        RULE_KEYS.put("attendanceAvgHours", K_ATT_AVG_HOURS);
+        RULE_KEYS.put("attendanceBonusDays", K_ATT_BONUS_DAYS);
         RULE_KEYS.put("performanceBonus", K_PERFORMANCE_BONUS);
         RULE_KEYS.put("performanceMinScore", K_PERFORMANCE_MIN_SCORE);
     }
@@ -1176,6 +1230,16 @@ public class PayrollService {
             throw new IllegalArgumentException("Standard hours per day must be between 1 and 24.");
         if (days != null && (days.signum() == 0 || days.compareTo(BigDecimal.valueOf(31)) > 0))
             throw new IllegalArgumentException("Working days per month must be between 1 and 31.");
+        for (String hrsKey : List.of("attendanceDayHours", "attendanceAvgHours")) {
+            BigDecimal v = parsed.get(hrsKey);
+            if (v != null && v.compareTo(BigDecimal.valueOf(24)) > 0)
+                throw new IllegalArgumentException("'" + hrsKey + "' can't be above 24 hours.");
+        }
+        for (String dayKey : List.of("attendanceMinDays", "attendanceBonusDays")) {
+            BigDecimal v = parsed.get(dayKey);
+            if (v != null && v.compareTo(BigDecimal.valueOf(31)) > 0)
+                throw new IllegalArgumentException("'" + dayKey + "' can't be above 31 days.");
+        }
         for (String pct : List.of("attendanceMinPercent", "performanceMinScore")) {
             BigDecimal v = parsed.get(pct);
             if (v != null && v.compareTo(BigDecimal.valueOf(100)) > 0)

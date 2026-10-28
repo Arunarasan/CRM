@@ -95,9 +95,17 @@ export default function PayRulesTab({ canEdit }: { canEdit: boolean }) {
         <Field label="Per Google review" prefix="₹" hint="Reward when HR pays a verified QR review. Added to the payslip as a Google reviews line." value={form.reviewReward} onChange={set("reviewReward")} disabled={!canEdit} />
       </Section>
 
-      <Section title="Attendance & performance bonus" sub="One flat bonus per month when the employee reaches the minimum. 0 = off.">
-        <Field label="Attendance bonus" prefix="₹" value={form.attendanceBonus} onChange={set("attendanceBonus")} disabled={!canEdit} />
-        <Field label="Minimum attendance %" hint="Present = 1 day, half day = ½, absent = 0; approved leave is ignored." value={form.attendanceMinPercent} onChange={set("attendanceMinPercent")} disabled={!canEdit} />
+      <Section title="Attendance bonus" sub="Earned only when the attendance % below is met and, if you switch on an hours test, when at least one of the two tests passes. If neither passes, no bonus. 0 = off.">
+        <Field label="Bonus amount" prefix="₹" hint="Flat amount. Ignored if 'Bonus in days of pay' is set." value={form.attendanceBonus} onChange={set("attendanceBonus")} disabled={!canEdit} />
+        <Field label="Bonus in days of pay" hint="e.g. 1.5 = one and a half days' pay (hourly rate × standard hours per day). Replaces the flat amount." value={form.attendanceBonusDays} onChange={set("attendanceBonusDays")} disabled={!canEdit} />
+        <Field label="Minimum attendance %" hint="Present = 1 day, half day = ½, absent = 0; approved leave is ignored. Set 0 to rely on the hours tests only." value={form.attendanceMinPercent} onChange={set("attendanceMinPercent")} disabled={!canEdit} />
+        <div />
+        <Field label="Test 1 — hours a day counts from" hint="A day counts only if the employee worked at least this many hours (e.g. 7)." value={form.attendanceDayHours} onChange={set("attendanceDayHours")} disabled={!canEdit} />
+        <Field label="Test 1 — minimum counted days" hint="Needed counted days in the month (e.g. 20). 0 = Test 1 is off." value={form.attendanceMinDays} onChange={set("attendanceMinDays")} disabled={!canEdit} />
+        <Field label="Test 2 — average hours a day" hint="Total hours ÷ days attended must be at least this (e.g. 7). 0 = Test 2 is off." value={form.attendanceAvgHours} onChange={set("attendanceAvgHours")} disabled={!canEdit} />
+      </Section>
+
+      <Section title="Performance bonus" sub="One flat bonus per month when the employee reaches the minimum. 0 = off.">
         <Field label="Performance bonus" prefix="₹" value={form.performanceBonus} onChange={set("performanceBonus")} disabled={!canEdit} />
         <Field label="Minimum performance score" hint="Out of 100 — the auto score from attendance, tasks and reviews." value={form.performanceMinScore} onChange={set("performanceMinScore")} disabled={!canEdit} />
       </Section>

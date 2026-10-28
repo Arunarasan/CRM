@@ -13,6 +13,10 @@ export interface PayRules {
   reviewReward: number;
   attendanceBonus: number;
   attendanceMinPercent: number;
+  attendanceDayHours: number;
+  attendanceMinDays: number;
+  attendanceAvgHours: number;
+  attendanceBonusDays: number;
   performanceBonus: number;
   performanceMinScore: number;
 }
