@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, Trash2, UserPlus, Users } from "lucide-react";
+import { Loader2, Trash2, UserPlus, Users, X } from "lucide-react";
 import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
@@ -10,13 +10,16 @@ interface Person {
   tasks: { id: number; name: string; status: string }[];
 }
 
+interface ProjectTask { id: number; taskName: string; status: string; isDeleted?: boolean }
+
 const ROLES: [Person["role"], string][] = [
   ["PROJECT_MANAGER", "Project Manager"], ["ASSISTANT_MANAGER", "Assistant Manager"], ["MEMBER", "Team member"],
 ];
 
 /**
- * Everyone on the project in one list: the managers the admin set plus anyone holding a task (office-assigned,
- * auto-assigned or picked up by themselves). The admin changes a role, adds a person or removes one here.
+ * Everyone on the project in one list: the managers the admin set plus anyone holding a task (office-assigned
+ * or picked up by themselves). The admin changes a role, adds a person, removes one, or puts a person on /
+ * takes them off a specific task here.
  */
 export default function ProjectPeoplePanel({ projectId, onChanged }: { projectId: number; onChanged?: () => void }) {
   const [people, setPeople] = useState<Person[]>([]);
@@ -25,6 +28,15 @@ export default function ProjectPeoplePanel({ projectId, onChanged }: { projectId
   const [open, setOpen] = useState(true);
   const [newSel, setNewSel] = useState<ResourceSelection | null>(null);
   const [newRole, setNewRole] = useState<Person["role"]>("MEMBER");
+
+  const [tasks, setTasks] = useState<ProjectTask[]>([]);
+
+  const loadTasks = useCallback(() => {
+    api.get<ProjectTask[]>(`/tasks/project/${projectId}`)
+      .then((r) => setTasks(r.data.filter((t) => !t.isDeleted && t.status !== "COMPLETED" && t.status !== "CANCELLED")))
+      .catch(() => setTasks([]));
+  }, [projectId]);
+  useEffect(() => { loadTasks(); }, [loadTasks]);
 
   const load = useCallback(() => {
     api.get<Person[]>(`/projects/${projectId}/people`)
@@ -49,6 +61,27 @@ export default function ProjectPeoplePanel({ projectId, onChanged }: { projectId
     if (!newSel) { toast.error("Pick an employee"); return; }
     if (newSel.resourceType !== "EMPLOYEE") { toast.error("Only employees can be added to the project team"); return; }
     if (await save(newSel.resourceId, newRole, "add")) { toast.success(`${newSel.name || "Employee"} added`); setNewSel(null); }
+  };
+
+  const addToTask = async (p: Person, taskId: number) => {
+    setBusy(p.userId);
+    try {
+      await api.post(`/employee-tasks/${taskId}/assignments`, { resources: [{ resourceType: "EMPLOYEE", resourceId: p.userId, role: "Team member" }] });
+      toast.success(`${p.name} added to the task`);
+      load(); loadTasks(); onChanged?.();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || "Could not add to the task");
+    } finally { setBusy(null); }
+  };
+
+  const takeOffTask = async (p: Person, taskId: number) => {
+    setBusy(p.userId);
+    try {
+      await api.delete(`/employee-tasks/${taskId}/assignments/EMPLOYEE/${p.userId}`);
+      load(); loadTasks(); onChanged?.();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || "Could not take them off the task");
+    } finally { setBusy(null); }
   };
 
   const remove = async (p: Person) => {
@@ -82,11 +115,23 @@ export default function ProjectPeoplePanel({ projectId, onChanged }: { projectId
               <div key={p.userId} className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-100 bg-slate-50/60 px-3 py-2">
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold text-slate-800">{p.name}</p>
-                  <p className="truncate text-[11px] text-slate-500" title={p.tasks.map((t) => t.name).join(", ")}>
-                    {p.tasks.length ? `${p.tasks.length} task${p.tasks.length > 1 ? "s" : ""}: ${p.tasks.map((t) => t.name).join(", ")}` : "No tasks yet"}
-                    {p.pickedOwn ? " · picked by themself" : ""}
-                  </p>
+                  <div className="mt-1 flex flex-wrap items-center gap-1">
+                    {p.tasks.length === 0 && <span className="text-[11px] text-slate-400">No tasks yet</span>}
+                    {p.tasks.map((t) => (
+                      <span key={t.id} className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-slate-600 ring-1 ring-slate-200">
+                        {t.name}
+                        <button type="button" disabled={busy === p.userId} onClick={() => takeOffTask(p, t.id)}
+                          className="text-slate-400 hover:text-rose-600" title="Take off this task"><X className="h-3 w-3" /></button>
+                      </span>
+                    ))}
+                    {p.pickedOwn && <span className="text-[11px] text-slate-400">· picked by themself</span>}
+                  </div>
                 </div>
+                <select className={sel} value="" disabled={busy === p.userId}
+                  onChange={(e) => { if (e.target.value) addToTask(p, Number(e.target.value)); }}>
+                  <option value="">+ Add to task…</option>
+                  {tasks.filter((t) => !p.tasks.some((x) => x.id === t.id)).map((t) => <option key={t.id} value={t.id}>{t.taskName}</option>)}
+                </select>
                 <select className={sel} value={p.role} disabled={busy === p.userId}
                   onChange={(e) => save(p.userId, e.target.value as Person["role"], p.userId)}>
                   {ROLES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}

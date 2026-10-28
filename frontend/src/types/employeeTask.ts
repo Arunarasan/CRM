@@ -391,12 +391,9 @@ export interface InstallOrderInfo {
 }
 
 export interface TaskDetail extends Omit<TaskCard, 'closedByOffice'> {
-  /** Owner / PM / admin of the task: may add helpers and decide join requests. */
+  /** Owner / PM / admin of the task: may add helpers. */
   canManageTeam?: boolean;
-  canRequestJoin?: boolean;
-  joinRequested?: boolean;
   cancelRequest?: { id: number; reasonCode: string; reason: string; targetType: string; requesterName: string } | null;
-  joinRequests?: { id: number; employeeId: number; employeeName: string; note?: string | null }[];
   closedByOffice?: { by: string | null; at: string | null; note: string | null } | null;
   description: string | null;
   assignmentType: 'SINGLE_EMPLOYEE' | 'MULTIPLE_EMPLOYEES' | 'TEAM' | null;

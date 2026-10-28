@@ -631,8 +631,7 @@ export default function TaskDetail({ embeddedTaskId, onChanged }: { embeddedTask
               ))}
             </ul>
             {!locked && (
-              <TaskTeamPanel taskId={taskId} canRequestJoin={!!task.canRequestJoin} joinRequested={!!task.joinRequested}
-                canManage={!!task.canManageTeam} requests={task.joinRequests ?? []} onChanged={load} />
+              <TaskTeamPanel taskId={taskId} canManage={!!task.canManageTeam} onChanged={load} />
             )}
           </div>
         )}
@@ -761,13 +760,6 @@ export default function TaskDetail({ embeddedTaskId, onChanged }: { embeddedTask
             targetType={task.projectId ? 'PROJECT' : task.leadId ? 'LEAD' : 'TASK'} onChanged={load} />
         )}
 
-        {/* Helpers: ask to join a task someone holds; the owner / PM approves requests or adds a colleague. */}
-        {!isLeadForm && !isCallTask && !orderTask && !locked && (
-          <TaskTeamPanel taskId={taskId} joinRequested={!!task.joinRequested} canManage={false}
-            canRequestJoin={!!task.canRequestJoin && !(task.assignmentType === 'MULTIPLE_EMPLOYEES' || task.assignmentType === 'TEAM')}
-            requests={[]} onChanged={load} />
-        )}
-
         {/* Field-execution tools — only for real field/site tasks, not lead "collect info" forms. */}
         {!isLeadForm && !isCallTask && (<>
         {mine && !orderTask && !isProjectTask && !['STITCHING', 'INSTALLATION'].includes(task.category as string) && <TimeTracker taskId={taskId} disabled={locked} />}
@@ -842,7 +834,7 @@ export default function TaskDetail({ embeddedTaskId, onChanged }: { embeddedTask
 
           {!orderTask && <Disclosure title={isProjectTask ? t('pw.td.assignedTeamCaps') : t('pw.td.assigned_team')} count={task.team.length}
             meta={isProjectTask ? t('pw.td.members', { n: task.team.length }) : undefined} icon={<Users className="h-4 w-4" />}
-            defaultOpen={(task.joinRequests?.length ?? 0) > 0}>
+            >
             <ul className="flex flex-col gap-2">
               {task.team.map((m) => (
                 <li key={m.employeeId} className="flex items-center justify-between text-[13px] text-[#33392F]">
@@ -851,11 +843,10 @@ export default function TaskDetail({ embeddedTaskId, onChanged }: { embeddedTask
                 </li>
               ))}
             </ul>
-            {/* Join requests + Add helper live with the team: any member can approve a request or add a colleague. */}
+            {/* Add helper lives with the team: the owner / PM picks a colleague from the project team. */}
             {!locked && (
               <div className="mt-3">
-                <TaskTeamPanel taskId={taskId} canRequestJoin={false} joinRequested={false} canManage={!!task.canManageTeam}
-                  requests={task.joinRequests ?? []} onChanged={load} />
+                <TaskTeamPanel taskId={taskId} canManage={!!task.canManageTeam} onChanged={load} />
               </div>
             )}
           </Disclosure>}
