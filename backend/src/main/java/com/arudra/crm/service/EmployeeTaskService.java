@@ -32,6 +32,9 @@ public class EmployeeTaskService {
     private ProjectWorkService projectWorkService;
 
     @Autowired
+    private QuotationShareService quotationShareService;
+
+    @Autowired
     private TaskRepository taskRepository;
     @Autowired
     private TaskAssignmentRepository assignmentRepository;
@@ -573,6 +576,24 @@ public class EmployeeTaskService {
                     r.setStatus("CANCELLED");
                     joinRequestRepository.save(r);
                 });
+    }
+
+    /** The project's customer quotation link (/q/{token}) for a team member to send; created on first use. */
+    @Transactional
+    public Map<String, Object> projectQuotationLink(Long taskId, User viewer) {
+        Task task = getTask(taskId);
+        if (!isAdminUser(viewer) && !onTask(taskId, viewer.getId())) {
+            throw new IllegalStateException("Only people on this task can share its quotation.");
+        }
+        Project project = task.getProject();
+        Quotation q = project == null ? null : project.getQuotation();
+        if (q == null) throw new IllegalStateException("This project has no quotation to share.");
+        Map<String, Object> out = new HashMap<>(quotationShareService.share(q.getId(), null));
+        out.put("quotationNumber", q.getQuotationNumber());
+        out.put("customerName", project.getCustomer() != null ? project.getCustomer().getName() : null);
+        out.put("customerPhone", project.getCustomer() != null ? project.getCustomer().getPhone() : null);
+        out.put("staffName", viewer.getName());
+        return out;
     }
 
     /** Colleagues the manager can add: portal employees not already on the task. */

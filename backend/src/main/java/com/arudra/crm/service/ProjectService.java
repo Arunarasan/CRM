@@ -2495,6 +2495,7 @@ public class ProjectService {
         Map<String, Object> info = new java.util.LinkedHashMap<>();
         info.put("projectCode", project.getProjectCode());
         info.put("projectName", project.getProjectName());
+        info.put("hasQuotation", project.getQuotation() != null);
         info.put("status", project.getStatus());
         info.put("progress", project.getProgress());
         info.put("startDate", project.getStartDate());

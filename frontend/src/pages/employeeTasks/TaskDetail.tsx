@@ -33,6 +33,7 @@ import { callRecordingApi, type CallRecording } from '@/api/callRecordingApi';
 import CollectPaymentSheet from './components/CollectPaymentSheet';
 import MarkInstalledSheet, { InstallOrderCard } from './components/MarkInstalledSheet';
 import PaymentBox from './components/PaymentBox';
+import ShareQuotationCard from './components/ShareQuotationCard';
 import CustomerContactCard from './components/CustomerContactCard';
 import TimeTracker from './components/TimeTracker';
 import HoldTimer from './components/HoldTimer';
@@ -642,6 +643,7 @@ export default function TaskDetail({ embeddedTaskId, onChanged }: { embeddedTask
           <PaymentBox info={task.projectInfo} compact
             canRecord={canRecordPayment} onRecord={() => setSheet('payment')} />
         )}
+        {isProjectTask && task.projectInfo?.hasQuotation && !locked && <ShareQuotationCard taskId={taskId} />}
         {isProjectTask && task.projectInfo && <ItemsToMakeCard info={task.projectInfo} />}
         {isProjectTask && task.projectInfo && !workTracking && (
           <ChecklistPanel taskId={taskId} checklist={task.checklist} onChanged={load} locked={locked} compact

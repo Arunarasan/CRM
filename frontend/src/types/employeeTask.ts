@@ -335,6 +335,7 @@ export interface LeadMediaItem {
 export interface ProjectExecutionInfo {
   projectCode?: string | null;
   projectName?: string | null;
+  hasQuotation?: boolean;
   status?: string | null;
   progress?: number | null;
   startDate?: string | null;

@@ -695,6 +695,12 @@ public class EmployeePortalService {
         employeeTaskService.decideJoinRequest(requestId, currentUser, approve);
     }
 
+    @Transactional
+    public Map<String, Object> projectQuotationLink(User currentUser, Long taskId) {
+        requireEmployee(currentUser);
+        return employeeTaskService.projectQuotationLink(taskId, currentUser);
+    }
+
     public List<Map<String, Object>> helperCandidates(User currentUser, Long taskId) {
         requireEmployee(currentUser);
         return employeeTaskService.helperCandidates(taskId, currentUser);

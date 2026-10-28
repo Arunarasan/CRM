@@ -569,6 +569,13 @@ public class EmployeePortalController {
         return ResponseEntity.ok(ApiResponse.success("Request declined."));
     }
 
+    /** The customer quotation link for this project task, ready to send. */
+    @PostMapping("/tasks/{taskId}/quotation-link")
+    @PreAuthorize(PORTAL)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> quotationLink(@PathVariable Long taskId) {
+        return ResponseEntity.ok(ApiResponse.success(portalService.projectQuotationLink(me(), taskId)));
+    }
+
     /** Colleagues the task owner / PM can add as helpers. */
     @GetMapping("/tasks/{taskId}/helper-candidates")
     @PreAuthorize(PORTAL)
