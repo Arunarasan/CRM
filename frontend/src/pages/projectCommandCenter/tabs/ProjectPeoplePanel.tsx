@@ -21,7 +21,7 @@ const ROLES: [Person["role"], string][] = [
  * or picked up by themselves). The admin changes a role, adds a person, removes one, or puts a person on /
  * takes them off a specific task here.
  */
-export default function ProjectPeoplePanel({ projectId, onChanged }: { projectId: number; onChanged?: () => void }) {
+export default function ProjectPeoplePanel({ projectId, onChanged, compact }: { projectId: number; onChanged?: () => void; compact?: boolean }) {
   const [people, setPeople] = useState<Person[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<number | "add" | null>(null);
@@ -127,11 +127,11 @@ export default function ProjectPeoplePanel({ projectId, onChanged }: { projectId
                     {p.pickedOwn && <span className="text-[11px] text-slate-400">· picked by themself</span>}
                   </div>
                 </div>
-                <select className={sel} value="" disabled={busy === p.userId}
+                {!compact && <select className={sel} value="" disabled={busy === p.userId}
                   onChange={(e) => { if (e.target.value) addToTask(p, Number(e.target.value)); }}>
                   <option value="">+ Add to task…</option>
                   {tasks.filter((t) => !p.tasks.some((x) => x.id === t.id)).map((t) => <option key={t.id} value={t.id}>{t.taskName}</option>)}
-                </select>
+                </select>}
                 <select className={sel} value={p.role} disabled={busy === p.userId}
                   onChange={(e) => save(p.userId, e.target.value as Person["role"], p.userId)}>
                   {ROLES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}

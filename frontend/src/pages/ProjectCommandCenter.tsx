@@ -4,8 +4,6 @@ import api from "@/lib/api";
 import { uploadFile, resolveFileUrl } from "@/lib/uploadFile";
 import { projectApi, AvailableQuotation } from "@/api/projectApi";
 import { employeeTaskApi } from "@/api/employeeTaskApi";
-import { smartAssignmentApi } from "@/api/smartAssignmentApi";
-import { EmployeeRecommendation } from "@/types/assignment";
 import { boqApi } from "@/api/boqApi";
 import { changeRequestApi } from "@/api/changeRequestApi";
 import { inventoryApi } from "@/api/inventoryApi";
@@ -47,6 +45,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import ProjectContractorsTab from "@/pages/contractors/ProjectContractorsTab";
 import DecisionsTab from "@/pages/projectCommandCenter/tabs/DecisionsTab";
+import ProjectPeoplePanel from "@/pages/projectCommandCenter/tabs/ProjectPeoplePanel";
 import DailyLogsTab from "@/pages/projectCommandCenter/tabs/DailyLogsTab";
 import FieldProgressTab from "@/pages/projectCommandCenter/tabs/FieldProgressTab";
 import WorkProgressTab from "@/pages/projectCommandCenter/tabs/WorkProgressTab";
@@ -326,17 +325,6 @@ export default function ProjectCommandCenter() {
   const [newAssignState, setNewAssignState] = useState<{ taskId: string; resource: ResourceSelection | null }>({ taskId: '', resource: null });
   const [newPurchaseState, setNewPurchaseState] = useState({ itemDesc: '', quantity: 1 });
 
-  // Assign Team — smart-recommend the best 2 people for the project; user picks the pair
-  // and they're assigned as workforce resources on a project task (smart-assignment engine).
-  const [teamDialog, setTeamDialog] = useState(false);
-  // Live roster (managers + everyone holding a task) — same list as the Tasks tab's Team card.
-  const [people, setPeople] = useState<{ userId: number; name: string; role: string; tasks: { id: number }[] }[]>([]);
-  const [teamPicks, setTeamPicks] = useState<EmployeeRecommendation[]>([]);
-  const [teamSel, setTeamSel] = useState<Record<string, boolean>>({});
-  const [teamTopKeys, setTeamTopKeys] = useState<Set<string>>(new Set());
-  const [teamShowOthers, setTeamShowOthers] = useState(false);
-  const [teamLoading, setTeamLoading] = useState(false);
-  const [teamSaving, setTeamSaving] = useState(false);
 
   useEffect(() => {
     fetchProjectData();
@@ -346,7 +334,6 @@ export default function ProjectCommandCenter() {
   // approvals and documents all come from this single GET. Mutations that only touch those
   // sub-records refresh with fetchCore() instead of re-pulling all ~13 endpoints.
   const fetchCore = () => {
-    api.get(`/projects/${id}/people`).then(r => setPeople(r.data)).catch(() => setPeople([]));
     api.get(`/projects/${id}`)
       .then(res => {
         setData(res.data);
@@ -402,56 +389,6 @@ export default function ProjectCommandCenter() {
      }])
        .then(() => { setQuickActionOpen(false); setQuickActionView('menu'); setNewAssignState({ taskId: '', resource: null }); fetchProjectData(); })
        .catch(err => toast.error(err?.response?.data?.message || 'Failed to assign resource'));
-  };
-
-  // --- Assign Team: recommend the best 2 people, pick the pair, assign to a project task ----
-  const teamKey = (p: { resourceType: string; resourceId: number }) => `${p.resourceType}:${p.resourceId}`;
-  const loadTeamPicks = (taskId?: string) => {
-    setTeamLoading(true);
-    smartAssignmentApi.recommend({
-      projectId: Number(projectId),
-      taskId: taskId ? Number(taskId) : null,
-      requiredCount: 2,
-    })
-      .then((res) => {
-        const all = res.recommendations?.length ? res.recommendations : (res.topPicks || []);
-        const top = (res.topPicks?.length ? res.topPicks : all).slice(0, 2);
-        const topKeys = new Set(top.map(teamKey));
-        // Top 2 first (pre-selected), then the rest of the eligible people to swap in.
-        const ordered = [...top, ...all.filter((p) => !topKeys.has(teamKey(p)))];
-        setTeamPicks(ordered);
-        setTeamTopKeys(topKeys);
-        setTeamSel(Object.fromEntries(top.map((p) => [teamKey(p), true])));
-        setTeamShowOthers(false);
-      })
-      .catch((err) => { setTeamPicks([]); setTeamTopKeys(new Set()); toast.error(err?.response?.data?.message || 'Failed to load recommendations'); })
-      .finally(() => setTeamLoading(false));
-  };
-  const openAssignTeam = () => {
-    setTeamDialog(true);
-    setTeamPicks([]);
-    setTeamSel({});
-    loadTeamPicks();
-  };
-  // The picked pair becomes the project's leadership: highest suitability → Project Manager,
-  // second → Assistant Manager. Saved onto the project's roles (not a task assignment).
-  const handleAssignTeam = () => {
-    const chosen = teamPicks
-      .filter((p) => teamSel[teamKey(p)])
-      .sort((a, b) => b.suitabilityScore - a.suitabilityScore);
-    if (!chosen.length) { toast.error('Pick at least one person'); return; }
-    const pm = chosen[0];
-    const am = chosen[1]; // optional — a single pick just sets the Project Manager
-    if (!pm.userId) { toast.error(`${pm.name} has no linked user account and can't be set as Project Manager`); return; }
-    if (am && !am.userId) { toast.error(`${am.name} has no linked user account and can't be set as Assistant Manager`); return; }
-    setTeamSaving(true);
-    api.put(`/projects/${projectId}/team`, {
-      projectManagerId: pm.userId,
-      assistantManagerId: am ? am.userId : null,
-    })
-      .then(() => { toast.success('Team assigned'); setTeamDialog(false); fetchCore(); })
-      .catch((err) => toast.error(err?.response?.data?.message || 'Failed to assign team'))
-      .finally(() => setTeamSaving(false));
   };
 
   const handleQuickIssue = () => {
@@ -1240,7 +1177,7 @@ export default function ProjectCommandCenter() {
                 if (outstanding > 0)
                   attention.push({ key: 'due', tone: 'info', icon: IndianRupee, label: `${inr(outstanding)} unpaid`, detail: 'invoiced, not yet received', onClick: () => setActiveTab('payments') });
                 if (!done && !project.projectManager)
-                  attention.push({ key: 'pm', tone: 'info', icon: Users, label: 'No project manager', detail: 'assign the team', onClick: openAssignTeam });
+                  attention.push({ key: 'pm', tone: 'info', icon: Users, label: 'No project manager', detail: 'assign the team', onClick: () => document.getElementById('project-team-card')?.scrollIntoView({ behavior: 'smooth', block: 'center' }) });
                 if (!done && (stats?.pendingMaterials ?? 0) > 0)
                   attention.push({ key: 'materials', tone: 'info', icon: Package, label: `${stats.pendingMaterials} material${stats.pendingMaterials > 1 ? 's' : ''} not yet issued`, onClick: () => setActiveTab('purchaseOrders') });
 
@@ -1249,11 +1186,6 @@ export default function ProjectCommandCenter() {
                   MEDIUM: 'bg-sky-50 text-sky-700 ring-sky-200', LOW: 'bg-slate-100 text-slate-600 ring-slate-200',
                 };
                 const address = project.propertyAddress || summary.address;
-                const roleLabel: Record<string, string> = { PROJECT_MANAGER: 'Project Manager', ASSISTANT_MANAGER: 'Assistant Manager', MEMBER: 'Team member' };
-                const fromPeople: [string, any][] = people.map((p) => [p.tasks.length ? `${roleLabel[p.role] || 'Team member'} · ${p.tasks.length} task${p.tasks.length > 1 ? 's' : ''}` : (roleLabel[p.role] || 'Team member'), p]);
-                const listed = new Set(people.map((p) => p.name));
-                const extras = ([['Sales', project.salesExecutive], ['Designer', project.designer], ['Site Engineer', project.siteEngineer]] as [string, any][]).filter(([, u]) => u && !listed.has(u.name));
-                const team = [...fromPeople, ...extras];
 
                 return (
                   <>
@@ -1398,27 +1330,8 @@ export default function ProjectCommandCenter() {
                           </div>
                         </div>
 
-                        <div className={CARD}>
-                          <div className="flex items-center justify-between mb-2">
-                            <h3 className={CARD_TITLE}><Users className="w-5 h-5 text-emerald-700"/> Project Team</h3>
-                            <button type="button" onClick={openAssignTeam} className="text-xs font-semibold text-emerald-700 hover:text-emerald-900">{team.length ? 'Change' : 'Assign'}</button>
-                          </div>
-                          {team.length > 0 ? (
-                            <ul className="divide-y divide-slate-100">
-                              {team.map(([role, u], i) => (
-                                <li key={`${role}-${u.userId ?? u.name}-${i}`} className="flex items-center gap-3 py-2">
-                                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold shrink-0">{(u.name || '?').split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase()}</span>
-                                  <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-800">{u.name}</span>
-                                  <span className="shrink-0 text-[11px] text-slate-400">{role}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          ) : (
-                            <div className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2.5">
-                              <span className="text-xs text-slate-500">No one assigned yet</span>
-                              <Button onClick={openAssignTeam} size="sm" className="h-8 bg-emerald-700 hover:bg-emerald-800 rounded-lg text-xs text-white"><Plus className="w-3.5 h-3.5 mr-1"/> Assign team</Button>
-                            </div>
-                          )}
+                        <div id="project-team-card" className={`${CARD} !p-0 overflow-hidden`}>
+                          <ProjectPeoplePanel projectId={Number(projectId)} compact onChanged={fetchCore} />
                         </div>
 
                         {!done && (
@@ -2389,90 +2302,6 @@ export default function ProjectCommandCenter() {
             </DialogContent>
          </Dialog>
       </div>
-
-      {/* Assign Team — best-2 smart recommendations; top pick → Project Manager, 2nd → Assistant Manager */}
-      <Dialog open={teamDialog} onOpenChange={setTeamDialog}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><Users className="w-4 h-4 text-emerald-600"/> Assign Team</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 pt-2">
-            <div className="rounded-lg bg-emerald-50/70 border border-emerald-100 px-3 py-2 text-[11px] text-emerald-800">
-              Pick the pair — the higher-scored person becomes <b>Project Manager</b>, the other becomes <b>Assistant Manager</b>.
-            </div>
-            <div>
-              {teamLoading ? (
-                <div className="py-8 text-center text-sm text-slate-400">Finding the best people…</div>
-              ) : teamPicks.length === 0 ? (
-                <div className="py-8 text-center text-sm text-slate-400">No eligible people found right now.</div>
-              ) : (() => {
-                const selCount = teamPicks.filter((p) => teamSel[teamKey(p)]).length;
-                const top = teamPicks.filter((p) => teamTopKeys.has(teamKey(p)));
-                const others = teamPicks.filter((p) => !teamTopKeys.has(teamKey(p)));
-                // Selected pair (by score): 1st → Project Manager, 2nd → Assistant Manager.
-                const chosen = teamPicks.filter((p) => teamSel[teamKey(p)]).sort((a, b) => b.suitabilityScore - a.suitabilityScore);
-                const roleFor: Record<string, string> = {};
-                if (chosen[0]) roleFor[teamKey(chosen[0])] = 'PM';
-                if (chosen[1]) roleFor[teamKey(chosen[1])] = 'Asst. Manager';
-                const Row = (p: EmployeeRecommendation) => {
-                  const k = teamKey(p);
-                  const on = !!teamSel[k];
-                  const role = roleFor[k];
-                  return (
-                    <button
-                      key={k}
-                      type="button"
-                      onClick={() => setTeamSel((s) => ({ ...s, [k]: !on }))}
-                      className={`w-full text-left flex items-center gap-3 rounded-xl border px-3 py-2.5 transition-colors ${on ? 'border-emerald-300 bg-emerald-50/70' : 'border-slate-200 bg-white hover:bg-slate-50'}`}
-                    >
-                      <span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 text-sm font-bold shrink-0">{(p.name || '?').charAt(0).toUpperCase()}</span>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-sm font-semibold text-slate-700 truncate">{p.name}</span>
-                          {role && <span className={`shrink-0 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide ${role === 'PM' ? 'bg-emerald-600 text-white' : 'bg-amber-100 text-amber-700'}`}>{role}</span>}
-                        </div>
-                        <div className="text-[11px] text-slate-400 truncate">{p.designation || p.department || p.employeeCode || '—'}{p.reasons?.[0] ? ` · ${p.reasons[0]}` : ''}</div>
-                      </div>
-                      <span className="text-[11px] font-bold text-emerald-700 shrink-0" title="Suitability score">{Math.round(p.suitabilityScore)}</span>
-                      {on ? <Check className="w-4 h-4 text-emerald-600 shrink-0" /> : <span className="w-4 h-4 rounded-full border border-slate-300 shrink-0" />}
-                    </button>
-                  );
-                };
-                return (
-                  <>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-xs font-semibold text-slate-500">Best suited — pick the pair</span>
-                      {selCount > 0 && <span className="text-[11px] font-semibold text-emerald-600">{selCount} selected</span>}
-                    </div>
-                    <div className="space-y-2">{top.map(Row)}</div>
-                    {others.length > 0 && (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => setTeamShowOthers((v) => !v)}
-                          className="mt-2 flex w-full items-center justify-between rounded-lg px-1 py-1 text-[11px] font-semibold text-slate-500 hover:text-emerald-600"
-                        >
-                          <span>Choose someone else ({others.length})</span>
-                          {teamShowOthers ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                        </button>
-                        {teamShowOthers && (
-                          <div className="space-y-2 mt-1 max-h-56 overflow-y-auto pr-1">{others.map(Row)}</div>
-                        )}
-                      </>
-                    )}
-                  </>
-                );
-              })()}
-            </div>
-            <div className="flex gap-2 pt-1">
-              <Button variant="outline" onClick={() => setTeamDialog(false)} className="flex-1">Cancel</Button>
-              <Button onClick={handleAssignTeam} disabled={teamSaving || teamLoading || !teamPicks.length} className="flex-1 bg-emerald-500 hover:bg-emerald-600">
-                {teamSaving ? 'Assigning…' : 'Assign'}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       {/* Work Item — progress editor + timeline */}
       <Dialog open={!!editingItem} onOpenChange={(open) => { if (!open) setEditingItem(null); }}>
