@@ -8,6 +8,7 @@ import QuickPayDialog from "./QuickPayDialog";
 import PayslipEditor from "./PayslipEditor";
 import PayRun from "./PayRun";
 import PayRulesTab from "./PayRulesTab";
+import PayslipSettingsTab from "./PayslipSettingsTab";
 import WageSettingsDialog from "@/components/hr/WageSettingsDialog";
 import api from "@/lib/api";
 import { toast } from "@/components/ui/toast";
@@ -71,7 +72,7 @@ export default function HrFinanceDashboard() {
   const [searchParams] = useSearchParams();
   const [tab, setTab] = useState(() => {
     const t = searchParams.get("tab");
-    return t && ["run", "adjustments", "requests", "contractors", "rules"].includes(t) ? t : "run";
+    return t && ["run", "adjustments", "requests", "contractors", "rules", "payslip"].includes(t) ? t : "run";
   });
   const [runKey, setRunKey] = useState(0); // bump to make the pay run reload
   const [editSlip, setEditSlip] = useState<{ employeeId: number; name?: string } | null>(null);
@@ -274,6 +275,7 @@ export default function HrFinanceDashboard() {
                 <DropdownMenuContent align="end" className="w-56">
                   <DropdownMenuItem onClick={() => openWage()}><Settings2 className="mr-2 h-4 w-4" /> Wage &amp; pay basis</DropdownMenuItem>
                   <DropdownMenuItem onClick={() => setTab("rules")}><Gift className="mr-2 h-4 w-4" /> Pay rules &amp; incentives</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setTab("payslip")}><Settings2 className="mr-2 h-4 w-4" /> Payslip settings</DropdownMenuItem>
                   <DropdownMenuItem onClick={runAlerts}><Bell className="mr-2 h-4 w-4" /> Send payment alerts</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -290,6 +292,7 @@ export default function HrFinanceDashboard() {
             <TabsTrigger value="requests" className="py-1.5">Requests {pendingReqCount > 0 && <CountPill n={pendingReqCount} tone="amber" />}</TabsTrigger>
             <TabsTrigger value="contractors" className="py-1.5">Contractors <CountPill n={conLines.length} /></TabsTrigger>
             <TabsTrigger value="rules" className="py-1.5">Pay rules</TabsTrigger>
+            <TabsTrigger value="payslip" className="py-1.5">Payslip settings</TabsTrigger>
           </TabsList>
         </div>
 
@@ -306,6 +309,11 @@ export default function HrFinanceDashboard() {
         {/* ===================== PAY RULES ===================== */}
         <TabsContent value="rules" className="mt-4">
           <PayRulesTab canEdit={canProcess} />
+        </TabsContent>
+
+        {/* ===================== PAYSLIP SETTINGS ===================== */}
+        <TabsContent value="payslip" className="mt-4">
+          <PayslipSettingsTab canEdit={canProcess} month={month} year={year} />
         </TabsContent>
 
         {/* ===================== CONTRACTORS ===================== */}

@@ -4,6 +4,8 @@ import com.arudra.crm.entity.*;
 import com.arudra.crm.security.CurrentUserService;
 import com.arudra.crm.service.HrService;
 import com.arudra.crm.service.PayrollService;
+import com.arudra.crm.service.PayslipAutoGenerateScheduler;
+import com.arudra.crm.service.PayslipSettingsService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
@@ -37,6 +39,12 @@ public class HrController {
 
     @Autowired
     private PayrollService payrollService;
+
+    @Autowired
+    private PayslipSettingsService payslipSettingsService;
+
+    @Autowired
+    private PayslipAutoGenerateScheduler payslipAutoGenerateScheduler;
 
     @Autowired
     private com.arudra.crm.service.HrOverviewService hrOverviewService;
@@ -545,6 +553,27 @@ public class HrController {
     @PreAuthorize(PAYROLL_PROCESS)
     public ResponseEntity<Map<String, Object>> savePayRules(@RequestBody Map<String, Object> body) {
         return ResponseEntity.ok(payrollService.savePayRules(body));
+    }
+
+    /** Payslip presets: auto-generate schedule, default lines, printed template, release stage. */
+    @GetMapping("/payroll/payslip-settings")
+    @PreAuthorize(PAYROLL_READ)
+    public ResponseEntity<PayslipSettingsService.Settings> payslipSettings() {
+        return ResponseEntity.ok(payslipSettingsService.get());
+    }
+
+    @PutMapping("/payroll/payslip-settings")
+    @PreAuthorize(PAYROLL_PROCESS)
+    public ResponseEntity<PayslipSettingsService.Settings> savePayslipSettings(@RequestBody PayslipSettingsService.Settings body) {
+        return ResponseEntity.ok(payslipSettingsService.save(body));
+    }
+
+    /** Runs the auto-generate now for a month (fills in only employees without a payslip). */
+    @PostMapping("/payroll/payslip-settings/run-now")
+    @PreAuthorize(PAYROLL_PROCESS)
+    public ResponseEntity<Map<String, Object>> runAutoGenerateNow(@RequestParam int month, @RequestParam int year) {
+        String summary = payslipAutoGenerateScheduler.generate(java.time.YearMonth.of(year, month), payslipSettingsService.get().getAuto());
+        return ResponseEntity.ok(Map.of("summary", summary));
     }
 
     /** Generate one employee's payslip; basis HOURLY | MONTHLY, omitted means their usual basis. */

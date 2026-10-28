@@ -28,7 +28,6 @@ import { useGoBack } from "@/hooks/useGoBack";
 import { useAuth } from "@/hooks/useAuth";
 import LeadFormDialog from "./leads/LeadFormDialog";
 import ChangeCreatorDialog from "./leads/ChangeCreatorDialog";
-import LeadManagerDialog from "./leads/LeadManagerDialog";
 import type { LeadManager } from "./leads/leadApi";
 import ConvertLeadDialog from "./leads/ConvertLeadDialog";
 import { useLeadJourney, type JourneyStepId } from "./leads/journey";
@@ -100,7 +99,6 @@ export default function LeadProfile() {
   const [winBackOpen, setWinBackOpen] = useState(false);
   const [creatorOpen, setCreatorOpen] = useState(false);
   const [manager, setManager] = useState<LeadManager | null>(null);
-  const [managerOpen, setManagerOpen] = useState(false);
   const { isAdmin } = useAuth();
   // Phones: once the content is scrolled, the pinned header folds to name + tabs so the page itself has
   // room (the full header is ~40% of a phone screen). Tablet / desktop keep the full header — the
@@ -376,17 +374,19 @@ export default function LeadProfile() {
                 <span className="text-slate-400">Lead by</span> <span className="font-semibold text-slate-800">{addedBy}</span>
               </span>
             )}
-            {isAdmin ? (
-              <button type="button" onClick={() => setManagerOpen(true)} title="Who runs this lead's quote"
-                className={`${CHIP_SM} hover:border-emerald-300`}>
+            {(manager?.managers.length ?? 0) > 0 && (
+              <span className={CHIP_SM} title="Run this lead's quote">
                 <UserCheck className="h-3.5 w-3.5 text-emerald-600" />
-                <span className="text-slate-400">Lead manager</span> <span className="font-semibold text-slate-800">{manager?.name || "Not set"}</span>
-                <Pencil className="h-3 w-3 text-slate-400" />
-              </button>
-            ) : manager?.name && (
-              <span className={CHIP_SM} title="Runs this lead's quote">
-                <UserCheck className="h-3.5 w-3.5 text-emerald-600" />
-                <span className="text-slate-400">Lead manager</span> <span className="font-semibold text-slate-800">{manager.name}</span>
+                <span className="text-slate-400">Lead manager</span>
+                {manager!.managers.map((m) => (
+                  <span key={m.userId} className="inline-flex items-center gap-1 font-semibold text-slate-800">
+                    {m.name}
+                    {isAdmin && (
+                      <button type="button" title="Remove lead manager" className="text-slate-400 hover:text-rose-600"
+                        onClick={() => leadApi.removeLeadManager(lead.id, m.userId).then((r) => setManager(r.data)).catch(() => {})}>×</button>
+                    )}
+                  </span>
+                ))}
               </span>
             )}
             {place && (
@@ -493,10 +493,6 @@ export default function LeadProfile() {
       <MarkLostDialog open={lostOpen} onOpenChange={setLostOpen} lead={lead} onChanged={fetchLead} />
       <WinBackDialog open={winBackOpen} onOpenChange={setWinBackOpen} lead={lead} onChanged={fetchLead} />
       <ReopenDialog open={reopenOpen} onOpenChange={setReopenOpen} lead={lead} users={users} onChanged={fetchLead} />
-      {isAdmin && (
-        <LeadManagerDialog open={managerOpen} onOpenChange={setManagerOpen} leadId={lead.id} users={users}
-          currentUserId={manager?.userId} onChanged={setManager} />
-      )}
       {isAdmin && (
         <ChangeCreatorDialog open={creatorOpen} onOpenChange={setCreatorOpen} leadId={lead.id} users={users}
           currentUserId={creator?.userId ?? lead.leadOwner?.id}

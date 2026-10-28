@@ -16,6 +16,8 @@ import { EmployeeRecommendation } from "@/types/assignment";
 import { workflowApi, ConsoleOverview, WorkflowTemplate } from "@/api/workflowApi";
 import { employeeTaskApi } from "@/api/employeeTaskApi";
 import { TimeLogSummary } from "@/types/employeeTask";
+import LeadManagerCheck from "@/components/tasks/LeadManagerCheck";
+import { leadApi } from "@/pages/leads/leadApi";
 import ResourceSelect, { ResourceSelection } from "@/components/workforce/ResourceSelect";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
@@ -157,6 +159,7 @@ export default function Tasks() {
   const [newChecklistItem, setNewChecklistItem] = useState("");
   const [applyingChecklist, setApplyingChecklist] = useState(false);
   const [assignPick, setAssignPick] = useState<ResourceSelection | null>(null);
+  const [pickAsManager, setPickAsManager] = useState(false);
   const [assigning, setAssigning] = useState(false);
   const [taskCall, setTaskCall] = useState<CallRecording | null>(null);
 
@@ -198,7 +201,10 @@ export default function Tasks() {
     if (!currentTask.id || !assignPick) return;
     setAssigning(true);
     employeeTaskApi.assignResources(currentTask.id, [{ resourceType: assignPick.resourceType, resourceId: assignPick.resourceId }])
-      .then(() => { setAssignPick(null); loadAssignments(currentTask.id); loadBoard(); })
+      .then(async () => {
+        if (pickAsManager && currentTask.leadId && assignPick.resourceType === "EMPLOYEE") await leadApi.setLeadManager(currentTask.leadId, assignPick.resourceId);
+        setAssignPick(null); setPickAsManager(false); loadAssignments(currentTask.id); loadBoard();
+      })
       .catch(() => alert("Failed to assign"))
       .finally(() => setAssigning(false));
   };
@@ -387,6 +393,7 @@ export default function Tasks() {
                   <ResourceSelect value={assignPick} onChange={setAssignPick} className="flex-1" placeholder="Assign an employee…" />
                   <Button type="button" onClick={assignPicked} disabled={!assignPick || assigning}>{assigning ? "Assigning…" : "Assign"}</Button>
                 </div>
+                {currentTask.leadId && assignPick?.resourceType === "EMPLOYEE" && <LeadManagerCheck checked={pickAsManager} onChange={setPickAsManager} />}
               </div>
             )}
 
@@ -608,6 +615,7 @@ function SmartAssignDialog({ task, onClose, onAssigned }: {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [asManager, setAsManager] = useState(false);
 
   useEffect(() => {
     setLoading(true); setError(null);
@@ -620,6 +628,7 @@ function SmartAssignDialog({ task, onClose, onAssigned }: {
   const assign = (r: EmployeeRecommendation) => {
     setBusyId(r.resourceId); setError(null);
     smartAssignmentApi.assign(task.id, [{ resourceType: r.resourceType, resourceId: r.resourceId, suitabilityScore: r.suitabilityScore, reason: (r.reasons || []).join("; ") }], "AUTO")
+      .then(async () => { if (asManager && task.leadId && r.resourceType === "EMPLOYEE") await leadApi.setLeadManager(task.leadId, r.resourceId); })
       .then(onAssigned)
       .catch(e => setError(e?.message || "Assignment failed"))
       .finally(() => setBusyId(null));
@@ -631,6 +640,7 @@ function SmartAssignDialog({ task, onClose, onAssigned }: {
         <DialogHeader><DialogTitle className="flex items-center gap-2"><Zap className="w-4 h-4 text-amber-500" /> Smart Assign — {task.taskName}</DialogTitle></DialogHeader>
         <p className="text-xs text-muted-foreground -mt-2">Top 5 best-fit employees, ranked by availability, workload, skills &amp; performance.</p>
         {error && <div className="rounded-md border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div>}
+        {task.leadId && <LeadManagerCheck checked={asManager} onChange={setAsManager} />}
         <div className="space-y-2 max-h-[60vh] overflow-y-auto py-1">
           {loading && <p className="py-8 text-center text-sm text-muted-foreground">Analysing team…</p>}
           {!loading && recs.length === 0 && !error && <p className="py-8 text-center text-sm text-muted-foreground">No eligible employees found.</p>}

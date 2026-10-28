@@ -32,6 +32,7 @@ public class EmployeePortalService {
     @Autowired private LeaveRequestRepository leaveRequestRepository;
     @Autowired private SalaryRecordRepository salaryRecordRepository;
     @Autowired private com.arudra.crm.repository.PayslipLineItemRepository payslipLineItemRepository;
+    @Autowired private PayslipSettingsService payslipSettings;
     @Autowired private EmployeeDocumentRepository documentRepository;
     @Autowired private NotificationRepository notificationRepository;
     @Autowired private EmployeeTaskService employeeTaskService;
@@ -295,14 +296,22 @@ public class EmployeePortalService {
      *  still open to HR edits until approved, so the portal labels it "not final". */
     private static final java.util.Set<String> RELEASED_PAYSLIP_STATUSES = java.util.Set.of("PENDING", "APPROVED", "PAID");
 
-    private static boolean released(SalaryRecord r) {
-        return r.getStatus() != null && RELEASED_PAYSLIP_STATUSES.contains(r.getStatus().toUpperCase());
+    /** HR's "release payslip to employee at" preset narrows which of those statuses are shown. */
+    private boolean released(SalaryRecord r) {
+        if (r.getStatus() == null) return false;
+        String st = r.getStatus().toUpperCase();
+        if (!RELEASED_PAYSLIP_STATUSES.contains(st)) return false;
+        return switch (payslipSettings.get().getVisibility().getReleaseOn()) {
+            case "PAID" -> st.equals("PAID");
+            case "APPROVED" -> st.equals("APPROVED") || st.equals("PAID");
+            default -> true;
+        };
     }
 
     /** The employee's approved/paid payslips, latest first. */
     private List<SalaryRecord> releasedPayslips(Long employeeId) {
         return salaryRecordRepository.findByEmployeeIdOrderByYearDescMonthDesc(employeeId)
-                .stream().filter(EmployeePortalService::released).toList();
+                .stream().filter(this::released).toList();
     }
 
     public List<SalaryRecord> getPayslips(User currentUser) {
@@ -675,24 +684,6 @@ public class EmployeePortalService {
     public Map<String, Object> requestCancel(User currentUser, Long taskId, String reasonCode, String reason) {
         requireEmployee(currentUser);
         return taskCancelRequestService.request(taskId, currentUser, reasonCode, reason);
-    }
-
-    @Transactional
-    public void requestJoin(User currentUser, Long taskId, String note) {
-        requireEmployee(currentUser);
-        employeeTaskService.requestJoin(taskId, currentUser, note);
-    }
-
-    @Transactional
-    public void cancelJoinRequest(User currentUser, Long taskId) {
-        requireEmployee(currentUser);
-        employeeTaskService.cancelJoinRequest(taskId, currentUser);
-    }
-
-    @Transactional
-    public void decideJoinRequest(User currentUser, Long requestId, boolean approve) {
-        requireEmployee(currentUser);
-        employeeTaskService.decideJoinRequest(requestId, currentUser, approve);
     }
 
     @Transactional

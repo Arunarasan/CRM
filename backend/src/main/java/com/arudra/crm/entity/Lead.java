@@ -244,11 +244,11 @@ public class Lead extends BaseEntity {
     @JoinColumn(name = "lead_owner_id")
     private User leadOwner;
 
-    /** Runs the quote: sole non-admin editor of it, and converts to a project without admin approval. */
+    /** Run the quote: the only non-admin editors of it, and they convert to a project without admin approval. */
     @com.fasterxml.jackson.annotation.JsonIgnore
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "lead_manager_id")
-    private User leadManager;
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(name = "lead_managers", joinColumns = @JoinColumn(name = "lead_id"), inverseJoinColumns = @JoinColumn(name = "user_id"))
+    private java.util.Set<User> leadManagers = new java.util.HashSet<>();
 
     /** Payslip that paid the collector's per-lead reward (0 = pre-feature, never paid; null = not yet). */
     @com.fasterxml.jackson.annotation.JsonIgnore

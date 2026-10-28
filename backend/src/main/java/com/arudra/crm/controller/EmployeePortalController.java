@@ -539,36 +539,6 @@ public class EmployeePortalController {
                 "Sent to admin for approval."));
     }
 
-    /** Ask the task's holder / PM to add you as a helper. */
-    @PostMapping("/tasks/{taskId}/join-request")
-    @PreAuthorize(PORTAL)
-    public ResponseEntity<ApiResponse<String>> requestJoin(@PathVariable Long taskId,
-                                                           @RequestBody(required = false) Map<String, String> body) {
-        portalService.requestJoin(me(), taskId, body != null ? body.get("note") : null);
-        return ResponseEntity.ok(ApiResponse.success("Request sent."));
-    }
-
-    @DeleteMapping("/tasks/{taskId}/join-request")
-    @PreAuthorize(PORTAL)
-    public ResponseEntity<ApiResponse<String>> cancelJoinRequest(@PathVariable Long taskId) {
-        portalService.cancelJoinRequest(me(), taskId);
-        return ResponseEntity.ok(ApiResponse.success("Request cancelled."));
-    }
-
-    @PostMapping("/join-requests/{requestId}/approve")
-    @PreAuthorize(PORTAL)
-    public ResponseEntity<ApiResponse<String>> approveJoin(@PathVariable Long requestId) {
-        portalService.decideJoinRequest(me(), requestId, true);
-        return ResponseEntity.ok(ApiResponse.success("Helper added."));
-    }
-
-    @PostMapping("/join-requests/{requestId}/reject")
-    @PreAuthorize(PORTAL)
-    public ResponseEntity<ApiResponse<String>> rejectJoin(@PathVariable Long requestId) {
-        portalService.decideJoinRequest(me(), requestId, false);
-        return ResponseEntity.ok(ApiResponse.success("Request declined."));
-    }
-
     /** The customer quotation link for this project task, ready to send. */
     @PostMapping("/tasks/{taskId}/quotation-link")
     @PreAuthorize(PORTAL)

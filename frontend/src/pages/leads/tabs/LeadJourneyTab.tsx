@@ -8,6 +8,7 @@ import { employeeTaskApi } from "@/api/employeeTaskApi";
 import { smartAssignmentApi } from "@/api/smartAssignmentApi";
 import { EmployeeRecommendation } from "@/types/assignment";
 import { leadApi } from "../leadApi";
+import LeadManagerCheck from "@/components/tasks/LeadManagerCheck";
 import { PRIORITY_STYLES, formatDateTime } from "../constants";
 import { ListSkeleton } from "./shared";
 
@@ -44,6 +45,7 @@ export default function LeadJourneyTab({ leadId }: { leadId: string }) {
   const [loading, setLoading] = useState(true);
   const [manualFor, setManualFor] = useState<number | null>(null);
   const [pick, setPick] = useState<ResourceSelection | null>(null);
+  const [pickAsManager, setPickAsManager] = useState(false);
   const [busyTask, setBusyTask] = useState<number | null>(null);
   const [smartFor, setSmartFor] = useState<WorkflowRow | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -61,7 +63,10 @@ export default function LeadJourneyTab({ leadId }: { leadId: string }) {
     if (!pick) return;
     setBusyTask(taskId); setErr(null);
     employeeTaskApi.assignResources(taskId, [{ resourceType: pick.resourceType, resourceId: pick.resourceId }])
-      .then(() => { setManualFor(null); setPick(null); load(); })
+      .then(async () => {
+        if (pickAsManager && pick.resourceType === "EMPLOYEE") await leadApi.setLeadManager(leadId, pick.resourceId);
+        setManualFor(null); setPick(null); setPickAsManager(false); load();
+      })
       .catch(() => setErr("Failed to assign"))
       .finally(() => setBusyTask(null));
   };
@@ -167,6 +172,9 @@ export default function LeadJourneyTab({ leadId }: { leadId: string }) {
                       <Button type="button" size="sm" variant="ghost" onClick={() => { setManualFor(null); setPick(null); }}>Cancel</Button>
                     </div>
                   )}
+                  {canAssign && manualFor === t.id && pick?.resourceType === "EMPLOYEE" && (
+                    <div className="mt-2"><LeadManagerCheck checked={pickAsManager} onChange={setPickAsManager} /></div>
+                  )}
                 </div>
               </div>
             </div>
@@ -175,20 +183,21 @@ export default function LeadJourneyTab({ leadId }: { leadId: string }) {
       </CardContent>
 
       {smartFor && (
-        <SmartAssignChooser task={smartFor} onClose={() => setSmartFor(null)} onAssigned={() => { setSmartFor(null); load(); }} />
+        <SmartAssignChooser task={smartFor} leadId={leadId} onClose={() => setSmartFor(null)} onAssigned={() => { setSmartFor(null); load(); }} />
       )}
     </Card>
   );
 }
 
 // Top-5 ranked chooser — mirrors the global Tasks board's Smart Assign.
-function SmartAssignChooser({ task, onClose, onAssigned }: {
-  task: WorkflowRow; onClose: () => void; onAssigned: () => void;
+function SmartAssignChooser({ task, leadId, onClose, onAssigned }: {
+  task: WorkflowRow; leadId: string; onClose: () => void; onAssigned: () => void;
 }) {
   const [recs, setRecs] = useState<EmployeeRecommendation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [asManager, setAsManager] = useState(false);
 
   useEffect(() => {
     setLoading(true); setError(null);
@@ -201,6 +210,7 @@ function SmartAssignChooser({ task, onClose, onAssigned }: {
   const assign = (r: EmployeeRecommendation) => {
     setBusyId(r.resourceId); setError(null);
     smartAssignmentApi.assign(task.id, [{ resourceType: r.resourceType, resourceId: r.resourceId, suitabilityScore: r.suitabilityScore, reason: (r.reasons || []).join("; ") }], "AUTO")
+      .then(async () => { if (asManager && r.resourceType === "EMPLOYEE") await leadApi.setLeadManager(leadId, r.resourceId); })
       .then(onAssigned)
       .catch((e) => setError(e?.message || "Assignment failed"))
       .finally(() => setBusyId(null));
@@ -212,6 +222,7 @@ function SmartAssignChooser({ task, onClose, onAssigned }: {
         <DialogHeader><DialogTitle className="flex items-center gap-2"><Zap className="w-4 h-4 text-amber-500" /> Smart Assign — {task.taskName}</DialogTitle></DialogHeader>
         <p className="text-xs text-muted-foreground -mt-2">Top 5 best-fit employees, ranked by availability, workload, skills &amp; performance.</p>
         {error && <div className="rounded-md border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div>}
+        <LeadManagerCheck checked={asManager} onChange={setAsManager} />
         <div className="space-y-2 max-h-[60vh] overflow-y-auto py-1">
           {loading && <p className="py-8 text-center text-sm text-muted-foreground">Analysing team…</p>}
           {!loading && recs.length === 0 && !error && <p className="py-8 text-center text-sm text-muted-foreground">No eligible employees found.</p>}

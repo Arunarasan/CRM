@@ -3,7 +3,7 @@ import type { BoardColumn, DashboardMetrics, Lead, LeadCreator, LeadFilters, Lea
 
 // Thin typed wrapper around /api/leads endpoints so pages/tabs share one surface.
 
-export interface LeadManager { userId?: number | null; name?: string | null }
+export interface LeadManager { managers: { userId: number; name: string }[] }
 
 export const leadApi = {
   list(params: {
@@ -46,7 +46,8 @@ export const leadApi = {
   createdBy: (id: string | number) => api.get<LeadCreator>(`/leads/${id}/created-by`),
   /** Admin only — re-credit the lead to another employee. */
   leadManager: (id: string | number) => api.get<LeadManager>(`/leads/${id}/lead-manager`),
-  setLeadManager: (id: string | number, userId: number | null) => api.put<LeadManager>(`/leads/${id}/lead-manager`, { userId }),
+  setLeadManager: (id: string | number, userId: number) => api.put<LeadManager>(`/leads/${id}/lead-manager`, { userId }),
+  removeLeadManager: (id: string | number, userId: number) => api.delete<LeadManager>(`/leads/${id}/lead-manager/${userId}`),
   changeCreatedBy: (id: string | number, userId: number) => api.put<LeadCreator>(`/leads/${id}/created-by`, { userId }),
   create: (payload: Partial<Lead>) => api.post<Lead>("/leads", payload),
   update: (id: number, payload: Partial<Lead>) => api.put<Lead>(`/leads/${id}`, payload),

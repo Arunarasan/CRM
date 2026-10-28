@@ -250,6 +250,38 @@
       "env": {
         "VITE_API_URL": "http://localhost:8097/api"
       }
+    },
+    {
+      "name": "backend-pslipset",
+      "runtimeExecutable": "mvn",
+      "runtimeArgs": [
+        "-o",
+        "spring-boot:run",
+        "-Dspring-boot.run.arguments=--server.port=8101"
+      ],
+      "port": 8101,
+      "cwd": "backend",
+      "env": {
+        "CORS_ALLOWED_ORIGINS": "http://localhost:4191",
+        "DB_URL": "jdbc:mysql://localhost:3306/zz_payslip_settings?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true"
+      }
+    },
+    {
+      "name": "frontend-pslipset",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "4191",
+        "--strictPort"
+      ],
+      "port": 4191,
+      "cwd": "frontend",
+      "env": {
+        "VITE_API_URL": "http://localhost:8101/api"
+      }
     }
   ]
 }

@@ -1384,17 +1384,21 @@ public class LeadService {
         return out;
     }
 
-    /** Admin names (or clears, userId null) the lead's manager; logged on the timeline. */
+    /** Adds (or, with add=false, removes) one lead manager; logged on the timeline. */
     @Transactional
-    public Lead assignLeadManager(Long leadId, Long userId, User by) {
+    public Lead assignLeadManager(Long leadId, Long userId, boolean add, User by) {
         Lead lead = getLeadById(leadId);
-        User mgr = userId == null ? null : userRepository.findById(userId)
+        User mgr = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
-        lead.setLeadManager(mgr);
+        if (add) {
+            if (!lead.getLeadManagers().add(mgr)) return lead;
+        } else if (!lead.getLeadManagers().removeIf(m -> m.getId().equals(userId))) {
+            return lead;
+        }
         leadRepository.save(lead);
-        logActivity(lead, "LEAD_MANAGER", mgr == null ? "Lead manager removed" : "Lead manager set to " + mgr.getName(), by);
-        if (mgr != null && by != null && !mgr.getId().equals(by.getId())) {
-            notificationService.dispatch("You manage a lead", "You are now the lead manager for " + lead.getName()
+        logActivity(lead, "LEAD_MANAGER", (add ? "Lead manager added: " : "Lead manager removed: ") + mgr.getName(), by);
+        if (add && by != null && !mgr.getId().equals(by.getId())) {
+            notificationService.dispatch("You manage a lead", "You are now a lead manager for " + lead.getName()
                     + ". You can edit its quote and create its project directly.", "LEAD", mgr.getId(), "/employee/tasks");
         }
         return lead;
@@ -1402,11 +1406,14 @@ public class LeadService {
 
     public Map<String, Object> getLeadManagerInfo(Long leadId) {
         Lead lead = getLeadById(leadId);
-        Map<String, Object> m = new java.util.LinkedHashMap<>();
-        User mgr = lead.getLeadManager();
-        m.put("userId", mgr == null ? null : mgr.getId());
-        m.put("name", mgr == null ? null : mgr.getName());
-        return m;
+        List<Map<String, Object>> managers = new ArrayList<>();
+        for (User m : lead.getLeadManagers()) {
+            Map<String, Object> e = new LinkedHashMap<>();
+            e.put("userId", m.getId());
+            e.put("name", m.getName());
+            managers.add(e);
+        }
+        return Map.of("managers", managers);
     }
 
     /** Re-credits the lead to another employee (admin correction of "Lead by"); logged on the timeline. */

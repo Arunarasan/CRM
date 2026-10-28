@@ -17,6 +17,46 @@ export interface PayRules {
   performanceMinScore: number;
 }
 
+export interface PayslipAutoSettings {
+  enabled: boolean;
+  dayOfMonth: number;
+  period: 'PREVIOUS' | 'CURRENT';
+  basis: 'AUTO' | 'HOURLY' | 'MONTHLY';
+  notifyHr: boolean;
+  lastRunPeriod?: string | null;
+  lastRunSummary?: string | null;
+}
+export interface PayslipDefaultLine {
+  id?: string;
+  label: string;
+  category: 'EARNING' | 'DEDUCTION';
+  type: 'FIXED' | 'PERCENT';
+  value: number;
+  enabled: boolean;
+  employeeIds: number[];
+  basis: '' | 'HOURLY' | 'MONTHLY';
+}
+export interface PayslipTemplate {
+  title: string;
+  accentColor: string;
+  registrationNo: string;
+  footerNote: string;
+  showEmployeeDetails: boolean;
+  showBankAccount: boolean;
+  showAttendance: boolean;
+  showAmountInWords: boolean;
+  showStatusLine: boolean;
+  showSignatures: boolean;
+  employeeSignLabel: string;
+  companySignLabel: string;
+}
+export interface PayslipSettings {
+  auto: PayslipAutoSettings;
+  lines: PayslipDefaultLine[];
+  template: PayslipTemplate;
+  visibility: { releaseOn: 'GENERATED' | 'APPROVED' | 'PAID'; notifyEmployee: boolean };
+}
+
 export interface PayslipLineItem {
   id: number;
   category: 'EARNING' | 'DEDUCTION';
@@ -58,6 +98,11 @@ export const payrollApi = {
     api.get<PayrollPreviewRow[]>(`/hr/payroll/preview?month=${month}&year=${year}`).then((r) => r.data),
   payRules: () => api.get<PayRules>('/hr/payroll/rules').then((r) => r.data),
   savePayRules: (body: Partial<PayRules>) => api.put<PayRules>('/hr/payroll/rules', body).then((r) => r.data),
+  payslipSettings: () => api.get<PayslipSettings>('/hr/payroll/payslip-settings').then((r) => r.data),
+  savePayslipSettings: (body: PayslipSettings) =>
+    api.put<PayslipSettings>('/hr/payroll/payslip-settings', body).then((r) => r.data),
+  runAutoGenerateNow: (month: number, year: number) =>
+    api.post<{ summary: string }>(`/hr/payroll/payslip-settings/run-now?month=${month}&year=${year}`).then((r) => r.data),
   generatePayslip: (employeeId: number, month: number, year: number, basis?: 'HOURLY' | 'MONTHLY') =>
     api.post<SalaryRecord>(`/hr/payroll/generate?employeeId=${employeeId}&month=${month}&year=${year}${basis ? `&basis=${basis}` : ''}`).then((r) => r.data),
   generatePayslips: (month: number, year: number, choices: Record<number, 'HOURLY' | 'MONTHLY'>) =>

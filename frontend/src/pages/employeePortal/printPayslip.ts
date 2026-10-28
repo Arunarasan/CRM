@@ -1,5 +1,29 @@
 import type { Payslip } from '@/types/employeePortal';
 import { fetchCompanyProfile } from '@/lib/companyProfile';
+import api from '@/lib/api';
+import type { PayslipTemplate } from '@/api/payrollApi';
+
+export const DEFAULT_PAYSLIP_TEMPLATE: PayslipTemplate = {
+  title: 'Payslip',
+  accentColor: '#0f5132',
+  registrationNo: '',
+  footerNote: 'This is a computer-generated payslip.',
+  showEmployeeDetails: true,
+  showBankAccount: true,
+  showAttendance: true,
+  showAmountInWords: true,
+  showStatusLine: true,
+  showSignatures: true,
+  employeeSignLabel: 'Employee signature',
+  companySignLabel: 'Authorised signatory',
+};
+
+/** HR's printed-layout preset (Payroll › Payslip settings); falls back to the built-in layout if unavailable. */
+export function fetchPayslipTemplate(): Promise<PayslipTemplate> {
+  return api.get<Partial<PayslipTemplate>>('/payslip-template')
+    .then((r) => ({ ...DEFAULT_PAYSLIP_TEMPLATE, ...(r.data ?? {}) }))
+    .catch(() => ({ ...DEFAULT_PAYSLIP_TEMPLATE }));
+}
 
 export type PayslipRow = [string, number];
 
@@ -78,8 +102,8 @@ export function payslipRows(slip: Payslip): { earnings: PayslipRow[]; deductions
  * The one A4 payslip document, used by the employee portal PDF and the HR preview/print so they can't
  * drift apart. Company name/address/phone come from Website › Settings.
  */
-export async function buildPayslipHtml(slip: Payslip, opts?: PayslipEmployee): Promise<string> {
-  const company = await fetchCompanyProfile();
+export async function buildPayslipHtml(slip: Payslip, opts?: PayslipEmployee, templateOverride?: PayslipTemplate): Promise<string> {
+  const [company, tpl] = await Promise.all([fetchCompanyProfile(), templateOverride ? Promise.resolve(templateOverride) : fetchPayslipTemplate()]);
   const MONTHS = ['', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
   const inr = (n?: number | null) => '₹' + Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const esc = (s: unknown) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
@@ -104,24 +128,26 @@ export async function buildPayslipHtml(slip: Payslip, opts?: PayslipEmployee): P
        <div><span>LOP days</span><span>${slip.lopDays ?? '—'}</span></div>`;
 
   const fmtDate = (d?: string | null) => (d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '');
-  const acct = opts?.bankAccount ? 'XXXX' + String(opts.bankAccount).replace(/\s/g, '').slice(-4) : '';
+  const acct = tpl.showBankAccount && opts?.bankAccount ? 'XXXX' + String(opts.bankAccount).replace(/\s/g, '').slice(-4) : '';
   const details = ([
     ['Designation', opts?.designation], ['Department', opts?.department], ['Date of joining', fmtDate(opts?.dateOfJoining)],
     ['Bank a/c', acct], ['UAN', opts?.uan], ['PF no.', opts?.pfNumber], ['ESI no.', opts?.esiNumber],
   ] as [string, string | null | undefined][]).filter(([, v]) => v);
-  const detailsHtml = details.length
+  const detailsHtml = tpl.showEmployeeDetails && details.length
     ? `<div class="meta emp">${details.map(([k, v]) => `<div><span>${k}</span><span>${esc(v)}</span></div>`).join('')}</div>`
     : '';
 
   const contact = [company.address, company.phone].filter(Boolean).map(esc).join(' · ');
+  const accent = /^#[0-9a-fA-F]{6}$/.test(tpl.accentColor) ? tpl.accentColor : '#0f5132';
+  const docTitle = tpl.title.trim() || 'Payslip';
 
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Payslip ${esc(slip.payslipNumber || '')}</title>
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(docTitle)} ${esc(slip.payslipNumber || '')}</title>
   <style>
     *{box-sizing:border-box}
     @page{size:A4;margin:14mm}
     body{font-family:"Segoe UI",Roboto,Arial,sans-serif;color:#111;margin:0;font-size:13px}
-    .head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;border-bottom:2px solid #0f5132;padding-bottom:10px;margin-bottom:14px}
-    .co{font-size:22px;font-weight:800;color:#0f5132}
+    .head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;border-bottom:2px solid ${accent};padding-bottom:10px;margin-bottom:14px}
+    .co{font-size:22px;font-weight:800;color:${accent}}
     .sub{color:#555;font-size:12px}
     .addr{color:#666;font-size:11px;margin-top:2px;max-width:340px}
     .rt{text-align:right;font-size:12px}
@@ -136,13 +162,13 @@ export async function buildPayslipHtml(slip: Payslip, opts?: PayslipEmployee): P
     .sign div{border-top:1px solid #999;padding-top:4px;min-width:150px;text-align:center}
     .cols{display:flex;gap:24px}
     .col{flex:1}
-    h3{font-size:13px;color:#0f5132;border-bottom:1px solid #ddd;padding-bottom:4px;margin:0 0 6px}
+    h3{font-size:13px;color:${accent};border-bottom:1px solid #ddd;padding-bottom:4px;margin:0 0 6px}
     table{width:100%;border-collapse:collapse}
     td{padding:3px 0;vertical-align:top}
     .num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
     .mut{color:#999}
     .tot td{border-top:2px solid #333;font-weight:800;padding-top:6px}
-    .net{margin-top:16px;display:flex;justify-content:space-between;align-items:center;background:#0f5132;color:#fff;border-radius:10px;padding:12px 18px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .net{margin-top:16px;display:flex;justify-content:space-between;align-items:center;background:${accent};color:#fff;border-radius:10px;padding:12px 18px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
     .net .lbl{font-weight:700}
     .net .amt{font-size:22px;font-weight:800}
     .note{margin-top:10px;font-size:12px;color:#333;border:1px solid #e5e7eb;border-radius:8px;padding:8px 12px;white-space:pre-wrap}
@@ -153,7 +179,8 @@ export async function buildPayslipHtml(slip: Payslip, opts?: PayslipEmployee): P
       <div>
         <div class="co">${esc(company.name)}</div>
         ${contact ? `<div class="addr">${contact}</div>` : ''}
-        <div class="sub">Payslip — ${MONTHS[slip.month]} ${slip.year}</div>
+        ${tpl.registrationNo.trim() ? `<div class="addr">${esc(tpl.registrationNo.trim())}</div>` : ''}
+        <div class="sub">${esc(docTitle)} — ${MONTHS[slip.month]} ${slip.year}</div>
       </div>
       <div class="rt">
         ${slip.payslipNumber ? `<div class="no">${esc(slip.payslipNumber)}</div>` : ''}
@@ -163,7 +190,7 @@ export async function buildPayslipHtml(slip: Payslip, opts?: PayslipEmployee): P
     </div>
     ${slip.status === 'PREVIEW' ? '<div class="prev">PREVIEW — not final. Figures may change until HR generates and approves this month’s payroll.</div>' : slip.status === 'PENDING' ? '<div class="prev">Generated, awaiting HR approval — figures may still change.</div>' : ''}
     ${detailsHtml}
-    <div class="meta">${meta}</div>
+    ${tpl.showAttendance ? `<div class="meta">${meta}</div>` : ''}
     <div class="cols">
       <div class="col">
         <h3>Earnings</h3>
@@ -175,10 +202,15 @@ export async function buildPayslipHtml(slip: Payslip, opts?: PayslipEmployee): P
       </div>
     </div>
     <div class="net"><span class="lbl">Net Pay</span><span class="amt">${inr(slip.netSalary)}</span></div>
-    <div class="words"><b>Net pay in words:</b> ${esc(amountInWords(slip.netSalary))}</div>
+    ${tpl.showAmountInWords ? `<div class="words"><b>Net pay in words:</b> ${esc(amountInWords(slip.netSalary))}</div>` : ''}
     ${slip.remarks ? `<div class="note"><b>Note:</b> ${esc(slip.remarks)}</div>` : ''}
-    <div class="foot">Status: ${slip.status === 'PREVIEW' ? 'Preview (not final)' : esc(slip.status)}${slip.paymentDate ? ` · Paid on ${esc(slip.paymentDate)}` : ''} · This is a computer-generated payslip.</div>
-    <div class="sign"><div>Employee signature</div><div>Authorised signatory</div></div>
+    ${(tpl.showStatusLine || tpl.footerNote.trim())
+      ? `<div class="foot">${[
+          tpl.showStatusLine ? `Status: ${slip.status === 'PREVIEW' ? 'Preview (not final)' : esc(slip.status)}${slip.paymentDate ? ` · Paid on ${esc(slip.paymentDate)}` : ''}` : '',
+          esc(tpl.footerNote.trim()),
+        ].filter(Boolean).join(' · ')}</div>`
+      : ''}
+    ${tpl.showSignatures ? `<div class="sign"><div>${esc(tpl.employeeSignLabel)}</div><div>${esc(tpl.companySignLabel)}</div></div>` : ''}
   </body></html>`;
   return html;
 }

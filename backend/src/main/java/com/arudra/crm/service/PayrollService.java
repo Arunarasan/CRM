@@ -30,6 +30,7 @@ public class PayrollService {
     /** Fallback paid working days/month when an employee has none set (see Employee.workingDaysPerMonth). */
     private static final int STANDARD_WORKING_DAYS = 26;
     private static final List<String> ACTIVE_ADVANCE_STATES = List.of("APPROVED", "RECOVERING");
+    private static final ThreadLocal<Boolean> PREVIEWING = new ThreadLocal<>();
 
     @Autowired private EmployeeRepository employeeRepository;
     @Autowired private SalaryRecordRepository salaryRepository;
@@ -53,6 +54,7 @@ public class PayrollService {
     @Autowired private LeadRepository leadRepository;
     @Autowired private SiteSettingRepository siteSettingRepository;
     @Autowired private HrService hrService;
+    @Autowired private PayslipSettingsService payslipSettings;
     @Autowired private org.springframework.jdbc.core.JdbcTemplate jdbc;
     @Autowired private com.arudra.crm.repository.TaskAssignmentRepository taskAssignmentRepository;
     @Autowired private com.arudra.crm.repository.TaskRepository taskRepository;
@@ -734,9 +736,13 @@ public class PayrollService {
                     .add(addPerformanceBonusLine(employee, rec));
         }
 
+        // HR's preset allowance / deduction lines (Payslip settings) — percent lines use regular + overtime pay.
+        BigDecimal[] preset = addPresetLines(employee, rec, b, regularEarnings.add(overtimeEarnings));
+
         BigDecimal gross = regularEarnings.add(overtimeEarnings).add(projectBonus).add(manualBonus)
-                .add(incentive).add(reqOtherEarn).add(rewardLines);
-        BigDecimal totalDeductions = manualDeduction.add(advanceRecovery).add(loanRecovery).add(reqOtherDed);
+                .add(incentive).add(reqOtherEarn).add(rewardLines).add(preset[0]);
+        BigDecimal totalDeductions = manualDeduction.add(advanceRecovery).add(loanRecovery).add(reqOtherDed)
+                .add(preset[1]);
         rec.setProjectBonus(projectBonus);
         rec.setManualBonus(manualBonus);
         rec.setBonus(projectBonus.add(manualBonus));
@@ -757,7 +763,50 @@ public class PayrollService {
             employee.setSalaryType(b);
             employeeRepository.save(employee);
         }
+        if (PREVIEWING.get() == null) notifyEmployeePayslip(rec, "GENERATED");
         return rec;
+    }
+
+    /**
+     * Adds the enabled default lines that apply to this employee and basis as PRESET line items.
+     * Returns {earnings, deductions} totals so the caller can fold them into gross / deductions.
+     * A deduction can't push pay below zero: it is capped at what has been earned so far.
+     */
+    private BigDecimal[] addPresetLines(Employee employee, SalaryRecord rec, String basis, BigDecimal basePay) {
+        BigDecimal earn = BigDecimal.ZERO, ded = BigDecimal.ZERO;
+        for (PayslipSettingsService.DefaultLine l : payslipSettings.get().getLines()) {
+            if (!l.isEnabled()) continue;
+            if (!l.getEmployeeIds().isEmpty() && !l.getEmployeeIds().contains(employee.getId())) continue;
+            if (!l.getBasis().isEmpty() && !l.getBasis().equals(basis)) continue;
+            BigDecimal amt = "PERCENT".equals(l.getType())
+                    ? basePay.multiply(l.getValue()).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP)
+                    : l.getValue().setScale(2, RoundingMode.HALF_UP);
+            if (amt.signum() <= 0) continue;
+            PayslipLineItem item = new PayslipLineItem();
+            item.setSalaryRecord(rec);
+            item.setCategory(l.getCategory());
+            item.setLabel("PERCENT".equals(l.getType())
+                    ? l.getLabel() + " — " + l.getValue().stripTrailingZeros().toPlainString() + "%" : l.getLabel());
+            item.setAmount(amt);
+            item.setSource("PRESET");
+            lineItemRepository.save(item);
+            if ("EARNING".equals(l.getCategory())) earn = earn.add(amt); else ded = ded.add(amt);
+        }
+        return new BigDecimal[]{earn, ded};
+    }
+
+    /** Tells the employee their payslip is ready — only at the stage HR chose as the release point. */
+    private void notifyEmployeePayslip(SalaryRecord rec, String stage) {
+        PayslipSettingsService.Visibility v = payslipSettings.get().getVisibility();
+        if (!v.isNotifyEmployee() || !stage.equals(v.getReleaseOn())) return;
+        Employee e = rec.getEmployee();
+        if (e == null || e.getEmail() == null) return;
+        userRepository.findByEmail(e.getEmail()).ifPresent(u -> {
+            if ("PAID".equals(stage)) return; // markPaid already sends "Salary Paid"
+            notificationService.dispatch("Payslip ready",
+                    "Your payslip for " + rec.getMonth() + "/" + rec.getYear() + " is ready to view.",
+                    "SALARY", u.getId(), "/employee/salary");
+        });
     }
 
     /**
@@ -769,6 +818,8 @@ public class PayrollService {
     public SalaryRecord previewPayslip(Long employeeId, int month, int year) {
         org.springframework.transaction.support.TransactionTemplate tx =
                 new org.springframework.transaction.support.TransactionTemplate(transactionManager);
+        PREVIEWING.set(Boolean.TRUE); // a dry run must not notify anyone
+        try {
         return tx.execute(status -> {
             status.setRollbackOnly();
             SalaryRecord rec = generatePayslip(employeeId, month, year, null);
@@ -779,6 +830,9 @@ public class PayrollService {
             if (rec.getEmployee() != null) org.hibernate.Hibernate.initialize(rec.getEmployee().getWorkforce());
             return rec;
         });
+        } finally {
+            PREVIEWING.remove();
+        }
     }
 
     /**
@@ -1274,7 +1328,9 @@ public class PayrollService {
         rec.setStatus("APPROVED");
         rec.setApprovedBy(approver);
         rec.setApprovedAt(LocalDateTime.now());
-        return salaryRepository.save(rec);
+        SalaryRecord saved = salaryRepository.save(rec);
+        notifyEmployeePayslip(saved, "APPROVED");
+        return saved;
     }
 
     @Transactional

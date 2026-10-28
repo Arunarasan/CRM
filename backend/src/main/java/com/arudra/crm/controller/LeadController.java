@@ -179,11 +179,18 @@ public class LeadController {
         return ResponseEntity.ok(leadService.getLeadManagerInfo(id));
     }
 
-    /** Admin only: set / clear the lead manager — body {userId} (null clears). */
+    /** Add a lead manager (several allowed) — body {userId}. Done from the task assign screens. */
     @PutMapping("/{id}/lead-manager")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN') or hasAuthority('TASK_ASSIGN') or hasAuthority('ASSIGNMENT_WRITE')")
+    public ResponseEntity<Map<String, Object>> addLeadManager(@PathVariable Long id, @RequestBody Map<String, Long> body) {
+        leadService.assignLeadManager(id, body.get("userId"), true, currentUserService.getCurrentUser());
+        return ResponseEntity.ok(leadService.getLeadManagerInfo(id));
+    }
+
+    @DeleteMapping("/{id}/lead-manager/{userId}")
     @PreAuthorize("hasAuthority('ROLE_ADMIN')")
-    public ResponseEntity<Map<String, Object>> setLeadManager(@PathVariable Long id, @RequestBody Map<String, Long> body) {
-        leadService.assignLeadManager(id, body.get("userId"), currentUserService.getCurrentUser());
+    public ResponseEntity<Map<String, Object>> removeLeadManager(@PathVariable Long id, @PathVariable Long userId) {
+        leadService.assignLeadManager(id, userId, false, currentUserService.getCurrentUser());
         return ResponseEntity.ok(leadService.getLeadManagerInfo(id));
     }
 
