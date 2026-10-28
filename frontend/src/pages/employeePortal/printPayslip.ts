@@ -225,6 +225,56 @@ export async function buildPayslipHtml(slip: Payslip, opts?: PayslipEmployee, te
 }
 
 /**
+ * Builds the payslip as a real A4 PDF file and downloads it (no print dialog). The same HTML as the printed
+ * payslip is drawn off-screen, captured with html2canvas and cut into A4 pages with jsPDF. The two libraries
+ * load only when someone taps download.
+ */
+export async function downloadPayslipPdf(slip: Payslip, opts?: PayslipEmployee) {
+  const [html, { default: html2canvas }, { default: JsPDF }] = await Promise.all([
+    buildPayslipHtml(slip, opts),
+    import('html2canvas'),
+    import('jspdf'),
+  ]);
+  const WIDTH = 794; // A4 at 96 dpi
+  const frame = document.createElement('iframe');
+  frame.setAttribute('aria-hidden', 'true');
+  frame.style.cssText = `position:fixed;left:-10000px;top:0;width:${WIDTH}px;height:1123px;border:0`;
+  document.body.appendChild(frame);
+  try {
+    const doc = frame.contentWindow?.document;
+    if (!doc) throw new Error('Could not prepare the payslip.');
+    doc.open();
+    doc.write(html);
+    doc.close();
+    doc.body.style.cssText += `;width:${WIDTH}px;padding:40px;box-sizing:border-box;background:#fff`;
+    await new Promise((r) => setTimeout(r, 150)); // let fonts/layout settle
+    const contentH = doc.body.scrollHeight;
+    const canvas = await html2canvas(doc.body, {
+      scale: 2, backgroundColor: '#ffffff', useCORS: true,
+      width: WIDTH, height: contentH, windowWidth: WIDTH, windowHeight: contentH,
+    });
+
+    const pdf = new JsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+    const pageW = pdf.internal.pageSize.getWidth();
+    const pageH = pdf.internal.pageSize.getHeight();
+    const pxPerPage = Math.floor((canvas.width * pageH) / pageW); // canvas rows that fill one A4 page
+    for (let y = 0, page = 0; y < canvas.height - 4; y += pxPerPage, page++) { // -4: ignore a rounding sliver
+      const h = Math.min(pxPerPage, canvas.height - y);
+      const slice = document.createElement('canvas');
+      slice.width = canvas.width;
+      slice.height = h;
+      slice.getContext('2d')!.drawImage(canvas, 0, y, canvas.width, h, 0, 0, canvas.width, h);
+      if (page > 0) pdf.addPage();
+      pdf.addImage(slice.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, pageW, (h * pageW) / canvas.width);
+    }
+    const name = (slip.payslipNumber || `Payslip-${slip.year}-${String(slip.month).padStart(2, '0')}`).replace(/[^\w.-]+/g, '_');
+    pdf.save(`${name}.pdf`);
+  } finally {
+    frame.remove();
+  }
+}
+
+/**
  * Renders the shared A4 payslip into a hidden frame and opens the print dialog, so an employee (or HR)
  * can save it as a PDF (Print → Save as PDF on desktop and Android, Share → Print on iPhone). No pop-up
  * window, so pop-up blockers can't stop it.

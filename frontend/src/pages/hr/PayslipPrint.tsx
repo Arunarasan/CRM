@@ -3,9 +3,10 @@ import { useParams } from "react-router-dom";
 import { payrollApi } from "@/api/payrollApi";
 import { useGoBack } from "@/hooks/useGoBack";
 import type { Payslip } from "@/types/employeePortal";
-import { buildPayslipHtml, printPayslip, type PayslipEmployee } from "@/pages/employeePortal/printPayslip";
+import { buildPayslipHtml, downloadPayslipPdf, printPayslip, type PayslipEmployee } from "@/pages/employeePortal/printPayslip";
+import { toast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Printer } from "lucide-react";
+import { ArrowLeft, Download, Printer } from "lucide-react";
 
 /** HR view of a payslip: previews the exact document the employee gets (shared builder) and prints it. */
 export default function PayslipPrint() {
@@ -15,6 +16,7 @@ export default function PayslipPrint() {
   const [opts, setOpts] = useState<PayslipEmployee>({ employeeName: "Employee" });
   const [html, setHtml] = useState("");
   const [loading, setLoading] = useState(true);
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -51,7 +53,13 @@ export default function PayslipPrint() {
         <button type="button" onClick={goBack} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-primary">
           <ArrowLeft className="w-4 h-4" /> Back
         </button>
-        <Button onClick={() => printPayslip(slip, opts)}><Printer className="w-4 h-4 mr-1" /> Print / Save PDF</Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => printPayslip(slip, opts)}><Printer className="w-4 h-4 mr-1" /> Print</Button>
+          <Button disabled={downloading} onClick={() => {
+            setDownloading(true);
+            downloadPayslipPdf(slip, opts).catch(() => toast.error("Could not create the PDF. Please try again.")).finally(() => setDownloading(false));
+          }}><Download className="w-4 h-4 mr-1" /> {downloading ? "Preparing…" : "Download PDF"}</Button>
+        </div>
       </div>
       <iframe
         title="Payslip preview"

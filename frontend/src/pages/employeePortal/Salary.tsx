@@ -7,7 +7,7 @@ import { employeePortalApi } from '@/api/employeePortalApi';
 import { Payslip, MyBonuses, MonthlyEarning, PayrollRequestEntry, MyLoan, MyAdvance, PayrollRequestType } from '@/types/employeePortal';
 import { toast } from '@/components/ui/toast';
 import { PortalHeader, StatusPill, EmptyState, inr } from './_shared';
-import { printPayslip, payslipRows, type PayslipEmployee } from './printPayslip';
+import { downloadPayslipPdf, payslipRows, type PayslipEmployee } from './printPayslip';
 
 /** Localized short month names, index 1..12 (index 0 is blank so MONTHS[m] works with 1-based months). */
 function useMonths(): string[] {
@@ -30,7 +30,9 @@ function PayslipDetail({ slip, onBack, employee, requests = [] }: { slip: Paysli
   const [printing, setPrinting] = useState(false);
   const download = () => {
     setPrinting(true);
-    printPayslip(slip, employee).finally(() => setPrinting(false));
+    downloadPayslipPdf(slip, employee)
+      .catch(() => toast.error('Could not create the PDF. Please try again.'))
+      .finally(() => setPrinting(false));
   };
   const paidTotal = Number(slip.alreadyPaid || 0);
   // The travel / food requests that went onto this payslip: one pay line each kind, the detail is here.
