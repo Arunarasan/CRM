@@ -50,6 +50,7 @@ export interface PayslipTemplate {
   showAttendance: boolean;
   showAmountInWords: boolean;
   showStatusLine: boolean;
+  showAlreadyPaid: boolean;
   showSignatures: boolean;
   employeeSignLabel: string;
   companySignLabel: string;
@@ -67,7 +68,7 @@ export interface PayslipSettings {
 
 export interface PayslipLineItem {
   id: number;
-  category: 'EARNING' | 'DEDUCTION';
+  category: 'EARNING' | 'DEDUCTION' | 'PAID';
   label: string;
   amount: number;
   source: string;
@@ -176,8 +177,9 @@ export const payrollApi = {
     api.get<PayrollRequest[]>(`/hr/payroll-requests${status ? `?status=${status}` : ''}`).then((r) => r.data),
   payrollRequestsForEmployee: (employeeId: number) =>
     api.get<PayrollRequest[]>(`/hr/employees/${employeeId}/payroll-requests`).then((r) => r.data),
-  approvePayrollRequest: (id: number) =>
-    api.post<PayrollRequest>(`/hr/payroll-requests/${id}/approve`).then((r) => r.data),
+  /** `opts` only matters for an ALLOWANCE request: final amount and whether it was already paid out. */
+  approvePayrollRequest: (id: number, opts?: { amount?: number; alreadyPaid?: boolean; paidOn?: string; paidMode?: string }) =>
+    api.post<PayrollRequest>(`/hr/payroll-requests/${id}/approve`, opts ?? {}).then((r) => r.data),
   rejectPayrollRequest: (id: number, remarks?: string) =>
     api.post<PayrollRequest>(`/hr/payroll-requests/${id}/reject`, { remarks }).then((r) => r.data),
 

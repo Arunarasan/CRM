@@ -777,8 +777,9 @@ public class HrController {
 
     @PostMapping("/payroll-requests/{id}/approve")
     @PreAuthorize(PAYROLL_PROCESS)
-    public ResponseEntity<PayrollRequest> approvePayrollRequest(@PathVariable Long id) {
-        return ResponseEntity.ok(payrollService.approvePayrollRequest(id, currentUserService.getCurrentUser()));
+    public ResponseEntity<PayrollRequest> approvePayrollRequest(@PathVariable Long id,
+                                                                @RequestBody(required = false) Map<String, Object> body) {
+        return ResponseEntity.ok(payrollService.approvePayrollRequest(id, currentUserService.getCurrentUser(), body));
     }
 
     @PostMapping("/payroll-requests/{id}/reject")

@@ -162,8 +162,16 @@ public class PayrollService {
      * multi-month recovery engine takes over) and the request becomes CONVERTED. A LOAN_REPAYMENT / OTHER
      * simply becomes APPROVED and is absorbed by its target month's payroll run.
      */
-    @Transactional
     public com.arudra.crm.entity.PayrollRequest approvePayrollRequest(Long id, User approver) {
+        return approvePayrollRequest(id, approver, null);
+    }
+
+    /**
+     * As above; {@code opts} only matters for an ALLOWANCE request: {@code amount} (HR may change it),
+     * {@code alreadyPaid} (default true: the money was handed over), {@code paidOn}, {@code paidMode}.
+     */
+    @Transactional
+    public com.arudra.crm.entity.PayrollRequest approvePayrollRequest(Long id, User approver, Map<String, Object> opts) {
         com.arudra.crm.entity.PayrollRequest r = payrollRequestRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Payroll request not found: " + id));
         if (!"PENDING".equalsIgnoreCase(r.getStatus())) {
@@ -172,6 +180,7 @@ public class PayrollService {
         r.setApprovedBy(approver);
         r.setDecidedAt(LocalDateTime.now());
         String type = r.getRequestType() == null ? "" : r.getRequestType().toUpperCase();
+        if ("ALLOWANCE".equals(type)) applyAllowanceApproval(r, opts);
         if ("ADVANCE".equals(type)) {
             EmployeeAdvance a = new EmployeeAdvance();
             a.setEmployee(r.getEmployee());
@@ -218,6 +227,37 @@ public class PayrollService {
         return saved;
     }
 
+    /** Applies HR's choices on an allowance approval: final amount, and whether it was already paid out. */
+    private void applyAllowanceApproval(com.arudra.crm.entity.PayrollRequest r, Map<String, Object> opts) {
+        Object amt = opts == null ? null : opts.get("amount");
+        if (amt != null && !amt.toString().isBlank()) {
+            BigDecimal v;
+            try { v = new BigDecimal(amt.toString().trim()); }
+            catch (NumberFormatException e) { throw new IllegalArgumentException("Enter a valid amount."); }
+            if (v.signum() <= 0) throw new IllegalArgumentException("Amount must be greater than zero.");
+            r.setAmount(v);
+        }
+        Object paid = opts == null ? null : opts.get("alreadyPaid");
+        boolean alreadyPaid = paid == null || Boolean.parseBoolean(paid.toString()); // default: handed over
+        r.setAlreadyPaid(alreadyPaid);
+        if (alreadyPaid) {
+            Object on = opts == null ? null : opts.get("paidOn");
+            try { r.setPaidOn(on == null || on.toString().isBlank() ? LocalDate.now() : LocalDate.parse(on.toString().trim())); }
+            catch (java.time.format.DateTimeParseException e) { throw new IllegalArgumentException("Enter the paid date as yyyy-mm-dd."); }
+            Object mode = opts == null ? null : opts.get("paidMode");
+            String m = mode == null ? "CASH" : mode.toString().trim().toUpperCase();
+            r.setPaidMode(List.of("CASH", "UPI", "BANK").contains(m) ? m : "CASH");
+        } else {
+            r.setPaidOn(null);
+            r.setPaidMode(null);
+        }
+        if (r.getTargetMonth() == null || r.getTargetYear() == null) {
+            LocalDate d = r.getRequestDate() != null ? r.getRequestDate() : LocalDate.now();
+            r.setTargetMonth(d.getMonthValue());
+            r.setTargetYear(d.getYear());
+        }
+    }
+
     @Transactional
     public com.arudra.crm.entity.PayrollRequest rejectPayrollRequest(Long id, User approver, String remarks) {
         com.arudra.crm.entity.PayrollRequest r = payrollRequestRepository.findById(id)
@@ -246,7 +286,8 @@ public class PayrollService {
      */
     private BigDecimal[] applyPayrollRequests(Long employeeId, int month, int year, SalaryRecord rec) {
         BigDecimal loanRec = BigDecimal.ZERO, advanceRec = BigDecimal.ZERO,
-                otherDed = BigDecimal.ZERO, otherEarn = BigDecimal.ZERO;
+                otherDed = BigDecimal.ZERO, otherEarn = BigDecimal.ZERO,
+                allowanceEarn = BigDecimal.ZERO, allowancePaid = BigDecimal.ZERO;
         for (com.arudra.crm.entity.PayrollRequest r : payrollRequestRepository
                 .findByEmployeeIdAndStatusAndAppliedSalaryRecordIdIsNullAndIsDeletedFalse(employeeId, "APPROVED")) {
             // Respect the target period if the request set one (portal always does).
@@ -256,7 +297,18 @@ public class PayrollService {
             BigDecimal amt = nz(r.getAmount());
             if (amt.signum() <= 0) { markApplied(r, rec); continue; }
 
-            if ("REPAY".equals(type)) {
+            if ("ALLOWANCE".equals(type)) {
+                // Travel / food allowance: an earning by name, plus a PAID line when it was already handed over.
+                // One line per allowance kind however many requests there were; the per-request detail
+                // (dates, who/when paid) stays on the requests, which the employee sees in the app.
+                String name = "FOOD".equalsIgnoreCase(r.getAllowanceType()) ? "Food allowance" : "Travel allowance";
+                addAllowanceLine(rec, "EARNING", name, amt);
+                allowanceEarn = allowanceEarn.add(amt);
+                if (r.isAlreadyPaid()) {
+                    addAllowanceLine(rec, "PAID", name + " paid", amt);
+                    allowancePaid = allowancePaid.add(amt);
+                }
+            } else if ("REPAY".equals(type)) {
                 // "Repay money": pays down whatever they owe, oldest debt first (capped at the balance).
                 BigDecimal[] parts = repayOwed(employeeId, amt, rec);
                 advanceRec = advanceRec.add(parts[0]);
@@ -294,7 +346,25 @@ public class PayrollService {
             }
             markApplied(r, rec);
         }
-        return new BigDecimal[]{loanRec, advanceRec, otherDed, otherEarn};
+        return new BigDecimal[]{loanRec, advanceRec, otherDed, otherEarn, allowanceEarn, allowancePaid};
+    }
+
+    /** Adds {@code amount} to this payslip's allowance line of that kind, creating the line the first time. */
+    private void addAllowanceLine(SalaryRecord rec, String category, String label, BigDecimal amount) {
+        for (PayslipLineItem it : lineItemRepository.findBySalaryRecordIdAndIsDeletedFalseOrderByIdAsc(rec.getId())) {
+            if ("ALLOWANCE".equals(it.getSource()) && category.equals(it.getCategory()) && label.equals(it.getLabel())) {
+                it.setAmount(nz(it.getAmount()).add(amount));
+                lineItemRepository.save(it);
+                return;
+            }
+        }
+        PayslipLineItem item = new PayslipLineItem();
+        item.setSalaryRecord(rec);
+        item.setCategory(category);
+        item.setLabel(label.length() > 150 ? label.substring(0, 150) : label);
+        item.setAmount(amount);
+        item.setSource("ALLOWANCE");
+        lineItemRepository.save(item);
     }
 
     /** Adds any approved, not-yet-applied requests for this payslip's month onto it and re-totals it. */
@@ -729,6 +799,8 @@ public class PayrollService {
         advanceRecovery = advanceRecovery.add(req[1]);
         BigDecimal reqOtherDed = req[2];
         BigDecimal reqOtherEarn = req[3];
+        BigDecimal allowanceEarn = req[4];
+        rec.setAlreadyPaid(req[5]);
 
         // Counted reward lines (stored as payslip line items so the portal + PDF list them by name).
         BigDecimal rewardLines = addCountedLine(rec, lineName(PayslipSettingsService.REVIEW_REWARD), "review", reviewRewards)
@@ -743,7 +815,7 @@ public class PayrollService {
         BigDecimal[] preset = addPresetLines(employee, rec, b, regularEarnings.add(overtimeEarnings));
 
         BigDecimal gross = regularEarnings.add(overtimeEarnings).add(projectBonus).add(manualBonus)
-                .add(incentive).add(reqOtherEarn).add(rewardLines).add(preset[0]);
+                .add(incentive).add(reqOtherEarn).add(rewardLines).add(preset[0]).add(allowanceEarn);
         BigDecimal totalDeductions = manualDeduction.add(advanceRecovery).add(loanRecovery).add(reqOtherDed)
                 .add(preset[1]);
         rec.setProjectBonus(projectBonus);

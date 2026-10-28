@@ -66,7 +66,7 @@ export default function PayslipEditor({
   const [form, setForm] = useState<Record<string, string>>({});
   const [dirty, setDirty] = useState(false);
   const [regenOpen, setRegenOpen] = useState(false);
-  const [draft, setDraft] = useState({ category: 'EARNING' as 'EARNING' | 'DEDUCTION', label: '', amount: '' });
+  const [draft, setDraft] = useState({ category: 'EARNING' as 'EARNING' | 'DEDUCTION' | 'PAID', label: '', amount: '' });
 
   const load = () => {
     setLoading(true);
@@ -80,9 +80,11 @@ export default function PayslipEditor({
   const paid = rec?.status === 'PAID';
   const locked = paid || busy;
   const items = view?.lineItems ?? [];
-  const presets = draft.category === 'EARNING' ? (view?.earningPresets ?? []) : (view?.deductionPresets ?? []);
+  const presets = draft.category === 'EARNING' ? (view?.earningPresets ?? [])
+    : draft.category === 'PAID' ? ['Travel allowance paid', 'Food allowance paid', 'Cash given'] : (view?.deductionPresets ?? []);
   const earnItems = useMemo(() => items.filter((i) => i.category === 'EARNING'), [items]);
   const dedItems = useMemo(() => items.filter((i) => i.category === 'DEDUCTION'), [items]);
+  const paidItems = useMemo(() => items.filter((i) => i.category === 'PAID'), [items]);
 
   // Live totals from the form + extra lines (the server recomputes the same way on save).
   const totals = useMemo(() => {
@@ -90,8 +92,8 @@ export default function PayslipEditor({
     const gross = EARNING_FIELDS.reduce((a, f) => a + num(form[f.key]), 0) + itemSum(earnItems);
     const ded = DEDUCTION_FIELDS.reduce((a, f) => a + num(form[f.key]), 0)
       + num(form.repayment) + itemSum(dedItems);
-    return { gross, ded, net: gross - ded };
-  }, [form, earnItems, dedItems]);
+    return { gross, ded, net: gross - ded, paid: itemSum(paidItems) };
+  }, [form, earnItems, dedItems, paidItems]);
 
   const set = (key: string, value: string) => { setForm((f) => ({ ...f, [key]: value })); setDirty(true); };
 
@@ -258,14 +260,23 @@ export default function PayslipEditor({
                 onDelete={(it) => applyItems(() => payrollApi.deletePayslipLineItem(it.id))} />
             </Section>
 
+            {paidItems.length > 0 && (
+              <Section title="Already paid">
+                <p className="mb-1 text-[11px] text-muted-foreground">Money already handed over. It doesn't change net pay — it reduces the balance still to pay.</p>
+                <ItemGroup items={paidItems} disabled={locked}
+                  onEdit={(it, v) => applyItems(() => payrollApi.updatePayslipLineItem(it.id, { amount: Number(v) }))}
+                  onDelete={(it) => applyItems(() => payrollApi.deletePayslipLineItem(it.id))} />
+              </Section>
+            )}
+
             {!paid && (
               <div className="rounded-lg border p-3">
                 <p className="mb-2 text-xs font-semibold uppercase text-muted-foreground">Add a line</p>
                 <div className="mb-2 flex gap-1">
-                  {(['EARNING', 'DEDUCTION'] as const).map((c) => (
+                  {(['EARNING', 'DEDUCTION', 'PAID'] as const).map((c) => (
                     <button key={c} onClick={() => setDraft((d) => ({ ...d, category: c, label: '' }))}
                       className={`rounded-md px-2.5 py-1 text-xs font-semibold ${draft.category === c ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
-                      {c === 'EARNING' ? 'Earning' : 'Deduction'}
+                      {c === 'EARNING' ? 'Earning' : c === 'PAID' ? 'Already paid' : 'Deduction'}
                     </button>
                   ))}
                 </div>
@@ -292,6 +303,14 @@ export default function PayslipEditor({
               <div className="mt-1 flex items-center justify-between border-t pt-2 text-base font-bold">
                 <span>Net pay</span><span className="tabular-nums">{inr(totals.net)}</span>
               </div>
+              {totals.paid > 0 && (
+                <>
+                  <Row label="Already paid" value={-totals.paid} />
+                  <div className="flex items-center justify-between border-t pt-2 text-sm font-semibold">
+                    <span>Balance payable</span><span className="tabular-nums">{inr(totals.net - totals.paid)}</span>
+                  </div>
+                </>
+              )}
               {!paid && (
                 <div className="mt-3 flex items-center justify-end gap-2">
                   {dirty && <span className="mr-auto text-xs text-amber-700">Unsaved changes</span>}

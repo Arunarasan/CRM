@@ -556,7 +556,7 @@ public class EmployeePortalService {
         if (type == null) throw new IllegalArgumentException("Request type is required.");
         type = type.toUpperCase();
         java.util.Set<String> allowed = java.util.Set.of(
-                "ADVANCE", "REPAY", "LOAN_REPAYMENT", "ADVANCE_REPAYMENT", "SET_RECOVERY", "OTHER");
+                "ADVANCE", "REPAY", "LOAN_REPAYMENT", "ADVANCE_REPAYMENT", "SET_RECOVERY", "OTHER", "ALLOWANCE");
         if (!allowed.contains(type)) {
             throw new IllegalArgumentException("Unsupported request type.");
         }
@@ -615,6 +615,24 @@ public class EmployeePortalService {
                     throw new IllegalArgumentException("Select the loan or advance to set the recovery plan for.");
                 }
                 break;
+            case "ALLOWANCE": { // travel / food the employee spent; HR approves and may mark it already paid
+                String at = trimToNull((String) body.get("allowanceType"));
+                at = at == null ? "" : at.toUpperCase();
+                if (!at.equals("TRAVEL") && !at.equals("FOOD")) throw new IllegalArgumentException("Choose travel or food.");
+                LocalDate day = now;
+                String ds = trimToNull(body.get("requestDate") == null ? null : body.get("requestDate").toString());
+                if (ds != null) {
+                    try { day = LocalDate.parse(ds); }
+                    catch (java.time.format.DateTimeParseException e) { throw new IllegalArgumentException("Enter the date as yyyy-mm-dd."); }
+                }
+                if (day.isAfter(now)) throw new IllegalArgumentException("The date can't be in the future.");
+                r.setAllowanceType(at);
+                r.setRequestDate(day);
+                r.setDirection("CREDIT");
+                r.setTargetMonth(day.getMonthValue());
+                r.setTargetYear(day.getYear());
+                break;
+            }
             case "LOAN_REPAYMENT":
                 if (loanId == null) throw new IllegalArgumentException("Select the loan to repay.");
                 setTargetMonth(r, body, now);

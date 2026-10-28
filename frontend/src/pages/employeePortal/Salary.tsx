@@ -21,17 +21,20 @@ function useTr() {
   return (key: string, fallback: string) => { const v = t(key); return v === key ? fallback : v; };
 }
 
-function PayslipDetail({ slip, onBack, employee }: { slip: Payslip; onBack: () => void; employee?: PayslipEmployee }) {
+function PayslipDetail({ slip, onBack, employee, requests = [] }: { slip: Payslip; onBack: () => void; employee?: PayslipEmployee; requests?: PayrollRequestEntry[] }) {
   const { t } = useT();
   const MONTHS = useMonths();
   const monthlyHours = slip.standardHours != null; // MONTHLY generated from hours
   const hourly = slip.payType === 'HOURLY' || monthlyHours;
-  const { earnings, deductions } = payslipRows(slip); // same rows as the PDF
+  const { earnings, deductions, paid } = payslipRows(slip); // same rows as the PDF
   const [printing, setPrinting] = useState(false);
   const download = () => {
     setPrinting(true);
     printPayslip(slip, employee).finally(() => setPrinting(false));
   };
+  const paidTotal = Number(slip.alreadyPaid || 0);
+  // The travel / food requests that went onto this payslip: one pay line each kind, the detail is here.
+  const allowances = requests.filter((r) => r.requestType === 'ALLOWANCE' && r.appliedSalaryRecordId === slip.id);
   const rows = (list: [string, number][]) => list.length === 0
     ? <div className="px-4 py-2.5 text-sm text-muted-foreground">{t('pw.sal.none')}</div>
     : list.map(([l, v], i) => (
@@ -86,6 +89,23 @@ function PayslipDetail({ slip, onBack, employee }: { slip: Payslip; onBack: () =
         <div className="flex justify-between bg-muted/40 px-4 py-2.5 text-sm font-semibold"><span>{t('pw.sal.total')}</span><span>{inr(slip.totalDeductions)}</span></div>
       </div>
 
+      {paidTotal > 0 && (
+        <>
+          <h3 className="px-4 pb-1 text-xs font-semibold uppercase text-muted-foreground">Payments already made</h3>
+          <div className="mx-3 mb-6 divide-y overflow-hidden rounded-xl border bg-card shadow-sm">
+            {rows(paid)}
+            {allowances.map((r) => (
+              <div key={r.id} className="flex justify-between gap-3 px-4 py-2 text-xs text-muted-foreground">
+                <span>{r.allowanceType === 'FOOD' ? 'Food' : 'Travel'} · {r.requestDate ?? ''}{r.alreadyPaid ? ` · paid${r.paidOn ? ` ${r.paidOn}` : ''}${r.paidMode ? ` (${r.paidMode})` : ''}` : ''}</span>
+                <span className="shrink-0">{inr(r.amount)}</span>
+              </div>
+            ))}
+            <div className="flex justify-between bg-muted/40 px-4 py-2.5 text-sm font-semibold"><span>Already paid</span><span>{inr(paidTotal)}</span></div>
+            <div className="flex justify-between bg-muted/40 px-4 py-2.5 text-sm font-semibold"><span>Balance payable</span><span>{inr(Number(slip.netSalary || 0) - paidTotal)}</span></div>
+          </div>
+        </>
+      )}
+
       {slip.remarks && (
         <div className="mx-3 -mt-3 mb-6 rounded-xl border bg-card px-4 py-3 text-sm shadow-sm">
           <p className="text-xs font-semibold uppercase text-muted-foreground">{t('pw.sal.hrNote')}</p>
@@ -101,7 +121,9 @@ const now = new Date();
 function RequestSheet({ owed, borrow, onClose, onSaved }: { owed: number; borrow?: boolean; onClose: () => void; onSaved: () => void }) {
   const { t } = useT();
   const MONTHS = useMonths();
-  const [type, setType] = useState<'ADVANCE' | 'REPAY'>(!borrow && owed > 0 ? 'REPAY' : 'ADVANCE');
+  const [type, setType] = useState<'ADVANCE' | 'REPAY' | 'ALLOWANCE'>(!borrow && owed > 0 ? 'REPAY' : 'ADVANCE');
+  const [allowanceType, setAllowanceType] = useState<'TRAVEL' | 'FOOD'>('TRAVEL');
+  const [spentOn, setSpentOn] = useState(new Date().toISOString().slice(0, 10));
   const [amount, setAmount] = useState('');
   const [reason, setReason] = useState('');
   const [monthlyRecovery, setMonthlyRecovery] = useState('');
@@ -121,9 +143,11 @@ function RequestSheet({ owed, borrow, onClose, onSaved }: { owed: number; borrow
         requestType: type as PayrollRequestType,
         amount: amt,
         reason: reason || undefined,
-        ...(type === 'ADVANCE'
-          ? { monthlyRecovery: monthlyRecovery ? Number(monthlyRecovery) : undefined }
-          : { targetMonth: month, targetYear: year }),
+        ...(type === 'ALLOWANCE'
+          ? { allowanceType, requestDate: spentOn }
+          : type === 'ADVANCE'
+            ? { monthlyRecovery: monthlyRecovery ? Number(monthlyRecovery) : undefined }
+            : { targetMonth: month, targetYear: year }),
       });
       onSaved();
     } catch (e: any) {
@@ -133,9 +157,10 @@ function RequestSheet({ owed, borrow, onClose, onSaved }: { owed: number; borrow
     }
   };
 
-  const choices: { value: 'ADVANCE' | 'REPAY'; title: string; hint: string; disabled?: boolean }[] = [
+  const choices: { value: 'ADVANCE' | 'REPAY' | 'ALLOWANCE'; title: string; hint: string; disabled?: boolean }[] = [
     { value: 'ADVANCE', title: t('pw.sal.req.ADVANCE'), hint: t('pw.sal.borrowHint') },
     { value: 'REPAY', title: t('pw.sal.req.REPAY'), hint: owed > 0 ? t('pw.sal.repayHint', { amount: inr(owed) }) : t('pw.sal.owNothing'), disabled: owed <= 0 },
+    { value: 'ALLOWANCE', title: 'Travel / food', hint: 'Ask HR to add a travel or food allowance to your pay' },
   ];
 
   return (
@@ -147,7 +172,7 @@ function RequestSheet({ owed, borrow, onClose, onSaved }: { owed: number; borrow
         </div>
         {error && <p className="mb-2 rounded-md bg-destructive/15 p-2 text-xs text-destructive">{error}</p>}
         <div className="flex flex-col gap-3">
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             {choices.map((c) => (
               <button key={c.value} type="button" disabled={c.disabled} onClick={() => setType(c.value)}
                 className={`rounded-xl border p-3 text-left transition-colors disabled:opacity-50 ${type === c.value ? 'border-primary bg-primary/10 ring-1 ring-primary' : 'bg-card'}`}>
@@ -158,12 +183,28 @@ function RequestSheet({ owed, borrow, onClose, onSaved }: { owed: number; borrow
           </div>
 
           <div>
-            <label className="text-xs font-medium text-muted-foreground">{type === 'ADVANCE' ? t('pw.sal.howMuchNeed') : t('pw.sal.howMuchRepay')}</label>
+            <label className="text-xs font-medium text-muted-foreground">{type === 'ALLOWANCE' ? 'Amount you spent' : type === 'ADVANCE' ? t('pw.sal.howMuchNeed') : t('pw.sal.howMuchRepay')}</label>
             <BaseInput type="number" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value)}
               className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" placeholder="2000" />
           </div>
 
-          {type === 'ADVANCE' ? (
+          {type === 'ALLOWANCE' ? (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">For</label>
+                <select value={allowanceType} onChange={(e) => setAllowanceType(e.target.value as 'TRAVEL' | 'FOOD')}
+                  className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm">
+                  <option value="TRAVEL">Travel</option>
+                  <option value="FOOD">Food</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Date</label>
+                <BaseInput type="date" value={spentOn} max={new Date().toISOString().slice(0, 10)} onChange={(e) => setSpentOn(e.target.value)}
+                  className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" />
+              </div>
+            </div>
+          ) : type === 'ADVANCE' ? (
             <div>
               <label className="text-xs font-medium text-muted-foreground">{t('pw.sal.perMonthOpt')}</label>
               <BaseInput type="number" inputMode="numeric" value={monthlyRecovery} onChange={(e) => setMonthlyRecovery(e.target.value)}
@@ -254,7 +295,7 @@ export default function Salary() {
       .catch((e) => toast.error(e?.response?.data?.message || e?.message || 'Could not build the preview.'));
   };
 
-  if (selected) return <PayslipDetail slip={selected} onBack={() => setSelected(null)} employee={me ?? undefined} />;
+  if (selected) return <PayslipDetail slip={selected} onBack={() => setSelected(null)} employee={me ?? undefined} requests={requests} />;
 
   return (
     <div className="flex flex-col">
@@ -311,11 +352,13 @@ export default function Salary() {
                 <HandCoins className="h-4 w-4 shrink-0 text-emerald-500" />
                 <div className="min-w-0">
                   <p className="text-sm font-medium">
-                    {tr(`pw.sal.req.${r.requestType}`, r.requestType)}
+                    {r.requestType === 'ALLOWANCE'
+                      ? `${r.allowanceType === 'FOOD' ? 'Food' : 'Travel'} allowance`
+                      : tr(`pw.sal.req.${r.requestType}`, r.requestType)}
                     {r.requestType === 'OTHER' && r.direction === 'CREDIT' && <span className="ml-1 text-emerald-600">{t('pw.sal.reimbursement')}</span>}
                   </p>
                   <p className="truncate text-xs text-muted-foreground">
-                    {r.targetMonth ? `${MONTHS[r.targetMonth]} ${r.targetYear} · ` : ''}{r.reason || (r.adminRemarks ? t('pw.sal.hrPrefix', { text: r.adminRemarks }) : '')}
+                    {r.requestType === 'ALLOWANCE' && r.requestDate ? `${r.requestDate} · ` : r.targetMonth ? `${MONTHS[r.targetMonth]} ${r.targetYear} · ` : ''}{r.reason || (r.adminRemarks ? t('pw.sal.hrPrefix', { text: r.adminRemarks }) : '')}
                   </p>
                 </div>
               </div>

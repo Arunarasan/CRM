@@ -47,6 +47,8 @@ export interface SalaryRecord {
   approvedAt?: string;
   otherEarnings?: number;
   remarks?: string | null;
+  /** Money already handed over; balance payable = netSalary - alreadyPaid. */
+  alreadyPaid?: number;
 }
 
 // Manual deduction (fine / damage / advance recovery / loan recovery / other).
@@ -67,7 +69,10 @@ export interface PayrollRequest {
   id: number;
   employee?: any;
   requestedBy?: any;
-  requestType: 'ADVANCE' | 'REPAY' | 'LOAN_REPAYMENT' | 'ADVANCE_REPAYMENT' | 'SET_RECOVERY' | 'OTHER';
+  requestType: 'ADVANCE' | 'REPAY' | 'LOAN_REPAYMENT' | 'ADVANCE_REPAYMENT' | 'SET_RECOVERY' | 'OTHER' | 'ALLOWANCE';
+  allowanceType?: 'TRAVEL' | 'FOOD' | null;
+  requestDate?: string | null;
+  alreadyPaid?: boolean;
   direction: 'DEBIT' | 'CREDIT';
   amount: number;
   monthlyRecovery?: number | null;

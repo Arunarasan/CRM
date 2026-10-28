@@ -48,11 +48,15 @@ public class PayslipEditService {
         PayslipLineItem item = new PayslipLineItem();
         item.setSalaryRecord(rec);
         item.setCategory(cat);
-        item.setLabel(label == null || label.isBlank() ? (cat.equals("EARNING") ? "Earning" : "Deduction") : label.trim());
+        item.setLabel(label == null || label.isBlank()
+                ? (cat.equals("EARNING") ? "Earning" : cat.equals("PAID") ? "Already paid" : "Deduction") : label.trim());
         item.setAmount(nz(amount).max(BigDecimal.ZERO));
         item.setSource("MANUAL");
         lineItemRepository.save(item);
         recompute(rec);
+        if (cat.equals("PAID") && nz(rec.getAlreadyPaid()).compareTo(nz(rec.getNetSalary())) > 0) {
+            throw new IllegalArgumentException("Already paid can't be more than the net salary.");
+        }
         return view(rec);
     }
 
@@ -153,11 +157,14 @@ public class PayslipEditService {
 
     /** Sets gross / total deductions / net on {@code r} = its component fields + the given line items. */
     public static void applyTotals(SalaryRecord r, List<PayslipLineItem> items) {
-        BigDecimal earnAdd = BigDecimal.ZERO, dedAdd = BigDecimal.ZERO;
+        BigDecimal earnAdd = BigDecimal.ZERO, dedAdd = BigDecimal.ZERO, paidAdd = BigDecimal.ZERO;
         for (PayslipLineItem it : items) {
+            // PAID lines are money already handed over: they don't change gross or net, only the balance payable.
             if ("DEDUCTION".equals(it.getCategory())) dedAdd = dedAdd.add(nz(it.getAmount()));
+            else if ("PAID".equals(it.getCategory())) paidAdd = paidAdd.add(nz(it.getAmount()));
             else earnAdd = earnAdd.add(nz(it.getAmount()));
         }
+        r.setAlreadyPaid(paidAdd);
         BigDecimal baseGross = nz(r.getBasic()).add(nz(r.getRegularEarnings())).add(nz(r.getOvertimeAmount()))
                 .add(nz(r.getHra())).add(nz(r.getAllowances())).add(nz(r.getBonus())).add(nz(r.getIncentive()))
                 .add(nz(r.getOtherEarnings()));
@@ -195,6 +202,7 @@ public class PayslipEditService {
     }
 
     private static String normalizeCategory(String c) {
+        if ("PAID".equalsIgnoreCase(c)) return "PAID";
         return "DEDUCTION".equalsIgnoreCase(c) ? "DEDUCTION" : "EARNING";
     }
 

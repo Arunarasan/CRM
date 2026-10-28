@@ -243,6 +243,8 @@ export interface Payslip {
   otherEarnings?: number | null;
   otherDeductions?: number | null;
   remarks?: string | null;
+  /** Money already handed over before this payslip (travel/food paid in cash, etc.). */
+  alreadyPaid?: number | null;
 }
 
 export interface SalarySummary {
@@ -579,7 +581,7 @@ export interface MyAdvance {
   advanceDate?: string;
 }
 
-export type PayrollRequestType = 'ADVANCE' | 'REPAY' | 'LOAN_REPAYMENT' | 'ADVANCE_REPAYMENT' | 'SET_RECOVERY' | 'OTHER';
+export type PayrollRequestType = 'ADVANCE' | 'REPAY' | 'LOAN_REPAYMENT' | 'ADVANCE_REPAYMENT' | 'SET_RECOVERY' | 'OTHER' | 'ALLOWANCE';
 
 /** One of the employee's money requests. */
 export interface PayrollRequestEntry {
@@ -592,6 +594,12 @@ export interface PayrollRequestEntry {
   targetYear?: number | null;
   loanId?: number | null;
   advanceId?: number | null;
+  allowanceType?: 'TRAVEL' | 'FOOD' | null;
+  requestDate?: string | null;
+  alreadyPaid?: boolean;
+  paidOn?: string | null;
+  paidMode?: string | null;
+  appliedSalaryRecordId?: number | null;
   reason?: string;
   status: string; // PENDING | APPROVED | APPLIED | CONVERTED | REJECTED
   adminRemarks?: string;
@@ -608,6 +616,8 @@ export interface PayrollRequestCreateBody {
   targetYear?: number;
   loanId?: number;
   advanceId?: number;
+  allowanceType?: 'TRAVEL' | 'FOOD';
+  requestDate?: string;
 }
 
 // --- Goods receipt (portal) ---

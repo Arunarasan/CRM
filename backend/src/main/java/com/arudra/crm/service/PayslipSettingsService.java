@@ -80,6 +80,7 @@ public class PayslipSettingsService {
         private boolean showAttendance = true;
         private boolean showAmountInWords = true;
         private boolean showStatusLine = true;
+        private boolean showAlreadyPaid = false;
         private boolean showSignatures = true;
         private String employeeSignLabel = "Employee signature";
         private String companySignLabel = "Authorised signatory";

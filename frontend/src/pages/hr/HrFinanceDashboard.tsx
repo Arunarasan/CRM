@@ -45,7 +45,7 @@ const DEDUCTION_LABEL: Record<string, string> = {
 
 const REQUEST_LABEL: Record<string, string> = {
   ADVANCE: "Borrow money", REPAY: "Repay money", LOAN_REPAYMENT: "Loan Repayment", ADVANCE_REPAYMENT: "Advance Repayment",
-  SET_RECOVERY: "Recovery Plan", OTHER: "Other",
+  SET_RECOVERY: "Recovery Plan", OTHER: "Other", ALLOWANCE: "Allowance",
 };
 const MONTHS_SHORT = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -172,6 +172,23 @@ export default function HrFinanceDashboard() {
   const approveBonus = (id: number) => payrollApi.approveBonus(id).then(() => { toast.success("Bonus approved."); loadBonuses(); }).catch((e) => toast.error(errMsg(e, "Failed")));
   const payBonus = (id: number) => payrollApi.payBonus(id).then(() => { toast.success("Bonus marked paid."); loadBonuses(); }).catch((e) => toast.error(errMsg(e, "Failed")));
   const approveDeduction = (id: number) => payrollApi.approveDeduction(id).then(() => { toast.success("Deduction approved."); loadDeductions(); }).catch((e) => toast.error(errMsg(e, "Failed")));
+  const [approvingAllowance, setApprovingAllowance] = useState<{ id: number; amount: string; alreadyPaid: boolean; paidMode: string; label: string } | null>(null);
+  const startApprove = (r: PayrollRequest) => {
+    if (r.requestType === "ALLOWANCE") {
+      setApprovingAllowance({ id: r.id, amount: String(r.amount), alreadyPaid: true, paidMode: "CASH",
+        label: `${r.allowanceType === "FOOD" ? "Food" : "Travel"} allowance — ${empName(r.employee)}` });
+    } else approveRequest(r.id);
+  };
+  const submitAllowanceApproval = () => {
+    if (!approvingAllowance) return;
+    const amount = Number(approvingAllowance.amount);
+    if (!amount || amount <= 0) { toast.error("Enter an amount greater than zero."); return; }
+    payrollApi.approvePayrollRequest(approvingAllowance.id, {
+      amount, alreadyPaid: approvingAllowance.alreadyPaid, paidMode: approvingAllowance.paidMode,
+    })
+      .then(() => { toast.success("Allowance approved."); setApprovingAllowance(null); loadPayReqs(); load(); setRunKey((k) => k + 1); })
+      .catch((e) => toast.error(errMsg(e, "Failed to approve")));
+  };
   const approveRequest = (id: number) => payrollApi.approvePayrollRequest(id)
     .then(() => { toast.success("Request approved."); loadPayReqs(); load(); setRunKey((k) => k + 1); })
     .catch((e) => toast.error(errMsg(e, "Failed to approve")));
@@ -222,7 +239,9 @@ export default function HrFinanceDashboard() {
   const isCredit = (r: PayrollRequest) => r.requestType === "OTHER" && r.direction === "CREDIT";
   const reqCols: Column<PayrollRequest>[] = [
     { key: "who", header: "Employee", cell: (r) => <EmpLink emp={r.employee} /> },
-    { key: "what", header: "Request", cell: (r) => <Reason kind={`${REQUEST_LABEL[r.requestType] || r.requestType}${isCredit(r) ? " · reimbursement" : ""}`} text={r.reason} /> },
+    { key: "what", header: "Request", cell: (r) => <Reason kind={r.requestType === "ALLOWANCE"
+      ? `${r.allowanceType === "FOOD" ? "Food" : "Travel"} allowance${r.requestDate ? ` · ${r.requestDate}` : ""}`
+      : `${REQUEST_LABEL[r.requestType] || r.requestType}${isCredit(r) ? " · reimbursement" : ""}`} text={r.reason} /> },
     { key: "for", header: "For", headClassName: "hidden xl:table-cell", cellClassName: "hidden whitespace-nowrap text-slate-600 xl:table-cell", cell: (r) => r.targetMonth ? `${MONTHS_SHORT[r.targetMonth]} ${r.targetYear}` : "—" },
     { key: "amt", header: "Amount", headClassName: "text-right", cellClassName: "text-right tabular-nums font-semibold", cell: (r) => <span className={isCredit(r) ? "text-emerald-700" : "text-rose-700"}>{inr(r.amount)}</span> },
     { key: "status", header: "Status", cell: (r) => <StatusPill status={r.status} /> },
@@ -246,7 +265,7 @@ export default function HrFinanceDashboard() {
     if (!canProcess || r.status !== "PENDING") return null;
     return (
       <div className="inline-flex gap-1.5">
-        <Button size="sm" variant="forest" onClick={() => approveRequest(r.id)}><Check className="mr-1 h-3.5 w-3.5" /> Approve</Button>
+        <Button size="sm" variant="forest" onClick={() => startApprove(r)}><Check className="mr-1 h-3.5 w-3.5" /> Approve</Button>
         <Button size="sm" variant="outline" onClick={() => setRejecting({ id: r.id, remarks: "" })}><X className="mr-1 h-3.5 w-3.5" /> Reject</Button>
       </div>
     );
@@ -475,6 +494,41 @@ export default function HrFinanceDashboard() {
             <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <Button variant="outline" onClick={() => setDedOpen(false)}>Cancel</Button>
               <Button onClick={submitDeduction}>Add deduction</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* APPROVE ALLOWANCE */}
+      <Dialog open={!!approvingAllowance} onOpenChange={(o) => !o && setApprovingAllowance(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Approve allowance</DialogTitle>
+            <DialogDescription>{approvingAllowance?.label}. It is added to the payslip as an earning.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="space-y-1.5">
+              <Label>Amount (₹)</Label>
+              <Input type="number" min={0} value={approvingAllowance?.amount ?? ""}
+                onChange={(e) => setApprovingAllowance((a) => a && { ...a, amount: e.target.value })} />
+            </div>
+            <label className="flex items-start gap-2 text-sm">
+              <input type="checkbox" className="mt-1" checked={approvingAllowance?.alreadyPaid ?? true}
+                onChange={(e) => setApprovingAllowance((a) => a && { ...a, alreadyPaid: e.target.checked })} />
+              <span>Already paid to the employee<span className="block text-xs text-slate-500">It is shown as already paid on the payslip, so the balance payable excludes it.</span></span>
+            </label>
+            {approvingAllowance?.alreadyPaid && (
+              <div className="space-y-1.5">
+                <Label>Paid by</Label>
+                <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={approvingAllowance.paidMode}
+                  onChange={(e) => setApprovingAllowance((a) => a && { ...a, paidMode: e.target.value })}>
+                  <option value="CASH">Cash</option><option value="UPI">UPI</option><option value="BANK">Bank transfer</option>
+                </select>
+              </div>
+            )}
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button variant="outline" onClick={() => setApprovingAllowance(null)}>Cancel</Button>
+              <Button variant="forest" onClick={submitAllowanceApproval}>Approve</Button>
             </div>
           </div>
         </DialogContent>

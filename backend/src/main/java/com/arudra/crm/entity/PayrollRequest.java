@@ -99,6 +99,25 @@ public class PayrollRequest extends BaseEntity {
     @Column(name = "applied_salary_record_id")
     private Long appliedSalaryRecordId;
 
+    /** ALLOWANCE requests: TRAVEL or FOOD. */
+    @Column(name = "allowance_type", length = 20)
+    private String allowanceType;
+
+    /** ALLOWANCE requests: the day the expense was for. */
+    @Column(name = "request_date")
+    private java.time.LocalDate requestDate;
+
+    /** ALLOWANCE requests: the money was already handed over, so the payslip shows it as paid. */
+    @Column(name = "already_paid", nullable = false)
+    private boolean alreadyPaid = false;
+
+    @Column(name = "paid_on")
+    private java.time.LocalDate paidOn;
+
+    /** CASH | UPI | BANK. */
+    @Column(name = "paid_mode", length = 20)
+    private String paidMode;
+
     /** The EmployeeAdvance spawned when an ADVANCE request is approved. */
     @Column(name = "converted_advance_id")
     private Long convertedAdvanceId;

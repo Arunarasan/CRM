@@ -24,7 +24,9 @@ const SAMPLE: Payslip = {
   lineItems: [
     { id: 1, category: "EARNING", label: "Travel allowance", amount: 1500, source: "PRESET" },
     { id: 2, category: "DEDUCTION", label: "PF — 12%", amount: 1500, source: "PRESET" },
+    { id: 3, category: "PAID", label: "Travel allowance paid on 2026-10-12 (CASH)", amount: 500, source: "ALLOWANCE" },
   ],
+  alreadyPaid: 500,
 } as unknown as Payslip;
 const SAMPLE_EMP = {
   employeeName: "Sample Employee", employeeCode: "EMP-001", designation: "Site Supervisor",
@@ -408,6 +410,7 @@ export default function PayslipSettingsTab({ canEdit, month, year }: { canEdit: 
               <Toggle label="Bank account (last 4 digits)" checked={t.showBankAccount} onChange={(v) => setTpl({ showBankAccount: v })} disabled={ro || !t.showEmployeeDetails} />
               <Toggle label="Attendance & hours summary" checked={t.showAttendance} onChange={(v) => setTpl({ showAttendance: v })} disabled={ro} />
               <Toggle label="Net pay in words" checked={t.showAmountInWords} onChange={(v) => setTpl({ showAmountInWords: v })} disabled={ro} />
+              <Toggle label="Payments already made & balance payable" hint="Off by default: the employee still sees it on the Salary page in the app, just not in the PDF" checked={t.showAlreadyPaid} onChange={(v) => setTpl({ showAlreadyPaid: v })} disabled={ro} />
               <Toggle label="Status line (Pending / Paid on…)" checked={t.showStatusLine} onChange={(v) => setTpl({ showStatusLine: v })} disabled={ro} />
               <Toggle label="Signature lines" checked={t.showSignatures} onChange={(v) => setTpl({ showSignatures: v })} disabled={ro} />
             </div>

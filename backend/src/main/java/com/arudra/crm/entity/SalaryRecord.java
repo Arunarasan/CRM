@@ -35,6 +35,10 @@ public class SalaryRecord extends BaseEntity {
     @Column(name = "net_salary", precision = 15, scale = 2, nullable = false)
     private BigDecimal netSalary;
 
+    /** Money already handed over before this payslip (Σ its PAID line items); balance payable = net - this. */
+    @Column(name = "already_paid", nullable = false, precision = 15, scale = 2)
+    private BigDecimal alreadyPaid = BigDecimal.ZERO;
+
     @Column(nullable = false, length = 20)
     private String status = "PENDING"; // PENDING, PAID
 

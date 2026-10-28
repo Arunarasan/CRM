@@ -13,6 +13,7 @@ export const DEFAULT_PAYSLIP_TEMPLATE: PayslipTemplate = {
   showAttendance: true,
   showAmountInWords: true,
   showStatusLine: true,
+  showAlreadyPaid: false,
   showSignatures: true,
   employeeSignLabel: 'Employee signature',
   companySignLabel: 'Authorised signatory',
@@ -70,7 +71,7 @@ export function amountInWords(amount: number): string {
  * PDF render, so they always match and add up to Gross / Total. Zero rows are dropped; admin-added and
  * auto lines (e.g. "Leads collected — 12 × ₹50") follow the computed ones.
  */
-export function payslipRows(slip: Payslip): { earnings: PayslipRow[]; deductions: PayslipRow[] } {
+export function payslipRows(slip: Payslip): { earnings: PayslipRow[]; deductions: PayslipRow[]; paid: PayslipRow[] } {
   const monthlyHours = slip.standardHours != null; // MONTHLY generated from hours
   const items = slip.lineItems ?? [];
   const n = (v?: number | null) => Number(v || 0);
@@ -95,7 +96,9 @@ export function payslipRows(slip: Payslip): { earnings: PayslipRow[]; deductions
     ['Advance recovery', n(slip.advanceRecovery)], ['Loan recovery', n(slip.loanRecovery)],
     ...items.filter((i) => i.category === 'DEDUCTION').map((i) => [i.label, i.amount] as PayslipRow),
   ]);
-  return { earnings, deductions };
+  // Money already handed over (e.g. travel / food paid in cash): informational, doesn't change gross or net.
+  const paid = items.filter((i) => i.category === 'PAID').map((i) => [i.label, i.amount] as PayslipRow);
+  return { earnings, deductions, paid };
 }
 
 /**
@@ -110,7 +113,8 @@ export async function buildPayslipHtml(slip: Payslip, opts?: PayslipEmployee, te
 
   const monthlyHours = slip.standardHours != null;
   const hourly = slip.payType === 'HOURLY' || monthlyHours;
-  const { earnings, deductions } = payslipRows(slip);
+  const { earnings, deductions, paid } = payslipRows(slip);
+  const paidTotal = Number(slip.alreadyPaid || 0) || paid.reduce((a, [, v]) => a + Number(v || 0), 0);
 
   const rowsHtml = (rows: PayslipRow[]) =>
     rows.map(([k, v]) => `<tr><td>${esc(k)}</td><td class="num">${inr(v)}</td></tr>`).join('') || '<tr><td class="mut">—</td><td></td></tr>';
@@ -202,6 +206,11 @@ export async function buildPayslipHtml(slip: Payslip, opts?: PayslipEmployee, te
       </div>
     </div>
     <div class="net"><span class="lbl">Net Pay</span><span class="amt">${inr(slip.netSalary)}</span></div>
+    ${tpl.showAlreadyPaid && paidTotal > 0
+      ? `<h3 style="margin-top:14px">Payments already made</h3>
+         <table>${rowsHtml(paid)}<tr class="tot"><td>Already paid</td><td class="num">${inr(paidTotal)}</td></tr>
+         <tr class="tot"><td>Balance payable</td><td class="num">${inr(Number(slip.netSalary || 0) - paidTotal)}</td></tr></table>`
+      : ''}
     ${tpl.showAmountInWords ? `<div class="words"><b>Net pay in words:</b> ${esc(amountInWords(slip.netSalary))}</div>` : ''}
     ${slip.remarks ? `<div class="note"><b>Note:</b> ${esc(slip.remarks)}</div>` : ''}
     ${(tpl.showStatusLine || tpl.footerNote.trim())
