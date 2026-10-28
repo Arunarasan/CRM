@@ -173,6 +173,20 @@ public class LeadController {
         return ResponseEntity.ok(leadService.getLeadCreator(id));
     }
 
+    @GetMapping("/{id}/lead-manager")
+    @PreAuthorize(READ)
+    public ResponseEntity<Map<String, Object>> leadManager(@PathVariable Long id) {
+        return ResponseEntity.ok(leadService.getLeadManagerInfo(id));
+    }
+
+    /** Admin only: set / clear the lead manager — body {userId} (null clears). */
+    @PutMapping("/{id}/lead-manager")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<Map<String, Object>> setLeadManager(@PathVariable Long id, @RequestBody Map<String, Long> body) {
+        leadService.assignLeadManager(id, body.get("userId"), currentUserService.getCurrentUser());
+        return ResponseEntity.ok(leadService.getLeadManagerInfo(id));
+    }
+
     @PostMapping
     @PreAuthorize(WRITE)
     public ResponseEntity<Lead> createLead(@RequestBody Lead lead) {

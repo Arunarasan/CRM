@@ -90,6 +90,11 @@ export default function LeadDetailsCard({ lead, fallbackName, onEdit, more }: {
             {t('pw.ld.leadBy')}<span className="font-semibold text-[#33392F]">{leadBy}</span>{leadDate ? ` · ${leadDate}` : ''}
           </p>
         )}
+        {has(lead?.leadManagerName) && (
+          <p className="mt-1 text-[12px] text-[#6B726E]">
+            Lead manager: <span className="font-semibold text-[#33392F]">{lead.leadManagerName}</span> · only they edit the quote
+          </p>
+        )}
         {(chips.length > 0 || reqRows.length > 0) && (
           <div className="mt-3 flex flex-col gap-2.5 rounded-xl bg-[#F7F4EC] p-3">
             {chips.length > 0 && (

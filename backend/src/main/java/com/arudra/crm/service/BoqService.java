@@ -38,6 +38,7 @@ public class BoqService {
     private static final BigDecimal HUNDRED = new BigDecimal(100);
 
     @Autowired private BoqRepository boqRepository;
+    @Autowired private com.arudra.crm.security.CurrentUserService currentUserService;
     @Autowired private WorkflowTriggerService workflowTriggerService;
     @Autowired private BoqItemRepository boqItemRepository;
     @Autowired private BoqItemMaterialRepository boqItemMaterialRepository;
@@ -2288,6 +2289,8 @@ public class BoqService {
      * which the frontend's existing "New Revision" button already does.
      */
     private void ensureEditable(Boq boq) {
+        // A lead with a named manager: only they (and admins) may change its price sheet.
+        if (boq.getLead() != null) LeadQuoteAccess.require(boq.getLead(), currentUserService.getCurrentUser());
         if ("APPROVED".equals(boq.getStatus())) {
             throw new IllegalStateException("BOQ " + boq.getBoqNumber() + " is approved — create a new revision to edit it.");
         }

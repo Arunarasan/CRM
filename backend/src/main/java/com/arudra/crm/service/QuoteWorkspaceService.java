@@ -63,6 +63,7 @@ public class QuoteWorkspaceService {
     @Transactional
     public Quotation liveQuote(Long boqId, User currentUser) {
         Boq boq = boqService.getBoqById(boqId);
+        if (boq.getLead() != null) LeadQuoteAccess.require(boq.getLead(), currentUser);
         if (boq.getItems() == null || boq.getItems().stream().noneMatch(i -> !Boolean.FALSE.equals(i.getIsActive()))) {
             throw new IllegalStateException("Tick at least one item before making the quotation.");
         }

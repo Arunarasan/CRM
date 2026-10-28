@@ -99,6 +99,13 @@ public class ProjectConversionRequestService {
         r.setRequestedById(employee.getId());
         r = requestRepository.save(r);
 
+        // The lead's manager needs no admin sign-off: the project is created straight away.
+        if (LeadQuoteAccess.isManager(lead, employee)) {
+            leadService.addNote(leadId, "Customer agreed to quote " + quote.getQuotationNumber()
+                    + " — project created by the lead manager.", employee);
+            return approve(r.getId(), employee, null, null);
+        }
+
         String who = employee.getName() != null ? employee.getName() : "An employee";
         String money = r.getAdvanceAmount() != null
                 ? " Advance ₹" + r.getAdvanceAmount().toPlainString() + " (" + r.getPaymentMethod() + ")."

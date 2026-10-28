@@ -1384,6 +1384,31 @@ public class LeadService {
         return out;
     }
 
+    /** Admin names (or clears, userId null) the lead's manager; logged on the timeline. */
+    @Transactional
+    public Lead assignLeadManager(Long leadId, Long userId, User by) {
+        Lead lead = getLeadById(leadId);
+        User mgr = userId == null ? null : userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
+        lead.setLeadManager(mgr);
+        leadRepository.save(lead);
+        logActivity(lead, "LEAD_MANAGER", mgr == null ? "Lead manager removed" : "Lead manager set to " + mgr.getName(), by);
+        if (mgr != null && by != null && !mgr.getId().equals(by.getId())) {
+            notificationService.dispatch("You manage a lead", "You are now the lead manager for " + lead.getName()
+                    + ". You can edit its quote and create its project directly.", "LEAD", mgr.getId(), "/employee/tasks");
+        }
+        return lead;
+    }
+
+    public Map<String, Object> getLeadManagerInfo(Long leadId) {
+        Lead lead = getLeadById(leadId);
+        Map<String, Object> m = new java.util.LinkedHashMap<>();
+        User mgr = lead.getLeadManager();
+        m.put("userId", mgr == null ? null : mgr.getId());
+        m.put("name", mgr == null ? null : mgr.getName());
+        return m;
+    }
+
     /** Re-credits the lead to another employee (admin correction of "Lead by"); logged on the timeline. */
     @Transactional
     public Lead changeLeadCreator(Long leadId, Long userId, User changedBy) {

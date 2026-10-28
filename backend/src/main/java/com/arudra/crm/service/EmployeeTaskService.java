@@ -1161,6 +1161,7 @@ public class EmployeeTaskService {
         m.put("remarks", l.getRemarks());
         // Who brought the lead in and who handles it.
         m.put("leadOwnerName", userName(l.getLeadOwner()));
+        m.put("leadManagerName", userName(l.getLeadManager()));
         m.put("salesExecutiveName", userName(l.getAssignedSalesExecutive()));
         m.put("referredByEmployeeName", userName(l.getReferredByEmployee()));
         m.put("capturedByName", auditorName(l.getCreatedBy()));

@@ -3,6 +3,8 @@ import type { BoardColumn, DashboardMetrics, Lead, LeadCreator, LeadFilters, Lea
 
 // Thin typed wrapper around /api/leads endpoints so pages/tabs share one surface.
 
+export interface LeadManager { userId?: number | null; name?: string | null }
+
 export const leadApi = {
   list(params: {
     search?: string;
@@ -43,6 +45,8 @@ export const leadApi = {
   get: (id: string | number) => api.get<Lead>(`/leads/${id}`),
   createdBy: (id: string | number) => api.get<LeadCreator>(`/leads/${id}/created-by`),
   /** Admin only — re-credit the lead to another employee. */
+  leadManager: (id: string | number) => api.get<LeadManager>(`/leads/${id}/lead-manager`),
+  setLeadManager: (id: string | number, userId: number | null) => api.put<LeadManager>(`/leads/${id}/lead-manager`, { userId }),
   changeCreatedBy: (id: string | number, userId: number) => api.put<LeadCreator>(`/leads/${id}/created-by`, { userId }),
   create: (payload: Partial<Lead>) => api.post<Lead>("/leads", payload),
   update: (id: number, payload: Partial<Lead>) => api.put<Lead>(`/leads/${id}`, payload),

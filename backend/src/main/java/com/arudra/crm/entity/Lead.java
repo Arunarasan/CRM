@@ -244,6 +244,12 @@ public class Lead extends BaseEntity {
     @JoinColumn(name = "lead_owner_id")
     private User leadOwner;
 
+    /** Runs the quote: sole non-admin editor of it, and converts to a project without admin approval. */
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "lead_manager_id")
+    private User leadManager;
+
     /** Payslip that paid the collector's per-lead reward (0 = pre-feature, never paid; null = not yet). */
     @com.fasterxml.jackson.annotation.JsonIgnore
     @Column(name = "lead_reward_salary_record_id")

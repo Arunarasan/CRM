@@ -28,6 +28,8 @@ import { useGoBack } from "@/hooks/useGoBack";
 import { useAuth } from "@/hooks/useAuth";
 import LeadFormDialog from "./leads/LeadFormDialog";
 import ChangeCreatorDialog from "./leads/ChangeCreatorDialog";
+import LeadManagerDialog from "./leads/LeadManagerDialog";
+import type { LeadManager } from "./leads/leadApi";
 import ConvertLeadDialog from "./leads/ConvertLeadDialog";
 import { useLeadJourney, type JourneyStepId } from "./leads/journey";
 import { LeadJourneyBar } from "./leads/LeadHeader";
@@ -97,6 +99,8 @@ export default function LeadProfile() {
   const [reopenOpen, setReopenOpen] = useState(false);
   const [winBackOpen, setWinBackOpen] = useState(false);
   const [creatorOpen, setCreatorOpen] = useState(false);
+  const [manager, setManager] = useState<LeadManager | null>(null);
+  const [managerOpen, setManagerOpen] = useState(false);
   const { isAdmin } = useAuth();
   // Phones: once the content is scrolled, the pinned header folds to name + tabs so the page itself has
   // room (the full header is ~40% of a phone screen). Tablet / desktop keep the full header — the
@@ -130,6 +134,7 @@ export default function LeadProfile() {
   useEffect(() => {
     fetchLead();
     leadApi.assignableUsers().then((res) => setUsers(res.data)).catch(console.error);
+    if (id) leadApi.leadManager(id).then((res) => setManager(res.data)).catch(() => setManager(null));
     if (id) leadApi.createdBy(id).then((res) => setCreator(res.data)).catch(() => setCreator(null));
   }, [fetchLead, id]);
 
@@ -371,6 +376,19 @@ export default function LeadProfile() {
                 <span className="text-slate-400">Lead by</span> <span className="font-semibold text-slate-800">{addedBy}</span>
               </span>
             )}
+            {isAdmin ? (
+              <button type="button" onClick={() => setManagerOpen(true)} title="Who runs this lead's quote"
+                className={`${CHIP_SM} hover:border-emerald-300`}>
+                <UserCheck className="h-3.5 w-3.5 text-emerald-600" />
+                <span className="text-slate-400">Lead manager</span> <span className="font-semibold text-slate-800">{manager?.name || "Not set"}</span>
+                <Pencil className="h-3 w-3 text-slate-400" />
+              </button>
+            ) : manager?.name && (
+              <span className={CHIP_SM} title="Runs this lead's quote">
+                <UserCheck className="h-3.5 w-3.5 text-emerald-600" />
+                <span className="text-slate-400">Lead manager</span> <span className="font-semibold text-slate-800">{manager.name}</span>
+              </span>
+            )}
             {place && (
               <span className={CHIP_SM} title={mapQuery || place}>
                 <MapPin className="h-3.5 w-3.5 text-emerald-700" /> <span className="text-slate-800">{place}</span>
@@ -475,6 +493,10 @@ export default function LeadProfile() {
       <MarkLostDialog open={lostOpen} onOpenChange={setLostOpen} lead={lead} onChanged={fetchLead} />
       <WinBackDialog open={winBackOpen} onOpenChange={setWinBackOpen} lead={lead} onChanged={fetchLead} />
       <ReopenDialog open={reopenOpen} onOpenChange={setReopenOpen} lead={lead} users={users} onChanged={fetchLead} />
+      {isAdmin && (
+        <LeadManagerDialog open={managerOpen} onOpenChange={setManagerOpen} leadId={lead.id} users={users}
+          currentUserId={manager?.userId} onChanged={setManager} />
+      )}
       {isAdmin && (
         <ChangeCreatorDialog open={creatorOpen} onOpenChange={setCreatorOpen} leadId={lead.id} users={users}
           currentUserId={creator?.userId ?? lead.leadOwner?.id}

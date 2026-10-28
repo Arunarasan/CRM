@@ -200,6 +200,7 @@ public class QuotationService {
     @Transactional
     public Quotation updateQuotation(Long id, Quotation quotationDetails, User user) {
         Quotation quotation = getQuotationById(id);
+        if (quotation.getLead() != null) LeadQuoteAccess.require(quotation.getLead(), user);
 
         // Once a quotation is customer-approved (or converted), only managers/admins may still edit
         // it — a sales user can no longer silently reprice an agreed quotation.
