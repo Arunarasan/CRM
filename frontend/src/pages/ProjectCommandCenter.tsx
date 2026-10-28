@@ -1330,7 +1330,7 @@ export default function ProjectCommandCenter() {
                           </div>
                         </div>
 
-                        <div id="project-team-card" className={`${CARD} !p-0 overflow-hidden`}>
+                        <div id="project-team-card" className={`${CARD} !p-0`}>
                           <ProjectPeoplePanel projectId={Number(projectId)} compact onChanged={fetchCore} />
                         </div>
 

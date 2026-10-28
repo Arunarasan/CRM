@@ -113,7 +113,7 @@ export default function ProjectPeoplePanel({ projectId, onChanged, compact }: { 
             : people.length === 0 ? <p className="text-xs text-slate-400">Nobody on this project yet. Add the first person below.</p>
             : people.map((p) => (
               <div key={p.userId} className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-100 bg-slate-50/60 px-3 py-2">
-                <div className="min-w-0 flex-1">
+                <div className={`min-w-0 flex-1 ${compact ? "basis-full" : ""}`}>
                   <p className="truncate text-sm font-semibold text-slate-800">{p.name}</p>
                   <div className="mt-1 flex flex-wrap items-center gap-1">
                     {p.tasks.length === 0 && <span className="text-[11px] text-slate-400">No tasks yet</span>}
@@ -143,7 +143,7 @@ export default function ProjectPeoplePanel({ projectId, onChanged, compact }: { 
               </div>
             ))}
           <div className="flex flex-wrap items-center gap-2 pt-1">
-            <div className="min-w-[200px] flex-1"><ResourceSelect value={newSel} onChange={setNewSel} placeholder="Add a person…" /></div>
+            <div className={`flex-1 ${compact ? "basis-full" : "min-w-[200px]"}`}><ResourceSelect value={newSel} onChange={setNewSel} placeholder="Add a person…" /></div>
             <select className={sel} value={newRole} onChange={(e) => setNewRole(e.target.value as Person["role"])}>
               {ROLES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
