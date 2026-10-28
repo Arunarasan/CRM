@@ -329,6 +329,8 @@ export default function ProjectCommandCenter() {
   // Assign Team — smart-recommend the best 2 people for the project; user picks the pair
   // and they're assigned as workforce resources on a project task (smart-assignment engine).
   const [teamDialog, setTeamDialog] = useState(false);
+  // Live roster (managers + everyone holding a task) — same list as the Tasks tab's Team card.
+  const [people, setPeople] = useState<{ userId: number; name: string; role: string; tasks: { id: number }[] }[]>([]);
   const [teamPicks, setTeamPicks] = useState<EmployeeRecommendation[]>([]);
   const [teamSel, setTeamSel] = useState<Record<string, boolean>>({});
   const [teamTopKeys, setTeamTopKeys] = useState<Set<string>>(new Set());
@@ -344,6 +346,7 @@ export default function ProjectCommandCenter() {
   // approvals and documents all come from this single GET. Mutations that only touch those
   // sub-records refresh with fetchCore() instead of re-pulling all ~13 endpoints.
   const fetchCore = () => {
+    api.get(`/projects/${id}/people`).then(r => setPeople(r.data)).catch(() => setPeople([]));
     api.get(`/projects/${id}`)
       .then(res => {
         setData(res.data);
@@ -1246,7 +1249,11 @@ export default function ProjectCommandCenter() {
                   MEDIUM: 'bg-sky-50 text-sky-700 ring-sky-200', LOW: 'bg-slate-100 text-slate-600 ring-slate-200',
                 };
                 const address = project.propertyAddress || summary.address;
-                const team = ([['Project Manager', project.projectManager], ['Assistant Manager', project.assistantManager], ['Sales', project.salesExecutive], ['Designer', project.designer], ['Site Engineer', project.siteEngineer]] as [string, any][]).filter(([, u]) => u);
+                const roleLabel: Record<string, string> = { PROJECT_MANAGER: 'Project Manager', ASSISTANT_MANAGER: 'Assistant Manager', MEMBER: 'Team member' };
+                const fromPeople: [string, any][] = people.map((p) => [p.tasks.length ? `${roleLabel[p.role] || 'Team member'} · ${p.tasks.length} task${p.tasks.length > 1 ? 's' : ''}` : (roleLabel[p.role] || 'Team member'), p]);
+                const listed = new Set(people.map((p) => p.name));
+                const extras = ([['Sales', project.salesExecutive], ['Designer', project.designer], ['Site Engineer', project.siteEngineer]] as [string, any][]).filter(([, u]) => u && !listed.has(u.name));
+                const team = [...fromPeople, ...extras];
 
                 return (
                   <>
@@ -1398,8 +1405,8 @@ export default function ProjectCommandCenter() {
                           </div>
                           {team.length > 0 ? (
                             <ul className="divide-y divide-slate-100">
-                              {team.map(([role, u]) => (
-                                <li key={role} className="flex items-center gap-3 py-2">
+                              {team.map(([role, u], i) => (
+                                <li key={`${role}-${u.userId ?? u.name}-${i}`} className="flex items-center gap-3 py-2">
                                   <span className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold shrink-0">{(u.name || '?').split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase()}</span>
                                   <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-800">{u.name}</span>
                                   <span className="shrink-0 text-[11px] text-slate-400">{role}</span>
