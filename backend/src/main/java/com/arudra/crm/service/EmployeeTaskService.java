@@ -2614,7 +2614,8 @@ public class EmployeeTaskService {
         card.put("officeAssignedOn", viewerEmployeeId == null ? null : assignments.stream()
                 .filter(a -> a.getEmployee() != null && viewerEmployeeId.equals(a.getEmployee().getId()))
                 .filter(a -> !"CANCELLED".equals(a.getStatus()) && !"REJECTED".equals(a.getStatus()))
-                .filter(a -> a.getAssignedBy() != null && !viewerEmployeeId.equals(a.getAssignedBy().getId()))
+                // No assigner = the auto-assign sweep (a project on Auto-assign) — still the office's doing.
+                .filter(a -> a.getAssignedBy() == null || !viewerEmployeeId.equals(a.getAssignedBy().getId()))
                 .map(TaskAssignment::getAssignedDate).filter(java.util.Objects::nonNull)
                 .map(d -> d.toLocalDate().toString()).findFirst().orElse(null));
         card.put("assignedEmployees", assignments.stream()
