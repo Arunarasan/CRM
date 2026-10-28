@@ -225,9 +225,17 @@ export default function RequirementFormSheet({ taskId, leadId, open, onOpenChang
     if (fromCall && !v.name?.trim()) { setError(t('pw.rf.errName')); return; }
     // Next-step validation drives whether the workflow advances to the site visit or holds for follow-up.
     if (nextStep === 'VISIT') {
-      if (!v.siteVisitDate) { setError(t('pw.rf.errVisit')); return; }
-      const described = v.projectDescription?.trim() || v.roomsRequired?.trim();
-      if (!described && !Object.values(scope).some(Boolean)) { setError(t('pw.rf.errDescribe')); return; }
+      // Completing the task needs only these; everything else on the form is optional.
+      const missing = ([
+        [v.name, 'pw.rf.customer_lead_name'],
+        [v.mobileNumber, 'pw.rf.mobile'],
+        [v.city || v.googleMapLocation, 'pw.rf.city'],
+        [v.address, 'pw.rf.address'],
+        [pickedCategories.join(','), 'pw.rs.categoriesPick'],
+        [v.requirementProduct, 'pw.rf.products_asked'],
+      ] as [string | undefined, string][]).filter(([val]) => !val?.trim()).map(([, k]) => t(k));
+      if (!v.siteVisitDate) missing.push(t('pw.rf.schedule_site_visit'));
+      if (missing.length) { setError(t('pw.rf.errRequired', { list: missing.join(', ') })); return; }
     } else {
       if (!v.followUpDate) { setError(t('pw.rf.errFollow')); return; }
     }
