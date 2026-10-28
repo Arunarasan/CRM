@@ -614,6 +614,28 @@ export default function TaskDetail({ embeddedTaskId, onChanged }: { embeddedTask
           onMarkCompleted={orderNext === 'COMPLETED' ? () => setSheet('orderstep') : undefined} />}
         {installView && task.installOrder && <InstallTaskView task={task} info={task.installOrder} locked={locked || !mine} onChanged={load} />}
 
+        {/* Orders: a visible Team card — the holder adds as many helpers as needed, others can ask to join. */}
+        {orderTask && (
+          <div className="rounded-2xl border border-[#EDE6D8] bg-white p-4 shadow-[0_2px_10px_rgba(80,55,20,0.05)]">
+            <div className="mb-2 flex items-center gap-2 text-[14px] font-semibold text-[#1A211E]">
+              <Users className="h-4 w-4" /> {t('pw.td.assigned_team')}
+              <span className="ml-auto text-[12px] font-medium text-[#7A817C]">{task.team.length}</span>
+            </div>
+            <ul className="mb-3 flex flex-col gap-2">
+              {task.team.map((m) => (
+                <li key={m.employeeId} className="flex items-center justify-between text-[13px] text-[#33392F]">
+                  <span>{m.employeeName}{m.role ? ` · ${m.role}` : ''}</span>
+                  <span className="text-[11px] text-[#9A9E96]">{tr(`pw.status.${m.status}`, m.status.replace('_', ' '))}</span>
+                </li>
+              ))}
+            </ul>
+            {!locked && (
+              <TaskTeamPanel taskId={taskId} canRequestJoin={!!task.canRequestJoin} joinRequested={!!task.joinRequested}
+                canManage={!!task.canManageTeam} requests={task.joinRequests ?? []} onChanged={load} />
+            )}
+          </div>
+        )}
+
         {/* Shared project task — customer payments right under the project details, then the numbered items to
             make and the work-items checklist (tracked projects have their own work board below). */}
         {isProjectTask && task.projectInfo && (
@@ -738,7 +760,7 @@ export default function TaskDetail({ embeddedTaskId, onChanged }: { embeddedTask
         )}
 
         {/* Helpers: ask to join a task someone holds; the owner / PM approves requests or adds a colleague. */}
-        {!isLeadForm && !isCallTask && !locked && (
+        {!isLeadForm && !isCallTask && !orderTask && !locked && (
           <TaskTeamPanel taskId={taskId} joinRequested={!!task.joinRequested} canManage={false}
             canRequestJoin={!!task.canRequestJoin && !(task.assignmentType === 'MULTIPLE_EMPLOYEES' || task.assignmentType === 'TEAM')}
             requests={[]} onChanged={load} />
@@ -816,7 +838,7 @@ export default function TaskDetail({ embeddedTaskId, onChanged }: { embeddedTask
             </ul>
           </Disclosure>
 
-          <Disclosure title={isProjectTask ? t('pw.td.assignedTeamCaps') : t('pw.td.assigned_team')} count={task.team.length}
+          {!orderTask && <Disclosure title={isProjectTask ? t('pw.td.assignedTeamCaps') : t('pw.td.assigned_team')} count={task.team.length}
             meta={isProjectTask ? t('pw.td.members', { n: task.team.length }) : undefined} icon={<Users className="h-4 w-4" />}
             defaultOpen={(task.joinRequests?.length ?? 0) > 0}>
             <ul className="flex flex-col gap-2">
@@ -834,7 +856,7 @@ export default function TaskDetail({ embeddedTaskId, onChanged }: { embeddedTask
                   requests={task.joinRequests ?? []} onChanged={load} />
               </div>
             )}
-          </Disclosure>
+          </Disclosure>}
 
           {task.issues.length > 0 && (
             <Disclosure title={t('pw.td.issues')} count={task.issues.length} icon={<AlertTriangle className="h-4 w-4" />}>
