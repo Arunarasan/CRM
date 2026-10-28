@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { Play, Plus, Save, Trash2, X } from "lucide-react";
+import { Play, Plus, RotateCcw, Save, Trash2, X } from "lucide-react";
 import api from "@/lib/api";
-import { payrollApi, type PayslipDefaultLine, type PayslipSettings } from "@/api/payrollApi";
+import { payrollApi, type PayslipDefaultLine, type PayslipOption, type PayslipSettings } from "@/api/payrollApi";
 import { buildPayslipHtml } from "@/pages/employeePortal/printPayslip";
 import type { Payslip } from "@/types/employeePortal";
 import { MONTHS } from "@/pages/workforce/hrUi";
@@ -118,6 +118,30 @@ export default function PayslipSettingsTab({ canEdit, month, year }: { canEdit: 
     ...form,
     lines: [...form.lines, { label: "", category: "EARNING", type: "FIXED", value: 0, enabled: true, employeeIds: [], basis: "" }],
   });
+  const BUILTIN_NOTE: Record<string, string> = {
+    LEAD_REWARD: "Per qualified lead", PROJECT_INCENTIVE: "Per completed project",
+    REVIEW_REWARD: "Per verified Google review", ATTENDANCE_BONUS: "Attendance rules", PERFORMANCE_BONUS: "Performance score",
+  };
+  const setBuiltin = (k: string, p: Partial<{ label: string; enabled: boolean }>) =>
+    setForm({ ...form, builtins: { ...form.builtins, [k]: { ...form.builtins[k], ...p } } });
+  const setOption = (i: number, p: Partial<PayslipOption>) =>
+    setForm({ ...form, options: form.options.map((o, j) => (j === i ? { ...o, ...p } : o)) });
+  const addOption = (category: PayslipOption["category"]) =>
+    setForm({ ...form, options: [...form.options, { label: "", category, enabled: true }] });
+
+  /** Puts the original names / on-off back in the form (not saved until Save). */
+  async function resetDefaults(what: "builtins" | "options" | "one", key?: string) {
+    try {
+      const d = await payrollApi.payslipSettingsDefaults();
+      if (what === "builtins") setForm({ ...form!, builtins: d.builtins });
+      else if (what === "options") setForm({ ...form!, options: d.options });
+      else if (key) setForm({ ...form!, builtins: { ...form!.builtins, [key]: d.builtins[key] } });
+      toast.success("Defaults restored — press Save to keep them");
+    } catch (e) {
+      toast.error(errMsg(e, "Could not load the defaults"));
+    }
+  }
+
   const empName = (id: number) => employees.find((e) => e.id === id)?.name || `#${id}`;
 
   async function save() {
@@ -290,6 +314,70 @@ export default function PayslipSettingsTab({ canEdit, month, year }: { canEdit: 
         <p className="mt-3 text-xs text-slate-500">
           "% of pay" is taken on regular + overtime pay.
         </p>
+      </Card>
+
+      {/* ---------- 2b. built-in lines ---------- */}
+      <Card title="Built-in lines" sub="The automatic lines added to payslips. Rename one, or switch it off so it is never added. Amounts and conditions are set in Pay rules.">
+        <div className="divide-y divide-slate-100 rounded-lg border border-slate-200">
+          {Object.entries(form.builtins).map(([k, b]) => (
+            <div key={k} className="flex flex-wrap items-center gap-3 p-3">
+              <Switch checked={b.enabled} disabled={ro} onCheckedChange={(v) => setBuiltin(k, { enabled: v })} aria-label={`${b.label} on or off`} />
+              <div className="min-w-[10rem] flex-1">
+                <Input value={b.label} disabled={ro} maxLength={60} onChange={(e) => setBuiltin(k, { label: e.target.value })} />
+                <p className="mt-0.5 text-xs text-slate-500">{BUILTIN_NOTE[k]}{b.enabled ? "" : " — switched off"}</p>
+              </div>
+              {canEdit && (
+                <Button size="sm" variant="ghost" onClick={() => resetDefaults("one", k)}>
+                  <RotateCcw className="mr-1 h-3.5 w-3.5" /> Reset
+                </Button>
+              )}
+            </div>
+          ))}
+        </div>
+        {canEdit && (
+          <Button size="sm" variant="outline" className="mt-3" onClick={() => resetDefaults("builtins")}>
+            <RotateCcw className="mr-1 h-3.5 w-3.5" /> Reset all built-in lines
+          </Button>
+        )}
+        <p className="mt-2 text-xs text-slate-500">
+          A switched-off line is skipped, and what it would have paid (leads, projects, reviews) stays unpaid until you switch it back on.
+        </p>
+      </Card>
+
+      {/* ---------- 2c. quick-pick names ---------- */}
+      <Card title="Quick-pick names" sub="The names offered when HR adds a line while editing a payslip. Edit, switch off or delete them, or add your own.">
+        <div className="grid gap-4 md:grid-cols-2">
+          {(["EARNING", "DEDUCTION"] as const).map((cat) => (
+            <div key={cat}>
+              <h4 className="mb-2 text-sm font-medium text-slate-800">{cat === "EARNING" ? "Earnings" : "Deductions"}</h4>
+              <div className="space-y-2">
+                {form.options.map((o, i) => o.category !== cat ? null : (
+                  <div key={o.id ?? `n-${i}`} className="flex items-center gap-2">
+                    <Switch checked={o.enabled} disabled={ro} onCheckedChange={(v) => setOption(i, { enabled: v })} aria-label={`${o.label || "name"} on or off`} />
+                    <Input value={o.label} disabled={ro} maxLength={100} placeholder="Name" onChange={(e) => setOption(i, { label: e.target.value })} />
+                    {canEdit && (
+                      <Button size="icon" variant="ghost" aria-label={`Delete ${o.label}`}
+                        onClick={() => setForm({ ...form, options: form.options.filter((_, j) => j !== i) })}>
+                        <Trash2 className="h-4 w-4 text-rose-700" />
+                      </Button>
+                    )}
+                  </div>
+                ))}
+                {canEdit && (
+                  <Button size="sm" variant="outline" onClick={() => addOption(cat)}>
+                    <Plus className="mr-1 h-3.5 w-3.5" /> Add {cat === "EARNING" ? "earning" : "deduction"} name
+                  </Button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+        {canEdit && (
+          <Button size="sm" variant="outline" className="mt-4" onClick={() => resetDefaults("options")}>
+            <RotateCcw className="mr-1 h-3.5 w-3.5" /> Reset names to defaults
+          </Button>
+        )}
+        <p className="mt-2 text-xs text-slate-500">Changing these never alters payslips already made — each keeps the name it was created with.</p>
       </Card>
 
       {/* ---------- 3. template ---------- */}

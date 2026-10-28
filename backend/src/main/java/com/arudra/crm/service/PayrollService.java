@@ -680,6 +680,7 @@ public class PayrollService {
         // Google-review (QR) rewards are INCENTIVE bonuses too, but get their own counted line.
         BigDecimal projectBonus = BigDecimal.ZERO, manualBonus = BigDecimal.ZERO, incentive = BigDecimal.ZERO;
         List<BigDecimal> reviewRewards = new ArrayList<>();
+        boolean reviewsOn = lineOn(PayslipSettingsService.REVIEW_REWARD);
         if (Boolean.TRUE.equals(employee.getBonusEligible())) {
             List<EmployeeBonus> approved = bonusRepository
                     .findByEmployeeIdAndStatusAndPaidSalaryRecordIdIsNullAndIsDeletedFalse(employeeId, "APPROVED");
@@ -691,6 +692,8 @@ public class PayrollService {
                 }
             }
             for (EmployeeBonus bo : approved) {
+                // Review rewards HR switched off stay APPROVED, so they pay once the line is switched back on.
+                if (!reviewsOn && reviewBonusIds.contains(bo.getId())) continue;
                 BigDecimal amt = nz(bo.getAmount());
                 if (reviewBonusIds.contains(bo.getId())) reviewRewards.add(amt);
                 else if ("INCENTIVE".equalsIgnoreCase(bo.getBonusType())) incentive = incentive.add(amt);
@@ -728,7 +731,7 @@ public class PayrollService {
         BigDecimal reqOtherEarn = req[3];
 
         // Counted reward lines (stored as payslip line items so the portal + PDF list them by name).
-        BigDecimal rewardLines = addCountedLine(rec, "Google reviews (QR)", "review", reviewRewards)
+        BigDecimal rewardLines = addCountedLine(rec, lineName(PayslipSettingsService.REVIEW_REWARD), "review", reviewRewards)
                 .add(addLeadRewardLine(employee, rec, ym));
         if (Boolean.TRUE.equals(employee.getBonusEligible())) {
             rewardLines = rewardLines.add(addProjectIncentiveLine(employee, rec, ym))
@@ -997,7 +1000,7 @@ public class PayrollService {
      */
     private BigDecimal addLeadRewardLine(Employee employee, SalaryRecord rec, YearMonth ym) {
         BigDecimal rate = settingAmount("lead_collected_reward_amount");
-        if (rate.signum() <= 0 || employee.getEmail() == null) return BigDecimal.ZERO;
+        if (!lineOn(PayslipSettingsService.LEAD_REWARD) || rate.signum() <= 0 || employee.getEmail() == null) return BigDecimal.ZERO;
         User user = userRepository.findByEmail(employee.getEmail()).orElse(null);
         if (user == null) return BigDecimal.ZERO;
         List<LeadShare> due = leadShares(user, rate, ym.atEndOfMonth()).stream().filter(x -> !x.paid()).toList();
@@ -1006,7 +1009,7 @@ public class PayrollService {
             jdbc.update("INSERT INTO lead_reward_shares (lead_id, user_id, salary_record_id, amount) VALUES (?,?,?,?)",
                     x.lead().getId(), user.getId(), rec.getId(), x.amount());
         }
-        return addCountedLine(rec, "Leads collected", "lead", due.stream().map(LeadShare::amount).toList());
+        return addCountedLine(rec, lineName(PayslipSettingsService.LEAD_REWARD), "lead", due.stream().map(LeadShare::amount).toList());
     }
 
     /**
@@ -1063,7 +1066,7 @@ public class PayrollService {
      */
     private BigDecimal addProjectIncentiveLine(Employee employee, SalaryRecord rec, YearMonth ym) {
         BigDecimal pool = settingAmount(K_PROJECT_INCENTIVE);
-        if (pool.signum() <= 0 || employee.getEmail() == null) return BigDecimal.ZERO;
+        if (!lineOn(PayslipSettingsService.PROJECT_INCENTIVE) || pool.signum() <= 0 || employee.getEmail() == null) return BigDecimal.ZERO;
         User u = userRepository.findByEmail(employee.getEmail()).orElse(null);
         if (u == null) return BigDecimal.ZERO;
         List<BigDecimal> shares = new ArrayList<>();
@@ -1080,7 +1083,7 @@ public class PayrollService {
                     p.getId(), employee.getId(), rec.getId(), share);
             shares.add(share);
         }
-        return addCountedLine(rec, "Projects completed", "project", shares);
+        return addCountedLine(rec, lineName(PayslipSettingsService.PROJECT_INCENTIVE), "project", shares);
     }
 
     /** Flat bonus when this month's attendance (present = 1, half day = ½, absent = 0; leave ignored) meets the minimum %. */
@@ -1093,6 +1096,7 @@ public class PayrollService {
     private BigDecimal addAttendanceBonusLine(Employee employee, SalaryRecord rec, YearMonth ym) {
         BigDecimal flat = settingAmount(K_ATTENDANCE_BONUS);
         BigDecimal bonusDays = settingAmount(K_ATT_BONUS_DAYS);
+        if (!lineOn(PayslipSettingsService.ATTENDANCE_BONUS)) return BigDecimal.ZERO;
         if (flat.signum() <= 0 && bonusDays.signum() <= 0) return BigDecimal.ZERO;
         double dayHours = settingAmount(K_ATT_DAY_HOURS).doubleValue();
         int minDays = settingAmount(K_ATT_MIN_DAYS).intValue();
@@ -1133,7 +1137,7 @@ public class PayrollService {
         }
 
         BigDecimal amount = flat;
-        String label = "Attendance bonus — " + why;
+        String label = lineName(PayslipSettingsService.ATTENDANCE_BONUS) + " — " + why;
         if (bonusDays.signum() > 0) {
             BigDecimal dailyHours = employee.getStandardDailyHours() != null && employee.getStandardDailyHours().signum() > 0
                     ? employee.getStandardDailyHours() : settingAmount(K_DAILY_HOURS);
@@ -1145,6 +1149,16 @@ public class PayrollService {
         return addFlatLine(rec, label, amount);
     }
 
+    private boolean lineOn(String key) {
+        PayslipSettingsService.Builtin b = payslipSettings.builtin(key);
+        return b == null || b.isEnabled();
+    }
+
+    private String lineName(String key) {
+        PayslipSettingsService.Builtin b = payslipSettings.builtin(key);
+        return b == null || b.getLabel() == null ? key : b.getLabel();
+    }
+
     private static String stripZeros(double v) {
         return BigDecimal.valueOf(v).stripTrailingZeros().toPlainString();
     }
@@ -1152,11 +1166,11 @@ public class PayrollService {
     /** Flat bonus when the auto-calculated performance score meets the minimum. */
     private BigDecimal addPerformanceBonusLine(Employee employee, SalaryRecord rec) {
         BigDecimal amount = settingAmount(K_PERFORMANCE_BONUS);
-        if (amount.signum() <= 0) return BigDecimal.ZERO;
+        if (!lineOn(PayslipSettingsService.PERFORMANCE_BONUS) || amount.signum() <= 0) return BigDecimal.ZERO;
         Object score = hrService.computePerformance(employee.getId()).get("score");
         if (!(score instanceof Number) || ((Number) score).doubleValue() + 0.0001
                 < settingAmount(K_PERFORMANCE_MIN_SCORE).doubleValue()) return BigDecimal.ZERO;
-        return addFlatLine(rec, "Performance bonus — score " + Math.round(((Number) score).doubleValue()), amount);
+        return addFlatLine(rec, lineName(PayslipSettingsService.PERFORMANCE_BONUS) + " — score " + Math.round(((Number) score).doubleValue()), amount);
     }
 
     private BigDecimal addFlatLine(SalaryRecord rec, String label, BigDecimal amount) {

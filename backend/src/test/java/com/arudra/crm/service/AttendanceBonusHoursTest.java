@@ -37,6 +37,7 @@ class AttendanceBonusHoursTest {
         ReflectionTestUtils.setField(service, "siteSettingRepository", siteRepo);
         ReflectionTestUtils.setField(service, "attendanceRepository", attRepo);
         ReflectionTestUtils.setField(service, "lineItemRepository", lineRepo);
+        ReflectionTestUtils.setField(service, "payslipSettings", new PayslipSettingsService(siteRepo, new com.fasterxml.jackson.databind.ObjectMapper()));
         settings.put("payroll.attendance_bonus_amount", "500");
         settings.put("payroll.attendance_day_hours", "7");
         settings.put("payroll.attendance_min_days", "3");
@@ -62,6 +63,10 @@ class AttendanceBonusHoursTest {
     @Test void perDayTestPassesAlone() { hours(7, 7, 7, 2); assertEquals(0, run().compareTo(new BigDecimal("500"))); }   // avg 5.75 fails, 3 days ok
     @Test void averageTestPassesAlone() { hours(10, 10, 6); assertEquals(0, run().compareTo(new BigDecimal("500"))); }   // only 2 days ≥7, avg 8.7
     @Test void neitherPassesNoBonus() { hours(7, 6, 6, 5); assertEquals(0, run().signum()); }
+    @Test void switchedOffBuiltinPaysNothing() {
+        settings.put("payroll.payslip_settings", "{\"builtins\":{\"ATTENDANCE_BONUS\":{\"label\":\"Attendance bonus\",\"enabled\":false}}}");
+        hours(7, 7, 7); assertEquals(0, run().signum());
+    }
     @Test void hoursTestsOffBehavesAsBefore() {
         settings.put("payroll.attendance_min_days", "0"); settings.put("payroll.attendance_avg_hours", "0");
         hours(1, 1); assertEquals(0, run().compareTo(new BigDecimal("500")));

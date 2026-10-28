@@ -562,6 +562,13 @@ public class HrController {
         return ResponseEntity.ok(payslipSettingsService.get());
     }
 
+    /** Factory defaults for the built-in lines and quick-pick names: what "Reset" restores. */
+    @GetMapping("/payroll/payslip-settings/defaults")
+    @PreAuthorize(PAYROLL_READ)
+    public ResponseEntity<PayslipSettingsService.Settings> payslipSettingsDefaults() {
+        return ResponseEntity.ok(payslipSettingsService.defaults());
+    }
+
     @PutMapping("/payroll/payslip-settings")
     @PreAuthorize(PAYROLL_PROCESS)
     public ResponseEntity<PayslipSettingsService.Settings> savePayslipSettings(@RequestBody PayslipSettingsService.Settings body) {

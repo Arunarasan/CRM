@@ -54,8 +54,12 @@ export interface PayslipTemplate {
   employeeSignLabel: string;
   companySignLabel: string;
 }
+export interface PayslipBuiltin { label: string; enabled: boolean }
+export interface PayslipOption { id?: string; label: string; category: 'EARNING' | 'DEDUCTION'; enabled: boolean }
 export interface PayslipSettings {
   auto: PayslipAutoSettings;
+  builtins: Record<string, PayslipBuiltin>;
+  options: PayslipOption[];
   lines: PayslipDefaultLine[];
   template: PayslipTemplate;
   visibility: { releaseOn: 'GENERATED' | 'APPROVED' | 'PAID'; notifyEmployee: boolean };
@@ -103,6 +107,7 @@ export const payrollApi = {
   payRules: () => api.get<PayRules>('/hr/payroll/rules').then((r) => r.data),
   savePayRules: (body: Partial<PayRules>) => api.put<PayRules>('/hr/payroll/rules', body).then((r) => r.data),
   payslipSettings: () => api.get<PayslipSettings>('/hr/payroll/payslip-settings').then((r) => r.data),
+  payslipSettingsDefaults: () => api.get<PayslipSettings>('/hr/payroll/payslip-settings/defaults').then((r) => r.data),
   savePayslipSettings: (body: PayslipSettings) =>
     api.put<PayslipSettings>('/hr/payroll/payslip-settings', body).then((r) => r.data),
   runAutoGenerateNow: (month: number, year: number) =>

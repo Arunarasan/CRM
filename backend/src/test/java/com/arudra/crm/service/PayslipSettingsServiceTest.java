@@ -55,6 +55,43 @@ class PayslipSettingsServiceTest {
     }
 
     @Test
+    void builtinsAndOptionsDefaultThenCanBeRenamedSwitchedOffAndReset() {
+        PayslipSettingsService.Settings d = service.get();
+        assertEquals(5, d.getBuiltins().size());
+        assertEquals("Leads collected", d.getBuiltins().get(PayslipSettingsService.LEAD_REWARD).getLabel());
+        assertTrue(d.getOptions().stream().anyMatch(o -> o.getLabel().equals("Penalty") && o.getCategory().equals("DEDUCTION")));
+
+        PayslipSettingsService.Settings edit = service.get();
+        edit.getBuiltins().get(PayslipSettingsService.LEAD_REWARD).setLabel("Lead bonus");
+        edit.getBuiltins().get(PayslipSettingsService.REVIEW_REWARD).setEnabled(false);
+        edit.getOptions().removeIf(o -> o.getLabel().equals("Bonus"));
+        service.save(edit);
+
+        PayslipSettingsService.Settings back = service.get();
+        assertEquals("Lead bonus", service.builtin(PayslipSettingsService.LEAD_REWARD).getLabel());
+        assertFalse(service.builtin(PayslipSettingsService.REVIEW_REWARD).isEnabled());
+        assertFalse(service.optionLabels("EARNING").contains("Bonus"));
+
+        // "Reset" = the factory defaults, which a Save puts back.
+        service.save(service.defaults());
+        assertEquals("Leads collected", service.builtin(PayslipSettingsService.LEAD_REWARD).getLabel());
+        assertTrue(service.builtin(PayslipSettingsService.REVIEW_REWARD).isEnabled());
+        assertTrue(service.optionLabels("EARNING").contains("Bonus"));
+        assertNotNull(back);
+    }
+
+    @Test
+    void rejectsDuplicateOrBlankQuickPicks() {
+        PayslipSettingsService.Settings dup = service.get();
+        dup.getOptions().add(new PayslipSettingsService.Option(null, "penalty", "DEDUCTION"));
+        assertThrows(IllegalArgumentException.class, () -> service.save(dup));
+
+        PayslipSettingsService.Settings blank = service.get();
+        blank.getOptions().add(new PayslipSettingsService.Option(null, "  ", "EARNING"));
+        assertThrows(IllegalArgumentException.class, () -> service.save(blank));
+    }
+
+    @Test
     void rejectsBadInput() {
         PayslipSettingsService.Settings s = new PayslipSettingsService.Settings();
         s.getAuto().setDayOfMonth(31);

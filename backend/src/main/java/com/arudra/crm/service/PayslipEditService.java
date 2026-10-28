@@ -27,6 +27,7 @@ public class PayslipEditService {
     @Autowired private SalaryRecordRepository salaryRepository;
     @Autowired private PayslipLineItemRepository lineItemRepository;
     @Autowired private PayrollService payrollService;
+    @Autowired private PayslipSettingsService payslipSettings;
 
     /** Preset labels the admin UI offers; free text is allowed too. */
     public static final List<String> EARNING_PRESETS = List.of(
@@ -188,8 +189,8 @@ public class PayslipEditService {
             m.put("owedBalance", payrollService.owedBalance(rec.getEmployee().getId())); // left after this payslip
             m.put("pendingRequests", payrollService.pendingRequests(rec.getEmployee().getId()));
         }
-        m.put("earningPresets", EARNING_PRESETS);
-        m.put("deductionPresets", DEDUCTION_PRESETS);
+        m.put("earningPresets", payslipSettings.optionLabels("EARNING"));
+        m.put("deductionPresets", payslipSettings.optionLabels("DEDUCTION"));
         return m;
     }
 

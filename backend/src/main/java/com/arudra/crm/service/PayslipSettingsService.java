@@ -13,6 +13,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -90,9 +92,54 @@ public class PayslipSettingsService {
         private boolean notifyEmployee = true;
     }
 
+    /** One of the automatic payslip lines (amounts/conditions stay in Pay rules): rename it or switch it off. */
+    @Getter @Setter @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class Builtin {
+        private String label;
+        private boolean enabled = true;
+        public Builtin() {}
+        public Builtin(String label) { this.label = label; }
+    }
+
+    /** A quick-pick name offered in the payslip editor's add-line dropdown. */
+    @Getter @Setter @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class Option {
+        private String id;
+        private String label = "";
+        /** EARNING | DEDUCTION */
+        private String category = "EARNING";
+        private boolean enabled = true;
+        public Option() {}
+        public Option(String id, String label, String category) { this.id = id; this.label = label; this.category = category; }
+    }
+
+    /** Keys of the automatic lines, in display order, with their original names. */
+    public static final String LEAD_REWARD = "LEAD_REWARD", PROJECT_INCENTIVE = "PROJECT_INCENTIVE",
+            REVIEW_REWARD = "REVIEW_REWARD", ATTENDANCE_BONUS = "ATTENDANCE_BONUS", PERFORMANCE_BONUS = "PERFORMANCE_BONUS";
+
+    public static Map<String, Builtin> defaultBuiltins() {
+        Map<String, Builtin> m = new LinkedHashMap<>();
+        m.put(LEAD_REWARD, new Builtin("Leads collected"));
+        m.put(PROJECT_INCENTIVE, new Builtin("Projects completed"));
+        m.put(REVIEW_REWARD, new Builtin("Google reviews (QR)"));
+        m.put(ATTENDANCE_BONUS, new Builtin("Attendance bonus"));
+        m.put(PERFORMANCE_BONUS, new Builtin("Performance bonus"));
+        return m;
+    }
+
+    public static List<Option> defaultOptions() {
+        List<Option> out = new ArrayList<>();
+        int i = 0;
+        for (String l : PayslipEditService.EARNING_PRESETS) out.add(new Option("e" + (++i), l, "EARNING"));
+        for (String l : PayslipEditService.DEDUCTION_PRESETS) out.add(new Option("d" + (++i), l, "DEDUCTION"));
+        return out;
+    }
+
     @Getter @Setter @JsonIgnoreProperties(ignoreUnknown = true)
     public static class Settings {
         private Auto auto = new Auto();
+        private Map<String, Builtin> builtins = defaultBuiltins();
+        private List<Option> options = defaultOptions();
         private List<DefaultLine> lines = new ArrayList<>();
         private Template template = new Template();
         private Visibility visibility = new Visibility();
@@ -104,10 +151,45 @@ public class PayslipSettingsService {
                 .map(SiteSetting::getSettingValue)
                 .filter(v -> v != null && !v.isBlank())
                 .map(v -> {
-                    try { return mapper.readValue(v, Settings.class); }
+                    try { return normalise(mapper.readValue(v, Settings.class)); }
                     catch (Exception e) { log.warn("Unreadable payslip settings, using defaults: {}", e.getMessage()); return new Settings(); }
                 })
                 .orElseGet(Settings::new);
+    }
+
+    /** Fills in anything missing so older saved settings gain the new sections with their defaults. */
+    private static Settings normalise(Settings s) {
+        Map<String, Builtin> merged = defaultBuiltins();
+        if (s.getBuiltins() != null) {
+            s.getBuiltins().forEach((k, b) -> {
+                Builtin d = merged.get(k);
+                if (d == null || b == null) return;
+                d.setEnabled(b.isEnabled());
+                if (b.getLabel() != null && !b.getLabel().isBlank()) d.setLabel(b.getLabel().trim());
+            });
+        }
+        s.setBuiltins(merged);
+        if (s.getOptions() == null) s.setOptions(defaultOptions());
+        return s;
+    }
+
+    /** Name and on/off for one automatic line; falls back to the original name. */
+    @Transactional(readOnly = true)
+    public Builtin builtin(String key) {
+        return get().getBuiltins().get(key);
+    }
+
+    /** Enabled quick-pick names for the payslip editor, by category. */
+    @Transactional(readOnly = true)
+    public List<String> optionLabels(String category) {
+        return get().getOptions().stream()
+                .filter(o -> o.isEnabled() && category.equals(o.getCategory()))
+                .map(Option::getLabel).toList();
+    }
+
+    /** The factory defaults for the built-in lines and quick-pick names: what "Reset" restores. */
+    public Settings defaults() {
+        return new Settings();
     }
 
     /** The printable bits only — safe to hand to any signed-in user (employees print their own payslip). */
@@ -151,6 +233,24 @@ public class PayslipSettingsService {
         settingRepo.save(row);
     }
 
+    private void validateOptions(Settings s) {
+        Set<String> seen = new java.util.HashSet<>();
+        for (Option o : s.getOptions()) {
+            if (o.getLabel() == null || o.getLabel().isBlank())
+                throw new IllegalArgumentException("Every quick-pick name needs text.");
+            o.setLabel(o.getLabel().trim());
+            if (o.getLabel().length() > 100) throw new IllegalArgumentException("'" + o.getLabel() + "' is too long (max 100).");
+            if (!List.of("EARNING", "DEDUCTION").contains(o.getCategory()))
+                throw new IllegalArgumentException("'" + o.getLabel() + "': category must be EARNING or DEDUCTION.");
+            if (!seen.add(o.getCategory() + "|" + o.getLabel().toLowerCase()))
+                throw new IllegalArgumentException("'" + o.getLabel() + "' is listed twice.");
+            if (o.getId() == null || o.getId().isBlank()) o.setId(UUID.randomUUID().toString());
+        }
+        for (Builtin b : s.getBuiltins().values()) {
+            if (b.getLabel().length() > 60) throw new IllegalArgumentException("A built-in line name is too long (max 60).");
+        }
+    }
+
     private static final Set<String> BASES = Set.of("AUTO", "HOURLY", "MONTHLY");
 
     private void validate(Settings s) {
@@ -158,6 +258,8 @@ public class PayslipSettingsService {
         if (s.getTemplate() == null) s.setTemplate(new Template());
         if (s.getVisibility() == null) s.setVisibility(new Visibility());
         if (s.getLines() == null) s.setLines(new ArrayList<>());
+        normalise(s);
+        validateOptions(s);
 
         Auto a = s.getAuto();
         if (a.getDayOfMonth() < 1 || a.getDayOfMonth() > 28)
