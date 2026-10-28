@@ -55,6 +55,7 @@ public class PayrollService {
     @Autowired private SiteSettingRepository siteSettingRepository;
     @Autowired private HrService hrService;
     @Autowired private PayslipSettingsService payslipSettings;
+    @Autowired private EmployeeCelebrationService celebrations;
     @Autowired private org.springframework.jdbc.core.JdbcTemplate jdbc;
     @Autowired private com.arudra.crm.repository.TaskAssignmentRepository taskAssignmentRepository;
     @Autowired private com.arudra.crm.repository.TaskRepository taskRepository;
@@ -221,6 +222,11 @@ public class PayrollService {
             salaryRepository.findByEmployeeIdAndMonthAndYear(saved.getEmployee().getId(), saved.getTargetMonth(), saved.getTargetYear())
                     .filter(rec -> !"PAID".equalsIgnoreCase(rec.getStatus()))
                     .ifPresent(this::absorbApprovedRequests);
+        }
+        if ("ALLOWANCE".equals(type)) {
+            celebrations.give(r.getEmployee(), EmployeeCelebrationService.ALLOWANCE, "REQUEST", saved.getId(),
+                    ("FOOD".equalsIgnoreCase(saved.getAllowanceType()) ? "Food" : "Travel") + " allowance",
+                    nz(saved.getAmount()), null);
         }
         notifyEmployeeUser(r.getEmployee(), "Request Approved",
                 "Your " + prettyRequestType(r.getRequestType()) + " request of " + saved.getAmount() + " was approved.");
@@ -1480,6 +1486,7 @@ public class PayrollService {
         rec.setApprovedAt(LocalDateTime.now());
         SalaryRecord saved = salaryRepository.save(rec);
         notifyEmployeePayslip(saved, "APPROVED");
+        celebrations.payslipIncentives(saved);
         return saved;
     }
 
@@ -1490,6 +1497,8 @@ public class PayrollService {
         rec.setStatus("PAID");
         rec.setPaymentDate(LocalDate.now());
         SalaryRecord saved = salaryRepository.save(rec);
+        celebrations.payslipIncentives(saved);
+        celebrations.salaryPaid(saved);
         // Notify the employee (via their own login, resolved by email) that they've been paid.
         if (saved.getEmployee() != null && saved.getEmployee().getEmail() != null) {
             userRepository.findByEmail(saved.getEmployee().getEmail()).ifPresent(u ->
@@ -2043,6 +2052,7 @@ public class PayrollService {
         EmployeeBonus saved = bonusRepository.save(bonus);
         notifyEmployeeUser(bonus.getEmployee(), "Bonus Approved",
                 "Your " + prettyType(bonus.getBonusType()) + " bonus of " + inr(bonus.getAmount()) + " has been approved.");
+        celebrateBonus(saved);
         return saved;
     }
 
@@ -2060,8 +2070,16 @@ public class PayrollService {
         EmployeeBonus saved = bonusRepository.save(bonus);
         notifyEmployeeUser(bonus.getEmployee(), "Bonus Paid",
                 "Your " + prettyType(bonus.getBonusType()) + " bonus of " + inr(bonus.getAmount()) + " has been paid.");
+        celebrateBonus(saved); // no-op if it was already celebrated when approved
         return saved;
     }
+
+    private void celebrateBonus(EmployeeBonus b) {
+        celebrations.give(b.getEmployee(), EmployeeCelebrationService.BONUS, "BONUS", b.getId(),
+                prettyType(b.getBonusType()) + " bonus", nz(b.getAmount()), b.getReason());
+    }
+
+
 
     /** Totals for one employee's account view. */
     public Map<String, Object> bonusSummary(Long employeeId) {

@@ -113,6 +113,7 @@ export default function PayslipSettingsTab({ canEdit, month, year }: { canEdit: 
   const ro = !canEdit;
   const setAuto = (p: Partial<PayslipSettings["auto"]>) => setForm({ ...form, auto: { ...form.auto, ...p } });
   const setTpl = (p: Partial<PayslipSettings["template"]>) => setForm({ ...form, template: { ...form.template, ...p } });
+  const setCel = (p: Partial<PayslipSettings["celebrations"]>) => setForm({ ...form, celebrations: { ...form.celebrations, ...p } });
   const setVis = (p: Partial<PayslipSettings["visibility"]>) => setForm({ ...form, visibility: { ...form.visibility, ...p } });
   const setLine = (i: number, p: Partial<PayslipDefaultLine>) =>
     setForm({ ...form, lines: form.lines.map((l, j) => (j === i ? { ...l, ...p } : l)) });
@@ -437,6 +438,17 @@ export default function PayslipSettingsTab({ canEdit, month, year }: { canEdit: 
         </div>
         <Toggle label="Notify the employee when it appears" hint="A “Payslip ready” notification at that stage." checked={form.visibility.notifyEmployee}
           onChange={(v) => setVis({ notifyEmployee: v })} disabled={ro} />
+      </Card>
+
+      {/* ---------- 5. gifts ---------- */}
+      <Card title="Gifts (celebrations)" sub="A gift card appears in the employee's app each time money is given, with confetti when they open it.">
+        <Toggle label="Show gifts to employees" checked={form.celebrations.enabled} onChange={(v) => setCel({ enabled: v })} disabled={ro} />
+        <div className={`mt-2 divide-y divide-slate-100 rounded-lg border border-slate-200 px-3 ${form.celebrations.enabled ? "" : "opacity-60"}`}>
+          <Toggle label="Bonuses" hint="When a bonus is approved or paid. The bonus reason is shown as your message." checked={form.celebrations.bonus} onChange={(v) => setCel({ bonus: v })} disabled={ro || !form.celebrations.enabled} />
+          <Toggle label="Incentives" hint="Lead, project, attendance and performance incentives, once the payslip is approved or paid." checked={form.celebrations.incentive} onChange={(v) => setCel({ incentive: v })} disabled={ro || !form.celebrations.enabled} />
+          <Toggle label="Travel / food allowance" checked={form.celebrations.allowance} onChange={(v) => setCel({ allowance: v })} disabled={ro || !form.celebrations.enabled} />
+          <Toggle label="Salary paid" checked={form.celebrations.salary} onChange={(v) => setCel({ salary: v })} disabled={ro || !form.celebrations.enabled} />
+        </div>
       </Card>
 
       {canEdit && (

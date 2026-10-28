@@ -57,7 +57,9 @@ export interface PayslipTemplate {
 }
 export interface PayslipBuiltin { label: string; enabled: boolean }
 export interface PayslipOption { id?: string; label: string; category: 'EARNING' | 'DEDUCTION'; enabled: boolean }
+export interface PayslipCelebrations { enabled: boolean; bonus: boolean; incentive: boolean; allowance: boolean; salary: boolean }
 export interface PayslipSettings {
+  celebrations: PayslipCelebrations;
   auto: PayslipAutoSettings;
   builtins: Record<string, PayslipBuiltin>;
   options: PayslipOption[];

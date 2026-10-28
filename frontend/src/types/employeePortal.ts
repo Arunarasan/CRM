@@ -581,6 +581,18 @@ export interface MyAdvance {
   advanceDate?: string;
 }
 
+/** One "gift": money was given to the employee (bonus, incentive, allowance or salary). */
+export interface Celebration {
+  id: number;
+  kind: 'BONUS' | 'INCENTIVE' | 'ALLOWANCE' | 'SALARY';
+  title: string;
+  note?: string | null;
+  amount: number;
+  rewardDate: string;
+  opened: boolean;
+}
+export interface MyCelebrations { items: Celebration[]; unopened: number; monthTotal: number }
+
 export type PayrollRequestType = 'ADVANCE' | 'REPAY' | 'LOAN_REPAYMENT' | 'ADVANCE_REPAYMENT' | 'SET_RECOVERY' | 'OTHER' | 'ALLOWANCE';
 
 /** One of the employee's money requests. */

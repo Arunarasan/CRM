@@ -33,6 +33,7 @@ public class EmployeePortalService {
     @Autowired private SalaryRecordRepository salaryRecordRepository;
     @Autowired private com.arudra.crm.repository.PayslipLineItemRepository payslipLineItemRepository;
     @Autowired private PayslipSettingsService payslipSettings;
+    @Autowired private EmployeeCelebrationService celebrationService;
     @Autowired private EmployeeDocumentRepository documentRepository;
     @Autowired private NotificationRepository notificationRepository;
     @Autowired private EmployeeTaskService employeeTaskService;
@@ -312,6 +313,19 @@ public class EmployeePortalService {
     private List<SalaryRecord> releasedPayslips(Long employeeId) {
         return salaryRecordRepository.findByEmployeeIdOrderByYearDescMonthDesc(employeeId)
                 .stream().filter(this::released).toList();
+    }
+
+    /** The signed-in employee's gift cards (money given: bonus, incentive, allowance, salary). */
+    public Map<String, Object> getCelebrations(User currentUser) {
+        return celebrationService.mine(requireEmployee(currentUser).getId());
+    }
+
+    public void openCelebration(User currentUser, Long id) {
+        celebrationService.open(requireEmployee(currentUser).getId(), id);
+    }
+
+    public void openAllCelebrations(User currentUser) {
+        celebrationService.openAll(requireEmployee(currentUser).getId());
     }
 
     public List<SalaryRecord> getPayslips(User currentUser) {

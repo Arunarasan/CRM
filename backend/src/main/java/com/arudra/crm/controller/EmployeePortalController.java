@@ -407,6 +407,27 @@ public class EmployeePortalController {
         return ResponseEntity.ok(ApiResponse.success(portalService.getPayslips(me())));
     }
 
+    /** Gift cards: a celebration each time money is given to the employee. */
+    @GetMapping("/celebrations")
+    @PreAuthorize(PORTAL)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> celebrations() {
+        return ResponseEntity.ok(ApiResponse.success(portalService.getCelebrations(me())));
+    }
+
+    @PostMapping("/celebrations/{id}/open")
+    @PreAuthorize(PORTAL)
+    public ResponseEntity<ApiResponse<Void>> openCelebration(@PathVariable Long id) {
+        portalService.openCelebration(me(), id);
+        return ResponseEntity.ok(ApiResponse.success(null));
+    }
+
+    @PostMapping("/celebrations/open-all")
+    @PreAuthorize(PORTAL)
+    public ResponseEntity<ApiResponse<Void>> openAllCelebrations() {
+        portalService.openAllCelebrations(me());
+        return ResponseEntity.ok(ApiResponse.success(null));
+    }
+
     @GetMapping("/payslips/{id}")
     @PreAuthorize(PORTAL)
     public ResponseEntity<ApiResponse<SalaryRecord>> payslip(@PathVariable Long id) {

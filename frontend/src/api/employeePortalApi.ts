@@ -8,7 +8,7 @@ import {
   TimeStatus, Timesheet, TimesheetPeriod, MaterialOption, MaterialRequestEntry, MaterialRequestCreateBody,
   LeadSummary, LeadCreateBody, ManpowerRequestEntry, ManpowerRequestCreateBody,
   DailyReportEntry, DailyReportCreateBody, PersonalReminderEntry, ReminderCreateBody,
-  MyBonuses, MyRewards, PortalSearchResult, MonthlyEarning, PayrollRequestEntry, PayrollRequestCreateBody, MyLoan, MyAdvance,
+  MyBonuses, MyRewards, MyCelebrations, PortalSearchResult, MonthlyEarning, PayrollRequestEntry, PayrollRequestCreateBody, MyLoan, MyAdvance,
   IncomingReceiptPo, ReceiptWarehouse, GoodsReceiptSubmission, MyReceipt,
   ProfileChangeRequest, ProfileChangeBody, DocumentSubmitBody, AttendanceCorrection,
 } from '../types/employeePortal';
@@ -130,6 +130,10 @@ export const employeePortalApi = {
   myLoans: () => api.get<MyLoan[]>(`${BASE}/loans`).then((r) => r.data),
   myAdvances: () => api.get<MyAdvance[]>(`${BASE}/advances`).then((r) => r.data),
   payslips: () => api.get<Payslip[]>(`${BASE}/payslips`).then((r) => r.data),
+  // Gifts: a celebration card each time money is given
+  celebrations: () => api.get<MyCelebrations>(`${BASE}/celebrations`).then((r) => r.data),
+  openCelebration: (id: number) => api.post(`${BASE}/celebrations/${id}/open`).then((r) => r.data),
+  openAllCelebrations: () => api.post(`${BASE}/celebrations/open-all`).then((r) => r.data),
   /** Dry-run payslip for a month HR hasn't generated yet (computed, never saved). */
   previewPayslip: (month: number, year: number) =>
     api.get<Payslip>(`${BASE}/payslips/preview`, { params: { month, year } }).then((r) => r.data),

@@ -20,6 +20,8 @@ import java.util.stream.Collectors;
 
 @Service
 public class HrService {
+    @Autowired private EmployeeCelebrationService celebrations;
+
 
     @Autowired private DepartmentRepository departmentRepository;
     @Autowired private EmployeeRepository employeeRepository;
@@ -318,6 +320,8 @@ public class HrService {
         record.setStatus("PAID");
         record.setPaymentDate(LocalDate.now());
         SalaryRecord saved = salaryRepository.save(record);
+        celebrations.payslipIncentives(saved);
+        celebrations.salaryPaid(saved);
         notifyEmployee(saved.getEmployee(), "Salary Paid",
                 "Your salary for " + saved.getMonth() + "/" + saved.getYear() + " has been paid"
                         + (saved.getNetSalary() != null ? " (₹" + saved.getNetSalary() + ")" : "") + ".",

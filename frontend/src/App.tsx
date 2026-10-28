@@ -132,6 +132,7 @@ const EmployeeProfilePortal = lazy(() => import("./pages/employeePortal/MyProfil
 const EmployeeAttendance = lazy(() => import("./pages/employeePortal/Attendance"));
 const EmployeeLeave = lazy(() => import("./pages/employeePortal/Leave"));
 const EmployeeSalary = lazy(() => import("./pages/employeePortal/Salary"));
+const EmployeeGifts = lazy(() => import("./pages/employeePortal/Gifts"));
 const EmployeeDocuments = lazy(() => import("./pages/employeePortal/Documents"));
 const EmployeeTimesheet = lazy(() => import("./pages/employeePortal/Timesheet"));
 const EmployeeSettings = lazy(() => import("./pages/employeePortal/Settings"));
@@ -350,6 +351,7 @@ function App() {
             <Route path="attendance" element={<EmployeeAttendance />} />
             <Route path="leave" element={<EmployeeLeave />} />
             <Route path="salary" element={<EmployeeSalary />} />
+            <Route path="gifts" element={<EmployeeGifts />} />
             {/* Project work moved into Tasks → Projects filter; keep the old link working. */}
             <Route path="projects" element={<Navigate to="/employee/tasks?tab=PROJECTS" replace />} />
             <Route path="requests" element={<EmployeeRequests />} />

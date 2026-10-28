@@ -136,8 +136,29 @@ public class PayslipSettingsService {
         return out;
     }
 
+    /** The employee portal's Gifts tab: a celebration card each time money is given. */
+    @Getter @Setter @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class Celebrations {
+        private boolean enabled = true;
+        private boolean bonus = true;
+        private boolean incentive = true;
+        private boolean allowance = true;
+        private boolean salary = true;
+
+        public boolean allows(String kind) {
+            return switch (kind) {
+                case "BONUS" -> bonus;
+                case "INCENTIVE" -> incentive;
+                case "ALLOWANCE" -> allowance;
+                case "SALARY" -> salary;
+                default -> false;
+            };
+        }
+    }
+
     @Getter @Setter @JsonIgnoreProperties(ignoreUnknown = true)
     public static class Settings {
+        private Celebrations celebrations = new Celebrations();
         private Auto auto = new Auto();
         private Map<String, Builtin> builtins = defaultBuiltins();
         private List<Option> options = defaultOptions();
@@ -258,6 +279,7 @@ public class PayslipSettingsService {
         if (s.getAuto() == null) s.setAuto(new Auto());
         if (s.getTemplate() == null) s.setTemplate(new Template());
         if (s.getVisibility() == null) s.setVisibility(new Visibility());
+        if (s.getCelebrations() == null) s.setCelebrations(new Celebrations());
         if (s.getLines() == null) s.setLines(new ArrayList<>());
         normalise(s);
         validateOptions(s);
