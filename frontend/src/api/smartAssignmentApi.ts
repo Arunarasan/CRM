@@ -55,6 +55,12 @@ export const smartAssignmentApi = {
 
   dashboard: () => api.get<AssignmentDashboard>(`${BASE}/dashboard`).then((r) => r.data),
 
+  // --- Per-project auto / manual task assignment ---
+  projectMode: (projectId: number) =>
+    api.get<{ mode: 'AUTO' | 'MANUAL' }>(`${BASE}/project/${projectId}/mode`).then((r) => r.data),
+  setProjectMode: (projectId: number, mode: 'AUTO' | 'MANUAL') =>
+    api.put<{ mode: 'AUTO' | 'MANUAL'; assigned: number }>(`${BASE}/project/${projectId}/mode`, { mode }).then((r) => r.data),
+
   // --- Merged Tasks & Employees board ---
   taskBoard: () => api.get<TaskBoardRow[]>(`${BASE}/task-board`).then((r) => r.data),
   roster: () => api.get<RosterRow[]>(`${BASE}/roster`).then((r) => r.data),

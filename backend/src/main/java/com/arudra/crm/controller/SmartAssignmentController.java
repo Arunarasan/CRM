@@ -61,6 +61,22 @@ public class SmartAssignmentController {
         return ResponseEntity.ok(ApiResponse.success(service.assign(taskId, selections, method, me())));
     }
 
+    // ------------------------------------------------------ Per-project auto / manual mode
+
+    @GetMapping("/project/{projectId}/mode")
+    @PreAuthorize(READ)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> projectMode(@PathVariable Long projectId) {
+        return ResponseEntity.ok(ApiResponse.success(Map.of("mode", service.getProjectMode(projectId))));
+    }
+
+    @PutMapping("/project/{projectId}/mode")
+    @PreAuthorize(WRITE)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> setProjectMode(@PathVariable Long projectId,
+                                                                          @RequestBody Map<String, Object> payload) {
+        return ResponseEntity.ok(ApiResponse.success(
+                service.setProjectMode(projectId, String.valueOf(payload.get("mode")), me())));
+    }
+
     @GetMapping("/replace/suggest")
     @PreAuthorize(READ)
     public ResponseEntity<ApiResponse<Map<String, Object>>> suggestReplacement(

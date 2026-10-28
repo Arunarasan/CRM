@@ -27,6 +27,10 @@ public class Project extends BaseEntity {
     @Column(name = "project_code", unique = true, length = 50)
     private String projectCode;
 
+    /** AUTO = Smart Assignment staffs every unassigned task; MANUAL = a manager picks each one. */
+    @Column(name = "task_assignment_mode", nullable = false, length = 10)
+    private String taskAssignmentMode = "MANUAL";
+
     @NotBlank
     @Column(name = "project_name", nullable = false, length = 255)
     private String projectName;

@@ -416,6 +416,58 @@ public class SmartAssignmentService {
         return Map.of("assigned", requests.size(), "taskId", taskId, "method", m);
     }
 
+    // ============================================================ Per-project auto / manual mode
+
+    @Transactional(readOnly = true)
+    public String getProjectMode(Long projectId) {
+        Project p = projectRepository.findById(projectId).orElseThrow(() -> new RuntimeException("Project not found"));
+        return p.getTaskAssignmentMode() == null ? "MANUAL" : p.getTaskAssignmentMode();
+    }
+
+    /** Switch a project between AUTO and MANUAL; switching to AUTO staffs the open tasks straight away. */
+    @Transactional
+    public Map<String, Object> setProjectMode(Long projectId, String mode, User me) {
+        String m = "AUTO".equalsIgnoreCase(mode) ? "AUTO" : "MANUAL";
+        Project p = projectRepository.findById(projectId).orElseThrow(() -> new RuntimeException("Project not found"));
+        p.setTaskAssignmentMode(m);
+        projectRepository.save(p);
+        int assigned = "AUTO".equals(m) ? autoAssignProject(projectId, me) : 0;
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("mode", m);
+        out.put("assigned", assigned);
+        return out;
+    }
+
+    /** Give every open, unassigned task on the project its best-fit resource. Returns how many were staffed. */
+    @Transactional
+    public int autoAssignProject(Long projectId, User me) {
+        int assigned = 0;
+        for (Task t : taskRepository.findByProjectId(projectId)) {
+            if (Boolean.TRUE.equals(t.getIsDeleted())) continue;
+            String st = t.getStatus() == null ? "" : t.getStatus().toUpperCase();
+            if (Set.of("COMPLETED", "CANCELLED").contains(st)) continue;
+            if (!"UNASSIGNED".equals(buildTaskRow(t).get("bucket"))) continue;
+
+            RecommendRequest req = new RecommendRequest();
+            req.setTaskId(t.getId());
+            req.setProjectId(projectId);
+            Map<String, Object> res = recommend(req);
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> picks = (List<Map<String, Object>>) res.get("topPicks");
+            if (picks == null || picks.isEmpty()) continue;
+            Map<String, Object> pick = picks.get(0);
+            Map<String, Object> sel = new LinkedHashMap<>();
+            sel.put("resourceType", pick.getOrDefault("resourceType", ResourceType.EMPLOYEE));
+            sel.put("resourceId", pick.get("resourceId"));
+            sel.put("suitabilityScore", pick.get("suitabilityScore"));
+            List<?> reasons = (List<?>) pick.get("reasons");
+            if (reasons != null && !reasons.isEmpty()) sel.put("reason", String.valueOf(reasons.get(0)));
+            assign(t.getId(), List.of(sel), AssignmentHistory.METHOD_AUTO, me);
+            assigned++;
+        }
+        return assigned;
+    }
+
     /** Candidates for replacing a resource on a task — the recommend engine minus the current holder. */
     @Transactional(readOnly = true)
     public Map<String, Object> suggestReplacement(Long taskId, String resourceType, Long resourceId, String reason) {

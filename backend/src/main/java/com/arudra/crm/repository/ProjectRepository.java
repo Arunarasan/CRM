@@ -11,6 +11,8 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface ProjectRepository extends JpaRepository<Project, Long> {
     long countByStatus(String status);
+
+    java.util.List<Project> findByTaskAssignmentMode(String taskAssignmentMode);
     
     @Query("SELECT p FROM Project p WHERE " +
            "LOWER(p.projectName) LIKE LOWER(CONCAT('%', :search, '%')) OR " +

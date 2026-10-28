@@ -48,6 +48,8 @@ export default function ProjectTaskManager({ projectId, onChanged, onAddTask, fi
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [bulkRunning, setBulkRunning] = useState(false);
+  const [mode, setMode] = useState<"AUTO" | "MANUAL">("MANUAL");
+  const [modeBusy, setModeBusy] = useState(false);
   const [manualFor, setManualFor] = useState<TaskBoardRow | null>(null);
   const [manualSel, setManualSel] = useState<ResourceSelection | null>(null);
   const [manualBusy, setManualBusy] = useState(false);
@@ -65,6 +67,24 @@ export default function ProjectTaskManager({ projectId, onChanged, onAddTask, fi
   }, [projectId]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    smartAssignmentApi.projectMode(projectId).then((r) => setMode(r.mode)).catch(() => {});
+  }, [projectId]);
+
+  const changeMode = (next: "AUTO" | "MANUAL") => {
+    if (next === mode || modeBusy) return;
+    setModeBusy(true);
+    smartAssignmentApi.setProjectMode(projectId, next)
+      .then((r) => {
+        setMode(r.mode);
+        toast.success(r.mode === "AUTO"
+          ? `Auto-assign on${r.assigned ? ` — ${r.assigned} task(s) staffed` : ""}. New tasks are assigned automatically.`
+          : "Manual mode — you pick who does each task.");
+        refresh();
+      })
+      .catch((e: any) => toast.error(e?.response?.data?.message || "Could not change the mode"))
+      .finally(() => setModeBusy(false));
+  };
 
   const counts = rows.reduce<Record<string, number>>((a, r) => { a[r.bucket] = (a[r.bucket] || 0) + 1; return a; }, {});
   const unassigned = rows.filter((r) => r.bucket === "UNASSIGNED");
@@ -206,7 +226,22 @@ export default function ProjectTaskManager({ projectId, onChanged, onAddTask, fi
           )}
         </div>
         <div className="flex items-center gap-2">
-          {unassigned.length > 0 && (
+          <div className="inline-flex rounded-xl bg-slate-100 p-0.5" role="group" aria-label="Task assignment mode">
+            {(["AUTO", "MANUAL"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                disabled={modeBusy}
+                onClick={() => changeMode(m)}
+                title={m === "AUTO" ? "System assigns the best-fit person to every task" : "You pick who does each task"}
+                className={`h-8 rounded-[10px] px-3 text-xs font-bold transition-colors ${
+                  mode === m ? "bg-white text-emerald-800 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+              >
+                {m === "AUTO" ? "Auto-assign" : "I pick"}
+              </button>
+            ))}
+          </div>
+          {mode === "MANUAL" && unassigned.length > 0 && (
             <Button size="sm" variant="outline" onClick={handleAutoAssignAll} disabled={bulkRunning} className="h-9 rounded-xl">
               {bulkRunning ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Zap className="w-4 h-4 mr-1 text-amber-500" />}
               Auto-assign all
