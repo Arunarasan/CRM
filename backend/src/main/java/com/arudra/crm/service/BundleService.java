@@ -503,23 +503,33 @@ public class BundleService {
         Bundle b = find(id);
         boolean clear = req == null || req.resourceType == null || req.resourceType.isBlank() || req.resourceId == null;
         if (clear) {
+            String oldType = b.getResourceType();
+            Long oldId = b.getResourceId();
             b.setResourceType(null);
             b.setResourceId(null);
             bundleRepository.save(b);
             logEvent(b, b.getStatus(), b.getStatus(), user, "Unassigned", null);
             syncTaskAssignment(b, user);
+            if (oldId != null && b.getTaskId() != null) employeeTaskService.removeResourceAssignment(b.getTaskId(), oldType, oldId);
             return toView(b, true);
         }
         String type = ResourceType.normalize(req.resourceType);
         if (!resourceService.exists(type, req.resourceId)) {
             throw new IllegalArgumentException("Selected tailor / worker was not found");
         }
+        String prevType = b.getResourceType();
+        Long prevId = b.getResourceId();
         b.setResourceType(type);
         b.setResourceId(req.resourceId);
         bundleRepository.save(b);
         logEvent(b, b.getStatus(), b.getStatus(), user,
                 "Assigned to " + resourceService.displayName(type, req.resourceId), null);
         syncTaskAssignment(b, user); // also notifies the tailor
+        // Changing the main tailor takes the previous one off; other helpers stay.
+        if (prevId != null && !(Objects.equals(prevType, type) && Objects.equals(prevId, req.resourceId)) && b.getTaskId() != null) {
+            employeeTaskService.removeResourceAssignment(b.getTaskId(), prevType, prevId);
+            syncTaskStatus(b);
+        }
         return toView(b, true);
     }
 
@@ -829,11 +839,8 @@ public class BundleService {
             if (!CLOSED.contains(b.getStatus())) ensureTask(b, user);
             return;
         }
-        for (TaskAssignment a : assignmentRepository.findByTaskId(task.getId())) {
-            boolean active = !"CANCELLED".equals(a.getStatus()) && !"REJECTED".equals(a.getStatus());
-            boolean same = Objects.equals(a.getResourceType(), b.getResourceType()) && Objects.equals(a.getResourceId(), b.getResourceId());
-            if (active && !same) employeeTaskService.removeResourceAssignment(task.getId(), a.getResourceType(), a.getResourceId());
-        }
+        // An order can have several people on it: the bundle's tailor is only the main one, so nobody
+        // else is taken off here (changing the tailor removes the previous one in assign()).
         if (b.getResourceId() != null) {
             employeeTaskService.assignResources(task.getId(),
                     List.of(new AssignResourceRequest(b.getResourceType(), b.getResourceId(), null)), user);

@@ -1308,6 +1308,8 @@ public class EmployeeTaskService {
         if (!"BUNDLE".equals(task.getSource())) return;
         bundleRepository.findFirstByTaskIdAndIsDeletedFalse(task.getId()).ifPresent(b -> {
             if (java.util.Objects.equals(b.getResourceType(), type) && java.util.Objects.equals(b.getResourceId(), rid)) return;
+            // The order already has its main tailor: anyone added on the board joins as an extra person.
+            if (b.getResourceId() != null && rid != null) return;
             b.setResourceType(type);
             b.setResourceId(rid);
             bundleRepository.save(b);
