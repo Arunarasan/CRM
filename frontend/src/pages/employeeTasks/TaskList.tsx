@@ -187,7 +187,6 @@ export default function TaskList() {
   const projectOpen = tab === 'PROJECTS'
     ? available.filter((t) => t.project != null && myProjectIds.has(t.project.id))
     : [];
-  const inProgress = active.filter((t) => t.myAssignmentStatus === 'IN_PROGRESS').length;
   const what = t(`pw.tl.noun.${tab}`);
 
   // Long lists render a page at a time; "Show more" reveals the next page of that list only.
@@ -247,13 +246,6 @@ export default function TaskList() {
     { key: 'DONE', label: t('pw.tl.view.DONE'), count: completed.length },
   ];
 
-  const stats: { label: string; value: number; tone: string }[] = [
-    { label: t('pw.tl.stat.overdue'), value: overdue.length, tone: overdue.length ? 'text-[#C9302C]' : 'text-[#111817]' },
-    { label: t('pw.tl.stat.today'), value: today.length, tone: 'text-[#111817]' },
-    { label: t('pw.tl.stat.inProgress'), value: inProgress, tone: 'text-[#0A573B]' },
-    { label: t('pw.tl.stat.canPick'), value: available.length, tone: 'text-[#9B6B32]' },
-  ];
-
   return (
     <div className="flex flex-col gap-3.5 p-3.5">
       {/* Title + capacity */}
@@ -307,16 +299,6 @@ export default function TaskList() {
             );
           })}
         </div>
-      </div>
-
-      {/* At-a-glance numbers for the selected tab */}
-      <div className="grid grid-cols-4 divide-x divide-[#EEEDE8] rounded-2xl border border-[#ECEAE5] bg-white py-2.5 shadow-sm">
-        {stats.map((s) => (
-          <div key={s.label} className="flex flex-col items-center">
-            <span className={`text-[18px] font-bold leading-tight ${s.tone}`}>{s.value}</span>
-            <span className="text-[11px] text-[#7A817C]">{s.label}</span>
-          </div>
-        ))}
       </div>
 
       {/* Lead stage chips — same cards as the office lead page */}
