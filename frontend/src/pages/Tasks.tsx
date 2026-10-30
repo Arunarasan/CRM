@@ -5,7 +5,7 @@ import { format } from "date-fns";
 import {
   Plus, Search, RefreshCw, Zap, Users, CheckCircle2, Inbox, ListChecks,
   AlertTriangle, TriangleAlert, Timer, Check, X, GitBranch, UserCheck, Circle,
-  FolderKanban, Target, ExternalLink, PackageCheck,
+  FolderKanban, Target, ExternalLink, PackageCheck, User, MapPin, Wrench,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { BUNDLE_STATUS_LABELS } from "@/api/bundleApi";
@@ -674,6 +674,7 @@ function EmployeesTab({ roster, board, isAdmin, onChanged }: {
 }) {
   const [search, setSearch] = useState("");
   const [assignTo, setAssignTo] = useState<RosterRow | null>(null);
+  const [viewing, setViewing] = useState<RosterRow | null>(null);
 
   const rows = useMemo(() => roster.filter(r =>
     r.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -701,9 +702,9 @@ function EmployeesTab({ roster, board, isAdmin, onChanged }: {
             <tbody>
               {rows.length === 0 && <tr><td colSpan={5} className="p-8 text-center text-slate-400">No employees.</td></tr>}
               {rows.map(r => (
-                <tr key={r.employeeId} className="border-b last:border-0 hover:bg-slate-50">
+                <tr key={r.employeeId} className="border-b last:border-0 hover:bg-slate-50 cursor-pointer" onClick={() => setViewing(r)}>
                   <td className="p-3">
-                    <div className="font-semibold text-slate-800">{r.name}</div>
+                    <div className="font-semibold text-emerald-800 hover:underline">{r.name}</div>
                     <div className="text-xs text-slate-400">{r.employeeCode || `#${r.employeeId}`}{r.designation ? ` · ${r.designation}` : ""}</div>
                   </td>
                   <td className="p-3">
@@ -719,7 +720,7 @@ function EmployeesTab({ roster, board, isAdmin, onChanged }: {
                         ? <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600"><Circle className="w-2.5 h-2.5 fill-emerald-500 text-emerald-500" /> Working</span>
                         : <span className="inline-flex items-center gap-1 text-xs font-medium text-slate-400"><Circle className="w-2.5 h-2.5 fill-slate-300 text-slate-300" /> Off</span>}
                   </td>
-                  <td className="p-3 text-right">
+                  <td className="p-3 text-right" onClick={e => e.stopPropagation()}>
                     {isAdmin
                       ? <Button size="sm" variant="outline" className="h-8" disabled={!r.assignable} onClick={() => setAssignTo(r)}>Assign task</Button>
                       : <span className="text-xs text-slate-300">—</span>}
@@ -732,10 +733,263 @@ function EmployeesTab({ roster, board, isAdmin, onChanged }: {
       </div>
       {!isAdmin && <p className="text-xs text-slate-400">Only admins can assign tasks beyond an employee's capacity.</p>}
 
+      {viewing && (
+        <EmployeeTasksDialog employee={viewing} roster={roster} board={board} isAdmin={isAdmin}
+          onClose={() => setViewing(null)} onChanged={onChanged} />
+      )}
       {assignTo && (
         <AssignTaskToEmployeeDialog employee={assignTo} board={board} onClose={() => setAssignTo(null)} onAssigned={() => { setAssignTo(null); onChanged(); }} />
       )}
     </div>
+  );
+}
+
+// ---- One employee's tasks (Assigned | Completed): filter by type, search, page, move one or many ----
+
+const PAGE_SIZE = 20;
+const isOverdue = (d?: string | null) => !!d && new Date(d).getTime() < new Date(new Date().toDateString()).getTime();
+
+function EmployeeTasksDialog({ employee, roster, board, isAdmin, onClose, onChanged }: {
+  employee: RosterRow; roster: RosterRow[]; board: TaskBoardRow[]; isAdmin: boolean;
+  onClose: () => void; onChanged: () => void;
+}) {
+  const navigate = useNavigate();
+  const [tab, setTab] = useState<"assigned" | "completed">("assigned");
+  const [cat, setCat] = useState<string>("ALL");
+  const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<"due" | "priority" | "name">("due");
+  const [page, setPage] = useState(0);
+  const [picked, setPicked] = useState<Set<number>>(new Set());
+  const [moving, setMoving] = useState<TaskBoardRow[] | null>(null);
+  const [pickSearch, setPickSearch] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const mine = useMemo(() => board.filter(t => (t.assignees || []).some(a =>
+    a.resourceType === "EMPLOYEE" && a.resourceId === employee.resourceId
+    && a.status !== "CANCELLED" && a.status !== "REJECTED")), [board, employee.resourceId]);
+  const assigned = useMemo(() => mine.filter(t => t.bucket !== "COMPLETED"), [mine]);
+  const completed = useMemo(() => mine.filter(t => t.bucket === "COMPLETED"), [mine]);
+  const base = tab === "assigned" ? assigned : completed;
+
+  // Type chips with counts, only for the types this person actually has.
+  const catCounts = useMemo(() => {
+    const c: Record<string, number> = {};
+    base.forEach(t => { c[t.category] = (c[t.category] || 0) + 1; });
+    return c;
+  }, [base]);
+
+  const rank = (p?: string | null) => ({ CRITICAL: 0, URGENT: 0, HIGH: 1, MEDIUM: 2, LOW: 3 } as Record<string, number>)[(p || "").toUpperCase()] ?? 4;
+  const list = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const out = base.filter(t =>
+      (cat === "ALL" || t.category === cat) &&
+      (!q || [t.taskName, t.project, t.lead, t.bundleCode, t.categoryLabel, t.customerName, t.city, t.work, t.orderRef].some(v => (v || "").toLowerCase().includes(q))));
+    out.sort((a, b) =>
+      sort === "name" ? a.taskName.localeCompare(b.taskName)
+      : sort === "priority" ? rank(a.priority) - rank(b.priority)
+      : (a.dueDate ? new Date(a.dueDate).getTime() : Infinity) - (b.dueDate ? new Date(b.dueDate).getTime() : Infinity));
+    return out;
+  }, [base, cat, search, sort]);
+
+  const pages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+  const cur = Math.min(page, pages - 1);
+  const rows = list.slice(cur * PAGE_SIZE, cur * PAGE_SIZE + PAGE_SIZE);
+  const canMove = isAdmin && tab === "assigned";
+  const allOnPage = rows.length > 0 && rows.every(t => picked.has(t.id));
+
+  const reset = () => { setPage(0); setPicked(new Set()); };
+  const toggle = (id: number) => setPicked(p => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const togglePage = () => setPicked(p => {
+    const n = new Set(p);
+    rows.forEach(t => { if (allOnPage) n.delete(t.id); else n.add(t.id); });
+    return n;
+  });
+
+  const targets = useMemo(() => roster.filter(r =>
+    r.employeeId !== employee.employeeId && r.assignable && r.resourceId != null &&
+    (r.name.toLowerCase().includes(pickSearch.toLowerCase()) || (r.employeeCode || "").toLowerCase().includes(pickSearch.toLowerCase()))
+  ).sort((a, b) => Number(a.onLeave) - Number(b.onLeave) || a.tasksAssignedNow - b.tasksAssignedNow), [roster, employee.employeeId, pickSearch]);
+
+  const move = async (to: RosterRow) => {
+    if (!moving || employee.resourceId == null || to.resourceId == null) return;
+    setBusy(true);
+    let ok = 0; const failed: string[] = [];
+    for (const t of moving) {
+      try {
+        await smartAssignmentApi.replace({
+          taskId: t.id, oldResourceId: employee.resourceId, oldResourceType: "EMPLOYEE",
+          reason: `Moved from ${employee.name} to ${to.name} (admin)`,
+          replacement: { resourceType: "EMPLOYEE", resourceId: to.resourceId, reason: "Manual admin reassignment" },
+        });
+        ok++;
+      } catch { failed.push(t.taskName); }
+    }
+    setBusy(false);
+    if (ok) toast.success(ok === 1 ? `"${moving[0].taskName}" moved to ${to.name}` : `${ok} tasks moved to ${to.name}`);
+    if (failed.length) toast.error(`Could not move: ${failed.slice(0, 3).join(", ")}${failed.length > 3 ? ` +${failed.length - 3} more` : ""}`);
+    setMoving(null); setPicked(new Set()); onChanged();
+  };
+
+  const openHref = (t: TaskBoardRow) => t.projectId ? `/projects/${t.projectId}` : t.leadId ? `/leads/${t.leadId}` : null;
+
+  const tabBtn = (k: "assigned" | "completed", label: string, n: number) => (
+    <button type="button" onClick={() => { setTab(k); setCat("ALL"); setSearch(""); setMoving(null); reset(); }}
+      className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold ${tab === k ? "bg-emerald-700 text-white" : "bg-slate-100 text-slate-600"}`}>
+      {label} ({n})
+    </button>
+  );
+  const chip = (id: string, label: string, n: number) => (
+    <button key={id} type="button" onClick={() => { setCat(id); reset(); }}
+      className={`shrink-0 rounded-full border px-3 py-1 text-xs font-semibold ${cat === id ? "bg-emerald-700 text-white border-emerald-700" : "bg-white text-slate-600 hover:bg-slate-50"}`}>
+      {label} <span className="opacity-70">{n}</span>
+    </button>
+  );
+
+  return (
+    <Dialog open onOpenChange={o => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-5xl w-[96vw] h-[88vh] flex flex-col gap-3 p-4 sm:p-5">
+        <DialogHeader>
+          <DialogTitle className="flex flex-wrap items-center gap-2">
+            {employee.name}'s tasks
+            <span className="text-xs font-normal text-slate-400">
+              {employee.employeeCode || `#${employee.employeeId}`}{employee.designation ? ` · ${employee.designation}` : ""}
+            </span>
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="flex gap-2">
+          {tabBtn("assigned", "Assigned", assigned.length)}
+          {tabBtn("completed", "Completed", completed.length)}
+        </div>
+
+        {moving ? (
+          <div className="flex min-h-0 flex-1 flex-col gap-2">
+            <div className="flex items-center justify-between gap-2">
+              <p className="min-w-0 truncate text-sm text-slate-600">
+                Move {moving.length === 1 ? <b>{moving[0].taskName}</b> : <b>{moving.length} tasks</b>} to…
+              </p>
+              <Button size="sm" variant="ghost" disabled={busy} onClick={() => setMoving(null)}>Back</Button>
+            </div>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Input placeholder="Search employees…" value={pickSearch} onChange={e => setPickSearch(e.target.value)} className="pl-9" autoFocus />
+            </div>
+            <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto">
+              {targets.length === 0 && <p className="py-6 text-center text-sm text-muted-foreground">No employees match.</p>}
+              {targets.map(r => (
+                <div key={r.employeeId} className="flex items-center gap-3 rounded-lg border p-2.5">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-slate-800">{r.name}</p>
+                    <p className="truncate text-xs text-slate-400">
+                      {r.employeeCode || `#${r.employeeId}`} · {r.tasksAssignedNow}{r.maxTasksPerDay > 0 ? ` / ${r.maxTasksPerDay}` : ""} tasks
+                      {r.onLeave ? " · On leave" : r.atCapacity ? " · At capacity" : r.workingNow ? " · Working" : ""}
+                    </p>
+                  </div>
+                  <Button size="sm" disabled={busy} onClick={() => move(r)}>{busy ? "Moving…" : "Move here"}</Button>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <Input placeholder="Search task, project, lead or order…" value={search}
+                  onChange={e => { setSearch(e.target.value); reset(); }} className="h-9 pl-9" />
+              </div>
+              <select value={sort} onChange={e => setSort(e.target.value as typeof sort)}
+                className="h-9 rounded-md border bg-white px-2 text-sm text-slate-700">
+                <option value="due">Sort: Due date</option>
+                <option value="priority">Sort: Priority</option>
+                <option value="name">Sort: Name</option>
+              </select>
+            </div>
+
+            <div className="flex gap-1.5 overflow-x-auto pb-1">
+              {chip("ALL", "All", base.length)}
+              {CATEGORIES.filter(c => catCounts[c.id]).map(c => chip(c.id, c.label, catCounts[c.id]))}
+            </div>
+
+            {canMove && picked.size > 0 && (
+              <div className="flex items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
+                <span className="text-sm font-medium text-emerald-800">{picked.size} selected</span>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="ghost" onClick={() => setPicked(new Set())}>Clear</Button>
+                  <Button size="sm" onClick={() => { setMoving(base.filter(t => picked.has(t.id))); setPickSearch(""); }}>Move selected…</Button>
+                </div>
+              </div>
+            )}
+
+            <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border">
+              {canMove && rows.length > 0 && (
+                <label className="sticky top-0 z-10 flex items-center gap-2 border-b bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-500">
+                  <input type="checkbox" checked={allOnPage} onChange={togglePage} /> Select this page ({rows.length})
+                </label>
+              )}
+              {rows.length === 0 && (
+                <p className="py-10 text-center text-sm text-muted-foreground">
+                  {base.length === 0 ? (tab === "assigned" ? "No open tasks assigned." : "No completed tasks yet.") : "No tasks match these filters."}
+                </p>
+              )}
+              {rows.map(t => {
+                const href = openHref(t);
+                const ref = t.project ? `Project: ${t.project}`
+                  : t.lead ? `Lead: ${t.lead}`
+                  : t.orderRef || t.bundleCode ? `Order: ${[t.orderRef, t.bundleCode].filter(Boolean).join(" · ")}`
+                  : null;
+                return (
+                  <div key={t.id} className="flex items-center gap-3 border-b px-3 py-2 last:border-0 hover:bg-slate-50">
+                    {canMove && <input type="checkbox" checked={picked.has(t.id)} onChange={() => toggle(t.id)} />}
+                    <span className={`hidden shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide sm:inline-block ${CATEGORY_BADGE[t.category] || "bg-slate-100 text-slate-600 border-slate-200"}`}>
+                      {t.categoryLabel || t.category}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-slate-800">{t.taskName}</p>
+                      {(t.customerName || t.city || t.work) && (
+                        <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-600">
+                          {t.customerName && <span className="inline-flex items-center gap-1 font-medium"><User className="h-3 w-3 text-slate-400" />{t.customerName}</span>}
+                          {t.city && <span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3 text-slate-400" />{t.city}</span>}
+                          {t.work && <span className="inline-flex min-w-0 items-center gap-1"><Wrench className="h-3 w-3 shrink-0 text-slate-400" /><span className="truncate">{t.work}</span></span>}
+                        </p>
+                      )}
+                      <p className="truncate text-xs text-slate-400">
+                        <span className="sm:hidden">{t.categoryLabel || t.category} · </span>
+                        {ref ? `${ref} · ` : ""}{t.status?.replace(/_/g, " ")}
+                        {t.dueDate && <span className={isOverdue(t.dueDate) && tab === "assigned" ? " font-semibold text-red-600" : ""}>{` · due ${format(new Date(t.dueDate), "d MMM")}`}</span>}
+                      </p>
+                    </div>
+                    {t.priority && <span className={`hidden shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold sm:inline-block ${priorityColor(t.priority)}`}>{t.priority}</span>}
+                    {href && (
+                      <Button size="sm" variant="ghost" className="h-8 px-2" title="Open" onClick={() => navigate(href)}>
+                        <ExternalLink className="h-4 w-4" />
+                      </Button>
+                    )}
+                    {canMove && (
+                      <Button size="sm" variant="outline" className="h-8 shrink-0" onClick={() => { setMoving([t]); setPickSearch(""); }}>Change person</Button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="flex items-center justify-between gap-2 text-xs text-slate-500">
+              <span>
+                {list.length === 0 ? "0 tasks" : `${cur * PAGE_SIZE + 1}–${cur * PAGE_SIZE + rows.length} of ${list.length}`}
+                {tab === "completed" && " · completed work stays with who did it"}
+              </span>
+              {pages > 1 && (
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="outline" className="h-8" disabled={cur === 0} onClick={() => setPage(cur - 1)}>Prev</Button>
+                  <span>Page {cur + 1} / {pages}</span>
+                  <Button size="sm" variant="outline" className="h-8" disabled={cur >= pages - 1} onClick={() => setPage(cur + 1)}>Next</Button>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 

@@ -42,6 +42,9 @@ public class SmartAssignmentService {
     @Autowired private ProjectRepository projectRepository;
     @Autowired private LeadRepository leadRepository;
     @Autowired private com.arudra.crm.repository.BundleRepository bundleRepository;
+    @Autowired private com.arudra.crm.repository.BundleItemRepository bundleItemRepository;
+    @Autowired private com.arudra.crm.repository.CustomerRepository customerRepository;
+    @Autowired private com.arudra.crm.repository.InvoiceRepository invoiceRepository;
     @Autowired private DepartmentRepository departmentRepository;
     @Autowired private AssignmentSettingsRepository settingsRepository;
     @Autowired private AssignmentHistoryRepository historyRepository;
@@ -743,11 +746,74 @@ public class SmartAssignmentService {
                 row.put("bundleStatus", b.getStatus());
             });
         }
+        addTaskDetails(row, t, cat[0]);
         row.put("assignees", assignees);
         // Data-entry hold: flag + live auto-release instant so the board can show a countdown timer.
         row.put("dataEntry", employeeTaskService.isDataEntryLeadTask(t));
         row.put("holdExpiresAt", employeeTaskService.holdExpiresAt(t, active));
         return row;
+    }
+
+    /**
+     * What a task is about, for the employee task list: customerName, city, work (the thing being done)
+     * and orderRef (bill / invoice number). Taken from the lead, project, stitching bundle or invoice
+     * the task hangs off — whichever applies — and left out when unknown.
+     */
+    private void addTaskDetails(Map<String, Object> row, Task t, String category) {
+        String customer = null, city = null, work = null, ref = null;
+        if (t.getLeadId() != null) {
+            Lead l = leadRepository.findById(t.getLeadId()).orElse(null);
+            if (l != null) {
+                customer = firstNonBlank(l.getContactPerson(), l.getName());
+                city = l.getCity();
+                work = firstNonBlank(l.getRequirementProduct(), l.getRequirementCategory(),
+                        l.getRequirementService(), l.getRequirementOther(), l.getCustomerRequirements());
+            }
+        }
+        if (t.getProject() != null) {
+            Project p = t.getProject();
+            if (p.getCustomer() != null) {
+                customer = firstNonBlank(customer, p.getCustomer().getName());
+                city = firstNonBlank(city, p.getCustomer().getCity());
+            }
+            work = firstNonBlank(work, p.getProjectType());
+        }
+        if ("STITCHING".equals(category)) {
+            Bundle b = bundleRepository.findFirstByTaskIdAndIsDeletedFalse(t.getId()).orElse(null);
+            if (b != null) {
+                if (b.getCustomerId() != null) {
+                    Customer c = customerRepository.findById(b.getCustomerId()).orElse(null);
+                    if (c != null) { customer = firstNonBlank(customer, c.getName()); city = firstNonBlank(city, c.getCity()); }
+                }
+                if (b.getInvoiceId() != null) {
+                    ref = invoiceRepository.findById(b.getInvoiceId()).map(Invoice::getInvoiceNumber).orElse(null);
+                }
+                String items = bundleItemRepository.findByBundleIdAndIsDeletedFalseOrderByIdAsc(b.getId()).stream()
+                        .map(BundleItem::getDescription).filter(d -> d != null && !d.isBlank())
+                        .limit(3).collect(Collectors.joining(", "));
+                work = firstNonBlank(items, work);
+            }
+        }
+        if (t.getInvoiceId() != null) {
+            Invoice inv = invoiceRepository.findById(t.getInvoiceId()).orElse(null);
+            if (inv != null) {
+                ref = firstNonBlank(ref, inv.getInvoiceNumber());
+                if (inv.getCustomer() != null) {
+                    customer = firstNonBlank(customer, inv.getCustomer().getName());
+                    city = firstNonBlank(city, inv.getCustomer().getCity());
+                }
+                work = firstNonBlank(work, "Installation");
+            }
+        }
+        if (customer != null) row.put("customerName", customer);
+        if (city != null) row.put("city", city);
+        if (work != null) row.put("work", work);
+        if (ref != null) row.put("orderRef", ref);
+    }
+
+    private static String firstNonBlank(String... vs) {
+        for (String v : vs) if (v != null && !v.isBlank()) return v.trim();
+        return null;
     }
 
     /**

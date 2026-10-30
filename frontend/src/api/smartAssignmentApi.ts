@@ -85,6 +85,10 @@ export interface TaskBoardRow {
   project: string | null;
   leadId: number | null;
   lead: string | null;
+  customerName?: string;  // who the task is for (lead contact, project customer, bill customer)
+  city?: string;
+  work?: string;          // what is being done (requirement / project type / bundle items)
+  orderRef?: string;      // bill / invoice number for stitching and installation tasks
   status: string;
   priority: string | null;
   dueDate: string | null;
