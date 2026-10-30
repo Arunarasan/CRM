@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, Fragment } from "react";
 import { useParams, useSearchParams, Link } from "react-router-dom";
 import { useGoBack } from "@/hooks/useGoBack";
 import api from "@/lib/api";
+import { offboardingNote } from "@/lib/offboarding";
 import { workforceApi } from "@/api/workforceApi";
 import type { WorkforceDetail, WorkforceMeta } from "@/types/workforce";
 import { resolveFileUrl } from "@/lib/uploadFile";
@@ -170,19 +171,21 @@ export default function EmployeeProfile() {
       .finally(() => setSavingReview(false));
   };
 
-  const toggleActive = () => {
+  const toggleActive = async () => {
     const makeActive = employee.status === "INACTIVE";
     const msg = makeActive
       ? "Reactivate this employee? They can log in and be assigned work again."
-      : "Mark this employee Inactive? They will be blocked from logging in and skipped for new assignments. Their history is kept.";
+      : "Mark this employee Inactive? They will be blocked from logging in and skipped for new assignments. Their history is kept."
+        + await offboardingNote(id!);
     if (!window.confirm(msg)) return;
     api.put(`/hr/employees/${id}/active`, null, { params: { active: makeActive } })
       .then(() => { toast.success(makeActive ? "Employee reactivated." : "Employee marked inactive."); loadEmployee(); })
       .catch((e) => toast.error(e?.response?.data?.message || "Could not update status."));
   };
 
-  const deleteEmployee = () => {
-    if (!window.confirm("Permanently delete this employee? This cannot be undone. (If you only want to stop their access, use Mark Inactive instead.)")) return;
+  const deleteEmployee = async () => {
+    const note = await offboardingNote(id!);
+    if (!window.confirm("Permanently delete this employee? This cannot be undone. (If you only want to stop their access, use Mark Inactive instead.)" + note)) return;
     api.delete(`/hr/employees/${id}`)
       .then(() => { toast.success("Employee deleted."); goBack(); })
       .catch((e) => toast.error(e?.response?.data?.message || "Could not delete this employee."));

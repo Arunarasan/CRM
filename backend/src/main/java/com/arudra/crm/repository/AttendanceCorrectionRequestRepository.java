@@ -13,6 +13,8 @@ public interface AttendanceCorrectionRequestRepository extends JpaRepository<Att
 
     List<AttendanceCorrectionRequest> findByStatusAndIsDeletedFalseOrderByIdDesc(String status);
 
+    List<AttendanceCorrectionRequest> findByEmployeeIdAndStatusAndIsDeletedFalse(Long employeeId, String status);
+
     /** A correction request points at one of these sessions — they must not be rebuilt or deleted. */
     boolean existsByAttendanceSessionIdIn(java.util.Collection<Long> sessionIds);
 }

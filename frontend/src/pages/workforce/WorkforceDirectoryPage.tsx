@@ -13,6 +13,7 @@ import FilterSheet from "@/components/ui/filter-sheet";
 import { Plus, RefreshCw, SlidersHorizontal, Users, Phone, Mail, Briefcase, UserX, UserCheck, Trash2 } from "lucide-react";
 import AddWorkforceDialog from "./AddWorkforceDialog";
 import api from "@/lib/api";
+import { offboardingNote } from "@/lib/offboarding";
 import { toast } from "@/components/ui/toast";
 import { FilterChips, PersonChip, SearchField } from "./hrUi";
 
@@ -77,18 +78,20 @@ export default function WorkforceDirectoryPage() {
   const clearFilters = () => { setSkill(""); setStatus(""); setDepartment(""); setCompany(""); };
 
   // Employee-only row actions (contractors have their own module).
-  const toggleActive = (w: WorkforceListRow) => {
+  const toggleActive = async (w: WorkforceListRow) => {
     const makeActive = w.status === "INACTIVE";
     const msg = makeActive
       ? `Reactivate ${w.fullName}? They can log in and be assigned work again.`
-      : `Mark ${w.fullName} Inactive? They will be blocked from logging in and skipped for new assignments. Their history is kept.`;
+      : `Mark ${w.fullName} Inactive? They will be blocked from logging in and skipped for new assignments. Their history is kept.`
+        + await offboardingNote(w.employeeId!);
     if (!window.confirm(msg)) return;
     api.put(`/hr/employees/${w.employeeId}/active`, null, { params: { active: makeActive } })
       .then(() => { toast.success(makeActive ? "Employee reactivated." : "Employee marked inactive."); load(); })
       .catch((e) => toast.error(e?.response?.data?.message || "Could not update status."));
   };
-  const deleteEmployee = (w: WorkforceListRow) => {
-    if (!window.confirm(`Permanently delete ${w.fullName}? This cannot be undone. (To just stop their access, use Mark Inactive.)`)) return;
+  const deleteEmployee = async (w: WorkforceListRow) => {
+    const note = await offboardingNote(w.employeeId!);
+    if (!window.confirm(`Permanently delete ${w.fullName}? This cannot be undone. (To just stop their access, use Mark Inactive.)` + note)) return;
     api.delete(`/hr/employees/${w.employeeId}`)
       .then(() => { toast.success("Employee deleted."); load(); })
       .catch((e) => toast.error(e?.response?.data?.message || "Could not delete this employee."));

@@ -15,6 +15,8 @@ public interface ProfileChangeRequestRepository extends JpaRepository<ProfileCha
     /** The admin review queue filtered by status (e.g. PENDING), latest first. */
     List<ProfileChangeRequest> findByStatusAndIsDeletedFalseOrderByIdDesc(String status);
 
+    List<ProfileChangeRequest> findByEmployeeIdAndStatusAndIsDeletedFalse(Long employeeId, String status);
+
     /** The whole admin review queue, latest first. */
     List<ProfileChangeRequest> findByIsDeletedFalseOrderByIdDesc();
 }

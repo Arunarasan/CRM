@@ -14,4 +14,6 @@ public interface ProjectConversionRequestRepository extends JpaRepository<Projec
     boolean existsByLeadIdAndStatusAndIsDeletedFalse(Long leadId, String status);
 
     List<ProjectConversionRequest> findByStatusAndIsDeletedFalseOrderByIdDesc(String status);
+
+    long countByRequestedByIdAndStatusAndIsDeletedFalse(Long requestedById, String status);
 }

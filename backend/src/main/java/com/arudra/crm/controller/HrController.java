@@ -173,6 +173,12 @@ public class HrController {
         return ResponseEntity.ok(employeeLoginService.unlink(id));
     }
 
+    @GetMapping("/employees/{id}/offboarding-preview")
+    @PreAuthorize(HR_WRITE)
+    public ResponseEntity<Map<String, Object>> offboardingPreview(@PathVariable Long id) {
+        return ResponseEntity.ok(hrService.offboardingPreview(id));
+    }
+
     @PutMapping("/employees/{id}/active")
     @PreAuthorize(HR_WRITE)
     public ResponseEntity<Employee> setEmployeeActive(@PathVariable Long id, @RequestParam boolean active) {

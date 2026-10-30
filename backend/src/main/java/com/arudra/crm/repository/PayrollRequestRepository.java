@@ -22,6 +22,8 @@ public interface PayrollRequestRepository extends JpaRepository<PayrollRequest, 
 
     List<PayrollRequest> findByStatusAndIsDeletedFalseOrderByIdDesc(String status);
 
+    long countByEmployeeIdAndStatusAndIsDeletedFalse(Long employeeId, String status);
+
     /**
      * Approved, not-yet-applied month-targeted requests (LOAN_REPAYMENT / OTHER) an employee has for
      * a period — the candidates a payroll run absorbs.

@@ -39,6 +39,14 @@ public class HrService {
     @Autowired private RefreshTokenService refreshTokenService;
     @Autowired private EmailService emailService;
     @Autowired private EmployeeLoginService employeeLoginService;
+    @Autowired private EmployeeOffboardingService offboardingService;
+
+    /** What deactivating/deleting would clean up — for the confirm dialog. */
+    @Transactional(readOnly = true)
+    public Map<String, Object> offboardingPreview(Long id) {
+        return offboardingService.preview(employeeRepository.findById(id)
+                .orElseThrow(() -> new com.arudra.crm.exception.ResourceNotFoundException("Employee not found with id: " + id)));
+    }
 
     /** Notifies an employee via their own login account (resolved by shared email), if one exists. */
     private void notifyEmployee(Employee employee, String title, String message, String type, String url) {
@@ -189,6 +197,7 @@ public class HrService {
     public Employee setEmployeeActive(Long id, boolean active) {
         Employee employee = employeeRepository.findById(id)
                 .orElseThrow(() -> new com.arudra.crm.exception.ResourceNotFoundException("Employee not found with id: " + id));
+        if (!active && "ACTIVE".equals(employee.getStatus())) offboardingService.offboard(employee);
         employee.setStatus(active ? "ACTIVE" : "INACTIVE");
         Employee saved = employeeRepository.save(employee);
         Workforce header = saved.getWorkforce();
@@ -217,6 +226,7 @@ public class HrService {
                 .orElseThrow(() -> new com.arudra.crm.exception.ResourceNotFoundException("Employee not found with id: " + id));
         Workforce header = employee.getWorkforce();
         Long linkedUserId = employee.getUserId();
+        offboardingService.offboard(employee);
         employeeRepository.delete(employee);
         employeeRepository.flush();
         if (header != null) {
