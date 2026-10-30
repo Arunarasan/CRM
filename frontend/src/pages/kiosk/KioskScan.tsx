@@ -29,6 +29,11 @@ type Stage = 'loading' | 'find' | 'challenge' | 'capture' | 'sending';
 /** Face must fill at least this share of the frame width before we trust a reading. */
 const MIN_SHARE = 0.25;
 const CHALLENGE_MS = 9000;
+/**
+ * Ask for a blink / head turn before the punch. Off for speed: a check is just "show your face"
+ * (about 2-3 s). Every punch still stores its selfie for HR, and the server flags weak matches.
+ */
+const REQUIRE_LIVENESS = false;
 const TOTAL_MS = 45000;
 
 const nextFrame = () => new Promise<void>((res) => requestAnimationFrame(() => res()));
@@ -83,7 +88,15 @@ export default function KioskScan({ action, onDone, onFail, onCancel, onSwitch }
           if (pose.share < MIN_SHARE) { okFrames = 0; steady = 0; setHint('Come a little closer'); continue; }
           if (pose.score < 0.6) { okFrames = 0; steady = 0; setHint('Face the camera'); continue; }
 
-          if (stg === 'find') {
+          if (stg === 'find' && !REQUIRE_LIVENESS) {
+            // Fast path: no blink/turn to perform. Two steady, straight-on frames and we capture.
+            const frontal = Math.abs(pose.yaw - 0.5) < FRONTAL_OFFSET && pose.score >= 0.7;
+            steady = frontal ? steady + 1 : 0;
+            if (!frontal) { setHint('Look straight at the camera'); continue; }
+            if (steady < 2) { setHint('Hold still…'); continue; }
+            stg = 'capture';
+            setStage('capture'); setHint('Checking…');
+          } else if (stg === 'find') {
             okFrames += 1;
             if (okFrames >= 2) {
               challenge = new LivenessChallenge(pickChallenge());
@@ -100,14 +113,16 @@ export default function KioskScan({ action, onDone, onFail, onCancel, onSwitch }
               return;
             }
           } else if (stg === 'capture') {
-            const frontal = Math.abs(pose.yaw - 0.5) < FRONTAL_OFFSET;
-            steady = frontal && pose.score >= 0.7 ? steady + 1 : 0;
-            if (steady < 2) continue;
+            if (REQUIRE_LIVENESS) {
+              const frontal = Math.abs(pose.yaw - 0.5) < FRONTAL_OFFSET;
+              steady = frontal && pose.score >= 0.7 ? steady + 1 : 0;
+              if (steady < 2) continue;
+            }
 
             const full = await scanFace(video);
             if (cancelled) return;
-            if (full.state !== 'one') { steady = 0; continue; }
-            const selfie = await snapshot(video, 0.8, 480);
+            if (full.state !== 'one') { steady = 0; if (!REQUIRE_LIVENESS) { stg = 'find'; setStage('find'); } continue; }
+            const selfie = await snapshot(video, 0.7, 360);
             leaveCamera(stream, video); stream = null; // frame taken: stop showing it (the warm camera stays on)
             setStage('sending'); setHint('Checking…');
             try {
