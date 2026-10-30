@@ -9,7 +9,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Loader2, Tablet, LogIn, LogOut, CheckCircle2, AlertTriangle, XCircle, UserRound } from 'lucide-react';
 import { kioskApi, kioskToken, KioskInfo, KioskPunchResult } from '@/lib/kioskApi';
 import { keepCameraWarm, loadFaceEngine, releaseWarmCamera } from '@/lib/faceEngine';
-import { fingerprintSensorAvailable, insideKioskApp } from '@/lib/fingerprintBridge';
+import { fingerprintSensorAvailable } from '@/lib/fingerprintBridge';
 import KioskScan, { ScanAction, ScanDone, ScanFail } from './KioskScan';
 import KioskFingerScan from './KioskFingerScan';
 
@@ -222,10 +222,6 @@ function KioskHome({ kiosk, offline, onChoose }: { kiosk: KioskInfo | null; offl
       </div>
       <p className="mt-4 text-xs text-emerald-200">{kiosk?.verifyMode === 'FINGER' ? 'Tap one, then place your finger on the sensor.' : 'Tap one, then look at the camera.'}</p>
       {offline && <p className="mt-3 rounded-lg bg-amber-400/20 px-3 py-2 text-xs text-amber-100">Can’t reach the server. Retrying…</p>}
-      {/* Fingerprints are enrolled on this phone's own scanner so they match what it reads at check-in. */}
-      {insideKioskApp() && (
-        <a href="/crm/workforce/people" className="mt-8 inline-block text-xs text-emerald-300 underline">HR: enrol fingerprints</a>
-      )}
     </div>
   );
 }
