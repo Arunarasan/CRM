@@ -43,6 +43,16 @@ public interface TaskAssignmentRepository extends JpaRepository<TaskAssignment, 
     List<TaskAssignment> findByStatusNot(String status);
     List<TaskAssignment> findByStatusIn(List<String> statuses);
 
+    /** Per-resource count of assignments in the given statuses (one grouped query for the whole roster). */
+    @Query("SELECT a.resourceId, COUNT(a) FROM TaskAssignment a " +
+           "WHERE a.resourceType = :type AND a.status IN :statuses GROUP BY a.resourceId")
+    List<Object[]> countByStatusesGrouped(@Param("type") String type, @Param("statuses") java.util.Collection<String> statuses);
+
+    /** Per-resource count of assignments completed after {@code since}. */
+    @Query("SELECT a.resourceId, COUNT(a) FROM TaskAssignment a " +
+           "WHERE a.resourceType = :type AND a.completedAt > :since GROUP BY a.resourceId")
+    List<Object[]> countCompletedSinceGrouped(@Param("type") String type, @Param("since") java.time.LocalDateTime since);
+
     /** All task assignments across a project's tasks — for the project's people/labour roster. */
     List<TaskAssignment> findByTaskProjectId(Long projectId);
 

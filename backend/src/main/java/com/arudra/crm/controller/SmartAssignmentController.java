@@ -38,6 +38,20 @@ public class SmartAssignmentController {
         return user;
     }
 
+    /** One employee's tasks, paged and filtered on the server (Tasks & Workforce → Employees dialog). */
+    @GetMapping("/employees/{resourceId}/tasks")
+    @PreAuthorize(READ)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> employeeTasks(
+            @PathVariable Long resourceId,
+            @RequestParam(defaultValue = "assigned") String scope,
+            @RequestParam(required = false) String category,
+            @RequestParam(required = false) String q,
+            @RequestParam(defaultValue = "due") String sort,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(ApiResponse.success(service.employeeTasks(resourceId, scope, category, q, sort, page, size)));
+    }
+
     // ------------------------------------------------------ Recommendation
 
     @PostMapping("/recommend")
@@ -136,8 +150,9 @@ public class SmartAssignmentController {
     /** All tasks pre-bucketed (UNASSIGNED / ASSIGNED / IN_PROGRESS / NEEDS_APPROVAL / COMPLETED) for the Tasks tab. */
     @GetMapping("/task-board")
     @PreAuthorize(READ)
-    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> taskBoard() {
-        return ResponseEntity.ok(ApiResponse.success(service.taskBoard()));
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> taskBoard(
+            @RequestParam(required = false) Integer completedDays) {
+        return ResponseEntity.ok(ApiResponse.success(service.taskBoard(completedDays)));
     }
 
     /** Grant a held data-entry task a fresh hold window from the board (manager override). */

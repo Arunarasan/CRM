@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "@/lib/api";
 import { format } from "date-fns";
@@ -10,7 +10,7 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import { BUNDLE_STATUS_LABELS } from "@/api/bundleApi";
 import {
-  smartAssignmentApi, TaskBoardRow, TaskBucket, TaskCategory, RosterRow,
+  smartAssignmentApi, TaskBoardRow, TaskBucket, TaskCategory, RosterRow, EmployeeTasksPage,
 } from "@/api/smartAssignmentApi";
 import { EmployeeRecommendation } from "@/types/assignment";
 import { workflowApi, ConsoleOverview, WorkflowTemplate } from "@/api/workflowApi";
@@ -90,7 +90,7 @@ const BUCKETS: { id: TaskBucket | "ALL"; label: string }[] = [
   { id: "ASSIGNED", label: "Assigned" },
   { id: "IN_PROGRESS", label: "In Progress" },
   { id: "NEEDS_APPROVAL", label: "Need Approval" },
-  { id: "COMPLETED", label: "Completed" },
+  { id: "COMPLETED", label: "Completed (30d)" },
 ];
 
 // The three buckets whose tasks can still take a (re)assignment inline via Smart Assign.
@@ -114,6 +114,9 @@ type MainTab = "tasks" | "employees" | "calls" | "attendance" | "approvals" | "c
 
 // ============================================================ page
 
+// The board shows open work plus tasks finished in this many days; an employee's full history is in their dialog.
+const BOARD_COMPLETED_DAYS = 30;
+
 export default function Tasks() {
   const { isAdmin, hasAnyAuthority } = useAuth();
   const canManageCalls = hasAnyAuthority(["TASK_ASSIGN"]);
@@ -131,23 +134,28 @@ export default function Tasks() {
   const [taskBucket, setTaskBucket] = useState<TaskBucket | "ALL">("ALL"); // Tasks-tab status filter, driven by the stat tiles
   const [board, setBoard] = useState<TaskBoardRow[]>([]);
   const [roster, setRoster] = useState<RosterRow[]>([]);
-  const [fullTasks, setFullTasks] = useState<Record<number, any>>({});
+  const boardDirty = useRef(false);
   const [loading, setLoading] = useState(false);
 
   const loadBoard = useCallback(() => {
     setLoading(true);
+    boardDirty.current = false;
     Promise.all([
-      smartAssignmentApi.taskBoard().catch(() => [] as TaskBoardRow[]),
+      smartAssignmentApi.taskBoard(BOARD_COMPLETED_DAYS).catch(() => [] as TaskBoardRow[]),
       smartAssignmentApi.roster().catch(() => [] as RosterRow[]),
-      api.get(`/tasks/all`).then(r => r.data).catch(() => [] as any[]),
-    ]).then(([b, r, full]) => {
+    ]).then(([b, r]) => {
       setBoard(b);
       setRoster(r);
-      const map: Record<number, any> = {};
-      (full as any[]).forEach(t => { map[t.id] = t; });
-      setFullTasks(map);
     }).finally(() => setLoading(false));
   }, []);
+
+  // The Employees tab only needs the roster counts — a move there must not reload every task.
+  // The board is refreshed the next time the Tasks tab is opened instead.
+  const loadRoster = useCallback(() => {
+    boardDirty.current = true;
+    smartAssignmentApi.roster().then(setRoster).catch(() => {});
+  }, []);
+  useEffect(() => { if (tab === "tasks" && boardDirty.current) loadBoard(); }, [tab, loadBoard]);
 
   useEffect(() => { loadBoard(); }, [loadBoard]);
 
@@ -164,13 +172,14 @@ export default function Tasks() {
   const [taskCall, setTaskCall] = useState<CallRecording | null>(null);
 
   const openTask = (id: number) => {
-    const t = fullTasks[id];
-    setCurrentTask(t ? { ...t } : { id });
+    // The task's full record is fetched when it is opened — not for every task on page load.
+    setCurrentTask({ id });
+    api.get(`/tasks/${id}`).then(r => setCurrentTask((cur: any) => (cur?.id === id ? { ...(r.data?.task ?? r.data) } : cur))).catch(() => {});
     setAssignments([]); setAssignPick(null); setChecklists([]); setNewChecklistItem("");
     setIsDialogOpen(true);
     loadAssignments(id); loadChecklist(id);
     setTaskCall(null);
-    if (t?.source === "CALL_RECORDING" || !t) callRecordingApi.forTask(id).then(setTaskCall).catch(() => {});
+    callRecordingApi.forTask(id).then(setTaskCall).catch(() => {});
   };
   const openNew = () => {
     setCurrentTask({ status: "PENDING", priority: "MEDIUM" });
@@ -274,7 +283,7 @@ export default function Tasks() {
           { icon: UserCheck, tone: "text-primary", label: "Assigned", value: counts.ASSIGNED, bucket: "ASSIGNED" as const },
           { icon: ListChecks, tone: "text-emerald-600", label: "In Progress", value: counts.IN_PROGRESS, bucket: "IN_PROGRESS" as const },
           { icon: AlertTriangle, tone: "text-orange-600", label: "Need Approval", value: counts.NEEDS_APPROVAL, bucket: "NEEDS_APPROVAL" as const },
-          { icon: CheckCircle2, tone: "text-emerald-600", label: "Completed", value: counts.COMPLETED, bucket: "COMPLETED" as const },
+          { icon: CheckCircle2, tone: "text-emerald-600", label: `Completed · ${BOARD_COMPLETED_DAYS}d`, value: counts.COMPLETED, bucket: "COMPLETED" as const },
         ]).map(({ icon, tone, label, value, bucket }) => (
           <StatTile
             key={label} icon={icon} tone={tone} label={label} value={value}
@@ -301,7 +310,7 @@ export default function Tasks() {
       </div>
 
       {tab === "tasks" && <TasksTab board={board} counts={counts} filter={taskBucket} onFilterChange={setTaskBucket} onEdit={openTask} onChanged={loadBoard} navigate={navigate} />}
-      {tab === "employees" && <EmployeesTab roster={roster} board={board} isAdmin={isAdmin} onChanged={loadBoard} />}
+      {tab === "employees" && <EmployeesTab roster={roster} board={board} isAdmin={isAdmin} onChanged={loadRoster} />}
       {tab === "calls" && (isAdmin || canManageCalls) && <CallRecordingsTab onOpenTask={openTask} onTasksChanged={loadBoard} />}
       {tab === "attendance" && isAdmin && <AttendanceAdmin />}
       {tab === "approvals" && isAdmin && <ApprovalsTab />}
@@ -734,7 +743,7 @@ function EmployeesTab({ roster, board, isAdmin, onChanged }: {
       {!isAdmin && <p className="text-xs text-slate-400">Only admins can assign tasks beyond an employee's capacity.</p>}
 
       {viewing && (
-        <EmployeeTasksDialog employee={viewing} roster={roster} board={board} isAdmin={isAdmin}
+        <EmployeeTasksDialog employee={viewing} roster={roster} isAdmin={isAdmin}
           onClose={() => setViewing(null)} onChanged={onChanged} />
       )}
       {assignTo && (
@@ -749,59 +758,61 @@ function EmployeesTab({ roster, board, isAdmin, onChanged }: {
 const PAGE_SIZE = 20;
 const isOverdue = (d?: string | null) => !!d && new Date(d).getTime() < new Date(new Date().toDateString()).getTime();
 
-function EmployeeTasksDialog({ employee, roster, board, isAdmin, onClose, onChanged }: {
-  employee: RosterRow; roster: RosterRow[]; board: TaskBoardRow[]; isAdmin: boolean;
+function EmployeeTasksDialog({ employee, roster, isAdmin, onClose, onChanged }: {
+  employee: RosterRow; roster: RosterRow[]; isAdmin: boolean;
   onClose: () => void; onChanged: () => void;
 }) {
   const navigate = useNavigate();
   const [tab, setTab] = useState<"assigned" | "completed">("assigned");
   const [cat, setCat] = useState<string>("ALL");
   const [search, setSearch] = useState("");
+  const [q, setQ] = useState(""); // the search text actually sent to the server (debounced)
   const [sort, setSort] = useState<"due" | "priority" | "name">("due");
   const [page, setPage] = useState(0);
-  const [picked, setPicked] = useState<Set<number>>(new Set());
+  const [picked, setPicked] = useState<Map<number, TaskBoardRow>>(new Map());
   const [moving, setMoving] = useState<TaskBoardRow[] | null>(null);
   const [pickSearch, setPickSearch] = useState("");
   const [busy, setBusy] = useState(false);
+  const [data, setData] = useState<EmployeeTasksPage | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [reloadKey, setReloadKey] = useState(0);
 
-  const mine = useMemo(() => board.filter(t => (t.assignees || []).some(a =>
-    a.resourceType === "EMPLOYEE" && a.resourceId === employee.resourceId
-    && a.status !== "CANCELLED" && a.status !== "REJECTED")), [board, employee.resourceId]);
-  const assigned = useMemo(() => mine.filter(t => t.bucket !== "COMPLETED"), [mine]);
-  const completed = useMemo(() => mine.filter(t => t.bucket === "COMPLETED"), [mine]);
-  const base = tab === "assigned" ? assigned : completed;
+  useEffect(() => {
+    const h = setTimeout(() => { setQ(search.trim()); setPage(0); }, 350);
+    return () => clearTimeout(h);
+  }, [search]);
 
-  // Type chips with counts, only for the types this person actually has.
-  const catCounts = useMemo(() => {
-    const c: Record<string, number> = {};
-    base.forEach(t => { c[t.category] = (c[t.category] || 0) + 1; });
-    return c;
-  }, [base]);
+  // Only this one employee's tasks, one page at a time — nothing else on the board is loaded for this dialog.
+  useEffect(() => {
+    if (employee.resourceId == null) { setLoading(false); return; }
+    let alive = true;
+    setLoading(true);
+    smartAssignmentApi.employeeTasks(employee.resourceId, {
+      scope: tab, category: cat === "ALL" ? undefined : cat, q: q || undefined, sort, page, size: PAGE_SIZE,
+    })
+      .then(d => { if (alive) setData(d); })
+      .catch(() => { if (alive) toast.error("Could not load the tasks"); })
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, [employee.resourceId, tab, cat, q, sort, page, reloadKey]);
 
-  const rank = (p?: string | null) => ({ CRITICAL: 0, URGENT: 0, HIGH: 1, MEDIUM: 2, LOW: 3 } as Record<string, number>)[(p || "").toUpperCase()] ?? 4;
-  const list = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    const out = base.filter(t =>
-      (cat === "ALL" || t.category === cat) &&
-      (!q || [t.taskName, t.project, t.lead, t.bundleCode, t.categoryLabel, t.customerName, t.city, t.work, t.orderRef].some(v => (v || "").toLowerCase().includes(q))));
-    out.sort((a, b) =>
-      sort === "name" ? a.taskName.localeCompare(b.taskName)
-      : sort === "priority" ? rank(a.priority) - rank(b.priority)
-      : (a.dueDate ? new Date(a.dueDate).getTime() : Infinity) - (b.dueDate ? new Date(b.dueDate).getTime() : Infinity));
-    return out;
-  }, [base, cat, search, sort]);
-
-  const pages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+  const rows = data?.content ?? [];
+  const total = data?.total ?? 0;
+  const catCounts = data?.categoryCounts ?? {};
+  const assignedTotal = data?.assignedTotal ?? 0;
+  const completedTotal = data?.completedTotal ?? 0;
+  const scopeTotal = tab === "assigned" ? assignedTotal : completedTotal;
+  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const cur = Math.min(page, pages - 1);
-  const rows = list.slice(cur * PAGE_SIZE, cur * PAGE_SIZE + PAGE_SIZE);
   const canMove = isAdmin && tab === "assigned";
   const allOnPage = rows.length > 0 && rows.every(t => picked.has(t.id));
+  const filtered = !!q || cat !== "ALL";
 
-  const reset = () => { setPage(0); setPicked(new Set()); };
-  const toggle = (id: number) => setPicked(p => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const reset = () => setPage(0);
+  const toggle = (t: TaskBoardRow) => setPicked(p => { const n = new Map(p); if (n.has(t.id)) n.delete(t.id); else n.set(t.id, t); return n; });
   const togglePage = () => setPicked(p => {
-    const n = new Set(p);
-    rows.forEach(t => { if (allOnPage) n.delete(t.id); else n.add(t.id); });
+    const n = new Map(p);
+    rows.forEach(t => { if (allOnPage) n.delete(t.id); else n.set(t.id, t); });
     return n;
   });
 
@@ -827,13 +838,13 @@ function EmployeeTasksDialog({ employee, roster, board, isAdmin, onClose, onChan
     setBusy(false);
     if (ok) toast.success(ok === 1 ? `"${moving[0].taskName}" moved to ${to.name}` : `${ok} tasks moved to ${to.name}`);
     if (failed.length) toast.error(`Could not move: ${failed.slice(0, 3).join(", ")}${failed.length > 3 ? ` +${failed.length - 3} more` : ""}`);
-    setMoving(null); setPicked(new Set()); onChanged();
+    setMoving(null); setPicked(new Map()); setReloadKey(k => k + 1); onChanged();
   };
 
   const openHref = (t: TaskBoardRow) => t.projectId ? `/projects/${t.projectId}` : t.leadId ? `/leads/${t.leadId}` : null;
 
   const tabBtn = (k: "assigned" | "completed", label: string, n: number) => (
-    <button type="button" onClick={() => { setTab(k); setCat("ALL"); setSearch(""); setMoving(null); reset(); }}
+    <button type="button" onClick={() => { setTab(k); setCat("ALL"); setSearch(""); setQ(""); setMoving(null); setPicked(new Map()); reset(); }}
       className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold ${tab === k ? "bg-emerald-700 text-white" : "bg-slate-100 text-slate-600"}`}>
       {label} ({n})
     </button>
@@ -858,8 +869,8 @@ function EmployeeTasksDialog({ employee, roster, board, isAdmin, onClose, onChan
         </DialogHeader>
 
         <div className="flex gap-2">
-          {tabBtn("assigned", "Assigned", assigned.length)}
-          {tabBtn("completed", "Completed", completed.length)}
+          {tabBtn("assigned", "Assigned", assignedTotal)}
+          {tabBtn("completed", "Completed", completedTotal)}
         </div>
 
         {moving ? (
@@ -896,9 +907,9 @@ function EmployeeTasksDialog({ employee, roster, board, isAdmin, onClose, onChan
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <Input placeholder="Search task, project, lead or order…" value={search}
-                  onChange={e => { setSearch(e.target.value); reset(); }} className="h-9 pl-9" />
+                  onChange={e => setSearch(e.target.value)} className="h-9 pl-9" />
               </div>
-              <select value={sort} onChange={e => setSort(e.target.value as typeof sort)}
+              <select value={sort} onChange={e => { setSort(e.target.value as typeof sort); reset(); }}
                 className="h-9 rounded-md border bg-white px-2 text-sm text-slate-700">
                 <option value="due">Sort: Due date</option>
                 <option value="priority">Sort: Priority</option>
@@ -907,7 +918,7 @@ function EmployeeTasksDialog({ employee, roster, board, isAdmin, onClose, onChan
             </div>
 
             <div className="flex gap-1.5 overflow-x-auto pb-1">
-              {chip("ALL", "All", base.length)}
+              {chip("ALL", "All", scopeTotal)}
               {CATEGORIES.filter(c => catCounts[c.id]).map(c => chip(c.id, c.label, catCounts[c.id]))}
             </div>
 
@@ -915,13 +926,13 @@ function EmployeeTasksDialog({ employee, roster, board, isAdmin, onClose, onChan
               <div className="flex items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
                 <span className="text-sm font-medium text-emerald-800">{picked.size} selected</span>
                 <div className="flex gap-2">
-                  <Button size="sm" variant="ghost" onClick={() => setPicked(new Set())}>Clear</Button>
-                  <Button size="sm" onClick={() => { setMoving(base.filter(t => picked.has(t.id))); setPickSearch(""); }}>Move selected…</Button>
+                  <Button size="sm" variant="ghost" onClick={() => setPicked(new Map())}>Clear</Button>
+                  <Button size="sm" onClick={() => { setMoving([...picked.values()]); setPickSearch(""); }}>Move selected…</Button>
                 </div>
               </div>
             )}
 
-            <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border">
+            <div className={`min-h-0 flex-1 overflow-y-auto rounded-lg border transition-opacity ${loading && data ? "opacity-50" : ""}`}>
               {canMove && rows.length > 0 && (
                 <label className="sticky top-0 z-10 flex items-center gap-2 border-b bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-500">
                   <input type="checkbox" checked={allOnPage} onChange={togglePage} /> Select this page ({rows.length})
@@ -929,7 +940,7 @@ function EmployeeTasksDialog({ employee, roster, board, isAdmin, onClose, onChan
               )}
               {rows.length === 0 && (
                 <p className="py-10 text-center text-sm text-muted-foreground">
-                  {base.length === 0 ? (tab === "assigned" ? "No open tasks assigned." : "No completed tasks yet.") : "No tasks match these filters."}
+                  {loading ? "Loading…" : !filtered && total === 0 ? (tab === "assigned" ? "No open tasks assigned." : "No completed tasks yet.") : "No tasks match these filters."}
                 </p>
               )}
               {rows.map(t => {
@@ -940,7 +951,7 @@ function EmployeeTasksDialog({ employee, roster, board, isAdmin, onClose, onChan
                   : null;
                 return (
                   <div key={t.id} className="flex items-center gap-3 border-b px-3 py-2 last:border-0 hover:bg-slate-50">
-                    {canMove && <input type="checkbox" checked={picked.has(t.id)} onChange={() => toggle(t.id)} />}
+                    {canMove && <input type="checkbox" checked={picked.has(t.id)} onChange={() => toggle(t)} />}
                     <span className={`hidden shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide sm:inline-block ${CATEGORY_BADGE[t.category] || "bg-slate-100 text-slate-600 border-slate-200"}`}>
                       {t.categoryLabel || t.category}
                     </span>
@@ -979,7 +990,7 @@ function EmployeeTasksDialog({ employee, roster, board, isAdmin, onClose, onChan
 
             <div className="flex items-center justify-between gap-2 text-xs text-slate-500">
               <span>
-                {list.length === 0 ? "0 tasks" : `${cur * PAGE_SIZE + 1}–${cur * PAGE_SIZE + rows.length} of ${list.length}`}
+                {total === 0 ? "0 tasks" : `${cur * PAGE_SIZE + 1}–${cur * PAGE_SIZE + rows.length} of ${total}`}
                 {tab === "completed" && " · completed work stays with who did it"}
               </span>
               {pages > 1 && (

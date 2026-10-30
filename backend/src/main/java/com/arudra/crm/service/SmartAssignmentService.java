@@ -665,10 +665,24 @@ public class SmartAssignmentService {
      */
     @Transactional(readOnly = true)
     public List<Map<String, Object>> taskBoard() {
+        return taskBoard(null);
+    }
+
+    /**
+     * {@code completedDays}: when set, completed tasks older than that many days are left out — they pile up
+     * forever and each one costs several lookups to build. Null keeps every task.
+     */
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> taskBoard(Integer completedDays) {
+        LocalDate cutoff = completedDays == null ? null : LocalDate.now().minusDays(Math.max(1, completedDays));
         List<Map<String, Object>> rows = new ArrayList<>();
         for (Task t : taskRepository.findAll()) {
             // A cancelled bill's bundle work is void — keep it out of the assignable queue.
             if ("BUNDLE".equals(t.getSource()) && "CANCELLED".equals(t.getStatus())) continue;
+            if (cutoff != null && "COMPLETED".equalsIgnoreCase(t.getStatus())) {
+                LocalDate done = t.getCompletedDate() != null ? t.getCompletedDate() : t.getDueDate();
+                if (done == null || done.isBefore(cutoff)) continue;
+            }
             rows.add(buildTaskRow(t));
         }
         return rows;
@@ -846,17 +860,23 @@ public class SmartAssignmentService {
         java.time.LocalDateTime since = java.time.LocalDateTime.now().minusHours(24);
         int maxTasks = cfg.getMaxTasksPerDay() == null ? 0 : cfg.getMaxTasksPerDay();
 
+        // Two grouped COUNT queries for the whole roster — not each person's full assignment history.
+        Map<Long, Long> activeByUser = new HashMap<>();
+        for (Object[] r : assignmentRepository.countByStatusesGrouped(ResourceType.EMPLOYEE, ACTIVE_STATUSES)) {
+            activeByUser.put(((Number) r[0]).longValue(), ((Number) r[1]).longValue());
+        }
+        Map<Long, Long> doneByUser = new HashMap<>();
+        for (Object[] r : assignmentRepository.countCompletedSinceGrouped(ResourceType.EMPLOYEE, since)) {
+            doneByUser.put(((Number) r[0]).longValue(), ((Number) r[1]).longValue());
+        }
+
         List<Map<String, Object>> rows = new ArrayList<>();
         for (Employee emp : employeeRepository.findAll()) {
             if (Boolean.TRUE.equals(emp.getIsDeleted())) continue;
             User user = resolveUser(emp);
 
-            List<TaskAssignment> mine = user == null ? List.of()
-                    : assignmentRepository.findByResourceTypeAndResourceId(ResourceType.EMPLOYEE, user.getId());
-            long assignedNow = mine.stream().filter(a -> ACTIVE_STATUSES.contains(a.getStatus())).count();
-            long completed24 = mine.stream()
-                    .filter(a -> a.getCompletedAt() != null && a.getCompletedAt().isAfter(since))
-                    .count();
+            long assignedNow = user == null ? 0 : activeByUser.getOrDefault(user.getId(), 0L);
+            long completed24 = user == null ? 0 : doneByUser.getOrDefault(user.getId(), 0L);
 
             Attendance att = attendanceRepository.findFirstByEmployeeIdAndDateOrderByIdDesc(emp.getId(), today).orElse(null);
             boolean workingNow = att != null && att.getCheckInTime() != null && att.getCheckOutTime() == null;
@@ -882,6 +902,88 @@ public class SmartAssignmentService {
         }
         rows.sort((a, b) -> Double.compare(num(b.get("tasksAssignedNow")), num(a.get("tasksAssignedNow"))));
         return rows;
+    }
+
+    /**
+     * One employee's tasks for the Employees-tab dialog, loaded on demand and paged on the server so the
+     * page never carries every task in the system. {@code scope} = "assigned" (not completed) or
+     * "completed". Rows (with their customer / city / work lookups) are built only for the requested page —
+     * or, while searching, for up to {@link #SEARCH_CAP} tasks, since customer / city live on other records.
+     * Also returns both totals and per-type counts for the filter chips.
+     */
+    private static final int SEARCH_CAP = 400;
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> employeeTasks(Long resourceId, String scope, String category, String q,
+                                             String sort, int page, int size) {
+        size = Math.max(1, Math.min(size, 100));
+        page = Math.max(0, page);
+        boolean wantCompleted = "completed".equalsIgnoreCase(scope);
+
+        Set<Long> taskIds = assignmentRepository.findByResourceTypeAndResourceId(ResourceType.EMPLOYEE, resourceId).stream()
+                .filter(a -> !"CANCELLED".equalsIgnoreCase(a.getStatus()) && !"REJECTED".equalsIgnoreCase(a.getStatus()))
+                .map(a -> a.getTask().getId()).collect(Collectors.toCollection(LinkedHashSet::new));
+        List<Task> all = taskRepository.findAllById(taskIds).stream()
+                .filter(t -> !("BUNDLE".equals(t.getSource()) && "CANCELLED".equals(t.getStatus())))
+                .collect(Collectors.toList());
+
+        long assignedTotal = all.stream().filter(t -> !"COMPLETED".equalsIgnoreCase(t.getStatus())).count();
+        long completedTotal = all.size() - assignedTotal;
+        List<Task> scoped = all.stream()
+                .filter(t -> "COMPLETED".equalsIgnoreCase(t.getStatus()) == wantCompleted)
+                .collect(Collectors.toList());
+
+        Map<String, Long> categoryCounts = new LinkedHashMap<>();
+        for (Task t : scoped) categoryCounts.merge(taskCategory(t)[0], 1L, Long::sum);
+
+        List<Task> filtered = scoped.stream()
+                .filter(t -> category == null || category.isBlank() || "ALL".equalsIgnoreCase(category)
+                        || taskCategory(t)[0].equalsIgnoreCase(category))
+                .collect(Collectors.toList());
+
+        Comparator<Task> order = switch (sort == null ? "due" : sort) {
+            case "name" -> Comparator.comparing(t -> t.getTaskName() == null ? "" : t.getTaskName().toLowerCase());
+            case "priority" -> Comparator.comparingInt(t -> priorityRank(t.getPriority()));
+            default -> Comparator.comparing(Task::getDueDate, Comparator.nullsLast(Comparator.naturalOrder()));
+        };
+        filtered.sort(wantCompleted && "due".equals(sort == null ? "due" : sort) ? order.reversed() : order);
+
+        String needle = q == null ? "" : q.trim().toLowerCase();
+        List<Map<String, Object>> content;
+        long total;
+        if (needle.isEmpty()) {
+            total = filtered.size();
+            content = filtered.stream().skip((long) page * size).limit(size)
+                    .map(this::buildTaskRow).collect(Collectors.toList());
+        } else {
+            List<Map<String, Object>> hits = filtered.stream().limit(SEARCH_CAP).map(this::buildTaskRow)
+                    .filter(r -> matches(r, needle)).collect(Collectors.toList());
+            total = hits.size();
+            content = hits.stream().skip((long) page * size).limit(size).collect(Collectors.toList());
+        }
+
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("content", content);
+        out.put("total", total);
+        out.put("page", page);
+        out.put("size", size);
+        out.put("assignedTotal", assignedTotal);
+        out.put("completedTotal", completedTotal);
+        out.put("categoryCounts", categoryCounts);
+        return out;
+    }
+
+    private static int priorityRank(String p) {
+        String s = p == null ? "" : p.toUpperCase();
+        return switch (s) { case "CRITICAL", "URGENT" -> 0; case "HIGH" -> 1; case "MEDIUM" -> 2; case "LOW" -> 3; default -> 4; };
+    }
+
+    private static boolean matches(Map<String, Object> row, String needle) {
+        for (String k : new String[]{"taskName", "project", "lead", "bundleCode", "categoryLabel", "customerName", "city", "work", "orderRef"}) {
+            Object v = row.get(k);
+            if (v != null && v.toString().toLowerCase().contains(needle)) return true;
+        }
+        return false;
     }
 
     /** Display name for a task assignment — employee login name, or a typed fallback for contractors. */

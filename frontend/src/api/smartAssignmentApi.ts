@@ -62,11 +62,28 @@ export const smartAssignmentApi = {
     api.put<{ mode: 'AUTO' | 'MANUAL'; assigned: number }>(`${BASE}/project/${projectId}/mode`, { mode }).then((r) => r.data),
 
   // --- Merged Tasks & Employees board ---
-  taskBoard: () => api.get<TaskBoardRow[]>(`${BASE}/task-board`).then((r) => r.data),
+  // completedDays: leave out completed tasks older than this many days (the board grows without bound otherwise).
+  taskBoard: (completedDays?: number) =>
+    api.get<TaskBoardRow[]>(`${BASE}/task-board`, { params: completedDays ? { completedDays } : undefined }).then((r) => r.data),
   roster: () => api.get<RosterRow[]>(`${BASE}/roster`).then((r) => r.data),
+  // One employee's tasks, paged / filtered on the server (loaded only when their dialog is open).
+  employeeTasks: (resourceId: number, params: {
+    scope: 'assigned' | 'completed'; category?: string; q?: string; sort?: string; page?: number; size?: number;
+  }) =>
+    api.get<EmployeeTasksPage>(`${BASE}/employees/${resourceId}/tasks`, { params }).then((r) => r.data),
   // Manager override: grant a held data-entry task a fresh hold window from the board.
   extendTaskHold: (id: number) => api.post<boolean>(`${BASE}/tasks/${id}/extend-hold`).then((r) => r.data),
 };
+
+export interface EmployeeTasksPage {
+  content: TaskBoardRow[];
+  total: number;
+  page: number;
+  size: number;
+  assignedTotal: number;
+  completedTotal: number;
+  categoryCounts: Record<string, number>;
+}
 
 export type TaskBucket = 'UNASSIGNED' | 'ASSIGNED' | 'IN_PROGRESS' | 'NEEDS_APPROVAL' | 'COMPLETED';
 
