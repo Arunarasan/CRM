@@ -1467,6 +1467,23 @@ public class EmployeeTaskService {
     }
 
     /**
+     * Collect Requirement submitted from the lead workspace: close it as COMPLETED right away (no manager
+     * approval step) so the next task — Site Visit, Measure & Quote — is created in the same request and
+     * the employee carries on in the same page. The captured data is applied to the lead on finalize.
+     */
+    @Transactional
+    @LogActivity(module = "EMPLOYEE_TASK", action = "COMPLETE")
+    public Task completeLeadRequirement(Long taskId, User employee, String remarks) {
+        assertTaskEditableBy(taskId, employee);
+        TaskAssignment a = getAssignment(taskId, employee.getId());
+        a.setStatus("COMPLETED");
+        a.setCompletedAt(LocalDateTime.now());
+        if (remarks != null) a.setRemarks(remarks);
+        assignmentRepository.save(a);
+        return finalizeTaskCompletion(a.getTask(), employee);
+    }
+
+    /**
      * Force-close a lead data-entry task as COMPLETED (skipping the OWNER_APPROVAL "waiting" step) —
      * used when a follow-up attempt is recorded and immediately superseded by a freshly spawned task.
      * Without this the superseded attempt would sit in WAITING_APPROVAL and, being un-approved, block

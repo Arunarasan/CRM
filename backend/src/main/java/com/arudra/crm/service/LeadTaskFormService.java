@@ -166,7 +166,12 @@ public class LeadTaskFormService {
         //    lead here — it is applied only when the task is truly finalized (auto-finalize, or manager
         //    approval), via the LeadTaskCompletedEvent handled in onLeadTaskCompleted below. For an
         //    OWNER_APPROVAL task this means the lead updates only after the manager approves it.
-        employeeTaskService.complete(taskId, employee, notes);
+        if ("REQUIREMENT".equals(formType) && !isOpenCallTask(task)) {
+            // Requirement needs no manager approval — the next stage opens straight away.
+            employeeTaskService.completeLeadRequirement(taskId, employee, notes);
+        } else {
+            employeeTaskService.complete(taskId, employee, notes);
+        }
 
         return toSummary(sub);
     }

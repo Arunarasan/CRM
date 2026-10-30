@@ -65,6 +65,8 @@ export interface FaceBox { x: number; y: number; width: number; height: number }
 
 export interface FaceReading {
   descriptor: number[];
+  /** Nose position between the jaw edges (0.5 = facing the camera). */
+  yaw: number;
   /** Detector confidence, 0..1. */
   score: number;
   box: FaceBox;
@@ -78,18 +80,20 @@ export type FaceScan =
   | { state: 'one'; reading: FaceReading };
 
 /** Detects faces in the current video frame; computes a descriptor only when exactly one is found. */
-export async function scanFace(video: HTMLVideoElement): Promise<FaceScan> {
+export async function scanFace(video: HTMLVideoElement, inputSize = 320): Promise<FaceScan> {
   const faceapi = await loadFaceEngine();
   if (video.readyState < 2 || !video.videoWidth) return { state: 'none' };
-  const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 });
+  const options = new faceapi.TinyFaceDetectorOptions({ inputSize, scoreThreshold: 0.5 });
   const found = await faceapi.detectAllFaces(video, options).withFaceLandmarks(true).withFaceDescriptors();
   if (found.length === 0) return { state: 'none' };
   if (found.length > 1) return { state: 'multiple', count: found.length };
   const f = found[0];
   const b = f.detection.box;
+  const lp = f.landmarks.positions;
   return {
     state: 'one',
     reading: {
+      yaw: (lp[30].x - lp[0].x) / (lp[16].x - lp[0].x || 1),
       descriptor: Array.from(f.descriptor),
       score: f.detection.score,
       box: { x: b.x, y: b.y, width: b.width, height: b.height },

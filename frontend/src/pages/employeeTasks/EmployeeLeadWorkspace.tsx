@@ -116,6 +116,20 @@ export default function EmployeeLeadWorkspace() {
     employeeTaskApi.detail(infoTaskId).then(setInfo).catch(() => {});
   }, [infoTaskId, photosKey]);
 
+  // Requirement just finished on this page → carry on to the quote below without leaving.
+  const [justAdvanced, setJustAdvanced] = useState(false);
+  const wasLiveReq = useRef(false);
+  const quoteRef = useRef<HTMLDivElement>(null);
+  const reqLive = !!reqTask && lifecycleOf(reqTask) === 'ACTIVE';
+  useEffect(() => {
+    if (reqLive) { wasLiveReq.current = true; return; }
+    if (wasLiveReq.current && quoteTask) {
+      wasLiveReq.current = false;
+      setJustAdvanced(true);
+      setTimeout(() => quoteRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150);
+    }
+  }, [reqLive, quoteTask]);
+
   const converted = !!lead?.isConverted;
   const reqDone = !!reqTask && ['DONE', 'SUBMITTED'].includes(lifecycleOf(reqTask));
   const quoteDone = converted || (!!quoteTask && ['DONE', 'SUBMITTED'].includes(lifecycleOf(quoteTask)));
@@ -262,7 +276,10 @@ export default function EmployeeLeadWorkspace() {
               </div>
             )}
             {quoteTask || converted ? (
-              <EmployeeQuoteBody leadId={leadId} gpsTaskId={holder?.id} onPhotosChanged={() => setPhotosKey((k) => k + 1)} />
+              <div ref={quoteRef}>
+                {justAdvanced && <div className={`${narrow} w-full px-3 pt-3 md:px-4`}><Note>{t('pw.lw.reqSaved')}</Note></div>}
+                <EmployeeQuoteBody leadId={leadId} gpsTaskId={holder?.id} onPhotosChanged={() => setPhotosKey((k) => k + 1)} />
+              </div>
             ) : !reqTask ? (
               <div className={`${narrow} w-full p-3 md:p-4`}><Note>{t('pw.lw.reqNone')}</Note></div>
             ) : null}

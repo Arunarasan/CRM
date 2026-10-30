@@ -137,11 +137,18 @@ public class KioskPunchService {
     /** Records the identified employee's punch and builds the reply. */
     private Map<String, Object> record(AttendanceKiosk kiosk, boolean checkIn, Employee employee, String method, double value,
                                        boolean weak, String liveness, byte[] selfie, String selfieType) {
-        // The selfie is stored only if the punch is recorded (no orphan files for "already checked in" etc.).
-        String[] stored = new String[1];
+        // The selfie upload (a remote bucket, ~1 s) must not hold up the reply: the punch is recorded first
+        // and the photo is attached in the background. No orphan files for "already checked in" etc.
         EmployeeTimeService.KioskPunchOutcome res = timeService.kioskPunch(employee, kiosk, checkIn, method,
-                value, weak, () -> stored[0] = storeSelfie(selfie, selfieType), liveness);
-        String selfieUrl = stored[0];
+                value, weak, () -> null, liveness);
+        String selfieUrl = null;
+        if (res.sessionId() != null && selfie != null && selfie.length > 0) {
+            Long sid = res.sessionId();
+            java.util.concurrent.CompletableFuture.runAsync(() -> {
+                String url = storeSelfie(selfie, selfieType);
+                if (url != null) timeService.attachKioskSelfie(sid, checkIn, url);
+            });
+        }
         log.info("Kiosk {} {} employee={} method={} outcome={} value={} weak={} liveness={}", kiosk.getId(), checkIn ? "IN" : "OUT",
                 employee.getId(), method, res.outcome(), String.format(java.util.Locale.ROOT, "%.3f", value), weak, liveness);
         boolean recorded = res.outcome().equals("CHECKED_IN") || res.outcome().equals("CHECKED_OUT");

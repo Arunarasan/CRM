@@ -166,7 +166,19 @@ public class EmployeeTimeService {
     // --- office kiosk (face) punches ------------------------------------------
 
     /** What a kiosk punch did: CHECKED_IN | CHECKED_OUT | ALREADY_IN | NOT_IN | TOO_SOON. */
-    public record KioskPunchOutcome(String outcome, LocalTime time, Long minutesWorked) {}
+    public record KioskPunchOutcome(String outcome, LocalTime time, Long minutesWorked, Long sessionId) {
+        public KioskPunchOutcome(String outcome, LocalTime time, Long minutesWorked) { this(outcome, time, minutesWorked, null); }
+    }
+
+    /** Saves a kiosk selfie's link on a session after the punch was already recorded (the upload runs off the request). */
+    @Transactional
+    public void attachKioskSelfie(Long sessionId, boolean checkIn, String url) {
+        if (sessionId == null || url == null) return;
+        sessionRepository.findById(sessionId).ifPresent(x -> {
+            if (checkIn) x.setSelfieInUrl(url); else x.setSelfieOutUrl(url);
+            sessionRepository.save(x);
+        });
+    }
 
     /** A check-out this soon after the check-in is treated as an accidental double tap. */
     private static final long KIOSK_MIN_SESSION_SECONDS = 120;
@@ -208,11 +220,11 @@ public class EmployeeTimeService {
             s.setSelfieInUrl(selfieUrl.get());
             s.setLivenessIn(liveness);
             verificationService.applyBiometric(s, employee, method, weakMatch, weakReason, true);
-            sessionRepository.save(s);
+            AttendanceSession savedIn = sessionRepository.save(s);
             att.setStatus("PRESENT");
             syncAggregate(att, employee);
             attendanceRepository.save(att);
-            return new KioskPunchOutcome("CHECKED_IN", now, null);
+            return new KioskPunchOutcome("CHECKED_IN", now, null, savedIn.getId());
         }
 
         if (open == null) return new KioskPunchOutcome("NOT_IN", null, null);
@@ -229,10 +241,10 @@ public class EmployeeTimeService {
         open.setSelfieOutUrl(selfieUrl.get());
         open.setLivenessOut(liveness);
         verificationService.applyBiometric(open, employee, method, weakMatch, weakReason, false);
-        sessionRepository.save(open);
+        AttendanceSession savedOut = sessionRepository.save(open);
         syncAggregate(live, employee);
         attendanceRepository.save(live);
-        return new KioskPunchOutcome("CHECKED_OUT", now, Math.max(0, sinceIn / 60));
+        return new KioskPunchOutcome("CHECKED_OUT", now, Math.max(0, sinceIn / 60), savedOut.getId());
     }
 
     @LogActivity(module = "ATTENDANCE", action = "BREAK_START")

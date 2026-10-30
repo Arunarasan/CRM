@@ -79,6 +79,33 @@ export default function KioskScan({ action, onDone, onFail, onCancel, onSwitch }
         while (!cancelled) {
           if (Date.now() - started > TOTAL_MS) { failRef.current({ message: 'Timed out. Tap Check In or Check Out and try again.' }); return; }
           await nextFrame();
+          if (!REQUIRE_LIVENESS) {
+            // Fast path: ONE pass per frame (detect + landmarks + face signature). The first clear,
+            // straight-on face is sent at once, no separate pose/hold/re-scan steps.
+            const f = await scanFace(video, 224);
+            if (cancelled) return;
+            if (f.state === 'none') { setHint('Look at the camera'); continue; }
+            if (f.state === 'multiple') { setHint('One person at a time, please'); continue; }
+            const r = f.reading;
+            if (r.box.width / r.frameWidth < MIN_SHARE) { setHint('Come a little closer'); continue; }
+            if (r.score < 0.7) { setHint('Face the camera'); continue; }
+            if (Math.abs(r.yaw - 0.5) >= FRONTAL_OFFSET) { setHint('Look straight at the camera'); continue; }
+            setStage('sending'); setHint('Checking…');
+            const selfie = await snapshot(video, 0.7, 360);
+            leaveCamera(stream, video); stream = null;
+            try {
+              const result = await kioskApi.punch(action, r.descriptor, selfie, null);
+              if (!cancelled) doneRef.current({ result, selfie });
+            } catch (e: any) {
+              if (cancelled) return;
+              const status = e?.response?.status as number | undefined;
+              failRef.current({
+                status,
+                message: e?.response?.data?.message || (status ? 'The server refused this check.' : 'Cannot reach the server. Check the internet and try again.'),
+              });
+            }
+            return;
+          }
           const scan = await scanPose(video);
           if (cancelled) return;
           if (scan.state === 'none') { okFrames = 0; steady = 0; if (stg === 'find') setHint('Look at the camera'); continue; }
