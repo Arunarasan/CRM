@@ -122,6 +122,15 @@ public class PrivateFileStore {
         return Files.readAllBytes(file);
     }
 
+    /** Deletes a stored file; a file that is already gone is not an error. */
+    public void delete(String key) throws IOException {
+        if (usesBucket()) {
+            client().deleteObject(software.amazon.awssdk.services.s3.model.DeleteObjectRequest.builder().bucket(bucket).key(key).build());
+        } else {
+            Files.deleteIfExists(resolve(key));
+        }
+    }
+
     /** Where local private files live (for backups); null when a bucket is used. */
     public Path localDir() {
         return usesBucket() ? null : dir;

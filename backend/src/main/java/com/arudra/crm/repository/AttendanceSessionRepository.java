@@ -8,6 +8,12 @@ import java.util.List;
 
 @Repository
 public interface AttendanceSessionRepository extends JpaRepository<AttendanceSession, Long> {
+    /** Sessions on days before {@code cutoff} that still carry a kiosk selfie and are not waiting on HR approval. */
+    @org.springframework.data.jpa.repository.Query("select s from AttendanceSession s join fetch s.attendance a "
+            + "where a.date < :cutoff and (s.selfieInUrl is not null or s.selfieOutUrl is not null) "
+            + "and (s.approvalStatus is null or s.approvalStatus <> 'PENDING')")
+    List<AttendanceSession> findWithOldSelfies(@org.springframework.data.repository.query.Param("cutoff") java.time.LocalDate cutoff);
+
     List<AttendanceSession> findByAttendanceIdOrderByIdAsc(Long attendanceId);
 
     /** Still clocked-in sessions not yet flagged for the "no clock-out" alert. */
