@@ -7,9 +7,7 @@ import ResponsiveList, { type Column } from "@/components/ui/responsive-list";
 import FilterSheet from "@/components/ui/filter-sheet";
 import CustomerFormDialog, { type CustomerSegment } from "./customers/CustomerFormDialog";
 import { useNavigate } from "react-router-dom";
-import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import CustomerExportDialog from "./customers/CustomerExportDialog";
 
 interface CustomerProfileDTO {
   id: number;
@@ -65,6 +63,7 @@ export default function Customers() {
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [showFilters, setShowFilters] = useState(false);
+  const [isExportOpen, setIsExportOpen] = useState(false);
   const [isAddCustomerOpen, setIsAddCustomerOpen] = useState(false);
   const [addSegment, setAddSegment] = useState<CustomerSegment>("PROJECT_CLIENT");
   const [segment, setSegment] = useState<"" | CustomerSegment>("");
@@ -103,33 +102,11 @@ export default function Customers() {
       .finally(() => setLoading(false));
   };
 
-  const handleExportExcel = () => {
-    const worksheet = XLSX.utils.json_to_sheet(customers.map(c => ({
-      ID: c.id,
-      Name: c.name,
-      Email: c.email,
-      Phone: c.phone,
-      City: c.city,
-      State: c.state,
-      Tags: c.tags?.map(t => t.name).join(", ") || ""
-    })));
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Customers");
-    XLSX.writeFile(workbook, "customers_export.xlsx");
-  };
-
-  const handleExportPDF = () => {
-    const doc = new jsPDF();
-    doc.text("Customers List", 14, 15);
-    (doc as any).autoTable({
-      head: [['ID', 'Name', 'Email', 'Phone', 'Location', 'Tags']],
-      body: customers.map(c => [
-        c.id, c.name, c.email, c.phone, `${c.city || ''} ${c.state || ''}`, c.tags?.map(t => t.name).join(", ") || ""
-      ]),
-      startY: 20
-    });
-    doc.save('customers_export.pdf');
-  };
+  const exportParams = new URLSearchParams({
+    search: debouncedSearch,
+    ...(segment ? { segment } : {}),
+    ...Object.fromEntries(Object.entries(filters).filter(([_, v]) => v !== "")),
+  });
 
   const setFilter = (key: keyof typeof filters) => (value: string) =>
     setFilters((f) => ({ ...f, [key]: value }));
@@ -163,8 +140,7 @@ export default function Customers() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-3xl font-bold tracking-tight">Customers</h1>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={handleExportExcel}><Download className="mr-2 h-4 w-4" /> Excel</Button>
-          <Button variant="outline" onClick={handleExportPDF}><Download className="mr-2 h-4 w-4" /> PDF</Button>
+          <Button variant="outline" onClick={() => setIsExportOpen(true)}><Download className="mr-2 h-4 w-4" /> Export</Button>
           <Button variant="outline"><Upload className="mr-2 h-4 w-4" /> Import</Button>
           <Button variant="outline" onClick={() => openAdd("WALK_IN")}><Store className="mr-2 h-4 w-4" /> Walk-in</Button>
           <Button onClick={() => openAdd("PROJECT_CLIENT")}><Plus className="mr-2 h-4 w-4" /> Add Client</Button>
@@ -187,6 +163,8 @@ export default function Customers() {
           );
         })}
       </div>
+
+      <CustomerExportDialog open={isExportOpen} onOpenChange={setIsExportOpen} params={exportParams} />
 
       <CustomerFormDialog
         open={isAddCustomerOpen}

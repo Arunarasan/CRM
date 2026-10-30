@@ -19,6 +19,20 @@ public class CustomerController {
     private CustomerService customerService;
 
     @PreAuthorize("hasRole('ADMIN')")
+    @GetMapping("/export")
+    public ResponseEntity<ApiResponse<java.util.List<java.util.Map<String, Object>>>> exportCustomers(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String name,
+            @RequestParam(required = false) String city,
+            @RequestParam(required = false) String email,
+            @RequestParam(required = false) String phone,
+            @RequestParam(required = false) String tag,
+            @RequestParam(required = false) String segment
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(customerService.exportRows(search, name, city, email, phone, tag, segment)));
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
     @GetMapping
     public ResponseEntity<ApiResponse<Page<CustomerDTO>>> getCustomers(
             @RequestParam(required = false) String search,

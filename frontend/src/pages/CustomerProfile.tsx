@@ -10,13 +10,8 @@ import CustomerOverviewCards from "./customer360/components/CustomerOverviewCard
 import CustomerSidebar from "./customer360/components/CustomerSidebar";
 import type { CustomerOverview, CustomerDashboardStats } from "@/types/customer360";
 
-const ProfileTab = lazy(() => import("./customer360/tabs/ProfileTab"));
 const LeadsTab = lazy(() => import("./customer360/tabs/LeadsTab"));
-const CommunicationTab = lazy(() => import("./customer360/tabs/CommunicationTab"));
 const FollowUpsTab = lazy(() => import("./customer360/tabs/FollowUpsTab"));
-const SiteVisitsTab = lazy(() => import("./customer360/tabs/SiteVisitsTab"));
-const MeasurementsTab = lazy(() => import("./customer360/tabs/MeasurementsTab"));
-const BoqTab = lazy(() => import("./customer360/tabs/BoqTab"));
 const QuotationsTab = lazy(() => import("./customer360/tabs/QuotationsTab"));
 const ProjectsTab = lazy(() => import("./customer360/tabs/ProjectsTab"));
 const TasksTab = lazy(() => import("./customer360/tabs/TasksTab"));
@@ -26,13 +21,8 @@ const ActivityLogTab = lazy(() => import("./customer360/tabs/ActivityLogTab"));
 const PortalAccessTab = lazy(() => import("./customer360/tabs/PortalAccessTab"));
 
 const TABS = [
-  { value: "profile", label: "Profile", Component: ProfileTab },
   { value: "leads", label: "Leads", Component: LeadsTab },
-  { value: "communication", label: "Communication", Component: CommunicationTab },
   { value: "followups", label: "Follow-ups", Component: FollowUpsTab },
-  { value: "sitevisits", label: "Site Visits", Component: SiteVisitsTab },
-  { value: "measurements", label: "Measurements", Component: MeasurementsTab },
-  { value: "boqs", label: "BOQs", Component: BoqTab },
   { value: "quotations", label: "Quotations", Component: QuotationsTab },
   { value: "projects", label: "Projects", Component: ProjectsTab },
   { value: "tasks", label: "Tasks", Component: TasksTab },
@@ -57,7 +47,7 @@ export default function CustomerProfile() {
 
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editForm, setEditForm] = useState<any>({});
-  const [activeTab, setActiveTab] = useState("profile");
+  const [activeTab, setActiveTab] = useState("leads");
 
   const loadOverview = () => {
     setIsLoadingOverview(true);

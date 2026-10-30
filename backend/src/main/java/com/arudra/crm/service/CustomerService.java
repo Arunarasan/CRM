@@ -35,6 +35,32 @@ public class CustomerService {
         return customerRepository.findAll(spec, pageRequest);
     }
 
+    /** Flat rows for the Customers export: list fields plus tags and per-customer rollups. */
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    public java.util.List<java.util.Map<String, Object>> exportRows(String search, String name, String city, String email, String phone, String tag, String segment) {
+        java.util.List<java.util.Map<String, Object>> out = new java.util.ArrayList<>();
+        for (Customer c : getCustomersAdvanced(search, name, city, email, phone, tag, segment, 0, Integer.MAX_VALUE, "id", "desc").getContent()) {
+            java.util.Map<String, Object> row = new java.util.LinkedHashMap<>(new com.fasterxml.jackson.databind.ObjectMapper()
+                    .registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule())
+                    .disable(com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
+                    .convertValue(com.arudra.crm.dto.CustomerMapper.toDTO(c), java.util.Map.class));
+            row.remove("panNumber");
+            row.put("tags", c.getTags().stream().map(com.arudra.crm.entity.Tag::getName).sorted().collect(java.util.stream.Collectors.joining(", ")));
+            row.put("leadCount", leadRepository.findByConvertedToCustomerId(c.getId()).size());
+            row.put("projectCount", projectRepository.findByCustomerId(c.getId()).size());
+            java.math.BigDecimal paid = java.math.BigDecimal.ZERO;
+            for (com.arudra.crm.entity.CustomerPayment p : customerPaymentRepository.findByCustomerId(c.getId())) {
+                if (!Boolean.TRUE.equals(p.getIsDeleted()) && "CONFIRMED".equals(p.getStatus()) && p.getAmount() != null) paid = paid.add(p.getAmount());
+            }
+            row.put("totalPaid", paid);
+            row.put("lastPaymentDate", customerPaymentRepository.lastPaymentDateForCustomer(c.getId()));
+            row.put("lastContact", activityRepository.findByCustomerIdOrderByCreatedAtDesc(c.getId(), PageRequest.of(0, 1))
+                    .stream().findFirst().map(a -> a.getCreatedAt()).orElse(null));
+            out.add(row);
+        }
+        return out;
+    }
+
     // Retaining old method for backward compatibility if used elsewhere
     public Page<Customer> getCustomers(String search, int page, int size) {
         return getCustomersAdvanced(search, null, null, null, null, null, null, page, size, "id", "desc");
