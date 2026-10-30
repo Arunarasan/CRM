@@ -945,18 +945,22 @@ function EmployeeTasksDialog({ employee, roster, board, isAdmin, onClose, onChan
                       {t.categoryLabel || t.category}
                     </span>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-slate-800">{t.taskName}</p>
-                      {(t.customerName || t.city || t.work) && (
-                        <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-600">
-                          {t.customerName && <span className="inline-flex items-center gap-1 font-medium"><User className="h-3 w-3 text-slate-400" />{t.customerName}</span>}
-                          {t.city && <span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3 text-slate-400" />{t.city}</span>}
-                          {t.work && <span className="inline-flex min-w-0 items-center gap-1"><Wrench className="h-3 w-3 shrink-0 text-slate-400" /><span className="truncate">{t.work}</span></span>}
-                        </p>
-                      )}
-                      <p className="truncate text-xs text-slate-400">
-                        <span className="sm:hidden">{t.categoryLabel || t.category} · </span>
-                        {ref ? `${ref} · ` : ""}{t.status?.replace(/_/g, " ")}
-                        {t.dueDate && <span className={isOverdue(t.dueDate) && tab === "assigned" ? " font-semibold text-red-600" : ""}>{` · due ${format(new Date(t.dueDate), "d MMM")}`}</span>}
+                      {/* 1 customer (main) · 2 lead / project / order · 3 location · 4 task */}
+                      <p className="flex items-center gap-1.5 truncate text-sm font-bold text-slate-900">
+                        <User className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                        {t.customerName || t.lead || t.project
+                          ? <span className="truncate">{t.customerName || t.lead || t.project}</span>
+                          : <span className="truncate font-medium italic text-slate-400">No customer</span>}
+                      </p>
+                      {ref && <p className="truncate text-xs font-medium text-emerald-800">
+                        <span className="sm:hidden">{t.categoryLabel || t.category} · </span>{ref}
+                      </p>}
+                      {t.city && <p className="flex items-center gap-1 truncate text-xs text-slate-500"><MapPin className="h-3 w-3 shrink-0 text-slate-400" />{t.city}</p>}
+                      <p className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-700">
+                        <Wrench className="h-3 w-3 shrink-0 text-slate-400" />
+                        <span className="truncate font-medium">{t.taskName}{t.work ? ` — ${t.work}` : ""}</span>
+                        <span className="shrink-0 text-slate-400">· {t.status?.replace(/_/g, " ")}</span>
+                        {t.dueDate && <span className={`shrink-0 ${isOverdue(t.dueDate) && tab === "assigned" ? "font-semibold text-red-600" : "text-slate-400"}`}>{`· due ${format(new Date(t.dueDate), "d MMM")}`}</span>}
                       </p>
                     </div>
                     {t.priority && <span className={`hidden shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold sm:inline-block ${priorityColor(t.priority)}`}>{t.priority}</span>}
