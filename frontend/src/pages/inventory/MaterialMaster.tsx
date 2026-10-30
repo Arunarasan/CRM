@@ -25,7 +25,7 @@ import ProductColorsEditor from "./ProductColorsEditor";
 import { resolveFileUrl } from "@/lib/uploadFile";
 import { UnitOptions } from "@/components/UnitOptions";
 
-const emptyForm: Partial<Product> = { unit: "Nos", status: "ACTIVE", minStockLevel: 10 };
+const emptyForm: Partial<Product> = { unit: "Nos", status: "ACTIVE", minStockLevel: 10, gstPercent: 18 };
 
 function Barcode({ value }: { value: string }) {
   const ref = (el: SVGSVGElement | null) => {
@@ -156,6 +156,7 @@ export default function MaterialMaster() {
   const [codeDialogProduct, setCodeDialogProduct] = useState<Product | null>(null);
   const [form, setForm] = useState<Partial<Product>>(emptyForm);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [showMore, setShowMore] = useState(false);
   const info = useHoverInfo();
 
   const load = () => {
@@ -214,8 +215,8 @@ export default function MaterialMaster() {
     setSearchParams(next, { replace: true });
   };
 
-  const openCreate = () => { setForm(emptyForm); setEditingId(null); setDialogOpen(true); };
-  const openEdit = (p: Product) => { setForm(p); setEditingId(p.id); setDialogOpen(true); };
+  const openCreate = () => { setForm(emptyForm); setEditingId(null); setShowMore(false); setDialogOpen(true); };
+  const openEdit = (p: Product) => { setForm(p); setEditingId(p.id); setShowMore(true); setDialogOpen(true); };
 
   const save = () => {
     const payload = { ...form } as any;
@@ -350,19 +351,6 @@ export default function MaterialMaster() {
               <Label>Material Name</Label>
               <Input value={form.name || ""} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             </div>
-            <div className="col-span-2 space-y-1">
-              <Label>Description</Label>
-              <Input placeholder="Shown under the name on quotes" value={form.description || ""}
-                onChange={(e) => setForm({ ...form, description: e.target.value })} />
-            </div>
-            <div className="space-y-1">
-              <Label>SKU</Label>
-              <Input value={form.sku || ""} onChange={(e) => setForm({ ...form, sku: e.target.value })} />
-            </div>
-            <div className="space-y-1">
-              <Label>Brand</Label>
-              <Input value={form.brand || ""} onChange={(e) => setForm({ ...form, brand: e.target.value })} />
-            </div>
             <div className="space-y-1">
               <Label>Category</Label>
               <SearchableSelect value={form.category?.id ? String(form.category.id) : ""}
@@ -378,6 +366,48 @@ export default function MaterialMaster() {
               </select>
             </div>
             <div className="space-y-1">
+              <Label>Cost Price</Label>
+              <Input type="number" value={form.costPrice ?? ""} onChange={(e) => setForm({ ...form, costPrice: Number(e.target.value) })} />
+            </div>
+            <div className="space-y-1">
+              <Label>Selling Price</Label>
+              <Input type="number" value={form.sellingPrice ?? ""} onChange={(e) => setForm({ ...form, sellingPrice: Number(e.target.value) })} />
+            </div>
+            <div className="col-span-2">
+              <ImageCaptureField
+                module="MATERIAL"
+                label="Primary Image"
+                value={form.imageUrl ? resolveFileUrl(form.imageUrl) : ""}
+                onChange={({ url }) => setForm({ ...form, imageUrl: url })}
+              />
+            </div>
+            <button type="button" onClick={() => setShowMore(!showMore)}
+              className="col-span-2 text-left text-sm font-medium text-primary hover:underline">
+              {showMore ? "− Hide extra details" : "+ More details (GST, brand, HSN, stock limits, colours…)"}
+            </button>
+            {showMore && (<>
+            <div className="space-y-1">
+              <Label>GST %</Label>
+              <Input type="number" value={form.gstPercent ?? ""} onChange={(e) => setForm({ ...form, gstPercent: Number(e.target.value) })} />
+            </div>
+            <div className="space-y-1">
+              <Label>Min Stock Level</Label>
+              <Input type="number" value={form.minStockLevel ?? ""} onChange={(e) => setForm({ ...form, minStockLevel: Number(e.target.value) })} />
+            </div>
+            <div className="col-span-2 space-y-1">
+              <Label>Description</Label>
+              <Input placeholder="Shown under the name on quotes" value={form.description || ""}
+                onChange={(e) => setForm({ ...form, description: e.target.value })} />
+            </div>
+            <div className="space-y-1">
+              <Label>SKU</Label>
+              <Input value={form.sku || ""} onChange={(e) => setForm({ ...form, sku: e.target.value })} />
+            </div>
+            <div className="space-y-1">
+              <Label>Brand</Label>
+              <Input value={form.brand || ""} onChange={(e) => setForm({ ...form, brand: e.target.value })} />
+            </div>
+            <div className="space-y-1">
               <Label>Default Warehouse</Label>
               <SearchableSelect value={form.defaultWarehouse?.id ? String(form.defaultWarehouse.id) : ""}
                 onChange={(v) => setForm({ ...form, defaultWarehouse: v ? { id: Number(v) } : null })}
@@ -387,22 +417,6 @@ export default function MaterialMaster() {
             <div className="space-y-1">
               <Label>HSN Code</Label>
               <Input value={form.hsnCode || ""} onChange={(e) => setForm({ ...form, hsnCode: e.target.value })} />
-            </div>
-            <div className="space-y-1">
-              <Label>GST %</Label>
-              <Input type="number" value={form.gstPercent ?? ""} onChange={(e) => setForm({ ...form, gstPercent: Number(e.target.value) })} />
-            </div>
-            <div className="space-y-1">
-              <Label>Cost Price</Label>
-              <Input type="number" value={form.costPrice ?? ""} onChange={(e) => setForm({ ...form, costPrice: Number(e.target.value) })} />
-            </div>
-            <div className="space-y-1">
-              <Label>Selling Price</Label>
-              <Input type="number" value={form.sellingPrice ?? ""} onChange={(e) => setForm({ ...form, sellingPrice: Number(e.target.value) })} />
-            </div>
-            <div className="space-y-1">
-              <Label>Min Stock Level</Label>
-              <Input type="number" value={form.minStockLevel ?? ""} onChange={(e) => setForm({ ...form, minStockLevel: Number(e.target.value) })} />
             </div>
             <div className="space-y-1">
               <Label>Max Stock Level</Label>
@@ -419,14 +433,6 @@ export default function MaterialMaster() {
 
             {/* ---- Media ---- */}
             <SectionHead>Photos</SectionHead>
-            <div className="col-span-2">
-              <ImageCaptureField
-                module="MATERIAL"
-                label="Primary Image"
-                value={form.imageUrl ? resolveFileUrl(form.imageUrl) : ""}
-                onChange={({ url }) => setForm({ ...form, imageUrl: url })}
-              />
-            </div>
             <div className="col-span-2">
               <MultiImageCaptureField
                 module="MATERIAL"
@@ -503,6 +509,7 @@ export default function MaterialMaster() {
                 </select>
               </div>
             )}
+            </>)}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
