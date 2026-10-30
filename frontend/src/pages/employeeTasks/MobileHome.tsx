@@ -16,6 +16,7 @@ import { fetchCompanyProfile, COMPANY_FALLBACK, type CompanyProfile } from '@/li
 import Logo from '@/components/brand/Logo';
 import { resolveFileUrl } from '@/lib/uploadFile';
 import { useT } from '@/i18n';
+import { usePendingPhoto } from '../employeePortal/usePendingPhoto';
 
 // Premium card surface shared across the dashboard.
 const CARD = 'rounded-2xl border border-[#ECEAE5] bg-white shadow-[0_4px_14px_rgba(0,35,22,0.05)]';
@@ -108,6 +109,7 @@ function ProfileBar({ dash, today }: { dash: EmployeeDashboard | null; today: st
   const navigate = useNavigate();
   const { t } = useT();
   const e = dash?.employee;
+  const { pending: pendingPhoto } = usePendingPhoto();
   const name = e ? `${e.firstName ?? ''} ${e.lastName ?? ''}`.trim() : '';
   const initials = (name || 'Me').split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase()).join('');
   const time = (v: string | null | undefined) => {
@@ -124,7 +126,7 @@ function ProfileBar({ dash, today }: { dash: EmployeeDashboard | null; today: st
         className="flex min-h-[60px] w-full items-center gap-3 px-4 py-2.5 text-left active:bg-[#F7F7F5]"
       >
         <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#06452F] text-[13px] font-bold text-white">
-          {e?.profilePhotoUrl ? <img src={resolveFileUrl(e.profilePhotoUrl)} alt="" className="h-full w-full object-cover" /> : initials}
+          {pendingPhoto || e?.profilePhotoUrl ? <img src={resolveFileUrl((pendingPhoto || e?.profilePhotoUrl) as string)} alt="" className="h-full w-full object-cover" /> : initials}
         </span>
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[15px] font-semibold text-[#111817]">{name || today}</span>

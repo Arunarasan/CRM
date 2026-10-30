@@ -24,7 +24,7 @@ export interface AdminProfileChangeRequest {
   reviewRemarks: string | null;
   reviewedAt: string | null;
   createdAt: string | null;
-  employee?: { id: number; firstName: string; lastName: string; employeeCode: string; email: string } | null;
+  employee?: { id: number; firstName: string; lastName: string; employeeCode: string; email: string; profilePhotoUrl?: string | null } | null;
   requestedBy?: { id: number; name: string } | null;
 }
 

@@ -61,7 +61,7 @@ public class ProfileChangeRequestService {
         r.setProposedPhone(trimToNull(body.get("phone")));
         r.setProposedEmergencyName(trimToNull(body.get("emergencyContactName")));
         r.setProposedEmergencyPhone(trimToNull(body.get("emergencyContactPhone")));
-        r.setProposedPhotoUrl(trimToNull(body.get("profilePhotoUrl")));
+        r.setProposedPhotoUrl(changed(body.get("profilePhotoUrl"), employee.getProfilePhotoUrl()));
         r.setProposedFirstName(changed(body.get("firstName"), employee.getFirstName()));
         r.setProposedLastName(changed(body.get("lastName"), employee.getLastName()));
         r.setProposedBankAccount(changed(body.get("bankAccount"), employee.getBankAccount()));
@@ -78,6 +78,17 @@ public class ProfileChangeRequestService {
             throw new IllegalArgumentException("Nothing to submit — no changes were entered.");
         }
         r.setStatus("PENDING");
+        if (r.getProposedPhotoUrl() != null) {
+            // Only one photo can be waiting for approval: a newer upload supersedes older pending ones.
+            for (ProfileChangeRequest old : requestRepository
+                    .findByEmployeeIdAndIsDeletedFalseOrderByIdDesc(employee.getId())) {
+                if ("PENDING".equals(old.getStatus()) && "PROFILE".equals(old.getChangeType())
+                        && old.getProposedPhotoUrl() != null) {
+                    old.setProposedPhotoUrl(null);
+                    requestRepository.save(old);
+                }
+            }
+        }
         ProfileChangeRequest saved = requestRepository.save(r);
         notifyAdmins(currentUser, employee, "Profile Change Request",
                 fullName(employee) + " submitted profile changes for approval.");

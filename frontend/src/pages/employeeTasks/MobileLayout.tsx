@@ -7,6 +7,7 @@ import { useOfflineQueue } from '@/hooks/useOfflineQueue';
 import { employeePortalApi } from '@/api/employeePortalApi';
 import Logo from '@/components/brand/Logo';
 import { useT } from '@/i18n';
+import { usePendingPhoto } from '../employeePortal/usePendingPhoto';
 
 /**
  * Mobile-first shell for the Employee Task module — premium forest-green header,
@@ -26,9 +27,12 @@ export default function MobileLayout() {
   // Unopened gifts (money given) — badge on the Gifts tab; refreshed on every navigation.
   const [newGifts, setNewGifts] = useState(0);
 
+  const { pending: pendingPhoto, reload: reloadPendingPhoto } = usePendingPhoto();
   useEffect(() => {
     employeePortalApi.me().then((p) => setPhoto(p.profilePhotoUrl ?? null)).catch(() => {});
   }, []);
+  // A photo submitted/approved/rejected elsewhere changes what the header should show.
+  useEffect(() => { reloadPendingPhoto(); }, [location.pathname, reloadPendingPhoto]);
 
   useEffect(() => {
     const refresh = () => employeePortalApi.celebrations().then((c) => setNewGifts(c.unopened)).catch(() => {});
@@ -86,8 +90,8 @@ export default function MobileLayout() {
               className="relative h-9 w-9 shrink-0 overflow-hidden rounded-full ring-2 ring-white/25 active:scale-95"
               aria-label={t('pw.layout.myProfileAria')}
             >
-              {photo ? (
-                <img src={photo} alt="" className="h-full w-full object-cover" />
+              {pendingPhoto || photo ? (
+                <img src={(pendingPhoto || photo) as string} alt="" className="h-full w-full object-cover" />
               ) : (
                 <span className="flex h-full w-full items-center justify-center bg-[#0A573B] text-xs font-bold text-white">{t('pw.layout.me')}</span>
               )}

@@ -8,6 +8,7 @@ import { employeePortalApi } from '@/api/employeePortalApi';
 import { signOut } from '@/lib/api';
 import { EmployeeProfile } from '@/types/employeePortal';
 import { useT } from '@/i18n';
+import { usePendingPhoto } from './usePendingPhoto';
 
 const ITEMS = [
   { to: '/employee/profile', labelKey: 'portal.more.myProfile', icon: UserCircle, color: 'text-primary' },
@@ -28,6 +29,7 @@ export default function EmployeeMore() {
   const [p, setP] = useState<EmployeeProfile | null>(null);
   const navigate = useNavigate();
   const { t } = useT();
+  const { pending: pendingPhoto } = usePendingPhoto();
 
   useEffect(() => { employeePortalApi.me().then(setP).catch(() => {}); }, []);
 
@@ -36,14 +38,16 @@ export default function EmployeeMore() {
   return (
     <div className="flex flex-col">
       <button onClick={() => navigate('/employee/profile')} className="flex items-center gap-3 border-b bg-card px-4 py-4 text-left active:bg-accent/40">
-        {p?.profilePhotoUrl ? (
-          <img src={p.profilePhotoUrl} alt="" className="h-14 w-14 rounded-full object-cover" />
+        {pendingPhoto || p?.profilePhotoUrl ? (
+          <img src={(pendingPhoto || p?.profilePhotoUrl) as string} alt=""
+            className={`h-14 w-14 rounded-full object-cover ${pendingPhoto ? 'ring-2 ring-amber-400' : ''}`} />
         ) : (
           <UserCircle className="h-14 w-14 text-muted-foreground" />
         )}
         <div className="min-w-0 flex-1">
           <p className="truncate text-base font-semibold">{p ? `${p.firstName} ${p.lastName}` : '…'}</p>
           <p className="truncate text-xs text-muted-foreground">{p?.designation || t('portal.more.employee')} · {p?.employeeCode}</p>
+          {pendingPhoto && <p className="text-[11px] font-medium text-amber-700">Photo pending approval</p>}
         </div>
         <ChevronRight className="h-5 w-5 text-muted-foreground" />
       </button>

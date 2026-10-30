@@ -10,6 +10,7 @@ import { EmployeeProfile } from '@/types/employeePortal';
 import { uploadFile } from '@/lib/uploadFile';
 import { PortalHeader } from './_shared';
 import { useT } from '@/i18n';
+import { usePendingPhoto } from './usePendingPhoto';
 
 /** Read-only display row. `locked` shows a small lock hint for HR-managed fields. */
 function Row({ icon: Icon, label, value, locked }: { icon: React.ElementType; label: string; value?: string | null; locked?: boolean }) {
@@ -63,6 +64,7 @@ export default function MyProfile() {
   const photoInput = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const { t } = useT();
+  const { pending: pendingPhoto, rejected: rejectedPhoto, reload: reloadPhoto } = usePendingPhoto();
 
   const load = () => employeePortalApi.profile().then((d) => {
     setP(d);
@@ -96,6 +98,7 @@ export default function MyProfile() {
       await employeePortalApi.submitProfileChange(form);
       await load();
       await loadPending();
+      reloadPhoto();
       setEditing(false);
       setMsgOk(true);
       setMsg(t('portal.profile.submittedPending'));
@@ -103,7 +106,7 @@ export default function MyProfile() {
     finally { setSaving(false); }
   };
 
-  const photo = editing ? form.profilePhotoUrl : p?.profilePhotoUrl;
+  const photo = editing ? form.profilePhotoUrl : (pendingPhoto || p?.profilePhotoUrl);
 
   return (
     <div className="flex flex-col">
@@ -130,7 +133,8 @@ export default function MyProfile() {
           className={`relative rounded-full ${editing ? 'active:scale-95' : ''}`}
         >
           {photo ? (
-            <img src={photo} alt="" className="h-24 w-24 rounded-full object-cover shadow" />
+            <img src={photo} alt=""
+              className={`h-24 w-24 rounded-full object-cover shadow ${!editing && pendingPhoto ? 'ring-4 ring-amber-400' : ''}`} />
           ) : (
             <UserCircle className="h-24 w-24 text-muted-foreground" />
           )}
@@ -148,6 +152,12 @@ export default function MyProfile() {
           </div>
         ) : (
           <h2 className="text-lg font-bold">{p ? `${p.firstName} ${p.lastName}` : '…'}</h2>
+        )}
+        {!editing && pendingPhoto && (
+          <span className="rounded-full bg-amber-100 px-3 py-0.5 text-xs font-semibold text-amber-700">Photo pending approval</span>
+        )}
+        {!editing && !pendingPhoto && rejectedPhoto && (
+          <span className="mx-3 rounded-md bg-destructive/15 px-3 py-1 text-center text-xs text-destructive">Photo not approved: {rejectedPhoto}</span>
         )}
         <p className="text-sm text-muted-foreground">{p?.designation || t('portal.more.employee')}</p>
         <span className="rounded-full bg-primary/10 px-3 py-0.5 text-xs font-semibold text-primary">{p?.employeeCode}</span>

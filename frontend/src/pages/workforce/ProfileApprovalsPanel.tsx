@@ -102,12 +102,26 @@ export default function ProfileApprovalsPanel({
                   {r.proposedEmergencyName != null && <Row icon={<ShieldAlert className="h-3.5 w-3.5" />} label="Emergency contact" value={r.proposedEmergencyName} />}
                   {r.proposedEmergencyPhone != null && <Row icon={<Phone className="h-3.5 w-3.5" />} label="Emergency phone" value={r.proposedEmergencyPhone} />}
                   {r.proposedPhotoUrl != null && (
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-3">
                       <ImageIcon className="h-3.5 w-3.5 text-muted-foreground" />
                       <span className="text-muted-foreground">Profile photo:</span>
-                      <a href={resolveFileUrl(r.proposedPhotoUrl)} target="_blank" rel="noreferrer">
-                        <img src={resolveFileUrl(r.proposedPhotoUrl)} alt="proposed" className="h-10 w-10 rounded object-cover border" />
-                      </a>
+                      <div className="text-center">
+                        {r.employee?.profilePhotoUrl ? (
+                          <a href={resolveFileUrl(r.employee.profilePhotoUrl)} target="_blank" rel="noreferrer">
+                            <img src={resolveFileUrl(r.employee.profilePhotoUrl)} alt="current" className="h-20 w-20 rounded-lg object-cover border" />
+                          </a>
+                        ) : (
+                          <div className="flex h-20 w-20 items-center justify-center rounded-lg border text-[10px] text-muted-foreground">No photo</div>
+                        )}
+                        <p className="mt-0.5 text-[10px] uppercase text-muted-foreground">Current</p>
+                      </div>
+                      <span className="text-muted-foreground">→</span>
+                      <div className="text-center">
+                        <a href={resolveFileUrl(r.proposedPhotoUrl)} target="_blank" rel="noreferrer">
+                          <img src={resolveFileUrl(r.proposedPhotoUrl)} alt="proposed" className="h-20 w-20 rounded-lg object-cover border-2 border-amber-400" />
+                        </a>
+                        <p className="mt-0.5 text-[10px] uppercase text-amber-700">Proposed</p>
+                      </div>
                     </div>
                   )}
                 </>
