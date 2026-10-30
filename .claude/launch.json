@@ -282,6 +282,38 @@
       "env": {
         "VITE_API_URL": "http://localhost:8101/api"
       }
+    },
+    {
+      "name": "backend-taskswap",
+      "runtimeExecutable": "mvn",
+      "runtimeArgs": [
+        "-o",
+        "spring-boot:run",
+        "-Dspring-boot.run.arguments=--server.port=8103"
+      ],
+      "port": 8103,
+      "cwd": "backend",
+      "env": {
+        "CORS_ALLOWED_ORIGINS": "http://localhost:4189",
+        "DB_URL": "jdbc:mysql://localhost:3306/zz_task_swap?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true"
+      }
+    },
+    {
+      "name": "frontend-taskswap",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "4189",
+        "--strictPort"
+      ],
+      "port": 4189,
+      "cwd": "frontend",
+      "env": {
+        "VITE_API_URL": "http://localhost:8103/api"
+      }
     }
   ]
 }
