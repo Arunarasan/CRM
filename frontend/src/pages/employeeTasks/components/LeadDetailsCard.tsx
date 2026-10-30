@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { MessageCircle, MoreHorizontal, Navigation, Pencil, Phone } from 'lucide-react';
 import { useT, tNow, dateLocale, currentLang } from '@/i18n';
+import ShareCatalogueDialog from '@/components/leads/ShareCatalogueDialog';
 
 const has = (v: unknown) => v != null && String(v).trim() !== '';
 const list = (v?: string | null) => (v || '').split(',').map((x) => x.trim()).filter(Boolean);
@@ -42,6 +43,7 @@ export default function LeadDetailsCard({ lead, fallbackName, onEdit, more }: {
 }) {
   const { t } = useT();
   const [showMore, setShowMore] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const phone = lead?.mobileNumber || lead?.alternateMobile || lead?.whatsappNumber || lead?.phone;
   const wa = lead?.whatsappNumber || phone;
   const place = [lead?.address, lead?.city].filter(has).join(', ');
@@ -114,6 +116,14 @@ export default function LeadDetailsCard({ lead, fallbackName, onEdit, more }: {
             ))}
           </div>
         )}
+        {list(lead?.requirementCategory).length > 0 && (
+          <button onClick={() => setShareOpen(true)}
+            className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-[#0A573B]/30 bg-white px-3 py-2.5 text-[13px] font-semibold text-[#0A573B] active:scale-[0.98]">
+            <MessageCircle className="h-4 w-4" /> Share catalogue
+          </button>
+        )}
+        <ShareCatalogueDialog open={shareOpen} onClose={() => setShareOpen(false)}
+          customerName={customerName(lead, fallbackName)} phone={wa || ''} categoryNames={list(lead?.requirementCategory)} />
         {onEdit && (
           <button onClick={onEdit}
             className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-[#0A573B]/30 bg-[#F3F8F5] px-3 py-2.5 text-[13px] font-semibold text-[#0A573B] active:scale-[0.98]">

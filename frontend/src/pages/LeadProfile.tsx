@@ -27,6 +27,7 @@ import { SelectField, TextAreaField, selectClass } from "./leads/fields";
 import { useGoBack } from "@/hooks/useGoBack";
 import { useAuth } from "@/hooks/useAuth";
 import LeadFormDialog from "./leads/LeadFormDialog";
+import ShareCatalogueDialog from "@/components/leads/ShareCatalogueDialog";
 import ChangeCreatorDialog from "./leads/ChangeCreatorDialog";
 import type { LeadManager } from "./leads/leadApi";
 import ConvertLeadDialog from "./leads/ConvertLeadDialog";
@@ -93,6 +94,7 @@ export default function LeadProfile() {
   const [convertOpen, setConvertOpen] = useState(false);
   const [assignOpen, setAssignOpen] = useState(false);
   const [lostOpen, setLostOpen] = useState(false);
+  const [catalogueOpen, setCatalogueOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [undoOpen, setUndoOpen] = useState(false);
   const [reopenOpen, setReopenOpen] = useState(false);
@@ -420,6 +422,12 @@ export default function LeadProfile() {
                   <Package className="h-3.5 w-3.5 text-slate-500" /> {p}
                 </span>
               ))}
+              {splitList(lead.requirementCategory).length > 0 && (
+                <button type="button" onClick={() => setCatalogueOpen(true)} title="Send the website pages of these categories on WhatsApp"
+                  className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-emerald-200 bg-white px-2 py-0.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">
+                  <MessageCircle className="h-3.5 w-3.5" /> Share catalogue
+                </button>
+              )}
               {products.length > shownProducts.length && (
                 <span className="shrink-0 text-xs font-medium text-slate-400" title={products.slice(shownProducts.length).join(", ")}>
                   +{products.length - shownProducts.length} more
@@ -482,6 +490,8 @@ export default function LeadProfile() {
       </div>
 
       {/* Dialogs */}
+      <ShareCatalogueDialog open={catalogueOpen} onClose={() => setCatalogueOpen(false)}
+        customerName={lead.name || ""} phone={whatsapp || ""} categoryNames={splitList(lead.requirementCategory)} />
       <LeadFormDialog open={editOpen} onOpenChange={setEditOpen} lead={lead} users={users} onSaved={() => fetchLead()} />
       <ConvertLeadDialog open={convertOpen} onOpenChange={setConvertOpen} lead={lead} />
       <AssignDialog open={assignOpen} onOpenChange={setAssignOpen} lead={lead} users={users} onChanged={fetchLead} />
