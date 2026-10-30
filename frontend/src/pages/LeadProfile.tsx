@@ -5,7 +5,7 @@ import {
   ArrowLeft, CheckCircle2, MoreVertical, XCircle, Check, CalendarClock, CalendarPlus,
   LayoutGrid, ListChecks, Activity as ActivityIcon, FileText, Route, Clock, RotateCcw, Star,
   ChevronDown, ChevronRight, ChevronUp, FolderKanban, UserPlus, Phone, MessageCircle, Mail, MapPin, Navigation,
-  NotebookPen, Trash2, Pencil, Crown, Tag, PhoneCall, XOctagon, UserCheck, Package, ClipboardList, ClipboardCheck, Calculator, Rocket,
+  NotebookPen, Trash2, Pencil, Crown, Tag, PhoneCall, XOctagon, UserCheck, Users, Package, ClipboardList, ClipboardCheck, Calculator, Rocket,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import DeleteWithRemarkDialog from "@/components/DeleteWithRemarkDialog";
@@ -101,6 +101,7 @@ export default function LeadProfile() {
   const [winBackOpen, setWinBackOpen] = useState(false);
   const [creatorOpen, setCreatorOpen] = useState(false);
   const [manager, setManager] = useState<LeadManager | null>(null);
+  const [team, setTeam] = useState<{ id: number; name: string; role: string }[]>([]);
   const { isAdmin } = useAuth();
   // Phones: once the content is scrolled, the pinned header folds to name + tabs so the page itself has
   // room (the full header is ~40% of a phone screen). Tablet / desktop keep the full header — the
@@ -118,6 +119,9 @@ export default function LeadProfile() {
 
   const fetchLead = useCallback(() => {
     if (!id) return;
+    leadApi.getAssignments(id)
+      .then((res) => setTeam((res.data || []).map((a: any) => ({ id: a.id, name: a.assignedTo?.name, role: a.assignedRole })).filter((m: any) => m.name)))
+      .catch(() => setTeam([]));
     leadApi.get(id)
       .then((res) => setLead(res.data))
       .catch((err) => console.error("Failed to fetch lead", err))
@@ -389,6 +393,15 @@ export default function LeadProfile() {
                     )}
                   </span>
                 ))}
+              </span>
+            )}
+            {team.length > 0 && (
+              <span className={CHIP_SM} title={team.map((m) => `${m.name}${m.role ? ` (${m.role})` : ""}`).join(", ")}>
+                <Users className="h-3.5 w-3.5 text-sky-600" />
+                <span className="text-slate-400">Team</span>
+                <span className="font-semibold text-slate-800">
+                  {team.map((m) => m.role ? `${m.name} · ${m.role}` : m.name).join(", ")}
+                </span>
               </span>
             )}
             {place && (
