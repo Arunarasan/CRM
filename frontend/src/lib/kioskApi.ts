@@ -40,7 +40,7 @@ export interface KioskPairResult extends KioskInfo {
 }
 
 export type KioskOutcome =
-  | 'CHECKED_IN' | 'CHECKED_OUT' | 'ALREADY_IN' | 'NOT_IN' | 'TOO_SOON' | 'NOT_RECOGNISED' | 'AMBIGUOUS';
+  | 'CHECKED_IN' | 'CHECKED_OUT' | 'ALREADY_IN' | 'NOT_IN' | 'TOO_SOON' | 'NOT_RECOGNISED' | 'AMBIGUOUS' | 'NOT_FOUND';
 
 export interface KioskPunchResult {
   outcome: KioskOutcome;
@@ -68,6 +68,16 @@ export const kioskApi = {
     if (selfie) form.append('selfie', selfie, 'selfie.jpg');
     return http
       .post('/public/kiosk/punch', form, { headers: { 'X-Kiosk-Token': kioskToken.get() ?? '', 'Content-Type': 'multipart/form-data' } })
+      .then((r) => unwrap<KioskPunchResult>(r.data));
+  },
+  /** Fallback when face/finger can't be read: employee ID or phone + a photo. Always lands as pending approval. */
+  punchManual: (action: 'IN' | 'OUT', identifier: string, selfie: Blob) => {
+    const form = new FormData();
+    form.append('action', action);
+    form.append('identifier', identifier);
+    form.append('selfie', selfie, 'selfie.jpg');
+    return http
+      .post('/public/kiosk/punch-manual', form, { headers: { 'X-Kiosk-Token': kioskToken.get() ?? '', 'Content-Type': 'multipart/form-data' } })
       .then((r) => unwrap<KioskPunchResult>(r.data));
   },
   punchFinger: (action: 'IN' | 'OUT', capture: FingerCapture, selfie: Blob | null) => {

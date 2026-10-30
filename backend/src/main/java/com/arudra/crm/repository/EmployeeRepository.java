@@ -12,6 +12,7 @@ import java.util.List;
 public interface EmployeeRepository extends JpaRepository<Employee, Long> {
     long countByStatusAndIsDeletedFalse(String status);
     Page<Employee> findAllByOrderByFirstNameAsc(Pageable pageable);
+    List<Employee> findByEmployeeCodeIgnoreCaseAndIsDeletedFalse(String employeeCode);
     List<Employee> findByDepartmentId(Long departmentId);
     List<Employee> findByPhoneIsNotNullAndIsDeletedFalse();
     java.util.Optional<Employee> findByWorkforceId(Long workforceId);

@@ -182,6 +182,8 @@ public class EmployeeTimeService {
 
     /** A check-out this soon after the check-in is treated as an accidental double tap. */
     private static final long KIOSK_MIN_SESSION_SECONDS = 120;
+    /** Verification method of a kiosk punch typed in by employee ID / phone with a photo (always needs approval). */
+    public static final String KIOSK_MANUAL = "KIOSK_ID";
 
     /**
      * Records a face- or fingerprint-verified punch from an office kiosk for an already-identified employee. Mirrors the
@@ -193,7 +195,10 @@ public class EmployeeTimeService {
     public KioskPunchOutcome kioskPunch(Employee employee, com.arudra.crm.entity.AttendanceKiosk kiosk, boolean checkIn,
                                         String method, double value, boolean weakMatch, java.util.function.Supplier<String> selfieUrl, String liveness) {
         boolean finger = "FINGER".equals(method);
-        String weakReason = finger
+        boolean manual = KIOSK_MANUAL.equals(method);
+        String weakReason = manual
+                ? "Manual kiosk " + (checkIn ? "check-in" : "check-out") + " (face / fingerprint could not be read): identified by ID or phone, check the photo, needs admin approval"
+                : finger
                 ? String.format(Locale.ROOT, "Weak fingerprint match on the kiosk (score %.0f), needs admin approval", value)
                 : String.format(Locale.ROOT, "Weak face match on the kiosk (distance %.2f), needs admin approval", value);
         Attendance live = activeRow(employee.getId());
@@ -216,7 +221,7 @@ public class EmployeeTimeService {
             s.setCheckInSource(AttendanceSession.SOURCE_KIOSK);
             s.setKiosk(kiosk);
             s.setOfficeLocation(kiosk.getOfficeLocation());
-            if (finger) s.setFingerScoreIn(value); else s.setFaceDistanceIn(value);
+            if (finger) s.setFingerScoreIn(value); else if (!manual) s.setFaceDistanceIn(value);
             s.setSelfieInUrl(selfieUrl.get());
             s.setLivenessIn(liveness);
             verificationService.applyBiometric(s, employee, method, weakMatch, weakReason, true);
@@ -237,7 +242,7 @@ public class EmployeeTimeService {
         LocalTime now = LocalTime.now().withNano(0);
         open.setCheckOutTime(now);
         open.setCheckOutSource(AttendanceSession.SOURCE_KIOSK);
-        if (finger) open.setFingerScoreOut(value); else open.setFaceDistanceOut(value);
+        if (finger) open.setFingerScoreOut(value); else if (!manual) open.setFaceDistanceOut(value);
         open.setSelfieOutUrl(selfieUrl.get());
         open.setLivenessOut(liveness);
         verificationService.applyBiometric(open, employee, method, weakMatch, weakReason, false);

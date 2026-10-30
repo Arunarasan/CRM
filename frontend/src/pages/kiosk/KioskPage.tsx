@@ -12,6 +12,7 @@ import { keepCameraWarm, loadFaceEngine, releaseWarmCamera } from '@/lib/faceEng
 import { fingerprintSensorAvailable } from '@/lib/fingerprintBridge';
 import KioskScan, { ScanAction, ScanDone, ScanFail } from './KioskScan';
 import KioskFingerScan from './KioskFingerScan';
+import KioskManual from './KioskManual';
 
 type Phase = 'loading' | 'unpaired' | 'ready';
 
@@ -23,8 +24,9 @@ const RESULT_MS = 6000;
 type View =
   | { kind: 'home' }
   | { kind: 'scan'; action: ScanAction; method: 'FACE' | 'FINGER' }
+  | { kind: 'manual'; action: ScanAction }
   | { kind: 'result'; action: ScanAction; done: ScanDone }
-  | { kind: 'error'; message: string };
+  | { kind: 'error'; message: string; action?: ScanAction };
 
 export default function KioskPage() {
   const [phase, setPhase] = useState<Phase>('loading');
@@ -87,13 +89,14 @@ export default function KioskPage() {
   // Result and error cards close themselves.
   useEffect(() => {
     if (view.kind !== 'result' && view.kind !== 'error') return;
-    const t = window.setTimeout(() => setView({ kind: 'home' }), RESULT_MS);
+    const failed = view.kind === 'error' || ['NOT_RECOGNISED', 'AMBIGUOUS', 'NOT_FOUND'].includes(view.done.result.outcome);
+    const t = window.setTimeout(() => setView({ kind: 'home' }), failed ? RESULT_MS * 3 : RESULT_MS);
     return () => window.clearTimeout(t);
   }, [view]);
 
   const onFail = useCallback((f: ScanFail) => {
     if (f.status === 401 || f.status === 403) { unpair(f.message); return; }
-    setView({ kind: 'error', message: f.message });
+    setView((v) => ({ kind: 'error', message: f.message, action: v.kind === 'scan' ? v.action : undefined }));
   }, [unpair]);
 
   if (phase === 'loading') {
@@ -105,8 +108,10 @@ export default function KioskPage() {
   return (
     <>
       <Shell>
-        {view.kind === 'result' ? <ResultCard action={view.action} done={view.done} onClose={() => setView({ kind: 'home' })} />
-          : view.kind === 'error' ? <ErrorCard message={view.message} onClose={() => setView({ kind: 'home' })} />
+        {view.kind === 'result' ? <ResultCard action={view.action} done={view.done} onClose={() => setView({ kind: 'home' })}
+            onManual={() => setView({ kind: 'manual', action: view.action })} />
+          : view.kind === 'error' ? <ErrorCard message={view.message} onClose={() => setView({ kind: 'home' })}
+            onManual={view.action ? () => setView({ kind: 'manual', action: view.action! }) : undefined} />
           : <KioskHome kiosk={kiosk} offline={offline} onChoose={(action) => setView({ kind: 'scan', action, method: firstMethod(kiosk) })} />}
       </Shell>
       {view.kind === 'scan' && view.method === 'FACE' && (
@@ -116,6 +121,7 @@ export default function KioskPage() {
           onFail={onFail}
           onDone={(done) => setView({ kind: 'result', action: view.action, done })}
           onSwitch={canSwitch(kiosk) ? () => setView({ kind: 'scan', action: view.action, method: 'FINGER' }) : undefined}
+          onManual={() => setView({ kind: 'manual', action: view.action })}
         />
       )}
       {view.kind === 'scan' && view.method === 'FINGER' && (
@@ -125,6 +131,15 @@ export default function KioskPage() {
           onFail={onFail}
           onDone={(done) => setView({ kind: 'result', action: view.action, done })}
           onSwitch={kiosk?.verifyMode === 'EITHER' ? () => setView({ kind: 'scan', action: view.action, method: 'FACE' }) : undefined}
+          onManual={() => setView({ kind: 'manual', action: view.action })}
+        />
+      )}
+      {view.kind === 'manual' && (
+        <KioskManual
+          action={view.action}
+          onCancel={() => setView({ kind: 'home' })}
+          onFail={onFail}
+          onDone={(done) => setView({ kind: 'result', action: view.action, done })}
         />
       )}
     </>
@@ -239,7 +254,7 @@ function worked(mins?: number | null): string {
   return h > 0 ? `${h}h ${m}m` : `${m} min`;
 }
 
-function ResultCard({ action, done, onClose }: { action: ScanAction; done: ScanDone; onClose: () => void }) {
+function ResultCard({ action, done, onClose, onManual }: { action: ScanAction; done: ScanDone; onClose: () => void; onManual: () => void }) {
   const r: KioskPunchResult = done.result;
   const [photo, setPhoto] = useState<string | null>(null);
   const urlRef = useRef<string | null>(null);
@@ -253,11 +268,12 @@ function ResultCard({ action, done, onClose }: { action: ScanAction; done: ScanD
   let title = '';
   let detail = '';
   switch (r.outcome) {
-    case 'CHECKED_IN': title = `Welcome, ${first}`; detail = `Checked in at ${hm(r.time)}`; break;
-    case 'CHECKED_OUT': title = `Goodbye, ${first}`; detail = `Checked out at ${hm(r.time)}${r.minutesWorked != null ? ` · ${worked(r.minutesWorked)} this session` : ''}`; break;
+    case 'CHECKED_IN': title = done.manual ? `Sent for approval, ${first}` : `Welcome, ${first}`; detail = `Checked in at ${hm(r.time)}`; break;
+    case 'CHECKED_OUT': title = done.manual ? `Sent for approval, ${first}` : `Goodbye, ${first}`; detail = `Checked out at ${hm(r.time)}${r.minutesWorked != null ? ` · ${worked(r.minutesWorked)} this session` : ''}`; break;
     case 'ALREADY_IN': tone = 'warn'; title = `${first}, you're already checked in`; detail = `Since ${hm(r.time)}. Use Check Out when you leave.`; break;
     case 'NOT_IN': tone = 'warn'; title = `${first}, you're not checked in`; detail = 'Use Check In first.'; break;
     case 'TOO_SOON': tone = 'warn'; title = `${first}, you just checked in`; detail = `At ${hm(r.time)}. Wait a couple of minutes before checking out.`; break;
+    case 'NOT_FOUND': tone = 'bad'; title = 'ID or phone not found'; detail = 'Check the number and try again, or ask HR.'; break;
     case 'AMBIGUOUS': tone = 'bad'; title = 'Could not tell who this is'; detail = 'Try again. If it keeps happening, ask HR.'; break;
     default: tone = 'bad'; title = 'Not recognised'; detail = 'Try again: face the camera in good light, or press your finger flat. If it keeps failing, ask HR to enrol you.'; break;
   }
@@ -265,7 +281,7 @@ function ResultCard({ action, done, onClose }: { action: ScanAction; done: ScanD
   const color = tone === 'ok' ? 'text-emerald-600' : tone === 'warn' ? 'text-amber-500' : 'text-red-600';
 
   return (
-    <button onClick={onClose} className="w-full max-w-sm rounded-2xl bg-white p-6 text-center text-slate-900 shadow-2xl">
+    <div role="button" tabIndex={0} onClick={onClose} className="w-full max-w-sm rounded-2xl bg-white p-6 text-center text-slate-900 shadow-2xl">
       {photo && tone !== 'bad'
         ? <img src={photo} alt="" className="mx-auto h-28 w-28 -scale-x-100 rounded-full object-cover ring-4 ring-emerald-100" />
         : <UserRound className="mx-auto h-16 w-16 text-slate-300" />}
@@ -276,17 +292,27 @@ function ResultCard({ action, done, onClose }: { action: ScanAction; done: ScanD
         <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">Recorded. HR will confirm this {action === 'IN' ? 'check-in' : 'check-out'}.</p>
       )}
       {r.employeeCode && <p className="mt-3 text-xs text-slate-400">{r.employeeCode}</p>}
-    </button>
+      {tone === 'bad' && (
+        <button onClick={(e) => { e.stopPropagation(); onManual(); }} className="mt-4 w-full rounded-xl bg-emerald-700 py-3 text-sm font-bold text-white">
+          Use employee ID or phone + photo
+        </button>
+      )}
+    </div>
   );
 }
 
-function ErrorCard({ message, onClose }: { message: string; onClose: () => void }) {
+function ErrorCard({ message, onClose, onManual }: { message: string; onClose: () => void; onManual?: () => void }) {
   return (
-    <button onClick={onClose} className="w-full max-w-sm rounded-2xl bg-white p-6 text-center text-slate-900 shadow-2xl">
+    <div role="button" tabIndex={0} onClick={onClose} className="w-full max-w-sm rounded-2xl bg-white p-6 text-center text-slate-900 shadow-2xl">
       <XCircle className="mx-auto h-12 w-12 text-red-600" />
       <p className="mt-3 text-xl font-bold">Could not check you</p>
       <p className="mt-1 text-sm text-slate-600">{message}</p>
+      {onManual && (
+        <button onClick={(e) => { e.stopPropagation(); onManual(); }} className="mt-4 w-full rounded-xl bg-emerald-700 py-3 text-sm font-bold text-white">
+          Use employee ID or phone + photo
+        </button>
+      )}
       <p className="mt-4 text-xs text-slate-400">Tap to go back</p>
-    </button>
+    </div>
   );
 }

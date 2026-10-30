@@ -493,12 +493,12 @@ function PendingApprovals() {
                       <span className="inline-flex items-center gap-1 rounded bg-sky-100 px-1.5 py-0.5 text-[11px] font-semibold text-sky-700">
                         <MapPin className="h-3 w-3" /> Field punch
                       </span>
-                    ) : r.verificationMethod === 'FACE' || r.verificationMethod === 'FINGER' ? null : (
+                    ) : r.verificationMethod === 'FACE' || r.verificationMethod === 'FINGER' || r.verificationMethod === 'KIOSK_ID' ? null : (
                       <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">{r.verificationMethod ?? '—'}</span>
                     )}
-                    {(r.verificationMethod === 'FACE' || r.verificationMethod === 'FINGER') && (
+                    {(r.verificationMethod === 'FACE' || r.verificationMethod === 'FINGER' || r.verificationMethod === 'KIOSK_ID') && (
                       <span className="inline-flex items-center gap-1 rounded bg-violet-100 px-1.5 py-0.5 text-[11px] font-semibold text-violet-700">
-                        {r.verificationMethod === 'FINGER' ? 'Fingerprint kiosk' : 'Face kiosk'}{r.kioskName ? ` · ${r.kioskName}` : ''}
+                        {r.verificationMethod === 'FINGER' ? 'Fingerprint kiosk' : r.verificationMethod === 'KIOSK_ID' ? 'Manual ID + photo' : 'Face kiosk'}{r.kioskName ? ` · ${r.kioskName}` : ''}
                       </span>
                     )}
                   </div>

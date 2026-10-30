@@ -10,13 +10,15 @@ import { snapshot, startFrontCamera, stopCamera } from '@/lib/faceEngine';
 import { cancelFingerprint, captureFingerprint } from '@/lib/fingerprintBridge';
 import type { ScanAction, ScanDone, ScanFail } from './KioskScan';
 
-export default function KioskFingerScan({ action, onDone, onFail, onCancel, onSwitch }: {
+export default function KioskFingerScan({ action, onDone, onFail, onCancel, onSwitch, onManual }: {
   action: ScanAction;
   onDone: (d: ScanDone) => void;
   onFail: (f: ScanFail) => void;
   onCancel: () => void;
   /** Shown when the kiosk also accepts faces. */
   onSwitch?: () => void;
+  /** Fallback when the finger can't be read: employee ID / phone + photo, needs admin approval. */
+  onManual?: () => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [hint, setHint] = useState('Place your finger on the sensor');
@@ -75,6 +77,11 @@ export default function KioskFingerScan({ action, onDone, onFail, onCancel, onSw
         <video ref={videoRef} playsInline muted className="h-24 w-24 -scale-x-100 rounded-full object-cover opacity-80" />
       </div>
 
+      {onManual && !sending && (
+        <div className="px-4 pb-4 text-center">
+          <button onClick={onManual} className="text-sm text-white/80 underline">Can’t scan? Use employee ID or phone</button>
+        </div>
+      )}
       {onSwitch && !sending && (
         <div className="px-4 pb-8 text-center">
           <button onClick={onSwitch} className="rounded-full bg-white/15 px-5 py-2 text-sm font-semibold">Use face instead</button>

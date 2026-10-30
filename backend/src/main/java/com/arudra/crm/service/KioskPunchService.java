@@ -134,6 +134,44 @@ public class KioskPunchService {
         return record(kiosk, checkIn, employee, "FINGER", d.score(), d.verdict() == FingerprintPolicy.Verdict.WEAK, null, selfie, selfieType);
     }
 
+    /**
+     * Fallback when the face / fingerprint cannot be read: the person types their employee ID or phone
+     * number and the kiosk takes a photo. The punch is ALWAYS recorded as flagged / pending so an admin
+     * checks the photo before it counts. A photo is required.
+     */
+    public Map<String, Object> punchManual(AttendanceKiosk kiosk, String action, String identifier, byte[] selfie, String selfieType) {
+        boolean checkIn = parseAction(action);
+        if (selfie == null || selfie.length == 0) throw new IllegalArgumentException("Take a photo first.");
+        String id = identifier == null ? "" : identifier.trim();
+        if (id.length() < 3) throw new IllegalArgumentException("Enter your employee ID or phone number.");
+        throttleCheck(kiosk.getId());
+
+        Employee employee = findByIdOrPhone(id);
+        if (employee == null) {
+            recordFailure(kiosk.getId());
+            log.info("Kiosk {} manual punch: no unique active employee for '{}'", kiosk.getId(), id.replaceAll("\\d(?=\\d{3})", "*"));
+            return outcome("NOT_FOUND", null, null, null, null, null);
+        }
+        return record(kiosk, checkIn, employee, EmployeeTimeService.KIOSK_MANUAL, Double.NaN, true, null, selfie, selfieType);
+    }
+
+    /** An active employee matched by employee code, or by phone (last 10 digits); null if none or more than one. */
+    private Employee findByIdOrPhone(String id) {
+        List<Employee> byCode = employeeRepository.findByEmployeeCodeIgnoreCaseAndIsDeletedFalse(id).stream()
+                .filter(e -> "ACTIVE".equalsIgnoreCase(e.getStatus())).toList();
+        if (byCode.size() == 1) return byCode.get(0);
+        String digits = id.replaceAll("\\D", "");
+        if (digits.length() < 10) return null;
+        String tail = digits.substring(digits.length() - 10);
+        List<Employee> byPhone = employeeRepository.findByPhoneIsNotNullAndIsDeletedFalse().stream()
+                .filter(e -> "ACTIVE".equalsIgnoreCase(e.getStatus()))
+                .filter(e -> {
+                    String p = e.getPhone().replaceAll("\\D", "");
+                    return p.length() >= 10 && p.substring(p.length() - 10).equals(tail);
+                }).toList();
+        return byPhone.size() == 1 ? byPhone.get(0) : null;
+    }
+
     /** Records the identified employee's punch and builds the reply. */
     private Map<String, Object> record(AttendanceKiosk kiosk, boolean checkIn, Employee employee, String method, double value,
                                        boolean weak, String liveness, byte[] selfie, String selfieType) {

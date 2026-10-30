@@ -80,4 +80,18 @@ public class KioskController {
         String type = selfie == null ? null : selfie.getContentType();
         return ResponseEntity.ok(ApiResponse.success(punchService.punchFinger(kiosk, action, capture, bytes, type)));
     }
+
+    /** Fallback punch by employee ID / phone + a photo; always lands as pending admin approval. */
+    @PostMapping(value = "/punch-manual", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> punchManual(
+            @RequestHeader(value = TOKEN_HEADER, required = false) String token,
+            @RequestParam("action") String action,
+            @RequestParam("identifier") String identifier,
+            @RequestPart(value = "selfie", required = false) org.springframework.web.multipart.MultipartFile selfie,
+            HttpServletRequest request) throws java.io.IOException {
+        AttendanceKiosk kiosk = kioskService.authenticate(token, RequestIp.of(request));
+        byte[] bytes = selfie == null ? null : selfie.getBytes();
+        String type = selfie == null ? null : selfie.getContentType();
+        return ResponseEntity.ok(ApiResponse.success(punchService.punchManual(kiosk, action, identifier, bytes, type)));
+    }
 }
