@@ -841,6 +841,23 @@ function EmployeeTasksDialog({ employee, roster, isAdmin, onClose, onChanged }: 
     setMoving(null); setPicked(new Map()); setReloadKey(k => k + 1); onChanged();
   };
 
+  // Take the task off this employee (the task itself stays and goes back to the unassigned pool).
+  const remove = async (list: TaskBoardRow[]) => {
+    if (employee.resourceId == null || list.length === 0) return;
+    const what = list.length === 1 ? `"${list[0].taskName}"` : `${list.length} tasks`;
+    if (!window.confirm(`Remove ${what} from ${employee.name}? ${list.length === 1 ? "It" : "They"} will go back to unassigned.`)) return;
+    setBusy(true);
+    let ok = 0; const failed: string[] = [];
+    for (const t of list) {
+      try { await api.delete(`/tasks/${t.id}/assignments/EMPLOYEE/${employee.resourceId}`); ok++; }
+      catch { failed.push(t.taskName); }
+    }
+    setBusy(false);
+    if (ok) toast.success(ok === 1 ? `Removed from ${employee.name}` : `${ok} tasks removed from ${employee.name}`);
+    if (failed.length) toast.error(`Could not remove: ${failed.slice(0, 3).join(", ")}${failed.length > 3 ? ` +${failed.length - 3} more` : ""}`);
+    setPicked(new Map()); setReloadKey(k => k + 1); onChanged();
+  };
+
   const openHref = (t: TaskBoardRow) => t.projectId ? `/projects/${t.projectId}` : t.leadId ? `/leads/${t.leadId}` : null;
 
   const tabBtn = (k: "assigned" | "completed", label: string, n: number) => (
@@ -927,6 +944,8 @@ function EmployeeTasksDialog({ employee, roster, isAdmin, onClose, onChanged }: 
                 <span className="text-sm font-medium text-emerald-800">{picked.size} selected</span>
                 <div className="flex gap-2">
                   <Button size="sm" variant="ghost" onClick={() => setPicked(new Map())}>Clear</Button>
+                  <Button size="sm" variant="outline" className="border-red-300 text-red-600 hover:bg-red-50" disabled={busy}
+                    onClick={() => remove([...picked.values()])}>Remove selected</Button>
                   <Button size="sm" onClick={() => { setMoving([...picked.values()]); setPickSearch(""); }}>Move selected…</Button>
                 </div>
               </div>
@@ -982,6 +1001,12 @@ function EmployeeTasksDialog({ employee, roster, isAdmin, onClose, onChanged }: 
                     )}
                     {canMove && (
                       <Button size="sm" variant="outline" className="h-8 shrink-0" onClick={() => { setMoving([t]); setPickSearch(""); }}>Change person</Button>
+                    )}
+                    {canMove && (
+                      <Button size="sm" variant="ghost" className="h-8 shrink-0 px-2 text-red-600 hover:bg-red-50 hover:text-red-700" title="Remove from this employee"
+                        disabled={busy} onClick={() => remove([t])}>
+                        <X className="h-4 w-4" />
+                      </Button>
                     )}
                   </div>
                 );
