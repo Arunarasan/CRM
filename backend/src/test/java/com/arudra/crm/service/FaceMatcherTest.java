@@ -28,7 +28,7 @@ class FaceMatcherTest {
 
     @Test
     void borderlineFaceIsAcceptedButWeak() {
-        var r = FaceMatcher.identify(vec(0.1, 0.46), List.of(new Sample(1, vec(0.1, 0)), new Sample(2, vec(-0.5, 0))));
+        var r = FaceMatcher.identify(vec(0.1, 0.52), List.of(new Sample(1, vec(0.1, 0)), new Sample(2, vec(-0.5, 0))));
         assertEquals(Verdict.WEAK, r.verdict());
         assertEquals(1L, r.employeeId());
     }
