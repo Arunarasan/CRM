@@ -8,6 +8,7 @@ import { employeePortalApi } from '@/api/employeePortalApi';
 import Logo from '@/components/brand/Logo';
 import { useT } from '@/i18n';
 import { usePendingPhoto } from '../employeePortal/usePendingPhoto';
+import RequestsTabs, { isRequestsRoute } from '../employeePortal/RequestsTabs';
 
 /**
  * Mobile-first shell for the Employee Task module — premium forest-green header,
@@ -46,9 +47,9 @@ export default function MobileLayout() {
   // (/employee/more), from which attendance, salary, documents, settings, etc. hang.
   const navItems = [
     { to: '/employee', labelKey: 'portal.nav.home', icon: Home, match: (p: string) => p === '/employee' },
-    { to: '/employee/tasks', labelKey: 'portal.nav.tasks', icon: ListChecks, match: (p: string) => p.startsWith('/employee/tasks') },
+    { to: '/employee/work', labelKey: 'pw.nav.work', icon: ListChecks, match: (p: string) => p.startsWith('/employee/work') || p.startsWith('/employee/tasks') },
     { to: '/employee/gifts', labelKey: 'pw.nav.gifts', icon: Gift, badge: newGifts, match: (p: string) => p.startsWith('/employee/gifts') },
-    { to: '/employee/requests', labelKey: 'portal.nav.requests', icon: Inbox, match: (p: string) => ['/employee/requests', '/employee/leave', '/employee/leads', '/employee/daily-reports'].some((r) => p.startsWith(r)) },
+    { to: '/employee/requests', labelKey: 'portal.nav.requests', icon: Inbox, match: isRequestsRoute },
     { to: '/employee/more', labelKey: 'portal.nav.more', icon: LayoutGrid, match: (p: string) => ['/employee/more', '/employee/profile', '/employee/attendance', '/employee/salary', '/employee/documents', '/employee/timesheet', '/employee/settings'].some((r) => p.startsWith(r)) },
   ];
 
@@ -104,6 +105,7 @@ export default function MobileLayout() {
       {/* Wide pages dock their own sticky action bar at the bottom, so no FAB clearance (sticky bars
           stop short of a scroll container's bottom padding) and no floating search covering it. */}
       <main className={`flex-1 overflow-y-auto ${wide ? '' : 'pb-24'}`}>
+        {isRequestsRoute(location.pathname) && <RequestsTabs />}
         <Outlet />
       </main>
 

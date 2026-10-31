@@ -38,7 +38,7 @@ const LANES: Record<'PROJECTS' | 'ORDERS', string[]> = {
   PROJECTS: ['PROJECT', 'FIELD_WORK'],
   ORDERS: ['STITCHING', 'INSTALLATION'],
 };
-const LEAD_LANES = ['LEAD', 'ENQUIRY', 'CALL'];
+export const LEAD_LANES = ['LEAD', 'ENQUIRY', 'CALL'];
 
 const TABS: { key: Tab; icon: React.ComponentType<{ className?: string }> }[] = [
   { key: 'LEADS', icon: Users },
@@ -53,7 +53,7 @@ const inTab = (tab: Tab) => (t: TaskCardType) => {
 };
 
 /** Leads tab: one card per lead — the later stage (Measure & Quote) wins over Requirement. */
-const foldLeads = (list: TaskCardType[]): TaskCardType[] => {
+export const foldLeads = (list: TaskCardType[]): TaskCardType[] => {
   const byLead = new Map<number, TaskCardType>();
   const out: TaskCardType[] = [];
   for (const t of list) {
@@ -70,7 +70,7 @@ const foldLeads = (list: TaskCardType[]): TaskCardType[] => {
 // The server decides the lifecycle; only ACTIVE work counts as open. Status is a fallback for old responses.
 const lifecycleOf = (t: TaskCardType) =>
   t.lifecycle ?? (t.status === 'COMPLETED' ? 'DONE' : t.status === 'CANCELLED' ? 'CANCELLED' : 'ACTIVE');
-const isActive = (t: TaskCardType) => lifecycleOf(t) === 'ACTIVE';
+export const isActive = (t: TaskCardType) => lifecycleOf(t) === 'ACTIVE';
 const isSubmitted = (t: TaskCardType) => lifecycleOf(t) === 'SUBMITTED';
 
 /** Which urgency bucket an active task falls into. */

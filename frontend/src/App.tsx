@@ -117,6 +117,7 @@ const NotificationCenter = lazy(() => import("./pages/NotificationCenter"));
 const MobileLayout = lazy(() => import("./pages/employeeTasks/MobileLayout"));
 const MobileHome = lazy(() => import("./pages/employeeTasks/MobileHome"));
 const TaskListMobile = lazy(() => import("./pages/employeeTasks/TaskList"));
+const WorkListMobile = lazy(() => import("./pages/employeeTasks/WorkList"));
 const PortalSearch = lazy(() => import("./pages/employeeTasks/PortalSearch"));
 const TaskDetailMobile = lazy(() => import("./pages/employeeTasks/TaskDetail"));
 const EmployeeVisitMeasure = lazy(() => import("./pages/employeeTasks/EmployeeVisitMeasure"));
@@ -333,6 +334,7 @@ function App() {
           {/* Mobile-first Employee Task module — separate shell, does not touch DashboardLayout */}
           <Route path="/employee" element={<EmployeeGuard><MobileLayout /></EmployeeGuard>}>
             <Route index element={<MobileHome />} />
+            <Route path="work" element={<WorkListMobile />} />
             <Route path="tasks" element={<TaskListMobile />} />
             <Route path="search" element={<PortalSearch />} />
             <Route path="tasks/:id" element={<TaskDetailMobile />} />

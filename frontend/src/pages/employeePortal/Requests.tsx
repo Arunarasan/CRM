@@ -1,31 +1,13 @@
 import { useNavigate } from 'react-router-dom';
-import {
-  Boxes, Users, UserPlus, ClipboardList, Plane, ChevronRight, PackageCheck, Truck, PhoneCall,
-} from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import { useT } from '@/i18n';
+import { REQUEST_ITEMS } from './RequestsTabs';
 
 /**
  * Requests hub — the "Requests" bottom-nav tab. A launchpad for every self-service request an
- * employee can raise. Entries marked `soon` are wired as their backend/frontend phases land
- * (Material, Manpower, Leads, Daily Reports); Leave is already live.
+ * employee can raise; the tab bar above it (RequestsTabs) is rendered by MobileLayout.
  */
-const ITEMS: {
-  to: string;
-  labelKey: string;
-  hintKey: string;
-  icon: typeof Boxes;
-  color: string;
-  soon?: boolean;
-}[] = [
-  { to: '/employee/goods-receipts', labelKey: 'pw.requests.goodsReceipt', hintKey: 'pw.requests.goodsReceiptHint', icon: PackageCheck, color: 'text-blue-600' },
-  { to: '/employee/deliveries', labelKey: 'pw.requests.goodsDelivery', hintKey: 'pw.requests.goodsDeliveryHint', icon: Truck, color: 'text-rose-600' },
-  { to: '/employee/call-leads', labelKey: 'pw.requests.callLeads', hintKey: 'pw.requests.callLeadsHint', icon: PhoneCall, color: 'text-sky-600' },
-  { to: '/employee/requests/material', labelKey: 'pw.requests.material', hintKey: 'pw.requests.materialHint', icon: Boxes, color: 'text-orange-600' },
-  { to: '/employee/requests/manpower', labelKey: 'pw.requests.manpower', hintKey: 'pw.requests.manpowerHint', icon: Users, color: 'text-emerald-600' },
-  { to: '/employee/leads', labelKey: 'pw.requests.leads', hintKey: 'pw.requests.leadsHint', icon: UserPlus, color: 'text-emerald-600' },
-  { to: '/employee/daily-reports', labelKey: 'pw.requests.dailyReports', hintKey: 'pw.requests.dailyReportsHint', icon: ClipboardList, color: 'text-emerald-600' },
-  { to: '/employee/leave', labelKey: 'pw.requests.leave', hintKey: 'pw.requests.leaveHint', icon: Plane, color: 'text-violet-600' },
-];
+const ITEMS = REQUEST_ITEMS.map((i) => ({ ...i, soon: false }));
 
 export default function Requests() {
   const navigate = useNavigate();
