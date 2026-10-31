@@ -137,6 +137,21 @@ public class HrController {
     @Autowired
     private com.arudra.crm.service.EmployeeLoginService employeeLoginService;
 
+    // --- Reset test data: wipes work history, keeps the person (admin only; dryRun counts only) ---
+    @Autowired
+    private com.arudra.crm.service.EmployeeWorkResetService employeeWorkResetService;
+
+    @PostMapping("/employees/reset-work")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<Map<String, Object>> resetEmployeeWork(@RequestBody(required = false) Map<String, Object> body) {
+        boolean dryRun = body == null || !Boolean.FALSE.equals(body.get("dryRun"));
+        List<Long> ids = null;
+        if (body != null && body.get("employeeIds") instanceof List<?> l) {
+            ids = l.stream().map(o -> ((Number) o).longValue()).toList();
+        }
+        return ResponseEntity.ok(employeeWorkResetService.reset(ids, dryRun));
+    }
+
     @GetMapping("/employees/{id}/login")
     @PreAuthorize("hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<Map<String, Object>> employeeLogin(@PathVariable Long id) {

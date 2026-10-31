@@ -9,6 +9,7 @@ import { workforceApi } from "@/api/workforceApi";
 import type { WorkforceDetail, WorkforceMeta, WorkforceRequest } from "@/types/workforce";
 import { FaceEnrollmentCard } from "@/pages/hr/faceAdmin";
 import { LoginAccountCard } from "@/pages/hr/LoginAccountCard";
+import { ResetWorkDataCard } from "@/pages/hr/ResetWorkDataCard";
 import { useAuth } from "@/hooks/useAuth";
 import { FingerprintEnrollmentCard } from "@/pages/hr/fingerprintAdmin";
 
@@ -200,6 +201,7 @@ export default function EmployeeOverviewTab({
       <EmergencyCard detail={detail} canEdit={canEdit} save={save} />
       <EmploymentCard detail={detail} meta={meta} canEdit={canEdit} save={save} />
       {isAdmin && detail.employee?.id != null && <LoginAccountCard employeeId={detail.employee.id} onChanged={onChanged} />}
+      {isAdmin && detail.employee?.id != null && <ResetWorkDataCard employeeId={detail.employee.id} employeeName={detail.workforce.fullName ?? ""} onChanged={onChanged} />}
       {detail.employee?.id != null && <FaceEnrollmentCard employeeId={detail.employee.id} canEdit={canEdit} />}
       {detail.employee?.id != null && <FingerprintEnrollmentCard employeeId={detail.employee.id} canEdit={canEdit} />}
       <BankCard detail={detail} canEdit={canEdit} save={save} />
