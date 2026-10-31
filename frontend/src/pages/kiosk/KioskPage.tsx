@@ -89,7 +89,7 @@ export default function KioskPage() {
   // Result and error cards close themselves.
   useEffect(() => {
     if (view.kind !== 'result' && view.kind !== 'error') return;
-    const failed = view.kind === 'error' || ['NOT_RECOGNISED', 'AMBIGUOUS', 'NOT_FOUND'].includes(view.done.result.outcome);
+    const failed = view.kind === 'error' || ['NOT_RECOGNISED', 'AMBIGUOUS', 'NOT_FOUND'].includes(view.done.result.outcome) || view.done.result.match === 'WEAK';
     const t = window.setTimeout(() => setView({ kind: 'home' }), failed ? RESULT_MS * 3 : RESULT_MS);
     return () => window.clearTimeout(t);
   }, [view]);
@@ -288,8 +288,16 @@ function ResultCard({ action, done, onClose, onManual }: { action: ScanAction; d
       <Icon className={`mx-auto mt-4 h-10 w-10 ${color}`} />
       <p className="mt-2 text-xl font-bold">{title}</p>
       <p className="mt-1 text-sm text-slate-600">{detail}</p>
-      {r.needsApproval && (
-        <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">Recorded. HR will confirm this {action === 'IN' ? 'check-in' : 'check-out'}.</p>
+      {tone !== 'bad' && r.match === 'STRONG' && (
+        <p className="mt-3 inline-block rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">Strong match · no approval needed</p>
+      )}
+      {tone !== 'bad' && r.match === 'WEAK' && (
+        <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          <b>Weak match.</b> Recorded, but HR must approve this {action === 'IN' ? 'check-in' : 'check-out'}. Scan again within a minute and a clear match clears it.
+        </p>
+      )}
+      {tone !== 'bad' && r.match === 'MANUAL' && (
+        <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">Typed ID + photo. HR will check the photo and approve this {action === 'IN' ? 'check-in' : 'check-out'}.</p>
       )}
       {r.employeeCode && <p className="mt-3 text-xs text-slate-400">{r.employeeCode}</p>}
       {tone === 'bad' && (

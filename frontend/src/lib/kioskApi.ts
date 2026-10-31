@@ -51,6 +51,8 @@ export interface KioskPunchResult {
   minutesWorked?: number | null;
   selfieUrl?: string | null;
   needsApproval: boolean;
+  /** How good the match was: STRONG (counts at once), WEAK (held for admin), MANUAL (typed ID + photo, held for admin). */
+  match?: 'STRONG' | 'WEAK' | 'MANUAL';
 }
 
 const unwrap = <T,>(body: any): T => (body && typeof body === 'object' && 'success' in body ? body.data : body) as T;

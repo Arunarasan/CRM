@@ -190,8 +190,11 @@ public class KioskPunchService {
         log.info("Kiosk {} {} employee={} method={} outcome={} value={} weak={} liveness={}", kiosk.getId(), checkIn ? "IN" : "OUT",
                 employee.getId(), method, res.outcome(), String.format(java.util.Locale.ROOT, "%.3f", value), weak, liveness);
         boolean recorded = res.outcome().equals("CHECKED_IN") || res.outcome().equals("CHECKED_OUT");
-        return outcome(res.outcome(), employee, res.time() == null ? null : res.time().toString(),
+        Map<String, Object> reply = outcome(res.outcome(), employee, res.time() == null ? null : res.time().toString(),
                 res.minutesWorked(), recorded ? selfieUrl : null, recorded && weak);
+        // How good the match was, so the kiosk screen can say it: STRONG | WEAK | MANUAL (typed ID + photo).
+        reply.put("match", EmployeeTimeService.KIOSK_MANUAL.equals(method) ? "MANUAL" : weak ? "WEAK" : "STRONG");
+        return reply;
     }
 
     private static boolean parseAction(String action) {

@@ -180,6 +180,40 @@ public class EmployeeTimeService {
         return since >= 0 && since <= AttendanceVerificationService.KIOSK_RETRY_GRACE_SECONDS + 5;
     }
 
+    /**
+     * A kiosk check-out held for a weak match a moment ago, followed by a strong scan of the same person:
+     * lift the hold. Only when the check-in itself was a strong match, since a weak check-in keeps its own hold.
+     */
+    private KioskPunchOutcome liftRecentWeakCheckOut(Employee employee, boolean finger, double value) {
+        Attendance att = todayRow(employee.getId());
+        if (att == null || att.getDate() == null) return null;
+        List<AttendanceSession> all = sessionRepository.findByAttendanceIdOrderByIdAsc(att.getId());
+        for (int i = all.size() - 1; i >= 0; i--) {
+            AttendanceSession s = all.get(i);
+            if (s.getCheckOutTime() == null) continue;
+            if (!AttendanceSession.SOURCE_KIOSK.equals(s.getCheckOutSource()) || !s.isAwaitingApproval()) return null;
+            String m = s.getVerificationMethod();
+            if (!"FACE".equals(m) && !"FINGER".equals(m)) return null;
+            long since = Duration.between(att.getDate().atTime(s.getCheckOutTime()), java.time.LocalDateTime.now()).getSeconds();
+            if (since < 0 || since > AttendanceVerificationService.KIOSK_RETRY_GRACE_SECONDS + 5) return null;
+            boolean checkInStrong = "FINGER".equals(m)
+                    ? s.getFingerScoreIn() != null && s.getFingerScoreIn() >= FingerprintPolicy.CONFIDENT_MIN
+                    : s.getFaceDistanceIn() != null && s.getFaceDistanceIn() <= FaceMatcher.CONFIDENT_MAX;
+            if (!checkInStrong) return null;
+            s.setVerified(true);
+            s.setFlagged(false);
+            s.setFlagReason(null);
+            s.setApprovalStatus(null);
+            if (finger) s.setFingerScoreOut(value); else s.setFaceDistanceOut(value);
+            sessionRepository.save(s);
+            syncAggregate(att, employee);
+            attendanceRepository.save(att);
+            long mins = s.getCheckInTime() == null ? 0 : Math.max(0, Duration.between(s.getCheckInTime(), s.getCheckOutTime()).toMinutes());
+            return new KioskPunchOutcome("CHECKED_OUT", s.getCheckOutTime(), mins, s.getId());
+        }
+        return null;
+    }
+
     /** Saves a kiosk selfie's link on a session after the punch was already recorded (the upload runs off the request). */
     @Transactional
     public void attachKioskSelfie(Long sessionId, boolean checkIn, String url) {
@@ -258,7 +292,14 @@ public class EmployeeTimeService {
             return new KioskPunchOutcome("CHECKED_IN", now, null, savedIn.getId());
         }
 
-        if (open == null) return new KioskPunchOutcome("NOT_IN", null, null);
+        if (open == null) {
+            // Just checked out with a weak match and now a strong one: lift that hold (see isRecentWeakKioskCheckOut).
+            if (!weakMatch && !manual) {
+                KioskPunchOutcome lifted = liftRecentWeakCheckOut(employee, finger, value);
+                if (lifted != null) return lifted;
+            }
+            return new KioskPunchOutcome("NOT_IN", null, null);
+        }
         java.time.LocalDateTime inAt = live.getDate().atTime(open.getCheckInTime());
         long sinceIn = Duration.between(inAt, java.time.LocalDateTime.now()).getSeconds();
         if (sinceIn >= 0 && sinceIn < KIOSK_MIN_SESSION_SECONDS) {
