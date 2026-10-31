@@ -4,6 +4,7 @@ import com.arudra.crm.entity.AttendanceLocation;
 import com.arudra.crm.entity.AttendanceSession;
 import com.arudra.crm.entity.Employee;
 import com.arudra.crm.repository.AttendanceLocationRepository;
+import com.arudra.crm.repository.AttendanceSessionRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -12,6 +13,9 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Verifies a clock-in {@link AttendanceSession} against the employee's required method and stamps the
@@ -33,6 +37,32 @@ public class AttendanceVerificationService {
 
     @Autowired private AttendanceLocationRepository locationRepository;
     @Autowired private NotificationService notificationService;
+    @Autowired private AttendanceSessionRepository sessionRepository;
+
+    /**
+     * A weak kiosk match gets a minute's grace: if the person scans again and matches strongly, the hold is
+     * lifted and nobody needs to look at it, so admins are only alerted if it is STILL waiting after this.
+     */
+    public static final long KIOSK_RETRY_GRACE_SECONDS = 60;
+    private final ScheduledExecutorService delayedAlerts = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread t = new Thread(r, "kiosk-weak-alert");
+        t.setDaemon(true);
+        return t;
+    });
+
+    /** Alerts admins about a weak kiosk punch only if it is still unapproved after the retry grace period. */
+    public void notifyKioskWeakLater(Long sessionId, Employee employee, String reason) {
+        if (sessionId == null) return;
+        delayedAlerts.schedule(() -> {
+            try {
+                sessionRepository.findById(sessionId).ifPresent(s -> {
+                    if (s.isAwaitingApproval()) notifyFlagged(employee, reason);
+                });
+            } catch (RuntimeException e) {
+                log.warn("Weak kiosk punch alert for session {} failed: {}", sessionId, e.getMessage());
+            }
+        }, KIOSK_RETRY_GRACE_SECONDS + 5, TimeUnit.SECONDS);
+    }
 
     private static final double EARTH_RADIUS_M = 6_371_000d;
     /** Cap on how much GPS-reported accuracy can widen the fence, so a wildly imprecise fix can't
@@ -180,7 +210,7 @@ public class AttendanceVerificationService {
             session.setFlagged(weakMatch);
             session.setFlagReason(weakMatch ? clip(reason, 255) : null);
             session.setApprovalStatus(weakMatch ? "PENDING" : null);
-            if (weakMatch) notifyFlagged(employee, reason);
+            if (weakMatch && !isKioskBiometric(method)) notifyFlagged(employee, reason); // kiosk ones: after the grace period
             return;
         }
         if (!weakMatch) return; // a clean check-out does not clear an earlier flag
@@ -190,7 +220,11 @@ public class AttendanceVerificationService {
         session.setApprovalStatus("PENDING");
         String prior = session.getFlagReason();
         session.setFlagReason(clip(prior == null || prior.isBlank() ? reason : prior + " · " + reason, 255));
-        if (!alreadyWaiting) notifyFlagged(employee, reason);
+        if (!alreadyWaiting && !isKioskBiometric(method)) notifyFlagged(employee, reason);
+    }
+
+    private static boolean isKioskBiometric(String method) {
+        return "FACE".equals(method) || "FINGER".equals(method);
     }
 
     // --- helpers -----------------------------------------------------------

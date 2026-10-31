@@ -170,6 +170,16 @@ public class EmployeeTimeService {
         public KioskPunchOutcome(String outcome, LocalTime time, Long minutesWorked) { this(outcome, time, minutesWorked, null); }
     }
 
+    /** True for an open kiosk face/finger check-in still on hold for a weak match, made within the retry grace period. */
+    private boolean isRecentWeakKioskCheckIn(Attendance att, AttendanceSession s) {
+        if (!AttendanceSession.SOURCE_KIOSK.equals(s.getCheckInSource()) || !s.isAwaitingApproval()) return false;
+        String m = s.getVerificationMethod();
+        if (!"FACE".equals(m) && !"FINGER".equals(m)) return false; // a manual ID punch always needs an admin
+        if (s.getCheckInTime() == null || att.getDate() == null) return false;
+        long since = Duration.between(att.getDate().atTime(s.getCheckInTime()), java.time.LocalDateTime.now()).getSeconds();
+        return since >= 0 && since <= AttendanceVerificationService.KIOSK_RETRY_GRACE_SECONDS + 5;
+    }
+
     /** Saves a kiosk selfie's link on a session after the punch was already recorded (the upload runs off the request). */
     @Transactional
     public void attachKioskSelfie(Long sessionId, boolean checkIn, String url) {
@@ -205,7 +215,22 @@ public class EmployeeTimeService {
         AttendanceSession open = live == null ? null : openSession(live);
 
         if (checkIn) {
-            if (open != null) return new KioskPunchOutcome("ALREADY_IN", open.getCheckInTime(), null);
+            if (open != null) {
+                // A weak face/finger check-in a moment ago, and now a strong one: it is clearly the same
+                // person, so lift the hold instead of leaving it for an admin.
+                if (!weakMatch && !manual && isRecentWeakKioskCheckIn(live, open)) {
+                    open.setVerified(true);
+                    open.setFlagged(false);
+                    open.setFlagReason(null);
+                    open.setApprovalStatus(null);
+                    if (finger) open.setFingerScoreIn(value); else open.setFaceDistanceIn(value);
+                    sessionRepository.save(open);
+                    syncAggregate(live, employee);
+                    attendanceRepository.save(live);
+                    return new KioskPunchOutcome("CHECKED_IN", open.getCheckInTime(), null, open.getId());
+                }
+                return new KioskPunchOutcome("ALREADY_IN", open.getCheckInTime(), null);
+            }
             Attendance att = todayRow(employee.getId());
             if (att == null) {
                 att = new Attendance();
@@ -229,6 +254,7 @@ public class EmployeeTimeService {
             att.setStatus("PRESENT");
             syncAggregate(att, employee);
             attendanceRepository.save(att);
+            if (weakMatch && !manual) verificationService.notifyKioskWeakLater(savedIn.getId(), employee, weakReason);
             return new KioskPunchOutcome("CHECKED_IN", now, null, savedIn.getId());
         }
 
@@ -245,10 +271,12 @@ public class EmployeeTimeService {
         if (finger) open.setFingerScoreOut(value); else if (!manual) open.setFaceDistanceOut(value);
         open.setSelfieOutUrl(selfieUrl.get());
         open.setLivenessOut(liveness);
+        boolean wasWaiting = open.isAwaitingApproval();
         verificationService.applyBiometric(open, employee, method, weakMatch, weakReason, false);
         AttendanceSession savedOut = sessionRepository.save(open);
         syncAggregate(live, employee);
         attendanceRepository.save(live);
+        if (weakMatch && !manual && !wasWaiting) verificationService.notifyKioskWeakLater(savedOut.getId(), employee, weakReason);
         return new KioskPunchOutcome("CHECKED_OUT", now, Math.max(0, sinceIn / 60), savedOut.getId());
     }
 
