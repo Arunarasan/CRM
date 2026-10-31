@@ -28,6 +28,16 @@ import java.util.stream.Collectors;
 @Service
 public class EmployeeTaskService {
 
+    /** Employees can't pick or join tasks themselves — the office assigns work (admins are exempt). */
+    @org.springframework.beans.factory.annotation.Value("${app.tasks.employee-pick-enabled:false}")
+    private boolean employeePickEnabled;
+
+    private void requirePickAllowed(User employee) {
+        if (!employeePickEnabled && !isAdminUser(employee)) {
+            throw new IllegalStateException("Picking tasks is turned off. Your manager assigns work to you.");
+        }
+    }
+
     @Autowired
     private ProjectWorkService projectWorkService;
 
@@ -342,6 +352,7 @@ public class EmployeeTaskService {
     @Transactional
     @LogActivity(module = "EMPLOYEE_TASK", action = "SELF_ASSIGN")
     public Task selfAssign(Long taskId, User employee) {
+        requirePickAllowed(employee);
         // Pessimistic row lock serializes concurrent picks so only one employee can win a task.
         Task task = taskRepository.findByIdForUpdate(taskId)
                 .orElseThrow(() -> new RuntimeException("Task not found"));
@@ -394,6 +405,7 @@ public class EmployeeTaskService {
     @Transactional
     @LogActivity(module = "EMPLOYEE_TASK", action = "JOIN")
     public Task joinTask(Long taskId, User employee) {
+        requirePickAllowed(employee);
         Task task = taskRepository.findByIdForUpdate(taskId)
                 .orElseThrow(() -> new RuntimeException("Task not found"));
         if ("COMPLETED".equals(task.getStatus()) || "CANCELLED".equals(task.getStatus())) {
@@ -766,6 +778,7 @@ public class EmployeeTaskService {
      * card carries {@code canPick} reflecting the employee's remaining capacity.
      */
     public List<Map<String, Object>> getAvailablePool(User employee) {
+        if (!employeePickEnabled && !isAdminUser(employee)) return new ArrayList<>(); // nothing to pick
         // Workflow tasks wait in the pool as AVAILABLE; project / order / installation work is created
         // PENDING (or follows its order to IN_PROGRESS) — offer those too while nobody holds them.
         List<Task> candidates = new ArrayList<>(taskRepository.findByStatus("AVAILABLE"));
