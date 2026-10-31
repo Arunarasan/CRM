@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  BadgeIndianRupee, Check, CheckCircle2, Clock, FileText, Inbox, MoreHorizontal, Pencil, PlayCircle, Settings2, X,
+  AlertTriangle, BadgeIndianRupee, Check, CheckCircle2, Clock, FileText, Inbox, MoreHorizontal, Pencil, PlayCircle, Settings2, X,
 } from "lucide-react";
 import { payrollApi } from "@/api/payrollApi";
 import type { PayrollLine, PayrollPreviewRow, PendingMoneyRequest } from "@/types/payroll";
@@ -129,6 +129,16 @@ export default function PayRun({
   const paidTotal = rows.filter((r) => r.status === "PAID").reduce((a, r) => a + n(r.net), 0);
   const madeTotal = rows.filter((r) => r.status !== "NONE").reduce((a, r) => a + n(r.net), 0);
   // Ready to generate = not made yet, has a usable basis, and actually logged hours.
+  // Punches still waiting for an admin decision: that time is NOT in anyone's pay until approved.
+  const unapprovedRows = rows.filter((r) => n(r.preview?.pendingSessions) > 0);
+  const unapprovedPunches = unapprovedRows.reduce((a, r) => a + n(r.preview?.pendingSessions), 0);
+  const unapprovedHours = unapprovedRows.reduce((a, r) => a + n(r.preview?.pendingHours), 0);
+  const pendingWarn = (list: RunRow[]) => {
+    const hit = list.filter((r) => n(r.preview?.pendingSessions) > 0);
+    if (!hit.length) return "";
+    const punches = hit.reduce((a, r) => a + n(r.preview?.pendingSessions), 0);
+    return ` WARNING: ${hit.length} of these ${hit.length === 1 ? "has" : "have"} ${punches} attendance punch${punches === 1 ? "" : "es"} not approved yet (${hit.map((r) => r.name).slice(0, 3).join(", ")}${hit.length > 3 ? "…" : ""}). That time will NOT be paid. Approve them in Attendance first, or make the payslip anyway and fix it later.`;
+  };
   const readyToMake = rows.filter((r) => r.status === "NONE" && choice[r.id] && n(r.preview?.workedHours) > 0);
 
   const visible = useMemo(() => {
@@ -177,7 +187,7 @@ export default function PayRun({
 
   const askGenerate = (list: RunRow[]) => setConfirm({
     title: `Make ${list.length} payslip${list.length === 1 ? "" : "s"}?`,
-    body: "Payslips are built from attendance hours on each person's chosen basis, plus approved bonuses, deductions, repayments and lead / review pay. You can check and edit each one before approving.",
+    body: "Payslips are built from attendance hours on each person's chosen basis, plus approved bonuses, deductions, repayments and lead / review pay. You can check and edit each one before approving." + pendingWarn(list),
     cta: `Make ${list.length}`, run: () => generate(list),
   });
   const askApprove = (list: RunRow[]) => setConfirm({
@@ -194,11 +204,18 @@ export default function PayRun({
   const generateOne = (r: RunRow) => {
     const b = choice[r.id];
     if (!b) { onEditWage?.(r.id); return; }
-    setBusy(true);
-    payrollApi.generatePayslip(r.id, month, year, b)
-      .then(() => { toast.success("Payslip made — check it, then approve."); refresh(); onOpenSlip(r.id, r.name); })
-      .catch((e) => toast.error(errMsg(e, "Couldn't make the payslip")))
-      .finally(() => setBusy(false));
+    const make = () => {
+      setBusy(true);
+      payrollApi.generatePayslip(r.id, month, year, b)
+        .then(() => { toast.success("Payslip made — check it, then approve."); refresh(); onOpenSlip(r.id, r.name); })
+        .catch((e) => toast.error(errMsg(e, "Couldn't make the payslip")))
+        .finally(() => setBusy(false));
+    };
+    if (n(r.preview?.pendingSessions) > 0) {
+      setConfirm({ title: `Make ${r.name}'s payslip?`, body: `Not all attendance is approved.${pendingWarn([r])}`, cta: "Make anyway", run: async () => { make(); } });
+      return;
+    }
+    make();
   };
   const approveOne = (r: RunRow) => run(() => approveAll([r]));
 
@@ -229,6 +246,16 @@ export default function PayRun({
 
   return (
     <div className="space-y-4">
+      {unapprovedPunches > 0 && (
+        <div role="alert" className="flex flex-col gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 sm:flex-row sm:items-center">
+          <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600" />
+          <p className="flex-1">
+            <b>{unapprovedPunches} attendance punch{unapprovedPunches === 1 ? "" : "es"} ({hrs(unapprovedHours)} h) from {unapprovedRows.length} employee{unapprovedRows.length === 1 ? "" : "s"} still need admin approval.</b>{" "}
+            Until they are approved that time is not paid, so payslips made now will be short. Approve or reject them before you generate.
+          </p>
+          <Button asChild size="sm" variant="outline" className="shrink-0"><Link to="/workforce/attendance">Review punches</Link></Button>
+        </div>
+      )}
       {/* Where the month stands — each step filters the list; the next bulk action sits on the right */}
       <section className="rounded-xl border bg-card p-3 shadow-sm md:p-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
