@@ -7,7 +7,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Loader2, X } from 'lucide-react';
 import { kioskApi, KioskPunchResult } from '@/lib/kioskApi';
-import { attachWarmCamera, leaveCamera, loadFaceEngine, scanFace, scanPose, snapshot } from '@/lib/faceEngine';
+import { attachWarmCamera, faceDistance, leaveCamera, loadFaceEngine, scanFace, scanPose, snapshot } from '@/lib/faceEngine';
 import { FRONTAL_OFFSET, LIVENESS_PROMPT, LivenessChallenge, pickChallenge } from '@/lib/liveness';
 
 export type ScanAction = 'IN' | 'OUT';
@@ -29,7 +29,10 @@ export interface ScanFail {
 type Stage = 'loading' | 'find' | 'challenge' | 'capture' | 'sending';
 
 /** Face must fill at least this share of the frame width before we trust a reading. */
-const MIN_SHARE = 0.25;
+const MIN_SHARE = 0.28;
+/** Clear frames averaged into one signature, and how far apart two frames of one steady face may be. */
+const GOOD_FRAMES = 2;
+const SAME_FRAME_MAX = 0.3;
 const CHALLENGE_MS = 9000;
 /**
  * Ask for a blink / head turn before the punch. Off for speed: a check is just "show your face"
@@ -76,6 +79,7 @@ export default function KioskScan({ action, onDone, onFail, onCancel, onSwitch, 
         let stg: Stage = 'find';
         setStage('find'); setHint('Look at the camera');
         let okFrames = 0;
+        const good: number[][] = [];
         let steady = 0;
         let challenge: LivenessChallenge | null = null;
         let challengeStart = 0;
@@ -84,21 +88,26 @@ export default function KioskScan({ action, onDone, onFail, onCancel, onSwitch, 
           if (Date.now() - started > TOTAL_MS) { failRef.current({ message: 'Timed out. Tap Check In or Check Out and try again.' }); return; }
           await nextFrame();
           if (!REQUIRE_LIVENESS) {
-            // Fast path: ONE pass per frame (detect + landmarks + face signature). The first clear,
-            // straight-on face is sent at once, no separate pose/hold/re-scan steps.
+            // Fast path: ONE pass per frame (detect + landmarks + face signature). Two clear, straight-on
+            // frames that agree with each other are averaged into one signature (less noise = a more
+            // reliable match), then sent at once. A frame that disagrees (blur / movement) is dropped.
             const f = await scanFace(video, 224);
             if (cancelled) return;
             if (f.state === 'none') { setHint('Look at the camera'); continue; }
             if (f.state === 'multiple') { setHint('One person at a time, please'); continue; }
             const r = f.reading;
             if (r.box.width / r.frameWidth < MIN_SHARE) { setHint('Come a little closer'); continue; }
-            if (r.score < 0.7) { setHint('Face the camera'); continue; }
+            if (r.score < 0.8) { setHint('Face the camera'); continue; }
             if (Math.abs(r.yaw - 0.5) >= FRONTAL_OFFSET) { setHint('Look straight at the camera'); continue; }
+            if (good.length > 0 && faceDistance(good[0], r.descriptor) > SAME_FRAME_MAX) good.length = 0; // unsteady: start over
+            good.push(r.descriptor);
+            if (good.length < GOOD_FRAMES) { setHint('Hold still…'); continue; }
+            const descriptor = good[0].map((_, i) => good.reduce((sum, d) => sum + d[i], 0) / good.length);
             setStage('sending'); setHint('Checking…');
             const selfie = await snapshot(video, 0.7, 360);
             leaveCamera(stream, video); stream = null;
             try {
-              const result = await kioskApi.punch(action, r.descriptor, selfie, null);
+              const result = await kioskApi.punch(action, descriptor, selfie, null);
               if (!cancelled) doneRef.current({ result, selfie });
             } catch (e: any) {
               if (cancelled) return;
