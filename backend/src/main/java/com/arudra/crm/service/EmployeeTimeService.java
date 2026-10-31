@@ -280,7 +280,7 @@ public class EmployeeTimeService {
             s.setCheckInSource(AttendanceSession.SOURCE_KIOSK);
             s.setKiosk(kiosk);
             s.setOfficeLocation(kiosk.getOfficeLocation());
-            if (finger) s.setFingerScoreIn(value); else if (!manual) s.setFaceDistanceIn(value);
+            if (finger) s.setFingerScoreIn(value); else if (!Double.isNaN(value)) s.setFaceDistanceIn(value);
             s.setSelfieInUrl(selfieUrl.get());
             s.setLivenessIn(liveness);
             verificationService.applyBiometric(s, employee, method, weakMatch, weakReason, true);
@@ -309,7 +309,7 @@ public class EmployeeTimeService {
         LocalTime now = LocalTime.now().withNano(0);
         open.setCheckOutTime(now);
         open.setCheckOutSource(AttendanceSession.SOURCE_KIOSK);
-        if (finger) open.setFingerScoreOut(value); else if (!manual) open.setFaceDistanceOut(value);
+        if (finger) open.setFingerScoreOut(value); else if (!Double.isNaN(value)) open.setFaceDistanceOut(value);
         open.setSelfieOutUrl(selfieUrl.get());
         open.setLivenessOut(liveness);
         boolean wasWaiting = open.isAwaitingApproval();

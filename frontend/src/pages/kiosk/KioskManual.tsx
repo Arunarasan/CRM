@@ -6,7 +6,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Loader2, X, Camera } from 'lucide-react';
 import { kioskApi } from '@/lib/kioskApi';
-import { attachWarmCamera, leaveCamera, snapshot } from '@/lib/faceEngine';
+import { attachWarmCamera, leaveCamera, scanFace, snapshot } from '@/lib/faceEngine';
 import type { ScanAction, ScanDone, ScanFail } from './KioskScan';
 
 export default function KioskManual({ action, onDone, onFail, onCancel }: {
@@ -41,7 +41,10 @@ export default function KioskManual({ action, onDone, onFail, onCancel }: {
     try {
       const selfie = await snapshot(video, 0.7, 480);
       if (!selfie) throw new Error('Could not take the photo. Try again.');
-      const result = await kioskApi.punchManual(action, identifier.trim(), selfie);
+      // Read the face in the photo too: if it matches this employee's enrolled face, no admin approval is needed.
+      let descriptor: number[] | null = null;
+      try { const f = await scanFace(video, 224); if (f.state === 'one') descriptor = f.reading.descriptor; } catch { /* the photo then waits for an admin */ }
+      const result = await kioskApi.punchManual(action, identifier.trim(), selfie, descriptor);
       onDone({ result, selfie, manual: true });
     } catch (e: any) {
       const status = e?.response?.status as number | undefined;
@@ -59,7 +62,7 @@ export default function KioskManual({ action, onDone, onFail, onCancel }: {
       </div>
 
       <div className="flex flex-1 flex-col items-center gap-4 overflow-y-auto px-5 pb-6">
-        <p className="text-center text-sm text-emerald-100">Type your employee ID or phone number, look at the camera and tap the button. An admin will approve it.</p>
+        <p className="text-center text-sm text-emerald-100">Type your employee ID or phone number, look at the camera and tap the button. If your face matches, it counts at once; otherwise an admin approves it.</p>
         <input
           value={identifier} onChange={(e) => setIdentifier(e.target.value)}
           placeholder="Employee ID or phone number" autoComplete="off" autoCapitalize="characters"

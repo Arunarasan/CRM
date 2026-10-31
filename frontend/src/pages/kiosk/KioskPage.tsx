@@ -268,8 +268,8 @@ function ResultCard({ action, done, onClose, onManual }: { action: ScanAction; d
   let title = '';
   let detail = '';
   switch (r.outcome) {
-    case 'CHECKED_IN': title = done.manual ? `Sent for approval, ${first}` : `Welcome, ${first}`; detail = `Checked in at ${hm(r.time)}`; break;
-    case 'CHECKED_OUT': title = done.manual ? `Sent for approval, ${first}` : `Goodbye, ${first}`; detail = `Checked out at ${hm(r.time)}${r.minutesWorked != null ? ` · ${worked(r.minutesWorked)} this session` : ''}`; break;
+    case 'CHECKED_IN': title = done.manual && r.needsApproval ? `Sent for approval, ${first}` : `Welcome, ${first}`; detail = `Checked in at ${hm(r.time)}`; break;
+    case 'CHECKED_OUT': title = done.manual && r.needsApproval ? `Sent for approval, ${first}` : `Goodbye, ${first}`; detail = `Checked out at ${hm(r.time)}${r.minutesWorked != null ? ` · ${worked(r.minutesWorked)} this session` : ''}`; break;
     case 'ALREADY_IN': tone = 'warn'; title = `${first}, you're already checked in`; detail = `Since ${hm(r.time)}. Use Check Out when you leave.`; break;
     case 'NOT_IN': tone = 'warn'; title = `${first}, you're not checked in`; detail = 'Use Check In first.'; break;
     case 'TOO_SOON': tone = 'warn'; title = `${first}, you just checked in`; detail = `At ${hm(r.time)}. Wait a couple of minutes before checking out.`; break;
@@ -296,8 +296,11 @@ function ResultCard({ action, done, onClose, onManual }: { action: ScanAction; d
           <b>Weak match.</b> Recorded, but HR must approve this {action === 'IN' ? 'check-in' : 'check-out'}. Scan again within a minute and a clear match clears it.
         </p>
       )}
+      {tone !== 'bad' && r.match === 'MANUAL_OK' && (
+        <p className="mt-3 inline-block rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">Photo matched your face · no approval needed</p>
+      )}
       {tone !== 'bad' && r.match === 'MANUAL' && (
-        <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">Typed ID + photo. HR will check the photo and approve this {action === 'IN' ? 'check-in' : 'check-out'}.</p>
+        <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">Typed ID + photo, face not matched. HR will check the photo and approve this {action === 'IN' ? 'check-in' : 'check-out'}.</p>
       )}
       {r.employeeCode && <p className="mt-3 text-xs text-slate-400">{r.employeeCode}</p>}
       {tone === 'bad' && (

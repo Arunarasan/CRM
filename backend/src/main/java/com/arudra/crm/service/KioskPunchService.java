@@ -139,7 +139,8 @@ public class KioskPunchService {
      * number and the kiosk takes a photo. The punch is ALWAYS recorded as flagged / pending so an admin
      * checks the photo before it counts. A photo is required.
      */
-    public Map<String, Object> punchManual(AttendanceKiosk kiosk, String action, String identifier, byte[] selfie, String selfieType) {
+    public Map<String, Object> punchManual(AttendanceKiosk kiosk, String action, String identifier, String descriptor,
+                                           byte[] selfie, String selfieType) {
         boolean checkIn = parseAction(action);
         if (selfie == null || selfie.length == 0) throw new IllegalArgumentException("Take a photo first.");
         String id = identifier == null ? "" : identifier.trim();
@@ -152,7 +153,31 @@ public class KioskPunchService {
             log.info("Kiosk {} manual punch: no unique active employee for '{}'", kiosk.getId(), id.replaceAll("\\d(?=\\d{3})", "*"));
             return outcome("NOT_FOUND", null, null, null, null, null);
         }
-        return record(kiosk, checkIn, employee, EmployeeTimeService.KIOSK_MANUAL, Double.NaN, true, null, selfie, selfieType);
+        // If the photo's face matches the claimed employee's enrolled face clearly (and nobody else's), it
+        // is verified: no approval. Anything else (no face read, weak, another person) waits for an admin.
+        double distance = Double.NaN;
+        boolean verified = false;
+        double[] live = descriptor == null || descriptor.isBlank() ? null : safeParse(descriptor);
+        if (live != null) {
+            List<FaceMatcher.Sample> samples = new ArrayList<>();
+            for (EmployeeFaceTemplate t : templateRepository.findAllActive()) {
+                Employee e = t.getEmployee();
+                if (e == null || !"ACTIVE".equalsIgnoreCase(e.getStatus())) continue;
+                double[] d = parsedDescriptor(t);
+                if (d != null) samples.add(new FaceMatcher.Sample(e.getId(), d));
+            }
+            FaceMatcher.Result match = FaceMatcher.identify(live, samples);
+            distance = match.distance();
+            verified = match.verdict() == FaceMatcher.Verdict.CONFIDENT && employee.getId().equals(match.employeeId());
+            log.info("Kiosk {} manual punch employee={} photo check: {} (best distance {})", kiosk.getId(), employee.getId(),
+                    verified ? "MATCH" : "no match", String.format(java.util.Locale.ROOT, "%.3f", distance));
+        }
+        return record(kiosk, checkIn, employee, EmployeeTimeService.KIOSK_MANUAL, verified ? distance : Double.NaN, !verified, null, selfie, selfieType);
+    }
+
+    /** A face signature from the browser, or null when it is unusable (the photo then just waits for an admin). */
+    private double[] safeParse(String json) {
+        try { return parse(json); } catch (RuntimeException e) { return null; }
     }
 
     /** An active employee matched by employee code, or by phone (last 10 digits); null if none or more than one. */
@@ -193,7 +218,7 @@ public class KioskPunchService {
         Map<String, Object> reply = outcome(res.outcome(), employee, res.time() == null ? null : res.time().toString(),
                 res.minutesWorked(), recorded ? selfieUrl : null, recorded && weak);
         // How good the match was, so the kiosk screen can say it: STRONG | WEAK | MANUAL (typed ID + photo).
-        reply.put("match", EmployeeTimeService.KIOSK_MANUAL.equals(method) ? "MANUAL" : weak ? "WEAK" : "STRONG");
+        reply.put("match", EmployeeTimeService.KIOSK_MANUAL.equals(method) ? (weak ? "MANUAL" : "MANUAL_OK") : weak ? "WEAK" : "STRONG");
         return reply;
     }
 

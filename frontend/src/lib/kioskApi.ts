@@ -52,7 +52,7 @@ export interface KioskPunchResult {
   selfieUrl?: string | null;
   needsApproval: boolean;
   /** How good the match was: STRONG (counts at once), WEAK (held for admin), MANUAL (typed ID + photo, held for admin). */
-  match?: 'STRONG' | 'WEAK' | 'MANUAL';
+  match?: 'STRONG' | 'WEAK' | 'MANUAL' | 'MANUAL_OK';
 }
 
 const unwrap = <T,>(body: any): T => (body && typeof body === 'object' && 'success' in body ? body.data : body) as T;
@@ -73,10 +73,11 @@ export const kioskApi = {
       .then((r) => unwrap<KioskPunchResult>(r.data));
   },
   /** Fallback when face/finger can't be read: employee ID or phone + a photo. Always lands as pending approval. */
-  punchManual: (action: 'IN' | 'OUT', identifier: string, selfie: Blob) => {
+  punchManual: (action: 'IN' | 'OUT', identifier: string, selfie: Blob, descriptor?: number[] | null) => {
     const form = new FormData();
     form.append('action', action);
     form.append('identifier', identifier);
+    if (descriptor) form.append('descriptor', JSON.stringify(descriptor));
     form.append('selfie', selfie, 'selfie.jpg');
     return http
       .post('/public/kiosk/punch-manual', form, { headers: { 'X-Kiosk-Token': kioskToken.get() ?? '', 'Content-Type': 'multipart/form-data' } })
