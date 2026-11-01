@@ -921,7 +921,10 @@ public class PayrollService {
      * and Google-review rewards, each split into paid (already on a payslip) and pending (earned, will
      * land on the next payslip). Rates are the same site settings the payslip run uses.
      */
-    public Map<String, Object> rewardSummary(Employee employee) {
+    public Map<String, Object> rewardSummary(Employee employee) { return rewardSummary(employee, null); }
+
+    /** Same summary limited to one month ({@code ym}; null = all time): leads by collected date, projects by completion, reviews by date. */
+    public Map<String, Object> rewardSummary(Employee employee, YearMonth ym) {
         Map<String, Object> out = new LinkedHashMap<>();
         User u = employee.getEmail() == null ? null : userRepository.findByEmail(employee.getEmail()).orElse(null);
 
@@ -932,6 +935,7 @@ public class PayrollService {
         if (u != null) {
             Long uid = u.getId();
             for (LeadShare x : leadShares(u, leadRate, null)) {
+                if (ym != null && !ym.equals(leadQualifiedMonth(x.lead()))) continue;
                 if (x.paid()) { leadPaid++; leadPaidAmt = leadPaidAmt.add(x.amount()); }
                 else { leadPending++; leadPendingAmt = leadPendingAmt.add(x.amount()); }
             }
@@ -940,7 +944,12 @@ public class PayrollService {
             conv = conv.and(LeadSpecification.notDeleted()).and(
                     LeadSpecification.journeyStage(LeadSpecification.STAGE_PROJECT).or(
                             LeadSpecification.journeyStage(LeadSpecification.STAGE_COMPLETED)));
-            leadConverted = (int) leadRepository.count(conv);
+            if (ym == null) {
+                leadConverted = (int) leadRepository.count(conv);
+            } else {
+                leadConverted = (int) leadRepository.findAll(conv).stream()
+                        .filter(l -> l.getCreatedAt() != null && YearMonth.from(l.getCreatedAt()).equals(ym)).count();
+            }
         }
         Map<String, Object> leadRow = rewardRow(leadRate, leadPaid, leadPending, "convertedCount", leadConverted);
         leadRow.put("paidAmount", leadPaidAmt);       // shares can be a split of the rate
@@ -949,16 +958,22 @@ public class PayrollService {
 
         // Projects completed as PM / assistant manager
         BigDecimal projRate = settingAmount(K_PROJECT_INCENTIVE);
+        String pciRange = ym == null ? "" : " AND created_at >= '" + ym.atDay(1) + "' AND created_at < '" + ym.plusMonths(1).atDay(1) + "'";
         Integer projPaid = jdbc.queryForObject(
-                "SELECT COUNT(*) FROM project_completion_incentives WHERE employee_id = ?", Integer.class, employee.getId());
+                "SELECT COUNT(*) FROM project_completion_incentives WHERE employee_id = ?" + pciRange, Integer.class, employee.getId());
         BigDecimal projPaidAmt = jdbc.queryForObject(
-                "SELECT COALESCE(SUM(amount),0) FROM project_completion_incentives WHERE employee_id = ?",
+                "SELECT COALESCE(SUM(amount),0) FROM project_completion_incentives WHERE employee_id = ?" + pciRange,
                 BigDecimal.class, employee.getId());
         int projPending = 0;
         BigDecimal projPendingAmt = BigDecimal.ZERO;
         if (u != null && projRate.signum() > 0) {
             for (Project p : projectRepository.findAll()) {
                 if (Boolean.TRUE.equals(p.getIsDeleted()) || !"COMPLETED".equalsIgnoreCase(p.getStatus())) continue;
+                if (ym != null) {
+                    YearMonth done = p.getActualCompletionDate() != null ? YearMonth.from(p.getActualCompletionDate())
+                            : p.getUpdatedAt() != null ? YearMonth.from(p.getUpdatedAt()) : null;
+                    if (!ym.equals(done)) continue;
+                }
                 Set<Long> team = projectParticipantUserIds(p.getId());
                 if (!team.contains(u.getId())) continue;
                 Integer already = jdbc.queryForObject(
@@ -979,6 +994,10 @@ public class PayrollService {
         int revCount = 0, revPaid = 0, revPending = 0;
         BigDecimal revPaidAmt = BigDecimal.ZERO, revPendingAmt = BigDecimal.ZERO;
         for (EmployeeReview r : employeeReviewRepository.findByEmployeeIdAndIsDeletedFalseOrderByCreatedAtDesc(employee.getId())) {
+            if (ym != null) {
+                LocalDateTime earned = r.getGoogleVerifiedAt() != null ? r.getGoogleVerifiedAt() : r.getCreatedAt();
+                if (earned == null || !YearMonth.from(earned).equals(ym)) continue;
+            }
             if (Boolean.TRUE.equals(r.getGoogleVerified())) revCount++;
             if (r.getRewardBonusId() == null) continue;
             EmployeeBonus bo = bonusRepository.findById(r.getRewardBonusId()).orElse(null);
@@ -1103,6 +1122,17 @@ public class PayrollService {
             if (before == null || d.getCreatedAt() == null || d.getCreatedAt().isBefore(before)) return true;
         }
         return false;
+    }
+
+    /** Month the lead became rewardable: when its first site photo was added (falls back to creation). */
+    private YearMonth leadQualifiedMonth(Lead l) {
+        LocalDateTime first = null;
+        for (LeadDocument d : leadDocumentRepository.findByLeadId(l.getId())) {
+            if (Boolean.TRUE.equals(d.getIsDeleted()) || !isImageDoc(d) || d.getCreatedAt() == null) continue;
+            if (first == null || d.getCreatedAt().isBefore(first)) first = d.getCreatedAt();
+        }
+        if (first == null) first = l.getCreatedAt();
+        return first == null ? null : YearMonth.from(first);
     }
 
     private static boolean notBlank(String s) { return s != null && !s.isBlank(); }

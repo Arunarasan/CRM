@@ -443,8 +443,10 @@ public class EmployeePortalController {
 
     @GetMapping("/rewards")
     @PreAuthorize(PORTAL)
-    public ResponseEntity<ApiResponse<Map<String, Object>>> rewards() {
-        return ResponseEntity.ok(ApiResponse.success(portalService.getMyRewards(me())));
+    public ResponseEntity<ApiResponse<Map<String, Object>>> rewards(
+            @RequestParam(value = "month", required = false) Integer month,
+            @RequestParam(value = "year", required = false) Integer year) {
+        return ResponseEntity.ok(ApiResponse.success(portalService.getMyRewards(me(), month, year)));
     }
 
     @GetMapping("/bonuses")

@@ -34,15 +34,18 @@ export default function EarningsCard() {
   const [bonuses, setBonuses] = useState<MyBonuses | null>(null);
   const [loaded, setLoaded] = useState(false);
 
+  const now = useMemo(() => new Date(), []);
+
   useEffect(() => {
     Promise.allSettled([
-      employeePortalApi.rewards().then(setRewards),
+      employeePortalApi.rewards(now.getMonth() + 1, now.getFullYear()).then(setRewards),
       employeePortalApi.bonuses().then(setBonuses),
     ]).finally(() => setLoaded(true));
   }, []);
 
   const lines = useMemo<Line[]>(() => {
-    const other = (bonuses?.bonuses ?? []).filter((b) => !COVERED_BONUS_TYPES.includes((b.bonusType ?? '').toUpperCase()));
+    const thisMonth = (d?: string | null) => !!d && d.slice(0, 7) === `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const other = (bonuses?.bonuses ?? []).filter((b) => thisMonth(b.awardDate) && !COVERED_BONUS_TYPES.includes((b.bonusType ?? '').toUpperCase()));
     const otherTotal = other.reduce((s, b) => s + (b.amount ?? 0), 0);
     const otherPending = other.filter((b) => b.status !== 'PAID').reduce((s, b) => s + (b.amount ?? 0), 0);
     return [
@@ -51,7 +54,7 @@ export default function EarningsCard() {
       { key: 'reviews', label: t('portal.home.rewardReviews'), icon: Star, ...fromReward(rewards?.reviews) },
       { key: 'other', label: t('portal.home.earn.other'), icon: Gift, count: other.length, total: otherTotal, pending: otherPending },
     ].filter((l) => l.total > 0);
-  }, [rewards, bonuses, t]);
+  }, [rewards, bonuses, t, now]);
 
   if (!loaded || (!rewards && !bonuses)) return null;
 
@@ -63,7 +66,7 @@ export default function EarningsCard() {
     <button onClick={() => navigate('/employee/salary')} className={`${CARD} w-full p-4 text-left active:scale-[0.99]`}>
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-[12px] font-medium text-[#858B87]">{t('portal.home.earn.title')}</p>
+          <p className="text-[12px] font-medium text-[#858B87]">{t('portal.home.earn.title')} · {now.toLocaleString(undefined, { month: 'long' })}</p>
           <p className="mt-0.5 text-[28px] font-bold leading-none tabular-nums text-[#111817]">{inr(total)}</p>
         </div>
         <ChevronRight className="mt-1 h-5 w-5 text-[#B9C0BB]" />

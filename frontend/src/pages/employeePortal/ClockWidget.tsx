@@ -32,7 +32,7 @@ export default function ClockWidget({ onChange }: { onChange?: () => void }) {
   const [showDetails, setShowDetails] = useState(false);
   const [rewards, setRewards] = useState<MyRewards | null>(null);
   useEffect(() => {
-    if (showDetails && !rewards) employeePortalApi.rewards().then(setRewards).catch(() => {});
+    if (showDetails && !rewards) employeePortalApi.rewards(new Date().getMonth() + 1, new Date().getFullYear()).then(setRewards).catch(() => {});
   }, [showDetails, rewards]);
   const tickRef = useRef<number | null>(null);
   // Wall-clock instant of the last server sync — the running timer/earnings project forward from here.

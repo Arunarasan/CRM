@@ -372,8 +372,9 @@ public class EmployeePortalService {
      * account view never leaks other employees' data or trips Jackson on lazy relations. Totals included.
      */
     /** Home-page "My rewards": leads / projects / Google reviews, paid vs pending. */
-    public Map<String, Object> getMyRewards(User currentUser) {
-        return payrollService.rewardSummary(requireEmployee(currentUser));
+    public Map<String, Object> getMyRewards(User currentUser, Integer month, Integer year) {
+        java.time.YearMonth ym = (month != null && year != null) ? java.time.YearMonth.of(year, month) : null;
+        return payrollService.rewardSummary(requireEmployee(currentUser), ym);
     }
 
     public Map<String, Object> getMyBonuses(User currentUser) {
