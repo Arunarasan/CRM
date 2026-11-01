@@ -424,9 +424,10 @@ export default function Salary() {
                     {m.current && <span className="ml-2 text-[10px] font-normal text-amber-600">{t('pw.sal.running')}</span>}
                   </p>
                   <p className="text-xs text-muted-foreground">
+                    {m.exact && !m.official ? t('pw.sal.netAfterDeductions') : <>
                     {t('pw.sal.amountLabel', { amount: inr(m.amount) })}
                     {m.incentive > 0 && <> · {t('pw.sal.incentiveLabel')} <span className="text-emerald-600">{inr(m.incentive)}</span></>}
-                    {m.bonus > 0 && <> · {t('pw.sal.bonusLabel')} {inr(m.bonus)}</>}
+                    {m.bonus > 0 && <> · {t('pw.sal.bonusLabel')} {inr(m.bonus)}</>}</>}
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-2 pl-2 text-right">

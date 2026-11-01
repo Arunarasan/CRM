@@ -463,6 +463,14 @@ public class HrController {
         return ResponseEntity.ok(payrollService.employeeWorkStats(id));
     }
 
+    /** Incentives earned in a month (leads collected / projects / reviews) with the lead-level detail. */
+    @GetMapping("/employees/{id}/rewards")
+    @PreAuthorize(PAYROLL_READ)
+    public ResponseEntity<Map<String, Object>> employeeRewards(@PathVariable Long id,
+                                                               @RequestParam int month, @RequestParam int year) {
+        return ResponseEntity.ok(payrollService.employeeRewardDetail(id, java.time.YearMonth.of(year, month)));
+    }
+
     /** Per-day sheet: attendance worked/OT hours, day earnings, and real task-tracked hours for a month. */
     @GetMapping("/employees/{id}/daily-log")
     @PreAuthorize(PAYROLL_READ)

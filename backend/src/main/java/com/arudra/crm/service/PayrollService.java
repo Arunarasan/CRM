@@ -1023,6 +1023,31 @@ public class PayrollService {
         return out;
     }
 
+    /** Admin view: the month's reward summary plus the individual leads collected (what info, when, how much, paid or not). */
+    public Map<String, Object> employeeRewardDetail(Long employeeId, YearMonth ym) {
+        Employee employee = employeeRepository.findById(employeeId).orElseThrow();
+        Map<String, Object> out = rewardSummary(employee, ym);
+        List<Map<String, Object>> items = new ArrayList<>();
+        User u = employee.getEmail() == null ? null : userRepository.findByEmail(employee.getEmail()).orElse(null);
+        if (u != null) {
+            for (LeadShare x : leadShares(u, settingAmount("lead_collected_reward_amount"), null)) {
+                if (ym != null && !ym.equals(leadQualifiedMonth(x.lead(), u.getId()))) continue;
+                Lead l = x.lead();
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("leadId", l.getId());
+                m.put("leadNumber", l.getLeadNumber());
+                m.put("name", l.getName());
+                m.put("siteAddress", l.getSiteAddress());
+                m.put("hasLocation", notBlank(l.getGoogleMapLocation()) || notBlank(l.getSiteAddress()));
+                m.put("amount", x.amount());
+                m.put("paid", x.paid());
+                items.add(m);
+            }
+        }
+        out.put("leadItems", items);
+        return out;
+    }
+
     private Map<String, Object> rewardRow(BigDecimal rate, int paid, int pending, String extraKey, int extra) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("rate", rate);

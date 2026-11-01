@@ -29,6 +29,7 @@ import WorkforceFinanceTab from "./workforce/WorkforceFinanceTab";
 import AddWorkforceDialog from "./workforce/AddWorkforceDialog";
 import EmployeeOverviewTab from "./workforce/EmployeeOverviewTab";
 import EmployeeReviewsTab from "./workforce/EmployeeReviewsTab";
+import EmployeeIncentivesCard from "./hr/EmployeeIncentivesCard";
 import WageSettingsCard from "@/components/hr/WageSettingsCard";
 import { inr } from "./workforce/WorkforceFinanceTab";
 
@@ -497,6 +498,7 @@ export default function EmployeeProfile() {
           <TabsContent value="payroll">
             <div className="space-y-6">
               <WageSettingsCard employee={employee} employeeId={Number(id)} onSaved={loadEmployee} />
+              <EmployeeIncentivesCard employeeId={Number(id)} />
               {wfId
                 ? <WorkforceFinanceTab workforceId={wfId} />
                 : <div className="bg-white border rounded-2xl p-8 text-center text-slate-500 shadow-sm">No workforce record linked — payroll unavailable.</div>}

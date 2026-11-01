@@ -493,6 +493,17 @@ public class EmployeePortalService {
             } else {
                 row.put("official", null);
                 row.put("preview", true);
+                // Recent months: replace the rough estimate with the real payslip engine's dry run
+                // (deductions, recoveries, lead/project/review lines) so the row matches the payslip.
+                if (!ym.isBefore(cur.minusMonths(2))) {
+                    try {
+                        SalaryRecord pv = payrollService.previewPayslip(emp.getId(), ym.getMonthValue(), ym.getYear());
+                        if (pv.getNetSalary() != null) {
+                            row.put("total", scale(pv.getNetSalary()));
+                            row.put("exact", true);
+                        }
+                    } catch (Exception ignored) { /* pay not set up / nothing to compute: keep the estimate */ }
+                }
             }
             row.put("current", ym.equals(cur)); // the running (partial) month
             out.add(row);

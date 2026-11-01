@@ -144,7 +144,7 @@ export default function MyProfile() {
             </span>
           )}
         </button>
-        <BaseInput ref={photoInput} type="file" accept="image/*" capture="user" className="hidden" onChange={onPhoto} />
+        <BaseInput ref={photoInput} type="file" accept="image/*" className="hidden" onChange={onPhoto} />
         {editing ? (
           <div className="mx-3 grid w-full max-w-sm grid-cols-2 gap-2 px-3">
             <BaseInput value={form.firstName} onChange={(e) => setForm((f) => ({ ...f, firstName: e.target.value }))} placeholder="First name" className="rounded-lg border bg-background px-3 py-2 text-sm" />

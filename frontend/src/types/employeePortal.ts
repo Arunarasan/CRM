@@ -556,6 +556,8 @@ export interface MonthlyEarning {
   official: { id: number; status: string; netSalary: number } | null;
   preview: boolean;
   current: boolean;
+  /** total is the payslip engine's dry-run net (after deductions), not the rough estimate */
+  exact?: boolean;
 }
 
 /** One of the employee's loans (for display; the repayment picker filters to outstanding ones). */
