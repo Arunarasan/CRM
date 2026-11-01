@@ -935,7 +935,7 @@ public class PayrollService {
         if (u != null) {
             Long uid = u.getId();
             for (LeadShare x : leadShares(u, leadRate, null)) {
-                if (ym != null && !ym.equals(leadQualifiedMonth(x.lead()))) continue;
+                if (ym != null && !ym.equals(leadQualifiedMonth(x.lead(), u.getId()))) continue;
                 if (x.paid()) { leadPaid++; leadPaidAmt = leadPaidAmt.add(x.amount()); }
                 else { leadPending++; leadPendingAmt = leadPendingAmt.add(x.amount()); }
             }
@@ -1124,14 +1124,24 @@ public class PayrollService {
         return false;
     }
 
-    /** Month the lead became rewardable: when its first site photo was added (falls back to creation). */
-    private YearMonth leadQualifiedMonth(Lead l) {
+    /** Month this person earned the lead reward: first site photo added, or their Collect Requirement completion if later. */
+    private YearMonth leadQualifiedMonth(Lead l, Long userId) {
         LocalDateTime first = null;
         for (LeadDocument d : leadDocumentRepository.findByLeadId(l.getId())) {
             if (Boolean.TRUE.equals(d.getIsDeleted()) || !isImageDoc(d) || d.getCreatedAt() == null) continue;
             if (first == null || d.getCreatedAt().isBefore(first)) first = d.getCreatedAt();
         }
         if (first == null) first = l.getCreatedAt();
+        // An assignee earns it once they have completed Collect Requirement AND the lead qualified: the later of the two.
+        for (Task t : taskRepository.findByLeadId(l.getId())) {
+            if (Boolean.TRUE.equals(t.getIsDeleted()) || t.getTaskTemplate() == null
+                    || !EmployeeTaskService.COLLECT_REQUIREMENT_CODE.equals(t.getTaskTemplate().getCode())) continue;
+            for (TaskAssignment a : taskAssignmentRepository.findByTaskId(t.getId())) {
+                if (a.getEmployee() != null && userId.equals(a.getEmployee().getId()) && "COMPLETED".equals(a.getStatus())
+                        && !Boolean.TRUE.equals(a.getIsDeleted()) && a.getCompletedAt() != null
+                        && (first == null || a.getCompletedAt().isAfter(first))) first = a.getCompletedAt();
+            }
+        }
         return first == null ? null : YearMonth.from(first);
     }
 
