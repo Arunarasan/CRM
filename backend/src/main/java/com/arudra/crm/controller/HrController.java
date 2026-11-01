@@ -544,6 +544,13 @@ public class HrController {
         return ResponseEntity.ok(payrollService.approveAdvance(id, currentUserService.getCurrentUser()));
     }
 
+    @DeleteMapping("/advances/{id}")
+    @PreAuthorize(PAYROLL_PROCESS)
+    public ResponseEntity<Void> deleteAdvance(@PathVariable Long id) {
+        payrollService.deleteAdvance(id);
+        return ResponseEntity.noContent().build();
+    }
+
     // --- Loans ---
     @GetMapping("/employees/{id}/loans")
     @PreAuthorize(PAYROLL_READ)
@@ -555,6 +562,20 @@ public class HrController {
     @PreAuthorize(PAYROLL_PROCESS)
     public ResponseEntity<EmployeeLoan> createLoan(@PathVariable Long id, @RequestBody EmployeeLoan payload) {
         return ResponseEntity.ok(payrollService.createLoan(id, payload));
+    }
+
+    @DeleteMapping("/loans/{id}")
+    @PreAuthorize(PAYROLL_PROCESS)
+    public ResponseEntity<Void> deleteLoan(@PathVariable Long id) {
+        payrollService.deleteLoan(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/payroll-requests/{id}")
+    @PreAuthorize(PAYROLL_PROCESS)
+    public ResponseEntity<Void> deletePayrollRequest(@PathVariable Long id) {
+        payrollService.deletePayrollRequest(id);
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/loans/{id}/close")

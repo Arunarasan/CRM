@@ -9,13 +9,20 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ExternalLink, FileText, Pencil, Plus, Printer } from "lucide-react";
+import { ExternalLink, FileText, Pencil, Plus, Printer, Trash2 } from "lucide-react";
 import PayslipEditor from "@/pages/hr/PayslipEditor";
 import { useAuth } from "@/hooks/useAuth";
 import ContractorOrdersPanel from "@/pages/contractors/ContractorOrdersPanel";
 
 export const inr = (v: number | undefined | null) =>
   v == null ? "₹0" : "₹" + Number(v).toLocaleString("en-IN", { maximumFractionDigits: 2 });
+
+/** Confirm, run an admin delete, and surface the server's reason when it's refused. */
+function confirmDelete(what: string, run: () => Promise<unknown>, done: () => void) {
+  if (!window.confirm(`Delete this ${what}? This cannot be undone.`)) return;
+  run().then(() => { toast.success("Deleted."); done(); })
+    .catch((e: any) => toast.error(e?.response?.data?.message || "Could not delete."));
+}
 
 export default function WorkforceFinanceTab({ workforceId }: { workforceId: number }) {
   const [fin, setFin] = useState<WorkforceFinance | null>(null);
@@ -79,11 +86,13 @@ function EmployeeFinance({ fin, reload }: { fin: WorkforceFinance; reload: () =>
       key: `a-${a.id}`, kind: "Advance", date: a.advanceDate, amount: a.amount, perMonth: a.monthlyRecovery,
       balance: a.balance, status: a.status, open: Number(a.balance || 0) > 0 && a.status !== "RECOVERED",
       action: a.status === "PENDING" ? { label: "Approve", fn: () => payrollApi.approveAdvance(a.id!).then(() => { toast.success("Advance approved."); reload(); }) } : undefined,
+      remove: () => confirmDelete("advance", () => payrollApi.deleteAdvance(a.id!), reloadAll),
     })),
     ...(fin.loans ?? []).map((l) => ({
       key: `l-${l.id}`, kind: "Loan", date: (l as any).disbursedDate as string | undefined, amount: l.principal, perMonth: l.emiAmount,
       balance: l.balance, status: l.status, open: Number(l.balance || 0) > 0 && l.status !== "CLOSED",
       action: l.status === "ACTIVE" ? { label: "Close", fn: () => payrollApi.closeLoan(l.id!).then(() => { toast.success("Loan closed."); reload(); }) } : undefined,
+      remove: () => confirmDelete("loan", () => payrollApi.deleteLoan(l.id!), reloadAll),
     })),
   ].sort((a, b) => Number(b.open) - Number(a.open) || String(b.date || "").localeCompare(String(a.date || "")));
   const owed = debts.filter((d) => d.open && d.status !== "PENDING").reduce((a, d) => a + Number(d.balance || 0), 0);
@@ -164,6 +173,7 @@ function EmployeeFinance({ fin, reload }: { fin: WorkforceFinance; reload: () =>
                 </div>
                 <Badge className="bg-slate-100 text-slate-700">{String(d.status || "").replace(/_/g, " ").toLowerCase()}</Badge>
                 {d.action && <Button size="sm" variant="ghost" onClick={d.action.fn}>{d.action.label}</Button>}
+                {d.remove && <Button size="icon" variant="ghost" title="Delete" aria-label="Delete" onClick={d.remove} className="text-red-600 hover:text-red-700"><Trash2 className="h-4 w-4" /></Button>}
               </li>
             ))}
           </ul>
@@ -326,6 +336,8 @@ function RequestBlock({ reqs, reload }: { reqs: PayrollRequest[]; reload: () => 
                   <Button size="sm" variant="ghost" onClick={() => setRejecting({ id: r.id, remarks: "" })}>Reject</Button>
                 </>
               )}
+              <Button size="icon" variant="ghost" title="Delete" aria-label="Delete" className="text-red-600 hover:text-red-700"
+                onClick={() => confirmDelete("request", () => payrollApi.deletePayrollRequest(r.id), reload)}><Trash2 className="h-4 w-4" /></Button>
             </div>
           </li>
         ))}

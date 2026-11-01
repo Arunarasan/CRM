@@ -100,6 +100,9 @@ export const payrollApi = {
     api.get<EmployeeLoan[]>(`/hr/employees/${employeeId}/loans`).then((r) => r.data),
   createLoan: (employeeId: number, body: EmployeeLoan) =>
     api.post<EmployeeLoan>(`/hr/employees/${employeeId}/loans`, body).then((r) => r.data),
+  deleteAdvance: (id: number) => api.delete(`/hr/advances/${id}`).then(() => undefined),
+  deleteLoan: (id: number) => api.delete(`/hr/loans/${id}`).then(() => undefined),
+  deletePayrollRequest: (id: number) => api.delete(`/hr/payroll-requests/${id}`).then(() => undefined),
   closeLoan: (id: number) =>
     api.post<EmployeeLoan>(`/hr/loans/${id}/close`).then((r) => r.data),
 

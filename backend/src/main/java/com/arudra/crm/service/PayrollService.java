@@ -111,6 +111,51 @@ public class PayrollService {
         return loanRepository.save(l);
     }
 
+    /** Admin delete of a lent advance. Refused once any of it has been recovered through a payslip. */
+    @Transactional
+    public void deleteAdvance(Long id) {
+        EmployeeAdvance a = advanceRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Advance not found: " + id));
+        if (nz(a.getRecoveredAmount()).signum() > 0) {
+            throw new IllegalStateException("Part of this advance has already been recovered on a payslip, so it can't be deleted.");
+        }
+        advanceRepository.delete(a);
+    }
+
+    /** Admin delete of a loan. Refused once any EMI/repayment has been recovered. */
+    @Transactional
+    public void deleteLoan(Long id) {
+        EmployeeLoan l = loanRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Loan not found: " + id));
+        if (nz(l.getRecoveredAmount()).signum() > 0) {
+            throw new IllegalStateException("Part of this loan has already been recovered on a payslip, so it can't be deleted.");
+        }
+        loanRepository.delete(l);
+    }
+
+    /**
+     * Admin delete of a borrow / repay request. Refused if it was already taken into a payslip; a borrow
+     * request that became an advance removes that advance too (only while nothing has been recovered).
+     */
+    @Transactional
+    public void deletePayrollRequest(Long id) {
+        com.arudra.crm.entity.PayrollRequest r = payrollRequestRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Payroll request not found: " + id));
+        if (r.getAppliedSalaryRecordId() != null) {
+            throw new IllegalStateException("This request is already on a payslip, so it can't be deleted.");
+        }
+        if (r.getConvertedAdvanceId() != null) {
+            advanceRepository.findById(r.getConvertedAdvanceId()).ifPresent(a -> {
+                if (nz(a.getRecoveredAmount()).signum() > 0) {
+                    throw new IllegalStateException("The advance from this request is already being recovered, so it can't be deleted.");
+                }
+                advanceRepository.delete(a);
+            });
+        }
+        r.setIsDeleted(true);
+        payrollRequestRepository.save(r);
+    }
+
     public List<EmployeeLoan> loansForEmployee(Long employeeId) {
         return loanRepository.findByEmployeeIdOrderByIdDesc(employeeId);
     }
