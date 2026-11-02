@@ -207,8 +207,9 @@ public class HrController {
             hrService.deleteEmployee(id);
             return ResponseEntity.noContent().build();
         } catch (org.springframework.dao.DataIntegrityViolationException e) {
-            return ResponseEntity.status(409).body(java.util.Map.of("message",
-                    "This employee has attendance, payroll or task history and can't be deleted. Mark them Inactive instead."));
+            // History (attendance / payroll / tasks) blocks a hard delete — archive: hidden everywhere, history kept.
+            hrService.archiveEmployee(id);
+            return ResponseEntity.noContent().build();
         }
     }
 

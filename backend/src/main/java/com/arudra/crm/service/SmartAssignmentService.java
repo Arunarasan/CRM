@@ -111,9 +111,10 @@ public class SmartAssignmentService {
                         .map(TaskAssignment::getResourceId)
                         .collect(Collectors.toSet());
 
-        List<Employee> pool = req.getDepartmentId() != null
+        List<Employee> pool = (req.getDepartmentId() != null
                 ? employeeRepository.findByDepartmentId(req.getDepartmentId())
-                : employeeRepository.findAll();
+                : employeeRepository.findAll()).stream()
+                .filter(e -> !Boolean.TRUE.equals(e.getIsDeleted())).collect(Collectors.toList());
 
         List<Map<String, Object>> recommendations = new ArrayList<>();
         List<Map<String, Object>> excluded = new ArrayList<>();

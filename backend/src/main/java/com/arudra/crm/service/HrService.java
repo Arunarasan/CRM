@@ -122,7 +122,7 @@ public class HrService {
     }
 
     public Page<Employee> getEmployees(int page, int size) {
-        return employeeRepository.findAllByOrderByFirstNameAsc(PageRequest.of(page, size));
+        return employeeRepository.findByIsDeletedFalseOrderByFirstNameAsc(PageRequest.of(page, size));
     }
     public Optional<Employee> getEmployee(Long id) {
         return employeeRepository.findById(id);
@@ -235,6 +235,34 @@ public class HrService {
         }
         if (linkedUserId != null) {
             userRepository.findById(linkedUserId).ifPresent(u -> {
+                u.setEmailVerified(false);
+                userRepository.save(u);
+                refreshTokenService.revokeAll(u);
+            });
+        }
+    }
+
+    /**
+     * Delete for an employee who has attendance / payroll / task history and so can't be removed outright:
+     * the profile is hidden everywhere (soft-deleted, inactive), their open work is cleaned up and the login
+     * is switched off. The history rows stay intact for payroll and audit.
+     */
+    @Transactional
+    public void archiveEmployee(Long id) {
+        Employee employee = employeeRepository.findById(id)
+                .orElseThrow(() -> new com.arudra.crm.exception.ResourceNotFoundException("Employee not found with id: " + id));
+        offboardingService.offboard(employee);
+        employee.setIsDeleted(true);
+        employee.setStatus("INACTIVE");
+        employeeRepository.save(employee);
+        Workforce header = employee.getWorkforce();
+        if (header != null) {
+            header.setIsDeleted(true);
+            header.setStatus("INACTIVE");
+            workforceRepository.save(header);
+        }
+        if (employee.getUserId() != null) {
+            userRepository.findById(employee.getUserId()).ifPresent(u -> {
                 u.setEmailVerified(false);
                 userRepository.save(u);
                 refreshTokenService.revokeAll(u);

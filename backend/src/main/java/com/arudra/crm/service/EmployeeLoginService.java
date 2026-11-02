@@ -218,7 +218,8 @@ public class EmployeeLoginService {
 
     private void requireEmployeeEmailFree(Employee emp, String email) {
         boolean taken = employeeRepository.findAll().stream()
-                .anyMatch(e -> !e.getId().equals(emp.getId()) && email.trim().equalsIgnoreCase(e.getEmail()));
+                .anyMatch(e -> !Boolean.TRUE.equals(e.getIsDeleted())
+                        && !e.getId().equals(emp.getId()) && email.trim().equalsIgnoreCase(e.getEmail()));
         if (taken) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Another employee already uses the e-mail " + email.trim() + ".");
         }
