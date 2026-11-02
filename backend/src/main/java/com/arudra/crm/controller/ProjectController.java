@@ -211,6 +211,14 @@ public class ProjectController {
         return ResponseEntity.ok(ApiResponse.success(projectFilesService.listFiles(id)));
     }
 
+    /** Save an edited photo over the original, whichever module it came from: {key, fileUrl, fileName?}. */
+    @PutMapping("/{id}/files/image")
+    @PreAuthorize(WRITE)
+    public ResponseEntity<Void> replaceFileImage(@PathVariable Long id, @RequestBody Map<String, String> body) {
+        projectFilesService.replaceImage(id, body.get("key"), body.get("fileUrl"), body.get("fileName"));
+        return ResponseEntity.ok().build();
+    }
+
     /** Rename / re-type / describe an uploaded document: {fileName?, documentType?, remarks?}. */
     @PutMapping("/documents/{docId}")
     @PreAuthorize(WRITE)

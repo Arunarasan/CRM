@@ -46,6 +46,12 @@ public class EmployeeTaskService {
 
     @Autowired
     private TaskRepository taskRepository;
+
+    @Autowired
+    private ProjectFilesService projectFilesService;
+
+    @Autowired
+    private com.arudra.crm.repository.ProjectDocumentRepository projectDocumentRepository;
     @Autowired
     private TaskAssignmentRepository assignmentRepository;
     @Autowired
@@ -2286,6 +2292,29 @@ public class EmployeeTaskService {
     }
 
     /** Every photo on the task's lead, newest first. */
+    public Map<String, Object> projectFiles(Long taskId) {
+        Task task = getTask(taskId);
+        if (task.getProject() == null) return Map.of("files", List.of(), "total", 0);
+        return projectFilesService.listFiles(task.getProject().getId());
+    }
+
+    /** Rename / replace-file / delete of an uploaded project document, only for the task's own project. */
+    @Transactional
+    public void editProjectDocument(Long taskId, Long docId, String action, Map<String, String> body) {
+        Task task = getTask(taskId);
+        com.arudra.crm.entity.ProjectDocument doc = projectDocumentRepository.findById(docId)
+                .orElseThrow(() -> new RuntimeException("Document not found"));
+        if (task.getProject() == null || doc.getProject() == null
+                || !task.getProject().getId().equals(doc.getProject().getId())) {
+            throw new IllegalArgumentException("This document is not on the task's project");
+        }
+        switch (action) {
+            case "delete" -> projectService.deleteDocument(docId);
+            case "file" -> projectService.replaceDocumentFile(docId, body.get("fileUrl"), body.get("fileName"));
+            default -> projectService.updateDocumentDetails(docId, body.get("fileName"), body.get("documentType"), body.get("remarks"));
+        }
+    }
+
     public List<Map<String, Object>> leadPhotos(Long taskId, User me) {
         com.arudra.crm.entity.Lead lead = leadOf(getTask(taskId));
         if (lead == null) return List.of();

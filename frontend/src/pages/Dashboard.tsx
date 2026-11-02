@@ -159,7 +159,7 @@ export default function Dashboard() {
             <KpiCard to="/projects" title="Completed · Payment Pending" value={data.completedPaymentPendingCount.toLocaleString("en-IN")} icon={ReceiptText}
               subtitle={`${compactINR(data.completedPaymentPendingAmount || 0)} to collect`} />
 
-            <KpiCard to="/hr/attendance" title="Attendance Today" value={`${data.presentToday} / ${data.totalEmployees}`} icon={UserCheck}
+            <KpiCard to="/workforce/attendance" title="Attendance Today" value={`${data.presentToday} / ${data.totalEmployees}`} icon={UserCheck}
               extra={<SplitStats a={{ value: data.presentToday, label: "Present" }} b={{ value: data.absentToday, label: "Absent" }} />}
               subtitle={data.onLeaveToday ? `${data.onLeaveToday} on leave` : undefined} />
 

@@ -38,6 +38,7 @@ public class ProjectFilesService {
     @Autowired private TaskAttachmentRepository taskAttachmentRepository;
     @Autowired private TaskProgressUpdateRepository progressUpdateRepository;
     @Autowired private TaskCommentRepository commentRepository;
+    @Autowired private TaskProgressMediaRepository taskProgressMediaRepository;
     @Autowired private ProjectDailyLogRepository dailyLogRepository;
     @Autowired private ProjectDailyLogMediaRepository dailyLogMediaRepository;
     @Autowired private DailyReportRepository dailyReportRepository;
@@ -81,6 +82,63 @@ public class ProjectFilesService {
             m.put("generated", false);
             items.add(m);
             return m;
+        }
+    }
+
+
+    /** Swaps in an edited image for a photo on this project, wherever the photo came from (key = the file's key). */
+    @Transactional
+    public void replaceImage(Long projectId, String key, String fileUrl, String fileName) {
+        if (key == null || fileUrl == null || fileUrl.isBlank()) throw new IllegalArgumentException("key and fileUrl are required");
+        boolean onProject = ((List<Map<String, Object>>) listFiles(projectId).get("files")).stream()
+                .anyMatch(f -> key.equals(f.get("key")));
+        if (!onProject) throw new IllegalArgumentException("That file is not on this project");
+        int dash = key.indexOf('-');
+        String kind = key.substring(0, dash);
+        String rest = key.substring(dash + 1);
+        String name = fileName != null && !fileName.isBlank() ? fileName : null;
+        switch (kind) {
+            case "DOC" -> { /* project uploads keep their own endpoint */ throw new IllegalArgumentException("Use the document endpoint"); }
+            case "LEAD" -> leadDocumentRepository.findById(Long.valueOf(rest)).ifPresent(d -> {
+                d.setFileUrl(fileUrl); if (name != null) d.setFileName(name); leadDocumentRepository.save(d); });
+            case "MDRAW" -> drawingRepository.findById(Long.valueOf(rest)).ifPresent(d -> {
+                d.setFilePath(fileUrl); if (name != null) d.setFileName(name); drawingRepository.save(d); });
+            case "MMEDIA" -> measurementMediaRepository.findById(Long.valueOf(rest)).ifPresent(d -> {
+                d.setFilePath(fileUrl); if (name != null) d.setFileName(name); measurementMediaRepository.save(d); });
+            case "VISIT" -> siteVisitMediaRepository.findById(Long.valueOf(rest)).ifPresent(d -> {
+                d.setFileUrl(fileUrl); siteVisitMediaRepository.save(d); });
+            case "QATT" -> quotationAttachmentRepository.findById(Long.valueOf(rest)).ifPresent(d -> {
+                d.setFileUrl(fileUrl); if (name != null) d.setFileName(name); quotationAttachmentRepository.save(d); });
+            case "TATT" -> taskAttachmentRepository.findById(Long.valueOf(rest)).ifPresent(d -> {
+                d.setFileUrl(fileUrl); if (name != null) d.setFileName(name); taskAttachmentRepository.save(d); });
+            case "TPROG" -> taskProgressMediaRepository.findById(Long.valueOf(rest)).ifPresent(d -> {
+                d.setFileUrl(fileUrl); taskProgressMediaRepository.save(d); });
+            case "CHATIMG" -> commentRepository.findById(Long.valueOf(rest)).ifPresent(d -> {
+                d.setImageUrl(fileUrl); commentRepository.save(d); });
+            case "TLOG" -> {
+                int cut = rest.lastIndexOf('-');
+                int idx = Integer.parseInt(rest.substring(cut + 1));
+                taskDailyLogRepository.findById(Long.valueOf(rest.substring(0, cut))).ifPresent(l -> {
+                    List<String> photos = new ArrayList<>(l.getPhotos());
+                    photos.set(idx, fileUrl);
+                    l.setPhotos(photos);
+                    taskDailyLogRepository.save(l);
+                });
+            }
+            case "STEP" -> workStepRepository.findById(Long.valueOf(rest)).ifPresent(d -> {
+                d.setPhotoUrl(fileUrl); workStepRepository.save(d); });
+            case "WEV" -> workEventRepository.findById(Long.valueOf(rest)).ifPresent(d -> {
+                d.setPhotoUrl(fileUrl); workEventRepository.save(d); });
+            case "DLOG" -> dailyLogMediaRepository.findById(Long.valueOf(rest)).ifPresent(d -> {
+                d.setFileUrl(fileUrl); dailyLogMediaRepository.save(d); });
+            case "DREP" -> dailyReportRepository.findByProjectIdAndIsDeletedFalseOrderByReportDateDescIdDesc(projectId).stream()
+                    .flatMap(r -> r.getMedia() == null ? java.util.stream.Stream.<DailyReportMedia>empty() : r.getMedia().stream())
+                    .filter(m -> m.getId().equals(Long.valueOf(rest))).findFirst().ifPresent(m -> m.setFileUrl(fileUrl));
+            case "GRN" -> grnPhotoRepository.findById(Long.valueOf(rest)).ifPresent(d -> {
+                d.setPhotoUrl(fileUrl); grnPhotoRepository.save(d); });
+            case "CPROG" -> contractorMediaRepository.findById(Long.valueOf(rest)).ifPresent(d -> {
+                d.setFileUrl(fileUrl); if (name != null) d.setFileName(name); contractorMediaRepository.save(d); });
+            default -> throw new IllegalArgumentException("This kind of file can't be edited here");
         }
     }
 

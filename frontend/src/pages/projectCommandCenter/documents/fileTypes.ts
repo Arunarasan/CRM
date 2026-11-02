@@ -39,6 +39,9 @@ export const projectFilesApi = {
   update: (docId: number, body: { fileName?: string; documentType?: string; remarks?: string }) =>
     api.put(`/projects/documents/${docId}`, body).then((r) => r.data),
   remove: (docId: number) => api.delete(`/projects/documents/${docId}`),
+  /** Edited photo from any module (lead, task, chat, site log…) — saved over the original. */
+  replaceImageFor: (projectId: number) => (key: string, body: { fileUrl: string; fileName?: string }) =>
+    api.put(`/projects/${projectId}/files/image`, { key, ...body }).then((r) => r.data),
   replaceFile: (docId: number, body: { fileUrl: string; fileName?: string }) =>
     api.put(`/projects/documents/${docId}/file`, body).then((r) => r.data),
 };

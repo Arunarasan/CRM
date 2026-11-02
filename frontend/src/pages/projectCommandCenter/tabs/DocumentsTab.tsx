@@ -246,7 +246,8 @@ export default function DocumentsTab({ projectId, onChanged }: Props) {
       <AddFilesDialog open={adding} onOpenChange={setAdding} onSubmit={submit} />
       {viewerIndex != null && (
         <FileViewer files={viewerFiles} index={viewerIndex} onIndex={setViewerIndex} onClose={() => setViewerIndex(null)}
-          onChanged={() => { load(); onChanged?.(); }} canEdit={canEdit} />
+          onChanged={() => { load(); onChanged?.(); }} canEdit={canEdit}
+          api={{ ...projectFilesApi, replaceImage: projectFilesApi.replaceImageFor(projectId) }} />
       )}
     </div>
   );

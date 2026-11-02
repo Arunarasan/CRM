@@ -375,6 +375,36 @@ public class EmployeeTaskController {
         return ResponseEntity.ok(ApiResponse.success(employeeTaskService.addOrderRemark(id, me(), note, photos, audio)));
     }
 
+    /** Every file on this task's project (read-only) — the project's Documents tab for the field team. */
+    @GetMapping("/{id}/project-files")
+    @PreAuthorize(EXECUTE)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> projectFiles(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.success(employeeTaskService.projectFiles(id)));
+    }
+
+    /** Rename / re-type / describe an uploaded project document ({fileName?, documentType?, remarks?}). */
+    @PutMapping("/{id}/project-files/{docId}")
+    @PreAuthorize(EXECUTE)
+    public ResponseEntity<Void> updateProjectFile(@PathVariable Long id, @PathVariable Long docId, @RequestBody Map<String, String> body) {
+        employeeTaskService.editProjectDocument(id, docId, "update", body);
+        return ResponseEntity.ok().build();
+    }
+
+    /** Replace an uploaded project document's file (after editing the image). */
+    @PutMapping("/{id}/project-files/{docId}/file")
+    @PreAuthorize(EXECUTE)
+    public ResponseEntity<Void> replaceProjectFile(@PathVariable Long id, @PathVariable Long docId, @RequestBody Map<String, String> body) {
+        employeeTaskService.editProjectDocument(id, docId, "file", body);
+        return ResponseEntity.ok().build();
+    }
+
+    @DeleteMapping("/{id}/project-files/{docId}")
+    @PreAuthorize(EXECUTE)
+    public ResponseEntity<Void> deleteProjectFile(@PathVariable Long id, @PathVariable Long docId) {
+        employeeTaskService.editProjectDocument(id, docId, "delete", Map.of());
+        return ResponseEntity.ok().build();
+    }
+
     /** Photos on this task's lead (its Documents tab), newest first. */
     @GetMapping("/{id}/lead-photos")
     @PreAuthorize(EXECUTE)

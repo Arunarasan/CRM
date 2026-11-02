@@ -24,6 +24,7 @@ import RequirementFormSheet from './components/RequirementFormSheet';
 import RequirementSummaryCard from './components/RequirementSummaryCard';
 import { toast } from '@/components/ui/toast';
 import LeadPhotosCard from './components/LeadPhotosCard';
+import ProjectDocumentsCard from './components/ProjectDocumentsCard';
 import RequirementTaskView from './components/RequirementTaskView';
 import { ItemsToMakeCard, ProjectTaskHero } from './components/ProjectTaskLayout';
 import ProjectWorkTaskView, { WorkTab } from '@/components/projectWork/ProjectWorkTaskView';
@@ -644,6 +645,7 @@ export default function TaskDetail({ embeddedTaskId, onChanged }: { embeddedTask
         )}
         {isProjectTask && task.projectInfo?.hasQuotation && !locked && <ShareQuotationCard taskId={taskId} />}
         {isProjectTask && task.projectInfo && <ItemsToMakeCard info={task.projectInfo} />}
+        {isProjectTask && task.projectId && <ProjectDocumentsCard taskId={taskId} />}
         {isProjectTask && task.projectInfo && !workTracking && (
           <ChecklistPanel taskId={taskId} checklist={task.checklist} onChanged={load} locked={locked} compact
             title={isProjectExec ? t('pw.td.work_items') : t('pw.td.work_to_complete')} />

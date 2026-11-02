@@ -325,6 +325,7 @@ function App() {
             <Route path="workforce/:id" element={<WorkforceProfilePage />} />
             {/* Old Human Resources home merged into /workforce; keep the deep links alive. */}
             <Route path="hr" element={<Navigate to="/workforce" replace />} />
+            <Route path="hr/attendance" element={<Navigate to="/workforce/attendance" replace />} />
             <Route path="hr/employees/:id" element={<EmployeeProfile />} />
             <Route path="hr/payslip/:id" element={<PayslipPrint />} />
             <Route path="notifications" element={<NotificationCenter />} />

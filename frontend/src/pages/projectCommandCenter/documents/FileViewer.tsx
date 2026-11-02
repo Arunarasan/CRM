@@ -18,7 +18,7 @@ const isWide = () => typeof window !== 'undefined' && window.matchMedia('(min-wi
  * strip to move through files, double-click / double-tap a photo to zoom — plus a hideable details panel:
  * what it is, where it came from, who added it, with edit / delete for files uploaded to the project.
  */
-export default function FileViewer({ files, index, onIndex, onClose, onChanged, canEdit, onDelete }: {
+export default function FileViewer({ files, index, onIndex, onClose, onChanged, canEdit, onDelete, api = projectFilesApi }: {
   files: ProjectFile[];
   index: number | null;
   onIndex: (i: number) => void;
@@ -27,6 +27,11 @@ export default function FileViewer({ files, index, onIndex, onClose, onChanged, 
   canEdit: boolean;
   /** Delete files with a docId some other way (e.g. lead documents) instead of as project documents. */
   onDelete?: (file: ProjectFile) => Promise<unknown>;
+  /** Where edits go — the project's own endpoints by default; the portal passes task-scoped ones. */
+  api?: Pick<typeof projectFilesApi, 'update' | 'remove' | 'replaceFile'> & {
+    /** Save an edited photo over a file that belongs to another module (no docId). */
+    replaceImage?: (key: string, body: { fileUrl: string; fileName?: string }) => Promise<unknown>;
+  };
 }) {
   const navigate = useNavigate();
   const { openImage } = useImageViewer();
@@ -70,6 +75,8 @@ export default function FileViewer({ files, index, onIndex, onClose, onChanged, 
   if (!file) return null;
   const url = resolveFileUrl(file.fileUrl);
   const editable = canEdit && file.editable && file.docId != null;
+  const imageEditable = canEdit && file.kind === 'image' && !file.generated
+    && (editable || !!api.replaceImage);
   const deletable = editable || (!!onDelete && canEdit && file.docId != null);
 
   // A zoomed photo follows the pointer / finger, so you can look around without dragging.
@@ -102,7 +109,7 @@ export default function FileViewer({ files, index, onIndex, onClose, onChanged, 
   const save = async () => {
     setBusy(true);
     try {
-      await projectFilesApi.update(file.docId!, form);
+      await api.update(file.docId!, form);
       toast.success('Details saved');
       setEditing(false);
       onChanged();
@@ -114,7 +121,7 @@ export default function FileViewer({ files, index, onIndex, onClose, onChanged, 
     if (!confirm(`Delete "${file.fileName}"?`)) return;
     setBusy(true);
     try {
-      await (onDelete ? onDelete(file) : projectFilesApi.remove(file.docId!));
+      await (onDelete ? onDelete(file) : api.remove(file.docId!));
       toast.success('File deleted');
       onClose();
       onChanged();
@@ -126,7 +133,7 @@ export default function FileViewer({ files, index, onIndex, onClose, onChanged, 
     openImage({
       src: url, fileName: file.fileName, editable: true, module: 'PROJECT',
       onReplace: ({ url: newUrl, fileName }) => {
-        projectFilesApi.replaceFile(file.docId!, { fileUrl: newUrl, fileName })
+        (editable ? api.replaceFile(file.docId!, { fileUrl: newUrl, fileName }) : api.replaceImage!(file.key, { fileUrl: newUrl, fileName }))
           .then(() => { toast.success('Image updated'); onChanged(); })
           .catch(() => toast.error('Failed to save the edited image.'));
       },
@@ -291,7 +298,7 @@ export default function FileViewer({ files, index, onIndex, onClose, onChanged, 
                   <dd className="mt-0.5 text-slate-700">{fmtWhen(file.addedAt) || '—'}</dd>
                 </div>
               </div>
-              {!deletable && !file.generated && (
+              {!deletable && !imageEditable && !file.generated && (
                 <p className="rounded-lg bg-slate-50 p-2.5 text-[12px] text-slate-500">
                   Added in {(SOURCES[file.source] || 'another module').toLowerCase()} — change or remove it there.
                 </p>
@@ -299,20 +306,22 @@ export default function FileViewer({ files, index, onIndex, onClose, onChanged, 
             </dl>
           )}
 
-          {deletable && <div className="mt-auto flex flex-wrap gap-2 border-t border-slate-100 p-4">
+          {(deletable || imageEditable) && <div className="mt-auto flex flex-wrap gap-2 border-t border-slate-100 p-4">
             {editable && !editing && (
               <button onClick={() => setEditing(true)} className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-[13px] font-medium text-slate-700 hover:bg-slate-50">
                 <Pencil className="h-4 w-4" /> Edit details
               </button>
             )}
-            {editable && file.kind === 'image' && (
+            {imageEditable && (
               <button onClick={editImage} className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-[13px] font-medium text-slate-700 hover:bg-slate-50">
                 <Crop className="h-4 w-4" /> Crop / rotate
               </button>
             )}
-            <button onClick={remove} disabled={busy} className="inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-[13px] font-medium text-rose-600 hover:bg-rose-50">
-              <Trash2 className="h-4 w-4" /> Delete
-            </button>
+            {deletable && (
+              <button onClick={remove} disabled={busy} className="inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-[13px] font-medium text-rose-600 hover:bg-rose-50">
+                <Trash2 className="h-4 w-4" /> Delete
+              </button>
+            )}
           </div>}
         </aside>}
       </DialogContent>

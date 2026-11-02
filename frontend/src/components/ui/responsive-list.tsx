@@ -39,7 +39,7 @@ interface ResponsiveListProps<T> {
 }
 
 export default function ResponsiveList<T>({
-  items, columns, getRowKey, renderCard, onRowClick, getRowProps,
+  items = [], columns, getRowKey, renderCard, onRowClick, getRowProps,
   loading = false, skeletonRows = 6,
   emptyIcon, emptyTitle, emptyDescription, emptyAction,
 }: ResponsiveListProps<T>) {

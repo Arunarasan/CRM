@@ -216,7 +216,7 @@ export default function Leads() {
     }
     leadApi.list({ search: debouncedSearch, page, size: rowsPerPage, filters: apiFilters as Partial<LeadFilters> })
       .then((res) => {
-        setLeads(res.data.content);
+        setLeads(res.data.content ?? []);
         setTotalPages(res.data.totalPages);
         setTotalElements(res.data.totalElements);
       })
