@@ -41,7 +41,7 @@ export default function IncentiveReport({ canEdit, x, y, onX, onY, dirty, saving
           <Input type="number" min={0} value={y} disabled={!canEdit} onChange={(e) => onY(e.target.value)} className="mt-1 h-9 w-28" />
         </label>
         {canEdit && <Button size="sm" variant="forest" disabled={!dirty || saving} onClick={onSave}>{saving ? "Saving…" : "Save & refresh"}</Button>}
-        <p className="basis-full text-[11px] text-slate-500 sm:basis-auto sm:flex-1">Changes the shared attendance rule for everyone: the project incentive and attendance bonus.</p>
+        <p className="basis-full text-[11px] text-slate-500 sm:basis-auto sm:flex-1">Changes the shared attendance rule for everyone. It applies to the attendance bonus only.</p>
       </div>
       {rows === null ? <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
         : rows.length === 0 ? <p className="text-sm text-slate-400">No payroll employees.</p>

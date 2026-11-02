@@ -10,7 +10,7 @@ interface Person {
   tasks: { id: number; name: string; status: string }[];
 }
 
-interface Incentive { userId: number; amount: number; state: "WAITING" | "EARNED" | "PAID"; month?: string | null; eligible: boolean }
+interface Incentive { userId: number; amount: number; state: "WAITING" | "EARNED" | "PAID"; month?: string | null }
 
 const inr = (n: number) => `₹${Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
 
@@ -144,7 +144,7 @@ export default function ProjectPeoplePanel({ projectId, onChanged, compact }: { 
                     return (
                       <p className="mt-1">
                         <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${tone}`}>
-                          Incentive {inr(i.amount)} · {label}{!i.eligible ? " · not bonus-eligible" : ""}
+                          Incentive {inr(i.amount)} · {label}
                         </span>
                       </p>
                     );

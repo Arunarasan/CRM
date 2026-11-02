@@ -98,7 +98,7 @@ export default function PayRulesTab({ canEdit }: { canEdit: boolean }) {
         <Field label="Per Google review" prefix="₹" hint="Reward when HR pays a verified QR review. Added to the payslip as a Google reviews line." value={form.reviewReward} onChange={set("reviewReward")} disabled={!canEdit} />
       </Section>
 
-      <Section title="Incentive eligibility" sub="Only the project incentive and the attendance bonus use this rule. They are paid for a month only if EITHER test passes: X days of at least Y hours each, OR total hours ÷ X days reaches Y. The project incentive is counted month by month: a month that fails earns none of it. Leads, Google reviews and incentive bonuses follow their own rules. 0 in either box = no attendance check.">
+      <Section title="Incentive eligibility" sub="Only the attendance bonus uses this rule. It is paid for a month only if EITHER test passes: X days of at least Y hours each, OR total hours ÷ X days reaches Y. Project incentives, leads, Google reviews and incentive bonuses follow their own rules. 0 in either box = no attendance check.">
         <Field label="X — days needed" hint="e.g. 20 days in the month." value={form.incentiveMinDays} onChange={set("incentiveMinDays")} disabled={!canEdit} />
         <Field label="Y — hours per day" hint="e.g. 7. Test 1: X days of at least Y hours. Test 2: total hours ÷ X is at least Y (7 × 20 = 140 hrs)." value={form.incentiveAvgHours} onChange={set("incentiveAvgHours")} disabled={!canEdit} />
       </Section>
@@ -117,7 +117,7 @@ export default function PayRulesTab({ canEdit }: { canEdit: boolean }) {
         onX={set("incentiveMinDays")} onY={set("incentiveAvgHours")} dirty={dirty} saving={saving} onSave={save} reloadKey={reloadKey} />
 
       <p className="text-xs text-slate-500">
-        Only employees marked bonus-eligible receive the project, attendance and performance incentives.
+        Only employees marked bonus-eligible receive the attendance and performance bonuses.
         Changes apply to payslips generated from now on; to update one already made, delete or regenerate it.
       </p>
 
