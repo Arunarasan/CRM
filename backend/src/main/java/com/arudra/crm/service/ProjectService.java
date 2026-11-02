@@ -145,6 +145,11 @@ public class ProjectService {
     @Autowired
     private NotificationService notificationService;
 
+    /** Lazy: PayrollService sits on a wide dependency graph; this keeps ProjectService out of any startup cycle. */
+    @Autowired
+    @org.springframework.context.annotation.Lazy
+    private PayrollService payrollService;
+
     @Autowired
     private org.springframework.context.ApplicationEventPublisher eventPublisher;
 
@@ -853,6 +858,7 @@ public class ProjectService {
         log.setRole("Admin");
         log.setDescription("Status changed " + old + " → " + target + ". Remark: " + remarks.trim());
         activityLogRepository.save(log);
+        if ("COMPLETED".equals(target)) payrollService.notifyProjectIncentive(saved);
         return saved;
     }
 
@@ -994,7 +1000,9 @@ public class ProjectService {
         project.setActualCompletionDate(java.time.LocalDate.now());
         project.setCompletionCertificateBase64(certificateBase64);
         closeOpenProjectTasks(projectId);
-        return projectRepository.save(project);
+        Project done = projectRepository.save(project);
+        payrollService.notifyProjectIncentive(done);
+        return done;
     }
 
     /**
@@ -1029,6 +1037,7 @@ public class ProjectService {
         project.setHandoverNotes(summary.length() > 500 ? summary.substring(0, 500) : summary);
         closeOpenProjectTasks(projectId);
         Project saved = projectRepository.save(project);
+        payrollService.notifyProjectIncentive(saved);
 
         int photos = 0;
         if (photoUrls != null) {
@@ -1183,7 +1192,9 @@ public class ProjectService {
         project.setProgress(100);
         if (project.getActualCompletionDate() == null) project.setActualCompletionDate(java.time.LocalDate.now());
         closeOpenProjectTasks(projectId);
-        return projectRepository.save(project);
+        Project done = projectRepository.save(project);
+        payrollService.notifyProjectIncentive(done);
+        return done;
     }
 
     /**

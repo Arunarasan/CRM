@@ -528,6 +528,11 @@ export interface RewardRow {
 export interface MyRewards {
   leads: RewardRow; projects: RewardRow; reviews: RewardRow;
   paidTotal: number; pendingTotal: number; earnedTotal: number;
+  /** This month's attendance against the work-incentive bar (X days of Y hrs, or total hrs ÷ X ≥ Y). */
+  eligibility?: {
+    enabled: boolean; met: boolean; daysNeeded: number; hoursPerDay: number;
+    qualifyingDays: number; totalHours: number; totalHoursNeeded: number;
+  };
 }
 
 export interface MyBonuses {

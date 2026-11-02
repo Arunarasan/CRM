@@ -95,9 +95,9 @@ export default function PayRulesTab({ canEdit }: { canEdit: boolean }) {
         <Field label="Per Google review" prefix="₹" hint="Reward when HR pays a verified QR review. Added to the payslip as a Google reviews line." value={form.reviewReward} onChange={set("reviewReward")} disabled={!canEdit} />
       </Section>
 
-      <Section title="Work incentive eligibility" sub="The project, lead, Google-review and incentive-bonus lines above are paid only for a month where BOTH tests pass. If not, they are held back (not lost) and paid in the next month that qualifies. 0 = that test is off.">
-        <Field label="Minimum days present" hint="Days present in the month (half day = ½), e.g. 20." value={form.incentiveMinDays} onChange={set("incentiveMinDays")} disabled={!canEdit} />
-        <Field label="Minimum average hours a day" hint="Total hours ÷ days attended, e.g. 7 (range 7–8 is typical)." value={form.incentiveAvgHours} onChange={set("incentiveAvgHours")} disabled={!canEdit} />
+      <Section title="Work incentive eligibility" sub="The project, lead, Google-review and incentive-bonus lines above are paid for a month only if EITHER test passes: X days of at least Y hours each, OR total hours ÷ X days reaches Y. Lead and project incentives are counted month by month: only work done in that month is paid on that month's payslip, and a month that fails earns none of them. 0 in either box = no attendance check.">
+        <Field label="X — days needed" hint="e.g. 20 days in the month." value={form.incentiveMinDays} onChange={set("incentiveMinDays")} disabled={!canEdit} />
+        <Field label="Y — hours per day" hint="e.g. 7. Test 1: X days of at least Y hours. Test 2: total hours ÷ X is at least Y (7 × 20 = 140 hrs)." value={form.incentiveAvgHours} onChange={set("incentiveAvgHours")} disabled={!canEdit} />
       </Section>
 
       <Section title="Attendance bonus" sub="Earned only when the attendance % below is met and, if you switch on an hours test, when at least one of the two tests passes. If neither passes, no bonus. 0 = off.">

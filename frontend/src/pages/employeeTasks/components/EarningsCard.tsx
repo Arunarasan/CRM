@@ -61,6 +61,7 @@ export default function EarningsCard() {
   const total = lines.reduce((s, l) => s + l.total, 0);
   const pending = lines.reduce((s, l) => s + l.pending, 0);
   const paid = total - pending;
+  const elig = rewards?.eligibility;
 
   return (
     <button onClick={() => navigate('/employee/salary')} className={`${CARD} w-full p-4 text-left active:scale-[0.99]`}>
@@ -76,6 +77,18 @@ export default function EarningsCard() {
         <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-semibold">
           <span className="rounded-full bg-[#E7F2EC] px-2.5 py-1 text-[#28704F]">{t('portal.home.rewardPaid')} {inr(paid)}</span>
           {pending > 0 && <span className="rounded-full bg-[#FBF1DA] px-2.5 py-1 text-[#9D6B10]">{t('portal.home.rewardPending')} {inr(pending)}</span>}
+        </div>
+      )}
+
+      {elig?.enabled && (
+        <div className={`mt-3 rounded-xl px-3 py-2 text-[11.5px] ${elig.met ? 'bg-[#E7F2EC] text-[#28704F]' : 'bg-[#FBF1DA] text-[#9D6B10]'}`}>
+          <div className="flex items-center justify-between gap-2 font-semibold">
+            <span>{t('portal.home.earn.attendance')}</span>
+            <span>{elig.met ? t('portal.home.earn.eligible') : t('portal.home.earn.notYet')}</span>
+          </div>
+          <p className="mt-0.5 tabular-nums">
+            {elig.qualifyingDays}/{elig.daysNeeded} days × {elig.hoursPerDay}h+ · {elig.totalHours}/{elig.totalHoursNeeded} h
+          </p>
         </div>
       )}
 

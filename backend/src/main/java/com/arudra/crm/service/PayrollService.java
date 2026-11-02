@@ -1069,6 +1069,19 @@ public class PayrollService {
         out.put("paidTotal", paidTotal);
         out.put("pendingTotal", pendingTotal);
         out.put("earnedTotal", paidTotal.add(pendingTotal));
+
+        // Where this month's attendance stands against the work-incentive bar (for the employee's earnings card).
+        YearMonth em = ym != null ? ym : YearMonth.now();
+        IncentiveProgress ip = incentiveProgress(employee, em);
+        Map<String, Object> elig = new LinkedHashMap<>();
+        elig.put("enabled", ip.enabled());
+        elig.put("met", ip.met());
+        elig.put("daysNeeded", ip.minDays());
+        elig.put("hoursPerDay", ip.hoursPerDay());
+        elig.put("qualifyingDays", ip.qualifyingDays());
+        elig.put("totalHours", Math.round(ip.totalHours() * 10) / 10.0);
+        elig.put("totalHoursNeeded", ip.minDays() * ip.hoursPerDay());
+        out.put("eligibility", elig);
         return out;
     }
 
@@ -1174,7 +1187,9 @@ public class PayrollService {
         if (!lineOn(PayslipSettingsService.LEAD_REWARD) || rate.signum() <= 0 || employee.getEmail() == null) return BigDecimal.ZERO;
         User user = userRepository.findByEmail(employee.getEmail()).orElse(null);
         if (user == null) return BigDecimal.ZERO;
-        List<LeadShare> due = leadShares(user, rate, ym.atEndOfMonth()).stream().filter(x -> !x.paid()).toList();
+        // Month-wise: only leads that qualified (for this person) in the payslip's own month count.
+        List<LeadShare> due = leadShares(user, rate, ym.atEndOfMonth()).stream()
+                .filter(x -> !x.paid() && ym.equals(leadQualifiedMonth(x.lead(), user.getId()))).toList();
         if (due.isEmpty()) return BigDecimal.ZERO;
         for (LeadShare x : due) {
             jdbc.update("INSERT INTO lead_reward_shares (lead_id, user_id, salary_record_id, amount) VALUES (?,?,?,?)",
@@ -1342,25 +1357,67 @@ public class PayrollService {
     }
 
     /**
-     * Attendance bar for the work incentives: at least {@code incentive_min_days} days present (half day = ½)
-     * and total hours ÷ days attended ≥ {@code incentive_avg_hours}. A test set to 0 is off; both off ⇒ always open.
+     * Attendance bar for the work incentives, with X = {@code incentive_min_days} and Y = {@code incentive_avg_hours}:
+     * open when the employee has X days of at least Y hours each, OR total hours ÷ X reaches Y.
+     * Either value 0 switches the bar off (always open).
      */
     private boolean meetsIncentiveAttendance(Employee employee, YearMonth ym) {
+        return incentiveProgress(employee, ym).met();
+    }
+
+    /** X = days needed, Y = hours; where the employee stands for the month. {@code enabled=false} ⇒ no check. */
+    private record IncentiveProgress(boolean enabled, double minDays, double hoursPerDay,
+                                     int qualifyingDays, double totalHours, boolean met) {}
+
+    private IncentiveProgress incentiveProgress(Employee employee, YearMonth ym) {
         double minDays = settingAmount(K_INC_MIN_DAYS).doubleValue();
         double minAvg = settingAmount(K_INC_AVG_HOURS).doubleValue();
-        if (minDays <= 0 && minAvg <= 0) return true;
-        double days = 0, hours = 0;
-        int attended = 0;
+        if (minDays <= 0 || minAvg <= 0) return new IncentiveProgress(false, minDays, minAvg, 0, 0, true);
+        int qualifying = 0;
+        double hours = 0;
         for (Attendance a : attendanceRepository.findByEmployeeIdAndDateBetween(
                 employee.getId(), ym.atDay(1), ym.atEndOfMonth())) {
             String s = a.getStatus() == null ? "" : a.getStatus().toUpperCase();
             if (!s.equals("PRESENT") && !s.equals("HALF_DAY")) continue;
-            days += s.equals("PRESENT") ? 1.0 : 0.5;
-            attended++;
-            hours += a.getWorkedHours() == null ? 0 : a.getWorkedHours().doubleValue();
+            double h = a.getWorkedHours() == null ? 0 : a.getWorkedHours().doubleValue();
+            hours += h;
+            if (h + 0.0001 >= minAvg) qualifying++;
         }
-        if (minDays > 0 && days + 0.0001 < minDays) return false;
-        return minAvg <= 0 || (attended > 0 && hours / attended + 0.0001 >= minAvg);
+        // Either: X days each with at least Y hours, or total hours ÷ X days reaches Y.
+        boolean met = qualifying + 0.0001 >= minDays || hours / minDays + 0.0001 >= minAvg;
+        return new IncentiveProgress(true, minDays, minAvg, qualifying, hours, met);
+    }
+
+    /**
+     * Called when a project is completed: tells each employee on its Execution / Installation team the
+     * incentive they have earned now and that it is paid on that month's payslip. Never fails the completion.
+     */
+    public void notifyProjectIncentive(Project p) {
+        try {
+            BigDecimal pool = settingAmount(K_PROJECT_INCENTIVE);
+            if (!lineOn(PayslipSettingsService.PROJECT_INCENTIVE) || pool.signum() <= 0) return;
+            Set<Long> team = projectParticipantUserIds(p.getId());
+            if (team.isEmpty()) return;
+            BigDecimal share = projectShare(pool, team.size());
+            YearMonth ym = p.getActualCompletionDate() != null ? YearMonth.from(p.getActualCompletionDate()) : YearMonth.now();
+            String month = ym.getMonth().getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.ENGLISH) + " " + ym.getYear();
+            for (Long uid : team) {
+                User u = userRepository.findById(uid).orElse(null);
+                if (u == null || u.getEmail() == null) continue;
+                Employee e = employeeRepository.findByEmailIgnoreCaseAndIsDeletedFalse(u.getEmail()).orElse(null);
+                if (e == null || !Boolean.TRUE.equals(e.getBonusEligible())) continue;
+                IncentiveProgress ip = incentiveProgress(e, ym);
+                String rule = !ip.enabled() ? "" : " You earn it when you work " + stripZeros(ip.minDays()) + " days of "
+                        + stripZeros(ip.hoursPerDay()) + "+ hrs, or " + stripZeros(ip.minDays() * ip.hoursPerDay())
+                        + "+ total hrs, in " + month + ".";
+                notificationService.dispatch("Project incentive earned",
+                        (p.getProjectName() == null ? "Project" : p.getProjectName()) + " is completed — your incentive is "
+                                + inr(share) + ", added to your " + month + " payslip." + rule,
+                        "SALARY", uid, "/employee/salary");
+            }
+        } catch (RuntimeException ex) {
+            // incentive heads-up is best effort
+        }
     }
 
     private boolean lineOn(String key) {
