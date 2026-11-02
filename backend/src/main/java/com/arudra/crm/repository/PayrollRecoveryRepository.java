@@ -9,4 +9,5 @@ import java.util.List;
 @Repository
 public interface PayrollRecoveryRepository extends JpaRepository<PayrollRecovery, Long> {
     List<PayrollRecovery> findBySalaryRecordId(Long salaryRecordId);
+    List<PayrollRecovery> findBySourceTypeAndSourceId(String sourceType, Long sourceId);
 }

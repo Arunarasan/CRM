@@ -111,25 +111,45 @@ public class PayrollService {
         return loanRepository.save(l);
     }
 
-    /** Admin delete of a lent advance. Refused once any of it has been recovered through a payslip. */
+    /**
+     * Before an advance / loan is deleted (wrong data): take back what unpaid payslips deducted for it and
+     * re-total them. Refused only if a recovery already sits on a PAID payslip — that money has left.
+     */
+    private void undoRecoveriesFor(String sourceType, Long sourceId) {
+        List<PayrollRecovery> recoveries = recoveryRepository.findBySourceTypeAndSourceId(sourceType, sourceId);
+        for (PayrollRecovery pr : recoveries) {
+            if ("PAID".equalsIgnoreCase(pr.getSalaryRecord().getStatus())) {
+                throw new IllegalStateException("Part of this was already deducted on a payslip that is paid, so it can't be deleted. "
+                        + "Close it instead, or add a manual correction.");
+            }
+        }
+        for (PayrollRecovery pr : recoveries) {
+            SalaryRecord rec = pr.getSalaryRecord();
+            BigDecimal amt = nz(pr.getAmount());
+            if ("ADVANCE".equals(sourceType)) rec.setAdvanceRecovery(nz(rec.getAdvanceRecovery()).subtract(amt).max(BigDecimal.ZERO));
+            else rec.setLoanRecovery(nz(rec.getLoanRecovery()).subtract(amt).max(BigDecimal.ZERO));
+            PayslipEditService.applyTotals(rec, lineItemRepository.findBySalaryRecordId(rec.getId()));
+            salaryRepository.save(rec);
+        }
+        recoveryRepository.deleteAll(recoveries);
+        recoveryRepository.flush();
+    }
+
+    /** Admin delete of a lent advance; deductions already on unpaid payslips are taken back. */
     @Transactional
     public void deleteAdvance(Long id) {
         EmployeeAdvance a = advanceRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Advance not found: " + id));
-        if (nz(a.getRecoveredAmount()).signum() > 0) {
-            throw new IllegalStateException("Part of this advance has already been recovered on a payslip, so it can't be deleted.");
-        }
+        undoRecoveriesFor("ADVANCE", id);
         advanceRepository.delete(a);
     }
 
-    /** Admin delete of a loan. Refused once any EMI/repayment has been recovered. */
+    /** Admin delete of a loan; EMIs already on unpaid payslips are taken back. */
     @Transactional
     public void deleteLoan(Long id) {
         EmployeeLoan l = loanRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Loan not found: " + id));
-        if (nz(l.getRecoveredAmount()).signum() > 0) {
-            throw new IllegalStateException("Part of this loan has already been recovered on a payslip, so it can't be deleted.");
-        }
+        undoRecoveriesFor("LOAN", id);
         loanRepository.delete(l);
     }
 
@@ -146,9 +166,7 @@ public class PayrollService {
         }
         if (r.getConvertedAdvanceId() != null) {
             advanceRepository.findById(r.getConvertedAdvanceId()).ifPresent(a -> {
-                if (nz(a.getRecoveredAmount()).signum() > 0) {
-                    throw new IllegalStateException("The advance from this request is already being recovered, so it can't be deleted.");
-                }
+                undoRecoveriesFor("ADVANCE", a.getId());
                 advanceRepository.delete(a);
             });
         }
@@ -866,6 +884,8 @@ public class PayrollService {
                     .add(addPerformanceBonusLine(employee, rec));
         }
 
+        rec.setRemarks(incentiveNote(employee, ym, incentivesOpen, rewardLines, rec.getRemarks()));
+
         // HR's preset allowance / deduction lines (Payslip settings) — percent lines use regular + overtime pay.
         BigDecimal[] preset = addPresetLines(employee, rec, b, regularEarnings.add(overtimeEarnings));
 
@@ -895,6 +915,23 @@ public class PayrollService {
         }
         if (PREVIEWING.get() == null) notifyEmployeePayslip(rec, "GENERATED");
         return rec;
+    }
+
+    /** Says on the payslip why work incentives were not added (attendance short, or no amounts set). */
+    private String incentiveNote(Employee employee, YearMonth ym, boolean open, BigDecimal added, String existing) {
+        if (added.signum() > 0) return existing;
+        String why;
+        if (!open) {
+            IncentiveProgress ip = incentiveProgress(employee, ym);
+            why = "Work incentives not added: attendance " + ip.qualifyingDays() + " day(s) of " + stripZeros(ip.hoursPerDay())
+                    + "+ hrs, " + Math.round(ip.totalHours() * 10) / 10.0 + " total hrs. Needs " + stripZeros(ip.minDays())
+                    + " days of " + stripZeros(ip.hoursPerDay()) + "+ hrs, or " + stripZeros(ip.minDays() * ip.hoursPerDay()) + "+ total hrs.";
+        } else if (settingAmount(K_PROJECT_INCENTIVE).signum() <= 0 && settingAmount(K_LEAD_REWARD).signum() <= 0) {
+            why = "Work incentives not added: per-project and per-lead amounts are 0 in Pay rules.";
+        } else {
+            why = "No work incentive earned this month (no project completed or lead qualified in " + ym + ").";
+        }
+        return existing == null || existing.isBlank() ? why : existing + " " + why;
     }
 
     /**
