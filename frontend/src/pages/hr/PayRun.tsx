@@ -604,7 +604,7 @@ function RequestsDialog({ row, canProcess, onClose, onDone }: {
                 <div className="min-w-0">
                   <div className="font-medium text-slate-900">{REQ_TITLE[q.requestType] || q.requestType} · <span className="tabular-nums">{inr(q.amount)}</span></div>
                   <div className="text-xs text-slate-500">
-                    {q.targetMonth ? `From ${MON[q.targetMonth]} ${q.targetYear} salary` : q.requestType === "ADVANCE" ? (n(q.monthlyRecovery) > 0 ? `Pays back ${inr(q.monthlyRecovery)}/month` : "Pays back from next salary") : ""}
+                    {q.targetMonth ? `From ${MON[q.targetMonth]} ${q.targetYear} salary` : q.requestType === "ADVANCE" ? (n(q.monthlyRecovery) > 0 ? `Suggested pay back ${inr(q.monthlyRecovery)}/month — taken only when requested or entered by HR` : "Taken only when the employee requests repayment or HR enters it") : ""}
                   </div>
                   {q.reason && <p className="mt-1 text-sm text-slate-700">{q.reason}</p>}
                 </div>

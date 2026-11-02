@@ -859,9 +859,10 @@ public class PayrollService {
             deductionRepository.save(dd);
         }
 
-        // Advance + loan recovery (immutable PayrollRecovery rows; balances decremented).
-        BigDecimal advanceRecovery = recoverAdvances(employeeId, rec);
-        BigDecimal loanRecovery = recoverLoans(employeeId, rec);
+        // Borrowed money is NOT deducted automatically. It comes off only through (a) an approved "Repay money"
+        // request for this month (applied just below) or (b) the repayment HR types into the payslip editor.
+        BigDecimal advanceRecovery = BigDecimal.ZERO;
+        BigDecimal loanRecovery = BigDecimal.ZERO;
 
         // Employee-raised, approved requests for this month (extra loan/advance repayment, other debit/credit).
         BigDecimal[] req = applyPayrollRequests(employeeId, month, year, rec);
@@ -2690,43 +2691,6 @@ public class PayrollService {
     }
 
     // ============================================================ helpers
-    private BigDecimal recoverAdvances(Long employeeId, SalaryRecord rec) {
-        BigDecimal total = BigDecimal.ZERO;
-        List<EmployeeAdvance> advances = advanceRepository
-                .findByEmployeeIdAndStatusInAndBalanceGreaterThanOrderByIdAsc(
-                        employeeId, ACTIVE_ADVANCE_STATES, BigDecimal.ZERO);
-        for (EmployeeAdvance a : advances) {
-            BigDecimal due = nz(a.getMonthlyRecovery()).signum() > 0 ? a.getMonthlyRecovery() : a.getBalance();
-            BigDecimal take = due.min(a.getBalance());
-            if (take.signum() <= 0) continue;
-            a.setRecoveredAmount(nz(a.getRecoveredAmount()).add(take));
-            a.setBalance(a.getBalance().subtract(take));
-            a.setStatus(a.getBalance().signum() <= 0 ? "RECOVERED" : "RECOVERING");
-            advanceRepository.save(a);
-            recoveryRepository.save(recovery(rec, "ADVANCE", a.getId(), take));
-            total = total.add(take);
-        }
-        return total;
-    }
-
-    private BigDecimal recoverLoans(Long employeeId, SalaryRecord rec) {
-        BigDecimal total = BigDecimal.ZERO;
-        List<EmployeeLoan> loans = loanRepository
-                .findByEmployeeIdAndStatusAndBalanceGreaterThanOrderByIdAsc(employeeId, "ACTIVE", BigDecimal.ZERO);
-        for (EmployeeLoan l : loans) {
-            BigDecimal due = nz(l.getEmiAmount()).signum() > 0 ? l.getEmiAmount() : l.getBalance();
-            BigDecimal take = due.min(l.getBalance());
-            if (take.signum() <= 0) continue;
-            l.setRecoveredAmount(nz(l.getRecoveredAmount()).add(take));
-            l.setBalance(l.getBalance().subtract(take));
-            if (l.getBalance().signum() <= 0) l.setStatus("CLOSED");
-            loanRepository.save(l);
-            recoveryRepository.save(recovery(rec, "LOAN", l.getId(), take));
-            total = total.add(take);
-        }
-        return total;
-    }
-
     private static PayrollRecovery recovery(SalaryRecord rec, String type, Long sourceId, BigDecimal amount) {
         PayrollRecovery pr = new PayrollRecovery();
         pr.setSalaryRecord(rec);

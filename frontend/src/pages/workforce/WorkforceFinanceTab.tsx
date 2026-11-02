@@ -165,7 +165,7 @@ function EmployeeFinance({ fin, reload }: { fin: WorkforceFinance; reload: () =>
               <li key={d.key} className={`flex flex-wrap items-center gap-x-4 gap-y-1 py-3 ${d.open ? "" : "opacity-60"}`}>
                 <div className="min-w-[9rem] flex-1">
                   <div className="font-medium text-slate-900">{d.kind} · {inr(d.amount)}</div>
-                  <div className="text-xs text-slate-500">{[d.date, Number(d.perMonth || 0) > 0 ? `${inr(d.perMonth)}/month` : null].filter(Boolean).join(" · ") || "—"}</div>
+                  <div className="text-xs text-slate-500">{[d.date, Number(d.perMonth || 0) > 0 ? `suggested ${inr(d.perMonth)}/month` : null].filter(Boolean).join(" · ") || "—"}</div>
                 </div>
                 <div className="text-right">
                   <div className={`font-semibold tabular-nums ${d.open ? "text-rose-700" : "text-slate-500"}`}>{inr(d.balance)}</div>
@@ -241,7 +241,7 @@ function AdvanceDialog({ employeeId, onClose, onSaved }: { employeeId: number; o
         <DialogHeader><DialogTitle>Lend money (advance)</DialogTitle></DialogHeader>
         <div className="grid grid-cols-2 gap-3">
           <Num label="Amount" v={f.amount} on={(v) => setF({ ...f, amount: v })} />
-          <Num label="Pay back per month" v={f.monthlyRecovery} on={(v) => setF({ ...f, monthlyRecovery: v })} />
+          <Num label="Suggested pay back per month (not auto-deducted)" v={f.monthlyRecovery} on={(v) => setF({ ...f, monthlyRecovery: v })} />
           <div className="col-span-2"><Label className="text-xs text-slate-500">Reason</Label><Input value={f.reason} onChange={(e) => setF({ ...f, reason: e.target.value })} /></div>
         </div>
         <DialogFooter>

@@ -251,7 +251,7 @@ export default function QuickPayDialog({
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1.5"><Label>Amount (₹)</Label><Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} /></div>
                       {empType === "ADVANCE" && (
-                        <div className="space-y-1.5"><Label>Monthly recovery (₹)</Label><Input type="number" value={monthlyRecovery} onChange={(e) => setMonthlyRecovery(e.target.value)} placeholder="optional" /></div>
+                        <div className="space-y-1.5"><Label>Suggested pay back per month (₹) — not auto-deducted</Label><Input type="number" value={monthlyRecovery} onChange={(e) => setMonthlyRecovery(e.target.value)} placeholder="optional" /></div>
                       )}
                     </div>
                     <div className="space-y-1.5"><Label>Note / reason</Label><Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="optional" /></div>
