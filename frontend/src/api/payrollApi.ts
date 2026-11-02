@@ -19,6 +19,12 @@ export interface PayRules {
   performanceMinScore: number;
 }
 
+export interface IncentiveReportRow {
+  employeeId: number; name: string; employeeCode?: string; bonusEligible: boolean;
+  attendance: { enabled: boolean; met: boolean; qualifyingDays: number; totalHours: number; daysNeeded: number; hoursPerDay: number; totalHoursNeeded: number };
+  generated?: boolean; lines?: { label: string; amount: number }[]; total?: number; note?: string | null; error?: string;
+}
+
 export interface PayslipAutoSettings {
   enabled: boolean;
   dayOfMonth: number;
@@ -109,6 +115,8 @@ export const payrollApi = {
   payrollPreview: (month: number, year: number) =>
     api.get<PayrollPreviewRow[]>(`/hr/payroll/preview?month=${month}&year=${year}`).then((r) => r.data),
   payRules: () => api.get<PayRules>('/hr/payroll/rules').then((r) => r.data),
+  incentiveReport: (month: number, year: number) =>
+    api.get<IncentiveReportRow[]>('/hr/payroll/incentive-report', { params: { month, year } }).then((r) => r.data),
   savePayRules: (body: Partial<PayRules>) => api.put<PayRules>('/hr/payroll/rules', body).then((r) => r.data),
   payslipSettings: () => api.get<PayslipSettings>('/hr/payroll/payslip-settings').then((r) => r.data),
   payslipSettingsDefaults: () => api.get<PayslipSettings>('/hr/payroll/payslip-settings/defaults').then((r) => r.data),

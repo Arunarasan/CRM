@@ -600,6 +600,13 @@ public class HrController {
         return ResponseEntity.ok(payrollService.getPayRules());
     }
 
+    /** Who earns which incentive in a month, by the rules (read-only; dry-runs months with no payslip yet). */
+    @GetMapping("/payroll/incentive-report")
+    @PreAuthorize(PAYROLL_READ)
+    public ResponseEntity<List<Map<String, Object>>> incentiveReport(@RequestParam int month, @RequestParam int year) {
+        return ResponseEntity.ok(payrollService.incentiveReport(month, year));
+    }
+
     @PutMapping("/payroll/rules")
     @PreAuthorize(PAYROLL_PROCESS)
     public ResponseEntity<Map<String, Object>> savePayRules(@RequestBody Map<String, Object> body) {

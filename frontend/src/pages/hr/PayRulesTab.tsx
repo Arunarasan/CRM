@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import IncentiveReport from "./IncentiveReport";
 
 type Form = Record<keyof PayRules, string>;
 
@@ -52,6 +53,7 @@ export default function PayRulesTab({ canEdit }: { canEdit: boolean }) {
   const [form, setForm] = useState<Form | null>(null);
   const [saved, setSaved] = useState<Form | null>(null);
   const [saving, setSaving] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     payrollApi.payRules()
@@ -72,6 +74,7 @@ export default function PayRulesTab({ canEdit }: { canEdit: boolean }) {
       const f = toForm(r);
       setForm(f); setSaved(f);
       toast.success("Pay rules saved");
+      setReloadKey((k) => k + 1);
     } catch (e) {
       toast.error(errMsg(e, "Could not save pay rules"));
     } finally {
@@ -109,6 +112,9 @@ export default function PayRulesTab({ canEdit }: { canEdit: boolean }) {
         <Field label="Performance bonus" prefix="₹" value={form.performanceBonus} onChange={set("performanceBonus")} disabled={!canEdit} />
         <Field label="Minimum performance score" hint="Out of 100 — the auto score from attendance, tasks and reviews." value={form.performanceMinScore} onChange={set("performanceMinScore")} disabled={!canEdit} />
       </Section>
+
+      <IncentiveReport canEdit={canEdit} x={form.incentiveMinDays} y={form.incentiveAvgHours}
+        onX={set("incentiveMinDays")} onY={set("incentiveAvgHours")} dirty={dirty} saving={saving} onSave={save} reloadKey={reloadKey} />
 
       <p className="text-xs text-slate-500">
         Only employees marked bonus-eligible receive the project, attendance and performance incentives.
