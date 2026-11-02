@@ -792,6 +792,19 @@ public class EmployeeTimeService {
         return m;
     }
 
+    /**
+     * Hours worked on each day that has any, over a date range — the same per-day figures payroll pays from
+     * (approved sessions), so eligibility rules agree with the payslip's own hours.
+     */
+    public List<BigDecimal> dailyWorkedHours(Employee employee, LocalDate from, LocalDate to) {
+        List<BigDecimal> out = new ArrayList<>();
+        for (Attendance a : attendanceRepository.findByEmployeeIdAndDateBetween(employee.getId(), from, to)) {
+            BigDecimal h = computeBreakdown(a, employee, LocalTime.now())[0];
+            if (h.signum() > 0) out.add(h);
+        }
+        return out;
+    }
+
     private static BigDecimal nz(BigDecimal v, BigDecimal d) { return v == null ? d : v; }
 
     private static String note(String s) {

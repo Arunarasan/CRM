@@ -1375,11 +1375,10 @@ public class PayrollService {
         if (minDays <= 0 || minAvg <= 0) return new IncentiveProgress(false, minDays, minAvg, 0, 0, true);
         int qualifying = 0;
         double hours = 0;
-        for (Attendance a : attendanceRepository.findByEmployeeIdAndDateBetween(
-                employee.getId(), ym.atDay(1), ym.atEndOfMonth())) {
-            String s = a.getStatus() == null ? "" : a.getStatus().toUpperCase();
-            if (!s.equals("PRESENT") && !s.equals("HALF_DAY")) continue;
-            double h = a.getWorkedHours() == null ? 0 : a.getWorkedHours().doubleValue();
+        // Hours come from the same session figures the payslip pays from (not the daily summary column,
+        // which can be empty for session-based days).
+        for (BigDecimal bd : timeService.dailyWorkedHours(employee, ym.atDay(1), ym.atEndOfMonth())) {
+            double h = bd.doubleValue();
             hours += h;
             if (h + 0.0001 >= minAvg) qualifying++;
         }
