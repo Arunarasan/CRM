@@ -47,7 +47,9 @@ public class EmployeeTaskService {
     @Autowired
     private TaskRepository taskRepository;
 
+    // @Lazy: ProjectFilesService -> CallRecordingService -> EmployeeTaskService would otherwise be a startup cycle.
     @Autowired
+    @org.springframework.context.annotation.Lazy
     private ProjectFilesService projectFilesService;
 
     @Autowired
