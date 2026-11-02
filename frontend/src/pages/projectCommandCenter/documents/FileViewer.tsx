@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Download, ExternalLink, Pencil, Trash2, X, Crop, Info, ZoomIn, ZoomOut } from 'lucide-react';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
-import { resolveFileUrl } from '@/lib/uploadFile';
-import { useImageViewer } from '@/components/ImageViewerProvider';
+import { resolveFileUrl, uploadFile } from '@/lib/uploadFile';
+import { useAuth } from '@/hooks/useAuth';
+import ImageEditor from '@/components/ImageEditor';
 import { toast } from '@/components/ui/toast';
 import { FileThumb, SourceChip } from './FileTile';
 import { ProjectFile, SOURCES, UPLOAD_TYPES, fmtWhen, projectFilesApi } from './fileTypes';
@@ -34,8 +35,9 @@ export default function FileViewer({ files, index, onIndex, onClose, onChanged, 
   };
 }) {
   const navigate = useNavigate();
-  const { openImage } = useImageViewer();
+  const { isAdmin } = useAuth();
   const file = index != null ? files[index] : null;
+  const [editBlob, setEditBlob] = useState<Blob | null>(null);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({ fileName: '', documentType: '', remarks: '' });
   const [busy, setBusy] = useState(false);
@@ -75,7 +77,7 @@ export default function FileViewer({ files, index, onIndex, onClose, onChanged, 
   if (!file) return null;
   const url = resolveFileUrl(file.fileUrl);
   const editable = canEdit && file.editable && file.docId != null;
-  const imageEditable = canEdit && file.kind === 'image' && !file.generated
+  const imageEditable = canEdit && isAdmin && file.kind === 'image' && !file.generated
     && (editable || !!api.replaceImage);
   const deletable = editable || (!!onDelete && canEdit && file.docId != null);
 
@@ -129,19 +131,33 @@ export default function FileViewer({ files, index, onIndex, onClose, onChanged, 
     finally { setBusy(false); }
   };
 
-  const editImage = () => {
-    openImage({
-      src: url, fileName: file.fileName, editable: true, module: 'PROJECT',
-      onReplace: ({ url: newUrl, fileName }) => {
-        (editable ? api.replaceFile(file.docId!, { fileUrl: newUrl, fileName }) : api.replaceImage!(file.key, { fileUrl: newUrl, fileName }))
-          .then(() => { toast.success('Image updated'); onChanged(); })
-          .catch(() => toast.error('Failed to save the edited image.'));
-      },
-    });
+  // Crop / rotate opens the editor straight from this gallery. (It used to go through the app-wide image
+  // viewer, whose Edit button sits outside this modal dialog and so could not be clicked.)
+  const editImage = async () => {
+    setBusy(true);
+    try {
+      const blob = await fetch(url).then((r) => { if (!r.ok) throw new Error('fetch failed'); return r.blob(); });
+      setEditBlob(blob);
+    } catch { toast.error("Couldn't open this image for editing. Try again."); }
+    finally { setBusy(false); }
+  };
+
+  const saveEditedImage = async (edited: File) => {
+    setBusy(true);
+    try {
+      const res = await uploadFile(edited, 'PROJECT');
+      const body = { fileUrl: res.fileUrl, fileName: res.fileName };
+      await (editable ? api.replaceFile(file.docId!, body) : api.replaceImage!(file.key, body));
+      toast.success('Image updated');
+      setEditBlob(null);
+      onChanged();
+    } catch { toast.error('Failed to save the edited image.'); }
+    finally { setBusy(false); }
   };
 
   return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
+    <>
+    <Dialog open onOpenChange={(o) => !o && !editBlob && onClose()}>
       <DialogContent className="flex h-[100dvh] max-h-[100dvh] w-screen max-w-none flex-col gap-0 overflow-hidden rounded-none border-0 p-0 sm:h-[94vh] sm:max-h-[94vh] sm:w-[97vw] sm:max-w-7xl sm:rounded-2xl lg:flex-row [&>button]:hidden">
         <DialogTitle className="sr-only">{file.fileName}</DialogTitle>
         {/* Media */}
@@ -326,5 +342,9 @@ export default function FileViewer({ files, index, onIndex, onClose, onChanged, 
         </aside>}
       </DialogContent>
     </Dialog>
+    {editBlob && (
+      <ImageEditor file={editBlob} fileName={file.fileName} open onCancel={() => setEditBlob(null)} onSave={saveEditedImage} />
+    )}
+    </>
   );
 }

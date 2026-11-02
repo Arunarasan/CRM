@@ -42,9 +42,9 @@ export default function PhotosDrawingsPanel({ leadId, measurement, fieldMode }: 
     ]);
     const out: ProjectFile[] = [
       ...(docs as any[]).filter((d) => d.fileUrl && isImage(d.documentType, d.fileName || d.fileUrl)).map((d): ProjectFile => ({
-        key: `doc${d.id}`, source: "LEAD", sourceLabel: "Lead documents", type: d.category || "Photo", kind: "image",
+        key: `doc${d.id}`, docId: d.id, source: "LEAD", sourceLabel: "Lead documents", type: d.category || "Photo", kind: "image",
         category: isDrawingCategory(d.category) ? "DRAWING" : "PHOTO", fileName: d.fileName || "Image", fileUrl: d.fileUrl,
-        description: d.description, addedBy: d.uploadedBy?.name, addedAt: d.createdAt, editable: false, generated: false,
+        description: d.description, addedBy: d.uploadedBy?.name, addedAt: d.createdAt, editable: true, generated: false,
       })),
       ...(drawings as any[]).filter((d) => d.filePath && isImage(undefined, d.filePath)).map((d): ProjectFile => ({
         key: `dr${d.id}`, source: "MEASUREMENT", sourceLabel: "Measurement", type: d.drawingType || "Drawing", kind: "image",
@@ -104,7 +104,12 @@ export default function PhotosDrawingsPanel({ leadId, measurement, fieldMode }: 
       )}
       {viewer && (
         <FileViewer files={viewer.list} index={viewer.index} onIndex={(i) => setViewer((v) => (v ? { ...v, index: i } : v))}
-          onClose={() => setViewer(null)} onChanged={() => {}} canEdit={false} />
+          onClose={() => setViewer(null)} onChanged={load} canEdit={!fieldMode}
+          api={{
+            update: (docId, b) => leadApi.updateDocument(leadId, docId, { fileName: b.fileName, documentType: b.documentType, description: b.remarks }),
+            remove: (docId) => leadApi.deleteDocument(leadId, docId),
+            replaceFile: (docId, b) => leadApi.updateDocument(leadId, docId, b),
+          }} />
       )}
     </div>
   );
