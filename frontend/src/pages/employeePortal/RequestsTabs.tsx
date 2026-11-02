@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import api from '@/lib/api';
 import { Link, useLocation } from 'react-router-dom';
 import {
   Boxes, Users, UserPlus, ClipboardList, Plane, PackageCheck, Truck, PhoneCall, Inbox,
@@ -39,18 +40,41 @@ export default function RequestsTabs() {
   const activeRef = useRef<HTMLAnchorElement | null>(null);
 
   const tabs = [
-    { to: HUB, label: t('pw.requests.title'), icon: Inbox, on: pathname === HUB || pathname === `${HUB}/` },
-    ...REQUEST_ITEMS.map((i) => ({ to: i.to, label: t(i.labelKey), icon: i.icon, on: pathname.startsWith(i.to) })),
+    { to: HUB, label: t('pw.requests.title'), icon: Inbox, on: pathname === HUB || pathname === `${HUB}/`, count: 0 },
+    ...REQUEST_ITEMS.map((i) => ({ to: i.to, label: t(i.labelKey), icon: i.icon, on: pathname.startsWith(i.to), count: counts[i.to] || 0 })),
   ];
 
   useEffect(() => {
     activeRef.current?.scrollIntoView({ inline: 'center', block: 'nearest' });
   }, [pathname]);
 
+  // Unread employee alerts, bucketed by the request screen their actionUrl points at.
+  const [counts, setCounts] = useState<Record<string, number>>({});
+  useEffect(() => {
+    let cancelled = false;
+    const load = () => {
+      api.get('/notifications?size=100')
+        .then((res) => {
+          if (cancelled) return;
+          const next: Record<string, number> = {};
+          for (const n of (res.data.content || []) as { read: boolean; actionUrl?: string }[]) {
+            if (n.read || !n.actionUrl) continue;
+            const item = REQUEST_ITEMS.find((i) => n.actionUrl!.startsWith(i.to));
+            if (item) next[item.to] = (next[item.to] || 0) + 1;
+          }
+          setCounts(next);
+        })
+        .catch(() => {});
+    };
+    load();
+    const id = setInterval(load, 30000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [pathname]);
+
   return (
     <div className="sticky top-0 z-10 bg-[#F7F7F5]/95 px-3 pb-1 pt-2 backdrop-blur" role="tablist">
       <div className="flex gap-1 overflow-x-auto rounded-2xl bg-white p-1 shadow-[0_2px_10px_rgba(0,35,22,0.06)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {tabs.map(({ to, label, icon: Icon, on }) => (
+        {tabs.map(({ to, label, icon: Icon, on, count }) => (
           <Link
             key={to}
             to={to}
@@ -62,7 +86,14 @@ export default function RequestsTabs() {
               on ? 'bg-[#0A573B] text-white shadow-[0_2px_8px_rgba(10,87,59,0.3)]' : 'text-[#5B625E] active:bg-[#F2F4F2]'
             }`}
           >
-            <Icon className="h-[18px] w-[18px]" />
+            <span className="relative">
+              <Icon className="h-[18px] w-[18px]" />
+              {count > 0 && (
+                <span className="absolute -right-2.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold leading-none text-white">
+                  {count > 9 ? '9+' : count}
+                </span>
+              )}
+            </span>
             <span className="whitespace-nowrap text-[12px] font-semibold leading-tight">{label}</span>
           </Link>
         ))}
