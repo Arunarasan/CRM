@@ -379,7 +379,11 @@ public class Lead extends BaseEntity {
 
     // Shallow serialization: Project points back to Lead, so nested refs must be
     // cut here to avoid a cyclic (unbounded) JSON graph.
+    // Project is soft-deleted (@SQLRestriction), so a lead can still point at a project that no longer
+    // loads. IGNORE turns that into null; a lazy proxy would throw while the list JSON is being
+    // written and cut the whole response off (empty table, NaN pager).
     @ManyToOne(fetch = FetchType.LAZY)
+    @org.hibernate.annotations.NotFound(action = org.hibernate.annotations.NotFoundAction.IGNORE)
     @JoinColumn(name = "converted_project_id")
     @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "lead", "customer",
             "quotation", "siteVisit", "measurement", "boq", "assignedEmployees"})
