@@ -11,6 +11,8 @@ export interface PayRules {
   projectIncentive: number;
   leadReward: number;
   reviewReward: number;
+  incentiveMinDays: number;
+  incentiveAvgHours: number;
   attendanceBonus: number;
   attendanceMinPercent: number;
   attendanceDayHours: number;

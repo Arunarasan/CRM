@@ -95,6 +95,11 @@ export default function PayRulesTab({ canEdit }: { canEdit: boolean }) {
         <Field label="Per Google review" prefix="₹" hint="Reward when HR pays a verified QR review. Added to the payslip as a Google reviews line." value={form.reviewReward} onChange={set("reviewReward")} disabled={!canEdit} />
       </Section>
 
+      <Section title="Work incentive eligibility" sub="The project, lead, Google-review and incentive-bonus lines above are paid only for a month where BOTH tests pass. If not, they are held back (not lost) and paid in the next month that qualifies. 0 = that test is off.">
+        <Field label="Minimum days present" hint="Days present in the month (half day = ½), e.g. 20." value={form.incentiveMinDays} onChange={set("incentiveMinDays")} disabled={!canEdit} />
+        <Field label="Minimum average hours a day" hint="Total hours ÷ days attended, e.g. 7 (range 7–8 is typical)." value={form.incentiveAvgHours} onChange={set("incentiveAvgHours")} disabled={!canEdit} />
+      </Section>
+
       <Section title="Attendance bonus" sub="Earned only when the attendance % below is met and, if you switch on an hours test, when at least one of the two tests passes. If neither passes, no bonus. 0 = off.">
         <Field label="Bonus amount" prefix="₹" hint="Flat amount. Ignored if 'Bonus in days of pay' is set." value={form.attendanceBonus} onChange={set("attendanceBonus")} disabled={!canEdit} />
         <Field label="Bonus in days of pay" hint="e.g. 1.5 = one and a half days' pay (hourly rate × standard hours per day). Replaces the flat amount." value={form.attendanceBonusDays} onChange={set("attendanceBonusDays")} disabled={!canEdit} />

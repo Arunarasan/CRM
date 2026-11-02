@@ -801,7 +801,10 @@ public class PayrollService {
         // Google-review (QR) rewards are INCENTIVE bonuses too, but get their own counted line.
         BigDecimal projectBonus = BigDecimal.ZERO, manualBonus = BigDecimal.ZERO, incentive = BigDecimal.ZERO;
         List<BigDecimal> reviewRewards = new ArrayList<>();
-        boolean reviewsOn = lineOn(PayslipSettingsService.REVIEW_REWARD);
+        // Work incentives are earned only in a month that met the attendance bar; otherwise they stay unpaid
+        // (APPROVED bonuses / unmarked leads / unpaid projects) and are picked up in a later qualifying month.
+        boolean incentivesOpen = meetsIncentiveAttendance(employee, ym);
+        boolean reviewsOn = incentivesOpen && lineOn(PayslipSettingsService.REVIEW_REWARD);
         if (Boolean.TRUE.equals(employee.getBonusEligible())) {
             List<EmployeeBonus> approved = bonusRepository
                     .findByEmployeeIdAndStatusAndPaidSalaryRecordIdIsNullAndIsDeletedFalse(employeeId, "APPROVED");
@@ -815,6 +818,7 @@ public class PayrollService {
             for (EmployeeBonus bo : approved) {
                 // Review rewards HR switched off stay APPROVED, so they pay once the line is switched back on.
                 if (!reviewsOn && reviewBonusIds.contains(bo.getId())) continue;
+                if (!incentivesOpen && "INCENTIVE".equalsIgnoreCase(bo.getBonusType())) continue;
                 BigDecimal amt = nz(bo.getAmount());
                 if (reviewBonusIds.contains(bo.getId())) reviewRewards.add(amt);
                 else if ("INCENTIVE".equalsIgnoreCase(bo.getBonusType())) incentive = incentive.add(amt);
@@ -854,11 +858,11 @@ public class PayrollService {
         rec.setAlreadyPaid(req[5]);
 
         // Counted reward lines (stored as payslip line items so the portal + PDF list them by name).
-        BigDecimal rewardLines = addCountedLine(rec, lineName(PayslipSettingsService.REVIEW_REWARD), "review", reviewRewards)
-                .add(addLeadRewardLine(employee, rec, ym));
+        BigDecimal rewardLines = addCountedLine(rec, lineName(PayslipSettingsService.REVIEW_REWARD), "review", reviewRewards);
+        if (incentivesOpen) rewardLines = rewardLines.add(addLeadRewardLine(employee, rec, ym));
         if (Boolean.TRUE.equals(employee.getBonusEligible())) {
-            rewardLines = rewardLines.add(addProjectIncentiveLine(employee, rec, ym))
-                    .add(addAttendanceBonusLine(employee, rec, ym))
+            if (incentivesOpen) rewardLines = rewardLines.add(addProjectIncentiveLine(employee, rec, ym));
+            rewardLines = rewardLines.add(addAttendanceBonusLine(employee, rec, ym))
                     .add(addPerformanceBonusLine(employee, rec));
         }
 
@@ -1337,6 +1341,28 @@ public class PayrollService {
         return addFlatLine(rec, label, amount);
     }
 
+    /**
+     * Attendance bar for the work incentives: at least {@code incentive_min_days} days present (half day = ½)
+     * and total hours ÷ days attended ≥ {@code incentive_avg_hours}. A test set to 0 is off; both off ⇒ always open.
+     */
+    private boolean meetsIncentiveAttendance(Employee employee, YearMonth ym) {
+        double minDays = settingAmount(K_INC_MIN_DAYS).doubleValue();
+        double minAvg = settingAmount(K_INC_AVG_HOURS).doubleValue();
+        if (minDays <= 0 && minAvg <= 0) return true;
+        double days = 0, hours = 0;
+        int attended = 0;
+        for (Attendance a : attendanceRepository.findByEmployeeIdAndDateBetween(
+                employee.getId(), ym.atDay(1), ym.atEndOfMonth())) {
+            String s = a.getStatus() == null ? "" : a.getStatus().toUpperCase();
+            if (!s.equals("PRESENT") && !s.equals("HALF_DAY")) continue;
+            days += s.equals("PRESENT") ? 1.0 : 0.5;
+            attended++;
+            hours += a.getWorkedHours() == null ? 0 : a.getWorkedHours().doubleValue();
+        }
+        if (minDays > 0 && days + 0.0001 < minDays) return false;
+        return minAvg <= 0 || (attended > 0 && hours / attended + 0.0001 >= minAvg);
+    }
+
     private boolean lineOn(String key) {
         PayslipSettingsService.Builtin b = payslipSettings.builtin(key);
         return b == null || b.isEnabled();
@@ -1384,6 +1410,8 @@ public class PayrollService {
     private static final String K_ATT_MIN_DAYS = "payroll.attendance_min_days";
     private static final String K_ATT_AVG_HOURS = "payroll.attendance_avg_hours";
     private static final String K_ATT_BONUS_DAYS = "payroll.attendance_bonus_days";
+    private static final String K_INC_MIN_DAYS = "payroll.incentive_min_days";
+    private static final String K_INC_AVG_HOURS = "payroll.incentive_avg_hours";
     private static final String K_PERFORMANCE_BONUS = "payroll.performance_bonus_amount";
     private static final String K_PERFORMANCE_MIN_SCORE = "payroll.performance_bonus_min_score";
     private static final String K_REVIEW_REWARD = "google_review_reward_amount";
@@ -1397,6 +1425,8 @@ public class PayrollService {
         RULE_KEYS.put("projectIncentive", K_PROJECT_INCENTIVE);
         RULE_KEYS.put("leadReward", K_LEAD_REWARD);
         RULE_KEYS.put("reviewReward", K_REVIEW_REWARD);
+        RULE_KEYS.put("incentiveMinDays", K_INC_MIN_DAYS);
+        RULE_KEYS.put("incentiveAvgHours", K_INC_AVG_HOURS);
         RULE_KEYS.put("attendanceBonus", K_ATTENDANCE_BONUS);
         RULE_KEYS.put("attendanceMinPercent", K_ATTENDANCE_MIN_PERCENT);
         RULE_KEYS.put("attendanceDayHours", K_ATT_DAY_HOURS);
@@ -1432,12 +1462,12 @@ public class PayrollService {
             throw new IllegalArgumentException("Standard hours per day must be between 1 and 24.");
         if (days != null && (days.signum() == 0 || days.compareTo(BigDecimal.valueOf(31)) > 0))
             throw new IllegalArgumentException("Working days per month must be between 1 and 31.");
-        for (String hrsKey : List.of("attendanceDayHours", "attendanceAvgHours")) {
+        for (String hrsKey : List.of("attendanceDayHours", "attendanceAvgHours", "incentiveAvgHours")) {
             BigDecimal v = parsed.get(hrsKey);
             if (v != null && v.compareTo(BigDecimal.valueOf(24)) > 0)
                 throw new IllegalArgumentException("'" + hrsKey + "' can't be above 24 hours.");
         }
-        for (String dayKey : List.of("attendanceMinDays", "attendanceBonusDays")) {
+        for (String dayKey : List.of("attendanceMinDays", "attendanceBonusDays", "incentiveMinDays")) {
             BigDecimal v = parsed.get(dayKey);
             if (v != null && v.compareTo(BigDecimal.valueOf(31)) > 0)
                 throw new IllegalArgumentException("'" + dayKey + "' can't be above 31 days.");
