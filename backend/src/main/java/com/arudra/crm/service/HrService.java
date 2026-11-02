@@ -413,7 +413,11 @@ public class HrService {
         List<TaskAssignment> tasks = new ArrayList<>();
         if (emp.getEmail() != null && !emp.getEmail().isBlank()) {
             userRepository.findByEmail(emp.getEmail()).ifPresent(u ->
-                    tasks.addAll(taskAssignmentRepository.findByResourceTypeAndResourceId("EMPLOYEE", u.getId())));
+                    // Tasks they were taken off (CANCELLED/REJECTED) are no longer theirs — don't count them.
+                    taskAssignmentRepository.findByResourceTypeAndResourceId("EMPLOYEE", u.getId()).stream()
+                            .filter(a -> !"CANCELLED".equals(a.getStatus()) && !"REJECTED".equals(a.getStatus())
+                                    && !Boolean.TRUE.equals(a.getIsDeleted()))
+                            .forEach(tasks::add));
         }
         int totalTasks = tasks.size(), completed = 0, onTime = 0, overdue = 0;
         for (TaskAssignment t : tasks) {

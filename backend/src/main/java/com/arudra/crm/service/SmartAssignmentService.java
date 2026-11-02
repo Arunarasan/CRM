@@ -347,6 +347,7 @@ public class SmartAssignmentService {
         long completed = all.stream().filter(a -> "COMPLETED".equalsIgnoreCase(a.getStatus())).count();
         double base = clamp01(completed / 5.0);
         boolean sameProject = project != null && all.stream()
+                .filter(a -> !"CANCELLED".equals(a.getStatus()) && !"REJECTED".equals(a.getStatus()))
                 .anyMatch(a -> a.getTask() != null && a.getTask().getProject() != null
                         && project.getId().equals(a.getTask().getProject().getId()));
         if (sameProject && Boolean.TRUE.equals(cfg.getPreferSameProjectTeam())) {

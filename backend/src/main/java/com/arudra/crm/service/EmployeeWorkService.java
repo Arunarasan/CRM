@@ -37,7 +37,11 @@ public class EmployeeWorkService {
         User user = emp != null && emp.getEmail() != null ? userRepository.findByEmail(emp.getEmail()).orElse(null) : null;
         if (user != null) {
             LocalDate today = LocalDate.now();
-            List<TaskAssignment> mine = taskAssignmentRepository.findByEmployeeId(user.getId());
+            // Only assignments still theirs: a task they were taken off (CANCELLED/REJECTED) must not
+            // show or count — nor pull its order in through the task lookup below.
+            List<TaskAssignment> mine = taskAssignmentRepository.findByEmployeeId(user.getId()).stream()
+                    .filter(a -> !DEAD.contains(a.getStatus()) && !Boolean.TRUE.equals(a.getIsDeleted()))
+                    .toList();
             Set<Long> taskIds = new HashSet<>();
             for (TaskAssignment a : mine) if (a.getTask() != null) taskIds.add(a.getTask().getId());
 

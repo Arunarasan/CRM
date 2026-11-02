@@ -4,7 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft, Camera, AlertTriangle, Package, Play, Pause, CheckCircle2, ThumbsUp,
   Navigation, ChevronDown, UserPlus, ClipboardList, ClipboardCheck, MapPin, Image as ImageIcon,
-  Users, MessageSquare, Phone, MessageCircle, Star, Home, Wallet, FileText, UserCircle, Mic, CalendarDays, Building2,
+  Truck, Users, MessageSquare, Phone, MessageCircle, Star, Home, Wallet, FileText, UserCircle, Mic, CalendarDays, Building2,
 } from 'lucide-react';
 import api from '@/lib/api';
 import { employeeTaskApi } from '@/api/employeeTaskApi';
@@ -45,6 +45,18 @@ import OrderTaskView from './components/OrderTaskView';
 import InstallTaskView from './components/InstallTaskView';
 import OrderStepSheet from './components/OrderStepSheet';
 import { stepLabel } from './components/OrderTaskView';
+import { DeliverSheet } from '@/components/bundles/GoodsDeliveryView';
+import { employeePortalApi } from '@/api/employeePortalApi';
+import type { Bundle } from '@/api/bundleApi';
+import type { OrderView } from '@/types/employeeTask';
+
+/** The order task's data in the shape the delivery sheet reads. */
+const deliverBundle = (o: OrderView): Bundle => ({
+  id: o.id, code: o.code, status: o.status, handoverMode: o.handoverMode ?? 'PICKUP',
+  customerName: o.customerName, customerPhone: o.customerPhone, invoiceNumber: o.invoiceNumber,
+  balanceDue: o.balanceDue, itemCount: o.items.length,
+  items: o.items.map((i) => ({ id: i.id, description: i.description ?? 'Item', quantity: i.quantity ?? 1, unit: i.unit })),
+} as unknown as Bundle);
 import { useT, useTr, rich, dateLocale, currentLang } from '@/i18n';
 
 /** A quiet disclosure row — keeps history/team/notes tucked away until wanted. Designed to sit
@@ -381,6 +393,7 @@ export default function TaskDetail({ embeddedTaskId, onChanged }: { embeddedTask
   const [task, setTask] = useState<TaskDetailType | null>(null);
   const [note, setNote] = useState('');
   const [voice, setVoice] = useState<CapturedAudio[]>([]);
+  const [deliverOpen, setDeliverOpen] = useState(false);
   const [sheet, setSheet] = useState<'progress' | 'issue' | 'material' | 'complete' | 'payment' | 'installed' | 'orderstep' | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [formFocus, setFormFocus] = useState<string | null>(null);
@@ -942,6 +955,11 @@ export default function TaskDetail({ embeddedTaskId, onChanged }: { embeddedTask
             <button onClick={pickUp} disabled={busy} className={`${solid} bg-[#0A573B] text-white`}>
               <ThumbsUp className="h-4 w-4" /> {t('pw.td.take_this_task')}
             </button>
+          ) : orderView && task.order?.status === 'COMPLETED' && task.order.handoverMode !== 'INSTALL' ? (
+            // Stitched and packed: hand it to the customer right here (collects what's owed, same as Goods Delivery).
+            <button onClick={() => setDeliverOpen(true)} disabled={busy} className={`${solid} bg-[#0A573B] text-white`}>
+              <Truck className="h-4 w-4" /> {t('pw.gd.deliverTitle', { code: task.order.code })}
+            </button>
           ) : !mine ? null : orderView ? (
             orderNext === 'PROCESS' ? (
               <button onClick={advanceOrderNow} disabled={busy} className={`${solid} bg-[#0A573B] text-white`}>
@@ -969,6 +987,10 @@ export default function TaskDetail({ embeddedTaskId, onChanged }: { embeddedTask
             </p>
           )}
         </div>
+      )}
+      {deliverOpen && task.order && (
+        <DeliverSheet order={deliverBundle(task.order)} deliver={employeePortalApi.deliverOrder}
+          onClose={() => setDeliverOpen(false)} onDone={() => { setDeliverOpen(false); load(); }} />
       )}
       {task.order && orderNext && (
         <OrderStepSheet taskId={taskId} code={task.order.code} nextStatus={orderNext} open={sheet === 'orderstep'}

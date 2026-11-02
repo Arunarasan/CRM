@@ -120,7 +120,7 @@ export default function GoodsDeliveryView({ loadOrders, deliver }: {
   );
 }
 
-function DeliverSheet({ order, deliver: sendDelivery, onClose, onDone }: {
+export function DeliverSheet({ order, deliver: sendDelivery, onClose, onDone }: {
   order: Bundle; deliver: (id: number, body: DeliverBody) => Promise<unknown>; onClose: () => void; onDone: () => void;
 }) {
   const { t } = useT();
