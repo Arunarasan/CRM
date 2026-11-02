@@ -1531,6 +1531,8 @@ public class EmployeeTaskService {
     /** Comment role marking a task the office completed on the employee's behalf ("By office" badge). */
     public static final String OFFICE_CLOSE_ROLE = "OFFICE_CLOSE";
     public static final String COLLECT_REQUIREMENT_CODE = "TT_COLLECT_REQUIREMENT";
+    /** "Lead Works" — the one lead task (site visit, measure & quote); template code kept from the merged task. */
+    public static final String LEAD_WORKS_CODE = "TT_MEASURE_QUOTE";
 
     @Autowired @org.springframework.context.annotation.Lazy
     private TaskTimeService taskTimeService;

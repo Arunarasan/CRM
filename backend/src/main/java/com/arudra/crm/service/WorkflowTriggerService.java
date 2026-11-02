@@ -137,7 +137,9 @@ public class WorkflowTriggerService {
             if (project.getLead() != null) {
                 // Idempotent — for a floor-split (several projects, one lead) this closes the lead
                 // workflow on the first call and is a no-op thereafter.
-                advanceLeadPhaseOnEvent(project.getLead().getId(), "LEAD_QUOTATION");
+                // Lead Works lives in LEAD_QUALIFICATION on new leads; older leads still end at LEAD_QUOTATION.
+                Long leadId = project.getLead().getId();
+                advanceLeadPhaseOnEvent(leadId, instanceHasPhase(leadId, "LEAD_QUOTATION") ? "LEAD_QUOTATION" : "LEAD_QUALIFICATION");
             }
             // Build phases/rooms/work-items/materials from the linked BOQ, but WITHOUT per-item tasks.
             // Skipped for floor-split conversions, where each project owns only a slice of the BOQ

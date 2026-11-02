@@ -1043,6 +1043,61 @@ public class PayrollService {
     }
 
     /**
+     * Who earns which incentive in a month, by the rules: for every payroll employee, where they stand on the
+     * attendance rule and the incentive lines they get (from their payslip if one exists, else a dry run), with
+     * the payslip note explaining anything missing. Changes nothing.
+     */
+    public List<Map<String, Object>> incentiveReport(int month, int year) {
+        YearMonth ym = YearMonth.of(year, month);
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (Employee e : employeeRepository.findByPayrollEnabledTrueAndIsDeletedFalse()) {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("employeeId", e.getId());
+            row.put("name", ((e.getFirstName() == null ? "" : e.getFirstName()) + " "
+                    + (e.getLastName() == null ? "" : e.getLastName())).trim());
+            row.put("employeeCode", e.getEmployeeCode());
+            row.put("bonusEligible", Boolean.TRUE.equals(e.getBonusEligible()));
+            IncentiveProgress ip = incentiveProgress(e, ym);
+            Map<String, Object> att = new LinkedHashMap<>();
+            att.put("enabled", ip.enabled());
+            att.put("met", ip.met());
+            att.put("qualifyingDays", ip.qualifyingDays());
+            att.put("totalHours", Math.round(ip.totalHours() * 10) / 10.0);
+            att.put("daysNeeded", ip.minDays());
+            att.put("hoursPerDay", ip.hoursPerDay());
+            att.put("totalHoursNeeded", ip.minDays() * ip.hoursPerDay());
+            row.put("attendance", att);
+            try {
+                SalaryRecord existing = salaryRepository.findByEmployeeIdAndMonthAndYear(e.getId(), month, year).orElse(null);
+                SalaryRecord rec = existing != null ? existing : previewPayslip(e.getId(), month, year);
+                List<PayslipLineItem> items = existing != null
+                        ? lineItemRepository.findBySalaryRecordIdAndIsDeletedFalseOrderByIdAsc(existing.getId())
+                        : rec.getLineItems();
+                List<Map<String, Object>> lines = new ArrayList<>();
+                BigDecimal total = BigDecimal.ZERO;
+                for (PayslipLineItem it : items == null ? List.<PayslipLineItem>of() : items) {
+                    if (!"AUTO".equals(it.getSource()) || !"EARNING".equals(it.getCategory())) continue;
+                    lines.add(Map.of("label", it.getLabel(), "amount", nz(it.getAmount())));
+                    total = total.add(nz(it.getAmount()));
+                }
+                if (nz(rec.getIncentive()).signum() > 0) {
+                    lines.add(Map.of("label", "Approved incentive bonuses", "amount", nz(rec.getIncentive())));
+                    total = total.add(nz(rec.getIncentive()));
+                }
+                row.put("generated", existing != null);
+                row.put("lines", lines);
+                row.put("total", total);
+                row.put("note", rec.getRemarks());
+            } catch (RuntimeException ex) {
+                row.put("error", ex.getMessage());
+            }
+            rows.add(row);
+        }
+        rows.sort((a, b) -> String.valueOf(a.get("name")).compareToIgnoreCase(String.valueOf(b.get("name"))));
+        return rows;
+    }
+
+    /**
      * Read-only "what I earned" summary for the employee home page: leads collected, projects completed
      * and Google-review rewards, each split into paid (already on a payslip) and pending (earned, will
      * land on the next payslip). Rates are the same site settings the payslip run uses.
@@ -1206,11 +1261,9 @@ public class PayrollService {
         Set<Long> ids = new LinkedHashSet<>();
         if (l.getLeadOwner() != null) ids.add(l.getLeadOwner().getId());
         for (Task t : taskRepository.findByLeadId(l.getId())) {
-            if (Boolean.TRUE.equals(t.getIsDeleted()) || t.getTaskTemplate() == null
-                    || !EmployeeTaskService.COLLECT_REQUIREMENT_CODE.equals(t.getTaskTemplate().getCode())) continue;
+            if (Boolean.TRUE.equals(t.getIsDeleted()) || !isLeadRewardTask(t)) continue;
             for (TaskAssignment a : taskAssignmentRepository.findByTaskId(t.getId())) {
-                if (a.getEmployee() != null && "COMPLETED".equals(a.getStatus())
-                        && !Boolean.TRUE.equals(a.getIsDeleted())) ids.add(a.getEmployee().getId());
+                if (a.getEmployee() != null && earnedLeadTask(t, a)) ids.add(a.getEmployee().getId());
             }
         }
         return ids;
@@ -1225,9 +1278,7 @@ public class PayrollService {
         for (Lead l : leadRepository.findAll(owned.and(LeadSpecification.notDeleted()))) candidates.put(l.getId(), l);
         for (TaskAssignment a : taskAssignmentRepository.findByEmployeeId(uid)) {
             Task t = a.getTask();
-            if (!"COMPLETED".equals(a.getStatus()) || Boolean.TRUE.equals(a.getIsDeleted()) || t == null
-                    || t.getLeadId() == null || t.getTaskTemplate() == null
-                    || !EmployeeTaskService.COLLECT_REQUIREMENT_CODE.equals(t.getTaskTemplate().getCode())
+            if (t == null || t.getLeadId() == null || !isLeadRewardTask(t) || !earnedLeadTask(t, a)
                     || candidates.containsKey(t.getLeadId())) continue;
             leadRepository.findById(t.getLeadId()).filter(l -> !Boolean.TRUE.equals(l.getIsDeleted()))
                     .ifPresent(l -> candidates.put(l.getId(), l));
@@ -1252,8 +1303,8 @@ public class PayrollService {
     }
 
     /**
-     * Pays the employee their share of each qualified lead (they own it or completed its Collect
-     * Requirement task) up to the end of this month and not yet paid. Records each share against this
+     * Pays the employee their share of each qualified lead (they own it or completed its Lead
+     * Works task) up to the end of this month and not yet paid. Records each share against this
      * payslip so it is never counted twice. Returns the amount added (0 when the rate is unset).
      */
     private BigDecimal addLeadRewardLine(Employee employee, SalaryRecord rec, YearMonth ym) {
@@ -1297,15 +1348,43 @@ public class PayrollService {
         if (first == null) first = l.getCreatedAt();
         // An assignee earns it once they have completed Collect Requirement AND the lead qualified: the later of the two.
         for (Task t : taskRepository.findByLeadId(l.getId())) {
-            if (Boolean.TRUE.equals(t.getIsDeleted()) || t.getTaskTemplate() == null
-                    || !EmployeeTaskService.COLLECT_REQUIREMENT_CODE.equals(t.getTaskTemplate().getCode())) continue;
+            if (Boolean.TRUE.equals(t.getIsDeleted()) || !isLeadRewardTask(t)) continue;
             for (TaskAssignment a : taskAssignmentRepository.findByTaskId(t.getId())) {
-                if (a.getEmployee() != null && userId.equals(a.getEmployee().getId()) && "COMPLETED".equals(a.getStatus())
-                        && !Boolean.TRUE.equals(a.getIsDeleted()) && a.getCompletedAt() != null
-                        && (first == null || a.getCompletedAt().isAfter(first))) first = a.getCompletedAt();
+                if (a.getEmployee() == null || !userId.equals(a.getEmployee().getId()) || !earnedLeadTask(t, a)) continue;
+                LocalDateTime done = leadTaskDoneAt(t, a);
+                if (done != null && (first == null || done.isAfter(first))) first = done;
             }
         }
         return first == null ? null : YearMonth.from(first);
+    }
+
+    /** The lead task whose completion earns the lead incentive: Lead Works (current) or the retired Collect Requirement. */
+    private static boolean isLeadRewardTask(Task t) {
+        if (t.getTaskTemplate() == null) return false;
+        String c = t.getTaskTemplate().getCode();
+        return EmployeeTaskService.LEAD_WORKS_CODE.equals(c) || EmployeeTaskService.COLLECT_REQUIREMENT_CODE.equals(c);
+    }
+
+    /**
+     * Whether this assignee earned a share. Lead Works is one shared task: once it is COMPLETED every live
+     * assignee (the whole team) shares the incentive. Legacy Collect Requirement pays only the completer.
+     */
+    private static boolean earnedLeadTask(Task t, TaskAssignment a) {
+        if (Boolean.TRUE.equals(a.getIsDeleted())) return false;
+        if (EmployeeTaskService.LEAD_WORKS_CODE.equals(t.getTaskTemplate().getCode())) {
+            return "COMPLETED".equals(t.getStatus())
+                    && !"CANCELLED".equals(a.getStatus()) && !"REJECTED".equals(a.getStatus());
+        }
+        return "COMPLETED".equals(a.getStatus());
+    }
+
+    /** When the person finished their part of the lead task (task completion date for the shared Lead Works). */
+    private static LocalDateTime leadTaskDoneAt(Task t, TaskAssignment a) {
+        if (EmployeeTaskService.LEAD_WORKS_CODE.equals(t.getTaskTemplate().getCode())) {
+            if (a.getCompletedAt() != null) return a.getCompletedAt();
+            return t.getCompletedDate() == null ? null : t.getCompletedDate().atStartOfDay();
+        }
+        return a.getCompletedAt();
     }
 
     private static boolean notBlank(String s) { return s != null && !s.isBlank(); }
