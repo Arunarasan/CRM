@@ -819,9 +819,7 @@ public class PayrollService {
         // Google-review (QR) rewards are INCENTIVE bonuses too, but get their own counted line.
         BigDecimal projectBonus = BigDecimal.ZERO, manualBonus = BigDecimal.ZERO, incentive = BigDecimal.ZERO;
         List<BigDecimal> reviewRewards = new ArrayList<>();
-        // The attendance bar (X days of Y hrs, or total hrs ÷ X ≥ Y) gates only the project incentive and the
-        // attendance bonus. Leads, Google reviews and incentive bonuses follow their own rules.
-        boolean incentivesOpen = meetsIncentiveAttendance(employee, ym);
+        // The attendance bar (X days of Y hrs, or total hrs ÷ X ≥ Y) gates only the attendance bonus.
         boolean reviewsOn = lineOn(PayslipSettingsService.REVIEW_REWARD);
         if (Boolean.TRUE.equals(employee.getBonusEligible())) {
             List<EmployeeBonus> approved = bonusRepository
@@ -877,13 +875,14 @@ public class PayrollService {
         // Counted reward lines (stored as payslip line items so the portal + PDF list them by name).
         BigDecimal rewardLines = addCountedLine(rec, lineName(PayslipSettingsService.REVIEW_REWARD), "review", reviewRewards);
         rewardLines = rewardLines.add(addLeadRewardLine(employee, rec, ym));
+        // The project incentive is for anyone on the project team: no bonus-eligible or attendance rule.
+        rewardLines = rewardLines.add(addProjectIncentiveLine(employee, rec, ym));
         if (Boolean.TRUE.equals(employee.getBonusEligible())) {
-            if (incentivesOpen) rewardLines = rewardLines.add(addProjectIncentiveLine(employee, rec, ym));
             rewardLines = rewardLines.add(addAttendanceBonusLine(employee, rec, ym))
                     .add(addPerformanceBonusLine(employee, rec));
         }
 
-        rec.setRemarks(incentiveNote(employee, ym, incentivesOpen, rewardLines, rec.getRemarks()));
+        rec.setRemarks(incentiveNote(employee, ym, rewardLines, rec.getRemarks()));
 
         // HR's preset allowance / deduction lines (Payslip settings) — percent lines use regular + overtime pay.
         BigDecimal[] preset = addPresetLines(employee, rec, b, regularEarnings.add(overtimeEarnings));
@@ -921,7 +920,6 @@ public class PayrollService {
         BigDecimal pool = settingAmount(K_PROJECT_INCENTIVE);
         if (pool.signum() <= 0) return "Projects: per-project amount is 0 in Pay rules.";
         if (!lineOn(PayslipSettingsService.PROJECT_INCENTIVE)) return "Projects: the line is switched off in Payslip settings.";
-        if (!Boolean.TRUE.equals(employee.getBonusEligible())) return "Projects: employee is not bonus-eligible.";
         User u = employee.getEmail() == null ? null : userRepository.findByEmail(employee.getEmail()).orElse(null);
         if (u == null) return "Projects: no login found for the employee's email.";
         int earned = 0, already = 0, anyMonth = 0;
@@ -956,21 +954,11 @@ public class PayrollService {
                 : "Leads: " + qualified + " qualified in " + ym + ", " + paid + " already paid.";
     }
 
-    private String attendanceShortfall(Employee employee, YearMonth ym) {
-        IncentiveProgress ip = incentiveProgress(employee, ym);
-        return "Projects: attendance " + ip.qualifyingDays() + " day(s) of " + stripZeros(ip.hoursPerDay())
-                + "+ hrs, " + Math.round(ip.totalHours() * 10) / 10.0 + " total hrs. Needs " + stripZeros(ip.minDays())
-                + " days of " + stripZeros(ip.hoursPerDay()) + "+ hrs, or " + stripZeros(ip.minDays() * ip.hoursPerDay()) + "+ total hrs.";
-    }
-
     /** Says on the payslip why work incentives were not added (attendance short, or no amounts set). */
-    private String incentiveNote(Employee employee, YearMonth ym, boolean open, BigDecimal added, String existing) {
+    private String incentiveNote(Employee employee, YearMonth ym, BigDecimal added, String existing) {
         if (added.signum() > 0) return existing;
         String why;
-        String project = !open
-                ? attendanceShortfall(employee, ym)
-                : projectReason(employee, ym);
-        why = "No work incentive added. " + project + " " + leadReason(employee, ym);
+        why = "No work incentive added. " + projectReason(employee, ym) + " " + leadReason(employee, ym);
         return existing == null || existing.isBlank() ? why : existing + " " + why;
     }
 
@@ -1254,12 +1242,11 @@ public class PayrollService {
     private record LeadShare(Lead lead, BigDecimal amount, boolean paid) {}
 
     /**
-     * Who is paid for a qualified lead: its owner and whoever completed its Collect Requirement task.
-     * They split the per-lead rate equally; one person in both roles (or no completer) gets it all.
+     * Who is paid for a qualified lead: only the members of its Lead Works task (never the lead owner as such).
+     * They split the per-lead rate equally.
      */
     private Set<Long> leadRewardUserIds(Lead l) {
         Set<Long> ids = new LinkedHashSet<>();
-        if (l.getLeadOwner() != null) ids.add(l.getLeadOwner().getId());
         for (Task t : taskRepository.findByLeadId(l.getId())) {
             if (Boolean.TRUE.equals(t.getIsDeleted()) || !isLeadRewardTask(t)) continue;
             for (TaskAssignment a : taskAssignmentRepository.findByTaskId(t.getId())) {
@@ -1273,9 +1260,7 @@ public class PayrollService {
     private List<LeadShare> leadShares(User user, BigDecimal rate, LocalDate upTo) {
         Long uid = user.getId();
         Map<Long, Lead> candidates = new LinkedHashMap<>();
-        org.springframework.data.jpa.domain.Specification<Lead> owned = (root, q, cb) ->
-                cb.equal(root.get("leadOwner").get("id"), uid);
-        for (Lead l : leadRepository.findAll(owned.and(LeadSpecification.notDeleted()))) candidates.put(l.getId(), l);
+        // Task members only: a lead is a candidate through the person's own Lead Works assignment, not ownership.
         for (TaskAssignment a : taskAssignmentRepository.findByEmployeeId(uid)) {
             Task t = a.getTask();
             if (t == null || t.getLeadId() == null || !isLeadRewardTask(t) || !earnedLeadTask(t, a)
@@ -1303,7 +1288,7 @@ public class PayrollService {
     }
 
     /**
-     * Pays the employee their share of each qualified lead (they own it or completed its Lead
+     * Pays the employee their share of each qualified lead (they are on its Lead
      * Works task) up to the end of this month and not yet paid. Records each share against this
      * payslip so it is never counted twice. Returns the amount added (0 when the rate is unset).
      */
@@ -1324,25 +1309,25 @@ public class PayrollService {
     }
 
     /**
-     * A lead has earned its collector reward once the employee has set the site location (GPS pin or site
-     * address) and added at least one photo to it by {@code upTo} (null = ever).
+     * A lead earns its reward once it is completed (Lead Works) and the employee has set the site location (GPS pin or site
+     * address) and added at least one document to it by {@code upTo} (null = ever).
      */
     private boolean leadIsQualified(Lead l, LocalDate upTo) {
         boolean hasLocation = notBlank(l.getGoogleMapLocation()) || notBlank(l.getSiteAddress());
         if (!hasLocation) return false;
         LocalDateTime before = upTo == null ? null : upTo.plusDays(1).atStartOfDay();
         for (LeadDocument d : leadDocumentRepository.findByLeadId(l.getId())) {
-            if (Boolean.TRUE.equals(d.getIsDeleted()) || !isImageDoc(d)) continue;
+            if (Boolean.TRUE.equals(d.getIsDeleted())) continue;
             if (before == null || d.getCreatedAt() == null || d.getCreatedAt().isBefore(before)) return true;
         }
         return false;
     }
 
-    /** Month this person earned the lead reward: first site photo added, or their Collect Requirement completion if later. */
+    /** Month this person earned the lead reward: first document added, or their Lead Works completion if later. */
     private YearMonth leadQualifiedMonth(Lead l, Long userId) {
         LocalDateTime first = null;
         for (LeadDocument d : leadDocumentRepository.findByLeadId(l.getId())) {
-            if (Boolean.TRUE.equals(d.getIsDeleted()) || !isImageDoc(d) || d.getCreatedAt() == null) continue;
+            if (Boolean.TRUE.equals(d.getIsDeleted()) || d.getCreatedAt() == null) continue;
             if (first == null || d.getCreatedAt().isBefore(first)) first = d.getCreatedAt();
         }
         if (first == null) first = l.getCreatedAt();
@@ -1373,7 +1358,8 @@ public class PayrollService {
         if (Boolean.TRUE.equals(a.getIsDeleted())) return false;
         if (EmployeeTaskService.LEAD_WORKS_CODE.equals(t.getTaskTemplate().getCode())) {
             return "COMPLETED".equals(t.getStatus())
-                    && !"CANCELLED".equals(a.getStatus()) && !"REJECTED".equals(a.getStatus());
+                    && !"CANCELLED".equals(a.getStatus()) && !"REJECTED".equals(a.getStatus())
+                    && !"TERMINATED".equals(a.getStatus());
         }
         return "COMPLETED".equals(a.getStatus());
     }
@@ -1388,13 +1374,6 @@ public class PayrollService {
     }
 
     private static boolean notBlank(String s) { return s != null && !s.isBlank(); }
-
-    private static boolean isImageDoc(LeadDocument d) {
-        if (d.getFileUrl() == null) return false;
-        if ("image".equalsIgnoreCase(d.getDocumentType()) || "photo".equalsIgnoreCase(d.getDocumentType())) return true;
-        String name = (d.getFileName() != null ? d.getFileName() : d.getFileUrl()).split("\\?")[0].toLowerCase(java.util.Locale.ROOT);
-        return name.matches(".*\\.(jpe?g|png|webp|gif|heic|heif|bmp)$");
-    }
 
     private static final Set<String> PROJECT_REWARD_TASKS = Set.of("TT_PM_EXECUTION", "TT_PM_INSTALLATION");
 
@@ -1497,7 +1476,6 @@ public class PayrollService {
             m.put("amount", share);
             m.put("state", paid ? "PAID" : earned != null ? "EARNED" : "WAITING");
             m.put("month", earned == null ? null : earned.toString());
-            m.put("eligible", e != null && Boolean.TRUE.equals(e.getBonusEligible()));
             rows.add(m);
         }
         return rows;
@@ -1572,10 +1550,6 @@ public class PayrollService {
      * open when the employee has X days of at least Y hours each, OR total hours ÷ X reaches Y.
      * Either value 0 switches the bar off (always open).
      */
-    private boolean meetsIncentiveAttendance(Employee employee, YearMonth ym) {
-        return incentiveProgress(employee, ym).met();
-    }
-
     /** X = days needed, Y = hours; where the employee stands for the month. {@code enabled=false} ⇒ no check. */
     private record IncentiveProgress(boolean enabled, double minDays, double hoursPerDay,
                                      int qualifyingDays, double totalHours, boolean met) {}
@@ -1615,14 +1589,10 @@ public class PayrollService {
                 User u = userRepository.findById(uid).orElse(null);
                 if (u == null || u.getEmail() == null) continue;
                 Employee e = employeeRepository.findByEmailIgnoreCaseAndIsDeletedFalse(u.getEmail()).orElse(null);
-                if (e == null || !Boolean.TRUE.equals(e.getBonusEligible())) continue;
-                IncentiveProgress ip = incentiveProgress(e, ym);
-                String rule = !ip.enabled() ? "" : " You earn it when you work " + stripZeros(ip.minDays()) + " days of "
-                        + stripZeros(ip.hoursPerDay()) + "+ hrs, or " + stripZeros(ip.minDays() * ip.hoursPerDay())
-                        + "+ total hrs, in " + month + ".";
+                if (e == null) continue;
                 notificationService.dispatch("Project incentive earned",
                         (p.getProjectName() == null ? "Project" : p.getProjectName()) + " is completed — your incentive is "
-                                + inr(share) + ", added to your " + month + " payslip." + rule,
+                                + inr(share) + ", added to your " + month + " payslip.",
                         "SALARY", uid, "/employee/salary");
             }
         } catch (RuntimeException ex) {
