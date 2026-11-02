@@ -15,6 +15,13 @@ import java.util.Optional;
 @Repository
 public interface BundleRepository extends JpaRepository<Bundle, Long> {
 
+    /** Orders assigned straight to a worker (EMPLOYEE = users.id) — the employee profile's Work tab. */
+    List<Bundle> findByIsDeletedFalseAndResourceTypeAndResourceId(String resourceType, Long resourceId);
+
+    List<Bundle> findByIsDeletedFalseAndTaskIdIn(java.util.Collection<Long> taskIds);
+
+    List<Bundle> findByIsDeletedFalseAndInstallTaskIdIn(java.util.Collection<Long> taskIds);
+
     Optional<Bundle> findFirstByCodeIgnoreCaseAndIsDeletedFalse(String code);
 
     List<Bundle> findByGroupCodeIgnoreCaseAndIsDeletedFalseOrderByBundleNoAsc(String groupCode);

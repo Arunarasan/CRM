@@ -41,6 +41,9 @@ public class HrController {
     private PayrollService payrollService;
 
     @Autowired
+    private com.arudra.crm.service.EmployeeWorkService employeeWorkService;
+
+    @Autowired
     private PayslipSettingsService payslipSettingsService;
 
     @Autowired
@@ -462,6 +465,15 @@ public class HrController {
     @PreAuthorize(PAYROLL_READ)
     public ResponseEntity<Map<String, Object>> getEmployeeWorkStats(@PathVariable Long id) {
         return ResponseEntity.ok(payrollService.employeeWorkStats(id));
+    }
+
+    /** Work tab: assigned + finished tasks by lead / project / order; the date window filters finished work only. */
+    @GetMapping("/employees/{id}/work")
+    @PreAuthorize(PAYROLL_READ)
+    public ResponseEntity<Map<String, Object>> employeeWork(@PathVariable Long id,
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate from,
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate to) {
+        return ResponseEntity.ok(employeeWorkService.work(id, from, to));
     }
 
     /** Incentives earned in a month (leads collected / projects / reviews) with the lead-level detail. */

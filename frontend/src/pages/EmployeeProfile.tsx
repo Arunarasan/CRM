@@ -32,6 +32,8 @@ import EmployeeReviewsTab from "./workforce/EmployeeReviewsTab";
 import EmployeeIncentivesCard from "./hr/EmployeeIncentivesCard";
 import WageSettingsCard from "@/components/hr/WageSettingsCard";
 import { inr } from "./workforce/WorkforceFinanceTab";
+import EditDaySessionsDialog from "./hr/EditDaySessionsDialog";
+import EmployeeWorkTab from "./hr/EmployeeWorkTab";
 
 const DOC_TYPES = ["AADHAAR", "PAN", "OFFER_LETTER", "EXPERIENCE_LETTER", "RESUME", "CERTIFICATE", "CONTRACT", "OTHER"];
 const MONTHS_SEL = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -83,6 +85,12 @@ export default function EmployeeProfile() {
   const [dlYear, setDlYear] = useState(nowD.getFullYear());
   const [dailyLog, setDailyLog] = useState<any | null>(null);
   const [expandedDays, setExpandedDays] = useState<Record<string, boolean>>({});
+  const [fixDate, setFixDate] = useState<string | null>(null);
+  const reloadDailyLog = () => {
+    api.get(`/hr/employees/${id}/daily-log?month=${dlMonth}&year=${dlYear}`)
+      .then(res => setDailyLog(res.data)).catch(() => setDailyLog(null));
+    api.get(`/hr/employees/${id}/attendance`).then(res => setAttendance(res.data)).catch(() => {});
+  };
 
   // Edit (unified workforce dialog)
   const [meta, setMeta] = useState<WorkforceMeta | null>(null);
@@ -336,6 +344,7 @@ export default function EmployeeProfile() {
                         <th className="text-right p-3">OT</th>
                         <th className="text-right p-3">Task hrs</th>
                         <th className="text-right p-3">Earned</th>
+                        <th className="p-3 w-10"></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -366,10 +375,17 @@ export default function EmployeeProfile() {
                               : "—"}
                           </td>
                           <td className="p-3 text-right font-bold text-emerald-600">{Number(r.dayEarnings || 0) > 0 ? inr(r.dayEarnings) : "—"}</td>
+                          <td className="p-3 text-right">
+                            <button type="button" title="Fix time" aria-label={`Fix time for ${r.date}`}
+                              className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                              onClick={(e) => { e.stopPropagation(); setFixDate(r.date); }}>
+                              <Pencil className="w-4 h-4" />
+                            </button>
+                          </td>
                         </tr>
                         {open && hasTasks && (
                           <tr className="bg-slate-50/60">
-                            <td className="px-3 pb-3 pt-0" colSpan={8}>
+                            <td className="px-3 pb-3 pt-0" colSpan={9}>
                               <div className="ml-5 rounded-lg border bg-white divide-y">
                                 {tasks.map((t: any) => (
                                   <div key={t.taskId} className="flex items-center justify-between gap-3 px-3 py-2">
@@ -391,7 +407,7 @@ export default function EmployeeProfile() {
                         );
                       })}
                       {(!dailyLog?.rows || dailyLog.rows.length === 0) && (
-                        <tr><td colSpan={8} className="text-center py-10 text-slate-400">No attendance or task time recorded for {MONTHS_SEL[dlMonth - 1]} {dlYear}.</td></tr>
+                        <tr><td colSpan={9} className="text-center py-10 text-slate-400">No attendance or task time recorded for {MONTHS_SEL[dlMonth - 1]} {dlYear}.</td></tr>
                       )}
                     </tbody>
                     {dailyLog?.rows?.length > 0 && (
@@ -402,6 +418,7 @@ export default function EmployeeProfile() {
                           <td className="p-3 text-right text-amber-700">{hrs(dailyLog.totalOvertimeHours)}</td>
                           <td className="p-3 text-right text-cyan-700">{hrs(dailyLog.totalTaskHours)}</td>
                           <td className="p-3 text-right text-emerald-700">{inr(dailyLog.totalEarnings)}</td>
+                          <td></td>
                         </tr>
                       </tfoot>
                     )}
@@ -411,6 +428,9 @@ export default function EmployeeProfile() {
                   <b>Worked</b>/<b>OT</b> come from the attendance clock; <b>Task hrs</b> is real time tracked against tasks; <b>Earned</b> is that day’s pay for hourly staff.
                 </p>
               </div>
+
+              <EditDaySessionsDialog employeeId={Number(id)} date={fixDate} open={!!fixDate}
+                onClose={() => setFixDate(null)} onSaved={reloadDailyLog} />
 
               {/* Leave history */}
               <div className="bg-white border rounded-2xl shadow-sm overflow-hidden">
@@ -436,7 +456,9 @@ export default function EmployeeProfile() {
           </TabsContent>
 
           {/* ---- Work: leads raised from the field + daily reports ---- */}
-          <TabsContent value="work" className="space-y-6">
+          <TabsContent value="work">
+            <EmployeeWorkTab employeeId={Number(id)}>
+            <div className="space-y-6">
             <div className="bg-white border rounded-2xl shadow-sm">
               <div className="p-5 border-b flex items-center gap-2">
                 <Target className="w-5 h-5 text-emerald-600" />
@@ -492,6 +514,8 @@ export default function EmployeeProfile() {
                 ))
               )}
             </div>
+            </div>
+            </EmployeeWorkTab>
           </TabsContent>
 
           {/* ---- Payroll (wage settings + full financial: structure, payslips, advances, loans) ---- */}
