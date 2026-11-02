@@ -127,8 +127,11 @@ public class ProfileChangeRequestService {
 
     /** The signed-in employee's own change requests, latest first. */
     public List<ProfileChangeRequest> listMine(User currentUser) {
-        Employee employee = requireEmployee(currentUser);
-        return requestRepository.findByEmployeeIdAndIsDeletedFalseOrderByIdDesc(employee.getId());
+        // A login with no employee record (e.g. an admin opening the portal) simply has no requests.
+        if (currentUser == null) return List.of();
+        return employeeRepository.findByUserIdAndIsDeletedFalse(currentUser.getId())
+                .map(e -> requestRepository.findByEmployeeIdAndIsDeletedFalseOrderByIdDesc(e.getId()))
+                .orElse(List.of());
     }
 
     /** All change requests for one employee (admin inline panel). */
