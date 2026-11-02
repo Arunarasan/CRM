@@ -39,6 +39,9 @@ export default function RequestsTabs() {
   const { t } = useT();
   const activeRef = useRef<HTMLAnchorElement | null>(null);
 
+  // Unread employee alerts, bucketed by the request screen their actionUrl points at.
+  const [counts, setCounts] = useState<Record<string, number>>({});
+
   const tabs = [
     { to: HUB, label: t('pw.requests.title'), icon: Inbox, on: pathname === HUB || pathname === `${HUB}/`, count: 0 },
     ...REQUEST_ITEMS.map((i) => ({ to: i.to, label: t(i.labelKey), icon: i.icon, on: pathname.startsWith(i.to), count: counts[i.to] || 0 })),
@@ -48,8 +51,6 @@ export default function RequestsTabs() {
     activeRef.current?.scrollIntoView({ inline: 'center', block: 'nearest' });
   }, [pathname]);
 
-  // Unread employee alerts, bucketed by the request screen their actionUrl points at.
-  const [counts, setCounts] = useState<Record<string, number>>({});
   useEffect(() => {
     let cancelled = false;
     const load = () => {
