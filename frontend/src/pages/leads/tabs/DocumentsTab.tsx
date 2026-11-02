@@ -31,7 +31,7 @@ const docToFile = (doc: any): ProjectFile => ({
   type: doc.documentType || doc.category || "File",
   kind: isImageDoc(doc) ? "image" : isAudioDoc(doc) ? "audio" : kindOfName(doc.fileName || doc.fileUrl),
   category: "DOCUMENT", fileName: doc.fileName, fileUrl: doc.fileUrl, description: doc.description || doc.remarks,
-  addedBy: doc.uploadedBy?.name, addedAt: doc.createdAt, editable: false, generated: false,
+  addedBy: doc.uploadedBy?.name, addedAt: doc.createdAt, editable: true, generated: false,
 });
 const measurementToFile = (f: MeasurementFile): ProjectFile => ({
   key: f.key, source: "MEASUREMENT", sourceLabel: "Measurement", type: f.kind,
@@ -179,7 +179,12 @@ export default function DocumentsTab({ leadId }: { leadId: string }) {
     </Card>
     {viewerIndex != null && (
       <FileViewer files={viewerFiles} index={viewerIndex} onIndex={setViewerIndex} onClose={() => setViewerIndex(null)}
-        onChanged={reload} canEdit onDelete={(f) => leadApi.deleteDocument(leadId, f.docId!)} />
+        onChanged={reload} canEdit
+        api={{
+          update: (docId, b) => leadApi.updateDocument(leadId, docId, { fileName: b.fileName, documentType: b.documentType, description: b.remarks }),
+          remove: (docId) => leadApi.deleteDocument(leadId, docId),
+          replaceFile: (docId, b) => leadApi.updateDocument(leadId, docId, b),
+        }} />
     )}
     </div>
   );

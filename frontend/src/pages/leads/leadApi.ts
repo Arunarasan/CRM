@@ -84,6 +84,8 @@ export const leadApi = {
 
   getDocuments: (id: string | number) => api.get(`/leads/${id}/documents`),
   addDocument: (id: string | number, payload: any) => api.post(`/leads/${id}/documents`, payload),
+  updateDocument: (id: string | number, documentId: number, payload: Record<string, any>) =>
+    api.put(`/leads/${id}/documents/${documentId}`, payload).then((r) => r.data),
   deleteDocument: (id: string | number, documentId: number) =>
     api.delete(`/leads/${id}/documents/${documentId}`),
 

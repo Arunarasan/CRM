@@ -747,6 +747,29 @@ public class LeadService {
         return saved;
     }
 
+    /** Rename / re-type / describe a lead document, or point it at an edited file ({fileUrl}). */
+    @Transactional
+    public LeadDocument updateDocument(Long leadId, Long documentId, Map<String, String> body, User currentUser) {
+        LeadDocument document = leadDocumentRepository.findById(documentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Document not found with id: " + documentId));
+        if (!document.getLead().getId().equals(leadId)) {
+            throw new ResourceNotFoundException("Document does not belong to lead " + leadId);
+        }
+        String fileName = body.get("fileName");
+        if (fileName != null && !fileName.isBlank()) {
+            document.setFileName(fileName.length() > 200 ? fileName.substring(0, 200) : fileName.trim());
+        }
+        String type = body.get("documentType");
+        if (type != null && !type.isBlank()) document.setDocumentType(type.trim());
+        String description = body.get("description");
+        if (description != null) document.setDescription(description.isBlank() ? null : description.trim());
+        String fileUrl = body.get("fileUrl");
+        if (fileUrl != null && !fileUrl.isBlank()) document.setFileUrl(fileUrl);
+        LeadDocument saved = leadDocumentRepository.save(document);
+        logActivity(document.getLead(), "DOCUMENT_UPDATED", "Document updated: " + saved.getFileName(), currentUser);
+        return saved;
+    }
+
     @Transactional
     public void deleteDocument(Long leadId, Long documentId, User currentUser) {
         LeadDocument document = leadDocumentRepository.findById(documentId)

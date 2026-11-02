@@ -342,6 +342,14 @@ public class LeadController {
                 leadService.addDocument(id, document, currentUserService.getCurrentUser()));
     }
 
+    /** Edit a lead document: {fileName?, documentType?, description?, fileUrl?}. */
+    @PutMapping("/{id}/documents/{documentId}")
+    @PreAuthorize(WRITE)
+    public ResponseEntity<LeadDocument> updateDocument(@PathVariable Long id, @PathVariable Long documentId,
+            @RequestBody java.util.Map<String, String> body) {
+        return ResponseEntity.ok(leadService.updateDocument(id, documentId, body, currentUserService.getCurrentUser()));
+    }
+
     @DeleteMapping("/{id}/documents/{documentId}")
     @PreAuthorize(WRITE)
     public ResponseEntity<Void> deleteDocument(@PathVariable Long id, @PathVariable Long documentId) {
