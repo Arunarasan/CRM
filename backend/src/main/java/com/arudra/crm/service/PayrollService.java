@@ -819,10 +819,10 @@ public class PayrollService {
         // Google-review (QR) rewards are INCENTIVE bonuses too, but get their own counted line.
         BigDecimal projectBonus = BigDecimal.ZERO, manualBonus = BigDecimal.ZERO, incentive = BigDecimal.ZERO;
         List<BigDecimal> reviewRewards = new ArrayList<>();
-        // Work incentives are earned only in a month that met the attendance bar; otherwise they stay unpaid
-        // (APPROVED bonuses / unmarked leads / unpaid projects) and are picked up in a later qualifying month.
+        // The attendance bar (X days of Y hrs, or total hrs ÷ X ≥ Y) gates only the project incentive and the
+        // attendance bonus. Leads, Google reviews and incentive bonuses follow their own rules.
         boolean incentivesOpen = meetsIncentiveAttendance(employee, ym);
-        boolean reviewsOn = incentivesOpen && lineOn(PayslipSettingsService.REVIEW_REWARD);
+        boolean reviewsOn = lineOn(PayslipSettingsService.REVIEW_REWARD);
         if (Boolean.TRUE.equals(employee.getBonusEligible())) {
             List<EmployeeBonus> approved = bonusRepository
                     .findByEmployeeIdAndStatusAndPaidSalaryRecordIdIsNullAndIsDeletedFalse(employeeId, "APPROVED");
@@ -836,7 +836,6 @@ public class PayrollService {
             for (EmployeeBonus bo : approved) {
                 // Review rewards HR switched off stay APPROVED, so they pay once the line is switched back on.
                 if (!reviewsOn && reviewBonusIds.contains(bo.getId())) continue;
-                if (!incentivesOpen && "INCENTIVE".equalsIgnoreCase(bo.getBonusType())) continue;
                 BigDecimal amt = nz(bo.getAmount());
                 if (reviewBonusIds.contains(bo.getId())) reviewRewards.add(amt);
                 else if ("INCENTIVE".equalsIgnoreCase(bo.getBonusType())) incentive = incentive.add(amt);
@@ -877,7 +876,7 @@ public class PayrollService {
 
         // Counted reward lines (stored as payslip line items so the portal + PDF list them by name).
         BigDecimal rewardLines = addCountedLine(rec, lineName(PayslipSettingsService.REVIEW_REWARD), "review", reviewRewards);
-        if (incentivesOpen) rewardLines = rewardLines.add(addLeadRewardLine(employee, rec, ym));
+        rewardLines = rewardLines.add(addLeadRewardLine(employee, rec, ym));
         if (Boolean.TRUE.equals(employee.getBonusEligible())) {
             if (incentivesOpen) rewardLines = rewardLines.add(addProjectIncentiveLine(employee, rec, ym));
             rewardLines = rewardLines.add(addAttendanceBonusLine(employee, rec, ym))
@@ -917,20 +916,61 @@ public class PayrollService {
         return rec;
     }
 
+    /** One-line reason the project incentive is zero for this employee and month. */
+    private String projectReason(Employee employee, YearMonth ym) {
+        BigDecimal pool = settingAmount(K_PROJECT_INCENTIVE);
+        if (pool.signum() <= 0) return "Projects: per-project amount is 0 in Pay rules.";
+        if (!lineOn(PayslipSettingsService.PROJECT_INCENTIVE)) return "Projects: the line is switched off in Payslip settings.";
+        if (!Boolean.TRUE.equals(employee.getBonusEligible())) return "Projects: employee is not bonus-eligible.";
+        User u = employee.getEmail() == null ? null : userRepository.findByEmail(employee.getEmail()).orElse(null);
+        if (u == null) return "Projects: no login found for the employee's email.";
+        int earned = 0, already = 0, anyMonth = 0;
+        for (Map.Entry<Long, YearMonth> en : projectIncentiveMonths(u).entrySet()) {
+            anyMonth++;
+            if (!ym.equals(en.getValue())) continue;
+            earned++;
+            Integer paid = jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM project_completion_incentives WHERE project_id = ? AND employee_id = ?",
+                    Integer.class, en.getKey(), employee.getId());
+            if (paid != null && paid > 0) already++;
+        }
+        if (anyMonth == 0) return "Projects: employee is not on any project's Execution/Installation team.";
+        if (earned == 0) return "Projects: none of their projects finished in " + ym + " (tasks not all completed yet, or finished in another month).";
+        return "Projects: " + earned + " earned in " + ym + ", " + already + " already paid.";
+    }
+
+    /** One-line reason the lead reward is zero for this employee and month. */
+    private String leadReason(Employee employee, YearMonth ym) {
+        BigDecimal rate = settingAmount(K_LEAD_REWARD);
+        if (rate.signum() <= 0) return "Leads: per-lead amount is 0 in Pay rules.";
+        if (!lineOn(PayslipSettingsService.LEAD_REWARD)) return "Leads: the line is switched off in Payslip settings.";
+        User u = employee.getEmail() == null ? null : userRepository.findByEmail(employee.getEmail()).orElse(null);
+        if (u == null) return "Leads: no login found for the employee's email.";
+        int qualified = 0, paid = 0;
+        for (LeadShare x : leadShares(u, rate, ym.atEndOfMonth())) {
+            if (!ym.equals(leadQualifiedMonth(x.lead(), u.getId()))) continue;
+            qualified++;
+            if (x.paid()) paid++;
+        }
+        return qualified == 0 ? "Leads: none qualified in " + ym + " (needs site location + a photo)."
+                : "Leads: " + qualified + " qualified in " + ym + ", " + paid + " already paid.";
+    }
+
+    private String attendanceShortfall(Employee employee, YearMonth ym) {
+        IncentiveProgress ip = incentiveProgress(employee, ym);
+        return "Projects: attendance " + ip.qualifyingDays() + " day(s) of " + stripZeros(ip.hoursPerDay())
+                + "+ hrs, " + Math.round(ip.totalHours() * 10) / 10.0 + " total hrs. Needs " + stripZeros(ip.minDays())
+                + " days of " + stripZeros(ip.hoursPerDay()) + "+ hrs, or " + stripZeros(ip.minDays() * ip.hoursPerDay()) + "+ total hrs.";
+    }
+
     /** Says on the payslip why work incentives were not added (attendance short, or no amounts set). */
     private String incentiveNote(Employee employee, YearMonth ym, boolean open, BigDecimal added, String existing) {
         if (added.signum() > 0) return existing;
         String why;
-        if (!open) {
-            IncentiveProgress ip = incentiveProgress(employee, ym);
-            why = "Work incentives not added: attendance " + ip.qualifyingDays() + " day(s) of " + stripZeros(ip.hoursPerDay())
-                    + "+ hrs, " + Math.round(ip.totalHours() * 10) / 10.0 + " total hrs. Needs " + stripZeros(ip.minDays())
-                    + " days of " + stripZeros(ip.hoursPerDay()) + "+ hrs, or " + stripZeros(ip.minDays() * ip.hoursPerDay()) + "+ total hrs.";
-        } else if (settingAmount(K_PROJECT_INCENTIVE).signum() <= 0 && settingAmount(K_LEAD_REWARD).signum() <= 0) {
-            why = "Work incentives not added: per-project and per-lead amounts are 0 in Pay rules.";
-        } else {
-            why = "No work incentive earned this month (no project completed or lead qualified in " + ym + ").";
-        }
+        String project = !open
+                ? attendanceShortfall(employee, ym)
+                : projectReason(employee, ym);
+        why = "No work incentive added. " + project + " " + leadReason(employee, ym);
         return existing == null || existing.isBlank() ? why : existing + " " + why;
     }
 
@@ -1053,13 +1093,10 @@ public class PayrollService {
         int projPending = 0;
         BigDecimal projPendingAmt = BigDecimal.ZERO;
         if (u != null && projRate.signum() > 0) {
-            for (Project p : projectRepository.findAll()) {
-                if (Boolean.TRUE.equals(p.getIsDeleted()) || !"COMPLETED".equalsIgnoreCase(p.getStatus())) continue;
-                if (ym != null) {
-                    YearMonth done = p.getActualCompletionDate() != null ? YearMonth.from(p.getActualCompletionDate())
-                            : p.getUpdatedAt() != null ? YearMonth.from(p.getUpdatedAt()) : null;
-                    if (!ym.equals(done)) continue;
-                }
+            for (Map.Entry<Long, YearMonth> en : projectIncentiveMonths(u).entrySet()) {
+                if (ym != null && !ym.equals(en.getValue())) continue;
+                Project p = projectRepository.findById(en.getKey()).orElse(null);
+                if (p == null || Boolean.TRUE.equals(p.getIsDeleted()) || "CANCELLED".equalsIgnoreCase(p.getStatus())) continue;
                 Set<Long> team = projectParticipantUserIds(p.getId());
                 if (!team.contains(u.getId())) continue;
                 Integer already = jdbc.queryForObject(
@@ -1298,15 +1335,104 @@ public class PayrollService {
         return ids;
     }
 
+    /**
+     * Month a project's incentive was earned: when all its Execution / Installation tasks are completed, or when
+     * the project itself is completed, whichever came first. Null while neither has happened.
+     */
+    private YearMonth projectEarnedMonth(Project p) {
+        if (p == null || Boolean.TRUE.equals(p.getIsDeleted()) || "CANCELLED".equalsIgnoreCase(p.getStatus())) return null;
+        YearMonth done = null;
+        if ("COMPLETED".equalsIgnoreCase(p.getStatus())) {
+            done = p.getActualCompletionDate() != null ? YearMonth.from(p.getActualCompletionDate())
+                    : p.getUpdatedAt() != null ? YearMonth.from(p.getUpdatedAt()) : null;
+        }
+        List<Task> tasks = taskRepository.findByProjectId(p.getId()).stream()
+                .filter(t -> !Boolean.TRUE.equals(t.getIsDeleted()) && t.getTaskTemplate() != null
+                        && PROJECT_REWARD_TASKS.contains(t.getTaskTemplate().getCode())
+                        && !"CANCELLED".equals(t.getStatus()))
+                .toList();
+        if (!tasks.isEmpty() && tasks.stream().allMatch(t -> "COMPLETED".equals(t.getStatus()))) {
+            LocalDate latest = null;
+            for (Task t : tasks) {
+                LocalDate d = t.getCompletedDate();
+                if (d == null) {
+                    for (TaskAssignment a : taskAssignmentRepository.findByTaskId(t.getId())) {
+                        if (a.getCompletedAt() != null && (d == null || a.getCompletedAt().toLocalDate().isAfter(d)))
+                            d = a.getCompletedAt().toLocalDate();
+                    }
+                }
+                if (d != null && (latest == null || d.isAfter(latest))) latest = d;
+            }
+            YearMonth m = latest != null ? YearMonth.from(latest) : YearMonth.now();
+            done = done == null || m.isBefore(done) ? m : done;
+        }
+        return done;
+    }
+
+    /**
+     * Projects this person's team has earned the project incentive on, with the month it was earned (see
+     * {@link #projectEarnedMonth}). Being on the project's Execution / Installation team is what makes it theirs.
+     */
+    private Map<Long, YearMonth> projectIncentiveMonths(User u) {
+        Map<Long, YearMonth> out = new LinkedHashMap<>();
+        Set<Long> projectIds = new LinkedHashSet<>();
+        for (TaskAssignment a : taskAssignmentRepository.findByEmployeeId(u.getId())) {
+            Task t = a.getTask();
+            if (t == null || Boolean.TRUE.equals(t.getIsDeleted()) || Boolean.TRUE.equals(a.getIsDeleted())
+                    || t.getProject() == null || t.getTaskTemplate() == null
+                    || !PROJECT_REWARD_TASKS.contains(t.getTaskTemplate().getCode())
+                    || "CANCELLED".equals(a.getStatus()) || "REJECTED".equals(a.getStatus())) continue;
+            projectIds.add(t.getProject().getId());
+        }
+        for (Long pid : projectIds) {
+            YearMonth m = projectEarnedMonth(projectRepository.findById(pid).orElse(null));
+            if (m != null) out.put(pid, m);
+        }
+        return out;
+    }
+
+    /**
+     * Admin view of a project's incentive: for each team member, their share and where it stands —
+     * WAITING (their task isn't done yet), EARNED (done; goes on that month's payslip) or PAID (already on one).
+     */
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> projectIncentiveBreakdown(Long projectId) {
+        BigDecimal pool = settingAmount(K_PROJECT_INCENTIVE);
+        Set<Long> team = projectParticipantUserIds(projectId);
+        BigDecimal share = projectShare(pool, team.size());
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (Long uid : team) {
+            User u = userRepository.findById(uid).orElse(null);
+            if (u == null) continue;
+            Employee e = u.getEmail() == null ? null : employeeRepository.findByEmailIgnoreCaseAndIsDeletedFalse(u.getEmail()).orElse(null);
+            YearMonth earned = projectIncentiveMonths(u).get(projectId);
+            boolean paid = false;
+            if (e != null) {
+                Integer n = jdbc.queryForObject(
+                        "SELECT COUNT(*) FROM project_completion_incentives WHERE project_id = ? AND employee_id = ?",
+                        Integer.class, projectId, e.getId());
+                paid = n != null && n > 0;
+            }
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("userId", uid);
+            m.put("amount", share);
+            m.put("state", paid ? "PAID" : earned != null ? "EARNED" : "WAITING");
+            m.put("month", earned == null ? null : earned.toString());
+            m.put("eligible", e != null && Boolean.TRUE.equals(e.getBonusEligible()));
+            rows.add(m);
+        }
+        return rows;
+    }
+
     /** One participant's equal share of the per-project reward pool. */
     private static BigDecimal projectShare(BigDecimal pool, int participants) {
         return participants <= 0 ? BigDecimal.ZERO : pool.divide(BigDecimal.valueOf(participants), 2, RoundingMode.HALF_UP);
     }
 
     /**
-     * Pays each project completed this month as a pool (the configured project incentive) split equally
-     * among the employees who took part in its Execution / Installation tasks. Each (project, employee)
-     * is paid once, ever.
+     * Pays each project earned this month (its Execution / Installation tasks completed, or the project
+     * completed) from the pool the admin set in Pay rules, split equally among the employees on its team.
+     * Each (project, employee) is paid once, ever.
      */
     private BigDecimal addProjectIncentiveLine(Employee employee, SalaryRecord rec, YearMonth ym) {
         BigDecimal pool = settingAmount(K_PROJECT_INCENTIVE);
@@ -1314,8 +1440,10 @@ public class PayrollService {
         User u = userRepository.findByEmail(employee.getEmail()).orElse(null);
         if (u == null) return BigDecimal.ZERO;
         List<BigDecimal> shares = new ArrayList<>();
-        for (Project p : projectRepository.findByActualCompletionDateBetween(ym.atDay(1), ym.atEndOfMonth())) {
-            if (Boolean.TRUE.equals(p.getIsDeleted()) || !"COMPLETED".equalsIgnoreCase(p.getStatus())) continue;
+        for (Map.Entry<Long, YearMonth> en : projectIncentiveMonths(u).entrySet()) {
+            if (!ym.equals(en.getValue())) continue;
+            Project p = projectRepository.findById(en.getKey()).orElse(null);
+            if (p == null || Boolean.TRUE.equals(p.getIsDeleted()) || "CANCELLED".equalsIgnoreCase(p.getStatus())) continue;
             Set<Long> team = projectParticipantUserIds(p.getId());
             if (!team.contains(u.getId())) continue;
             Integer already = jdbc.queryForObject(
@@ -1330,55 +1458,22 @@ public class PayrollService {
         return addCountedLine(rec, lineName(PayslipSettingsService.PROJECT_INCENTIVE), "project", shares);
     }
 
-    /** Flat bonus when this month's attendance (present = 1, half day = ½, absent = 0; leave ignored) meets the minimum %. */
     /**
-     * Attendance bonus. The attendance-% test (if set) must pass. Then, if either hours test is switched on,
-     * the bonus is earned when AT LEAST ONE passes — per-day (enough days with at least N hours each) or
-     * overall average (total hours ÷ days attended ≥ N) — and withheld when none does. With both hours tests
-     * off it behaves as before. The reward is a flat amount, or "days of pay" when that rule is set.
+     * Attendance bonus: paid for a month that meets the shared attendance rule (X days of Y+ hours each, or
+     * total hours ÷ X ≥ Y — the same bar as the work incentives). The reward is a flat amount, or "days of
+     * pay" when that rule is set.
      */
     private BigDecimal addAttendanceBonusLine(Employee employee, SalaryRecord rec, YearMonth ym) {
         BigDecimal flat = settingAmount(K_ATTENDANCE_BONUS);
         BigDecimal bonusDays = settingAmount(K_ATT_BONUS_DAYS);
         if (!lineOn(PayslipSettingsService.ATTENDANCE_BONUS)) return BigDecimal.ZERO;
         if (flat.signum() <= 0 && bonusDays.signum() <= 0) return BigDecimal.ZERO;
-        double dayHours = settingAmount(K_ATT_DAY_HOURS).doubleValue();
-        int minDays = settingAmount(K_ATT_MIN_DAYS).intValue();
-        double avgNeeded = settingAmount(K_ATT_AVG_HOURS).doubleValue();
-
-        double countable = 0, credited = 0, totalHours = 0;
-        int attended = 0, qualifying = 0;
-        for (Attendance a : attendanceRepository.findByEmployeeIdAndDateBetween(
-                employee.getId(), ym.atDay(1), ym.atEndOfMonth())) {
-            String s = a.getStatus() == null ? "" : a.getStatus().toUpperCase();
-            switch (s) {
-                case "PRESENT": countable++; credited += 1.0; break;
-                case "HALF_DAY": countable++; credited += 0.5; break;
-                case "ABSENT": countable++; break;
-                default: break;
-            }
-            if (s.equals("PRESENT") || s.equals("HALF_DAY")) {
-                double h = a.getWorkedHours() == null ? 0 : a.getWorkedHours().doubleValue();
-                attended++;
-                totalHours += h;
-                if (h + 0.0001 >= dayHours) qualifying++;
-            }
-        }
-        if (countable == 0) return BigDecimal.ZERO;
-        double pct = credited / countable * 100.0;
-        if (pct + 0.0001 < settingAmount(K_ATTENDANCE_MIN_PERCENT).doubleValue()) return BigDecimal.ZERO;
-
-        boolean perDayOn = minDays > 0, avgOn = avgNeeded > 0;
-        double avg = attended == 0 ? 0 : totalHours / attended;
-        String why = Math.round(pct) + "% attendance";
-        if (perDayOn || avgOn) {
-            boolean perDayOk = perDayOn && qualifying >= minDays;
-            boolean avgOk = avgOn && avg + 0.0001 >= avgNeeded;
-            if (!perDayOk && !avgOk) return BigDecimal.ZERO; // neither hours test met → no bonus
-            why = perDayOk
-                    ? qualifying + " days of " + stripZeros(dayHours) + "+ hrs"
-                    : "avg " + String.format("%.1f", avg) + " hrs/day";
-        }
+        IncentiveProgress ip = incentiveProgress(employee, ym);
+        if (!ip.met()) return BigDecimal.ZERO;
+        String why = !ip.enabled() ? "full month"
+                : ip.qualifyingDays() + 0.0001 >= ip.minDays()
+                        ? ip.qualifyingDays() + " days of " + stripZeros(ip.hoursPerDay()) + "+ hrs"
+                        : stripZeros(Math.round(ip.totalHours() * 10) / 10.0) + " total hrs";
 
         BigDecimal amount = flat;
         String label = lineName(PayslipSettingsService.ATTENDANCE_BONUS) + " — " + why;
@@ -1497,11 +1592,7 @@ public class PayrollService {
     private static final String K_WORKING_DAYS = "payroll.default_working_days";
     private static final String K_PROJECT_INCENTIVE = "payroll.project_incentive_amount";
     private static final String K_ATTENDANCE_BONUS = "payroll.attendance_bonus_amount";
-    private static final String K_ATTENDANCE_MIN_PERCENT = "payroll.attendance_bonus_min_percent";
     // Attendance bonus hours tests (0 = that test is off) and the "days of pay" reward (0 = flat amount).
-    private static final String K_ATT_DAY_HOURS = "payroll.attendance_day_hours";
-    private static final String K_ATT_MIN_DAYS = "payroll.attendance_min_days";
-    private static final String K_ATT_AVG_HOURS = "payroll.attendance_avg_hours";
     private static final String K_ATT_BONUS_DAYS = "payroll.attendance_bonus_days";
     private static final String K_INC_MIN_DAYS = "payroll.incentive_min_days";
     private static final String K_INC_AVG_HOURS = "payroll.incentive_avg_hours";
@@ -1521,10 +1612,6 @@ public class PayrollService {
         RULE_KEYS.put("incentiveMinDays", K_INC_MIN_DAYS);
         RULE_KEYS.put("incentiveAvgHours", K_INC_AVG_HOURS);
         RULE_KEYS.put("attendanceBonus", K_ATTENDANCE_BONUS);
-        RULE_KEYS.put("attendanceMinPercent", K_ATTENDANCE_MIN_PERCENT);
-        RULE_KEYS.put("attendanceDayHours", K_ATT_DAY_HOURS);
-        RULE_KEYS.put("attendanceMinDays", K_ATT_MIN_DAYS);
-        RULE_KEYS.put("attendanceAvgHours", K_ATT_AVG_HOURS);
         RULE_KEYS.put("attendanceBonusDays", K_ATT_BONUS_DAYS);
         RULE_KEYS.put("performanceBonus", K_PERFORMANCE_BONUS);
         RULE_KEYS.put("performanceMinScore", K_PERFORMANCE_MIN_SCORE);
@@ -1555,17 +1642,17 @@ public class PayrollService {
             throw new IllegalArgumentException("Standard hours per day must be between 1 and 24.");
         if (days != null && (days.signum() == 0 || days.compareTo(BigDecimal.valueOf(31)) > 0))
             throw new IllegalArgumentException("Working days per month must be between 1 and 31.");
-        for (String hrsKey : List.of("attendanceDayHours", "attendanceAvgHours", "incentiveAvgHours")) {
+        for (String hrsKey : List.of("incentiveAvgHours")) {
             BigDecimal v = parsed.get(hrsKey);
             if (v != null && v.compareTo(BigDecimal.valueOf(24)) > 0)
                 throw new IllegalArgumentException("'" + hrsKey + "' can't be above 24 hours.");
         }
-        for (String dayKey : List.of("attendanceMinDays", "attendanceBonusDays", "incentiveMinDays")) {
+        for (String dayKey : List.of("attendanceBonusDays", "incentiveMinDays")) {
             BigDecimal v = parsed.get(dayKey);
             if (v != null && v.compareTo(BigDecimal.valueOf(31)) > 0)
                 throw new IllegalArgumentException("'" + dayKey + "' can't be above 31 days.");
         }
-        for (String pct : List.of("attendanceMinPercent", "performanceMinScore")) {
+        for (String pct : List.of("performanceMinScore")) {
             BigDecimal v = parsed.get(pct);
             if (v != null && v.compareTo(BigDecimal.valueOf(100)) > 0)
                 throw new IllegalArgumentException("'" + pct + "' can't be above 100.");

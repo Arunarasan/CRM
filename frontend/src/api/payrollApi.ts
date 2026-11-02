@@ -14,10 +14,6 @@ export interface PayRules {
   incentiveMinDays: number;
   incentiveAvgHours: number;
   attendanceBonus: number;
-  attendanceMinPercent: number;
-  attendanceDayHours: number;
-  attendanceMinDays: number;
-  attendanceAvgHours: number;
   attendanceBonusDays: number;
   performanceBonus: number;
   performanceMinScore: number;

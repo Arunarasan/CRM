@@ -46,6 +46,9 @@ public class ProjectController {
     @Autowired
     private com.arudra.crm.service.ProjectFilesService projectFilesService;
 
+    @Autowired
+    private com.arudra.crm.service.PayrollService payrollService;
+
     @GetMapping
     @PreAuthorize(READ)
     public ResponseEntity<Page<Project>> getAllProjects(
@@ -202,6 +205,13 @@ public class ProjectController {
     public ResponseEntity<Map<String, Integer>> importLeadAssets(@PathVariable Long id) {
         int imported = quotationService.importPreSalesAssets(id, currentUserService.getCurrentUser());
         return ResponseEntity.ok(Map.of("imported", imported));
+    }
+
+    /** Each team member's project-incentive share and whether it is waiting, earned or paid. */
+    @GetMapping("/{id}/incentives")
+    @PreAuthorize(READ)
+    public ResponseEntity<java.util.List<Map<String, Object>>> projectIncentives(@PathVariable Long id) {
+        return ResponseEntity.ok(payrollService.projectIncentiveBreakdown(id));
     }
 
     /** Every file on the project — uploads plus lead, measurement, quotation, invoices, tasks, chat, logs, GRNs… */

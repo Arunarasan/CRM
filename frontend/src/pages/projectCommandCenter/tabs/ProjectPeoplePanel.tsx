@@ -10,6 +10,10 @@ interface Person {
   tasks: { id: number; name: string; status: string }[];
 }
 
+interface Incentive { userId: number; amount: number; state: "WAITING" | "EARNED" | "PAID"; month?: string | null; eligible: boolean }
+
+const inr = (n: number) => `₹${Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
+
 interface ProjectTask { id: number; taskName: string; status: string; isDeleted?: boolean }
 
 const ROLES: [Person["role"], string][] = [
@@ -30,6 +34,7 @@ export default function ProjectPeoplePanel({ projectId, onChanged, compact }: { 
   const [newRole, setNewRole] = useState<Person["role"]>("MEMBER");
 
   const [tasks, setTasks] = useState<ProjectTask[]>([]);
+  const [incentives, setIncentives] = useState<Record<number, Incentive>>({});
 
   const loadTasks = useCallback(() => {
     api.get<ProjectTask[]>(`/tasks/project/${projectId}`)
@@ -37,6 +42,12 @@ export default function ProjectPeoplePanel({ projectId, onChanged, compact }: { 
       .catch(() => setTasks([]));
   }, [projectId]);
   useEffect(() => { loadTasks(); }, [loadTasks]);
+
+  useEffect(() => {
+    api.get<Incentive[]>(`/projects/${projectId}/incentives`)
+      .then((r) => setIncentives(Object.fromEntries(r.data.map((i) => [i.userId, i]))))
+      .catch(() => setIncentives({}));
+  }, [projectId, people]);
 
   const load = useCallback(() => {
     api.get<Person[]>(`/projects/${projectId}/people`)
@@ -126,6 +137,18 @@ export default function ProjectPeoplePanel({ projectId, onChanged, compact }: { 
                     ))}
                     {p.pickedOwn && <span className="text-[11px] text-slate-400">· picked by themself</span>}
                   </div>
+                  {incentives[p.userId] && incentives[p.userId].amount > 0 && (() => {
+                    const i = incentives[p.userId];
+                    const tone = i.state === "PAID" ? "bg-emerald-100 text-emerald-800" : i.state === "EARNED" ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-500";
+                    const label = i.state === "PAID" ? "paid on a payslip" : i.state === "EARNED" ? `earned · goes on ${i.month} payslip` : "when the project's tasks are done";
+                    return (
+                      <p className="mt-1">
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${tone}`}>
+                          Incentive {inr(i.amount)} · {label}{!i.eligible ? " · not bonus-eligible" : ""}
+                        </span>
+                      </p>
+                    );
+                  })()}
                 </div>
                 {!compact && <select className={sel} value="" disabled={busy === p.userId}
                   onChange={(e) => { if (e.target.value) addToTask(p, Number(e.target.value)); }}>
