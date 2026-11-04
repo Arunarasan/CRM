@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import ResponsiveList, { type Column } from "@/components/ui/responsive-list";
 import FilterSheet from "@/components/ui/filter-sheet";
+import TeamAvatars, { type TeamMember } from "@/components/ui/team-avatars";
 import SettleProjectDialog, { canSettleProjects } from "@/pages/projectCommandCenter/SettleProjectDialog";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
@@ -40,6 +41,7 @@ interface ProjectRow {
   projectType?: string;
   customer?: { id: number; name?: string; companyName?: string; city?: string };
   projectManager?: { id: number; name?: string };
+  team?: TeamMember[];
   status: string;
   progress: number;
   startDate?: string;
@@ -239,13 +241,16 @@ export default function Projects() {
 
   const ownerOptions = useMemo(() => {
     const set = new Map<string, string>();
-    projects.forEach((p) => { if (p.projectManager?.name) set.set(p.projectManager.name, p.projectManager.name); });
+    projects.forEach((p) => {
+      if (p.projectManager?.name) set.set(p.projectManager.name, p.projectManager.name);
+      p.team?.forEach((m) => { if (m.name) set.set(m.name, m.name); });
+    });
     return Array.from(set.values()).sort().map((v) => ({ value: v, label: v }));
   }, [projects]);
 
   const visible = useMemo(() => projects.filter((p) =>
     (!customerFilter || p.customer?.name === customerFilter) &&
-    (!ownerFilter || p.projectManager?.name === ownerFilter)
+    (!ownerFilter || p.projectManager?.name === ownerFilter || !!p.team?.some((m) => m.name === ownerFilter))
   ), [projects, customerFilter, ownerFilter]);
 
   const activeFilterCount = (customerFilter ? 1 : 0) + (ownerFilter ? 1 : 0);
@@ -274,6 +279,7 @@ export default function Projects() {
     { key: "category", header: "Category", cell: (p) => <NameList items={p.workCategories} /> },
     { key: "product", header: "Product", cell: (p) => <NameList items={p.workProducts} /> },
     { key: "stage", header: "Stage", cell: (p) => <StageBadge stage={p.workStage} /> },
+    { key: "team", header: "Team", cell: (p) => <TeamAvatars team={p.team} emptyLabel="Unassigned" /> },
     {
       key: "value", header: "Project Value", headClassName: "text-right", cellClassName: "whitespace-nowrap text-right",
       cell: (p: ProjectRow) => (
@@ -463,6 +469,7 @@ export default function Projects() {
                 {!!p.workProducts?.length && (
                   <div className="text-xs text-muted-foreground truncate">Product: {p.workProducts.join(", ")}</div>
                 )}
+                {!!p.team?.length && <TeamAvatars team={p.team} size="sm" />}
               </div>
               <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
             </div>

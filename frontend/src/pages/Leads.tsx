@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import ResponsiveList, { type Column } from "@/components/ui/responsive-list";
 import FilterSheet from "@/components/ui/filter-sheet";
+import TeamAvatars from "@/components/ui/team-avatars";
 import { useHoverInfo, InfoRow } from "@/components/ui/hover-info";
 import api from "@/lib/api";
 import { leadApi } from "./leads/leadApi";
@@ -414,6 +415,7 @@ export default function Leads() {
         </div>
       ),
     },
+    { key: "team", header: "Team", cell: (l) => <TeamAvatars team={l.team} emptyLabel="Unassigned" /> },
     {
       key: "next", header: "Next Follow-up", cellClassName: "whitespace-nowrap text-sm", cell: (l) => {
         const t = followUpTone(l.nextFollowUpDate, l.nextFollowUpTime);
@@ -735,10 +737,14 @@ export default function Leads() {
                     </div>
                     <div className="flex items-center justify-between text-xs">
                       <span className="flex items-center gap-1.5 text-muted-foreground">
-                        <span className={`h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-semibold ${avatarColor(l.assignedSalesExecutive?.name)}`}>
-                          {initials(l.assignedSalesExecutive?.name)}
-                        </span>
-                        {l.assignedSalesExecutive?.name || "Unassigned"}
+                        {l.team?.length ? (
+                          <TeamAvatars team={l.team} size="sm" />
+                        ) : (
+                          <span className={`h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-semibold ${avatarColor(l.assignedSalesExecutive?.name)}`}>
+                            {initials(l.assignedSalesExecutive?.name)}
+                          </span>
+                        )}
+                        {l.assignedSalesExecutive?.name || (l.team?.length ? "" : "Unassigned")}
                       </span>
                       <span className={followUpTone(l.nextFollowUpDate).className}>
                         {followUpTone(l.nextFollowUpDate, l.nextFollowUpTime).label}

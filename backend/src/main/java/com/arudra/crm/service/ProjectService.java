@@ -18,6 +18,7 @@ import java.util.Map;
 public class ProjectService {
 
     @Autowired private com.arudra.crm.repository.ProjectWorkLineRepository workLineRepository;
+    @Autowired private TeamSummaryService teamSummaryService;
     @Autowired @org.springframework.context.annotation.Lazy private ProjectWorkService projectWorkService;
     @Autowired @org.springframework.context.annotation.Lazy private EmployeeTaskService employeeTaskService;
 
@@ -307,6 +308,7 @@ public class ProjectService {
         attachTaskTallies(result.getContent());
         attachOutstanding(result.getContent());
         attachWorkSummary(result.getContent());
+        teamSummaryService.attachToProjects(result.getContent());
         return result;
     }
 

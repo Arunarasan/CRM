@@ -51,6 +51,7 @@ public class LeadService {
             Map.entry("Quotation Approved", 0.85), Map.entry("On Hold", 0.10));
 
     @Autowired private LeadRepository leadRepository;
+    @Autowired private TeamSummaryService teamSummaryService;
     @Autowired private org.springframework.context.ApplicationEventPublisher eventPublisher;
     @Autowired private CustomerRepository customerRepository;
     @Autowired private ProjectRepository projectRepository;
@@ -116,6 +117,7 @@ public class LeadService {
 
         Page<Lead> result = leadRepository.findAll(spec, pageRequest);
         fillJourneyStages(result.getContent());
+        teamSummaryService.attachToLeads(result.getContent());
         return result;
     }
 

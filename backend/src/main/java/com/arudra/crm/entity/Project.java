@@ -267,4 +267,8 @@ public class Project extends BaseEntity {
     /** Portfolio list only: EXECUTION, READY_TO_FIT or COMPLETED (null when the project has no work lines). */
     @Transient
     private String workStage;
+
+    /** Portfolio list only: PM, assistant manager and everyone on a live task — {userId, name, role}. */
+    @Transient
+    private java.util.List<java.util.Map<String, Object>> team;
 }

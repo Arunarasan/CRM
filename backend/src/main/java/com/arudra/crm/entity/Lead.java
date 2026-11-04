@@ -368,6 +368,10 @@ public class Lead extends BaseEntity {
     @Transient
     private String journeyStage;
 
+    /** Leads list only: sales executive, designer, engineer, assignees and everyone on a live task — {userId, name, role}. */
+    @Transient
+    private java.util.List<java.util.Map<String, Object>> team;
+
     /** Computed: in Quote Building with an approved quote, waiting to be converted to a project. */
     @Transient
     private Boolean quoteApproved;

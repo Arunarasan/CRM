@@ -66,6 +66,7 @@ import { toast } from "@/components/ui/toast";
 import SearchableSelect from "@/components/ui/searchable-select";
 import LeadFormDialog from "@/pages/leads/LeadFormDialog";
 import ChangeCreatorDialog from "@/pages/leads/ChangeCreatorDialog";
+import ChangeOwnerDialog from "@/pages/projectCommandCenter/ChangeOwnerDialog";
 import { useAuth } from "@/hooks/useAuth";
 import { leadApi } from "@/pages/leads/leadApi";
 import type { Lead, UserSummary } from "@/pages/leads/constants";
@@ -726,6 +727,13 @@ export default function ProjectCommandCenter() {
       setCreatorEdit({ users: u.data, currentUserId: c.data?.userId });
     } catch { toast.error("Couldn't load the lead."); }
   };
+  const [ownerEdit, setOwnerEdit] = useState<{ users: UserSummary[] } | null>(null);
+  const openOwnerEdit = async () => {
+    try {
+      const u = await leadApi.assignableUsers();
+      setOwnerEdit({ users: u.data });
+    } catch { toast.error("Couldn't load the team list."); }
+  };
   const [newStatus, setNewStatus] = useState("RUNNING");
   const [cancelRefresh, setCancelRefresh] = useState(0);
 
@@ -938,7 +946,8 @@ export default function ProjectCommandCenter() {
                     </span>
                   )}
                 </div>
-                <div className="-ml-[52px] mt-3 @xl:ml-0 @xl:mt-0"><ProjectInfoRow summary={summary} onChangeLeadBy={isAdmin && project.lead?.id ? openCreatorEdit : undefined} /></div>
+                <div className="-ml-[52px] mt-3 @xl:ml-0 @xl:mt-0"><ProjectInfoRow summary={summary} onChangeLeadBy={isAdmin && project.lead?.id ? openCreatorEdit : undefined}
+                  owner={(project.projectManager as any)?.name} onChangeOwner={isAdmin ? openOwnerEdit : undefined} /></div>
               </div>
             </div>
 
@@ -1025,6 +1034,11 @@ export default function ProjectCommandCenter() {
       {leadEdit && (
         <LeadFormDialog open onOpenChange={(o) => { if (!o) setLeadEdit(null); }} lead={leadEdit.lead} users={leadEdit.users}
           onSaved={() => { setLeadEdit(null); fetchProjectData(); }} />
+      )}
+      {ownerEdit && project?.id && (
+        <ChangeOwnerDialog open onOpenChange={(o) => { if (!o) setOwnerEdit(null); }} projectId={project.id}
+          users={ownerEdit.users} ownerId={(project.projectManager as any)?.id} assistantId={(project.assistantManager as any)?.id}
+          onChanged={() => { setOwnerEdit(null); fetchProjectData(); }} />
       )}
       {creatorEdit && project?.lead?.id && (
         <ChangeCreatorDialog open onOpenChange={(o) => { if (!o) setCreatorEdit(null); }} leadId={project.lead.id}

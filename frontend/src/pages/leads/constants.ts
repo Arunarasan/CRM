@@ -289,6 +289,7 @@ export interface Lead {
   assignedDesigner?: UserSummary;
   assignedEngineer?: UserSummary;
   projectManager?: UserSummary;
+  team?: { userId?: number; name?: string; role?: string }[]; // list only: everyone working on the lead
   leadOwner?: UserSummary; // who created/owns the lead (set when a field employee submits one)
   // Referral (captured at creation when leadSource === "Referral")
   referralType?: string; // "Existing Customer" | "Employee" | "Other"

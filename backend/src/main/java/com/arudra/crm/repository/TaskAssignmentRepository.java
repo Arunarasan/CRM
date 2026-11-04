@@ -14,6 +14,16 @@ public interface TaskAssignmentRepository extends JpaRepository<TaskAssignment, 
     List<TaskAssignment> findByTaskId(Long taskId);
     List<TaskAssignment> findByEmployeeId(Long employeeId);
 
+    /** Bulk loaders for the list "team" chips: one query per page, assignee + task already fetched. */
+    @Query("SELECT a FROM TaskAssignment a JOIN FETCH a.employee JOIN FETCH a.task t WHERE t.project.id IN :ids")
+    List<TaskAssignment> findWithEmployeeByProjectIds(@Param("ids") java.util.Collection<Long> ids);
+
+    @Query("SELECT a FROM TaskAssignment a JOIN FETCH a.employee JOIN FETCH a.task t WHERE t.leadId IN :ids")
+    List<TaskAssignment> findWithEmployeeByLeadIds(@Param("ids") java.util.Collection<Long> ids);
+
+    @Query("SELECT a FROM TaskAssignment a JOIN FETCH a.employee JOIN FETCH a.task t WHERE t.id IN :ids")
+    List<TaskAssignment> findWithEmployeeByTaskIds(@Param("ids") java.util.Collection<Long> ids);
+
     /**
      * A person can hold more than one row on a task (taken off → CANCELLED, then picked/assigned again).
      * Rows come back live-first, newest first, so callers asking for "the" assignment get the current one
