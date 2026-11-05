@@ -11,7 +11,7 @@ import {
 import {
   InvoiceStatusBadge, PaidBar, dueInfo, fmtDay, inr, invoiceTypeLabel, waReminderHref,
 } from "@/components/billing/billing-ui";
-import { FileText, IndianRupee, MessageCircle, MoreHorizontal, Plus, Printer, Search, X } from "lucide-react";
+import { FileText, IndianRupee, MessageCircle, MoreHorizontal, Pencil, Plus, Printer, Search, X } from "lucide-react";
 
 /** Status buttons: the questions people ask of the list. */
 const STATUS_CHIPS: { id: string; label: string }[] = [
@@ -176,6 +176,7 @@ export default function InvoicesPage() {
                         {open && <DropdownMenuItem onClick={() => navigate(`/billing/invoices/${i.id}?pay=1`)}><IndianRupee className="mr-2 h-4 w-4" /> Record payment</DropdownMenuItem>}
                         <DropdownMenuItem onClick={() => navigate(`/billing/invoices/${i.id}?print=invoice`)}><Printer className="mr-2 h-4 w-4" /> Print A4</DropdownMenuItem>
                         <DropdownMenuItem onClick={() => navigate(`/billing/invoices/${i.id}?print=receipt`)}><Printer className="mr-2 h-4 w-4" /> Print receipt</DropdownMenuItem>
+                        {(i.invoiceType as string) === "COUNTER_SALE" && i.status !== "CANCELLED" && <DropdownMenuItem onClick={() => navigate(`/billing/counter-sale?edit=${i.id}`)}><Pencil className="mr-2 h-4 w-4" /> Edit bill</DropdownMenuItem>}
                         {open && wa && <DropdownMenuItem onClick={() => window.open(wa, "_blank", "noopener")}><MessageCircle className="mr-2 h-4 w-4" /> WhatsApp reminder</DropdownMenuItem>}
                       </DropdownMenuContent>
                     </DropdownMenu>

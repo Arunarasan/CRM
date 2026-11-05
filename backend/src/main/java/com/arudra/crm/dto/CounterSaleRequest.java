@@ -31,6 +31,9 @@ public class CounterSaleRequest {
     public boolean deductStock = true;
     public Long warehouseId;      // default source warehouse for stock-out; per-line override wins
 
+    /** Edit only: why the issued bill is being changed (required; goes to the ledger note). */
+    public String editReason;
+
     public List<Item> items;
     public Installation installation;
     public Work work;

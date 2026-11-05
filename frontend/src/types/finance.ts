@@ -44,6 +44,8 @@ export interface InvoiceItem {
   notes?: string | null;
   /** Item photo — catalogue image or one taken while billing. */
   imageUrl?: string | null;
+  productId?: number | null;
+  sourceWarehouseId?: number | null;
 }
 
 export interface Invoice {

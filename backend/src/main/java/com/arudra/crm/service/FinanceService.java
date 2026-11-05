@@ -49,6 +49,8 @@ public class FinanceService {
     @Autowired private InventoryService inventoryService;
     @Autowired private TaskService taskService;
     @Autowired private BundleService bundleService;
+    @Autowired private com.arudra.crm.repository.BundleRepository bundleRepository;
+    @Autowired private com.arudra.crm.repository.SalesReturnItemRepository returnItemRepository;
 
     // =====================================================================
     // Numbering — allocated atomically (see DocumentNumberService); the old
@@ -509,6 +511,132 @@ public class FinanceService {
         invoice.setTerms(terms == null || terms.isBlank() ? null : terms.trim());
         invoice.setNotes(notes == null || notes.isBlank() ? null : notes.trim());
         return invoiceRepository.save(invoice);
+    }
+
+    /**
+     * Edits an issued counter-sale bill: lines, prices, GST mode, discount, notes and terms.
+     * Stock is adjusted by the difference per product, the ledger gets a credit/debit adjustment
+     * (never a rewrite), and payment state is re-derived. Refused when a stitching/work bundle exists,
+     * when a product return was taken against the bill, or when the new total is below what is paid.
+     */
+    @Transactional
+    public Invoice updateCounterSale(Long id, CounterSaleRequest req, User user) {
+        Invoice invoice = getInvoice(id);
+        if (!"COUNTER_SALE".equals(invoice.getInvoiceType())) {
+            throw new RuntimeException("Only counter-sale bills can be edited here");
+        }
+        if ("CANCELLED".equals(invoice.getStatus())) throw new RuntimeException("A cancelled bill can't be edited");
+        if (req.editReason == null || req.editReason.isBlank()) throw new RuntimeException("A reason for the edit is required");
+        if (bundleRepository.findByInvoiceIdAndIsDeletedFalseOrderByBundleNoAsc(id).stream()
+                .anyMatch(b -> !"CANCELLED".equals(b.getStatus()))) {
+            throw new RuntimeException("This bill has stitching/work orders — cancel them (or the bill) before editing the lines");
+        }
+        List<InvoiceItem> oldItems = invoiceItemRepository.findByInvoiceId(id);
+        for (InvoiceItem it : oldItems) {
+            if (returnItemRepository.totalReturnedForInvoiceItem(it.getId()) > 0) {
+                throw new RuntimeException("A product return was taken against this bill — it can't be edited");
+            }
+        }
+
+        List<InvoiceItem> items = new ArrayList<>();
+        List<CounterSaleRequest.Item> srcs = new ArrayList<>();
+        if (req.items != null) {
+            for (CounterSaleRequest.Item li : req.items) {
+                if (li == null || li.description == null || li.description.isBlank()) continue;
+                InvoiceItem item = new InvoiceItem();
+                item.setDescription(li.description.trim());
+                item.setHsnCode(emptyToNull(li.hsnCode));
+                item.setUnit(emptyToNull(li.unit));
+                item.setNotes(emptyToNull(li.notes));
+                item.setImageUrl(emptyToNull(li.imageUrl));
+                item.setQuantity(li.quantity == null || li.quantity < 1 ? 1 : li.quantity);
+                item.setUnitPrice(li.unitPrice == null ? BigDecimal.ZERO : li.unitPrice);
+                item.setGstRate(li.gstRate == null ? BigDecimal.ZERO : li.gstRate);
+                item.setProductId(li.productId);
+                items.add(item);
+                srcs.add(li);
+            }
+        }
+        if (items.isEmpty()) throw new RuntimeException("A bill needs at least one line");
+
+        BigDecimal oldTotal = invoice.getTotalAmount() == null ? BigDecimal.ZERO : invoice.getTotalAmount();
+        BigDecimal paid = invoice.getAmountPaid() == null ? BigDecimal.ZERO : invoice.getAmountPaid();
+
+        invoice.setGstType("IGST".equals(req.gstType) ? "IGST" : "CGST_SGST");
+        invoice.setTaxInclusive(Boolean.TRUE.equals(req.taxInclusive));
+        invoice.setPlaceOfSupply(emptyToNull(req.placeOfSupply));
+        invoice.setDiscountType(req.discountType);
+        invoice.setDiscountValue(req.discountValue);
+        invoice.setNotes(emptyToNull(req.notes));
+        invoice.setTerms(emptyToNull(req.terms));
+        computeTotals(invoice, items);
+        BigDecimal newTotal = invoice.getTotalAmount();
+        if (newTotal.compareTo(paid) < 0) {
+            throw new RuntimeException("New total ₹" + newTotal + " is less than the ₹" + paid
+                    + " already paid — refund the difference first, then edit");
+        }
+
+        // Stock: adjust by the per-product difference (old deducted qty vs the qty now wanted).
+        Map<Long, Integer> oldQty = new LinkedHashMap<>();
+        Map<Long, Long> oldWh = new HashMap<>();
+        for (InvoiceItem it : oldItems) {
+            if (it.getProductId() != null && it.getSourceWarehouseId() != null) {
+                oldQty.merge(it.getProductId(), it.getQuantity(), Integer::sum);
+                oldWh.putIfAbsent(it.getProductId(), it.getSourceWarehouseId());
+            }
+        }
+        Map<Long, Integer> newQty = new LinkedHashMap<>();
+        Map<Long, Long> reqWh = new HashMap<>();
+        for (int i = 0; i < items.size(); i++) {
+            InvoiceItem it = items.get(i);
+            if (it.getProductId() == null) continue;
+            newQty.merge(it.getProductId(), it.getQuantity(), Integer::sum);
+            CounterSaleRequest.Item src = srcs.get(i);
+            Long wh = src != null && src.warehouseId != null ? src.warehouseId : req.warehouseId;
+            if (wh != null) reqWh.putIfAbsent(it.getProductId(), wh);
+        }
+        Map<Long, Long> finalWh = new HashMap<>();
+        Set<Long> products = new LinkedHashSet<>(oldQty.keySet());
+        products.addAll(newQty.keySet());
+        for (Long pid : products) {
+            int before = oldQty.getOrDefault(pid, 0);
+            int after = req.deductStock ? newQty.getOrDefault(pid, 0) : 0;
+            Long wh = oldWh.get(pid);
+            try {
+                if (after > before) {
+                    Long used = inventoryService.sellStock(pid, wh != null ? wh : reqWh.get(pid), after - before, id);
+                    if (wh == null) wh = used;
+                } else if (after < before && wh != null) {
+                    inventoryService.reverseSaleStock(pid, wh, before - after, id);
+                }
+            } catch (Exception ex) {
+                // a stock hiccup never blocks the bill; the line just stays untracked
+            }
+            if (after > 0 && wh != null) finalWh.put(pid, wh);
+        }
+
+        invoiceItemRepository.deleteAll(oldItems);
+        Invoice saved = invoiceRepository.save(invoice);
+        for (InvoiceItem item : items) {
+            item.setId(null);
+            item.setInvoice(saved);
+            if (item.getProductId() != null) item.setSourceWarehouseId(finalWh.get(item.getProductId()));
+            invoiceItemRepository.save(item);
+        }
+
+        if (!"DRAFT".equals(saved.getStatus()) && newTotal.compareTo(oldTotal) != 0) {
+            BigDecimal diff = newTotal.subtract(oldTotal);
+            boolean up = diff.signum() > 0;
+            postLedger(saved.getCustomer(), saved.getProject(), LocalDate.now(), up ? "DEBIT_NOTE" : "CREDIT_NOTE",
+                    "INVOICE_EDIT", id, saved.getInvoiceNumber(),
+                    "Invoice " + saved.getInvoiceNumber() + " edited (" + req.editReason.trim() + ")",
+                    up ? diff : BigDecimal.ZERO, up ? BigDecimal.ZERO : diff.negate());
+        }
+        recalculateInvoice(id);
+        notifyFinanceUsers("Counter sale " + saved.getInvoiceNumber() + " edited",
+                "Total ₹" + oldTotal + " → ₹" + newTotal + ": " + req.editReason.trim(),
+                "INVOICE_GENERATED", "/finance/invoices/" + id);
+        return getInvoice(id);
     }
 
     private void computeTotals(Invoice invoice, List<InvoiceItem> items) {

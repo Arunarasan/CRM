@@ -93,6 +93,13 @@ public class FinanceController {
         return ResponseEntity.ok(financeService.createCounterSale(request, currentUserService.getCurrentUser()));
     }
 
+    /** Edit an issued counter-sale bill (lines/prices/GST/discount); stock and ledger are adjusted. */
+    @PutMapping("/counter-sale/{id}")
+    @PreAuthorize(WRITE)
+    public ResponseEntity<Invoice> updateCounterSale(@PathVariable Long id, @RequestBody com.arudra.crm.dto.CounterSaleRequest request) {
+        return ResponseEntity.ok(financeService.updateCounterSale(id, request, currentUserService.getCurrentUser()));
+    }
+
     /** Employees an installation task can be assigned to. */
     @GetMapping("/assignable-employees")
     @PreAuthorize(READ)

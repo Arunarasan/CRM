@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { financeApi } from "@/api/financeApi";
 import type { Invoice, InvoiceItem, CustomerPayment } from "@/types/finance";
 import { PAYMENT_METHODS } from "@/types/finance";
@@ -21,10 +21,11 @@ import { fetchCompanyProfile, type CompanyProfile } from "@/lib/companyProfile";
 import InvoiceBundles from "@/components/bundles/InvoiceBundles";
 import { resolveFileUrl } from "@/lib/uploadFile";
 import { resolveBillTo } from "@/lib/billTo";
-import { ArrowLeft, CheckCircle2, Send, XCircle, IndianRupee, RotateCcw, Printer, ChevronDown, MoreHorizontal, MessageCircle, Phone, MapPin, User } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Send, XCircle, IndianRupee, RotateCcw, Printer, ChevronDown, MoreHorizontal, MessageCircle, Phone, MapPin, User, Pencil } from "lucide-react";
 
 export default function InvoiceDetailPage() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const invId = Number(id);
   const goBack = useGoBack("/billing/invoices");
   const [searchParams, setSearchParams] = useSearchParams();
@@ -112,6 +113,7 @@ export default function InvoiceDetailPage() {
   const canSend = inv.status === "GENERATED";
   const canPay = ["GENERATED", "SENT", "PARTIAL", "OVERDUE"].includes(inv.status) && (inv.balanceDue ?? 0) > 0;
   const canCancel = !["CANCELLED", "PAID"].includes(inv.status);
+  const canEditBill = (inv.invoiceType as string) === "COUNTER_SALE" && inv.status !== "CANCELLED";
   const canUnpay = (inv.amountPaid ?? 0) > 0 && inv.status !== "CANCELLED";
 
   const due = dueInfo(inv);
@@ -164,13 +166,14 @@ export default function InvoiceDetailPage() {
           {primary && (
             <Button size="sm" disabled={busy} onClick={primary.onClick} className="active:scale-[0.98]"><primary.icon className="w-4 h-4 mr-1" /> {primary.label}</Button>
           )}
-          {(canUnpay || canCancel || wa) && (
+          {(canUnpay || canCancel || canEditBill || wa) && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button size="sm" variant="outline" aria-label="More actions"><MoreHorizontal className="w-4 h-4" /></Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 {wa && <DropdownMenuItem onClick={() => window.open(wa, "_blank", "noopener")}><MessageCircle className="mr-2 h-4 w-4" /> WhatsApp reminder</DropdownMenuItem>}
+                {canEditBill && <DropdownMenuItem onClick={() => navigate(`/billing/counter-sale?edit=${inv.id}`)}><Pencil className="mr-2 h-4 w-4" /> Edit bill</DropdownMenuItem>}
                 {canUnpay && <DropdownMenuItem onClick={() => run(() => financeApi.markInvoiceUnpaid(invId), "Payment reversed.")}><RotateCcw className="mr-2 h-4 w-4" /> Mark unpaid</DropdownMenuItem>}
                 {canCancel && <DropdownMenuItem onClick={cancel} className="text-red-600 focus:text-red-700"><XCircle className="mr-2 h-4 w-4" /> Cancel invoice</DropdownMenuItem>}
               </DropdownMenuContent>

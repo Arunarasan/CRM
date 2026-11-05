@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import GstModeToggle from "@/components/ui/gst-mode-toggle";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import api from "@/lib/api";
 import { financeApi } from "@/api/financeApi";
 import { inventoryApi } from "@/api/inventoryApi";
@@ -34,6 +34,12 @@ let keySeed = 1;
 
 export default function CounterSalePage() {
   const navigate = useNavigate();
+  // ?edit=<invoiceId> turns the screen into an editor for an already-issued counter-sale bill.
+  const [sp] = useSearchParams();
+  const editId = Number(sp.get("edit")) || null;
+  const [editInv, setEditInv] = useState<{ number: string; customer: string; paid: number } | null>(null);
+  const [editReason, setEditReason] = useState("");
+  const [editLoading, setEditLoading] = useState(!!editId);
 
   const [warehouses, setWarehouses] = useState<WarehouseLite[]>([]);
   const [employees, setEmployees] = useState<EmployeeLite[]>([]);
@@ -94,9 +100,30 @@ export default function CounterSalePage() {
   const phoneRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    if (!editId) return;
+    Promise.all([financeApi.getInvoice(editId), financeApi.getInvoiceItems(editId)]).then(([inv, items]) => {
+      if ((inv.invoiceType as string) !== "COUNTER_SALE" || inv.status === "CANCELLED") {
+        toast.error("This bill can't be edited."); navigate(`/billing/invoices/${editId}`); return;
+      }
+      setEditInv({ number: inv.invoiceNumber, customer: inv.customer?.name ?? "Walk-in Customer", paid: Number(inv.amountPaid ?? 0) });
+      setGstType(inv.gstType); setTaxInclusive(!!inv.taxInclusive);
+      setDiscountType(inv.discountType ?? "FLAT"); setDiscountValue(String(inv.discountValue ?? 0));
+      setDeductStock(items.some((i) => i.sourceWarehouseId != null));
+      const wh = items.find((i) => i.sourceWarehouseId != null)?.sourceWarehouseId;
+      if (wh) setWarehouseId(String(wh));
+      setLines(items.map((i) => ({
+        key: keySeed++, productId: i.productId ?? null, name: i.description, notes: i.notes ?? "", imageUrl: i.imageUrl ?? "",
+        hsnCode: i.hsnCode ?? "", unit: i.unit ?? "Nos", qty: i.quantity,
+        rate: Number(inv.taxInclusive ? (i.unitPriceIncl ?? i.unitPrice) : i.unitPrice), gst: Number(i.gstRate ?? 0),
+      })));
+    }).catch((e) => { toast.error(apiError(e, "Could not load the bill.")); navigate("/billing/invoices"); })
+      .finally(() => setEditLoading(false));
+  }, [editId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
     inventoryApi.getWarehouses().then((w) => {
       setWarehouses(w ?? []);
-      if (w?.length) setWarehouseId(String(w[0].id));
+      if (w?.length && !editId) setWarehouseId(String(w[0].id));
     }).catch(() => {});
     financeApi.getAssignableEmployees().then(setEmployees).catch(() => {});
   }, []);
@@ -196,6 +223,28 @@ export default function CounterSalePage() {
     if (validItems.length === 0 && !(installOn && Number(installCharge) > 0)) { toast.error("Add at least one item."); return; }
     const workItems = workOn ? validItems.filter((l) => workLines[l.key]?.on) : [];
     if (workOn && workItems.length === 0) { toast.error("Tick the items that need stitching / work."); return; }
+    if (editId) {
+      if (!editReason.trim()) { toast.error("Enter a reason for the edit."); return; }
+      if (totals.grand < (editInv?.paid ?? 0)) { toast.error(`New total is below the ${currency(editInv?.paid ?? 0)} already paid — refund first.`); return; }
+      setSaving(true);
+      try {
+        await financeApi.updateCounterSale(editId, {
+          gstType, taxInclusive, discountType, discountValue: Number(discountValue) || 0, editReason: editReason.trim(),
+          deductStock, warehouseId: deductStock && warehouseId ? Number(warehouseId) : null,
+          items: validItems.map((l) => ({
+            productId: l.productId, description: l.name.trim(), hsnCode: l.hsnCode || null,
+            notes: l.notes.trim() || null, imageUrl: l.imageUrl || null,
+            unit: l.unit || null, quantity: l.qty, unitPrice: l.rate, gstRate: l.gst || 0,
+          })),
+        });
+        toast.success(`${editInv?.number} updated.`);
+        navigate(`/billing/invoices/${editId}`);
+      } catch (e) {
+        toast.error(apiError(e, "Could not update the bill."));
+        setSaving(false);
+      }
+      return;
+    }
     setSaving(true);
     try {
       // A walk-in phone that already exists reuses that customer (phone is unique) — never a duplicate.
@@ -279,6 +328,8 @@ export default function CounterSalePage() {
     Math.ceil(payingNow / 2000) * 2000,
   ])).filter((v) => v > 0).slice(0, 4);
 
+  if (editLoading) return <div className="p-8 text-slate-500">Loading bill…</div>;
+
   return (
     <div className="h-full flex flex-col md:flex-row bg-white border rounded-xl overflow-hidden">
         {/* LEFT — cart */}
@@ -359,7 +410,7 @@ export default function CounterSalePage() {
           )}
 
           {/* installation add-on */}
-          <div className="bg-white border rounded-xl">
+          {!editId && <div className="bg-white border rounded-xl">
             <label className="flex items-center gap-2.5 px-3 py-3 cursor-pointer">
               <BaseInput type="checkbox" checked={installOn} onChange={(e) => setInstallOn(e.target.checked)} className="w-4 h-4" />
               <Wrench className="w-4 h-4 text-slate-500" />
@@ -380,10 +431,10 @@ export default function CounterSalePage() {
                   <Input value={installNotes} onChange={(e) => setInstallNotes(e.target.value)} className="h-10 xl:h-9 mt-1" placeholder="Optional" /></label>
               </div>
             )}
-          </div>
+          </div>}
 
           {/* stitching / making work add-on → stickered bundles */}
-          <div className="bg-white border rounded-xl">
+          {!editId && <div className="bg-white border rounded-xl">
             <label className="flex items-center gap-2.5 px-3 py-3 cursor-pointer">
               <BaseInput type="checkbox" checked={workOn} onChange={(e) => setWorkOn(e.target.checked)} className="w-4 h-4" />
               <Scissors className="w-4 h-4 text-slate-500" />
@@ -398,7 +449,7 @@ export default function CounterSalePage() {
                   lineState={workLines} onLine={patchWorkLine} showCharge installing={installOn} />
               </div>
             )}
-          </div>
+          </div>}
         </div>
 
         {/* RIGHT — bill */}
@@ -407,13 +458,13 @@ export default function CounterSalePage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Receipt className="h-4 w-4 text-emerald-700" />
-                <span className="text-sm font-bold text-slate-800">Current bill</span>
+                <span className="text-sm font-bold text-slate-800">{editId ? `Edit ${editInv?.number ?? "bill"}` : "Current bill"}</span>
                 {lines.length > 0 && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-slate-600">{lines.length} product{lines.length === 1 ? "" : "s"}</span>}
               </div>
-              <button type="button" onClick={clearBill} disabled={lines.length === 0 && !custName && !custPhone && !adopted}
+              {!editId && <button type="button" onClick={clearBill} disabled={lines.length === 0 && !custName && !custPhone && !adopted}
                 className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-800 disabled:opacity-40">
                 <RotateCcw className="h-3.5 w-3.5" /> New bill
-              </button>
+              </button>}
             </div>
             {/* Tax settings — label left, choice right */}
             <div className="mt-2.5 space-y-1.5">
@@ -442,7 +493,12 @@ export default function CounterSalePage() {
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Customer</span>
                 <span className="text-[10px] text-slate-400"><Kbd>F4</Kbd></span>
               </div>
-              {adopted ? (
+              {editId ? (
+                <div className="rounded-md border bg-white px-2.5 py-2">
+                  <span className="block text-sm font-semibold text-slate-800 truncate">{editInv?.customer}</span>
+                  <span className="block text-[11px] text-slate-400">Customer can't be changed on an issued bill</span>
+                </div>
+              ) : adopted ? (
                 <div className="flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-2">
                   <span className="min-w-0 flex-1">
                     <span className="block text-sm font-semibold text-emerald-800 truncate">{adopted.name}</span>
@@ -510,8 +566,21 @@ export default function CounterSalePage() {
               )}
             </label>
 
+            {editId && (
+              <div className="border-t pt-3 space-y-2">
+                <label className="block text-xs font-semibold text-slate-600">Reason for edit <span className="text-red-500">*</span>
+                  <Input value={editReason} onChange={(e) => setEditReason(e.target.value)} placeholder="e.g. wrong price, qty changed" className="mt-1 h-10 font-normal" />
+                </label>
+                <p className="text-[11px] text-slate-500">
+                  Already paid {currency(editInv?.paid ?? 0)} · new balance {currency(Math.max(0, totals.grand - (editInv?.paid ?? 0)))}.
+                  Stock and the customer ledger are adjusted by the difference.
+                </p>
+                {totals.grand < (editInv?.paid ?? 0) && <p className="text-xs font-medium text-red-600">Total is below the amount paid — refund first.</p>}
+              </div>
+            )}
+
             {/* payment */}
-            <div className="border-t pt-3">
+            {!editId && <div className="border-t pt-3">
               <label className="flex items-center gap-2 text-sm text-slate-700 mb-2">
                 <BaseInput type="checkbox" checked={collectNow} onChange={(e) => setCollectNow(e.target.checked)} className="w-4 h-4" />
                 Collect payment now
@@ -575,18 +644,18 @@ export default function CounterSalePage() {
                   )}
                 </div>
               )}
-            </div>
+            </div>}
           </div>
 
           {/* checkout */}
           <div className="border-t p-3 space-y-2.5">
-            {showCash && cash > 0 && totals.grand > 0 && (
+            {!editId && showCash && cash > 0 && totals.grand > 0 && (
               <div className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm font-bold ${change >= 0 ? "bg-emerald-50 text-emerald-800" : "bg-red-50 text-red-700"}`}>
                 <span>{change >= 0 ? `Change to return · cash ${currency(cash)}` : `Short by · cash ${currency(cash)}`}</span>
                 <span className="tabular-nums text-base">{currency(Math.abs(change))}</span>
               </div>
             )}
-            <div className="flex items-center gap-2 text-xs text-slate-600">
+            {!editId && <div className="flex items-center gap-2 text-xs text-slate-600">
               <span className="shrink-0">Print bill</span>
               <div className="ml-auto inline-flex rounded-md border overflow-hidden text-[11px]">
                 {([["receipt", "Receipt"], ["invoice", "A4"], ["none", "Off"]] as const).map(([v, label]) => (
@@ -596,10 +665,10 @@ export default function CounterSalePage() {
                   </button>
                 ))}
               </div>
-            </div>
+            </div>}
             <Button className="w-full h-12 text-base active:scale-[0.99]" onClick={save} disabled={saving || !!blocker}>
-              {saving ? "Saving…" : isAdvance ? `Take advance ${currency(advanceAmt)}` : collectNow ? `Charge ${currency(totals.grand)}` : `Save Bill · ${currency(totals.grand)}`}
-              {!saving && <span className="ml-2 rounded border border-white/30 px-1.5 py-px text-[10px] font-semibold opacity-80">F9</span>}
+              {saving ? "Saving…" : editId ? `Save changes · ${currency(totals.grand)}` : isAdvance ? `Take advance ${currency(advanceAmt)}` : collectNow ? `Charge ${currency(totals.grand)}` : `Save Bill · ${currency(totals.grand)}`}
+              {!saving && !editId && <span className="ml-2 rounded border border-white/30 px-1.5 py-px text-[10px] font-semibold opacity-80">F9</span>}
             </Button>
             {blocker && <p className="text-center text-[11px] text-slate-400">{blocker}</p>}
           </div>

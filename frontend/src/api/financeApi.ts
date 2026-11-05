@@ -53,6 +53,8 @@ export const financeApi = {
   // Walk-in / counter sale
   createCounterSale: (payload: Record<string, unknown>) =>
     api.post<Invoice>(`${BASE}/counter-sale`, payload).then((r) => r.data),
+  updateCounterSale: (id: number, payload: Record<string, unknown>) =>
+    api.put<Invoice>(`${BASE}/counter-sale/${id}`, payload).then((r) => r.data),
   getAssignableEmployees: () =>
     api.get<{ id: number; name: string }[]>(`${BASE}/assignable-employees`).then((r) => r.data),
 
