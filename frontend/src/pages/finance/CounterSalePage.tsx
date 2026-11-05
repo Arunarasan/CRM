@@ -91,6 +91,7 @@ export default function CounterSalePage() {
   const [advance, setAdvance] = useState("");
 
   // bill print — auto-opens the chosen format right after checkout
+  const [waAfter, setWaAfter] = useState(false); // offer to WhatsApp the bill PDF right after checkout
   const [printFormat, setPrintFormat] = useState<"receipt" | "invoice" | "none">("receipt");
 
   const [saving, setSaving] = useState(false);
@@ -106,6 +107,8 @@ export default function CounterSalePage() {
         toast.error("This bill can't be edited."); navigate(`/billing/invoices/${editId}`); return;
       }
       setEditInv({ number: inv.invoiceNumber, customer: inv.customer?.name ?? "Walk-in Customer", paid: Number(inv.amountPaid ?? 0) });
+      const c: any = inv.customer;
+      if (c?.id) { setAdopted({ id: c.id, name: c.name, phone: c.phone }); setCustName(c.name ?? ""); setCustPhone(c.phone ?? ""); }
       setGstType(inv.gstType); setTaxInclusive(!!inv.taxInclusive);
       setDiscountType(inv.discountType ?? "FLAT"); setDiscountValue(String(inv.discountValue ?? 0));
       setDeductStock(items.some((i) => i.sourceWarehouseId != null));
@@ -228,7 +231,11 @@ export default function CounterSalePage() {
       if (totals.grand < (editInv?.paid ?? 0)) { toast.error(`New total is below the ${currency(editInv?.paid ?? 0)} already paid — refund first.`); return; }
       setSaving(true);
       try {
+        const reuseId = adopted?.id ?? phoneMatch?.id ?? null;
         await financeApi.updateCounterSale(editId, {
+          customerId: reuseId,
+          customerName: reuseId ? null : (custName.trim() || null),
+          customerPhone: reuseId ? null : (custPhone.trim() || null),
           gstType, taxInclusive, discountType, discountValue: Number(discountValue) || 0, editReason: editReason.trim(),
           deductStock, warehouseId: deductStock && warehouseId ? Number(warehouseId) : null,
           items: validItems.map((l) => ({
@@ -238,7 +245,7 @@ export default function CounterSalePage() {
           })),
         });
         toast.success(`${editInv?.number} updated.`);
-        navigate(`/billing/invoices/${editId}`);
+        navigate(`/billing/invoices/${editId}${waAfter ? "?wa=1" : ""}`);
       } catch (e) {
         toast.error(apiError(e, "Could not update the bill."));
         setSaving(false);
@@ -283,6 +290,7 @@ export default function CounterSalePage() {
       toast.success(`${created.invoiceNumber} saved${isAdvance ? ` · advance ${currency(advanceAmt)}, balance ${currency(totals.grand - advanceAmt)}` : collectNow ? " · paid" : ""}.`);
       const q = new URLSearchParams();
       if (printFormat !== "none") q.set("print", printFormat);
+      if (waAfter) q.set("wa", "1");
       if (workOn) q.set("stickers", "1"); // invoice page offers / opens the bundle stickers
       navigate(`/billing/invoices/${created.id}${q.toString() ? `?${q}` : ""}`);
     } catch (e) {
@@ -493,10 +501,10 @@ export default function CounterSalePage() {
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Customer</span>
                 <span className="text-[10px] text-slate-400"><Kbd>F4</Kbd></span>
               </div>
-              {editId ? (
+              {editId && (editInv?.paid ?? 0) > 0 ? (
                 <div className="rounded-md border bg-white px-2.5 py-2">
                   <span className="block text-sm font-semibold text-slate-800 truncate">{editInv?.customer}</span>
-                  <span className="block text-[11px] text-slate-400">Customer can't be changed on an issued bill</span>
+                  <span className="block text-[11px] text-slate-400">Customer is locked — payments are recorded on this bill</span>
                 </div>
               ) : adopted ? (
                 <div className="flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-2">
@@ -666,6 +674,12 @@ export default function CounterSalePage() {
                 ))}
               </div>
             </div>}
+            {(
+              <label className="flex items-center gap-2 text-xs text-slate-600">
+                <BaseInput type="checkbox" checked={waAfter} onChange={(e) => setWaAfter(e.target.checked)} className="w-3.5 h-3.5" />
+                Send bill PDF on WhatsApp after saving
+              </label>
+            )}
             <Button className="w-full h-12 text-base active:scale-[0.99]" onClick={save} disabled={saving || !!blocker}>
               {saving ? "Saving…" : editId ? `Save changes · ${currency(totals.grand)}` : isAdvance ? `Take advance ${currency(advanceAmt)}` : collectNow ? `Charge ${currency(totals.grand)}` : `Save Bill · ${currency(totals.grand)}`}
               {!saving && !editId && <span className="ml-2 rounded border border-white/30 px-1.5 py-px text-[10px] font-semibold opacity-80">F9</span>}

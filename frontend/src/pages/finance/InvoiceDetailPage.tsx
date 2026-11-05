@@ -15,7 +15,7 @@ import { currency, currencyFull, stageLabel } from "./helpers";
 import {
   InvoiceStatusBadge, PaidBar, dueInfo, fmtDay, invoiceTypeLabel, waReminderHref,
 } from "@/components/billing/billing-ui";
-import { printInvoice } from "../projectFinance/printInvoice";
+import { printInvoice, sendBillOnWhatsApp } from "../projectFinance/printInvoice";
 import { printReceipt } from "./printReceipt";
 import { fetchCompanyProfile, type CompanyProfile } from "@/lib/companyProfile";
 import InvoiceBundles from "@/components/bundles/InvoiceBundles";
@@ -59,6 +59,15 @@ export default function InvoiceDetailPage() {
       setSearchParams((prev) => { const n = new URLSearchParams(prev); n.delete("pay"); return n; }, { replace: true });
     }
   }, [searchParams, inv, setSearchParams]);
+
+  const [waBusy, setWaBusy] = useState(false);
+  const sendWhatsApp = useCallback(async () => {
+    if (!inv || waBusy) return;
+    setWaBusy(true);
+    try { toast.success(await sendBillOnWhatsApp(inv, items, company?.name || "JB Decor")); }
+    catch { toast.error("Could not prepare the bill PDF."); }
+    finally { setWaBusy(false); }
+  }, [inv, items, company, waBusy]);
 
   const doPrint = useCallback((fmt: "receipt" | "invoice") => {
     if (!inv) return;
@@ -160,6 +169,11 @@ export default function InvoiceDetailPage() {
               <DropdownMenuItem onClick={() => doPrint("receipt")}>POS Receipt (80mm)</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          {inv.status !== "CANCELLED" && (
+            <Button size="sm" variant="outline" disabled={waBusy || items.length === 0} onClick={sendWhatsApp} className="border-emerald-300 text-emerald-800 hover:bg-emerald-50">
+              <MessageCircle className="w-4 h-4 mr-1" /> {waBusy ? "Preparing…" : "WhatsApp PDF"}
+            </Button>
+          )}
           {canSend && canPay && (
             <Button size="sm" variant="outline" disabled={busy} onClick={() => setPayOpen((o) => !o)}><IndianRupee className="w-4 h-4 mr-1" /> Record payment</Button>
           )}
@@ -181,6 +195,16 @@ export default function InvoiceDetailPage() {
           )}
         </div>
       </div>
+
+      {searchParams.get("wa") === "1" && inv.status !== "CANCELLED" && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+          <span className="text-sm font-medium text-emerald-900">Bill saved — send it to {(inv.customer as any)?.name || "the customer"} on WhatsApp?</span>
+          <div className="flex gap-2">
+            <Button size="sm" disabled={waBusy || items.length === 0} onClick={sendWhatsApp}><MessageCircle className="w-4 h-4 mr-1" /> Send PDF on WhatsApp</Button>
+            <Button size="sm" variant="ghost" onClick={() => setSearchParams((p) => { const n = new URLSearchParams(p); n.delete("wa"); return n; }, { replace: true })}>Not now</Button>
+          </div>
+        </div>
+      )}
 
       {/* Money summary */}
       <div className="grid grid-cols-2 divide-slate-100 overflow-hidden rounded-2xl border bg-white shadow-sm md:grid-cols-4 md:divide-x">

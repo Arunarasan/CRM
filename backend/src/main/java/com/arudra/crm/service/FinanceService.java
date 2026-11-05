@@ -576,6 +576,16 @@ public class FinanceService {
                     + " already paid — refund the difference first, then edit");
         }
 
+        // Customer: only when one was supplied; a bill with payments stays with the customer who paid.
+        Customer oldCustomer = invoice.getCustomer();
+        boolean custGiven = req.customerId != null || emptyToNull(req.customerName) != null
+                || emptyToNull(req.customerPhone) != null || emptyToNull(req.customerEmail) != null;
+        Customer newCustomer = custGiven ? resolveCounterCustomer(req) : oldCustomer;
+        boolean custChanged = newCustomer != null && oldCustomer != null && !newCustomer.getId().equals(oldCustomer.getId());
+        if (custChanged && paid.signum() > 0) {
+            throw new RuntimeException("Payments are recorded on this bill — the customer can't be changed");
+        }
+
         // Stock: adjust by the per-product difference (old deducted qty vs the qty now wanted).
         Map<Long, Integer> oldQty = new LinkedHashMap<>();
         Map<Long, Long> oldWh = new HashMap<>();
@@ -624,7 +634,17 @@ public class FinanceService {
             invoiceItemRepository.save(item);
         }
 
-        if (!"DRAFT".equals(saved.getStatus()) && newTotal.compareTo(oldTotal) != 0) {
+        if (custChanged) {
+            saved.setCustomer(newCustomer);
+            saved = invoiceRepository.save(saved);
+            if (!"DRAFT".equals(saved.getStatus())) {
+                String why = "Invoice " + saved.getInvoiceNumber() + " customer changed (" + req.editReason.trim() + ")";
+                postLedger(oldCustomer, saved.getProject(), LocalDate.now(), "CREDIT_NOTE", "INVOICE_EDIT", id,
+                        saved.getInvoiceNumber(), why, BigDecimal.ZERO, oldTotal);
+                postLedger(newCustomer, saved.getProject(), LocalDate.now(), "DEBIT_NOTE", "INVOICE_EDIT", id,
+                        saved.getInvoiceNumber(), why, newTotal, BigDecimal.ZERO);
+            }
+        } else if (!"DRAFT".equals(saved.getStatus()) && newTotal.compareTo(oldTotal) != 0) {
             BigDecimal diff = newTotal.subtract(oldTotal);
             boolean up = diff.signum() > 0;
             postLedger(saved.getCustomer(), saved.getProject(), LocalDate.now(), up ? "DEBIT_NOTE" : "CREDIT_NOTE",

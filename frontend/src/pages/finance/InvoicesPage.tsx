@@ -3,6 +3,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { endOfMonth, format, startOfMonth, subMonths } from "date-fns";
 import { financeApi } from "@/api/financeApi";
+import { toast } from "@/components/ui/toast";
+import { sendBillOnWhatsApp } from "../projectFinance/printInvoice";
 import type { Invoice, PageResp } from "@/types/finance";
 import { Button } from "@/components/ui/button";
 import {
@@ -176,6 +178,12 @@ export default function InvoicesPage() {
                         {open && <DropdownMenuItem onClick={() => navigate(`/billing/invoices/${i.id}?pay=1`)}><IndianRupee className="mr-2 h-4 w-4" /> Record payment</DropdownMenuItem>}
                         <DropdownMenuItem onClick={() => navigate(`/billing/invoices/${i.id}?print=invoice`)}><Printer className="mr-2 h-4 w-4" /> Print A4</DropdownMenuItem>
                         <DropdownMenuItem onClick={() => navigate(`/billing/invoices/${i.id}?print=receipt`)}><Printer className="mr-2 h-4 w-4" /> Print receipt</DropdownMenuItem>
+                        {i.status !== "CANCELLED" && <DropdownMenuItem onClick={async () => {
+                          try {
+                            const [full, its] = await Promise.all([financeApi.getInvoice(i.id), financeApi.getInvoiceItems(i.id)]);
+                            toast.success(await sendBillOnWhatsApp(full, its));
+                          } catch { toast.error("Could not prepare the bill PDF."); }
+                        }}><MessageCircle className="mr-2 h-4 w-4" /> WhatsApp PDF</DropdownMenuItem>}
                         {(i.invoiceType as string) === "COUNTER_SALE" && i.status !== "CANCELLED" && <DropdownMenuItem onClick={() => navigate(`/billing/counter-sale?edit=${i.id}`)}><Pencil className="mr-2 h-4 w-4" /> Edit bill</DropdownMenuItem>}
                         {open && wa && <DropdownMenuItem onClick={() => window.open(wa, "_blank", "noopener")}><MessageCircle className="mr-2 h-4 w-4" /> WhatsApp reminder</DropdownMenuItem>}
                       </DropdownMenuContent>

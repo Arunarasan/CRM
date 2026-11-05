@@ -95,3 +95,26 @@ export async function shareInvoiceWhatsApp(
   window.open(`https://wa.me/${phoneDigits}?text=${encodeURIComponent(message)}`, "_blank");
   return `PDF downloaded${copied ? ", message copied" : ""} — attach the PDF in WhatsApp`;
 }
+
+/** Customer's WhatsApp digits with the country code (a plain 10-digit number is taken as Indian). */
+export function billWhatsAppDigits(invoice: Invoice): string {
+  const c: any = invoice.customer || {};
+  let d = String(c.whatsappNumber || c.phone || "").replace(/\D/g, "");
+  if (d.length === 10) d = `91${d}`;
+  return d;
+}
+
+/** One call for "send this bill as a PDF on WhatsApp": builds the message and hands off the PDF. */
+export function sendBillOnWhatsApp(invoice: Invoice, items: InvoiceItem[], company = "JB Decor"): Promise<string> {
+  const c: any = invoice.customer || {};
+  const first = String(c.name || "").split(" ")[0] || "there";
+  const fmt = (n: unknown) => `₹${Number(n || 0).toLocaleString("en-IN")}`;
+  const bal = Number(invoice.balanceDue || 0);
+  const msg = `Hi ${first}, thank you for your purchase from ${company}.
+
+Bill ${invoice.invoiceNumber} · Total ${fmt(invoice.totalAmount)}`
+    + (bal > 0 ? ` · Balance due ${fmt(bal)}` : " · Paid in full")
+    + `.
+Please find your bill PDF attached.`;
+  return shareInvoiceWhatsApp(async () => ({ invoice, items, project: (invoice as any).project ?? undefined }), msg, billWhatsAppDigits(invoice));
+}
