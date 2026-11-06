@@ -1412,8 +1412,40 @@ public class EmployeeTaskService {
         return recomputeAndSave(a.getTask());
     }
 
-    @LogActivity(module = "EMPLOYEE_TASK", action = "COMPLETE")
+    @Autowired
+    private com.arudra.crm.repository.SiteVisitRepository siteVisitRepository;
+
+    private static boolean filled(String s) { return s != null && !s.trim().isEmpty(); }
+
+    /**
+     * What a "Lead Works" task is still missing when the employee wants to finish it: site location, site
+     * photos/documents, a recorded site visit and a quote. Empty for any other task. These are warnings,
+     * not blockers — the employee may complete anyway after confirming.
+     */
+    public List<String> leadWorksMissing(Long taskId) {
+        Task t = getTask(taskId);
+        List<String> missing = new java.util.ArrayList<>();
+        if (t.getTaskTemplate() == null || !LEAD_WORKS_CODE.equals(t.getTaskTemplate().getCode())
+                || t.getLeadId() == null) return missing;
+        Long leadId = t.getLeadId();
+        com.arudra.crm.entity.Lead lead = leadRepository.findById(leadId).orElse(null);
+        if (lead == null) return missing;
+        if (!filled(lead.getGoogleMapLocation()) && !filled(lead.getSiteAddress())) missing.add("Site location (GPS pin or site address)");
+        boolean photos = leadDocumentRepository.findByLeadId(leadId).stream()
+                .anyMatch(d -> !Boolean.TRUE.equals(d.getIsDeleted()));
+        if (!photos) missing.add("Site photos / documents");
+        boolean visit = !siteVisitRepository.findByLeadIdAndIsDeletedFalseOrderByScheduledDateDesc(leadId).isEmpty();
+        if (!visit) missing.add("Site visit notes");
+        if (quotationRepository.findByLeadIdOrderByCreatedAtDesc(leadId).isEmpty()) missing.add("Quote");
+        return missing;
+    }
+
     public Task complete(Long taskId, User employee, String remarks) {
+        return complete(taskId, employee, remarks, false);
+    }
+
+    @LogActivity(module = "EMPLOYEE_TASK", action = "COMPLETE")
+    public Task complete(Long taskId, User employee, String remarks, boolean force) {
         assertTaskEditableBy(taskId, employee);
         // Module-driven tasks (Measurement/BOQ) can't be finished by hand — they close automatically
         // when the real work is finalized in their module. Manual completion would falsely advance the
@@ -1429,7 +1461,16 @@ public class EmployeeTaskService {
             throw new IllegalStateException("Use Mark Installed once the order is installed — it closes this task "
                     + "and hands the order over.");
         }
-        if (guard.getTaskTemplate() != null
+        boolean leadWorks = guard.getTaskTemplate() != null && LEAD_WORKS_CODE.equals(guard.getTaskTemplate().getCode());
+        // Lead Works can be completed by hand, but only after the employee confirms any missing details.
+        if (leadWorks && !force) {
+            List<String> missing = leadWorksMissing(taskId);
+            if (!missing.isEmpty()) {
+                throw new IllegalStateException("Still missing: " + String.join(", ", missing)
+                        + ". Confirm to complete the task anyway.");
+            }
+        }
+        if (!leadWorks && guard.getTaskTemplate() != null
                 && com.arudra.crm.util.LeadTaskForms.isModuleDriven(guard.getTaskTemplate().getCode())) {
             throw new IllegalStateException("This task is completed automatically when its work is finalized "
                     + "in its dedicated module — it can't be marked done here.");

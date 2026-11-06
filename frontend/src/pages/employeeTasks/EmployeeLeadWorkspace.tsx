@@ -84,6 +84,8 @@ export default function EmployeeLeadWorkspace() {
   const [photosKey, setPhotosKey] = useState(0);
   const [taking, setTaking] = useState(false);
   const [editReq, setEditReq] = useState(false);
+  const [completing, setCompleting] = useState(false);
+  const [warn, setWarn] = useState<string[] | null>(null);
   const tookRef = useRef<number | null>(null);
 
   const loadLead = useCallback(() => {
@@ -157,6 +159,35 @@ export default function EmployeeLeadWorkspace() {
     employeeTaskApi.pick(quoteTask.id).catch(() => { /* not clocked in / taken — the sheet still opens */ })
       .finally(() => { setTaking(false); loadTasks(); });
   }, [tab, quoteTask, loadTasks]);
+
+  // Complete Lead Works: ask the server what is still missing; warn, and let the employee finish anyway.
+  const missingLabel = (m: string) =>
+    m.startsWith('Site location') ? t('pw.lw.miss.location')
+      : m.startsWith('Site photos') ? t('pw.lw.miss.photos')
+      : m.startsWith('Site visit') ? t('pw.lw.miss.visit')
+      : m.startsWith('Quote') ? t('pw.lw.miss.quote') : m;
+  const finishTask = async (force: boolean) => {
+    if (!quoteTask) return;
+    setCompleting(true);
+    try {
+      await employeeTaskApi.complete(quoteTask.id, undefined, force);
+      setWarn(null);
+      toast.success(t('pw.lw.completed'));
+      loadTasks(); loadLead();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || 'Could not complete the task');
+    } finally { setCompleting(false); }
+  };
+  const onCompleteClick = async () => {
+    if (!quoteTask) return;
+    setCompleting(true);
+    try {
+      const { missing } = await employeeTaskApi.completionCheck(quoteTask.id);
+      if (missing?.length) { setWarn(missing); setCompleting(false); return; }
+    } catch { /* check unavailable — fall through; the server still guards it */ }
+    setCompleting(false);
+    finishTask(false);
+  };
 
   if (!leadId) return <p className="p-6 text-center text-sm text-muted-foreground">{t('pw.lw.notFound')}</p>;
   if (leadFailed && !info?.lead) return <p className="p-6 text-center text-sm text-muted-foreground">{t('pw.lw.notFound')}</p>;
@@ -283,6 +314,16 @@ export default function EmployeeLeadWorkspace() {
             ) : !reqTask ? (
               <div className={`${narrow} w-full p-3 md:p-4`}><Note>{t('pw.lw.reqNone')}</Note></div>
             ) : null}
+
+            {/* Complete Lead Works by hand — warns about anything not added yet, but never blocks. */}
+            {quoteTask && holder?.id === quoteTask.id && !converted && (
+              <div className={`${narrow} w-full px-3 pb-28 pt-3 md:px-4`}>
+                <button type="button" onClick={onCompleteClick} disabled={completing}
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#0A573B] py-3.5 text-[15px] font-bold text-white shadow-[0_4px_14px_rgba(10,87,59,0.3)] active:scale-[0.99] disabled:opacity-60">
+                  <Check className="h-5 w-5" /> {completing ? t('pw.lw.completing') : t('pw.lw.complete')}
+                </button>
+              </div>
+            )}
           </div>
         )
       )}
@@ -303,6 +344,27 @@ export default function EmployeeLeadWorkspace() {
       {tab === 'activity' && (
         <div className={`${narrow} p-3 pb-24 md:p-4`}>
           <ActivityList leadId={leadId} taskIds={[reqTask?.id, quoteTask?.id].filter((x): x is number => x != null)} />
+        </div>
+      )}
+      {warn && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-3 sm:items-center" role="dialog" aria-modal="true">
+          <div className="w-full max-w-md rounded-2xl bg-white p-4 shadow-xl">
+            <p className="text-[16px] font-bold text-[#1A211E]">{t('pw.lw.warnTitle')}</p>
+            <p className="mt-1 text-[13px] text-[#5B625E]">{t('pw.lw.warnBody')}</p>
+            <ul className="mt-3 flex flex-col gap-1.5">
+              {warn.map((m) => (
+                <li key={m} className="flex items-center gap-2 rounded-lg bg-[#FFF6E5] px-3 py-2 text-[13px] font-medium text-[#8A5A12]">
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#BC8748]" /> {missingLabel(m)}
+                </li>
+              ))}
+            </ul>
+            <div className="mt-4 flex gap-2">
+              <button type="button" onClick={() => setWarn(null)}
+                className="flex-1 rounded-xl border border-[#0A573B]/30 bg-[#F3F8F5] py-2.5 text-[14px] font-semibold text-[#0A573B]">{t('pw.lw.goBack')}</button>
+              <button type="button" onClick={() => finishTask(true)} disabled={completing}
+                className="flex-1 rounded-xl bg-[#0A573B] py-2.5 text-[14px] font-bold text-white disabled:opacity-60">{t('pw.lw.completeAnyway')}</button>
+            </div>
+          </div>
         </div>
       )}
       <RequirementFormSheet taskId={holder?.id ?? 0} leadId={leadId} detailsOnly open={editReq} onOpenChange={setEditReq}

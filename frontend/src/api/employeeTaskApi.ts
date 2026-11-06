@@ -69,7 +69,10 @@ export const employeeTaskApi = {
   start: (id: number) => api.post(`${BASE}/${id}/start`).then((r) => r.data),
   pause: (id: number, remarks?: string) => api.post(`${BASE}/${id}/pause`, { remarks }).then((r) => r.data),
   resume: (id: number) => api.post(`${BASE}/${id}/resume`).then((r) => r.data),
-  complete: (id: number, remarks?: string) => api.post(`${BASE}/${id}/complete`, { remarks }).then((r) => r.data),
+  complete: (id: number, remarks?: string, force?: boolean) => api.post(`${BASE}/${id}/complete`, { remarks, force }).then((r) => r.data),
+  // Lead Works: details still missing (site location, photos, visit notes, quote) — warnings, not blockers.
+  completionCheck: (id: number): Promise<{ missing: string[] }> =>
+    api.get(`${BASE}/${id}/completion-check`).then((r) => r.data?.data ?? r.data),
   // Record how much the customer paid on a project execution task → PENDING_APPROVAL payment (admin verifies).
   collectPayment: (id: number, payload: { amount: number | string; method?: string; note?: string; reference?: string; receiptUrl?: string }) =>
     api.post(`${BASE}/${id}/collect-payment`, payload).then((r) => r.data),

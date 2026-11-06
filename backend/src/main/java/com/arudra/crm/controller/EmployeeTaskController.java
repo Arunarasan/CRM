@@ -173,9 +173,18 @@ public class EmployeeTaskController {
 
     @PostMapping("/{id}/complete")
     @PreAuthorize(EXECUTE)
-    public ResponseEntity<ApiResponse<Task>> complete(@PathVariable Long id, @RequestBody(required = false) Map<String, String> body) {
-        String remarks = body == null ? null : body.get("remarks");
-        return ResponseEntity.ok(ApiResponse.success(employeeTaskService.complete(id, me(), remarks)));
+    public ResponseEntity<ApiResponse<Task>> complete(@PathVariable Long id, @RequestBody(required = false) Map<String, Object> body) {
+        Object r = body == null ? null : body.get("remarks");
+        String remarks = r == null ? null : String.valueOf(r);
+        boolean force = body != null && Boolean.parseBoolean(String.valueOf(body.get("force")));
+        return ResponseEntity.ok(ApiResponse.success(employeeTaskService.complete(id, me(), remarks, force)));
+    }
+
+    /** Details a Lead Works task is still missing (site location, photos, visit notes, quote) — warnings only. */
+    @GetMapping("/{id}/completion-check")
+    @PreAuthorize(EXECUTE)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> completionCheck(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.success(Map.of("missing", employeeTaskService.leadWorksMissing(id))));
     }
 
     /**
