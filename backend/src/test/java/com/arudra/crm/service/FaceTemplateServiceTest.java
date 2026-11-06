@@ -75,7 +75,7 @@ class FaceTemplateServiceTest {
 
     @Test
     void samplesOfDifferentFacesAreRejected() {
-        // distance between the 1st and 3rd sample is 1.0, far above the 0.55 self-consistency limit
+        // distance between the 1st and 3rd sample is 1.0, far above the 0.45 self-consistency limit
         var ex = assertThrows(IllegalArgumentException.class,
                 () -> service.enroll(1L, List.of(vec(0.1, 0), vec(0.1, 0.02), vec(0.1, 1.0)), null, null, "hr"));
         assertTrue(ex.getMessage().contains("do not match each other"));

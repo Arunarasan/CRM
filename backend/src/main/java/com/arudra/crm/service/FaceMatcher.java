@@ -15,11 +15,11 @@ import java.util.Map;
 public final class FaceMatcher {
 
     /** At or below this the match is trusted outright. */
-    public static final double CONFIDENT_MAX = 0.50;
+    public static final double CONFIDENT_MAX = 0.42;
     /** Above CONFIDENT_MAX and at or below this the punch is accepted but flagged for HR. */
-    public static final double ACCEPT_MAX = 0.55;
+    public static final double ACCEPT_MAX = 0.50;
     /** If a different employee is within this much of the best, refuse rather than guess. */
-    public static final double AMBIGUITY_MARGIN = 0.04;
+    public static final double AMBIGUITY_MARGIN = 0.08;
 
     private FaceMatcher() {}
 

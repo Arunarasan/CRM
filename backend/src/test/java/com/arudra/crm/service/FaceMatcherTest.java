@@ -28,7 +28,7 @@ class FaceMatcherTest {
 
     @Test
     void borderlineFaceIsAcceptedButWeak() {
-        var r = FaceMatcher.identify(vec(0.1, 0.52), List.of(new Sample(1, vec(0.1, 0)), new Sample(2, vec(-0.5, 0))));
+        var r = FaceMatcher.identify(vec(0.1, 0.46), List.of(new Sample(1, vec(0.1, 0)), new Sample(2, vec(-0.5, 0))));
         assertEquals(Verdict.WEAK, r.verdict());
         assertEquals(1L, r.employeeId());
     }
@@ -43,8 +43,8 @@ class FaceMatcherTest {
 
     @Test
     void twoEmployeesAlmostEquallyCloseIsAmbiguous() {
-        // live is 0.30 from employee 1 and 0.32 from employee 2: too close to call
-        var r = FaceMatcher.identify(vec(0.1, 0.30), List.of(new Sample(1, vec(0.1, 0)), new Sample(2, vec(0.1, 0.62))));
+        // live is 0.30 from employee 1 and 0.36 from employee 2: too close to call
+        var r = FaceMatcher.identify(vec(0.1, 0.30), List.of(new Sample(1, vec(0.1, 0)), new Sample(2, vec(0.1, 0.66))));
         assertEquals(Verdict.AMBIGUOUS, r.verdict());
         assertFalse(r.matched());
     }

@@ -30,9 +30,9 @@ public class FaceTemplateService {
     static final int MIN_SAMPLES = 3;
     static final int MAX_SAMPLES = 8;
     /** Samples of one person must agree at least this well. */
-    static final double SELF_CONSISTENCY_MAX = 0.55;
+    static final double SELF_CONSISTENCY_MAX = 0.45;
     /** A face closer than this to another employee's template is treated as the same person. */
-    static final double OTHER_EMPLOYEE_MIN = 0.45;
+    static final double OTHER_EMPLOYEE_MIN = 0.50;
 
     private final ObjectMapper mapper = new ObjectMapper();
 
