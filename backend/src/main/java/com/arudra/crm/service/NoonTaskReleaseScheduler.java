@@ -18,8 +18,9 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Daily 12:00 reset: every task still assigned to an employee (not started, in progress or paused)
- * is taken back and left unassigned, so the office re-assigns the afternoon's work. Employees can't
+ * Daily reset at 11:59 PM (Asia/Kolkata): every task still assigned to an employee
+ * (not started, in progress or paused) is taken back and left unassigned, so the office re-assigns the
+ * next day's work. Employees can't
  * pick tasks themselves, so nothing is reclaimed until the office assigns it again. Finished work
  * (completed / waiting approval) and contractor assignments are untouched.
  *
@@ -41,7 +42,7 @@ public class NoonTaskReleaseScheduler {
     @Value("${app.tasks.noon-release-enabled:true}")
     private boolean enabled;
 
-    @Scheduled(cron = "${app.tasks.noon-release-cron:0 0 12 * * *}", zone = "${app.tasks.noon-release-zone:Asia/Kolkata}")
+    @Scheduled(cron = "${app.tasks.noon-release-cron:0 59 23 * * *}", zone = "${app.tasks.noon-release-zone:Asia/Kolkata}")
     public void releaseAll() {
         if (!enabled) return;
         TransactionTemplate tx = new TransactionTemplate(transactionManager);
@@ -64,7 +65,7 @@ public class NoonTaskReleaseScheduler {
                 log.error("Noon release failed for task {} / employee {}", pair[0], pair[1], e);
             }
         }
-        log.info("Noon release: took {} task assignment(s) back from employees", released);
+        log.info("Daily 11:59 PM release: took {} task assignment(s) back from employees", released);
     }
 
     private void release(Long taskId, Long employeeId) {
