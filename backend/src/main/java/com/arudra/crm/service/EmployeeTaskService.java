@@ -2653,6 +2653,7 @@ public class EmployeeTaskService {
         // Ranking inputs for the employee plan: the lead's star rating and when this task was raised.
         card.put("leadRating", reqLead != null ? reqLead.getRating() : null);
         card.put("createdAt", t.getCreatedAt());
+        card.put("completedDate", t.getCompletedDate()); // shown on the My Work "Completed" list
         // Assignment mode (SINGLE_EMPLOYEE / MULTIPLE_EMPLOYEES / TEAM) and the origin category lane.
         card.put("assignmentType", t.getAssignmentType());
         String[] cat = taskCategoryFor(t);

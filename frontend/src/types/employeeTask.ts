@@ -53,6 +53,7 @@ export interface TaskCard {
   requirementProduct?: string | null; // lead tasks: comma-separated catalog products ("Door Type")
   leadRating?: number | null; // lead's 1-5 star quality rating (ranking input)
   createdAt?: string | null; // when the task was raised ("new lead" ranking input)
+  completedDate?: string | null; // yyyy-mm-dd the task was approved/closed
   closedByOffice?: boolean; // completed by the office on the employee's behalf
   /** Orders lane — a stitching / making task's order, summarised for the card. */
   order?: OrderCardInfo | null;

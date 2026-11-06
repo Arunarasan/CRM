@@ -6,11 +6,11 @@ import { TaskCard as TaskCardType } from '@/types/employeeTask';
 import { runOrQueue } from '@/hooks/useOfflineQueue';
 import TaskCard from './components/TaskCard';
 import { LEAD_LANES, foldLeads, isActive } from './TaskList';
-import { useT } from '@/i18n';
+import { useT, dateLocale, currentLang } from '@/i18n';
 
 // "Work" — only what is assigned to me (no pool), newest assignment first, with Lead / Project pills.
-type Filter = 'ALL' | 'LEAD' | 'PROJECT';
-const FILTERS: Filter[] = ['ALL', 'LEAD', 'PROJECT'];
+type Filter = 'ALL' | 'LEAD' | 'PROJECT' | 'DONE';
+const FILTERS: Filter[] = ['ALL', 'LEAD', 'PROJECT', 'DONE'];
 const PAGE = 20;
 
 const isLead = (t: TaskCardType) => LEAD_LANES.includes((t.category ?? '').toUpperCase());
@@ -53,10 +53,18 @@ export default function WorkList() {
   const onExtend = (id: number) => withRefresh(() => employeeTaskApi.extendHold(id));
 
   const open = mine.filter(isActive);
+  // Finished work: approved/closed (DONE) and submitted-awaiting-approval, newest completion first.
+  const finished = mine.filter((x) => x.lifecycle === 'DONE' || x.lifecycle === 'SUBMITTED'
+    || (!x.lifecycle && x.status === 'COMPLETED'));
+  const doneAt = (x: TaskCardType) => {
+    const ms = x.completedDate ? new Date(x.completedDate).getTime() : NaN;
+    return Number.isNaN(ms) ? 0 : ms;
+  };
   const scoped = (f: Filter) => open.filter((x) => (f === 'ALL' ? true : f === 'LEAD' ? isLead(x) : !isLead(x)));
   // Leads fold to one card per lead, as on the Tasks screen.
   const build = (f: Filter) => {
-    const list = scoped(f);
+    if (f === 'DONE') return foldLeads(finished).sort((a, b) => doneAt(b) - doneAt(a) || b.id - a.id);
+    const list = scoped(f as Exclude<Filter, 'DONE'>);
     return (f === 'PROJECT' ? list : foldLeads(list)).sort(newestFirst);
   };
   const list = build(filter);
@@ -69,7 +77,7 @@ export default function WorkList() {
         <p className="text-xs text-[#7A817C]">{t('pw.work.sub')}</p>
       </div>
 
-      <div className="flex gap-2" role="tablist">
+      <div className="-mx-3.5 flex gap-2 overflow-x-auto px-3.5 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="tablist">
         {FILTERS.map((f) => {
           const on = filter === f;
           return (
@@ -78,7 +86,7 @@ export default function WorkList() {
               role="tab"
               aria-selected={on}
               onClick={() => setParams((p) => { const n = new URLSearchParams(p); if (f === 'ALL') n.delete('f'); else n.set('f', f); return n; }, { replace: true })}
-              className={`flex items-center gap-1.5 rounded-full border px-4 py-1.5 text-[13px] font-semibold transition-colors ${
+              className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-4 py-1.5 text-[13px] font-semibold transition-colors ${
                 on ? 'border-[#0A573B] bg-[#0A573B] text-white' : 'border-[#DDE2DE] bg-white text-[#3F4642] active:bg-[#F2F4F2]'
               }`}
             >
@@ -98,14 +106,26 @@ export default function WorkList() {
       ) : list.length === 0 ? (
         <div className="flex flex-col items-center gap-2 rounded-2xl border border-[#ECEAE5] bg-white px-6 py-12 text-center shadow-sm">
           <CheckCircle2 className="h-9 w-9 text-[#B9C0BB]" />
-          <p className="text-[13px] text-[#7A817C]">{t('pw.work.empty')}</p>
+          <p className="text-[13px] text-[#7A817C]">{t(filter === 'DONE' ? 'pw.work.emptyDone' : 'pw.work.empty')}</p>
         </div>
       ) : (
         <>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 md:items-start [&>*]:min-w-0 md:[&>*:only-child]:col-span-2">
             {list.slice(0, limit).map((task) => (
-              <TaskCard key={task.id} task={task}
-                onStart={onStart} onPause={onPause} onComplete={onComplete} onExtend={onExtend} />
+              filter === 'DONE' ? (
+                <div key={task.id} className="flex flex-col gap-1">
+                  <TaskCard task={task}
+                    onStart={onStart} onPause={onPause} onComplete={onComplete} onExtend={onExtend} />
+                  <p className="px-1 text-[11.5px] font-medium text-[#0A573B]">
+                    {task.lifecycle === 'SUBMITTED' || !task.completedDate
+                      ? t('pw.work.awaitingApproval')
+                      : t('pw.work.completedOn', { date: new Date(task.completedDate).toLocaleDateString(dateLocale(currentLang()), { day: 'numeric', month: 'short', year: 'numeric' }) })}
+                  </p>
+                </div>
+              ) : (
+                <TaskCard key={task.id} task={task}
+                  onStart={onStart} onPause={onPause} onComplete={onComplete} onExtend={onExtend} />
+              )
             ))}
           </div>
           {list.length > limit && (
