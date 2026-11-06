@@ -122,10 +122,17 @@ public class TaskLifecycleService {
         return saved;
     }
 
+    /**
+     * Remark stamped on an assignment that was closed together with its task rather than completed by the
+     * person themselves. Payroll uses it so the lead incentive goes only to whoever actually completed the task.
+     */
+    public static final String CLOSED_WITH_TASK = "Closed with the task";
+
     private void closeAssignments(Long taskId) {
         for (TaskAssignment a : assignmentRepository.findByTaskId(taskId)) {
             if (isLive(a) && !"COMPLETED".equals(a.getStatus())) {
                 a.setStatus("COMPLETED");
+                if (a.getRemarks() == null || a.getRemarks().isBlank()) a.setRemarks(CLOSED_WITH_TASK);
                 if (a.getCompletedAt() == null) a.setCompletedAt(LocalDateTime.now());
                 assignmentRepository.save(a);
             }

@@ -1272,11 +1272,13 @@ public class PayrollService {
         List<LeadShare> out = new ArrayList<>();
         for (Lead l : candidates.values()) {
             Long rid = l.getLeadRewardSalaryRecordId();
-            if (rid != null) { // settled under the old owner-only rule (0 = legacy, never paid)
-                if (rid > 0 && l.getLeadOwner() != null && uid.equals(l.getLeadOwner().getId()))
+            if (rid != null && rid > 0) { // settled under the old owner-only rule: already on a payslip
+                if (l.getLeadOwner() != null && uid.equals(l.getLeadOwner().getId()))
                     out.add(new LeadShare(l, rate, true));
                 continue;
             }
+            // rid == 0 marks legacy leads that were never paid: whoever completed their Lead Works task
+            // now earns it, counted in the month they completed it (same as any new lead).
             if (!leadIsQualified(l, upTo)) continue;
             Set<Long> people = leadRewardUserIds(l);
             if (!people.contains(uid)) continue;
@@ -1314,6 +1316,18 @@ public class PayrollService {
      * address) and added at least one document to it by {@code upTo} (null = ever).
      */
     private boolean leadIsQualified(Lead l, LocalDate upTo) {
+        // Completing the Lead Works task is what earns the incentive — even if the employee confirmed
+        // "complete anyway" without a location or photo.
+        for (Task t : taskRepository.findByLeadId(l.getId())) {
+            if (Boolean.TRUE.equals(t.getIsDeleted()) || t.getTaskTemplate() == null
+                    || !EmployeeTaskService.LEAD_WORKS_CODE.equals(t.getTaskTemplate().getCode())) continue;
+            for (TaskAssignment a : taskAssignmentRepository.findByTaskId(t.getId())) {
+                if (earnedLeadTask(t, a)) {
+                    LocalDateTime done = leadTaskDoneAt(t, a);
+                    if (upTo == null || done == null || done.isBefore(upTo.plusDays(1).atStartOfDay())) return true;
+                }
+            }
+        }
         boolean hasLocation = notBlank(l.getGoogleMapLocation()) || notBlank(l.getSiteAddress());
         if (!hasLocation) return false;
         LocalDateTime before = upTo == null ? null : upTo.plusDays(1).atStartOfDay();
@@ -1352,15 +1366,16 @@ public class PayrollService {
     }
 
     /**
-     * Whether this assignee earned a share. Lead Works is one shared task: once it is COMPLETED every live
-     * assignee (the whole team) shares the incentive. Legacy Collect Requirement pays only the completer.
+     * Whether this assignee earned a share: whoever completed the task themselves is paid as soon as they
+     * complete it — no manager approval needed. A teammate whose assignment was merely closed together with
+     * the task (see {@link TaskLifecycleService#CLOSED_WITH_TASK}) earns nothing, nor does anyone on a
+     * cancelled task.
      */
     private static boolean earnedLeadTask(Task t, TaskAssignment a) {
         if (Boolean.TRUE.equals(a.getIsDeleted())) return false;
         if (EmployeeTaskService.LEAD_WORKS_CODE.equals(t.getTaskTemplate().getCode())) {
-            return "COMPLETED".equals(t.getStatus())
-                    && !"CANCELLED".equals(a.getStatus()) && !"REJECTED".equals(a.getStatus())
-                    && !"TERMINATED".equals(a.getStatus());
+            return !"CANCELLED".equals(t.getStatus()) && "COMPLETED".equals(a.getStatus())
+                    && !TaskLifecycleService.CLOSED_WITH_TASK.equals(a.getRemarks());
         }
         return "COMPLETED".equals(a.getStatus());
     }
