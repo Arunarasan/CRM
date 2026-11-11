@@ -30,20 +30,31 @@ type Stage = 'loading' | 'find' | 'challenge' | 'capture' | 'sending';
 
 /** Face must fill at least this share of the frame width before we trust a reading. */
 const MIN_SHARE = 0.28;
+/** ...and not so big it overflows the oval; its centre must sit near the middle of the oval (the oval is centred on screen). */
+const MAX_SHARE = 0.75;
+const CENTRE_TOLERANCE_X = 0.14;
+const CENTRE_TOLERANCE_Y = 0.16;
 /** Clear frames averaged into one signature, and how far apart two frames of one steady face may be. */
-const GOOD_FRAMES = 3;
-const SAME_FRAME_MAX = 0.3;
-/** Gap between the counted frames, so they are three separate looks (not three copies of one) and the whole check takes ~3-5 s. */
-const FRAME_GAP_MS = 900;
+const GOOD_FRAMES = 4;
+/** A frame this far from the average of the frames so far is a blur / movement: dropped, not counted. */
+const SAME_FRAME_MAX = 0.35;
+/** Gap between counted frames: 4 separate looks take ~3-4 s: quick, yet steadier than a single frame. */
+const FRAME_GAP_MS = 500;
+/** After this long since the first good frame, go with what we have if at least MIN_FRAMES agree (keeps it under ~10 s). */
+const MAX_CAPTURE_MS = 3500;
+const MIN_FRAMES = 3;
 const MIN_DETECT_SCORE = 0.85;
+/** Detector input size: larger = a sharper face crop for the recognition net, a little slower per frame. */
+const DETECT_SIZE = 256;
 const CHALLENGE_MS = 9000;
 /**
  * Ask for a blink / head turn before the punch. Off for speed: a check is just "show your face"
- * (about 2-3 s). Every punch still stores its selfie for HR, and the server flags weak matches.
+ * (about 3-4 s). Every punch still stores its selfie for HR, and the server flags weak matches.
  */
 const REQUIRE_LIVENESS = false;
 const TOTAL_MS = 45000;
 
+const mean = (vs: number[][]) => vs[0].map((_, i) => vs.reduce((sum, d) => sum + d[i], 0) / vs.length);
 const nextFrame = () => new Promise<void>((res) => requestAnimationFrame(() => res()));
 
 export default function KioskScan({ action, onDone, onFail, onCancel, onSwitch, onManual }: {
@@ -59,6 +70,7 @@ export default function KioskScan({ action, onDone, onFail, onCancel, onSwitch, 
   const videoRef = useRef<HTMLVideoElement>(null);
   const [stage, setStage] = useState<Stage>('loading');
   const [hint, setHint] = useState('Starting camera…');
+  const [faceInOval, setFaceInOval] = useState(false);
   // The callbacks come from a parent that re-renders every second (clock); keep the latest in refs.
   const doneRef = useRef(onDone);
   const failRef = useRef(onFail);
@@ -84,6 +96,8 @@ export default function KioskScan({ action, onDone, onFail, onCancel, onSwitch, 
         let okFrames = 0;
         const good: number[][] = [];
         let lastGoodAt = 0;
+        let firstGoodAt = 0;
+        let rejects = 0;
         let steady = 0;
         let challenge: LivenessChallenge | null = null;
         let challengeStart = 0;
@@ -92,23 +106,50 @@ export default function KioskScan({ action, onDone, onFail, onCancel, onSwitch, 
           if (Date.now() - started > TOTAL_MS) { failRef.current({ message: 'Timed out. Tap Check In or Check Out and try again.' }); return; }
           await nextFrame();
           if (!REQUIRE_LIVENESS) {
-            // Fast path: ONE pass per frame (detect + landmarks + face signature). Three clear, straight-on
-            // frames, ~0.9 s apart, that agree with each other are averaged into one signature (less noise
-            // = fewer wrong-person matches), then sent. If they disagree (blur / movement) we start over.
-            const f = await scanFace(video, 224);
+            // Fast path: ONE pass per frame (detect + landmarks + face signature). Up to 4 clear, straight-on
+            // frames, ~0.5 s apart, are gathered (about 3-4 s in all). A frame far from the others (blur /
+            // movement) is dropped; the worst remaining frame is then discarded and the rest averaged into
+            // one signature, so one bad frame can't cause a wrong-person match.
+            const f = await scanFace(video, DETECT_SIZE);
             if (cancelled) return;
-            if (f.state === 'none') { setHint('Look at the camera'); continue; }
-            if (f.state === 'multiple') { setHint('One person at a time, please'); continue; }
+            if (f.state === 'none') { setFaceInOval(false); setHint('Look at the camera'); continue; }
+            if (f.state === 'multiple') { setFaceInOval(false); setHint('One person at a time, please'); continue; }
             const r = f.reading;
-            if (r.box.width / r.frameWidth < MIN_SHARE) { setHint('Come a little closer'); continue; }
+            const share = r.box.width / r.frameWidth;
+            const cx = (r.box.x + r.box.width / 2) / r.frameWidth;
+            const cy = (r.box.y + r.box.height / 2) / r.frameHeight;
+            const inOval = share >= MIN_SHARE && share <= MAX_SHARE
+              && Math.abs(cx - 0.5) <= CENTRE_TOLERANCE_X && Math.abs(cy - 0.5) <= CENTRE_TOLERANCE_Y;
+            setFaceInOval(inOval);
+            if (share < MIN_SHARE) { setHint('Come a little closer'); continue; }
+            if (share > MAX_SHARE) { setHint('Move back a little'); continue; }
+            if (!inOval) { setHint('Put your face inside the oval'); continue; }
             if (r.score < MIN_DETECT_SCORE) { setHint('Face the camera'); continue; }
             if (Math.abs(r.yaw - 0.5) >= FRONTAL_OFFSET) { setHint('Look straight at the camera'); continue; }
             if (Date.now() - lastGoodAt < FRAME_GAP_MS) continue; // wait between counted frames
-            if (good.length > 0 && faceDistance(good[0], r.descriptor) > SAME_FRAME_MAX) good.length = 0; // unsteady: start over
+            if (good.length > 0) {
+              const c = mean(good);
+              if (faceDistance(c, r.descriptor) > SAME_FRAME_MAX) {
+                // Disagrees with the frames so far. Three in a row means a different face took over: start again.
+                if (++rejects >= 3) { good.length = 0; rejects = 0; firstGoodAt = 0; }
+                setHint('Hold still…');
+                continue;
+              }
+            }
+            rejects = 0;
+            if (good.length === 0) firstGoodAt = Date.now();
             good.push(r.descriptor);
             lastGoodAt = Date.now();
-            if (good.length < GOOD_FRAMES) { setHint(`Hold still… ${good.length}/${GOOD_FRAMES}`); continue; }
-            const descriptor = good[0].map((_, i) => good.reduce((sum, d) => sum + d[i], 0) / good.length);
+            const waited = Date.now() - firstGoodAt;
+            if (good.length < GOOD_FRAMES && !(good.length >= MIN_FRAMES && waited >= MAX_CAPTURE_MS)) {
+              setHint(`Hold still… ${good.length}/${GOOD_FRAMES}`);
+              continue;
+            }
+            // Drop the frame farthest from the average, then average the rest.
+            const centre = mean(good);
+            let worst = 0;
+            good.forEach((d, i) => { if (faceDistance(d, centre) > faceDistance(good[worst], centre)) worst = i; });
+            const descriptor = mean(good.filter((_, i) => i !== worst));
             setStage('sending'); setHint('Checking…');
             const selfie = await snapshot(video, 0.7, 360);
             leaveCamera(stream, video); stream = null;
@@ -205,7 +246,7 @@ export default function KioskScan({ action, onDone, onFail, onCancel, onSwitch, 
         <video ref={videoRef} playsInline muted className="absolute inset-0 h-full w-full -scale-x-100 object-cover" />
         {/* oval guide */}
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <div className={`h-[58%] w-[70%] max-w-sm rounded-[50%] border-4 ${stage === 'capture' ? 'border-emerald-400' : stage === 'challenge' ? 'border-amber-300' : 'border-white/70'}`} />
+          <div className={`h-[58%] w-[70%] max-w-sm rounded-[50%] border-4 ${stage === 'capture' || faceInOval ? 'border-emerald-400' : stage === 'challenge' ? 'border-amber-300' : 'border-white/70'}`} />
         </div>
         {(stage === 'loading' || stage === 'sending') && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/60">
