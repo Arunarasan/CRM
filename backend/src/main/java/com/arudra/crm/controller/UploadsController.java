@@ -80,6 +80,7 @@ public class UploadsController {
                 type = MediaTypeFactory.getMediaType(key).map(MediaType::toString).orElse("application/octet-stream");
             }
             response.setContentType(type);
+            hardenActiveContent(type, response);
             response.setHeader(HttpHeaders.ACCEPT_RANGES, "bytes");
             response.setHeader(HttpHeaders.CACHE_CONTROL, "public, max-age=86400");
             if (meta.contentRange() != null) {
@@ -91,12 +92,27 @@ public class UploadsController {
         }
     }
 
+    /**
+     * Defence in depth (AUD-004): uploads are public by URL, and upload validation already rejects
+     * script-capable types. If one ever got in (older data, a bucket written by another tool), it must
+     * download rather than render same-origin, and run sandboxed if opened anyway.
+     */
+    private static void hardenActiveContent(String type, HttpServletResponse response) {
+        String t = type == null ? "" : type.toLowerCase();
+        if (t.contains("html") || t.contains("svg") || t.contains("xml") || t.contains("javascript")) {
+            response.setHeader(HttpHeaders.CONTENT_DISPOSITION, "attachment");
+            response.setHeader("Content-Security-Policy", "default-src 'none'; sandbox");
+        }
+        response.setHeader("X-Content-Type-Options", "nosniff");
+    }
+
     /** Streams a disk file, honouring a single-range Range header so audio and video can seek. */
     private void serveFromDisk(Path file, String key, String range, HttpServletResponse response) throws IOException {
         long size = Files.size(file);
         long start = 0;
         long end = size - 1;
         response.setContentType(MediaTypeFactory.getMediaType(key).map(MediaType::toString).orElse("application/octet-stream"));
+        hardenActiveContent(response.getContentType(), response);
         response.setHeader(HttpHeaders.ACCEPT_RANGES, "bytes");
         response.setHeader(HttpHeaders.CACHE_CONTROL, "public, max-age=86400");
         if (range != null && !range.isBlank()) {

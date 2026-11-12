@@ -25,6 +25,8 @@ import java.util.Map;
  */
 @Service
 public class EmployeePortalService {
+    private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(EmployeePortalService.class);
+
 
     @Autowired private EmployeeRepository employeeRepository;
     @Autowired private RefreshTokenService refreshTokenService;
@@ -1110,7 +1112,7 @@ public class EmployeePortalService {
                 saved = dailyReportRepository.save(saved);
             } catch (RuntimeException ex) {
                 // Never fail the report over the payment; log and move on.
-                System.err.println("Daily-report cash payment failed: " + ex.getMessage());
+                LOG.warn("Daily-report cash payment failed: " + ex.getMessage());
             }
         }
 

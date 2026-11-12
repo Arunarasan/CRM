@@ -89,14 +89,14 @@ public class FinanceController {
     /** Walk-in / counter sale: project-less product invoice (+ optional installation task). */
     @PostMapping("/counter-sale")
     @PreAuthorize(WRITE)
-    public ResponseEntity<Invoice> createCounterSale(@RequestBody com.arudra.crm.dto.CounterSaleRequest request) {
+    public ResponseEntity<Invoice> createCounterSale(@RequestBody @jakarta.validation.Valid com.arudra.crm.dto.CounterSaleRequest request) {
         return ResponseEntity.ok(financeService.createCounterSale(request, currentUserService.getCurrentUser()));
     }
 
     /** Edit an issued counter-sale bill (lines/prices/GST/discount); stock and ledger are adjusted. */
     @PutMapping("/counter-sale/{id}")
     @PreAuthorize(WRITE)
-    public ResponseEntity<Invoice> updateCounterSale(@PathVariable Long id, @RequestBody com.arudra.crm.dto.CounterSaleRequest request) {
+    public ResponseEntity<Invoice> updateCounterSale(@PathVariable Long id, @RequestBody @jakarta.validation.Valid com.arudra.crm.dto.CounterSaleRequest request) {
         return ResponseEntity.ok(financeService.updateCounterSale(id, request, currentUserService.getCurrentUser()));
     }
 
@@ -302,7 +302,7 @@ public class FinanceController {
 
     @PostMapping("/sales-returns")
     @PreAuthorize(WRITE)
-    public ResponseEntity<SalesReturn> createSalesReturn(@RequestBody com.arudra.crm.dto.SalesReturnRequest request) {
+    public ResponseEntity<SalesReturn> createSalesReturn(@RequestBody @jakarta.validation.Valid com.arudra.crm.dto.SalesReturnRequest request) {
         return ResponseEntity.ok(salesReturnService.createReturn(request, currentUserService.getCurrentUser()));
     }
 

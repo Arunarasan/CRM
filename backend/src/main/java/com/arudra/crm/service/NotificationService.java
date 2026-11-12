@@ -18,6 +18,8 @@ import java.util.Optional;
 
 @Service
 public class NotificationService {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(NotificationService.class);
+
 
     /** Roles that should receive company-wide management alerts (new lead, task completed, etc.). */
     public static final List<String> ADMIN_ALERT_ROLES = List.of("ROLE_ADMIN");
@@ -52,15 +54,15 @@ public class NotificationService {
 
         // 3. External API Routing (Mocked)
         if (settings.isEmailEnabled()) {
-            System.out.println("[EMAIL DISPATCHER] To: User " + recipientId + " | Subject: " + title + " | Body: " + message);
+            log.debug("[EMAIL DISPATCHER] To: User " + recipientId + " | Subject: " + title + " | Body: " + message);
         }
         
         if (settings.isSmsEnabled()) {
-            System.out.println("[SMS DISPATCHER] To: User " + recipientId + " | Msg: " + title + " - " + message);
+            log.debug("[SMS DISPATCHER] To: User " + recipientId + " | Msg: " + title + " - " + message);
         }
         
         if (settings.isWhatsappEnabled()) {
-            System.out.println("[WHATSAPP DISPATCHER] To: User " + recipientId + " | Msg: *" + title + "* \n" + message);
+            log.debug("[WHATSAPP DISPATCHER] To: User " + recipientId + " | Msg: *" + title + "* \n" + message);
         }
     }
 

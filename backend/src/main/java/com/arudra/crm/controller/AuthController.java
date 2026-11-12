@@ -60,7 +60,7 @@ public class AuthController {
     private com.arudra.crm.security.CurrentUserService currentUserService;
 
     @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody AuthRequest authRequest, HttpServletRequest request,
+    public ResponseEntity<?> login(@RequestBody @jakarta.validation.Valid AuthRequest authRequest, HttpServletRequest request,
                                    jakarta.servlet.http.HttpServletResponse response) {
         String ipAddress = request.getRemoteAddr();
         // The "email" field may carry a phone number instead; resolve it to the account's email.
@@ -257,7 +257,7 @@ public class AuthController {
      * generic success so the response can't be used to enumerate which emails are registered.
      */
     @PostMapping("/forgot-password")
-    public ResponseEntity<?> forgotPassword(@RequestBody com.arudra.crm.dto.ForgotPasswordRequest request) {
+    public ResponseEntity<?> forgotPassword(@RequestBody @jakarta.validation.Valid com.arudra.crm.dto.ForgotPasswordRequest request) {
         String email = request.getEmail() == null ? "" : request.getEmail().trim();
         userRepository.findByEmail(email).ifPresent(user -> {
             com.arudra.crm.entity.VerificationToken token =
@@ -270,7 +270,7 @@ public class AuthController {
 
     /** Step 2 (optional): confirm the OTP is valid before showing the new-password fields. */
     @PostMapping("/verify-otp")
-    public ResponseEntity<?> verifyOtp(@RequestBody com.arudra.crm.dto.VerifyOtpRequest request) {
+    public ResponseEntity<?> verifyOtp(@RequestBody @jakarta.validation.Valid com.arudra.crm.dto.VerifyOtpRequest request) {
         boolean valid = userRepository.findByEmail(request.getEmail() == null ? "" : request.getEmail().trim())
                 .flatMap(user -> verificationTokenService.verifyPasswordResetOtp(user, request.getOtp()))
                 .isPresent();
@@ -282,7 +282,7 @@ public class AuthController {
 
     /** Step 3: verify the OTP and set the new password. */
     @PostMapping("/reset-password")
-    public ResponseEntity<?> resetPassword(@RequestBody com.arudra.crm.dto.PasswordResetRequest request) {
+    public ResponseEntity<?> resetPassword(@RequestBody @jakarta.validation.Valid com.arudra.crm.dto.PasswordResetRequest request) {
         String newPassword = request.getNewPassword();
         String problem = com.arudra.crm.security.PasswordPolicy.validate(newPassword, request.getEmail());
         if (problem != null) {

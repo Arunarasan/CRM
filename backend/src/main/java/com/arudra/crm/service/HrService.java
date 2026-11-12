@@ -20,6 +20,8 @@ import java.util.stream.Collectors;
 
 @Service
 public class HrService {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(HrService.class);
+
     @Autowired private EmployeeCelebrationService celebrations;
 
 
@@ -71,7 +73,7 @@ public class HrService {
             try {
                 syncUserForEmployee(saved);
             } catch (Exception e) {
-                System.err.println("Failed to sync user for employee " + saved.getId() + ": " + e.getMessage());
+                log.warn("Failed to sync user for employee " + saved.getId() + ": " + e.getMessage());
             }
         }
     }
@@ -143,7 +145,7 @@ public class HrService {
         try {
             syncUserForEmployee(saved);
         } catch (Exception e) {
-            System.err.println("Failed to auto-create user for employee: " + e.getMessage());
+            log.warn("Failed to auto-create user for employee: " + e.getMessage());
             // Proceed anyway so the Employee record is still saved
         }
 
@@ -184,7 +186,7 @@ public class HrService {
         try {
             syncUserForEmployee(saved); 
         } catch (Exception e) {
-            System.err.println("Failed to sync user roles for employee " + saved.getId() + ": " + e.getMessage());
+            log.warn("Failed to sync user roles for employee " + saved.getId() + ": " + e.getMessage());
         }
         return saved;
     }

@@ -20,6 +20,8 @@ import java.util.*;
 
 @Service
 public class PurchaseService {
+    private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(PurchaseService.class);
+
 
     /** Roles that get procurement alerts (approvals required, deliveries, invoices due). */
     static final List<String> PURCHASE_ALERT_ROLES =
@@ -1056,7 +1058,7 @@ public class PurchaseService {
             try {
                 projectFinanceService.syncProjectExpenses(po.getProject().getId());
             } catch (Exception e) {
-                System.out.println("Project expense sync skipped for bill " + saved.getId() + ": " + e.getMessage());
+                LOG.info("Project expense sync skipped for bill " + saved.getId() + ": " + e.getMessage());
             }
         }
         return saved;

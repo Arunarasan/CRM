@@ -23,7 +23,7 @@ public class CounterSaleRequest {
     public Boolean taxInclusive;  // true = the entered prices already include GST
     public String placeOfSupply;
     public String discountType;   // PERCENTAGE or FLAT
-    public BigDecimal discountValue;
+    @jakarta.validation.constraints.PositiveOrZero public BigDecimal discountValue;
     public String notes;
     public String terms;
 
@@ -34,7 +34,7 @@ public class CounterSaleRequest {
     /** Edit only: why the issued bill is being changed (required; goes to the ledger note). */
     public String editReason;
 
-    public List<Item> items;
+    @jakarta.validation.Valid public List<Item> items;
     public Installation installation;
     public Work work;
 
@@ -42,16 +42,16 @@ public class CounterSaleRequest {
     public boolean collectNow;
     public String paymentMethod;  // CASH / UPI / CARD / ... (when collectNow)
     /** Advance: collect only this much now (bill stays PARTIAL). Null/0 or ≥ total = pay in full. */
-    public BigDecimal paidAmount;
+    @jakarta.validation.constraints.PositiveOrZero public BigDecimal paidAmount;
 
     public static class Item {
         public Long productId;    // null for a free-text / non-catalogue line
         public String description;
         public String hsnCode;
         public String unit;
-        public Integer quantity;
-        public BigDecimal unitPrice;
-        public BigDecimal gstRate;
+        @jakarta.validation.constraints.Positive public Integer quantity;
+        @jakarta.validation.constraints.PositiveOrZero public BigDecimal unitPrice;
+        @jakarta.validation.constraints.DecimalMin("0") @jakarta.validation.constraints.DecimalMax("100") public BigDecimal gstRate;
         public Long warehouseId;  // optional per-line source warehouse
         public String notes;      // short description under the item name
         public String imageUrl;   // item photo

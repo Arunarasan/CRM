@@ -22,6 +22,8 @@ import java.util.Set;
 
 @Configuration
 public class DataSeeder {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(DataSeeder.class);
+
 
     /**
      * Hibernate's ddl-auto=update (this project has no migration tool — see class-level context in
@@ -47,7 +49,7 @@ public class DataSeeder {
                     }
                 }
             } catch (Exception e) {
-                System.out.println("BOQ legacy column cleanup skipped: " + e.getMessage());
+                log.info("BOQ legacy column cleanup skipped: " + e.getMessage());
             }
         };
     }
@@ -281,11 +283,11 @@ public class DataSeeder {
                         roles.add(adminRole);
                         admin.setRoles(roles);
                         userRepository.save(admin);
-                        System.out.println("Seeded bootstrap admin '" + bootstrapEmail
+                        log.info("Seeded bootstrap admin '" + bootstrapEmail
                                 + "' (must change password on first login).");
                     }
                 } else {
-                    System.out.println("No bootstrap admin seeded: set BOOTSTRAP_ADMIN_EMAIL and "
+                    log.info("No bootstrap admin seeded: set BOOTSTRAP_ADMIN_EMAIL and "
                             + "BOOTSTRAP_ADMIN_PASSWORD to provision one, or create an admin out-of-band.");
                 }
             } else if (userRepository.findByEmail("admin@arudra.com").isEmpty()) {
