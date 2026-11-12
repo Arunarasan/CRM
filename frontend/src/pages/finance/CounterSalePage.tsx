@@ -14,7 +14,8 @@ import BundleWorkEditor, { defaultWorkHeader, type WorkHeader, type WorkLine } f
 import { specToJson } from "@/components/bundles/workSpec";
 import { resolveFileUrl } from "@/lib/uploadFile";
 import BillItemDialog, { type BillItem } from "./BillItemDialog";
-import { Plus, Search, Trash2, Wrench, Scissors, Receipt, RotateCcw, Banknote, ImageIcon, Pencil } from "lucide-react";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import { Printer, ChevronDown, Plus, Search, Trash2, Wrench, Scissors, Receipt, RotateCcw, Banknote, ImageIcon, Pencil } from "lucide-react";
 
 interface CustomerLite { id: number; name: string; phone?: string }
 interface ProductLite { id: number; name?: string; sku?: string; materialCode?: string; unit?: string; hsnCode?: string; gstPercent?: number; price?: number; sellingPrice?: number; imageUrl?: string }
@@ -92,7 +93,6 @@ export default function CounterSalePage() {
 
   // bill print — auto-opens the chosen format right after checkout
   const [waAfter, setWaAfter] = useState(false); // offer to WhatsApp the bill PDF right after checkout
-  const [printFormat, setPrintFormat] = useState<"receipt" | "invoice" | "none">("receipt");
 
   const [saving, setSaving] = useState(false);
   // Cash handed over → change to give back (shown only; not stored on the bill).
@@ -220,7 +220,8 @@ export default function CounterSalePage() {
   const isAdvance = collectNow && payMode === "ADVANCE" && advanceAmt > 0 && advanceAmt < totals.grand;
   const canSave = lines.some((l) => l.name.trim() && l.qty > 0) || (installOn && Number(installCharge) > 0);
 
-  const save = async () => {
+  /** Saves the bill; `printAs` also opens that print layout afterwards (the separate Print button). */
+  const save = async (printAs?: "receipt" | "invoice") => {
     if (saving) return;
     const validItems = lines.filter((l) => l.name.trim() && l.qty > 0);
     if (validItems.length === 0 && !(installOn && Number(installCharge) > 0)) { toast.error("Add at least one item."); return; }
@@ -245,7 +246,12 @@ export default function CounterSalePage() {
           })),
         });
         toast.success(`${editInv?.number} updated.`);
-        navigate(`/billing/invoices/${editId}${waAfter ? "?wa=1" : ""}`);
+        {
+          const q = new URLSearchParams();
+          if (printAs) q.set("print", printAs);
+          if (waAfter) q.set("wa", "1");
+          navigate(`/billing/invoices/${editId}${q.toString() ? `?${q}` : ""}`);
+        }
       } catch (e) {
         toast.error(apiError(e, "Could not update the bill."));
         setSaving(false);
@@ -289,7 +295,7 @@ export default function CounterSalePage() {
       });
       toast.success(`${created.invoiceNumber} saved${isAdvance ? ` · advance ${currency(advanceAmt)}, balance ${currency(totals.grand - advanceAmt)}` : collectNow ? " · paid" : ""}.`);
       const q = new URLSearchParams();
-      if (printFormat !== "none") q.set("print", printFormat);
+      if (printAs) q.set("print", printAs);
       if (waAfter) q.set("wa", "1");
       if (workOn) q.set("stickers", "1"); // invoice page offers / opens the bundle stickers
       navigate(`/billing/invoices/${created.id}${q.toString() ? `?${q}` : ""}`);
@@ -663,27 +669,29 @@ export default function CounterSalePage() {
                 <span className="tabular-nums text-base">{currency(Math.abs(change))}</span>
               </div>
             )}
-            {!editId && <div className="flex items-center gap-2 text-xs text-slate-600">
-              <span className="shrink-0">Print bill</span>
-              <div className="ml-auto inline-flex rounded-md border overflow-hidden text-[11px]">
-                {([["receipt", "Receipt"], ["invoice", "A4"], ["none", "Off"]] as const).map(([v, label]) => (
-                  <button key={v} onClick={() => setPrintFormat(v)}
-                    className={`px-3 py-1.5 ${printFormat === v ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}>
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>}
             {(
               <label className="flex items-center gap-2 text-xs text-slate-600">
                 <BaseInput type="checkbox" checked={waAfter} onChange={(e) => setWaAfter(e.target.checked)} className="w-3.5 h-3.5" />
                 Send bill PDF on WhatsApp after saving
               </label>
             )}
-            <Button className="w-full h-12 text-base active:scale-[0.99]" onClick={save} disabled={saving || !!blocker}>
+            <div className="flex gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button type="button" variant="outline" className="h-12 shrink-0 px-3" disabled={saving || !!blocker} title="Save the bill and print it">
+                  <Printer className="h-4 w-4 sm:mr-1.5" /><span className="hidden sm:inline">Print</span><ChevronDown className="ml-1 h-3.5 w-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuItem onClick={() => save("receipt")}>Save &amp; print receipt (80mm)</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => save("invoice")}>Save &amp; print A4 invoice</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button className="flex-1 h-12 text-base active:scale-[0.99]" onClick={() => save()} disabled={saving || !!blocker}>
               {saving ? "Saving…" : editId ? `Save changes · ${currency(totals.grand)}` : isAdvance ? `Take advance ${currency(advanceAmt)}` : collectNow ? `Charge ${currency(totals.grand)}` : `Save Bill · ${currency(totals.grand)}`}
               {!saving && !editId && <span className="ml-2 rounded border border-white/30 px-1.5 py-px text-[10px] font-semibold opacity-80">F9</span>}
             </Button>
+            </div>
             {blocker && <p className="text-center text-[11px] text-slate-400">{blocker}</p>}
           </div>
         </div>
