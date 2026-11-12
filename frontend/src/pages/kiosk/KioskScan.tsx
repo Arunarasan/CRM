@@ -70,7 +70,8 @@ export default function KioskScan({ action, onDone, onFail, onCancel, onSwitch, 
   const videoRef = useRef<HTMLVideoElement>(null);
   const [stage, setStage] = useState<Stage>('loading');
   const [hint, setHint] = useState('Starting camera…');
-  const [faceInOval, setFaceInOval] = useState(false);
+  // The oval is the live signal: white = no face yet, red = adjust (move / hold still), green = good, and it fills as frames are captured.
+  const [ring, setRing] = useState<{ tone: 'idle' | 'bad' | 'good'; p: number }>({ tone: 'idle', p: 0 });
   // The callbacks come from a parent that re-renders every second (clock); keep the latest in refs.
   const doneRef = useRef(onDone);
   const failRef = useRef(onFail);
@@ -96,6 +97,7 @@ export default function KioskScan({ action, onDone, onFail, onCancel, onSwitch, 
         let okFrames = 0;
         const good: number[][] = [];
         let lastGoodAt = 0;
+        const show = (tone: 'idle' | 'bad' | 'good') => setRing({ tone, p: Math.min(1, good.length / GOOD_FRAMES) });
         let firstGoodAt = 0;
         let rejects = 0;
         let steady = 0;
@@ -112,27 +114,27 @@ export default function KioskScan({ action, onDone, onFail, onCancel, onSwitch, 
             // one signature, so one bad frame can't cause a wrong-person match.
             const f = await scanFace(video, DETECT_SIZE);
             if (cancelled) return;
-            if (f.state === 'none') { setFaceInOval(false); setHint('Look at the camera'); continue; }
-            if (f.state === 'multiple') { setFaceInOval(false); setHint('One person at a time, please'); continue; }
+            if (f.state === 'none') { show('idle'); setHint('Look at the camera'); continue; }
+            if (f.state === 'multiple') { show('bad'); setHint('One person at a time, please'); continue; }
             const r = f.reading;
             const share = r.box.width / r.frameWidth;
             const cx = (r.box.x + r.box.width / 2) / r.frameWidth;
             const cy = (r.box.y + r.box.height / 2) / r.frameHeight;
             const inOval = share >= MIN_SHARE && share <= MAX_SHARE
               && Math.abs(cx - 0.5) <= CENTRE_TOLERANCE_X && Math.abs(cy - 0.5) <= CENTRE_TOLERANCE_Y;
-            setFaceInOval(inOval);
-            if (share < MIN_SHARE) { setHint('Come a little closer'); continue; }
-            if (share > MAX_SHARE) { setHint('Move back a little'); continue; }
-            if (!inOval) { setHint('Put your face inside the oval'); continue; }
-            if (r.score < MIN_DETECT_SCORE) { setHint('Face the camera'); continue; }
-            if (Math.abs(r.yaw - 0.5) >= FRONTAL_OFFSET) { setHint('Look straight at the camera'); continue; }
+            if (share < MIN_SHARE) { show('bad'); setHint('Come a little closer'); continue; }
+            if (share > MAX_SHARE) { show('bad'); setHint('Move back a little'); continue; }
+            if (!inOval) { show('bad'); setHint('Put your face inside the oval'); continue; }
+            if (r.score < MIN_DETECT_SCORE) { show('bad'); setHint('Face the camera'); continue; }
+            if (Math.abs(r.yaw - 0.5) >= FRONTAL_OFFSET) { show('bad'); setHint('Look straight at the camera'); continue; }
+            show('good');
             if (Date.now() - lastGoodAt < FRAME_GAP_MS) continue; // wait between counted frames
             if (good.length > 0) {
               const c = mean(good);
               if (faceDistance(c, r.descriptor) > SAME_FRAME_MAX) {
                 // Disagrees with the frames so far. Three in a row means a different face took over: start again.
                 if (++rejects >= 3) { good.length = 0; rejects = 0; firstGoodAt = 0; }
-                setHint('Hold still…');
+                show('bad'); setHint('Hold still…');
                 continue;
               }
             }
@@ -140,6 +142,7 @@ export default function KioskScan({ action, onDone, onFail, onCancel, onSwitch, 
             if (good.length === 0) firstGoodAt = Date.now();
             good.push(r.descriptor);
             lastGoodAt = Date.now();
+            show('good');
             const waited = Date.now() - firstGoodAt;
             if (good.length < GOOD_FRAMES && !(good.length >= MIN_FRAMES && waited >= MAX_CAPTURE_MS)) {
               setHint(`Hold still… ${good.length}/${GOOD_FRAMES}`);
@@ -150,6 +153,7 @@ export default function KioskScan({ action, onDone, onFail, onCancel, onSwitch, 
             let worst = 0;
             good.forEach((d, i) => { if (faceDistance(d, centre) > faceDistance(good[worst], centre)) worst = i; });
             const descriptor = mean(good.filter((_, i) => i !== worst));
+            setRing({ tone: 'good', p: 1 });
             setStage('sending'); setHint('Checking…');
             const selfie = await snapshot(video, 0.7, 360);
             leaveCamera(stream, video); stream = null;
@@ -246,7 +250,15 @@ export default function KioskScan({ action, onDone, onFail, onCancel, onSwitch, 
         <video ref={videoRef} playsInline muted className="absolute inset-0 h-full w-full -scale-x-100 object-cover" />
         {/* oval guide */}
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <div className={`h-[58%] w-[70%] max-w-sm rounded-[50%] border-4 ${stage === 'capture' || faceInOval ? 'border-emerald-400' : stage === 'challenge' ? 'border-amber-300' : 'border-white/70'}`} />
+          <div className="relative h-[58%] w-[70%] max-w-sm">
+            <svg viewBox="0 0 100 130" preserveAspectRatio="none" className="absolute inset-0 h-full w-full">
+              <ellipse cx="50" cy="65" rx="48" ry="63" fill="none" stroke="rgba(255,255,255,0.35)" strokeWidth="5" vectorEffect="non-scaling-stroke" />
+              <path d="M50,2 A48,63 0 1,1 49.99,2" pathLength={100} fill="none" strokeLinecap="round" strokeWidth="9" vectorEffect="non-scaling-stroke"
+                stroke={ring.tone === 'good' ? '#34d399' : ring.tone === 'bad' ? '#f87171' : '#ffffff'}
+                strokeDasharray={`${ring.tone === 'idle' && ring.p === 0 ? 0 : Math.max(ring.p * 100, 2)} 100`}
+                style={{ transition: 'stroke-dasharray 0.45s linear, stroke 0.15s' }} />
+            </svg>
+          </div>
         </div>
         {(stage === 'loading' || stage === 'sending') && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/60">
