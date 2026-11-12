@@ -1,0 +1,22 @@
+ID,Phase,Module/Area,Test,Method,Result,Evidence
+T-001,11,Backend unit tests,Run mvn test (26 test classes),Executed 2026-11-12,PASSED,139 run / 0 fail / 0 error / 0 skip (surefire reports)
+T-002,8,Frontend build,npm run build (tsc + vite),Executed 2026-11-12,PASSED,Built in 6.4s; chunks over 500KB warning
+T-003,6,Authorization,@PreAuthorize coverage per controller,Static analysis,PASSED with gaps,Nearly all of 70 controllers annotated; gaps in AUD-003
+T-004,6,Default admin,DataSeeder prod guard,Static analysis,PASSED,DataSeeder.java:262-295 seeds admin only when not prod
+T-005,6,JWT secret,No default in prod profile,Static analysis,PASSED,application-prod.yml:3 jwt.secret=${JWT_SECRET}
+T-006,6,CORS,No @CrossOrigin on controllers,Static analysis,PASSED,grep = 0 files
+T-007,6,Rate limiting,RateLimitFilter present,Static analysis,PASSED (existence only),security/RateLimitFilter.java; behaviour NOT TESTED
+T-008,4,Doc numbering,DocumentNumberService for INV/PAY + UNIQUE constraints,Static analysis,PASSED (design only),FinanceService.java:61,65; V1 unique constraints; concurrency NOT TESTED
+T-009,6,Error leakage,DataIntegrityViolation handler generic message,Static analysis,PASSED,GlobalExceptionHandler.java:160-170
+T-010,6,Uploads,Script-capable types rejected,Static analysis,PASSED,FileUploadController.java:194-198
+T-011,10,Backups,Nightly encrypted offsite backup implemented and documented,Static review,PASSED (config only),docs/BACKUP_RESTORE.md; restore NOT TESTED
+T-012,10,CI,Deploy workflow runs tests,Static analysis,FAILED,AUD-001
+T-013,5,Input validation,@Valid usage,Static analysis,FAILED,AUD-002
+T-014,2,Modules 1-25 functional CRUD/UI,All modules,NOT EXECUTED,NOT TESTED,No isolated test DB or running stack (mysql/docker absent)
+T-015,3,Workflows A-G end-to-end,All workflows,NOT EXECUTED,NOT TESTED,Requires running backend + test DB
+T-016,4,Concurrency/rollback/FK/orphans,DB runtime tests,NOT EXECUTED,NOT TESTED,Requires test DB
+T-017,5,API runtime (codes; SQLi; mass assignment; token expiry),All endpoints,NOT EXECUTED,NOT TESTED,Requires running API
+T-018,7,Load 1-100 users,Performance,NOT EXECUTED,NOT TESTED,No metrics fabricated
+T-019,8,Responsive/a11y/console,Browser UI,NOT EXECUTED,NOT TESTED,No running app
+T-020,9,Email/WhatsApp/R2/PDF/Excel integrations,Integrations,NOT EXECUTED,NOT TESTED,Needs credentials/env
+T-021,10,Restore test,Isolated restore,NOT EXECUTED,NOT TESTED,No MySQL available locally
