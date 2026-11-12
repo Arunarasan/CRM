@@ -314,6 +314,84 @@
       "env": {
         "VITE_API_URL": "http://localhost:8103/api"
       }
+    },
+    {
+      "name": "backend-guide",
+      "runtimeExecutable": "mvn",
+      "runtimeArgs": [
+        "-o",
+        "spring-boot:run",
+        "-Dspring-boot.run.arguments=--server.port=8110"
+      ],
+      "port": 8110,
+      "cwd": "backend",
+      "env": {
+        "CORS_ALLOWED_ORIGINS": "http://localhost:4180",
+        "DB_URL": "jdbc:mysql://localhost:3306/zz_guide_screens?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true"
+      }
+    },
+    {
+      "name": "frontend-guide",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "4180",
+        "--strictPort"
+      ],
+      "port": 4180,
+      "cwd": "frontend",
+      "env": {
+        "VITE_API_URL": "http://localhost:8110/api"
+      }
+    },
+    {
+      "name": "website-guide",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
+      "port": 5280,
+      "cwd": "website",
+      "env": {
+        "PORT": "5280",
+        "VITE_API_PROXY": "http://localhost:8110",
+        "VITE_CRM_PROXY": "http://localhost:4180"
+      }
+    },
+    {
+      "name": "backend-empwork",
+      "runtimeExecutable": "mvn",
+      "runtimeArgs": [
+        "-o",
+        "spring-boot:run",
+        "-Dspring-boot.run.arguments=--server.port=8121"
+      ],
+      "port": 8121,
+      "cwd": "backend",
+      "env": {
+        "CORS_ALLOWED_ORIGINS": "http://localhost:4121"
+      }
+    },
+    {
+      "name": "frontend-empwork",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "4121",
+        "--strictPort"
+      ],
+      "port": 4121,
+      "cwd": "frontend",
+      "env": {
+        "VITE_API_URL": "http://localhost:8121/api"
+      }
     }
   ]
 }
