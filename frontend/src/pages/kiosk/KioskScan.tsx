@@ -16,6 +16,8 @@ export interface ScanDone {
   result: KioskPunchResult;
   /** The selfie that was sent, for showing on the result card. */
   selfie: Blob | null;
+  /** True when the person picked their own name, so the result card needs no "Not me". */
+  confirmed?: boolean;
   /** The face signature that was sent, kept so a borderline match can be confirmed without scanning again. */
   descriptor?: number[];
   /** True when the punch was typed in by ID / phone with a photo (waiting for admin approval). */
@@ -165,7 +167,8 @@ export default function KioskScan({ action, onDone, onFail, onCancel, onSwitch, 
             const selfie = await snapshot(video, 0.7, 360);
             leaveCamera(stream, video); stream = null;
             try {
-              const result = await kioskApi.punch(action, descriptor, selfie, null);
+              // No selfie upload on this first call (a smaller, faster request): it is only needed when a punch is recorded.
+              const result = await kioskApi.punch(action, descriptor, null, null);
               if (!cancelled) doneRef.current({ result, selfie, descriptor });
             } catch (e: any) {
               if (cancelled) return;

@@ -59,6 +59,25 @@ class FaceMatcherTest {
     }
 
     @Test
+    void rankOffersOnlyNearbyPeopleClosestFirst() {
+        var live = vec(0.1, 0.0);
+        var ranked = FaceMatcher.rank(live, List.of(
+                new Sample(1, vec(0.1, 0.30)),   // 0.30
+                new Sample(2, vec(0.1, 0.38)),   // 0.38, within 0.12 of the best
+                new Sample(3, vec(0.1, 0.54)),   // 0.54, too far behind the best
+                new Sample(4, vec(0.1, 0.80))),  // beyond the candidate limit
+                3);
+        assertEquals(2, ranked.size());
+        assertEquals(1L, ranked.get(0).employeeId());
+        assertEquals(2L, ranked.get(1).employeeId());
+    }
+
+    @Test
+    void rankIsEmptyWhenNobodyIsClose() {
+        assertTrue(FaceMatcher.rank(vec(0.1, 0.0), List.of(new Sample(1, vec(0.1, 0.9))), 3).isEmpty());
+    }
+
+    @Test
     void nobodyEnrolledIsNotRecognised() {
         assertEquals(Verdict.NOT_RECOGNISED, FaceMatcher.identify(vec(0.1, 0), List.of()).verdict());
     }

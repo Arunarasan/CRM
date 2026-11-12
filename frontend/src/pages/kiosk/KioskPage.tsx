@@ -278,7 +278,7 @@ function ResultCard({ action, done, onClose, onManual }: { action: ScanAction; d
   const first = (r.name ?? '').split(' ')[0] || 'there';
   // "Not me": the face match picked the wrong person. The punch is put on hold for HR, nothing is deleted.
   const [notMe, setNotMe] = useState<'idle' | 'busy' | 'done'>('idle');
-  const canReport = r.sessionId != null && !done.manual && r.match === 'STRONG' && (r.outcome === 'CHECKED_IN' || r.outcome === 'CHECKED_OUT');
+  const canReport = r.sessionId != null && !done.manual && !done.confirmed && r.match === 'STRONG' && (r.outcome === 'CHECKED_IN' || r.outcome === 'CHECKED_OUT');
   const reportNotMe = async () => {
     if (r.sessionId == null) return;
     setNotMe('busy');
@@ -342,13 +342,16 @@ function ResultCard({ action, done, onClose, onManual }: { action: ScanAction; d
   );
 }
 
-/** A close-but-not-certain match: nothing is recorded until the person says "Yes, it's me". */
+/**
+ * The face was read; nothing is recorded yet. The kiosk shows the one to three people it could be and the person
+ * taps their own name (or "Not me"). Only a tapped name is recorded, so a wrong guess can't punch the wrong employee.
+ */
 function ConfirmCard({ action, done, onResult, onFail, onNotMe, onCancel }: {
   action: ScanAction; done: ScanDone; onResult: (d: ScanDone) => void; onFail: (f: ScanFail) => void; onNotMe: () => void; onCancel: () => void;
 }) {
-  const r = done.result;
+  const candidates = done.result.candidates ?? [];
   const [photo, setPhoto] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [busyId, setBusyId] = useState<number | null>(null);
   useEffect(() => {
     if (!done.selfie) return;
     const u = URL.createObjectURL(done.selfie);
@@ -356,32 +359,53 @@ function ConfirmCard({ action, done, onResult, onFail, onNotMe, onCancel }: {
     return () => URL.revokeObjectURL(u);
   }, [done.selfie]);
 
-  const yes = async () => {
-    if (!done.descriptor || r.employeeId == null) { onCancel(); return; }
-    setBusy(true);
+  const pick = async (employeeId: number) => {
+    if (!done.descriptor || busyId != null) { if (!done.descriptor) onCancel(); return; }
+    setBusyId(employeeId);
     try {
-      const result = await kioskApi.punch(action, done.descriptor, done.selfie, null, r.employeeId);
-      onResult({ result, selfie: done.selfie });
+      const result = await kioskApi.punch(action, done.descriptor, done.selfie, null, employeeId);
+      onResult({ result, selfie: done.selfie, confirmed: true });
     } catch (e: any) {
       const status = e?.response?.status as number | undefined;
       onFail({ status, message: e?.response?.data?.message || (status ? 'The server refused this check.' : 'Cannot reach the server. Check the internet and try again.') });
     }
   };
 
+  const single = candidates.length === 1;
   return (
-    <div className="w-full max-w-sm rounded-2xl bg-white p-6 text-center text-slate-900 shadow-2xl">
-      {photo ? <img src={photo} alt="" className="mx-auto h-28 w-28 -scale-x-100 rounded-full object-cover ring-4 ring-emerald-100" />
-        : <UserRound className="mx-auto h-16 w-16 text-slate-300" />}
-      <p className="mt-4 text-sm text-slate-500">Is this you?</p>
-      <p className="mt-1 text-2xl font-bold">{r.name}</p>
-      {r.employeeCode && <p className="mt-1 text-xs text-slate-400">{r.employeeCode}</p>}
-      <div className="mt-5 grid grid-cols-2 gap-3">
-        <button onClick={onNotMe} disabled={busy} className="rounded-xl border border-red-200 bg-red-50 py-3 text-sm font-bold text-red-700 disabled:opacity-60">Not me</button>
-        <button onClick={yes} disabled={busy} className="flex items-center justify-center gap-2 rounded-xl bg-emerald-700 py-3 text-sm font-bold text-white disabled:opacity-60">
-          {busy && <Loader2 className="h-4 w-4 animate-spin" />} Yes, it&apos;s me
-        </button>
+    <div className="w-full max-w-sm rounded-2xl bg-white p-5 text-center text-slate-900 shadow-2xl">
+      {photo && <img src={photo} alt="" className="mx-auto h-20 w-20 -scale-x-100 rounded-full object-cover ring-4 ring-emerald-100" />}
+      <p className="mt-3 text-lg font-bold">{single ? 'Is this you?' : 'Tap your name'}</p>
+      <div className="mt-3 space-y-2">
+        {candidates.map((c) => (
+          <button key={c.employeeId} onClick={() => pick(c.employeeId)} disabled={busyId != null}
+            className="flex w-full items-center gap-3 rounded-xl border-2 border-emerald-200 bg-emerald-50 p-3 text-left active:scale-[0.99] disabled:opacity-60">
+            <CandidatePhoto url={c.photoUrl} name={c.name} />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-lg font-bold">{c.name}</span>
+              {c.employeeCode && <span className="block text-xs text-slate-500">{c.employeeCode}</span>}
+            </span>
+            {busyId === c.employeeId ? <Loader2 className="h-5 w-5 animate-spin text-emerald-700" /> : <span className="rounded-lg bg-emerald-700 px-3 py-1.5 text-sm font-bold text-white">{single ? 'Yes' : 'This is me'}</span>}
+          </button>
+        ))}
       </div>
+      <button onClick={onNotMe} disabled={busyId != null}
+        className="mt-3 w-full rounded-xl border border-red-200 bg-red-50 py-3 text-sm font-bold text-red-700 disabled:opacity-60">
+        {single ? 'Not me' : 'None of these'}
+      </button>
     </div>
+  );
+}
+
+function CandidatePhoto({ url, name }: { url?: string | null; name: string }) {
+  const [failed, setFailed] = useState(false);
+  if (url && !failed) {
+    return <img src={url} alt="" onError={() => setFailed(true)} className="h-12 w-12 shrink-0 rounded-full object-cover" />;
+  }
+  return (
+    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-emerald-200 text-lg font-bold text-emerald-900">
+      {(name || '?').trim().charAt(0).toUpperCase()}
+    </span>
   );
 }
 

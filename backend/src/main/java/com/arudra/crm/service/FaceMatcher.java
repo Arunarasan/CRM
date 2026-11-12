@@ -62,6 +62,37 @@ public final class FaceMatcher {
         return new Result(bestDist <= CONFIDENT_MAX ? Verdict.CONFIDENT : Verdict.WEAK, bestId, bestDist);
     }
 
+    /** Farthest a face may be and still be offered as "is this you?" on the kiosk. */
+    public static final double CANDIDATE_MAX = 0.55;
+    /** Only offer people nearly as close as the best one, so a far-off face never shows up as a choice. */
+    public static final double CANDIDATE_SPREAD = 0.12;
+
+    public record Candidate(long employeeId, double distance) {}
+
+    /**
+     * The employees this face could be, closest first: each scores as their best sample, and only those within
+     * {@link #CANDIDATE_MAX} of the face and within {@link #CANDIDATE_SPREAD} of the closest one are returned
+     * (at most {@code limit}). The kiosk shows them and the person taps their own name.
+     */
+    public static List<Candidate> rank(double[] live, List<Sample> samples, int limit) {
+        Map<Long, Double> best = new HashMap<>();
+        for (Sample s : samples) {
+            if (s.descriptor() == null || s.descriptor().length != live.length) continue;
+            best.merge(s.employeeId(), distance(live, s.descriptor()), Math::min);
+        }
+        List<Candidate> all = new java.util.ArrayList<>();
+        best.forEach((id, d) -> all.add(new Candidate(id, d)));
+        all.sort(java.util.Comparator.comparingDouble(Candidate::distance));
+        List<Candidate> out = new java.util.ArrayList<>();
+        for (Candidate c : all) {
+            if (c.distance() > CANDIDATE_MAX) break;
+            if (!out.isEmpty() && c.distance() - out.get(0).distance() > CANDIDATE_SPREAD) break;
+            out.add(c);
+            if (out.size() >= limit) break;
+        }
+        return out;
+    }
+
     public static double distance(double[] a, double[] b) {
         double s = 0;
         for (int i = 0; i < a.length; i++) {

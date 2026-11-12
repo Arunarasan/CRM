@@ -42,7 +42,16 @@ export interface KioskPairResult extends KioskInfo {
 export type KioskOutcome =
   | 'CONFIRM' | 'CHECKED_IN' | 'CHECKED_OUT' | 'ALREADY_IN' | 'NOT_IN' | 'TOO_SOON' | 'NOT_RECOGNISED' | 'AMBIGUOUS' | 'NOT_FOUND';
 
+export interface KioskCandidate {
+  employeeId: number;
+  name: string;
+  employeeCode?: string | null;
+  photoUrl?: string | null;
+}
+
 export interface KioskPunchResult {
+  /** For CONFIRM: the few people this face could be; the person taps their own name. */
+  candidates?: KioskCandidate[];
   outcome: KioskOutcome;
   employeeId?: number;
   name?: string;

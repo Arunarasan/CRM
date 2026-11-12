@@ -87,40 +87,53 @@ public class KioskPunchService {
 
         List<FaceMatcher.Sample> samples = new ArrayList<>();
         Map<Long, Employee> employees = new LinkedHashMap<>();
+        Map<Long, String> photos = new java.util.HashMap<>();
         for (EmployeeFaceTemplate t : templateRepository.findAllActive()) {
             Employee e = t.getEmployee();
             if (e == null || !"ACTIVE".equalsIgnoreCase(e.getStatus())) continue; // on leave / terminated can't punch
             double[] d = parsedDescriptor(t);
             if (d == null) continue;
             employees.put(e.getId(), e);
+            if (t.getPhotoUrl() != null) photos.putIfAbsent(e.getId(), t.getPhotoUrl());
             samples.add(new FaceMatcher.Sample(e.getId(), d));
         }
 
-        FaceMatcher.Result match = FaceMatcher.identify(live, samples);
-        if (!match.matched()) {
+        // Who could this face be? The kiosk shows these few people and the person taps their own name, so one
+        // wrong 1:N guess can never punch the wrong employee: a punch is only recorded for a person who was picked.
+        List<FaceMatcher.Candidate> ranked = FaceMatcher.rank(live, samples, 3);
+        if (ranked.isEmpty()) {
             recordFailure(kiosk.getId());
-            log.info("Kiosk {} punch not matched: {} (best distance {})", kiosk.getId(), match.verdict(), match.distance());
-            return outcome(match.verdict() == FaceMatcher.Verdict.AMBIGUOUS ? "AMBIGUOUS" : "NOT_RECOGNISED", null, null, null, null, null);
+            log.info("Kiosk {} punch not matched: nobody within {}", kiosk.getId(), FaceMatcher.CANDIDATE_MAX);
+            return outcome("NOT_RECOGNISED", null, null, null, null, null);
         }
 
-        Employee employee = employees.get(match.employeeId());
-        boolean borderline = match.verdict() == FaceMatcher.Verdict.WEAK;
-        if (confirmEmployeeId != null && !confirmEmployeeId.equals(match.employeeId())) {
-            // The person confirmed a name, but this face now points at someone else: never record it.
+        if (confirmEmployeeId == null) {
+            List<Map<String, Object>> list = new ArrayList<>();
+            for (FaceMatcher.Candidate c : ranked) {
+                Employee e = employees.get(c.employeeId());
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("employeeId", e.getId());
+                m.put("name", ((e.getFirstName() == null ? "" : e.getFirstName()) + " " + (e.getLastName() == null ? "" : e.getLastName())).trim());
+                m.put("employeeCode", e.getEmployeeCode());
+                m.put("photoUrl", photos.get(e.getId()));
+                list.add(m);
+            }
+            Map<String, Object> ask = outcome("CONFIRM", null, null, null, null, false);
+            ask.put("candidates", list);
+            return ask;
+        }
+
+        // The person tapped a name: record it only if that employee is still one of this face's candidates.
+        FaceMatcher.Candidate picked = ranked.stream().filter(c -> c.employeeId() == confirmEmployeeId).findFirst().orElse(null);
+        if (picked == null) {
             recordFailure(kiosk.getId());
             return outcome("NOT_RECOGNISED", null, null, null, null, null);
         }
-        if (borderline && confirmEmployeeId == null) {
-            // Close but not certain: record nothing yet. The kiosk asks "Is this you, <name>?" and only
-            // the person's own tap (a second call carrying confirmEmployeeId) records the punch.
-            Map<String, Object> ask = outcome("CONFIRM", employee, null, null, null, false);
-            ask.put("match", "WEAK");
-            return ask;
-        }
-        boolean weak = false; // a trusted match, or a borderline one the person just confirmed
+        Employee employee = employees.get(picked.employeeId());
+        boolean weak = picked.distance() > FaceMatcher.ACCEPT_MAX; // chosen but a loose likeness: HR approves
         String cleanLiveness = liveness == null ? null : liveness.trim().toUpperCase();
         if (cleanLiveness != null && !cleanLiveness.equals("BLINK") && !cleanLiveness.equals("TURN")) cleanLiveness = null;
-        return record(kiosk, checkIn, employee, "FACE", match.distance(), weak, cleanLiveness, selfie, selfieType);
+        return record(kiosk, checkIn, employee, "FACE", picked.distance(), weak, cleanLiveness, selfie, selfieType);
     }
 
     /** "Not me" on the result card: puts that punch on hold for HR. Only this kiosk's own recent punch qualifies. */
