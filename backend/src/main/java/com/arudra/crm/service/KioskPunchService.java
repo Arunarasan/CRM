@@ -78,7 +78,7 @@ public class KioskPunchService {
      * @param liveness   the liveness challenge the kiosk says the person passed (BLINK | TURN), or null
      */
     public Map<String, Object> punch(AttendanceKiosk kiosk, String action, String descriptor, String liveness,
-                                     byte[] selfie, String selfieType) {
+                                     byte[] selfie, String selfieType, Long confirmEmployeeId) {
         boolean checkIn = parseAction(action);
         requireMode(kiosk, "FACE");
         double[] live = parse(descriptor);
@@ -104,10 +104,30 @@ public class KioskPunchService {
         }
 
         Employee employee = employees.get(match.employeeId());
-        boolean weak = match.verdict() == FaceMatcher.Verdict.WEAK;
+        boolean borderline = match.verdict() == FaceMatcher.Verdict.WEAK;
+        if (confirmEmployeeId != null && !confirmEmployeeId.equals(match.employeeId())) {
+            // The person confirmed a name, but this face now points at someone else: never record it.
+            recordFailure(kiosk.getId());
+            return outcome("NOT_RECOGNISED", null, null, null, null, null);
+        }
+        if (borderline && confirmEmployeeId == null) {
+            // Close but not certain: record nothing yet. The kiosk asks "Is this you, <name>?" and only
+            // the person's own tap (a second call carrying confirmEmployeeId) records the punch.
+            Map<String, Object> ask = outcome("CONFIRM", employee, null, null, null, false);
+            ask.put("match", "WEAK");
+            return ask;
+        }
+        boolean weak = false; // a trusted match, or a borderline one the person just confirmed
         String cleanLiveness = liveness == null ? null : liveness.trim().toUpperCase();
         if (cleanLiveness != null && !cleanLiveness.equals("BLINK") && !cleanLiveness.equals("TURN")) cleanLiveness = null;
         return record(kiosk, checkIn, employee, "FACE", match.distance(), weak, cleanLiveness, selfie, selfieType);
+    }
+
+    /** "Not me" on the result card: puts that punch on hold for HR. Only this kiosk's own recent punch qualifies. */
+    public boolean notMe(AttendanceKiosk kiosk, Long sessionId) {
+        boolean flagged = timeService.flagKioskNotMe(kiosk.getId(), sessionId);
+        log.info("Kiosk {} 'Not me' on session {} -> {}", kiosk.getId(), sessionId, flagged ? "flagged for HR" : "ignored");
+        return flagged;
     }
 
     /**
@@ -219,6 +239,7 @@ public class KioskPunchService {
                 res.minutesWorked(), recorded ? selfieUrl : null, recorded && weak);
         // How good the match was, so the kiosk screen can say it: STRONG | WEAK | MANUAL (typed ID + photo).
         reply.put("match", EmployeeTimeService.KIOSK_MANUAL.equals(method) ? (weak ? "MANUAL" : "MANUAL_OK") : weak ? "WEAK" : "STRONG");
+        if (recorded && res.sessionId() != null) reply.put("sessionId", res.sessionId()); // so "Not me" can flag it
         return reply;
     }
 

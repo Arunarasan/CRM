@@ -16,6 +16,8 @@ export interface ScanDone {
   result: KioskPunchResult;
   /** The selfie that was sent, for showing on the result card. */
   selfie: Blob | null;
+  /** The face signature that was sent, kept so a borderline match can be confirmed without scanning again. */
+  descriptor?: number[];
   /** True when the punch was typed in by ID / phone with a photo (waiting for admin approval). */
   manual?: boolean;
 }
@@ -35,21 +37,21 @@ const MAX_SHARE = 0.75;
 const CENTRE_TOLERANCE_X = 0.14;
 const CENTRE_TOLERANCE_Y = 0.16;
 /** Clear frames averaged into one signature, and how far apart two frames of one steady face may be. */
-const GOOD_FRAMES = 4;
+const GOOD_FRAMES = 1;
 /** A frame this far from the average of the frames so far is a blur / movement: dropped, not counted. */
 const SAME_FRAME_MAX = 0.35;
-/** Gap between counted frames: 4 separate looks take ~3-4 s: quick, yet steadier than a single frame. */
+/** Gap between counted frames: One good frame is enough: speed comes first, accuracy from the server match and the Hi-name check. */
 const FRAME_GAP_MS = 500;
 /** After this long since the first good frame, go with what we have if at least MIN_FRAMES agree (keeps it under ~10 s). */
 const MAX_CAPTURE_MS = 3500;
-const MIN_FRAMES = 3;
+const MIN_FRAMES = 1;
 const MIN_DETECT_SCORE = 0.85;
 /** Detector input size: larger = a sharper face crop for the recognition net, a little slower per frame. */
 const DETECT_SIZE = 256;
 const CHALLENGE_MS = 9000;
 /**
  * Ask for a blink / head turn before the punch. Off for speed: a check is just "show your face"
- * (about 3-4 s). Every punch still stores its selfie for HR, and the server flags weak matches.
+ * (about 1-2 s). Every punch still stores its selfie for HR, and the server flags weak matches.
  */
 const REQUIRE_LIVENESS = false;
 const TOTAL_MS = 45000;
@@ -148,18 +150,23 @@ export default function KioskScan({ action, onDone, onFail, onCancel, onSwitch, 
               setHint(`Hold still… ${good.length}/${GOOD_FRAMES}`);
               continue;
             }
-            // Drop the frame farthest from the average, then average the rest.
-            const centre = mean(good);
-            let worst = 0;
-            good.forEach((d, i) => { if (faceDistance(d, centre) > faceDistance(good[worst], centre)) worst = i; });
-            const descriptor = mean(good.filter((_, i) => i !== worst));
+            // One good frame is enough (the server and the "Hi <name>" check catch mistakes). If several were
+            // gathered, drop the one farthest from the average, then average the rest.
+            let kept = good;
+            if (good.length >= 3) {
+              const centre = mean(good);
+              let worst = 0;
+              good.forEach((d, i) => { if (faceDistance(d, centre) > faceDistance(good[worst], centre)) worst = i; });
+              kept = good.filter((_, i) => i !== worst);
+            }
+            const descriptor = mean(kept);
             setRing({ tone: 'good', p: 1 });
             setStage('sending'); setHint('Checking…');
             const selfie = await snapshot(video, 0.7, 360);
             leaveCamera(stream, video); stream = null;
             try {
               const result = await kioskApi.punch(action, descriptor, selfie, null);
-              if (!cancelled) doneRef.current({ result, selfie });
+              if (!cancelled) doneRef.current({ result, selfie, descriptor });
             } catch (e: any) {
               if (cancelled) return;
               const status = e?.response?.status as number | undefined;

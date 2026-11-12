@@ -40,7 +40,7 @@ export interface KioskPairResult extends KioskInfo {
 }
 
 export type KioskOutcome =
-  | 'CHECKED_IN' | 'CHECKED_OUT' | 'ALREADY_IN' | 'NOT_IN' | 'TOO_SOON' | 'NOT_RECOGNISED' | 'AMBIGUOUS' | 'NOT_FOUND';
+  | 'CONFIRM' | 'CHECKED_IN' | 'CHECKED_OUT' | 'ALREADY_IN' | 'NOT_IN' | 'TOO_SOON' | 'NOT_RECOGNISED' | 'AMBIGUOUS' | 'NOT_FOUND';
 
 export interface KioskPunchResult {
   outcome: KioskOutcome;
@@ -51,6 +51,8 @@ export interface KioskPunchResult {
   minutesWorked?: number | null;
   selfieUrl?: string | null;
   needsApproval: boolean;
+  /** The punch's session, so "Not me" can put it on hold. Present only when a punch was recorded. */
+  sessionId?: number;
   /** How good the match was: STRONG (counts at once), WEAK (held for admin), MANUAL (typed ID + photo, held for admin). */
   match?: 'STRONG' | 'WEAK' | 'MANUAL' | 'MANUAL_OK';
 }
@@ -62,16 +64,20 @@ export const kioskApi = {
     http.post('/public/kiosk/pair', { code, deviceInfo: navigator.userAgent?.slice(0, 250) }).then((r) => unwrap<KioskPairResult>(r.data)),
   me: () =>
     http.get('/public/kiosk/me', { headers: { 'X-Kiosk-Token': kioskToken.get() ?? '' } }).then((r) => unwrap<KioskInfo>(r.data)),
-  punch: (action: 'IN' | 'OUT', descriptor: number[], selfie: Blob | null, liveness: string | null) => {
+  punch: (action: 'IN' | 'OUT', descriptor: number[], selfie: Blob | null, liveness: string | null, confirmEmployeeId?: number) => {
     const form = new FormData();
     form.append('action', action);
     form.append('descriptor', JSON.stringify(descriptor));
     if (liveness) form.append('liveness', liveness);
+    if (confirmEmployeeId != null) form.append('confirmEmployeeId', String(confirmEmployeeId));
     if (selfie) form.append('selfie', selfie, 'selfie.jpg');
     return http
       .post('/public/kiosk/punch', form, { headers: { 'X-Kiosk-Token': kioskToken.get() ?? '', 'Content-Type': 'multipart/form-data' } })
       .then((r) => unwrap<KioskPunchResult>(r.data));
   },
+  /** "Not me" on the result card: the match picked the wrong person, so that punch is held for HR. */
+  notMe: (sessionId: number) =>
+    http.post('/public/kiosk/not-me', { sessionId }, { headers: { 'X-Kiosk-Token': kioskToken.get() ?? '' } }).then((r) => unwrap<{ flagged: boolean }>(r.data)),
   /** Fallback when face/finger can't be read: employee ID or phone + a photo. Always lands as pending approval. */
   punchManual: (action: 'IN' | 'OUT', identifier: string, selfie: Blob, descriptor?: number[] | null) => {
     const form = new FormData();

@@ -55,12 +55,24 @@ public class KioskController {
             @RequestParam("action") String action,
             @RequestParam("descriptor") String descriptor,
             @RequestParam(value = "liveness", required = false) String liveness,
+            @RequestParam(value = "confirmEmployeeId", required = false) Long confirmEmployeeId,
             @RequestPart(value = "selfie", required = false) org.springframework.web.multipart.MultipartFile selfie,
             HttpServletRequest request) throws java.io.IOException {
         AttendanceKiosk kiosk = kioskService.authenticate(token, RequestIp.of(request));
         byte[] bytes = selfie == null ? null : selfie.getBytes();
         String type = selfie == null ? null : selfie.getContentType();
-        return ResponseEntity.ok(ApiResponse.success(punchService.punch(kiosk, action, descriptor, liveness, bytes, type)));
+        return ResponseEntity.ok(ApiResponse.success(punchService.punch(kiosk, action, descriptor, liveness, bytes, type, confirmEmployeeId)));
+    }
+
+    /** "Not me" on the result card: the face match picked the wrong person, so that punch is held for HR. */
+    @PostMapping("/not-me")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> notMe(
+            @RequestHeader(value = TOKEN_HEADER, required = false) String token,
+            @RequestBody Map<String, Object> body, HttpServletRequest request) {
+        AttendanceKiosk kiosk = kioskService.authenticate(token, RequestIp.of(request));
+        Object sid = body.get("sessionId");
+        Long sessionId = sid instanceof Number n ? n.longValue() : null;
+        return ResponseEntity.ok(ApiResponse.success(Map.of("flagged", punchService.notMe(kiosk, sessionId))));
     }
 
     /**

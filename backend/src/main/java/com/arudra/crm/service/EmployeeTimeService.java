@@ -224,6 +224,39 @@ public class EmployeeTimeService {
         });
     }
 
+    /** How long after a kiosk punch the person may still tap "Not me" on the result card. */
+    private static final long KIOSK_NOT_ME_WINDOW_SECONDS = 180;
+
+    /**
+     * The person on the kiosk result card says "Not me": the face match picked the wrong employee. The punch is not
+     * deleted (HR decides), it is put on hold for approval with a clear reason, so it stops counting for hours and pay
+     * until HR looks at the selfie. Only a punch made on THIS kiosk in the last few minutes can be flagged.
+     */
+    @Transactional
+    public boolean flagKioskNotMe(Long kioskId, Long sessionId) {
+        if (kioskId == null || sessionId == null) return false;
+        AttendanceSession s = sessionRepository.findById(sessionId).orElse(null);
+        if (s == null || s.getKiosk() == null || !kioskId.equals(s.getKiosk().getId())) return false;
+        Attendance att = s.getAttendance();
+        LocalTime t = s.getCheckOutTime() != null ? s.getCheckOutTime() : s.getCheckInTime();
+        if (att == null || att.getDate() == null || t == null) return false;
+        long since = Duration.between(att.getDate().atTime(t), java.time.LocalDateTime.now()).getSeconds();
+        if (since < 0 || since > KIOSK_NOT_ME_WINDOW_SECONDS) return false;
+        String reason = "Person tapped 'Not me' on the kiosk: possible wrong match, check the selfie";
+        boolean wasWaiting = s.isAwaitingApproval();
+        s.setVerified(false);
+        s.setFlagged(true);
+        s.setApprovalStatus("PENDING");
+        String prior = s.getFlagReason();
+        String merged = prior == null || prior.isBlank() ? reason : prior + " · " + reason;
+        s.setFlagReason(merged.length() > 255 ? merged.substring(0, 255) : merged);
+        sessionRepository.save(s);
+        syncAggregate(att, att.getEmployee());
+        attendanceRepository.save(att);
+        if (!wasWaiting) verificationService.notifyKioskWeakLater(sessionId, att.getEmployee(), reason);
+        return true;
+    }
+
     /** A check-out this soon after the check-in is treated as an accidental double tap. */
     private static final long KIOSK_MIN_SESSION_SECONDS = 120;
     /** Verification method of a kiosk punch typed in by employee ID / phone with a photo (always needs approval). */

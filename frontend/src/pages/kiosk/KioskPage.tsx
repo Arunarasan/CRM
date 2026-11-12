@@ -25,6 +25,7 @@ type View =
   | { kind: 'home' }
   | { kind: 'scan'; action: ScanAction; method: 'FACE' | 'FINGER' }
   | { kind: 'manual'; action: ScanAction }
+  | { kind: 'confirm'; action: ScanAction; done: ScanDone }
   | { kind: 'result'; action: ScanAction; done: ScanDone }
   | { kind: 'error'; message: string; action?: ScanAction };
 
@@ -88,6 +89,10 @@ export default function KioskPage() {
 
   // Result and error cards close themselves.
   useEffect(() => {
+    if (view.kind === 'confirm') {
+      const t = window.setTimeout(() => setView({ kind: 'home' }), 20000); // nobody answered: back to the home screen
+      return () => window.clearTimeout(t);
+    }
     if (view.kind !== 'result' && view.kind !== 'error') return;
     const failed = view.kind === 'error' || ['NOT_RECOGNISED', 'AMBIGUOUS', 'NOT_FOUND'].includes(view.done.result.outcome) || view.done.result.match === 'WEAK';
     const t = window.setTimeout(() => setView({ kind: 'home' }), failed ? RESULT_MS * 3 : RESULT_MS);
@@ -108,7 +113,12 @@ export default function KioskPage() {
   return (
     <>
       <Shell>
-        {view.kind === 'result' ? <ResultCard action={view.action} done={view.done} onClose={() => setView({ kind: 'home' })}
+        {view.kind === 'confirm' ? <ConfirmCard action={view.action} done={view.done}
+            onResult={(done) => setView({ kind: 'result', action: view.action, done })}
+            onFail={onFail}
+            onNotMe={() => setView({ kind: 'manual', action: view.action })}
+            onCancel={() => setView({ kind: 'home' })} />
+          : view.kind === 'result' ? <ResultCard action={view.action} done={view.done} onClose={() => setView({ kind: 'home' })}
             onManual={() => setView({ kind: 'manual', action: view.action })} />
           : view.kind === 'error' ? <ErrorCard message={view.message} onClose={() => setView({ kind: 'home' })}
             onManual={view.action ? () => setView({ kind: 'manual', action: view.action! }) : undefined} />
@@ -119,7 +129,9 @@ export default function KioskPage() {
           action={view.action}
           onCancel={() => setView({ kind: 'home' })}
           onFail={onFail}
-          onDone={(done) => setView({ kind: 'result', action: view.action, done })}
+          onDone={(done) => setView(done.result.outcome === 'CONFIRM'
+            ? { kind: 'confirm', action: view.action, done }
+            : { kind: 'result', action: view.action, done })}
           onSwitch={canSwitch(kiosk) ? () => setView({ kind: 'scan', action: view.action, method: 'FINGER' }) : undefined}
           onManual={() => setView({ kind: 'manual', action: view.action })}
         />
@@ -264,12 +276,21 @@ function ResultCard({ action, done, onClose, onManual }: { action: ScanAction; d
   }, [done.selfie]);
 
   const first = (r.name ?? '').split(' ')[0] || 'there';
+  // "Not me": the face match picked the wrong person. The punch is put on hold for HR, nothing is deleted.
+  const [notMe, setNotMe] = useState<'idle' | 'busy' | 'done'>('idle');
+  const canReport = r.sessionId != null && !done.manual && r.match === 'STRONG' && (r.outcome === 'CHECKED_IN' || r.outcome === 'CHECKED_OUT');
+  const reportNotMe = async () => {
+    if (r.sessionId == null) return;
+    setNotMe('busy');
+    try { await kioskApi.notMe(r.sessionId); } catch { /* HR still sees the selfie */ }
+    setNotMe('done');
+  };
   let tone: 'ok' | 'warn' | 'bad' = 'ok';
   let title = '';
   let detail = '';
   switch (r.outcome) {
-    case 'CHECKED_IN': title = done.manual && r.needsApproval ? `Sent for approval, ${first}` : `Welcome, ${first}`; detail = `Checked in at ${hm(r.time)}`; break;
-    case 'CHECKED_OUT': title = done.manual && r.needsApproval ? `Sent for approval, ${first}` : `Goodbye, ${first}`; detail = `Checked out at ${hm(r.time)}${r.minutesWorked != null ? ` · ${worked(r.minutesWorked)} this session` : ''}`; break;
+    case 'CHECKED_IN': title = done.manual && r.needsApproval ? `Sent for approval, ${first}` : `Hi, ${first}`; detail = `Checked in at ${hm(r.time)}`; break;
+    case 'CHECKED_OUT': title = done.manual && r.needsApproval ? `Sent for approval, ${first}` : `Hi, ${first}`; detail = `Checked out at ${hm(r.time)}${r.minutesWorked != null ? ` · ${worked(r.minutesWorked)} this session` : ''}`; break;
     case 'ALREADY_IN': tone = 'warn'; title = `${first}, you're already checked in`; detail = `Since ${hm(r.time)}. Use Check Out when you leave.`; break;
     case 'NOT_IN': tone = 'warn'; title = `${first}, you're not checked in`; detail = 'Use Check In first.'; break;
     case 'TOO_SOON': tone = 'warn'; title = `${first}, you just checked in`; detail = `At ${hm(r.time)}. Wait a couple of minutes before checking out.`; break;
@@ -303,11 +324,63 @@ function ResultCard({ action, done, onClose, onManual }: { action: ScanAction; d
         <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">Typed ID + photo, face not matched. HR will check the photo and approve this {action === 'IN' ? 'check-in' : 'check-out'}.</p>
       )}
       {r.employeeCode && <p className="mt-3 text-xs text-slate-400">{r.employeeCode}</p>}
+      {canReport && notMe === 'idle' && (
+        <button onClick={(e) => { e.stopPropagation(); reportNotMe(); }} className="mt-4 w-full rounded-xl border border-red-200 bg-red-50 py-3 text-sm font-bold text-red-700">
+          Not me
+        </button>
+      )}
+      {canReport && notMe === 'busy' && <p className="mt-4 text-sm text-slate-500">Sending…</p>}
+      {canReport && notMe === 'done' && (
+        <p className="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">Thanks. This punch is on hold and HR will check it. Please scan again so your own face is recorded.</p>
+      )}
       {tone === 'bad' && (
         <button onClick={(e) => { e.stopPropagation(); onManual(); }} className="mt-4 w-full rounded-xl bg-emerald-700 py-3 text-sm font-bold text-white">
           Use employee ID or phone + photo
         </button>
       )}
+    </div>
+  );
+}
+
+/** A close-but-not-certain match: nothing is recorded until the person says "Yes, it's me". */
+function ConfirmCard({ action, done, onResult, onFail, onNotMe, onCancel }: {
+  action: ScanAction; done: ScanDone; onResult: (d: ScanDone) => void; onFail: (f: ScanFail) => void; onNotMe: () => void; onCancel: () => void;
+}) {
+  const r = done.result;
+  const [photo, setPhoto] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (!done.selfie) return;
+    const u = URL.createObjectURL(done.selfie);
+    setPhoto(u);
+    return () => URL.revokeObjectURL(u);
+  }, [done.selfie]);
+
+  const yes = async () => {
+    if (!done.descriptor || r.employeeId == null) { onCancel(); return; }
+    setBusy(true);
+    try {
+      const result = await kioskApi.punch(action, done.descriptor, done.selfie, null, r.employeeId);
+      onResult({ result, selfie: done.selfie });
+    } catch (e: any) {
+      const status = e?.response?.status as number | undefined;
+      onFail({ status, message: e?.response?.data?.message || (status ? 'The server refused this check.' : 'Cannot reach the server. Check the internet and try again.') });
+    }
+  };
+
+  return (
+    <div className="w-full max-w-sm rounded-2xl bg-white p-6 text-center text-slate-900 shadow-2xl">
+      {photo ? <img src={photo} alt="" className="mx-auto h-28 w-28 -scale-x-100 rounded-full object-cover ring-4 ring-emerald-100" />
+        : <UserRound className="mx-auto h-16 w-16 text-slate-300" />}
+      <p className="mt-4 text-sm text-slate-500">Is this you?</p>
+      <p className="mt-1 text-2xl font-bold">{r.name}</p>
+      {r.employeeCode && <p className="mt-1 text-xs text-slate-400">{r.employeeCode}</p>}
+      <div className="mt-5 grid grid-cols-2 gap-3">
+        <button onClick={onNotMe} disabled={busy} className="rounded-xl border border-red-200 bg-red-50 py-3 text-sm font-bold text-red-700 disabled:opacity-60">Not me</button>
+        <button onClick={yes} disabled={busy} className="flex items-center justify-center gap-2 rounded-xl bg-emerald-700 py-3 text-sm font-bold text-white disabled:opacity-60">
+          {busy && <Loader2 className="h-4 w-4 animate-spin" />} Yes, it&apos;s me
+        </button>
+      </div>
     </div>
   );
 }
