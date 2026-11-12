@@ -125,9 +125,10 @@ export default function QuoteWorkspace({ leadId, projectId, onChanged, fieldMode
       projectId == null ? projectRequestApi.forLead(leadId).catch(() => null) : Promise.resolve(null),
     ]);
     setProjectRequest(pr);
-    setMeasurements(m.data || []);
-    const list: Boq[] = b.data || [];
-    setQuotations(q.data || []);
+    const arr = (r: any) => (Array.isArray(r?.data) ? r.data : []);
+    setMeasurements(arr(m));
+    const list: Boq[] = arr(b);
+    setQuotations(arr(q));
     setProjectQuote(pq);
     // In a project: the sheet the project was built from. Otherwise the latest revision — older ones are history.
     const current = (pq?.boqId ? list.find((x) => x.id === pq.boqId) : undefined)
