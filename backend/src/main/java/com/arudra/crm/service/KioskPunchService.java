@@ -130,7 +130,7 @@ public class KioskPunchService {
             return outcome("NOT_RECOGNISED", null, null, null, null, null);
         }
         Employee employee = employees.get(picked.employeeId());
-        boolean weak = picked.distance() > FaceMatcher.ACCEPT_MAX; // chosen but a loose likeness: HR approves
+        boolean weak = picked.distance() > FaceMatcher.CLEAN_MAX; // chosen but a loose likeness: HR approves
         String cleanLiveness = liveness == null ? null : liveness.trim().toUpperCase();
         if (cleanLiveness != null && !cleanLiveness.equals("BLINK") && !cleanLiveness.equals("TURN")) cleanLiveness = null;
         return record(kiosk, checkIn, employee, "FACE", picked.distance(), weak, cleanLiveness, selfie, selfieType);

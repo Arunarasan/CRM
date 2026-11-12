@@ -62,6 +62,12 @@ public final class FaceMatcher {
         return new Result(bestDist <= CONFIDENT_MAX ? Verdict.CONFIDENT : Verdict.WEAK, bestId, bestDist);
     }
 
+    /**
+     * A name the person tapped from the kiosk's candidate list counts at once only up to this distance; a looser
+     * likeness (up to {@link #CANDIDATE_MAX}) is recorded but held for HR. Chosen from a 150-person LFW test:
+     * at 0.45 strangers were never accepted, at 0.50 about 2% were.
+     */
+    public static final double CLEAN_MAX = 0.45;
     /** Farthest a face may be and still be offered as "is this you?" on the kiosk. */
     public static final double CANDIDATE_MAX = 0.55;
     /** Only offer people nearly as close as the best one, so a far-off face never shows up as a choice. */
