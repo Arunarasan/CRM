@@ -68,7 +68,7 @@ async function handleStatic(request) {
   const hit = await cache.match(request);
   const refresh = fetch(request)
     .then((res) => { if (res.ok && res.type === 'basic') cache.put(request, res.clone()); return res; })
-    .catch(() => hit);
+    .catch(() => hit || Response.error()); // never resolve undefined — that breaks respondWith
   return hit || refresh;
 }
 

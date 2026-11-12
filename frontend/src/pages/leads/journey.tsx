@@ -57,10 +57,14 @@ export function useLeadJourney(leadId: string, lead: Lead | null): LeadJourney {
       leadApi.getQuotations(leadId).catch(() => ({ data: [] })),
       leadApi.getProjects(leadId).catch(() => ({ data: [] })),
     ])
-      .then(([sv, m, b, q, p]) => setRecords({
-        siteVisits: sv.data || [], measurements: m.data || [], boqs: b.data || [],
-        quotations: q.data || [], projects: p.data || [],
-      }))
+      .then(([sv, m, b, q, p]) => {
+        // A failed/odd response (HTML fallback, error object, offline SW) must never crash the page.
+        const arr = (r: any) => (Array.isArray(r?.data) ? r.data : []);
+        setRecords({
+          siteVisits: arr(sv), measurements: arr(m), boqs: arr(b),
+          quotations: arr(q), projects: arr(p),
+        });
+      })
       .finally(() => setLoading(false));
   }, [leadId]);
 
