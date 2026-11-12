@@ -77,6 +77,15 @@ class ControllerAuthorizationTest {
     @MockBean private com.arudra.crm.service.GoogleBusinessReviewService googleBusinessReviewService;
     @MockBean private com.arudra.crm.service.GoogleReviewCountService googleReviewCountService;
     @MockBean private CurrentUserService currentUserService;
+    @MockBean private com.arudra.crm.service.ProjectService projectService;
+    @MockBean private com.arudra.crm.repository.EmployeeRepository employeeRepository;
+    @MockBean private com.arudra.crm.repository.AttendanceRepository attendanceRepository;
+    @MockBean private com.arudra.crm.service.ProjectWorkService projectWorkService;
+    @MockBean private com.arudra.crm.service.EmployeeWorkService employeeWorkService;
+    @MockBean private com.arudra.crm.service.EmployeeLoginService employeeLoginService;
+    @MockBean private com.arudra.crm.service.EmployeeWorkResetService employeeWorkResetService;
+    @MockBean private com.arudra.crm.service.PayslipSettingsService payslipSettingsService;
+    @MockBean private com.arudra.crm.service.PayslipAutoGenerateScheduler payslipAutoGenerateScheduler;
     // Task
     @MockBean private TaskService taskService;
     @MockBean private TaskChecklistService taskChecklistService;
