@@ -21,6 +21,10 @@ public class QuoteWorkspaceController {
     // Pricing access is what the workspace is about; skipping the in-between approvals is deliberate.
     private static final String WRITE = "hasAuthority('ROLE_ADMIN') or hasAuthority('BOQ_WRITE')";
 
+    // Reading contract values / quote status: pricing or project read access (AUD-003).
+    private static final String READ = "hasAuthority('ROLE_ADMIN') or hasAuthority('BOQ_READ') "
+            + "or hasAuthority('BOQ_WRITE') or hasAuthority('PROJECT_READ')";
+
     // Changing a running project's quote: admins and project managers only.
     private static final String PROJECT_CHANGE = "hasAuthority('ROLE_ADMIN')";
 
@@ -37,6 +41,7 @@ public class QuoteWorkspaceController {
 
     /** The project's quote: current quotation, contract value, whether a change is open / allowed. */
     @GetMapping("/project/{projectId}")
+    @PreAuthorize(READ)
     public ResponseEntity<Map<String, Object>> projectStatus(@PathVariable Long projectId) {
         return ResponseEntity.ok(projectChanges.status(projectId));
     }
@@ -64,6 +69,7 @@ public class QuoteWorkspaceController {
 
     /** The lead's existing project this sheet's quote would update ({} when the lead has none). */
     @GetMapping("/boq/{boqId}/lead-project")
+    @PreAuthorize(READ)
     public ResponseEntity<Map<String, Object>> leadProject(@PathVariable Long boqId) {
         return ResponseEntity.ok(projectChanges.leadProject(boqId));
     }
