@@ -98,7 +98,8 @@ export default function LeadProfile() {
   const [reopenOpen, setReopenOpen] = useState(false);
   const [winBackOpen, setWinBackOpen] = useState(false);
   const [manager, setManager] = useState<LeadManager | null>(null);
-  const [team, setTeam] = useState<{ id: number; name: string; role: string }[]>([]);
+  // Employees assigned to this lead's workflow tasks (Requirement → Site Visit → Quote …), de-duplicated.
+  const [team, setTeam] = useState<{ id: string; name: string; role: string }[]>([]);
   const { isAdmin } = useAuth();
   // Phones: once the content is scrolled, the pinned header folds to name + tabs so the page itself has
   // room (the full header is ~40% of a phone screen). Tablet / desktop keep the full header — the
@@ -116,8 +117,14 @@ export default function LeadProfile() {
 
   const fetchLead = useCallback(() => {
     if (!id) return;
-    leadApi.getAssignments(id)
-      .then((res) => setTeam((res.data || []).map((a: any) => ({ id: a.id, name: a.assignedTo?.name, role: a.assignedRole })).filter((m: any) => m.name)))
+    leadApi.getWorkflowTasks(id)
+      .then((res) => {
+        const seen = new Map<string, { id: string; name: string; role: string }>();
+        (res.data || []).forEach((t: any) => (t.assignees || []).forEach((a: any) => {
+          if (a?.name) seen.set(`${a.resourceType}:${a.resourceId}`, { id: `${a.resourceType}:${a.resourceId}`, name: a.name, role: "" });
+        }));
+        setTeam([...seen.values()]);
+      })
       .catch(() => setTeam([]));
     leadApi.get(id)
       .then((res) => setLead(res.data))
@@ -363,7 +370,7 @@ export default function LeadProfile() {
               </a>
             )}
             {isAdmin ? (
-              <button type="button" onClick={() => setAssignOpen(true)} title="Assign team"
+              <button type="button" onClick={() => setActiveTab("journey")} title="Assigned to this lead's tasks — open Journey to assign"
                 className={`${CHIP_SM} hover:border-emerald-300`}>
                 <Users className="h-3.5 w-3.5 text-sky-600" />
                 <span className="text-slate-400">Assigned</span>
