@@ -65,7 +65,6 @@ import { useGoBack } from "@/hooks/useGoBack";
 import { toast } from "@/components/ui/toast";
 import SearchableSelect from "@/components/ui/searchable-select";
 import LeadFormDialog from "@/pages/leads/LeadFormDialog";
-import ChangeCreatorDialog from "@/pages/leads/ChangeCreatorDialog";
 import ChangeOwnerDialog from "@/pages/projectCommandCenter/ChangeOwnerDialog";
 import { useAuth } from "@/hooks/useAuth";
 import { leadApi } from "@/pages/leads/leadApi";
@@ -718,15 +717,6 @@ export default function ProjectCommandCenter() {
     } catch { toast.error("Couldn't load the lead."); }
   };
   const { isAdmin } = useAuth();
-  const [creatorEdit, setCreatorEdit] = useState<{ users: UserSummary[]; currentUserId?: number } | null>(null);
-  const openCreatorEdit = async () => {
-    const leadId = project?.lead?.id;
-    if (!leadId) return;
-    try {
-      const [c, u] = await Promise.all([leadApi.createdBy(leadId), leadApi.assignableUsers()]);
-      setCreatorEdit({ users: u.data, currentUserId: c.data?.userId });
-    } catch { toast.error("Couldn't load the lead."); }
-  };
   const [ownerEdit, setOwnerEdit] = useState<{ users: UserSummary[] } | null>(null);
   const openOwnerEdit = async () => {
     try {
@@ -946,7 +936,7 @@ export default function ProjectCommandCenter() {
                     </span>
                   )}
                 </div>
-                <div className="-ml-[52px] mt-3 @xl:ml-0 @xl:mt-0"><ProjectInfoRow summary={summary} onChangeLeadBy={isAdmin && project.lead?.id ? openCreatorEdit : undefined}
+                <div className="-ml-[52px] mt-3 @xl:ml-0 @xl:mt-0"><ProjectInfoRow summary={summary} leadHref={isAdmin && project.lead?.id ? `/leads/${project.lead.id}` : undefined}
                   owner={(project.projectManager as any)?.name} onChangeOwner={isAdmin ? openOwnerEdit : undefined} /></div>
               </div>
             </div>
@@ -1039,11 +1029,6 @@ export default function ProjectCommandCenter() {
         <ChangeOwnerDialog open onOpenChange={(o) => { if (!o) setOwnerEdit(null); }} projectId={project.id}
           users={ownerEdit.users} ownerId={(project.projectManager as any)?.id} assistantId={(project.assistantManager as any)?.id}
           onChanged={() => { setOwnerEdit(null); fetchProjectData(); }} />
-      )}
-      {creatorEdit && project?.lead?.id && (
-        <ChangeCreatorDialog open onOpenChange={(o) => { if (!o) setCreatorEdit(null); }} leadId={project.lead.id}
-          users={creatorEdit.users} currentUserId={creatorEdit.currentUserId}
-          onChanged={() => { setCreatorEdit(null); fetchProjectData(); }} />
       )}
       <DeleteWithRemarkDialog open={statusOpen} title="Change project status" subject="Status" action="Change" success="Status updated."
         hint="Moving a cancelled project back does not reopen its cancelled tasks or refunds."

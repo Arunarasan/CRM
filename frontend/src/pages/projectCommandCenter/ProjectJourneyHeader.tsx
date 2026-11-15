@@ -1,4 +1,5 @@
 import { Fragment } from "react";
+import { Link } from "react-router-dom";
 import {
   Phone, MessageCircle, UserCheck, UserCog, MapPin, Navigation, Tag, Package, CheckCircle2, Star, ArrowRight,
 } from "lucide-react";
@@ -23,6 +24,7 @@ export interface ProjectHeaderSummary {
   address?: string;
   mapUrl?: string;
   leadBy?: string;
+  leadHandlers?: string[];
   categories?: string[];
   products?: string[];
   journey?: JourneyStage[];
@@ -46,8 +48,8 @@ export const waLink = (n: string) => {
 const PHONE_PRODUCTS = 2;
 
 /** Customer contact / lead / location / scope rows shown under the project name. */
-export function ProjectInfoRow({ summary, onChangeLeadBy, owner, onChangeOwner }: {
-  summary: ProjectHeaderSummary; onChangeLeadBy?: () => void; owner?: string; onChangeOwner?: () => void;
+export function ProjectInfoRow({ summary, leadHref, owner, onChangeOwner }: {
+  summary: ProjectHeaderSummary; leadHref?: string; owner?: string; onChangeOwner?: () => void;
 }) {
   const chip = "inline-flex min-w-0 items-center gap-2 rounded-xl bg-white border border-slate-200 px-2.5 @lg:px-3 py-1.5 text-[13px] @lg:text-sm text-slate-700 shadow-sm whitespace-nowrap [&>svg]:shrink-0";
   const link = `${chip} hover:border-emerald-300 hover:text-emerald-800 transition-colors`;
@@ -70,13 +72,14 @@ export function ProjectInfoRow({ summary, onChangeLeadBy, owner, onChangeOwner }
           </a>
         )}
         {(() => {
+          const names = (summary.leadHandlers || []).join(", ");
           const body = (<>
             <UserCheck className="h-4 w-4 text-amber-500" />
-            <span className="text-slate-400 hidden @md:inline">Lead by</span> <span className="font-semibold truncate">{summary.leadBy || "—"}</span>
+            <span className="text-slate-400 hidden @md:inline">Lead handled by</span> <span className={`truncate ${names ? "font-semibold" : "text-slate-400"}`}>{names || "—"}</span>
           </>);
-          return onChangeLeadBy
-            ? <button type="button" onClick={onChangeLeadBy} className={`${chip} hover:border-slate-300`} title="Change who brought this lead in">{body}</button>
-            : <span className={chip} title="Employee who got this lead">{body}</span>;
+          return leadHref
+            ? <Link to={leadHref} className={`${chip} hover:border-slate-300`} title="Employees handling this lead — open the lead to change">{body}</Link>
+            : <span className={chip} title="Employees who handled this lead">{body}</span>;
         })()}
         {(() => {
           const body = (<>

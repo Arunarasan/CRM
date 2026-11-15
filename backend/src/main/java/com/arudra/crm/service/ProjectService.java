@@ -21,6 +21,7 @@ public class ProjectService {
     @Autowired private TeamSummaryService teamSummaryService;
     @Autowired @org.springframework.context.annotation.Lazy private ProjectWorkService projectWorkService;
     @Autowired @org.springframework.context.annotation.Lazy private EmployeeTaskService employeeTaskService;
+    @Autowired @org.springframework.context.annotation.Lazy private SmartAssignmentService smartAssignmentService;
 
     @Autowired
     private ProjectRepository projectRepository;
@@ -606,6 +607,22 @@ public class ProjectService {
             if (leadBy == null && lead.getAssignedSalesExecutive() != null) leadBy = lead.getAssignedSalesExecutive().getName();
         }
         s.put("leadBy", leadBy);
+
+        // Employees handling the lead (assigned to its workflow tasks), de-duplicated in task order.
+        java.util.Set<String> handlers = new java.util.LinkedHashSet<>();
+        if (lead != null) {
+            try {
+                for (Map<String, Object> row : smartAssignmentService.tasksForLead(lead.getId())) {
+                    Object as = row.get("assignees");
+                    if (as instanceof List<?> list) {
+                        for (Object o : list) {
+                            if (o instanceof Map<?, ?> m && m.get("name") != null) handlers.add(String.valueOf(m.get("name")));
+                        }
+                    }
+                }
+            } catch (RuntimeException ignored) { /* header must still render */ }
+        }
+        s.put("leadHandlers", new java.util.ArrayList<>(handlers));
 
         // What was sold: categories + products from the quotation lines.
         java.util.Set<String> categories = new java.util.LinkedHashSet<>();
