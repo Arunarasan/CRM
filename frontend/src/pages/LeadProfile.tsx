@@ -21,14 +21,13 @@ import api from "@/lib/api";
 import {
   LEAD_STATUSES,
   formatDate, statusStyle, JOURNEY_STAGE_META,
-  type JourneyStage, type Lead, type UserSummary, type LeadCreator,
+  type JourneyStage, type Lead, type UserSummary,
 } from "./leads/constants";
 import { SelectField, TextAreaField, selectClass } from "./leads/fields";
 import { useGoBack } from "@/hooks/useGoBack";
 import { useAuth } from "@/hooks/useAuth";
 import LeadFormDialog from "./leads/LeadFormDialog";
 import ShareCatalogueDialog from "@/components/leads/ShareCatalogueDialog";
-import ChangeCreatorDialog from "./leads/ChangeCreatorDialog";
 import type { LeadManager } from "./leads/leadApi";
 import ConvertLeadDialog from "./leads/ConvertLeadDialog";
 import { useLeadJourney, type JourneyStepId } from "./leads/journey";
@@ -77,7 +76,6 @@ export default function LeadProfile() {
   const [searchParams, setSearchParams] = useSearchParams();
   const goBack = useGoBack("/leads");
   const [lead, setLead] = useState<Lead | null>(null);
-  const [creator, setCreator] = useState<LeadCreator | null>(null);
   const [users, setUsers] = useState<UserSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTabState] = useState(normalizeTab(searchParams.get("tab") || "overview"));
@@ -99,7 +97,6 @@ export default function LeadProfile() {
   const [undoOpen, setUndoOpen] = useState(false);
   const [reopenOpen, setReopenOpen] = useState(false);
   const [winBackOpen, setWinBackOpen] = useState(false);
-  const [creatorOpen, setCreatorOpen] = useState(false);
   const [manager, setManager] = useState<LeadManager | null>(null);
   const [team, setTeam] = useState<{ id: number; name: string; role: string }[]>([]);
   const { isAdmin } = useAuth();
@@ -139,7 +136,6 @@ export default function LeadProfile() {
     fetchLead();
     leadApi.assignableUsers().then((res) => setUsers(res.data)).catch(console.error);
     if (id) leadApi.leadManager(id).then((res) => setManager(res.data)).catch(() => setManager(null));
-    if (id) leadApi.createdBy(id).then((res) => setCreator(res.data)).catch(() => setCreator(null));
   }, [fetchLead, id]);
 
   if (loading) {
@@ -169,7 +165,6 @@ export default function LeadProfile() {
   const StageIcon = lead.journeyStage ? STAGE_ICONS[lead.journeyStage] : Crown;
   const canReopen = isLost && lead.canReopen !== false;
   const project = lead.convertedToProject || journey.records.projects[0];
-  const addedBy = creator?.name || lead.leadOwner?.name;
 
   const phone = lead.mobileNumber;
   const whatsapp = lead.whatsappNumber || lead.mobileNumber;
@@ -368,16 +363,18 @@ export default function LeadProfile() {
               </a>
             )}
             {isAdmin ? (
-              <button type="button" onClick={() => setCreatorOpen(true)} title="Change who brought this lead in"
+              <button type="button" onClick={() => setAssignOpen(true)} title="Assign team"
                 className={`${CHIP_SM} hover:border-emerald-300`}>
-                <UserCheck className="h-3.5 w-3.5 text-amber-500" />
-                <span className="text-slate-400">Lead by</span> <span className="font-semibold text-slate-800">{addedBy || "—"}</span>
+                <Users className="h-3.5 w-3.5 text-sky-600" />
+                <span className="text-slate-400">Assigned</span>
+                <span className="font-semibold text-slate-800">{team.length ? team.map((m) => m.name).join(", ") : "—"}</span>
                 <Pencil className="h-3 w-3 text-slate-400" />
               </button>
-            ) : addedBy && (
-              <span className={CHIP_SM} title="Who brought this lead in">
-                <UserCheck className="h-3.5 w-3.5 text-amber-500" />
-                <span className="text-slate-400">Lead by</span> <span className="font-semibold text-slate-800">{addedBy}</span>
+            ) : team.length > 0 && (
+              <span className={CHIP_SM} title={team.map((m) => `${m.name}${m.role ? ` (${m.role})` : ""}`).join(", ")}>
+                <Users className="h-3.5 w-3.5 text-sky-600" />
+                <span className="text-slate-400">Assigned</span>
+                <span className="font-semibold text-slate-800">{team.map((m) => m.name).join(", ")}</span>
               </span>
             )}
             {(manager?.managers.length ?? 0) > 0 && (
@@ -393,15 +390,6 @@ export default function LeadProfile() {
                     )}
                   </span>
                 ))}
-              </span>
-            )}
-            {team.length > 0 && (
-              <span className={CHIP_SM} title={team.map((m) => `${m.name}${m.role ? ` (${m.role})` : ""}`).join(", ")}>
-                <Users className="h-3.5 w-3.5 text-sky-600" />
-                <span className="text-slate-400">Team</span>
-                <span className="font-semibold text-slate-800">
-                  {team.map((m) => m.role ? `${m.name} · ${m.role}` : m.name).join(", ")}
-                </span>
               </span>
             )}
             {place && (
@@ -516,11 +504,6 @@ export default function LeadProfile() {
       <MarkLostDialog open={lostOpen} onOpenChange={setLostOpen} lead={lead} onChanged={fetchLead} />
       <WinBackDialog open={winBackOpen} onOpenChange={setWinBackOpen} lead={lead} onChanged={fetchLead} />
       <ReopenDialog open={reopenOpen} onOpenChange={setReopenOpen} lead={lead} users={users} onChanged={fetchLead} />
-      {isAdmin && (
-        <ChangeCreatorDialog open={creatorOpen} onOpenChange={setCreatorOpen} leadId={lead.id} users={users}
-          currentUserId={creator?.userId ?? lead.leadOwner?.id}
-          onChanged={(c) => { setCreator(c); fetchLead(); }} />
-      )}
     </Tabs>
   );
 }
