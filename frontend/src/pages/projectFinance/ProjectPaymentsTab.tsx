@@ -1,3 +1,4 @@
+import { localIso } from '@/lib/localDate';
 import { useEffect, useMemo, useState } from "react";
 import GstModeToggle from "@/components/ui/gst-mode-toggle";
 import { format } from "date-fns";
@@ -29,7 +30,7 @@ import { readPricing } from "@/pages/quotations/quotationPricing";
 
 const inr = (n?: number | null) =>
   "₹" + Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => localIso();
 
 type InvoiceFilter = "ALL" | "UNPAID" | "PAID" | "DRAFT";
 const INVOICE_FILTERS: [InvoiceFilter, string][] = [["ALL", "All"], ["UNPAID", "Unpaid"], ["PAID", "Paid"], ["DRAFT", "Draft"]];

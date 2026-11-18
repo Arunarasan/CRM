@@ -1,3 +1,4 @@
+import { localIso } from '@/lib/localDate';
 import { BaseInput } from '@/components/ui/input';
 import { useCallback, useEffect, useState } from "react";
 import api from "@/lib/api";
@@ -53,7 +54,7 @@ function ProjectExpenses() {
   const [eProject, setEProject] = useState("");
   const [eCategory, setECategory] = useState("MISC");
   const [eAmount, setEAmount] = useState("");
-  const [eDate, setEDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [eDate, setEDate] = useState(() => localIso());
   const [eVendor, setEVendor] = useState("");
   const [eDescription, setEDescription] = useState("");
 
@@ -213,8 +214,8 @@ function ProjectExpenses() {
 
 /* ============================ Company expenses ============================ */
 
-const todayStr = () => new Date().toISOString().slice(0, 10);
-const monthStartStr = () => { const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10); };
+const todayStr = () => localIso();
+const monthStartStr = () => { const d = new Date(); d.setDate(1); return localIso(d); };
 const PAY_METHODS =["CASH", "UPI", "BANK_TRANSFER", "CHEQUE", "CARD"];
 
 function CompanyExpenses() {

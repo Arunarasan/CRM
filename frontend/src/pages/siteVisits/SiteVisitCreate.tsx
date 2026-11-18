@@ -1,3 +1,4 @@
+import { localIso } from '@/lib/localDate';
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
@@ -20,7 +21,7 @@ export default function SiteVisitCreate() {
   const navigate = useNavigate();
 
   const [visitType, setVisitType] = useState('Initial Visit');
-  const [scheduledDate, setScheduledDate] = useState(new Date().toISOString().slice(0, 10));
+  const [scheduledDate, setScheduledDate] = useState(localIso());
   const [purpose, setPurpose] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');

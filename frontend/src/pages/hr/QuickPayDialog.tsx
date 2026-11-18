@@ -1,3 +1,4 @@
+import { localIso } from '@/lib/localDate';
 import { useEffect, useMemo, useState } from "react";
 import { payrollApi } from "@/api/payrollApi";
 import { contractorApi } from "@/api/contractorApi";
@@ -61,14 +62,14 @@ export default function QuickPayDialog({
   // Contractor payment form
   const [payMode, setPayMode] = useState("BANK_TRANSFER");
   const [reference, setReference] = useState("");
-  const [payDate, setPayDate] = useState(new Date().toISOString().slice(0, 10));
+  const [payDate, setPayDate] = useState(localIso());
 
   useEffect(() => {
     if (!open) return;
     // Reset each time it opens.
     setQ(""); setPerson(null); setBusy(false);
     setEmpType("SALARY"); setAmount(""); setMonthlyRecovery(""); setNote("");
-    setPayMode("BANK_TRANSFER"); setReference(""); setPayDate(new Date().toISOString().slice(0, 10));
+    setPayMode("BANK_TRANSFER"); setReference(""); setPayDate(localIso());
     if (canPayContractor) {
       contractorApi.list({ size: 500 }).then((r) => setContractors(r.content || [])).catch(() => setContractors([]));
     } else {

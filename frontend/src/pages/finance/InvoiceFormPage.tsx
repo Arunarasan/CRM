@@ -1,3 +1,4 @@
+import { localIso } from '@/lib/localDate';
 import { useEffect, useMemo, useState } from "react";
 import GstModeToggle from "@/components/ui/gst-mode-toggle";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -52,7 +53,7 @@ export default function InvoiceFormPage() {
   const [gstType, setGstType] = useState<"CGST_SGST" | "IGST">("CGST_SGST");
   // Rates typed with GST already in them (GST is worked out, not added).
   const [taxInclusive, setTaxInclusive] = useState(false);
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(() => localIso());
   const [dueDate, setDueDate] = useState("");
   const [placeOfSupply, setPlaceOfSupply] = useState("");
   const [discountType, setDiscountType] = useState<"PERCENTAGE" | "FLAT">("PERCENTAGE");

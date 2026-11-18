@@ -1,3 +1,4 @@
+import { localIso } from '@/lib/localDate';
 import { useMemo, useState } from "react";
 import { CheckSquare, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -25,7 +26,7 @@ const addOneDay = (iso?: string | null) => {
 
 /** Split a `yyyy-mm-ddThh:mm:ss` reminder into the date + time the editor expects. */
 const splitReminder = (iso?: string | null) => ({
-  date: iso ? iso.slice(0, 10) : new Date().toISOString().slice(0, 10),
+  date: iso ? iso.slice(0, 10) : localIso(),
   time: iso ? iso.slice(11, 16) : "09:00",
 });
 

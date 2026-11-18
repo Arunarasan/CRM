@@ -1,3 +1,4 @@
+import { localIso } from '@/lib/localDate';
 import { BaseInput } from '@/components/ui/input';
 import { useEffect, useState } from "react";
 import { Trash2 } from "lucide-react";
@@ -14,7 +15,7 @@ import {
 const selectClass =
   "w-full h-10 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring";
 
-const todayISO = () => new Date().toISOString().slice(0, 10);
+const todayISO = () => localIso();
 
 const EMPTY: TaskFormValues = {
   title: "",

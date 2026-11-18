@@ -1,3 +1,4 @@
+import { localIso } from '@/lib/localDate';
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import {
@@ -14,7 +15,7 @@ import { toast } from "@/components/ui/toast";
 
 const inr = (n?: number | null) =>
   "₹" + Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => localIso();
 
 // Friendly labels over the backend's EXPENSE_CATEGORIES. Travel/shipping live under TRANSPORT.
 const EXPENSE_OPTIONS: { value: string; label: string }[] = [

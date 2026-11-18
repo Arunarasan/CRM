@@ -1,3 +1,4 @@
+import { localIso } from '@/lib/localDate';
 import { useState, useEffect, useCallback } from "react";
 import { format, startOfWeek, addDays, startOfMonth, endOfMonth, endOfWeek, isSameMonth, isSameDay, addMonths, subMonths } from "date-fns";
 import { ChevronLeft, ChevronRight, Search, Plus, MapPin, Calendar as CalendarIcon, List, Activity, CheckCircle, Clock, AlertTriangle } from "lucide-react";
@@ -11,7 +12,7 @@ import { SelectField, TextField, TextAreaField, selectClass } from "@/pages/lead
 const NEW_VISIT_DEFAULTS = {
   visitType: "Initial Visit",
   priority: "Medium",
-  scheduledDate: new Date().toISOString().slice(0, 10),
+  scheduledDate: localIso(),
   locationAddress: "",
   visitNotes: "",
 };

@@ -1,3 +1,4 @@
+import { localIso } from '@/lib/localDate';
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   UploadCloud, Loader2, Trash2, ListPlus, AlertTriangle, CheckCircle2, Ban, ChevronDown, ChevronUp,
@@ -43,7 +44,7 @@ function measureDuration(file: File): Promise<number | undefined> {
 }
 
 const toLocalInput = (iso?: string | null) => (iso ? iso.slice(0, 16) : "");
-const tomorrow = () => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10); };
+const tomorrow = () => { const d = new Date(); d.setDate(d.getDate() + 1); return localIso(d); };
 
 /**
  * Tasks & Workforce → Call Recordings. Drop in many call recordings at once; each becomes a row with

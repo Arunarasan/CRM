@@ -1,3 +1,4 @@
+import { localIso } from '@/lib/localDate';
 import { useCallback, useEffect, useState, type ComponentType, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 import { format } from "date-fns";
@@ -36,7 +37,7 @@ export default function SupplierProfilePage() {
   const [form, setForm] = useState<Partial<Supplier>>({});
   const [payOpen, setPayOpen] = useState(false);
   const [payForm, setPayForm] = useState<{ amount?: number; paymentMethod: string; paymentDate: string; referenceNumber?: string; proofUrl?: string; notes?: string }>(
-    { paymentMethod: "BANK_TRANSFER", paymentDate: new Date().toISOString().slice(0, 10) }
+    { paymentMethod: "BANK_TRANSFER", paymentDate: localIso() }
   );
   const [paying, setPaying] = useState(false);
 
@@ -63,7 +64,7 @@ export default function SupplierProfilePage() {
   const openEdit = () => { setForm(s); setEditOpen(true); };
 
   const openPay = () => {
-    setPayForm({ amount: pendingAmt > 0 ? pendingAmt : undefined, paymentMethod: "BANK_TRANSFER", paymentDate: new Date().toISOString().slice(0, 10) });
+    setPayForm({ amount: pendingAmt > 0 ? pendingAmt : undefined, paymentMethod: "BANK_TRANSFER", paymentDate: localIso() });
     setPayOpen(true);
   };
   const submitPay = () => {

@@ -1,3 +1,4 @@
+import { localIso } from '@/lib/localDate';
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { format } from "date-fns";
@@ -169,7 +170,7 @@ export function PoListTable({ rows, loading, empty, onHover }: {
   );
 }
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => localIso();
 const selectCls = "w-full h-10 rounded-md border border-input bg-background px-3 text-sm";
 
 /**

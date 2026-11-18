@@ -1,3 +1,4 @@
+import { localIso } from '@/lib/localDate';
 import { BaseInput } from '@/components/ui/input';
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -19,7 +20,7 @@ import { areaUnitFor } from "@/lib/units";
 
 const SITE_CONDITIONS = ['Ready to Move', 'Under Construction', 'Bare Shell', 'Renovation', 'Occupied'];
 const ITEM_TYPES = ['Wall', 'Floor', 'Ceiling', 'Wardrobe', 'Kitchen', 'Window', 'Door', 'Loft', 'Other'];
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => localIso();
 
 interface ItemDraft { itemType: string; length: string; width: string; height: string; quantity: string; unit: string }
 interface RoomDraft { name: string; floor: string; open: boolean; items: ItemDraft[] }

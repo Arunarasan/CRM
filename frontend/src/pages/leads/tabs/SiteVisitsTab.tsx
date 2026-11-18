@@ -1,3 +1,4 @@
+import { localIso } from '@/lib/localDate';
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { MapPin, Plus } from "lucide-react";
@@ -12,7 +13,7 @@ import { ListSkeleton, useLeadList } from "./shared";
 
 const EMPTY = {
   visitType: "Initial Visit",
-  scheduledDate: new Date().toISOString().slice(0, 10),
+  scheduledDate: localIso(),
   priority: "Medium",
   visitNotes: "",
   locationAddress: "",

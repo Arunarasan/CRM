@@ -1,3 +1,4 @@
+import { localIso } from '@/lib/localDate';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 import { purchaseApi } from "@/api/purchaseApi";
@@ -94,7 +95,7 @@ export default function PurchaseOrderProfile() {
 
   // pay form
   const [payForm, setPayForm] = useState<{ amount?: number; paymentMethod: string; paymentDate: string; referenceNumber?: string; proofUrl?: string; notes?: string }>(
-    { paymentMethod: "BANK_TRANSFER", paymentDate: new Date().toISOString().slice(0, 10) }
+    { paymentMethod: "BANK_TRANSFER", paymentDate: localIso() }
   );
 
   // return form
@@ -176,7 +177,7 @@ export default function PurchaseOrderProfile() {
   // ---- Record payment (against the order) ----
   // Open the payment dialog pre-filled with the outstanding balance (one-tap "pay the balance").
   const openPay = () => {
-    setPayForm({ amount: pending > 0 ? pending : undefined, paymentMethod: "BANK_TRANSFER", paymentDate: new Date().toISOString().slice(0, 10) });
+    setPayForm({ amount: pending > 0 ? pending : undefined, paymentMethod: "BANK_TRANSFER", paymentDate: localIso() });
     setPayOpen(true);
   };
 
@@ -197,7 +198,7 @@ export default function PurchaseOrderProfile() {
       setPayments((prev) => (saved && !prev.some((p) => p.id === saved.id) ? [saved, ...prev] : prev));
       toast.success("Payment recorded.");
       setPayOpen(false);
-      setPayForm({ paymentMethod: "BANK_TRANSFER", paymentDate: new Date().toISOString().slice(0, 10) });
+      setPayForm({ paymentMethod: "BANK_TRANSFER", paymentDate: localIso() });
       load();
     } catch (e) {
       toast.error(apiError(e, "Could not record the payment."));

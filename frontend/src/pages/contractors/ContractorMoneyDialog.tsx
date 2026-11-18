@@ -1,3 +1,4 @@
+import { localIso } from '@/lib/localDate';
 import { useEffect, useState } from "react";
 import { contractorApi } from "@/api/contractorApi";
 import type { ContractorOrderRow } from "@/types/contractor";
@@ -35,7 +36,7 @@ export default function ContractorMoneyDialog({
 }) {
   const incoming = direction === "IN";
   const [amount, setAmount] = useState("");
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(localIso());
   const [mode, setMode] = useState("CASH");
   const [type, setType] = useState("SETTLEMENT_RECEIVED");
   const [reference, setReference] = useState("");

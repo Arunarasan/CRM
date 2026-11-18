@@ -1,10 +1,11 @@
+import { localIso } from '@/lib/localDate';
 import { useCallback, useEffect, useState } from 'react';
 import { Play, Pause, Square, Clock } from 'lucide-react';
 import { employeeTaskApi } from '@/api/employeeTaskApi';
 import { TimeLogSummary } from '@/types/employeeTask';
 import { useT } from '@/i18n';
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => localIso();
 
 /**
  * Compact per-task work timer (spec §21): START → PAUSE → RESUME → STOP, writing task_time_logs.

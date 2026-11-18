@@ -1,3 +1,4 @@
+import { localIso } from '@/lib/localDate';
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2, UserPlus, Zap, X, Plus, ChevronRight, LayoutGrid } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -174,7 +175,7 @@ export default function ProjectTaskManager({ projectId, onChanged, onAddTask, fi
         title: t.taskName ?? r.taskName,
         taskType: "",
         priority: (t.priority ?? r.priority ?? "MEDIUM").toUpperCase(),
-        reminderDate: (t.dueDate ?? r.dueDate)?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
+        reminderDate: (t.dueDate ?? r.dueDate)?.slice(0, 10) ?? localIso(),
         reminderTime: "09:00",
         assignedToId: "",
         status: t.status ?? r.status,

@@ -1,3 +1,4 @@
+import { localIso } from '@/lib/localDate';
 import { BaseInput } from '@/components/ui/input';
 import { useCallback, useEffect, useState } from 'react';
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
@@ -74,7 +75,7 @@ export function EmployeeQuoteBody({ leadId, gpsTaskId, onPhotosChanged }: { lead
   );
 }
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => localIso();
 
 const IMAGE_EXT = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'heic', 'heif', 'bmp'];
 const isImage = (type: string | undefined, url: string | undefined) => {

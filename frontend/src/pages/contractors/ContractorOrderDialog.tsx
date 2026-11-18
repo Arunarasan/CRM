@@ -1,3 +1,4 @@
+import { localIso } from '@/lib/localDate';
 import { useEffect, useState } from "react";
 import { contractorApi } from "@/api/contractorApi";
 import { bundleApi, type Bundle } from "@/api/bundleApi";
@@ -27,7 +28,7 @@ export default function ContractorOrderDialog({
   const [bundle, setBundle] = useState(existing?.bundleId != null ? String(existing.bundleId) : "");
   const [title, setTitle] = useState(existing?.title ?? "");
   const [amount, setAmount] = useState(existing ? String(existing.amount) : "");
-  const [date, setDate] = useState(existing?.orderDate ?? new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(existing?.orderDate ?? localIso());
   const [notes, setNotes] = useState(existing?.notes ?? "");
   const [busy, setBusy] = useState(false);
 

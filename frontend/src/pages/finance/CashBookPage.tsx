@@ -1,3 +1,4 @@
+import { localIso } from '@/lib/localDate';
 import { BaseInput } from '@/components/ui/input';
 import { useCallback, useEffect, useMemo, useState } from "react";
 import api from "@/lib/api";
@@ -25,8 +26,8 @@ const SOURCE_META: Record<string, { label: string; dir: "IN" | "OUT"; tone: stri
 // Rows the user can delete here (they live in company_transactions).
 const DELETABLE = new Set(["COMPANY_INCOME", "COMPANY_EXPENSE"]);
 
-const todayStr = () => new Date().toISOString().slice(0, 10);
-const monthStartStr = () => { const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10); };
+const todayStr = () => localIso();
+const monthStartStr = () => { const d = new Date(); d.setDate(1); return localIso(d); };
 
 export default function CashBookPage() {
   const [from, setFrom] = useState(monthStartStr);

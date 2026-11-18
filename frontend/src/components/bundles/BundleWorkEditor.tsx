@@ -1,3 +1,4 @@
+import { localIso } from '@/lib/localDate';
 import { useState } from "react";
 import { Input, BaseInput } from "@/components/ui/input";
 import ResourceSelect, { type ResourceSelection } from "@/components/workforce/ResourceSelect";
@@ -24,7 +25,7 @@ export function defaultWorkHeader(): WorkHeader {
   const due = new Date();
   due.setDate(due.getDate() + 5);
   return {
-    workType: "STITCHING", bundleCount: 1, charge: "", dueDate: due.toISOString().slice(0, 10),
+    workType: "STITCHING", bundleCount: 1, charge: "", dueDate: localIso(due),
     priority: "MEDIUM", resource: null, handoverMode: "PICKUP", notes: "",
   };
 }

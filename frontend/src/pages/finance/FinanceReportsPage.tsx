@@ -1,3 +1,4 @@
+import { localIso } from '@/lib/localDate';
 import { BaseInput } from '@/components/ui/input';
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -21,7 +22,7 @@ const REPORTS: { key: ReportKey; label: string }[] = [
 ];
 
 const firstOfYear = () => `${new Date().getFullYear()}-01-01`;
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => localIso();
 
 // Friendly labels for the consolidated expense sources.
 const SOURCE_LABEL: Record<string, string> = {

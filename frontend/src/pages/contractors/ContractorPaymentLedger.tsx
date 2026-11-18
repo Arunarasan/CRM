@@ -1,3 +1,4 @@
+import { localIso } from '@/lib/localDate';
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -173,7 +174,7 @@ const MODES = ["CASH", "UPI", "BANK_TRANSFER", "NEFT", "RTGS", "CHEQUE"];
 /** Correct a recorded payment's amount, date, mode, reference or note. */
 function EditPaymentDialog({ payment, onClose, onDone }: { payment: Row; onClose: () => void; onDone: () => void }) {
   const [amount, setAmount] = useState(String(payment.amount));
-  const [date, setDate] = useState(payment.paymentDate ?? new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(payment.paymentDate ?? localIso());
   const [mode, setMode] = useState(payment.paymentMode ?? "CASH");
   const [reference, setReference] = useState(payment.referenceNumber ?? "");
   const [remarks, setRemarks] = useState(payment.remarks ?? "");

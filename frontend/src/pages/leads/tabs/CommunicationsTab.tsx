@@ -1,3 +1,4 @@
+import { localIso } from '@/lib/localDate';
 import { useState } from "react";
 import { MessageSquare, Plus, Paperclip } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -17,7 +18,7 @@ const TYPE_ICONS: Record<string, string> = {
 const EMPTY = {
   communicationType: "Phone Call",
   direction: "Outgoing",
-  communicationDate: new Date().toISOString().slice(0, 10),
+  communicationDate: localIso(),
   communicationTime: "",
   summary: "",
   detailedNotes: "",

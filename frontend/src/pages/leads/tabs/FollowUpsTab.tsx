@@ -1,3 +1,4 @@
+import { localIso } from '@/lib/localDate';
 import { useState } from "react";
 import { PhoneCall, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -10,7 +11,7 @@ import { CheckboxField, SelectField, TextAreaField, TextField } from "../fields"
 import { ListSkeleton, useLeadList } from "./shared";
 
 const EMPTY = {
-  followupDate: new Date().toISOString().slice(0, 10),
+  followupDate: localIso(),
   followupTime: "",
   method: "Phone Call",
   notes: "",

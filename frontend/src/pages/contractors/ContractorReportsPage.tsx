@@ -1,3 +1,4 @@
+import { localIso } from '@/lib/localDate';
 import { useEffect, useState } from "react";
 import { contractorApi } from "@/api/contractorApi";
 import { Button } from "@/components/ui/button";
@@ -189,7 +190,7 @@ export default function ContractorReportsPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `contractor-${active.key}-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `contractor-${active.key}-${localIso()}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
