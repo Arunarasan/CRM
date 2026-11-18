@@ -91,8 +91,8 @@ public class AttendanceOvertimeScheduler {
             notificationService.dispatchToAdmins(
                     "Missed check-out — approval needed",
                     name + " did not check out on " + att.getDate() + " (checked in at " + s.getCheckInTime().toString().substring(0, 5)
-                            + "). That day is not counted in the payslip. Set the check-out time in Attendance to approve it.",
-                    "ATTENDANCE", "/hr/attendance", null);
+                            + "). That day is not counted in the payslip. Tap to enter the finish time and approve it.",
+                    "ATTENDANCE", "/hr/attendance?fixEmployee=" + (emp == null ? "" : emp.getId()) + "&fixDate=" + att.getDate(), null);
             flagged++;
         }
         if (flagged > 0) log.info("Missed check-out sweep: flagged {} open session(s) from past days.", flagged);

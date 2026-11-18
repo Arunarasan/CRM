@@ -6,6 +6,7 @@ import { BaseInput } from '@/components/ui/input';
  *    recorded but held for HR to approve or reject (soft enforcement).
  */
 import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import api from '@/lib/api';
 import { MapPin, Plus, Trash2, Crosshair, Loader2, ShieldAlert, Check, X, ExternalLink, Fingerprint, Clock3 } from 'lucide-react';
 import { attendanceApi, AttendanceLocation, PendingAttendance, MethodRequest, CorrectionRequest } from '@/api/attendanceApi';
@@ -28,6 +29,16 @@ export function AttendanceAdmin() {
   const [tab, setTab] = useState('register');
   const [counts, setCounts] = useState({ punches: 0, corrections: 0, methods: 0 });
   const [prefill, setPrefill] = useState<CorrectionPrefill | null>(null);
+  // A "Missed check-out" notification links here with ?fixEmployee=&fixDate= — open Fix a time for that day.
+  const [params, setParams] = useSearchParams();
+  useEffect(() => {
+    const employeeId = params.get('fixEmployee'); const date = params.get('fixDate');
+    if (!employeeId || !date) return;
+    setPrefill({ employeeId, date, nonce: Date.now() });
+    setTab('fix');
+    const next = new URLSearchParams(params); next.delete('fixEmployee'); next.delete('fixDate');
+    setParams(next, { replace: true });
+  }, [params]);
 
   const loadCounts = () => {
     Promise.all([
@@ -110,7 +121,7 @@ export function DirectCorrection({ prefill, onApplied }: { prefill?: CorrectionP
 
   useEffect(() => {
     if (!prefill) return;
-    prefilled.current = true;
+    prefilled.current = !!prefill.sessions; // no sessions given → let the day auto-load fetch them
     setForm({ employeeId: prefill.employeeId ?? '', date: prefill.date ?? '' });
     setSessions(toDrafts(prefill.sessions));
     setOpen(true);
