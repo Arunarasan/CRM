@@ -1,3 +1,4 @@
+import { localIso } from '@/lib/localDate';
 import { BaseInput } from '@/components/ui/input';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, X, Check, Trash2, Bell } from 'lucide-react';
@@ -56,7 +57,7 @@ export default function TaskManagement() {
   const toggle = (id: number) => employeePortalApi.toggleReminder(id).then(load).catch(() => {});
   const remove = (id: number) => employeePortalApi.deleteReminder(id).then(load).catch(() => {});
 
-  const overdue = (r: PersonalReminderEntry) => r.status === 'PENDING' && r.dueDate && r.dueDate < new Date().toISOString().slice(0, 10);
+  const overdue = (r: PersonalReminderEntry) => r.status === 'PENDING' && r.dueDate && r.dueDate < localIso();
 
   return (
     <div className="flex flex-col">

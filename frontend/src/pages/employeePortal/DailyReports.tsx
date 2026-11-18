@@ -1,3 +1,4 @@
+import { localIso } from '@/lib/localDate';
 import { BaseInput } from '@/components/ui/input';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Plus, X, Camera, Video, Trash2, CalendarDays } from 'lucide-react';
@@ -8,7 +9,7 @@ import { PortalHeader, StatusPill, EmptyState } from './_shared';
 import { useT, useTr } from '@/i18n';
 
 interface Media { mediaType: string; fileUrl: string }
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => localIso();
 const emptyForm = (): DailyReportCreateBody => ({
   projectId: null, leadId: null, reportDate: today(), todaysWork: '', hoursWorked: '', completedWork: '',
   pendingWork: '', problems: '', materialUsed: '', materialRequired: '', remarks: '',

@@ -1,3 +1,4 @@
+import { localIso } from '@/lib/localDate';
 import { BaseInput } from '@/components/ui/input';
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -125,7 +126,7 @@ function RequestSheet({ owed, borrow, onClose, onSaved }: { owed: number; borrow
   const MONTHS = useMonths();
   const [type, setType] = useState<'ADVANCE' | 'REPAY' | 'ALLOWANCE'>(!borrow && owed > 0 ? 'REPAY' : 'ADVANCE');
   const [allowanceType, setAllowanceType] = useState<'TRAVEL' | 'FOOD'>('TRAVEL');
-  const [spentOn, setSpentOn] = useState(new Date().toISOString().slice(0, 10));
+  const [spentOn, setSpentOn] = useState(localIso());
   const [amount, setAmount] = useState('');
   const [reason, setReason] = useState('');
   const [monthlyRecovery, setMonthlyRecovery] = useState('');
@@ -202,7 +203,7 @@ function RequestSheet({ owed, borrow, onClose, onSaved }: { owed: number; borrow
               </div>
               <div>
                 <label className="text-xs font-medium text-muted-foreground">Date</label>
-                <BaseInput type="date" value={spentOn} max={new Date().toISOString().slice(0, 10)} onChange={(e) => setSpentOn(e.target.value)}
+                <BaseInput type="date" value={spentOn} max={localIso()} onChange={(e) => setSpentOn(e.target.value)}
                   className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" />
               </div>
             </div>

@@ -1,3 +1,4 @@
+import { localIso } from '@/lib/localDate';
 import { BaseInput } from '@/components/ui/input';
 import { useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, Clock3, Loader2, Plus } from 'lucide-react';
@@ -14,7 +15,7 @@ const DAY_TONE: Record<string, string> = {
   ABSENT: 'bg-red-500 text-white',
 };
 
-const iso = (d: Date) => d.toISOString().slice(0, 10);
+const iso = localIso;
 
 export default function Attendance() {
   const { t, lang } = useT();
